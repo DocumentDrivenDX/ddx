@@ -97,7 +97,7 @@ jobs:
           go build -v -o ../bin/ddx-${{ matrix.os }}-${{ matrix.arch }} .
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: ddx-${{ matrix.os }}-${{ matrix.arch }}
         path: bin/ddx-${{ matrix.os }}-${{ matrix.arch }}
