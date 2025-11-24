@@ -46,18 +46,10 @@ $RECYCLE.BIN/
 # IDE and Editor Files
 ################################################################################
 
-# Obsidian
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.obsidian/workspace/*
-# Uncomment below if you want to ignore all Obsidian settings except specific ones
-# .obsidian/*
-# !.obsidian/app.json
-# !.obsidian/appearance.json
-# !.obsidian/core-plugins.json
-# !.obsidian/community-plugins.json
-# !.obsidian/hotkeys.json
-# !.obsidian/graph.json
+# Obsidian - ignore all personal settings except plugin configs
+.obsidian/*
+!.obsidian/core-plugins.json
+!.obsidian/community-plugins.json
 
 # JetBrains IDEs (IntelliJ, GoLand, etc.)
 .idea/
