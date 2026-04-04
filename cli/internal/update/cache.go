@@ -10,6 +10,7 @@ import (
 
 const (
 	cacheTTL      = 24 * time.Hour
+	errorRetryTTL = 5 * time.Minute
 	cacheFileName = "last-update-check.json"
 )
 
@@ -82,12 +83,17 @@ func (c *Cache) Save() error {
 	return nil
 }
 
-// IsExpired checks if cache is older than TTL
+// IsExpired checks whether the cache should be refreshed.
+// Successful checks use the long TTL; failed checks retry sooner to avoid dogpiling.
 func (c *Cache) IsExpired() bool {
 	if c.data.LastCheck.IsZero() {
 		return true // No check recorded
 	}
-	return time.Since(c.data.LastCheck) > cacheTTL
+	ttl := cacheTTL
+	if c.data.CheckError != "" {
+		ttl = errorRetryTTL
+	}
+	return time.Since(c.data.LastCheck) > ttl
 }
 
 // getCacheFilePath returns the cache file path following XDG Base Directory spec

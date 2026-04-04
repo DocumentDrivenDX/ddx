@@ -84,6 +84,8 @@ func (c *Checker) CheckForUpdate(ctx context.Context) (*UpdateCheckResult, error
 		c.result = result
 
 		// Update cache with error
+		c.cache.data.LastCheck = time.Now()
+		c.cache.data.CurrentVersion = c.currentVersion
 		c.cache.data.CheckError = err.Error()
 		_ = c.cache.Save() // Ignore save errors
 
@@ -97,6 +99,8 @@ func (c *Checker) CheckForUpdate(ctx context.Context) (*UpdateCheckResult, error
 		c.result = result
 
 		// Update cache with error
+		c.cache.data.LastCheck = time.Now()
+		c.cache.data.CurrentVersion = c.currentVersion
 		c.cache.data.CheckError = err.Error()
 		_ = c.cache.Save() // Ignore save errors
 

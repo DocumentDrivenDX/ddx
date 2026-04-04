@@ -111,6 +111,28 @@ func TestCache_IsExpired_Exactly24Hours(t *testing.T) {
 	assert.False(t, expired, "Cache at exactly 24 hours should not be expired")
 }
 
+func TestCache_IsExpired_FailureBackoffFresh(t *testing.T) {
+	cache := &Cache{
+		data: &CacheData{
+			LastCheck:  time.Now().Add(-1 * time.Minute),
+			CheckError: "failed to fetch latest release",
+		},
+	}
+
+	assert.False(t, cache.IsExpired(), "Recent failure should use short retry backoff")
+}
+
+func TestCache_IsExpired_FailureBackoffOld(t *testing.T) {
+	cache := &Cache{
+		data: &CacheData{
+			LastCheck:  time.Now().Add(-6 * time.Minute),
+			CheckError: "failed to fetch latest release",
+		},
+	}
+
+	assert.True(t, cache.IsExpired(), "Old failure should be retried after short backoff")
+}
+
 func TestCache_Load_CorruptedFile(t *testing.T) {
 	// Given: A corrupted cache file
 	tempDir := t.TempDir()

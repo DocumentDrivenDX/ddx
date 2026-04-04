@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/easel/ddx/internal/config"
 	"github.com/easel/ddx/internal/update"
@@ -28,6 +29,8 @@ type CommandFactory struct {
 
 	// Update checker instance (stores check result for PostRunE)
 	updateChecker *update.Checker
+	updateDone    chan struct{}
+	updateMu      sync.Mutex
 }
 
 // NewCommandFactory creates a new command factory with default settings
@@ -170,25 +173,36 @@ func (f *CommandFactory) checkForUpdates(cmd *cobra.Command) {
 
 	// Create checker and perform check (synchronous)
 	checker := update.NewChecker(f.Version, cfg)
-	ctx := context.Background()
-
-	// Fast when cache valid (just reads file)
-	// Slow once per 24h when cache expired (network call ~200-500ms)
-	_, err = checker.CheckForUpdate(ctx)
-
-	// Log errors to stderr (don't let users get stranded on old versions)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: Could not check for updates: %v\n", err)
-	}
-
-	// Store in factory for PostRunE
+	f.updateMu.Lock()
 	f.updateChecker = checker
+	f.updateDone = make(chan struct{})
+	done := f.updateDone
+	f.updateMu.Unlock()
+
+	// Run the check asynchronously so command startup is never blocked.
+	go func() {
+		defer close(done)
+		_, _ = checker.CheckForUpdate(context.Background())
+	}()
 }
 
 // displayUpdateNotification shows update notification if available
 func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
-	if f.updateChecker == nil {
+	f.updateMu.Lock()
+	checker := f.updateChecker
+	done := f.updateDone
+	f.updateMu.Unlock()
+
+	if checker == nil {
 		return nil
+	}
+
+	if done != nil {
+		select {
+		case <-done:
+		default:
+			return nil
+		}
 	}
 
 	// Skip update notification for help commands
@@ -214,8 +228,11 @@ func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
 		return nil
 	}
 
-	available, version, err := f.updateChecker.IsUpdateAvailable()
+	available, version, err := checker.IsUpdateAvailable()
 	if err != nil || !available {
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: Could not check for updates: %v\n", err)
+		}
 		return nil
 	}
 

@@ -3,6 +3,7 @@ package update
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -15,19 +16,37 @@ const (
 
 // FetchLatestRelease fetches the latest release information from GitHub
 func FetchLatestRelease() (*GitHubRelease, error) {
-	resp, err := http.Get(githubAPIURL)
+	return fetchLatestRelease(githubAPIURL)
+}
+
+func fetchLatestRelease(url string) (*GitHubRelease, error) {
+	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch release info: %w", err)
+		return nil, fmt.Errorf("checking for DDx updates: failed to fetch latest release from %s: %w", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		details := strings.TrimSpace(string(body))
+		if details != "" {
+			return nil, fmt.Errorf(
+				"checking for DDx updates: fetching latest release from %s failed: GitHub API returned %s: %s",
+				url,
+				resp.Status,
+				details,
+			)
+		}
+		return nil, fmt.Errorf(
+			"checking for DDx updates: fetching latest release from %s failed: GitHub API returned %s",
+			url,
+			resp.Status,
+		)
 	}
 
 	var release GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, fmt.Errorf("failed to parse release info: %w", err)
+		return nil, fmt.Errorf("checking for DDx updates: failed to parse release info from %s: %w", url, err)
 	}
 
 	return &release, nil

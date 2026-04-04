@@ -65,7 +65,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 
 ### Non-Functional
 
-- **Performance:** All local operations <1 second (benchmarked: startup 7ms, bead create 13ms, bead ready 14ms)
+- **Performance:** All local operations <1 second, with a startup ratchet on the hot paths. Current benchmarks: CLI startup 7.5ms, `ddx bead create` 10ms with async update checks, config load 0.46ms. Update checks run asynchronously and failures back off for 5 minutes instead of re-firing on every startup. Ratchet coverage lives in `cli/bench_test.go` and `cli/internal/config/benchmark_test.go`; keep `ddx bead create` below 20ms and config load below 1ms on the local perf harness.
 - **Portability:** Single binary, no runtime dependencies. macOS, Linux, Windows.
 - **Installability:** `curl | bash` or `go install`
 
