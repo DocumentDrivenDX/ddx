@@ -27,6 +27,66 @@ func TestInit(t *testing.T) {
 	assert.NoError(t, err, "beads.jsonl should exist after init")
 }
 
+func TestInitUsesCollectionFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStoreWithCollection(filepath.Join(dir, ".ddx"), "exec-runs")
+	require.Equal(t, "exec-runs", s.Collection)
+	require.Equal(t, filepath.Join(dir, ".ddx", "exec-runs.jsonl"), s.File)
+	require.Equal(t, filepath.Join(dir, ".ddx", "exec-runs.lock"), s.LockDir)
+	require.NoError(t, s.Init())
+
+	_, err := os.Stat(s.File)
+	assert.NoError(t, err, "collection file should exist after init")
+}
+
+func TestWithCollectionNormalizesJSONLExtension(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, ".ddx"), WithCollection("agent-sessions.jsonl"))
+	assert.Equal(t, "agent-sessions", s.Collection)
+	assert.Equal(t, filepath.Join(dir, ".ddx", "agent-sessions.jsonl"), s.File)
+}
+
+func TestExternalBackendCarriesLogicalCollectionName(t *testing.T) {
+	toolDir := t.TempDir()
+	writeFakeBackendTool(t, toolDir, "bd")
+	writeFakeBackendTool(t, toolDir, "br")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	for _, tc := range []struct {
+		name       string
+		backend    string
+		collection string
+	}{
+		{name: "default-bd", backend: "bd", collection: DefaultCollection},
+		{name: "exec-runs-bd", backend: "bd", collection: "exec-runs"},
+		{name: "agent-sessions-br", backend: "br", collection: "agent-sessions"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("DDX_BEAD_BACKEND", tc.backend)
+			s := NewStore(filepath.Join(t.TempDir(), ".ddx"), WithCollection(tc.collection))
+			backend, ok := s.backend.(*ExternalBackend)
+			require.True(t, ok)
+			assert.Equal(t, tc.backend, backend.Tool)
+			assert.Equal(t, tc.collection, backend.Collection)
+		})
+	}
+}
+
+func TestExternalBackendFallsBackWhenToolMissing(t *testing.T) {
+	t.Setenv("PATH", "")
+	t.Setenv("DDX_BEAD_BACKEND", "bd")
+
+	s := NewStore(filepath.Join(t.TempDir(), ".ddx"), WithCollection("exec-runs"))
+	assert.Nil(t, s.backend)
+}
+
+func writeFakeBackendTool(t *testing.T, dir, name string) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	script := "#!/bin/sh\nexit 0\n"
+	require.NoError(t, os.WriteFile(path, []byte(script), 0o755))
+}
+
 func TestCreateAndGet(t *testing.T) {
 	s := newTestStore(t)
 
