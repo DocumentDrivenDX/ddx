@@ -314,6 +314,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newLogCommand())
 	rootCmd.AddCommand(f.newAuthCommand())
 	rootCmd.AddCommand(f.newBeadCommand())
+	rootCmd.AddCommand(f.newAgentCommand())
 	rootCmd.AddCommand(f.newADRCommand())
 	rootCmd.AddCommand(f.newSDCommand())
 
