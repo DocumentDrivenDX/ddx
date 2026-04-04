@@ -97,6 +97,38 @@
         }
       },
       "additionalProperties": false
+    },
+    "agent": {
+      "type": "object",
+      "description": "Agent service configuration",
+      "properties": {
+        "harness": {
+          "type": "string",
+          "description": "Default harness name (e.g., codex, claude, gemini)",
+          "examples": ["codex", "claude", "gemini"]
+        },
+        "models": {
+          "type": "object",
+          "description": "Per-harness model overrides",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "examples": [{"codex": "o3-mini", "claude": "claude-sonnet-4-20250514"}]
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "description": "Default timeout in milliseconds",
+          "default": 300000,
+          "examples": [300000, 600000]
+        },
+        "session_log_dir": {
+          "type": "string",
+          "description": "Directory for agent session logs",
+          "default": ".ddx/agent-logs",
+          "examples": [".ddx/agent-logs", "/tmp/agent-logs"]
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

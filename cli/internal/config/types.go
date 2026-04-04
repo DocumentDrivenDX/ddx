@@ -8,6 +8,15 @@ type NewConfig struct {
 	System          *SystemConfig      `yaml:"system,omitempty" json:"system,omitempty"`
 	PersonaBindings map[string]string  `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
 	UpdateCheck     *UpdateCheckConfig `yaml:"update_check,omitempty" json:"update_check,omitempty"`
+	Agent           *AgentConfig       `yaml:"agent,omitempty" json:"agent,omitempty"`
+}
+
+// AgentConfig represents agent service configuration in .ddx/config.yaml
+type AgentConfig struct {
+	Harness       string            `yaml:"harness,omitempty" json:"harness,omitempty"`
+	Models        map[string]string `yaml:"models,omitempty" json:"models,omitempty"`
+	TimeoutMS     int               `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+	SessionLogDir string            `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 }
 
 // SystemConfig represents system-level configuration settings

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/easel/ddx/internal/agent"
+	"github.com/easel/ddx/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -41,8 +42,16 @@ Examples:
 }
 
 func (f *CommandFactory) agentRunner() *agent.Runner {
-	// TODO: load agent config from .ddx/config.yaml
-	return agent.NewRunner(agent.Config{})
+	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
+	if err != nil || cfg.Agent == nil {
+		return agent.NewRunner(agent.Config{})
+	}
+	return agent.NewRunner(agent.Config{
+		Harness:       cfg.Agent.Harness,
+		Models:        cfg.Agent.Models,
+		TimeoutMS:     cfg.Agent.TimeoutMS,
+		SessionLogDir: cfg.Agent.SessionLogDir,
+	})
 }
 
 func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
