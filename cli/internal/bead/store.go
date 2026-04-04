@@ -167,20 +167,14 @@ func (s *Store) Create(b *Bead) error {
 		}
 		b.ID = id
 	}
-	if b.Type == "" {
-		b.Type = DefaultType
+	if b.IssueType == "" {
+		b.IssueType = DefaultType
 	}
 	if b.Status == "" {
 		b.Status = DefaultStatus
 	}
-	if b.Labels == nil {
-		b.Labels = []string{}
-	}
-	if b.Deps == nil {
-		b.Deps = []string{}
-	}
-	b.Created = now
-	b.Updated = now
+	b.CreatedAt = now
+	b.UpdatedAt = now
 
 	// Validate after defaults are applied so hooks see final state
 	if err := s.validateBead(b); err != nil {
@@ -203,12 +197,13 @@ func (s *Store) Create(b *Bead) error {
 			}
 		}
 		// Validate deps reference existing beads
-		if len(b.Deps) > 0 {
+		depIDs := b.DepIDs()
+		if len(depIDs) > 0 {
 			existing := make(map[string]bool)
 			for _, e := range beads {
 				existing[e.ID] = true
 			}
-			for _, dep := range b.Deps {
+			for _, dep := range depIDs {
 				if !existing[dep] {
 					return fmt.Errorf("bead: dependency not found: %s", dep)
 				}
@@ -244,7 +239,7 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 		for i := range beads {
 			if beads[i].ID == id {
 				mutate(&beads[i])
-				beads[i].Updated = time.Now().UTC()
+				beads[i].UpdatedAt = time.Now().UTC()
 				// Core validation after mutation
 				if err := s.validateBead(&beads[i]); err != nil {
 					return err
@@ -272,7 +267,7 @@ func (s *Store) Claim(id, assignee string) error {
 			b.Extra = make(map[string]any)
 		}
 		b.Status = StatusInProgress
-		b.Assignee = assignee
+		b.Owner = assignee
 		b.Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
 		b.Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
 	})
@@ -282,7 +277,7 @@ func (s *Store) Claim(id, assignee string) error {
 func (s *Store) Unclaim(id string) error {
 	return s.Update(id, func(b *Bead) {
 		b.Status = StatusOpen
-		b.Assignee = ""
+		b.Owner = ""
 		if b.Extra != nil {
 			delete(b.Extra, "claimed-at")
 			delete(b.Extra, "claimed-pid")
@@ -344,8 +339,8 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 			continue
 		}
 		allSatisfied := true
-		for _, dep := range b.Deps {
-			if statusMap[dep] != StatusClosed {
+		for _, depID := range b.DepIDs() {
+			if statusMap[depID] != StatusClosed {
 				allSatisfied = false
 				break
 			}
@@ -395,8 +390,8 @@ func (s *Store) Blocked() ([]Bead, error) {
 		if b.Status != StatusOpen {
 			continue
 		}
-		for _, dep := range b.Deps {
-			if statusMap[dep] != StatusClosed {
+		for _, depID := range b.DepIDs() {
+			if statusMap[depID] != StatusClosed {
 				blocked = append(blocked, b)
 				break
 			}
@@ -439,7 +434,6 @@ func (s *Store) DepAdd(id, depID string) error {
 		if err != nil {
 			return err
 		}
-		// Verify both exist
 		var target *Bead
 		depExists := false
 		for i := range beads {
@@ -459,23 +453,22 @@ func (s *Store) DepAdd(id, depID string) error {
 		if id == depID {
 			return fmt.Errorf("bead: cannot depend on self")
 		}
-		if containsString(target.Deps, depID) {
+		if target.HasDep(depID) {
 			return nil // already exists
 		}
 
 		// Check for circular dependency
 		depMap := make(map[string][]string)
 		for _, b := range beads {
-			depMap[b.ID] = b.Deps
+			depMap[b.ID] = b.DepIDs()
 		}
-		// Temporarily add the new dep for cycle check
-		depMap[id] = append(append([]string{}, target.Deps...), depID)
+		depMap[id] = append(append([]string{}, target.DepIDs()...), depID)
 		if hasCycle(depMap, id) {
 			return fmt.Errorf("bead: circular dependency: %s -> %s", id, depID)
 		}
 
-		target.Deps = append(target.Deps, depID)
-		target.Updated = time.Now().UTC()
+		target.AddDep(depID, "blocks")
+		target.UpdatedAt = time.Now().UTC()
 		return s.WriteAll(beads)
 	})
 }
@@ -483,16 +476,7 @@ func (s *Store) DepAdd(id, depID string) error {
 // DepRemove removes a dependency.
 func (s *Store) DepRemove(id, depID string) error {
 	return s.Update(id, func(b *Bead) {
-		var filtered []string
-		for _, d := range b.Deps {
-			if d != depID {
-				filtered = append(filtered, d)
-			}
-		}
-		if filtered == nil {
-			filtered = []string{}
-		}
-		b.Deps = filtered
+		b.RemoveDep(depID)
 	})
 }
 
@@ -519,7 +503,7 @@ func (s *Store) DepTree(rootID string) (string, error) {
 	// Find roots (beads that have no dependencies themselves)
 	var roots []string
 	for _, b := range beads {
-		if len(b.Deps) == 0 {
+		if len(b.Dependencies) == 0 {
 			roots = append(roots, b.ID)
 		}
 	}
@@ -551,7 +535,7 @@ func (s *Store) printTree(sb *strings.Builder, byID map[string]*Bead, id, prefix
 	// Find beads that depend on this one (children in the tree)
 	var children []string
 	for _, other := range sortedKeys(byID) {
-		if containsString(byID[other].Deps, id) {
+		if byID[other].HasDep(id) {
 			children = append(children, other)
 		}
 	}
@@ -582,8 +566,8 @@ func (s *Store) validateBead(b *Bead) error {
 		return fmt.Errorf("bead: invalid status: %s", b.Status)
 	}
 	// Self-ref check
-	for _, dep := range b.Deps {
-		if dep == b.ID && b.ID != "" {
+	for _, depID := range b.DepIDs() {
+		if depID == b.ID && b.ID != "" {
 			return fmt.Errorf("bead: cannot depend on self")
 		}
 	}

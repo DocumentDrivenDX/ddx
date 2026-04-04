@@ -29,20 +29,20 @@ func TestInit(t *testing.T) {
 func TestCreateAndGet(t *testing.T) {
 	s := newTestStore(t)
 
-	b := &Bead{Title: "Fix auth bug", Type: "bug", Priority: 1}
+	b := &Bead{Title: "Fix auth bug", IssueType: "bug", Priority: 1}
 	require.NoError(t, s.Create(b))
 
 	assert.NotEmpty(t, b.ID)
 	assert.True(t, len(b.ID) > 3, "ID should have prefix + hex")
-	assert.Equal(t, "bug", b.Type)
+	assert.Equal(t, "bug", b.IssueType)
 	assert.Equal(t, StatusOpen, b.Status)
 	assert.Equal(t, 1, b.Priority)
-	assert.False(t, b.Created.IsZero())
+	assert.False(t, b.CreatedAt.IsZero())
 
 	got, err := s.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, b.Title, got.Title)
-	assert.Equal(t, b.Type, got.Type)
+	assert.Equal(t, b.IssueType, got.IssueType)
 }
 
 func TestCreateDefaults(t *testing.T) {
@@ -51,11 +51,11 @@ func TestCreateDefaults(t *testing.T) {
 	b := &Bead{Title: "Simple task"}
 	require.NoError(t, s.Create(b))
 
-	assert.Equal(t, DefaultType, b.Type)
+	assert.Equal(t, DefaultType, b.IssueType)
 	assert.Equal(t, DefaultStatus, b.Status)
 	assert.Equal(t, 0, b.Priority) // Store does not apply priority defaults; CLI layer sets flag default to 2
-	assert.NotNil(t, b.Labels)
-	assert.NotNil(t, b.Deps)
+	assert.Empty(t, b.Labels)
+	assert.Empty(t, b.DepIDs())
 }
 
 func TestCreateValidation(t *testing.T) {
@@ -86,7 +86,7 @@ func TestUpdate(t *testing.T) {
 	err := s.Update(b.ID, func(b *Bead) {
 		b.Title = "Updated"
 		b.Status = StatusInProgress
-		b.Assignee = "me"
+		b.Owner = "me"
 	})
 	require.NoError(t, err)
 
@@ -94,7 +94,7 @@ func TestUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Updated", got.Title)
 	assert.Equal(t, StatusInProgress, got.Status)
-	assert.Equal(t, "me", got.Assignee)
+	assert.Equal(t, "me", got.Owner)
 }
 
 func TestUpdateNotFound(t *testing.T) {
@@ -208,11 +208,11 @@ func TestDepRemove(t *testing.T) {
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 
 	got, _ := s.Get(b.ID)
-	assert.Contains(t, got.Deps, a.ID)
+	assert.Contains(t, got.DepIDs(), a.ID)
 
 	require.NoError(t, s.DepRemove(b.ID, a.ID))
 	got, _ = s.Get(b.ID)
-	assert.NotContains(t, got.Deps, a.ID)
+	assert.NotContains(t, got.DepIDs(), a.ID)
 }
 
 func TestDepTree(t *testing.T) {

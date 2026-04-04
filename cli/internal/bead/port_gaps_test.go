@@ -22,7 +22,7 @@ func TestClaimRecordsMetadata(t *testing.T) {
 	got, err := s.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
-	assert.Equal(t, "agent-1", got.Assignee)
+	assert.Equal(t, "agent-1", got.Owner)
 	assert.NotEmpty(t, got.Extra["claimed-at"])
 	assert.NotEmpty(t, got.Extra["claimed-pid"])
 }
@@ -38,7 +38,7 @@ func TestUnclaimClearsMetadata(t *testing.T) {
 	got, err := s.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, got.Status)
-	assert.Empty(t, got.Assignee)
+	assert.Empty(t, got.Owner)
 	assert.Nil(t, got.Extra["claimed-at"])
 	assert.Nil(t, got.Extra["claimed-pid"])
 }
@@ -60,8 +60,8 @@ func TestImportRejectsCircularDeps(t *testing.T) {
 	s := newTestStore(t)
 
 	importFile := filepath.Join(t.TempDir(), "cycle.jsonl")
-	jsonl := `{"id":"bx-cyc001","title":"A","type":"task","status":"open","priority":2,"labels":[],"deps":["bx-cyc002"],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}
-{"id":"bx-cyc002","title":"B","type":"task","status":"open","priority":2,"labels":[],"deps":["bx-cyc001"],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`
+	jsonl := `{"id":"bx-cyc001","title":"A","issue_type":"task","status":"open","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-cyc001","depends_on_id":"bx-cyc002","type":"blocks"}]}
+{"id":"bx-cyc002","title":"B","issue_type":"task","status":"open","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-cyc002","depends_on_id":"bx-cyc001","type":"blocks"}]}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
 	_, err := s.Import("jsonl", importFile)
@@ -73,8 +73,8 @@ func TestImportNoCycleSucceeds(t *testing.T) {
 	s := newTestStore(t)
 
 	importFile := filepath.Join(t.TempDir(), "dag.jsonl")
-	jsonl := `{"id":"bx-dag001","title":"Root","type":"task","status":"open","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}
-{"id":"bx-dag002","title":"Child","type":"task","status":"open","priority":2,"labels":[],"deps":["bx-dag001"],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`
+	jsonl := `{"id":"bx-dag001","title":"Root","issue_type":"task","status":"open","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}
+{"id":"bx-dag002","title":"Child","issue_type":"task","status":"open","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-dag002","depends_on_id":"bx-dag001","type":"blocks"}]}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
 	n, err := s.Import("jsonl", importFile)
@@ -111,7 +111,7 @@ func TestExportRoundTripPreservesFields(t *testing.T) {
 
 	orig := &Bead{
 		Title:       "Full bead",
-		Type:        "bug",
+		IssueType:        "bug",
 		Priority:    1,
 		Labels:      []string{"backend", "urgent"},
 		Description: "A real bug",
@@ -134,7 +134,7 @@ func TestExportRoundTripPreservesFields(t *testing.T) {
 	got, err := s2.Get(orig.ID)
 	require.NoError(t, err)
 	assert.Equal(t, orig.Title, got.Title)
-	assert.Equal(t, orig.Type, got.Type)
+	assert.Equal(t, orig.IssueType, got.IssueType)
 	assert.Equal(t, orig.Priority, got.Priority)
 	assert.Equal(t, orig.Labels, got.Labels)
 	assert.Equal(t, orig.Description, got.Description)

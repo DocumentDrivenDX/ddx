@@ -16,7 +16,7 @@ import (
 func TestCreateWithDanglingDep(t *testing.T) {
 	s := newTestStore(t)
 
-	b := &Bead{Title: "Has bad dep", Deps: []string{"nonexistent-id"}}
+	b := &Bead{Title: "Has bad dep", Dependencies: []Dependency{{DependsOnID: "nonexistent-id", Type: "blocks"}}}
 	err := s.Create(b)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "dependency not found")
@@ -28,12 +28,12 @@ func TestCreateWithValidDep(t *testing.T) {
 	a := &Bead{Title: "Exists"}
 	require.NoError(t, s.Create(a))
 
-	b := &Bead{Title: "Depends on A", Deps: []string{a.ID}}
+	b := &Bead{Title: "Depends on A", Dependencies: []Dependency{{DependsOnID: a.ID, Type: "blocks"}}}
 	require.NoError(t, s.Create(b))
 
 	got, err := s.Get(b.ID)
 	require.NoError(t, err)
-	assert.Contains(t, got.Deps, a.ID)
+	assert.Contains(t, got.DepIDs(), a.ID)
 }
 
 // ── Priority-sorted ready queue ──────────────────────────────────

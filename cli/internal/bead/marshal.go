@@ -6,17 +6,18 @@ import (
 	"time"
 )
 
-// Known field names that map to Bead struct fields.
+// Known field names that map to Bead struct fields (bd-compatible names).
 var knownFields = map[string]bool{
-	"id": true, "title": true, "type": true, "status": true,
-	"priority": true, "labels": true, "parent": true,
-	"description": true, "acceptance": true, "deps": true,
-	"assignee": true, "notes": true, "created": true, "updated": true,
+	"id": true, "title": true, "issue_type": true, "status": true,
+	"priority": true, "owner": true, "created_at": true, "created_by": true,
+	"updated_at": true, "labels": true, "parent": true, "description": true,
+	"acceptance": true, "dependencies": true, "notes": true,
+	// Note: bd computed fields (dependency_count, dependent_count, comment_count)
+	// are NOT in knownFields — they land in Extra and round-trip through it.
 }
 
 // unmarshalBead parses JSON into a Bead, preserving unknown fields in Extra.
 func unmarshalBead(data []byte) (Bead, error) {
-	// First unmarshal into a generic map to capture everything.
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return Bead{}, fmt.Errorf("bead: unmarshal: %w", err)
@@ -24,21 +25,38 @@ func unmarshalBead(data []byte) (Bead, error) {
 
 	var b Bead
 
-	// Unmarshal known fields
 	if v, ok := raw["id"]; ok {
 		json.Unmarshal(v, &b.ID)
 	}
 	if v, ok := raw["title"]; ok {
 		json.Unmarshal(v, &b.Title)
 	}
-	if v, ok := raw["type"]; ok {
-		json.Unmarshal(v, &b.Type)
+	if v, ok := raw["issue_type"]; ok {
+		json.Unmarshal(v, &b.IssueType)
 	}
 	if v, ok := raw["status"]; ok {
 		json.Unmarshal(v, &b.Status)
 	}
 	if v, ok := raw["priority"]; ok {
 		json.Unmarshal(v, &b.Priority)
+	}
+	if v, ok := raw["owner"]; ok {
+		json.Unmarshal(v, &b.Owner)
+	}
+	if v, ok := raw["created_at"]; ok {
+		var t time.Time
+		if err := json.Unmarshal(v, &t); err == nil {
+			b.CreatedAt = t
+		}
+	}
+	if v, ok := raw["created_by"]; ok {
+		json.Unmarshal(v, &b.CreatedBy)
+	}
+	if v, ok := raw["updated_at"]; ok {
+		var t time.Time
+		if err := json.Unmarshal(v, &t); err == nil {
+			b.UpdatedAt = t
+		}
 	}
 	if v, ok := raw["labels"]; ok {
 		json.Unmarshal(v, &b.Labels)
@@ -52,43 +70,22 @@ func unmarshalBead(data []byte) (Bead, error) {
 	if v, ok := raw["acceptance"]; ok {
 		json.Unmarshal(v, &b.Acceptance)
 	}
-	if v, ok := raw["deps"]; ok {
-		json.Unmarshal(v, &b.Deps)
-	}
-	if v, ok := raw["assignee"]; ok {
-		json.Unmarshal(v, &b.Assignee)
-	}
 	if v, ok := raw["notes"]; ok {
 		json.Unmarshal(v, &b.Notes)
 	}
-	if v, ok := raw["created"]; ok {
-		var t time.Time
-		if err := json.Unmarshal(v, &t); err == nil {
-			b.Created = t
-		}
-	}
-	if v, ok := raw["updated"]; ok {
-		var t time.Time
-		if err := json.Unmarshal(v, &t); err == nil {
-			b.Updated = t
-		}
+	if v, ok := raw["dependencies"]; ok {
+		json.Unmarshal(v, &b.Dependencies)
 	}
 
-	// Defaults for nil slices
-	if b.Labels == nil {
-		b.Labels = []string{}
-	}
-	if b.Deps == nil {
-		b.Deps = []string{}
-	}
-	if b.Type == "" {
-		b.Type = DefaultType
+	// Defaults
+	if b.IssueType == "" {
+		b.IssueType = DefaultType
 	}
 	if b.Status == "" {
 		b.Status = DefaultStatus
 	}
 
-	// Collect unknown fields
+	// Collect unknown fields into Extra
 	for k, v := range raw {
 		if knownFields[k] {
 			continue
@@ -105,26 +102,32 @@ func unmarshalBead(data []byte) (Bead, error) {
 }
 
 // MarshalBead serializes a Bead to JSON, merging Extra fields back in.
+// The output matches bd/br JSONL format.
 func MarshalBead(b Bead) ([]byte, error) {
 	return marshalBead(b)
 }
 
-// marshalBead is the internal implementation.
 func marshalBead(b Bead) ([]byte, error) {
-	// Build an ordered map with known fields first, then extras.
 	m := map[string]any{
-		"id":       b.ID,
-		"title":    b.Title,
-		"type":     b.Type,
-		"status":   b.Status,
-		"priority": b.Priority,
-		"labels":   b.Labels,
-		"deps":     b.Deps,
-		"created":  b.Created,
-		"updated":  b.Updated,
+		"id":         b.ID,
+		"title":      b.Title,
+		"status":     b.Status,
+		"priority":   b.Priority,
+		"issue_type": b.IssueType,
+		"created_at": b.CreatedAt,
+		"updated_at": b.UpdatedAt,
 	}
 
-	// Only include optional fields if non-empty
+	// Optional fields — only include if non-empty
+	if b.Owner != "" {
+		m["owner"] = b.Owner
+	}
+	if b.CreatedBy != "" {
+		m["created_by"] = b.CreatedBy
+	}
+	if len(b.Labels) > 0 {
+		m["labels"] = b.Labels
+	}
 	if b.Parent != "" {
 		m["parent"] = b.Parent
 	}
@@ -134,11 +137,11 @@ func marshalBead(b Bead) ([]byte, error) {
 	if b.Acceptance != "" {
 		m["acceptance"] = b.Acceptance
 	}
-	if b.Assignee != "" {
-		m["assignee"] = b.Assignee
-	}
 	if b.Notes != "" {
 		m["notes"] = b.Notes
+	}
+	if len(b.Dependencies) > 0 {
+		m["dependencies"] = b.Dependencies
 	}
 
 	// Merge extra fields (workflow-specific)

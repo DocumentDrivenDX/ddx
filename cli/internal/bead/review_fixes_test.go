@@ -103,7 +103,7 @@ exit 0`
 	b := &Bead{Title: "Hook test"}
 	err := s.Create(b)
 	assert.NoError(t, err)
-	assert.Equal(t, DefaultType, b.Type)
+	assert.Equal(t, DefaultType, b.IssueType)
 }
 
 // ── Finding #7: Import error reporting ──────────────────────────────

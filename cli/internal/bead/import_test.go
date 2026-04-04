@@ -81,7 +81,7 @@ func TestExportRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 
 	require.NoError(t, s.Create(&Bead{Title: "Task A", Labels: []string{"backend"}}))
-	require.NoError(t, s.Create(&Bead{Title: "Task B", Type: "bug", Priority: 0}))
+	require.NoError(t, s.Create(&Bead{Title: "Task B", IssueType: "bug", Priority: 0}))
 
 	// Export
 	exportFile := filepath.Join(t.TempDir(), "export.jsonl")

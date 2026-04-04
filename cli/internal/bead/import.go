@@ -187,9 +187,9 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 				b.Priority = MaxPriority
 			}
 			// Validate deps exist in either existing or incoming set
-			for _, dep := range b.Deps {
-				if !existingIDs[dep] && !incomingIDs[dep] {
-					fmt.Fprintf(os.Stderr, "bead: import: %s has dangling dep %s (skipped)\n", b.ID, dep)
+			for _, depID := range b.DepIDs() {
+				if !existingIDs[depID] && !incomingIDs[depID] {
+					fmt.Fprintf(os.Stderr, "bead: import: %s has dangling dep %s (skipped)\n", b.ID, depID)
 				}
 			}
 			existing = append(existing, b)
@@ -200,10 +200,10 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 		// Validate no circular dependencies in merged set
 		depMap := make(map[string][]string)
 		for _, b := range existing {
-			depMap[b.ID] = b.Deps
+			depMap[b.ID] = b.DepIDs()
 		}
 		for _, b := range existing {
-			if len(b.Deps) > 0 && hasCycle(depMap, b.ID) {
+			if len(b.Dependencies) > 0 && hasCycle(depMap, b.ID) {
 				return fmt.Errorf("bead: import would create circular dependency involving %s", b.ID)
 			}
 		}

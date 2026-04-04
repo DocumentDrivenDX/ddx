@@ -84,7 +84,7 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 			b := &bead.Bead{Title: args[0]}
 
 			if v, _ := cmd.Flags().GetString("type"); v != "" {
-				b.Type = v
+				b.IssueType = v
 			}
 			if v, _ := cmd.Flags().GetInt("priority"); cmd.Flags().Changed("priority") {
 				b.Priority = v
@@ -160,20 +160,20 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "ID:       %s\n", b.ID)
 			fmt.Fprintf(out, "Title:    %s\n", b.Title)
-			fmt.Fprintf(out, "Type:     %s\n", b.Type)
+			fmt.Fprintf(out, "Type:     %s\n", b.IssueType)
 			fmt.Fprintf(out, "Status:   %s\n", b.Status)
 			fmt.Fprintf(out, "Priority: %d\n", b.Priority)
 			if len(b.Labels) > 0 {
 				fmt.Fprintf(out, "Labels:   %s\n", strings.Join(b.Labels, ", "))
 			}
-			if b.Assignee != "" {
-				fmt.Fprintf(out, "Assignee: %s\n", b.Assignee)
+			if b.Owner != "" {
+				fmt.Fprintf(out, "Owner:    %s\n", b.Owner)
 			}
 			if b.Parent != "" {
 				fmt.Fprintf(out, "Parent:   %s\n", b.Parent)
 			}
-			if len(b.Deps) > 0 {
-				fmt.Fprintf(out, "Deps:     %s\n", strings.Join(b.Deps, ", "))
+			if len(b.Dependencies) > 0 {
+				fmt.Fprintf(out, "Deps:     %s\n", strings.Join(b.DepIDs(), ", "))
 			}
 			if b.Description != "" {
 				fmt.Fprintf(out, "Desc:     %s\n", b.Description)
@@ -181,8 +181,8 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			if b.Acceptance != "" {
 				fmt.Fprintf(out, "Accept:   %s\n", b.Acceptance)
 			}
-			fmt.Fprintf(out, "Created:  %s\n", b.Created.Format("2006-01-02 15:04:05"))
-			fmt.Fprintf(out, "Updated:  %s\n", b.Updated.Format("2006-01-02 15:04:05"))
+			fmt.Fprintf(out, "Created:  %s\n", b.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Fprintf(out, "Updated:  %s\n", b.UpdatedAt.Format("2006-01-02 15:04:05"))
 			for k, v := range b.Extra {
 				fmt.Fprintf(out, "%s: %v\n", k, v)
 			}
@@ -230,7 +230,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 					b.Acceptance = v
 				}
 				if v, _ := cmd.Flags().GetString("assignee"); cmd.Flags().Changed("assignee") {
-					b.Assignee = v
+					b.Owner = v
 				}
 				if setFlags, _ := cmd.Flags().GetStringArray("set"); len(setFlags) > 0 {
 					if b.Extra == nil {
@@ -388,7 +388,7 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 
 			for _, b := range beads {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  deps: %s\n",
-					b.ID, b.Priority, b.Title, strings.Join(b.Deps, ", "))
+					b.ID, b.Priority, b.Title, strings.Join(b.DepIDs(), ", "))
 			}
 			return nil
 		},
