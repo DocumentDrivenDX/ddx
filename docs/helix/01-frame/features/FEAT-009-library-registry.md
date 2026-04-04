@@ -141,6 +141,18 @@ ddx install persona/strict-code-reviewer
 6. **Uninstall** (`ddx uninstall <name>`) — remove an installed resource
 7. **Populate plugin cache** — on install, copy dun-compatible plugins to `~/.cache/ddx/library/plugins/`
 8. **Version tracking** — record installed versions, detect available updates
+9. **Update detection** (`ddx outdated`) — compare installed package versions
+   against source repo tags (via `git ls-remote --tags`) to determine if
+   updates are available. Output: package name, installed version, latest
+   available, update available (yes/no).
+10. **Package update** (`ddx upgrade <name>`) — re-install a package at the
+    latest available version. Performs a fresh shallow clone at the latest tag,
+    copies new files, updates `installed.yaml`. Safe to run repeatedly.
+11. **Startup update check** — on `ddx` startup (async, non-blocking), check
+    if installed packages have newer versions available. If so, print a
+    one-line notice: `Plugin update available: helix 0.1.0 → 0.2.0 (run
+    'ddx upgrade helix')`. Same pattern as the existing DDx binary update
+    check.
 
 ### Non-Functional
 
@@ -158,6 +170,8 @@ ddx install <name>                  # Install a resource or package
 ddx install helix                   # Install HELIX workflow
 ddx install persona/strict-code-reviewer  # Install one persona
 ddx installed                       # List what's installed
+ddx outdated                        # Check for available updates
+ddx upgrade <name>                  # Update a package to latest version
 ddx uninstall <name>                # Remove an installed resource
 ```
 
