@@ -69,10 +69,34 @@ Unknown fields in imported or existing beads are preserved on read/write. This a
 
 ## Storage
 
+DDx beads abstracts over multiple storage backends. Consumers (HELIX, dun, other workflows) **must only interact via `ddx bead` commands or the server API** — never read/write the storage file directly.
+
+### Backend Selection
+
+| Backend | Config Value | When To Use |
+|---------|-------------|-------------|
+| `jsonl` (default) | `bead.backend: jsonl` | Simple projects, single-agent, no external tooling |
+| `bd` | `bead.backend: bd` | Dolt-backed bead store (collaborative, branching) |
+| `br` | `bead.backend: br` | SQLite-backed bead store (local performance) |
+
+Backend is configured in `.ddx/config.yaml` or via `DDX_BEAD_BACKEND` env var. Default: `jsonl`.
+
+For `bd` and `br` backends, DDx shells out to the respective binary. For `jsonl`, DDx manages the file directly.
+
+### JSONL Backend Details
+
 - **Default path:** `.ddx/beads.jsonl` (one JSON object per line, sorted by id)
 - **Configuration:** `DDX_BEAD_DIR` env var or `bead.dir` in `.ddx/config.yaml`
-- **ID prefix:** `DDX_BEAD_PREFIX` env var or `bead.id_prefix` in config (default: `bx`)
 - **Locking:** Directory-based lock at `.ddx/beads.lock/` with PID file and acquisition timestamp. Configurable timeout (default: 10s).
+
+### ID Prefix
+
+- **Configurable per project:** `bead.id_prefix` in `.ddx/config.yaml` or `DDX_BEAD_PREFIX` env var
+- **Default:** `bx`
+- **Convention:** HELIX projects use `hx`, dun projects use `dn`, etc.
+- **Format:** `<prefix>-` + 8 hex chars (e.g., `hx-7c6f43f4`)
+
+This means the same DDx bead service can manage beads for different projects with distinct, non-colliding ID namespaces.
 
 ## Validation
 
@@ -155,6 +179,37 @@ ddx bead export [--stdout] [file]
 **Acceptance Criteria:**
 - Given ddx-server is running with beads, when an agent calls `ddx_bead_ready`, then it receives ready beads as structured JSON
 - Given an agent calls `ddx_show_bead` with an ID, then it receives the full bead including all fields (known and unknown)
+
+## Claim Semantics
+
+Beads support advisory ownership claims for agent/workflow coordination:
+
+- `ddx bead update <id> --claim` sets `status=in_progress`, `assignee=<caller>`, records `claimed-at` (ISO-8601 UTC) and `claimed-pid` (current PID)
+- `ddx bead update <id> --unclaim` sets `status=open`, clears `assignee`, `claimed-at`, `claimed-pid`
+- Claims are advisory — they prevent double-claiming, not hard locks
+- `claimed-at` and `claimed-pid` are standard fields (not unknown-field extensions)
+
+## Custom Fields
+
+Workflows need to store fields DDx doesn't know about (e.g., HELIX stores `spec-id`, `execution-eligible`, `superseded-by`).
+
+- `ddx bead create --set key=value` — set arbitrary field on create
+- `ddx bead update <id> --set key=value` — set arbitrary field on update
+- `ddx bead list --where key=value` — filter by custom field
+- Unknown fields are preserved on all read/write operations
+- Custom fields appear in JSON output and import/export
+
+This keeps DDx agnostic while giving workflows a typed pass-through mechanism.
+
+## Validation Hooks
+
+Workflows register custom validators as executables:
+
+- `.ddx/hooks/validate-bead-create` — called on create, receives bead JSON on stdin
+- `.ddx/hooks/validate-bead-update` — called on update, receives bead JSON on stdin
+- Exit 0 = ok, Exit 1 = hard error (creation blocked, stderr = message), Exit 2 = warning (proceeds, stderr = message)
+
+Example: HELIX installs a hook requiring `spec-id` on task-type beads and `acceptance` on task/epic beads.
 
 ## Edge Cases
 

@@ -32,7 +32,9 @@ DDx makes documents the unit of software development — providing the shared in
 | Meta-prompt injection | Right baseline context injected into agents automatically, no manual assembly |
 | MCP server for document access | Agents can programmatically browse and consume document libraries |
 | Template engine | New projects start with proven document structures, not blank files |
-| Workflow-agnostic primitives | Any methodology (HELIX, custom, etc.) can build on DDx without reimplementing document management |
+| Bead tracker | Portable work items with dependency DAG, ready queue, and import/export — shared across workflow tools |
+| Agent service | Unified harness dispatch (codex, claude, gemini, etc.) with quorum, session logging, and prompt envelope format |
+| Workflow-agnostic primitives | Any methodology (HELIX, custom, etc.) can build on DDx without reimplementing infrastructure |
 
 ## Success Definition
 

@@ -4,30 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DDx (Document-Driven Development eXperience) is a CLI toolkit for AI-assisted development that helps developers share templates, prompts, and patterns across projects. The project follows a medical differential diagnosis metaphor - using structured documentation to diagnose project issues, prescribe solutions, and share improvements.
+DDx (Document-Driven Development eXperience) is the shared infrastructure platform for document-driven development. It provides the tools that developers and workflow systems (like HELIX) use to manage the documents AI agents consume to build software.
+
+DDx is one layer in a three-project stack:
+- **DDx** (this repo) — platform services: document library, bead tracker, agent service, personas, templates, git sync
+- **HELIX** (`~/Projects/helix`) — workflow methodology: phases, gates, supervisory dispatch, bounded actions
+- **Dun** (`~/Projects/dun`) — quality check runner: check discovery, execution, agent-friendly output
 
 ## Architecture
 
-The project has a dual structure:
-- **CLI Application** (`/cli/`): Go-based command-line tool built with Cobra framework
-- **Library Repository** (ddx-library): Templates, patterns, prompts, and configurations synced via git subtree to `.ddx/library/`
+This monorepo produces three artifacts:
+- **`ddx` CLI** (`/cli/`): Go binary — document library mgmt, bead tracker, agent dispatch, personas, templates, git sync
+- **`ddx-server`** (planned): Web server + MCP endpoints for document and bead access
+- **`ddx.github.io`** (`/website/`): Hugo promotional site
 
 ### Key Components
 
 - `cli/` - Go CLI application source code
-  - `cmd/` - Cobra command implementations (init, list, apply, doctor, update, contribute)
-  - `internal/` - Internal packages (config, templates, git utilities)
+  - `cmd/` - Cobra command implementations
+  - `internal/` - Internal packages (config, bead, persona, git, mcp, metaprompt, etc.)
   - `main.go` - Application entry point
+- `website/` - Hugo site with Hextra theme
 - `.ddx/library/` - DDx library resources (synced from ddx-library repo)
-  - `templates/` - Project templates (NextJS, Python, etc.)
-  - `patterns/` - Reusable code patterns and examples
-  - `prompts/` - AI prompts and instructions (Claude-specific and general)
-  - `personas/` - AI persona definitions for consistent role-based interactions
-  - `mcp-servers/` - MCP server registry and configurations
-  - `configs/` - Tool configurations (ESLint, Prettier, TypeScript)
-  - `workflows/` - Development workflow definitions
+  - `templates/` - Project templates
+  - `patterns/` - Reusable code patterns
+  - `prompts/` - AI prompts and instructions
+  - `personas/` - AI persona definitions
+  - `mcp-servers/` - MCP server registry
+  - `configs/` - Tool configurations
+- `docs/helix/` - HELIX frame artifacts (vision, PRD, feature specs)
 - `scripts/` - Build and automation scripts
-- `docs/` - Project documentation
 
 ## Development Commands
 
@@ -75,23 +81,15 @@ The CLI uses git subtree for managing the relationship between individual projec
 
 **CRITICAL**: The DDx CLI follows the principle of "Extensibility Through Composition" - keep the CLI core minimal and add features through library resources.
 
-1. **CLI Core Minimalism**:
-   - The CLI should only contain fundamental operations: init, update, apply, list, doctor, contribute
-   - Tool-specific integrations (Obsidian, VSCode, etc.) belong in `.ddx/library/scripts/` or `.ddx/library/tools/`
+1. **Platform Services in CLI, Opinions in Workflows**:
+   - CLI owns: document library, bead tracker, agent dispatch, personas, templates, git sync
+   - Workflow tools own: phase enforcement, supervisory loops, methodology-specific validation
+   - DDx provides primitives; HELIX and others provide opinions
 
 2. **Feature Addition Pattern**:
-   - New capabilities are added as templates, prompts, or scripts in the library
-   - The CLI is a delivery mechanism, not a feature repository
-   - Third-party tool integrations go through the library, not CLI actions
-
-3. **Correct Implementation Pattern**:
-   ```go
-   // BAD: Hard-coding features in CLI
-   var obsidianCmd = &cobra.Command{...}  // Don't do this
-
-   // GOOD: Loading features from library
-   ddx apply tools/obsidian/migrate.sh     // Use library scripts
-   ```
+   - Document-type resources go in the library (personas, patterns, templates)
+   - Platform capabilities go in the CLI (beads, agent service, MCP)
+   - Workflow-specific logic stays in workflow tools (HELIX, etc.)
 
 ## Testing and Quality
 
@@ -135,24 +133,31 @@ Pre-commit checks include:
 The CLI follows a noun-verb command structure for clarity and consistency:
 
 **Core Commands:**
-- `ddx init` - Initialize DDx in a project (with optional template)
+- `ddx init` - Initialize DDx in a project
 - `ddx doctor` - Check installation health and diagnose issues
 - `ddx upgrade` - Upgrade DDx binary to latest release version
 - `ddx update` - Update toolkit resources from master repository
 - `ddx contribute` - Share improvements back to community
+- `ddx status` - Show version and sync status
 
-**Resource Commands (noun-verb structure):**
-- `ddx prompts list` - List available AI prompts
-- `ddx prompts show <name>` - Display a specific prompt
-- `ddx templates list` - List available project templates
-- `ddx templates apply <name>` - Apply a project template
-- `ddx patterns list` - List available code patterns
-- `ddx patterns apply <name>` - Apply a code pattern
-- `ddx persona list` - List available AI personas
-- `ddx persona show <name>` - Show persona details
-- `ddx persona bind <role> <name>` - Bind persona to role
-- `ddx mcp list` - List available MCP servers
-The CLI follows the medical metaphor throughout, treating projects as patients that need diagnosis and treatment through appropriate templates and patterns.
+**Bead Tracker:**
+- `ddx bead create/show/update/close` - Work item CRUD
+- `ddx bead list/ready/blocked/status` - Query and filter beads
+- `ddx bead dep add/remove/tree` - Dependency DAG management
+- `ddx bead import/export` - JSONL interchange with bd/br
+
+**Agent Service:**
+- `ddx agent run --harness=<name> --prompt <file>` - Invoke an AI agent
+- `ddx agent run --quorum=majority --harnesses=a,b` - Multi-agent consensus
+- `ddx agent list` - Show available harnesses
+- `ddx agent doctor` - Harness health check
+- `ddx agent log` - Session history
+
+**Resource Commands:**
+- `ddx prompts list/show` - AI prompts
+- `ddx templates list/apply` - Project templates
+- `ddx persona list/show/bind` - AI personas
+- `ddx mcp list/install` - MCP servers
 
 ## Persona System
 

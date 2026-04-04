@@ -104,7 +104,12 @@ func unmarshalBead(data []byte) (Bead, error) {
 	return b, nil
 }
 
-// marshalBead serializes a Bead to JSON, merging Extra fields back in.
+// MarshalBead serializes a Bead to JSON, merging Extra fields back in.
+func MarshalBead(b Bead) ([]byte, error) {
+	return marshalBead(b)
+}
+
+// marshalBead is the internal implementation.
 func marshalBead(b Bead) ([]byte, error) {
 	// Build an ordered map with known fields first, then extras.
 	m := map[string]any{

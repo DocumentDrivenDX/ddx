@@ -49,7 +49,7 @@ AI agents produce code from documents. But there's no tooling for the documents 
 
 - A workflow methodology (that's HELIX and others, not DDx)
 - Workflow-specific bead validation (phase labels, spec-id enforcement — that's the workflow layer via hooks)
-- Supervisory execution loops or agent orchestration (that's workflow-level)
+- Loop orchestration — deciding what to do next based on agent results is workflow-level (HELIX `helix run`). DDx provides single-invocation dispatch and mechanical quorum (call N agents, compare responses), not decision loops.
 - An AI agent or agent framework
 - A GUI for editing documents (use your editor)
 - A cloud/SaaS service
@@ -92,6 +92,11 @@ AI agents produce code from documents. But there's no tooling for the documents 
 - Bead tracker for work items (`ddx bead create/show/update/close/list/ready/blocked/status`)
 - Bead dependency DAG (`ddx bead dep add/remove/tree`)
 - Bead import/export for interchange with `bd`, `br`, and JSONL (`ddx bead import/export`)
+- Agent interface for harness dispatch (`ddx agent run --harness=<name> --prompt <file>`)
+- Agent harness registry (codex, claude, gemini, opencode, cursor, etc.)
+- Agent output capture with token tracking and session logging
+- Agent quorum dispatch (`ddx agent run --quorum=majority --harnesses=codex,claude`)
+- Prompt envelope format as standard agent I/O contract
 
 **Server (`ddx-server`)**
 - HTTP endpoints to browse document library contents
