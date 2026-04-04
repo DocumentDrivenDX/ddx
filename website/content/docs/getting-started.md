@@ -5,7 +5,9 @@ prev: /docs
 next: /docs/concepts
 ---
 
-Get DDx installed, HELIX plugged in, and your first project built in under 10 minutes.
+Get DDx installed, HELIX plugged in, and your first beads created in under 5 minutes.
+
+{{< asciinema src="07-quickstart" cols="100" rows="30" >}}
 
 ## Install
 
@@ -35,68 +37,36 @@ make install
 
 **Requirements:** Git 2.0+.
 
-{{< asciinema src="01-install" >}}
-
-## Initialize Your Project
+## Initialize and Install HELIX
 
 ```bash
 cd your-project
-ddx init
+ddx init                    # create .ddx/ library structure
+ddx install helix           # install HELIX workflow plugin
+ddx doctor                  # verify everything works
 ```
 
-This creates:
-- `.ddx/config.yaml` — project configuration
-- `.ddx/library/` — your document library (prompts, personas, patterns, templates)
-
-{{< asciinema src="02-init-explore" >}}
-
-## Install a Workflow Plugin
+## Create Work Items
 
 ```bash
-ddx search workflow       # find available plugins
-ddx install helix         # install HELIX methodology
-ddx installed             # verify installation
+ddx bead create "Design auth system" --type epic --labels "helix,phase:frame"
+ddx bead create "Implement login" --type task --labels "helix,phase:build"
+ddx bead dep add <task-id> <epic-id>
+ddx bead list               # see all beads
+ddx bead ready              # see what's unblocked
 ```
 
-{{< asciinema src="03-plugin-install" >}}
-
-## Build Something
+## Build with Agents
 
 With DDx and HELIX installed, agents can frame, build, and evolve projects.
 See the [HELIX quickstart](https://github.com/DocumentDrivenDX/helix#quickstart)
-for a full walkthrough, or try it yourself:
+for a full walkthrough.
 
 ```bash
-# Frame: agent creates specs and work items
-ddx agent run --harness claude --prompt frame-prompt.md
-
-# Build: agent implements per specs with TDD
-ddx agent run --harness claude --prompt build-prompt.md
-
-# Evolve: add a feature
-ddx agent run --harness claude --prompt evolve-prompt.md
-
-# Inspect: see what was built
-ddx bead list             # work items tracked
-ddx agent usage           # token consumption
-ddx doc changed --since HEAD~10  # artifacts touched
+ddx agent run --harness claude --prompt frame-prompt.md   # create specs
+ddx agent run --harness claude --prompt build-prompt.md   # implement
+ddx agent usage             # check token consumption
 ```
-
-## Explore What's Available
-
-```bash
-ddx list              # See all document categories
-ddx persona list      # Browse persona definitions
-ddx doctor            # Validate your setup
-```
-
-## Check Your Setup
-
-```bash
-ddx doctor
-```
-
-Doctor validates your library structure, git configuration, and dependencies.
 
 ## Next Steps
 

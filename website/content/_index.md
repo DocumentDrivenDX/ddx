@@ -60,6 +60,4 @@ layout: hextra-home
 
 ## See It In Action
 
-{{< asciinema src="02-init-explore" >}}
-
-See the [full DDx + HELIX journey](https://github.com/DocumentDrivenDX/helix#quickstart) — from `ddx init` through building a working application with AI agents.
+{{< asciinema src="07-quickstart" cols="100" rows="30" >}}
