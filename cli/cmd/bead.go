@@ -261,7 +261,15 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						case "acceptance":
 							b.Acceptance = v
 						default:
-							b.Extra[k] = v
+							// Parse booleans and numbers for proper typing
+							switch v {
+							case "true":
+								b.Extra[k] = true
+							case "false":
+								b.Extra[k] = false
+							default:
+								b.Extra[k] = v
+							}
 						}
 					}
 				}
