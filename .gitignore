@@ -413,5 +413,3 @@ site/
 cli/internal/agent/.ddx/
 
 # Keep embedded frontend build (required for go:embed)
-!cli/internal/server/frontend/dist/
-cli/internal/server/frontend/dist/
