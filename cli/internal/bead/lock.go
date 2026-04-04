@@ -65,12 +65,15 @@ func (s *Store) breakStaleLock() bool {
 	if err == nil {
 		pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
 		if err == nil && pid > 0 && pid != os.Getpid() {
-			// syscall.Kill with signal 0 checks process existence
-			if syscall.Kill(pid, 0) != nil {
+			// syscall.Kill with signal 0 checks process existence.
+			// ESRCH = no such process (dead). EPERM = exists but different user (alive).
+			killErr := syscall.Kill(pid, 0)
+			if killErr == syscall.ESRCH {
 				// Process is dead — break the lock
 				os.RemoveAll(s.LockDir)
 				return true
 			}
+			// EPERM or nil means process is alive — don't break
 		}
 	}
 

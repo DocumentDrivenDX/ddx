@@ -126,12 +126,8 @@ func (s *Store) WriteAll(beads []Bead) error {
 	return os.Rename(tmp, s.File)
 }
 
-// Create adds a new bead. Validates and assigns defaults.
+// Create adds a new bead. Assigns defaults, validates, then persists.
 func (s *Store) Create(b *Bead) error {
-	if err := s.validateCreate(b); err != nil {
-		return err
-	}
-
 	now := time.Now().UTC()
 	if b.ID == "" {
 		id, err := s.GenID()
@@ -155,10 +151,25 @@ func (s *Store) Create(b *Bead) error {
 	b.Created = now
 	b.Updated = now
 
+	// Validate after defaults are applied so hooks see final state
+	if err := s.validateBead(b); err != nil {
+		return err
+	}
+	// Run create hook
+	if err := s.runHook("validate-bead-create", b); err != nil {
+		return err
+	}
+
 	return s.WithLock(func() error {
 		beads, err := s.ReadAll()
 		if err != nil {
 			return err
+		}
+		// Reject duplicate IDs
+		for _, e := range beads {
+			if e.ID == b.ID {
+				return fmt.Errorf("bead: duplicate id: %s", b.ID)
+			}
 		}
 		// Validate deps reference existing beads
 		if len(b.Deps) > 0 {
@@ -203,7 +214,12 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 			if beads[i].ID == id {
 				mutate(&beads[i])
 				beads[i].Updated = time.Now().UTC()
-				if err := s.validateUpdate(&beads[i]); err != nil {
+				// Core validation after mutation
+				if err := s.validateBead(&beads[i]); err != nil {
+					return err
+				}
+				// Run update hook
+				if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
 					return err
 				}
 				found = true
@@ -497,15 +513,15 @@ func (s *Store) printTree(sb *strings.Builder, byID map[string]*Bead, id, prefix
 	}
 }
 
-// validateCreate checks base DDx validation rules, then runs workflow hooks.
-func (s *Store) validateCreate(b *Bead) error {
+// validateBead checks core invariants that must hold for any bead (create or update).
+func (s *Store) validateBead(b *Bead) error {
 	if strings.TrimSpace(b.Title) == "" {
 		return fmt.Errorf("bead: title is required")
 	}
 	if b.Priority < MinPriority || b.Priority > MaxPriority {
 		return fmt.Errorf("bead: priority must be %d-%d, got %d", MinPriority, MaxPriority, b.Priority)
 	}
-	if b.Status != "" && b.Status != StatusOpen && b.Status != StatusInProgress && b.Status != StatusClosed {
+	if b.Status != StatusOpen && b.Status != StatusInProgress && b.Status != StatusClosed {
 		return fmt.Errorf("bead: invalid status: %s", b.Status)
 	}
 	// Self-ref check
@@ -514,13 +530,7 @@ func (s *Store) validateCreate(b *Bead) error {
 			return fmt.Errorf("bead: cannot depend on self")
 		}
 	}
-	// Run workflow validation hook
-	return s.runHook("validate-bead-create", b)
-}
-
-// validateUpdate runs the workflow update validation hook.
-func (s *Store) validateUpdate(b *Bead) error {
-	return s.runHook("validate-bead-update", b)
+	return nil
 }
 
 func envOr(key, fallback string) string {

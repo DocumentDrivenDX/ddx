@@ -85,7 +85,7 @@ func TestExportRoundTrip(t *testing.T) {
 
 	// Export
 	exportFile := filepath.Join(t.TempDir(), "export.jsonl")
-	require.NoError(t, s.Export(exportFile))
+	require.NoError(t, s.ExportToFile(exportFile))
 
 	// Import into fresh store
 	s2 := newTestStore(t)

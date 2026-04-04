@@ -3,6 +3,7 @@ package bead
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,36 +29,34 @@ func (s *Store) Import(source, filePath string) (int, error) {
 	}
 }
 
-// Export writes all beads as JSONL to the given path, or stdout if path is "".
-func (s *Store) Export(filePath string) error {
+// ExportTo writes all beads as JSONL to the given writer.
+func (s *Store) ExportTo(w io.Writer) error {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return err
 	}
-
-	var f *os.File
-	if filePath == "" || filePath == "-" {
-		f = os.Stdout
-	} else {
-		dir := filepath.Dir(filePath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("bead: export mkdir: %w", err)
-		}
-		f, err = os.Create(filePath)
-		if err != nil {
-			return fmt.Errorf("bead: export create: %w", err)
-		}
-		defer f.Close()
-	}
-
 	for _, b := range beads {
 		data, err := marshalBead(b)
 		if err != nil {
 			return fmt.Errorf("bead: export marshal: %w", err)
 		}
-		fmt.Fprintf(f, "%s\n", data)
+		fmt.Fprintf(w, "%s\n", data)
 	}
 	return nil
+}
+
+// ExportToFile writes all beads as JSONL to the given file path.
+func (s *Store) ExportToFile(filePath string) error {
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("bead: export mkdir: %w", err)
+	}
+	f, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("bead: export create: %w", err)
+	}
+	defer f.Close()
+	return s.ExportTo(f)
 }
 
 func (s *Store) importAuto(filePath string) (int, error) {
@@ -105,19 +104,22 @@ func (s *Store) importFromJSONL(path string) (int, error) {
 
 func (s *Store) mergeJSONL(data string) (int, error) {
 	var incoming []Bead
+	var parseErrors int
 
 	// Try as JSON array first, then as JSONL
 	trimmed := strings.TrimSpace(data)
 	if strings.HasPrefix(trimmed, "[") {
 		var raw []json.RawMessage
-		if err := json.Unmarshal([]byte(trimmed), &raw); err == nil {
-			for _, r := range raw {
-				b, err := unmarshalBead(r)
-				if err != nil {
-					continue
-				}
-				incoming = append(incoming, b)
+		if err := json.Unmarshal([]byte(trimmed), &raw); err != nil {
+			return 0, fmt.Errorf("bead: import parse: %w", err)
+		}
+		for _, r := range raw {
+			b, err := unmarshalBead(r)
+			if err != nil {
+				parseErrors++
+				continue
 			}
+			incoming = append(incoming, b)
 		}
 	} else {
 		for _, line := range strings.Split(trimmed, "\n") {
@@ -127,10 +129,18 @@ func (s *Store) mergeJSONL(data string) (int, error) {
 			}
 			b, err := unmarshalBead([]byte(line))
 			if err != nil {
+				parseErrors++
 				continue
 			}
 			incoming = append(incoming, b)
 		}
+	}
+
+	if parseErrors > 0 && len(incoming) == 0 {
+		return 0, fmt.Errorf("bead: import failed: %d malformed record(s), 0 valid", parseErrors)
+	}
+	if parseErrors > 0 {
+		fmt.Fprintf(os.Stderr, "bead: import: skipped %d malformed record(s)\n", parseErrors)
 	}
 
 	if len(incoming) == 0 {
@@ -153,9 +163,32 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 			existingIDs[b.ID] = true
 		}
 
+		// Collect IDs from incoming for cross-reference validation
+		incomingIDs := make(map[string]bool)
+		for _, b := range incoming {
+			incomingIDs[b.ID] = true
+		}
+
 		for _, b := range incoming {
 			if existingIDs[b.ID] {
 				continue // skip duplicates
+			}
+			// Normalize: ensure valid status
+			if b.Status != StatusOpen && b.Status != StatusInProgress && b.Status != StatusClosed {
+				b.Status = StatusOpen
+			}
+			// Clamp priority
+			if b.Priority < MinPriority {
+				b.Priority = MinPriority
+			}
+			if b.Priority > MaxPriority {
+				b.Priority = MaxPriority
+			}
+			// Validate deps exist in either existing or incoming set
+			for _, dep := range b.Deps {
+				if !existingIDs[dep] && !incomingIDs[dep] {
+					fmt.Fprintf(os.Stderr, "bead: import: %s has dangling dep %s (skipped)\n", b.ID, dep)
+				}
 			}
 			existing = append(existing, b)
 			existingIDs[b.ID] = true

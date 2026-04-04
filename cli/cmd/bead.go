@@ -189,7 +189,11 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 					b.Priority = v
 				}
 				if v, _ := cmd.Flags().GetString("labels"); cmd.Flags().Changed("labels") {
-					b.Labels = strings.Split(v, ",")
+					if v == "" {
+						b.Labels = []string{}
+					} else {
+						b.Labels = strings.Split(v, ",")
+					}
 				}
 				if v, _ := cmd.Flags().GetString("acceptance"); cmd.Flags().Changed("acceptance") {
 					b.Acceptance = v
@@ -470,17 +474,11 @@ func (f *CommandFactory) newBeadExportCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			stdout, _ := cmd.Flags().GetBool("stdout")
-			file := ""
-			if len(args) > 0 {
-				file = args[0]
+
+			if stdout || len(args) == 0 {
+				return s.ExportTo(cmd.OutOrStdout())
 			}
-			if stdout {
-				file = "-"
-			}
-			if file == "" {
-				file = ".beads/issues.jsonl"
-			}
-			return s.Export(file)
+			return s.ExportToFile(args[0])
 		},
 	}
 	cmd.Flags().Bool("stdout", false, "Write to stdout")
