@@ -37,7 +37,7 @@ func NewStore(dir string) *Store {
 		Dir:      dir,
 		File:     filepath.Join(dir, "issues.jsonl"),
 		Prefix:   prefix,
-		LockDir:  filepath.Join(dir, "beads.lock"),
+		LockDir:  filepath.Join(dir, "issues.lock"),
 		LockWait: parseDurationOr("DDX_BEAD_LOCK_TIMEOUT", 10*time.Second),
 	}
 
