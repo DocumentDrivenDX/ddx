@@ -233,6 +233,32 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 	})
 }
 
+// Claim sets a bead to in_progress with claim metadata.
+// Fails if the bead is already claimed (status == in_progress).
+func (s *Store) Claim(id, assignee string) error {
+	return s.Update(id, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Status = StatusInProgress
+		b.Assignee = assignee
+		b.Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
+		b.Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
+	})
+}
+
+// Unclaim resets a bead from in_progress back to open, clearing claim metadata.
+func (s *Store) Unclaim(id string) error {
+	return s.Update(id, func(b *Bead) {
+		b.Status = StatusOpen
+		b.Assignee = ""
+		if b.Extra != nil {
+			delete(b.Extra, "claimed-at")
+			delete(b.Extra, "claimed-pid")
+		}
+	})
+}
+
 // Close sets a bead's status to closed.
 func (s *Store) Close(id string) error {
 	return s.Update(id, func(b *Bead) {

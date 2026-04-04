@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/easel/ddx/internal/bead"
 	"github.com/spf13/cobra"
@@ -201,6 +200,15 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
+
+			// --claim and --unclaim use dedicated store methods
+			if claim, _ := cmd.Flags().GetBool("claim"); claim {
+				return s.Claim(args[0], "ddx")
+			}
+			if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
+				return s.Unclaim(args[0])
+			}
+
 			return s.Update(args[0], func(b *bead.Bead) {
 				if v, _ := cmd.Flags().GetString("title"); cmd.Flags().Changed("title") {
 					b.Title = v
@@ -223,23 +231,6 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				}
 				if v, _ := cmd.Flags().GetString("assignee"); cmd.Flags().Changed("assignee") {
 					b.Assignee = v
-				}
-				if claim, _ := cmd.Flags().GetBool("claim"); claim {
-					b.Status = bead.StatusInProgress
-					b.Assignee = "ddx"
-					if b.Extra == nil {
-						b.Extra = make(map[string]any)
-					}
-					b.Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
-					b.Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
-				}
-				if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
-					b.Status = bead.StatusOpen
-					b.Assignee = ""
-					if b.Extra != nil {
-						delete(b.Extra, "claimed-at")
-						delete(b.Extra, "claimed-pid")
-					}
 				}
 				if setFlags, _ := cmd.Flags().GetStringArray("set"); len(setFlags) > 0 {
 					if b.Extra == nil {

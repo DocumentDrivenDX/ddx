@@ -40,7 +40,9 @@ func (s *Store) ExportTo(w io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("bead: export marshal: %w", err)
 		}
-		fmt.Fprintf(w, "%s\n", data)
+		if _, err := fmt.Fprintf(w, "%s\n", data); err != nil {
+			return fmt.Errorf("bead: export write: %w", err)
+		}
 	}
 	return nil
 }
@@ -193,6 +195,17 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 			existing = append(existing, b)
 			existingIDs[b.ID] = true
 			count++
+		}
+
+		// Validate no circular dependencies in merged set
+		depMap := make(map[string][]string)
+		for _, b := range existing {
+			depMap[b.ID] = b.Deps
+		}
+		for _, b := range existing {
+			if len(b.Deps) > 0 && hasCycle(depMap, b.ID) {
+				return fmt.Errorf("bead: import would create circular dependency involving %s", b.ID)
+			}
 		}
 
 		return s.WriteAll(existing)
