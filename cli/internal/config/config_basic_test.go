@@ -225,3 +225,26 @@ agent:
 	assert.Equal(t, "claude-sonnet-4-20250514", cfg.Agent.Models["claude"])
 	assert.Equal(t, []string{"low", "medium", "high"}, cfg.Agent.ReasoningLevels["codex"])
 }
+
+func TestLoadConfig_BeadPrefixField(t *testing.T) {
+	tempDir := t.TempDir()
+
+	content := `version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+bead:
+  id_prefix: "nif"
+`
+
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0o644))
+
+	cfg, err := LoadWithWorkingDir(tempDir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Bead)
+	assert.Equal(t, "nif", cfg.Bead.IDPrefix)
+}

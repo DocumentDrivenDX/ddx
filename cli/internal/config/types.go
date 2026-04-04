@@ -5,6 +5,7 @@ package config
 type NewConfig struct {
 	Version         string             `yaml:"version" json:"version"`
 	Library         *LibraryConfig     `yaml:"library" json:"library"`
+	Bead            *BeadConfig        `yaml:"bead,omitempty" json:"bead,omitempty"`
 	System          *SystemConfig      `yaml:"system,omitempty" json:"system,omitempty"`
 	PersonaBindings map[string]string  `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
 	UpdateCheck     *UpdateCheckConfig `yaml:"update_check,omitempty" json:"update_check,omitempty"`
@@ -30,6 +31,11 @@ type SystemConfig struct {
 type LibraryConfig struct {
 	Path       string            `yaml:"path,omitempty" json:"path,omitempty"`
 	Repository *RepositoryConfig `yaml:"repository" json:"repository"`
+}
+
+// BeadConfig represents bead tracker configuration settings.
+type BeadConfig struct {
+	IDPrefix string `yaml:"id_prefix,omitempty" json:"id_prefix,omitempty"`
 }
 
 // RepositoryConfig represents repository settings for the new format
@@ -107,6 +113,9 @@ func (c *NewConfig) ApplyDefaults() {
 				c.Library.Repository.Branch = "main"
 			}
 		}
+	}
+	if c.Bead == nil {
+		c.Bead = &BeadConfig{}
 	}
 	if c.PersonaBindings == nil {
 		c.PersonaBindings = make(map[string]string)

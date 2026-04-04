@@ -3,6 +3,7 @@ package bead
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,54 @@ func TestCreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, b.Title, got.Title)
 	assert.Equal(t, b.IssueType, got.IssueType)
+}
+
+func TestCreateUsesConfiguredPrefix(t *testing.T) {
+	tempDir := t.TempDir()
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+bead:
+  id_prefix: "nif"
+`), 0o644))
+
+	s := NewStore(filepath.Join(tempDir, ".ddx"))
+	require.NoError(t, s.Init())
+
+	b := &Bead{Title: "Configured prefix"}
+	require.NoError(t, s.Create(b))
+
+	assert.True(t, strings.HasPrefix(b.ID, "nif-"))
+}
+
+func TestCreateUsesEnvPrefixOverConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+bead:
+  id_prefix: "nif"
+`), 0o644))
+
+	t.Setenv("DDX_BEAD_PREFIX", "env")
+
+	s := NewStore(filepath.Join(tempDir, ".ddx"))
+	require.NoError(t, s.Init())
+
+	b := &Bead{Title: "Env prefix"}
+	require.NoError(t, s.Create(b))
+
+	assert.True(t, strings.HasPrefix(b.ID, "env-"))
 }
 
 func TestCreateDefaults(t *testing.T) {

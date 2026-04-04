@@ -329,6 +329,8 @@ PowerShell:
 	rootCmd.AddCommand(f.newLogCommand())
 	rootCmd.AddCommand(f.newAuthCommand())
 	rootCmd.AddCommand(f.newBeadCommand())
+	rootCmd.AddCommand(f.newExecCommand())
+	rootCmd.AddCommand(f.newMetricCommand())
 	rootCmd.AddCommand(f.newAgentCommand())
 	rootCmd.AddCommand(f.newDocCommand())
 	rootCmd.AddCommand(f.newServerCommand())

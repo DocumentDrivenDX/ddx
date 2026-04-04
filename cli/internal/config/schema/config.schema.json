@@ -53,6 +53,19 @@
       },
       "additionalProperties": false
     },
+    "bead": {
+      "type": "object",
+      "description": "Bead tracker configuration",
+      "properties": {
+        "id_prefix": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Override the bead ID prefix used by the tracker",
+          "examples": ["nif", "bx"]
+        }
+      },
+      "additionalProperties": false
+    },
     "persona_bindings": {
       "type": "object",
       "description": "Bindings between roles and persona names",

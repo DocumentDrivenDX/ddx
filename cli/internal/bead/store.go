@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/easel/ddx/internal/config"
 )
 
 // Store manages beads via a pluggable backend.
@@ -32,7 +34,19 @@ func NewStore(dir string) *Store {
 	if dir == "" {
 		dir = envOr("DDX_BEAD_DIR", ".ddx")
 	}
-	prefix := envOr("DDX_BEAD_PREFIX", detectPrefix())
+	prefix := envOr("DDX_BEAD_PREFIX", "")
+	if prefix == "" {
+		workingDir := dir
+		if filepath.Base(dir) == ".ddx" {
+			workingDir = filepath.Dir(dir)
+		}
+		if cfg, err := config.LoadWithWorkingDir(workingDir); err == nil && cfg != nil && cfg.Bead != nil && cfg.Bead.IDPrefix != "" {
+			prefix = cfg.Bead.IDPrefix
+		}
+	}
+	if prefix == "" {
+		prefix = detectPrefix()
+	}
 	backendType := envOr("DDX_BEAD_BACKEND", BackendJSONL)
 
 	s := &Store{
@@ -367,6 +381,102 @@ func (s *Store) Unclaim(id string) error {
 			delete(b.Extra, "claimed-pid")
 		}
 	})
+}
+
+// AppendEvent adds an immutable execution evidence entry to a bead.
+func (s *Store) AppendEvent(id string, event BeadEvent) error {
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = time.Now().UTC()
+	}
+	return s.Update(id, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		var events []BeadEvent
+		if raw, ok := b.Extra["events"]; ok {
+			events = decodeBeadEvents(raw)
+		}
+		events = append(events, event)
+		encoded := make([]map[string]any, 0, len(events))
+		for _, e := range events {
+			encoded = append(encoded, map[string]any{
+				"kind":       e.Kind,
+				"summary":    e.Summary,
+				"body":       e.Body,
+				"actor":      e.Actor,
+				"created_at": e.CreatedAt,
+				"source":     e.Source,
+			})
+		}
+		b.Extra["events"] = encoded
+	})
+}
+
+// Events returns the bead's evidence history in insertion order.
+func (s *Store) Events(id string) ([]BeadEvent, error) {
+	b, err := s.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	events := decodeBeadEvents(b.Extra["events"])
+	if len(events) == 0 {
+		return []BeadEvent{}, nil
+	}
+	out := make([]BeadEvent, len(events))
+	copy(out, events)
+	return out, nil
+}
+
+func decodeBeadEvents(raw any) []BeadEvent {
+	switch v := raw.(type) {
+	case []BeadEvent:
+		out := make([]BeadEvent, len(v))
+		copy(out, v)
+		return out
+	case []any:
+		out := make([]BeadEvent, 0, len(v))
+		for _, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			out = append(out, beadEventFromMap(m))
+		}
+		return out
+	case []map[string]any:
+		out := make([]BeadEvent, 0, len(v))
+		for _, item := range v {
+			out = append(out, beadEventFromMap(item))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func beadEventFromMap(m map[string]any) BeadEvent {
+	e := BeadEvent{}
+	if v, ok := m["kind"].(string); ok {
+		e.Kind = v
+	}
+	if v, ok := m["summary"].(string); ok {
+		e.Summary = v
+	}
+	if v, ok := m["body"].(string); ok {
+		e.Body = v
+	}
+	if v, ok := m["actor"].(string); ok {
+		e.Actor = v
+	}
+	if v, ok := m["source"].(string); ok {
+		e.Source = v
+	}
+	if v, ok := m["created_at"].(string); ok {
+		if parsed, err := time.Parse(time.RFC3339, v); err == nil {
+			e.CreatedAt = parsed
+		}
+	}
+	return e
 }
 
 // Close sets a bead's status to closed.
