@@ -60,23 +60,51 @@ These prefixes are conventions — DDx treats them all the same. Workflows (HELI
 
 Unknown fields are preserved on round-trip.
 
+## The Artifact Graph
+
+All artifacts in a project form a **single directed acyclic graph** via `depends_on` edges. This graph is the project's authority structure — it encodes which documents govern which.
+
+```
+Product Vision
+  └─ PRD
+       ├─ FEAT-001
+       │    ├─ SD-001
+       │    │    └─ TD-001
+       │    │         └─ TP-001
+       │    └─ US-001
+       ├─ FEAT-002
+       │    └─ ADR-001
+       └─ MET-001
+```
+
+Every artifact should be reachable from a root (typically the vision or PRD). Orphaned artifacts — those with no incoming or outgoing edges — are a smell that `ddx doc validate` flags.
+
+### Graph Properties
+
+- **Single graph per project.** All artifacts with `ddx:` frontmatter participate in one graph. There are no separate "ADR graph" or "feature graph" partitions.
+- **Edges are explicit.** Only `depends_on` creates edges. No implicit edges from directory structure or naming.
+- **Direction is authority.** An edge from B to A means "A governs B" — if A changes, B may be stale.
+- **Staleness cascades.** If a node is stale, all its descendants are transitively stale.
+- **Types are orthogonal.** The graph doesn't care about artifact types. An ADR can depend on a feature spec; a metric can depend on a PRD; a test plan can depend on a solution design. The graph is type-agnostic.
+
 ## What DDx Does With Artifacts
 
 All via `ddx doc` commands (FEAT-007):
 
 1. **Discover** — scan for `ddx:` frontmatter in markdown files
-2. **Graph** — build dependency DAG from `depends_on` references
+2. **Graph** — build the single project-wide dependency DAG
 3. **Stale** — detect when upstream dependencies changed since last stamp
 4. **Stamp** — record review hashes after updating a document
 5. **List** — list artifacts with optional type filtering (`ddx doc list --type ADR`)
 6. **Show** — display artifact content and metadata
-7. **Validate** — check frontmatter structure, dependency references exist, no circular deps
+7. **Validate** — check frontmatter structure, dependency references exist, no circular deps, no orphans
 
 ## What DDx Does NOT Do
 
 - **Scaffold from templates** — agents and workflows create documents. DDx doesn't need `create` commands for each type.
-- **Enforce type-specific structure** — "ADRs must have a Decision section" is a workflow concern. DDx validates frontmatter; dun validates content structure.
+- **Enforce type-specific structure** — "ADRs must have a Decision section" is a workflow concern. DDx validates the graph; dun validates content structure.
 - **Hardcode artifact types** — no switch statements on type prefixes. The graph treats all artifacts equally.
+- **Partition the graph** — all artifacts are in one graph regardless of type or directory.
 
 ## Templates and Prompts
 
