@@ -53,7 +53,7 @@ func TestCreateDefaults(t *testing.T) {
 
 	assert.Equal(t, DefaultType, b.Type)
 	assert.Equal(t, DefaultStatus, b.Status)
-	assert.Equal(t, DefaultPriority, b.Priority)
+	assert.Equal(t, 0, b.Priority)
 	assert.NotNil(t, b.Labels)
 	assert.NotNil(t, b.Deps)
 }

@@ -3,7 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/easel/ddx/internal/bead"
 	"github.com/spf13/cobra"
@@ -198,6 +200,11 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if claim, _ := cmd.Flags().GetBool("claim"); claim {
 					b.Status = bead.StatusInProgress
 					b.Assignee = "ddx"
+					if b.Extra == nil {
+						b.Extra = make(map[string]any)
+					}
+					b.Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
+					b.Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
 				}
 			})
 		},
@@ -279,7 +286,15 @@ func (f *CommandFactory) newBeadReadyCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			beads, err := s.Ready()
+			execution, _ := cmd.Flags().GetBool("execution")
+
+			var beads []bead.Bead
+			var err error
+			if execution {
+				beads, err = s.ReadyExecution()
+			} else {
+				beads, err = s.Ready()
+			}
 			if err != nil {
 				return err
 			}
@@ -303,6 +318,7 @@ func (f *CommandFactory) newBeadReadyCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.Flags().Bool("execution", false, "Filter by execution-eligible and not superseded")
 	return cmd
 }
 
@@ -342,7 +358,7 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 }
 
 func (f *CommandFactory) newBeadStatusCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show bead counts",
 		Args:  cobra.NoArgs,
@@ -352,6 +368,14 @@ func (f *CommandFactory) newBeadStatusCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(counts)
+			}
+
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Total:   %d\n", counts.Total)
 			fmt.Fprintf(out, "Open:    %d\n", counts.Open)
@@ -361,6 +385,8 @@ func (f *CommandFactory) newBeadStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
 }
 
 func (f *CommandFactory) newBeadDepCommand() *cobra.Command {

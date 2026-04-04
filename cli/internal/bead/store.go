@@ -146,9 +146,6 @@ func (s *Store) Create(b *Bead) error {
 	if b.Status == "" {
 		b.Status = DefaultStatus
 	}
-	if b.Priority == 0 && b.Extra == nil {
-		b.Priority = DefaultPriority
-	}
 	if b.Labels == nil {
 		b.Labels = []string{}
 	}
@@ -162,6 +159,18 @@ func (s *Store) Create(b *Bead) error {
 		beads, err := s.ReadAll()
 		if err != nil {
 			return err
+		}
+		// Validate deps reference existing beads
+		if len(b.Deps) > 0 {
+			existing := make(map[string]bool)
+			for _, e := range beads {
+				existing[e.ID] = true
+			}
+			for _, dep := range b.Deps {
+				if !existing[dep] {
+					return fmt.Errorf("bead: dependency not found: %s", dep)
+				}
+			}
 		}
 		beads = append(beads, *b)
 		return s.WriteAll(beads)
@@ -194,6 +203,9 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 			if beads[i].ID == id {
 				mutate(&beads[i])
 				beads[i].Updated = time.Now().UTC()
+				if err := s.validateUpdate(&beads[i]); err != nil {
+					return err
+				}
 				found = true
 				break
 			}
@@ -231,8 +243,19 @@ func (s *Store) List(status, label string) ([]Bead, error) {
 	return result, nil
 }
 
-// Ready returns open beads whose dependencies are all closed.
+// Ready returns open beads whose dependencies are all closed, sorted by
+// priority (0 = highest first).
 func (s *Store) Ready() ([]Bead, error) {
+	return s.readyFiltered(false)
+}
+
+// ReadyExecution returns ready beads that are also execution-eligible and
+// not superseded. This is the filter HELIX uses for its build loop.
+func (s *Store) ReadyExecution() ([]Bead, error) {
+	return s.readyFiltered(true)
+}
+
+func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return nil, err
@@ -254,10 +277,32 @@ func (s *Store) Ready() ([]Bead, error) {
 				break
 			}
 		}
-		if allSatisfied {
-			ready = append(ready, b)
+		if !allSatisfied {
+			continue
 		}
+		if executionOnly {
+			// Filter by execution-eligible (default true if absent)
+			eligible, ok := b.Extra["execution-eligible"]
+			if ok {
+				if val, isBool := eligible.(bool); isBool && !val {
+					continue
+				}
+			}
+			// Filter out superseded beads
+			if sup, ok := b.Extra["superseded-by"]; ok {
+				if s, isStr := sup.(string); isStr && s != "" {
+					continue
+				}
+			}
+		}
+		ready = append(ready, b)
 	}
+
+	// Sort by priority (0 = highest first)
+	sort.Slice(ready, func(i, j int) bool {
+		return ready[i].Priority < ready[j].Priority
+	})
+
 	return ready, nil
 }
 
@@ -344,6 +389,18 @@ func (s *Store) DepAdd(id, depID string) error {
 		if containsString(target.Deps, depID) {
 			return nil // already exists
 		}
+
+		// Check for circular dependency
+		depMap := make(map[string][]string)
+		for _, b := range beads {
+			depMap[b.ID] = b.Deps
+		}
+		// Temporarily add the new dep for cycle check
+		depMap[id] = append(append([]string{}, target.Deps...), depID)
+		if hasCycle(depMap, id) {
+			return fmt.Errorf("bead: circular dependency: %s -> %s", id, depID)
+		}
+
 		target.Deps = append(target.Deps, depID)
 		target.Updated = time.Now().UTC()
 		return s.WriteAll(beads)
@@ -440,7 +497,7 @@ func (s *Store) printTree(sb *strings.Builder, byID map[string]*Bead, id, prefix
 	}
 }
 
-// validateCreate checks base DDx validation rules.
+// validateCreate checks base DDx validation rules, then runs workflow hooks.
 func (s *Store) validateCreate(b *Bead) error {
 	if strings.TrimSpace(b.Title) == "" {
 		return fmt.Errorf("bead: title is required")
@@ -457,7 +514,13 @@ func (s *Store) validateCreate(b *Bead) error {
 			return fmt.Errorf("bead: cannot depend on self")
 		}
 	}
-	return nil
+	// Run workflow validation hook
+	return s.runHook("validate-bead-create", b)
+}
+
+// validateUpdate runs the workflow update validation hook.
+func (s *Store) validateUpdate(b *Bead) error {
+	return s.runHook("validate-bead-update", b)
 }
 
 func envOr(key, fallback string) string {
@@ -483,4 +546,31 @@ func sortedKeys(m map[string]*Bead) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// hasCycle detects cycles in the dependency graph starting from startID.
+func hasCycle(deps map[string][]string, startID string) bool {
+	visited := make(map[string]bool)
+	stack := make(map[string]bool)
+
+	var visit func(string) bool
+	visit = func(id string) bool {
+		visited[id] = true
+		stack[id] = true
+
+		for _, dep := range deps[id] {
+			if !visited[dep] {
+				if visit(dep) {
+					return true
+				}
+			} else if stack[dep] {
+				return true
+			}
+		}
+
+		stack[id] = false
+		return false
+	}
+
+	return visit(startID)
 }
