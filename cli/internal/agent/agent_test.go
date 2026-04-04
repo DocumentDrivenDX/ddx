@@ -83,7 +83,7 @@ func TestBuildArgsCodexBasic(t *testing.T) {
 	h, _ := r.Get("codex")
 	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
 	assert.Equal(t, []string{
-		"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral",
+		"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral", "--json",
 		"do stuff",
 	}, args)
 }
@@ -281,6 +281,59 @@ func TestExtractTokensNoMatch(t *testing.T) {
 	assert.Equal(t, 0, ExtractTokens("no token info", h))
 }
 
+// TC-010: codex harness Args contains "--json"
+func TestCodexArgsContainsJSON(t *testing.T) {
+	r := NewRegistry()
+	h, ok := r.Get("codex")
+	require.True(t, ok)
+	assert.Contains(t, h.Args, "--json")
+}
+
+// TC-001: ExtractUsage with fixture codex JSONL output containing turn.completed returns correct tokens
+func TestExtractUsageCodexTurnCompleted(t *testing.T) {
+	fixture := `{"type":"turn.started","session_id":"s-abc123"}
+{"type":"message","role":"assistant","content":"Working on it..."}
+{"type":"turn.completed","usage":{"input_tokens":17337,"cached_input_tokens":16768,"output_tokens":37}}
+`
+	usage := ExtractUsage("codex", fixture)
+	assert.Equal(t, 17337, usage.InputTokens)
+	assert.Equal(t, 37, usage.OutputTokens)
+	assert.Equal(t, 0.0, usage.CostUSD)
+}
+
+// TC-002: ExtractUsage with fixture claude JSON returns correct tokens and cost
+func TestExtractUsageClaudeJSON(t *testing.T) {
+	fixture := `{"usage":{"input_tokens":5000,"output_tokens":800,"cache_creation_input_tokens":0,"cache_read_input_tokens":4200},"total_cost_usd":0.045,"result":"the agent's text output..."}`
+	usage := ExtractUsage("claude", fixture)
+	assert.Equal(t, 5000, usage.InputTokens)
+	assert.Equal(t, 800, usage.OutputTokens)
+	assert.Equal(t, 0.045, usage.CostUSD)
+}
+
+// TC-002b: ExtractUsage with claude JSON as last line (preceded by other output) returns correct tokens and cost
+func TestExtractUsageClaudeJSONLastLine(t *testing.T) {
+	fixture := "some preamble output\nanother line\n" + `{"usage":{"input_tokens":5000,"output_tokens":800,"cache_creation_input_tokens":0,"cache_read_input_tokens":4200},"total_cost_usd":0.045,"result":"the agent's text output..."}`
+	usage := ExtractUsage("claude", fixture)
+	assert.Equal(t, 5000, usage.InputTokens)
+	assert.Equal(t, 800, usage.OutputTokens)
+	assert.Equal(t, 0.045, usage.CostUSD)
+}
+
+// TC-003: ExtractUsage with garbage input returns zero UsageData (no panic)
+func TestExtractUsageCodexGarbageInput(t *testing.T) {
+	usage := ExtractUsage("codex", "not json at all\n{broken\n")
+	assert.Equal(t, UsageData{}, usage)
+}
+
+// TC-011: claude harness Args contains "--output-format" and "json"
+func TestClaudeArgsContainsOutputFormatJSON(t *testing.T) {
+	r := NewRegistry()
+	h, ok := r.Get("claude")
+	require.True(t, ok)
+	assert.Contains(t, h.Args, "--output-format")
+	assert.Contains(t, h.Args, "json")
+}
+
 // --- Session logging ---
 
 func TestSessionLogging(t *testing.T) {
@@ -315,6 +368,39 @@ func TestSessionEntryLegacyRowCompatibility(t *testing.T) {
 	assert.Equal(t, 100, entry.PromptLen)
 	assert.Empty(t, entry.Prompt)
 	assert.Empty(t, entry.Response)
+}
+
+// TC-004: old-format JSON (tokens only) parses without error; new fields default to zero.
+func TestSessionEntryTC004_OldFormatNewFieldsZero(t *testing.T) {
+	row := `{"id":"as-0002","timestamp":"2026-01-01T10:00:00Z","harness":"codex","prompt_len":50,"tokens":1200,"duration_ms":1000,"exit_code":0}`
+	var entry SessionEntry
+	require.NoError(t, json.Unmarshal([]byte(row), &entry))
+	assert.Equal(t, 1200, entry.Tokens)
+	assert.Equal(t, 0, entry.InputTokens)
+	assert.Equal(t, 0, entry.OutputTokens)
+	assert.Equal(t, 0.0, entry.CostUSD)
+}
+
+// TC-005: new fields round-trip through JSON correctly.
+func TestSessionEntryTC005_NewFieldsRoundTrip(t *testing.T) {
+	original := SessionEntry{
+		ID:           "as-0003",
+		Harness:      "claude",
+		Tokens:       900,
+		InputTokens:  300,
+		OutputTokens: 600,
+		CostUSD:      0.0045,
+		Duration:     1500,
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded SessionEntry
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, original.Tokens, decoded.Tokens)
+	assert.Equal(t, original.InputTokens, decoded.InputTokens)
+	assert.Equal(t, original.OutputTokens, decoded.OutputTokens)
+	assert.InDelta(t, original.CostUSD, decoded.CostUSD, 1e-9)
 }
 
 // --- Quorum ---

@@ -234,6 +234,10 @@ The server feature spec should also define requirements for:
 - **Scope:** DDx manages documents, not agents. No workflow enforcement.
 - **Platform:** macOS, Linux, Windows for CLI. Server runs anywhere Go runs.
 - **License:** MIT, open source.
+- **Agent safety:** DDx defaults to safe agent permissions. Permissive modes
+  (`unrestricted`) require explicit opt-in via config or CLI flag. Normal
+  users should never accidentally run agents with bypassed safety rails.
+  See FEAT-006 Agent Permission Model.
 
 ## Risks
 

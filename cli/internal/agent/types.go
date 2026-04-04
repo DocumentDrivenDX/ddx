@@ -51,14 +51,17 @@ type QuorumOptions struct {
 
 // Result holds the output of an agent invocation.
 type Result struct {
-	Harness    string `json:"harness"`
-	Model      string `json:"model,omitempty"`
-	ExitCode   int    `json:"exit_code"`
-	Output     string `json:"output"`
-	Stderr     string `json:"stderr,omitempty"`
-	Tokens     int    `json:"tokens,omitempty"`
-	DurationMS int    `json:"duration_ms"`
-	Error      string `json:"error,omitempty"`
+	Harness      string  `json:"harness"`
+	Model        string  `json:"model,omitempty"`
+	ExitCode     int     `json:"exit_code"`
+	Output       string  `json:"output"`
+	Stderr       string  `json:"stderr,omitempty"`
+	Tokens       int     `json:"tokens,omitempty"`
+	InputTokens  int     `json:"input_tokens,omitempty"`
+	OutputTokens int     `json:"output_tokens,omitempty"`
+	CostUSD      float64 `json:"cost_usd,omitempty"`
+	DurationMS   int     `json:"duration_ms"`
+	Error        string  `json:"error,omitempty"`
 }
 
 // SessionEntry is written to the session log.
@@ -74,6 +77,9 @@ type SessionEntry struct {
 	Correlation  map[string]string `json:"correlation,omitempty"`
 	Stderr       string            `json:"stderr,omitempty"`
 	Tokens       int               `json:"tokens,omitempty"`
+	InputTokens  int               `json:"input_tokens,omitempty"`
+	OutputTokens int               `json:"output_tokens,omitempty"`
+	CostUSD      float64           `json:"cost_usd,omitempty"`
 	Duration     int               `json:"duration_ms"`
 	ExitCode     int               `json:"exit_code"`
 	Error        string            `json:"error,omitempty"`

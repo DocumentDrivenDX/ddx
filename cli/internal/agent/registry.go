@@ -10,7 +10,7 @@ var builtinHarnesses = map[string]Harness{
 	"codex": {
 		Name:            "codex",
 		Binary:          "codex",
-		Args:            []string{"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral"},
+		Args:            []string{"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral", "--json"},
 		PromptMode:      "arg",
 		DefaultModel:    "o3-mini",
 		Models:          nil, // models change frequently; rely on provider-side validation
@@ -24,7 +24,7 @@ var builtinHarnesses = map[string]Harness{
 	"claude": {
 		Name:            "claude",
 		Binary:          "claude",
-		Args:            []string{"--no-session-persistence", "--print", "-p", "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"},
+		Args:            []string{"--no-session-persistence", "--print", "-p", "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions", "--output-format", "json"},
 		PromptMode:      "arg",
 		DefaultModel:    "claude-sonnet-4-20250514",
 		Models:          nil, // models change frequently; rely on provider-side validation

@@ -259,11 +259,97 @@ func (r *Runner) processResult(harnessName, model string, harness Harness, execR
 	}
 
 	result.Tokens = ExtractTokens(result.Output, harness)
+	usage := ExtractUsage(harnessName, result.Output)
+	result.InputTokens = usage.InputTokens
+	result.OutputTokens = usage.OutputTokens
+	result.CostUSD = usage.CostUSD
 	return result
 }
 
+// UsageData holds structured token usage from a structured agent output.
+type UsageData struct {
+	InputTokens  int
+	OutputTokens int
+	CostUSD      float64
+}
+
+// ExtractUsage parses structured token usage from agent output.
+// For codex, it scans JSONL output for a turn.completed event and reads the usage object.
+// For claude, it parses the --output-format json envelope (whole output or last non-empty line).
+// Returns zero-value UsageData if parsing fails or the harness is unsupported.
+func ExtractUsage(harnessName string, output string) UsageData {
+	switch harnessName {
+	case "codex":
+		for _, line := range strings.Split(output, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || !strings.Contains(line, `"turn.completed"`) {
+				continue
+			}
+			var event struct {
+				Type  string `json:"type"`
+				Usage struct {
+					InputTokens  int `json:"input_tokens"`
+					OutputTokens int `json:"output_tokens"`
+				} `json:"usage"`
+			}
+			if err := json.Unmarshal([]byte(line), &event); err != nil {
+				continue
+			}
+			if event.Type == "turn.completed" {
+				return UsageData{
+					InputTokens:  event.Usage.InputTokens,
+					OutputTokens: event.Usage.OutputTokens,
+				}
+			}
+		}
+		return UsageData{}
+	case "claude":
+		var envelope struct {
+			Usage struct {
+				InputTokens  int `json:"input_tokens"`
+				OutputTokens int `json:"output_tokens"`
+			} `json:"usage"`
+			TotalCostUSD float64 `json:"total_cost_usd"`
+		}
+		// Try whole output first, then fall back to last non-empty line.
+		if err := json.Unmarshal([]byte(output), &envelope); err != nil {
+			lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+			last := ""
+			for i := len(lines) - 1; i >= 0; i-- {
+				if strings.TrimSpace(lines[i]) != "" {
+					last = lines[i]
+					break
+				}
+			}
+			if last == "" {
+				return UsageData{}
+			}
+			if err2 := json.Unmarshal([]byte(last), &envelope); err2 != nil {
+				return UsageData{}
+			}
+		}
+		if envelope.Usage.InputTokens == 0 && envelope.Usage.OutputTokens == 0 && envelope.TotalCostUSD == 0 {
+			return UsageData{}
+		}
+		return UsageData{
+			InputTokens:  envelope.Usage.InputTokens,
+			OutputTokens: envelope.Usage.OutputTokens,
+			CostUSD:      envelope.TotalCostUSD,
+		}
+	default:
+		return UsageData{}
+	}
+}
+
 // ExtractTokens parses token usage from agent output using the harness's pattern.
+// For codex, it delegates to ExtractUsage and returns total tokens (input + output).
 func ExtractTokens(output string, harness Harness) int {
+	if harness.Name == "codex" {
+		usage := ExtractUsage("codex", output)
+		if usage.InputTokens > 0 || usage.OutputTokens > 0 {
+			return usage.InputTokens + usage.OutputTokens
+		}
+	}
 	if harness.TokenPattern == "" {
 		return 0
 	}
@@ -304,6 +390,9 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 		Correlation:  correlation,
 		Stderr:       result.Stderr,
 		Tokens:       result.Tokens,
+		InputTokens:  result.InputTokens,
+		OutputTokens: result.OutputTokens,
+		CostUSD:      result.CostUSD,
 		Duration:     result.DurationMS,
 		ExitCode:     result.ExitCode,
 		Error:        result.Error,

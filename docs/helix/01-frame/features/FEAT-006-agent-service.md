@@ -226,9 +226,49 @@ This ensures no working functionality is lost at any step.
 - Harness binaries (codex, claude, etc.) installed by user
 - DDx CLI infrastructure (config loading, command factory)
 
+## Agent Permission Model
+
+**Problem:** DDx currently hardcodes permissive flags into harness
+invocations (`--dangerously-bypass-approvals-and-sandbox` for codex,
+`--dangerously-skip-permissions` for claude). This is unsafe for normal
+users who may not understand the implications.
+
+**Design:**
+
+DDx defines three permission profiles:
+
+| Profile | Behavior | When to use |
+|---------|----------|-------------|
+| `safe` (default) | Uses harness's built-in permission model. No bypass flags. Agent asks for approval on destructive actions. | Normal users, first-time setup |
+| `supervised` | Auto-approves read operations, prompts for writes and shell commands. Harness-specific flag mapping. | Experienced users with review workflow |
+| `unrestricted` | Current behavior — all safety bypassed. Harness runs with full permissions. | Controlled CI environments, experienced operators |
+
+**Configuration:**
+```yaml
+# .ddx/config.yaml
+agent:
+  permissions: safe  # safe | supervised | unrestricted
+```
+
+**CLI override:** `ddx agent run --permissions unrestricted`
+
+**Harness flag mapping:**
+
+| Profile | codex flags | claude flags |
+|---------|------------|--------------|
+| safe | (none — default codex behavior) | (none — default claude behavior) |
+| supervised | `--auto-approve-reads` | `--permission-mode default` |
+| unrestricted | `--dangerously-bypass-approvals-and-sandbox` | `--permission-mode bypassPermissions --dangerously-skip-permissions` |
+
+**Safety invariant:** If `agent.permissions` is not explicitly set in config
+AND the `--permissions` flag is not provided, DDx defaults to `safe` and
+logs a one-time notice explaining the available modes.
+
 ## Out of Scope
 
-- **Server-side agent dispatch** — `ddx agent run` is CLI-only. Exposing it over HTTP/MCP would be remote code execution. If ever added, it must require explicit opt-in, authentication, and input validation. Deferred indefinitely.
+- **Server-side agent dispatch** — `ddx agent run` is CLI-only for security.
+  The localhost-only dispatch endpoints in FEAT-002 (items 40-41) delegate to
+  the CLI internally and require API key for non-local access.
 - Building or hosting AI agents
 - Model fine-tuning or prompt optimization
 - Agent-to-agent communication protocols
