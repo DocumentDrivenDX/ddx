@@ -97,6 +97,9 @@ AI agents produce code from documents. But there's no tooling for the documents 
 - Agent output capture with token tracking and session logging
 - Agent quorum dispatch (`ddx agent run --quorum=majority --harnesses=codex,claude`)
 - Prompt envelope format as standard agent I/O contract
+- Document dependency graph (`ddx doc graph/stale/stamp`)
+- Document staleness detection via content hashing and dependency tracking
+- `ddx:` YAML frontmatter convention for document identity and dependencies
 
 **Server (`ddx-server`)**
 - HTTP endpoints to browse document library contents
@@ -104,6 +107,7 @@ AI agents produce code from documents. But there's no tooling for the documents 
 - Serve from a local DDx library path
 - Stateless — reads from filesystem, no database
 - Bead endpoints (list, show, ready, status) via MCP and HTTP
+- Document graph endpoints (graph, stale, dependencies) via MCP and HTTP
 
 **Website (`ddx.github.io`)**
 - Clear explanation of what DDx is and why it exists

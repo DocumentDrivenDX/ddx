@@ -34,6 +34,7 @@ DDx makes documents the unit of software development — providing the shared in
 | Template engine | New projects start with proven document structures, not blank files |
 | Bead tracker | Portable work items with dependency DAG, ready queue, and import/export — shared across workflow tools |
 | Agent service | Unified harness dispatch (codex, claude, gemini, etc.) with quorum, session logging, and prompt envelope format |
+| Document dependency graph | Track which docs depend on which, detect staleness via content hashing, cascade invalidation when upstream docs change |
 | Workflow-agnostic primitives | Any methodology (HELIX, custom, etc.) can build on DDx without reimplementing infrastructure |
 
 ## Success Definition
