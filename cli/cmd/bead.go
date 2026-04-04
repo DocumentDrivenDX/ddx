@@ -288,6 +288,9 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if beads == nil {
+				beads = []bead.Bead{}
+			}
 
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
@@ -338,6 +341,9 @@ func (f *CommandFactory) newBeadReadyCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if beads == nil {
+				beads = []bead.Bead{}
+			}
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
@@ -372,6 +378,9 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 			beads, err := s.Blocked()
 			if err != nil {
 				return err
+			}
+			if beads == nil {
+				beads = []bead.Bead{}
 			}
 
 			asJSON, _ := cmd.Flags().GetBool("json")
