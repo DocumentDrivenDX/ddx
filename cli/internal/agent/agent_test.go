@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -323,12 +324,15 @@ func TestQuorumRunsAllHarnesses(t *testing.T) {
 }
 
 type trackingExecutor struct {
+	mu     sync.Mutex
 	calls  map[string]bool
 	output string
 }
 
 func (e *trackingExecutor) Execute(ctx context.Context, binary string, args []string, stdin string) (*ExecResult, error) {
+	e.mu.Lock()
 	e.calls[binary] = true
+	e.mu.Unlock()
 	return &ExecResult{Stdout: e.output}, nil
 }
 
