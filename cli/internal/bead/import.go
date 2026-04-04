@@ -61,6 +61,27 @@ func (s *Store) ExportToFile(filePath string) error {
 	return s.ExportTo(f)
 }
 
+// MigrateFromHelix checks for .helix/issues.jsonl and imports beads into the
+// DDx store if it exists and the DDx store is empty. Returns (count, migrated, error).
+func (s *Store) MigrateFromHelix() (int, bool, error) {
+	helixFile := ".helix/issues.jsonl"
+	if _, err := os.Stat(helixFile); err != nil {
+		return 0, false, nil // no HELIX tracker, nothing to do
+	}
+
+	// Check if DDx store already has beads
+	existing, err := s.ReadAll()
+	if err == nil && len(existing) > 0 {
+		return 0, false, nil // DDx store already populated
+	}
+
+	n, err := s.importFromJSONL(helixFile)
+	if err != nil {
+		return 0, false, fmt.Errorf("bead: migrate from .helix/issues.jsonl: %w", err)
+	}
+	return n, n > 0, nil
+}
+
 func (s *Store) importAuto(filePath string) (int, error) {
 	// Try bd
 	if _, err := exec.LookPath("bd"); err == nil {
@@ -78,10 +99,21 @@ func (s *Store) importAuto(filePath string) (int, error) {
 		}
 	}
 
-	// Try .beads/issues.jsonl
+	// Try known bead file locations in priority order
 	beadsFile := filePath
 	if beadsFile == "" {
-		beadsFile = ".beads/issues.jsonl"
+		for _, candidate := range []string{
+			".beads/issues.jsonl",   // bd default
+			".helix/issues.jsonl",   // HELIX legacy tracker
+		} {
+			if _, err := os.Stat(candidate); err == nil {
+				beadsFile = candidate
+				break
+			}
+		}
+		if beadsFile == "" {
+			beadsFile = ".beads/issues.jsonl" // fallback for error message
+		}
 	}
 	return s.importFromJSONL(beadsFile)
 }

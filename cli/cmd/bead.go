@@ -69,6 +69,14 @@ func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized bead storage at %s\n", s.File)
+
+			// Auto-migrate from .helix/issues.jsonl if present
+			n, migrated, err := s.MigrateFromHelix()
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: migration from .helix/issues.jsonl failed: %v\n", err)
+			} else if migrated {
+				fmt.Fprintf(cmd.OutOrStdout(), "Migrated %d beads from .helix/issues.jsonl\n", n)
+			}
 			return nil
 		},
 	}
