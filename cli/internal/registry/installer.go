@@ -136,21 +136,51 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 	}
 
 	if info.IsDir() {
-		// Copy directory contents.
-		entries, err := os.ReadDir(src)
+		// Copy directory tree, resolving symlinks (HELIX skills are symlinked dirs).
+		err := filepath.Walk(src, func(path string, fi os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			rel, _ := filepath.Rel(src, path)
+			if rel == "." {
+				return nil
+			}
+
+			// Resolve symlinks to their real targets.
+			realPath := path
+			if fi.Mode()&os.ModeSymlink != 0 {
+				resolved, err := filepath.EvalSymlinks(path)
+				if err != nil {
+					return nil // skip broken symlinks
+				}
+				realPath = resolved
+				fi, err = os.Stat(resolved)
+				if err != nil {
+					return nil
+				}
+			}
+
+			dstPath := filepath.Join(dst, rel)
+			if fi.IsDir() {
+				// Recurse into symlinked directories.
+				subFiles, subErr := copyMapping(realPath, &InstallMapping{Source: ".", Target: dstPath})
+				if subErr != nil {
+					return subErr
+				}
+				written = append(written, subFiles...)
+				return filepath.SkipDir
+			}
+			if !fi.Mode().IsRegular() {
+				return nil
+			}
+			if err := copyFile(realPath, dstPath); err != nil {
+				return err
+			}
+			written = append(written, dstPath)
+			return nil
+		})
 		if err != nil {
 			return nil, err
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				continue // only top-level files for now
-			}
-			srcFile := filepath.Join(src, e.Name())
-			dstFile := filepath.Join(dst, e.Name())
-			if err := copyFile(srcFile, dstFile); err != nil {
-				return nil, err
-			}
-			written = append(written, dstFile)
 		}
 	} else {
 		// Source is a single file.
@@ -165,9 +195,17 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 }
 
 // copyFile copies src to dst, creating parent directories as needed.
+// If dst already exists (file, symlink, or directory), it is removed first.
 func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
+	}
+
+	// Remove any existing file/symlink/directory at dst.
+	if _, err := os.Lstat(dst); err == nil {
+		if err := os.RemoveAll(dst); err != nil {
+			return fmt.Errorf("removing existing %s: %w", dst, err)
+		}
 	}
 
 	in, err := os.Open(src)

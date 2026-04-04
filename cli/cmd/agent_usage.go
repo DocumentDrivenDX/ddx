@@ -111,6 +111,7 @@ func aggregateUsage(logFile, harnessFilter string, since time.Time) ([]usageRow,
 	order := []string{}
 
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max line
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {

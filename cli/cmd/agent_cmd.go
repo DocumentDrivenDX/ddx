@@ -39,6 +39,7 @@ Examples:
 	cmd.AddCommand(f.newAgentCapabilitiesCommand())
 	cmd.AddCommand(f.newAgentDoctorCommand())
 	cmd.AddCommand(f.newAgentLogCommand())
+	cmd.AddCommand(f.newAgentUsageCommand())
 
 	return cmd
 }
