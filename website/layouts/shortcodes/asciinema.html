@@ -1,18 +1,40 @@
 {{ $src := .Get "src" }}
 {{ $cols := .Get "cols" | default "80" }}
 {{ $rows := .Get "rows" | default "24" }}
+{{ $id := printf "player-%s" ($src | urlize) }}
 <div class="asciinema-container" style="margin: 1.5rem 0;">
-  <div id="player-{{ $src | urlize }}"></div>
+  <div id="{{ $id }}"></div>
 </div>
-<link rel="stylesheet" type="text/css" href="https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.css" />
-<script src="https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.min.js"></script>
 <script>
-  AsciinemaPlayer.create('/demos/{{ $src }}.cast', document.getElementById('player-{{ $src | urlize }}'), {
-    cols: {{ $cols }},
-    rows: {{ $rows }},
-    theme: 'monokai',
-    fit: 'width',
-    autoPlay: true,
-    speed: 1.5
-  });
+  (function() {
+    // Load asciinema-player CSS/JS once
+    if (!document.querySelector('link[href*="asciinema-player"]')) {
+      var css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = 'https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.css';
+      document.head.appendChild(css);
+      var js = document.createElement('script');
+      js.src = 'https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.min.js';
+      js.onload = function() { initPlayer(); };
+      document.head.appendChild(js);
+    } else {
+      // Already loaded — init immediately or wait for script
+      if (window.AsciinemaPlayer) { initPlayer(); }
+      else { setTimeout(initPlayer, 500); }
+    }
+    function initPlayer() {
+      if (!window.AsciinemaPlayer) return;
+      var el = document.getElementById('{{ $id }}');
+      if (el && !el.hasChildNodes()) {
+        AsciinemaPlayer.create('{{ site.BaseURL }}demos/{{ $src }}.cast', el, {
+          cols: {{ $cols }},
+          rows: {{ $rows }},
+          theme: 'monokai',
+          fit: 'width',
+          autoPlay: true,
+          speed: 1.5
+        });
+      }
+    }
+  })();
 </script>

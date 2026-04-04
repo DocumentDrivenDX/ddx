@@ -1,0 +1,11 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1775335631, "env": {"SHELL": "/usr/bin/zsh", "TERM": "screen-256color"}}
+[0.029897, "o", "warning: templates not found in /home/erik/.git-template\r\n"]
+[0.081368, "o", "\r\n$ ddx init --silent --skip-claude-injection\r\n"]
+[1.632569, "o", "\r\n$ ddx bead create Build task tracker --type epic --labels helix,phase:build\r\n"]
+[2.149067, "o", "tmp.jn3o5VGndA-0f90e8ed\r\n"]
+[3.152683, "o", "\r\n$ ddx bead create Add task CRUD --type task --labels helix,phase:build\r\n"]
+[3.669809, "o", "tmp.jn3o5VGndA-dd821ac3\r\n"]
+[4.67291, "o", "\r\n$ ddx bead list\r\n"]
+[5.189378, "o", "tmp.jn3o5VGndA-0f90e8ed  open          P0  Build task tracker [helix,phase:build]\r\ntmp.jn3o5VGndA-dd821ac3  open          P0  Add task CRUD [helix,phase:build]\r\n"]
+[6.192364, "o", "\r\n$ ddx bead ready\r\n"]
+[6.709048, "o", "tmp.jn3o5VGndA-0f90e8ed  P0  Build task tracker\r\ntmp.jn3o5VGndA-dd821ac3  P0  Add task CRUD\r\n"]

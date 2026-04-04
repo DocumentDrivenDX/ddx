@@ -25,8 +25,6 @@ layout: hextra-home
 {{< hextra/hero-button text="Learn More" link="docs/concepts" style="alt" >}}
 </div>
 
-<div class="hx-mt-6"></div>
-
 {{< hextra/feature-grid >}}
   {{< hextra/feature-card
     title="Document Library Management"
