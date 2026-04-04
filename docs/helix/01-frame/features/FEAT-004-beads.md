@@ -47,9 +47,10 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 
 ### Non-Functional
 
-- **Performance:** All local operations complete in <100ms for up to 10,000 beads
+- **Performance:** All local operations complete in <100ms for up to 10,000 beads. Read-heavy queue commands (`list`, `ready`, `blocked`, `status`) operate on one parsed snapshot and remain deterministic under repeated calls.
 - **Portability:** No external dependencies beyond the `ddx` binary
-- **Concurrency:** File-level locking prevents corruption from parallel writes
+- **Concurrency:** File-level locking prevents corruption from parallel writes. Writers use temp-file + atomic rename semantics, and repair flows keep a backup before swapping in a cleaned file.
+- **Recovery:** Malformed or partially written JSONL records are handled best-effort. Valid records are preserved, malformed lines are reported with line numbers, and a `.bak` backup is kept when the store auto-repairs a file.
 - **Interchange:** JSONL format compatible with `bd`, `br`, and HELIX tracker
 
 ## Bead Schema
@@ -94,6 +95,11 @@ For `bd` and `br` backends, DDx shells out to the respective binary. For `jsonl`
 - **Default path:** `.ddx/beads.jsonl` (one JSON object per line, sorted by id)
 - **Configuration:** `DDX_BEAD_DIR` env var or `bead.dir` in `.ddx/config.yaml` (default: `.ddx`)
 - **Locking:** Directory-based lock at `.ddx/beads.lock/` with PID file and acquisition timestamp. Configurable timeout (default: 10s).
+- **Write algorithm:** Mutating operations take the lock, build a complete bead snapshot, write to `beads.jsonl.tmp`, and atomically rename the temp file into place. This avoids partially written tracker state.
+- **Read algorithm:** Queue commands scan `beads.jsonl` line-by-line. Valid JSON objects are loaded into a snapshot; malformed lines are skipped with line-numbered warnings so one bad record does not take down the entire queue.
+- **Repair algorithm:** If a read finds malformed lines but at least one valid bead, DDx takes the store lock, copies the current file to `.ddx/beads.jsonl.bak`, and rewrites the repaired snapshot atomically.
+- **Failure mode:** If every line is malformed, the command returns a contextual error that names the file and malformed-record count.
+- **Design reference:** See [`SD-004-beads-tracker.md`](/home/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-004-beads-tracker.md) for the concrete algorithms, repair flow, and concurrency model.
 
 ### ID Prefix
 
@@ -188,6 +194,16 @@ ddx bead export [--stdout] [file]
 - Given ddx-server is running with beads, when an agent calls `ddx_bead_ready`, then it receives ready beads as structured JSON
 - Given an agent calls `ddx_show_bead` with an ID, then it receives the full bead including all fields (known and unknown)
 
+### US-024: Operator Recovers From Partial JSONL Corruption
+**As a** repo operator
+**I want** bead queue commands to survive a partially written or externally edited `beads.jsonl`
+**So that** one bad record does not block the whole queue
+
+**Acceptance Criteria:**
+- Given `beads.jsonl` contains one malformed record and one valid record, when I run `ddx bead ready` or `ddx bead status`, then DDx reports the malformed line number, preserves the valid record, and rewrites the cleaned file atomically
+- Given DDx auto-repairs a partially corrupted file, then it keeps a `.bak` backup of the original contents
+- Given `beads.jsonl` contains only malformed records, then queue reads fail with a contextual error that includes the file path and malformed-record count
+
 ## Claim Semantics
 
 Beads support advisory ownership claims for agent/workflow coordination:
@@ -225,6 +241,7 @@ Example: HELIX installs a hook requiring `spec-id` on task-type beads and `accep
 - Import with duplicate IDs — skip duplicates, report count
 - Dep add with nonexistent target — error with clear message
 - Concurrent writes — locking prevents corruption, second writer waits or times out
+- Partially corrupted JSONL — valid records are preserved, malformed lines are skipped with contextual warnings, and auto-repair keeps a `.bak` backup before atomic replacement
 - Export when no beads exist — produce empty JSONL file
 - Unknown fields in imported data — preserve on round-trip without validation
 
