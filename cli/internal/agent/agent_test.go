@@ -194,6 +194,15 @@ func TestRunModelResolution(t *testing.T) {
 	assert.Contains(t, mock.lastArgs, "o3-mini")
 }
 
+func TestCapabilitiesUsesBuiltinDefaultModel(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+
+	caps, err := r.Capabilities("codex")
+	require.NoError(t, err)
+	assert.Equal(t, "o3-mini", caps.Model)
+	assert.Equal(t, []string{"o3-mini"}, caps.Models)
+}
+
 func TestRunModelOverride(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
@@ -227,6 +236,30 @@ func TestRunEmptyPrompt(t *testing.T) {
 	_, err := r.Run(RunOptions{Harness: "codex"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "prompt is required")
+}
+
+func TestCapabilitiesUsesDefaultsAndConfigOverrides(t *testing.T) {
+	mock := &mockExecutor{}
+	r := newTestRunner(mock)
+	r.Config.Models = map[string]string{"codex": "gpt-4o"}
+	r.Config.ReasoningLevels = map[string][]string{
+		"codex": []string{"concise", "balanced", "deep"},
+	}
+
+	caps, err := r.Capabilities("codex")
+	require.NoError(t, err)
+	assert.Equal(t, "codex", caps.Harness)
+	assert.Equal(t, "gpt-4o", caps.Model)
+	assert.Equal(t, []string{"gpt-4o"}, caps.Models)
+	assert.Equal(t, []string{"concise", "balanced", "deep"}, caps.ReasoningLevels)
+	assert.NotEmpty(t, caps.Path)
+}
+
+func TestCapabilitiesUnknownHarness(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	_, err := r.Capabilities("nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown harness")
 }
 
 // --- Token extraction ---

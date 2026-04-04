@@ -13,10 +13,12 @@ type NewConfig struct {
 
 // AgentConfig represents agent service configuration in .ddx/config.yaml
 type AgentConfig struct {
-	Harness       string            `yaml:"harness,omitempty" json:"harness,omitempty"`
-	Models        map[string]string `yaml:"models,omitempty" json:"models,omitempty"`
-	TimeoutMS     int               `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
-	SessionLogDir string            `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
+	Harness         string              `yaml:"harness,omitempty" json:"harness,omitempty"`
+	Model           string              `yaml:"model,omitempty" json:"model,omitempty"`
+	Models          map[string]string   `yaml:"models,omitempty" json:"models,omitempty"`
+	ReasoningLevels map[string][]string `yaml:"reasoning_levels,omitempty" json:"reasoning_levels,omitempty"`
+	TimeoutMS       int                 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 }
 
 // SystemConfig represents system-level configuration settings

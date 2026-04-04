@@ -48,6 +48,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 22. `ddx agent list` — show available harnesses with availability status
 23. `ddx agent doctor` — harness health check (binary paths, availability)
 24. `ddx agent log [session-id]` — session history with token tracking
+25. `ddx agent capabilities [harness]` — show reasoning levels and model defaults for a harness
 
 **Document Graph (not started — FEAT-007)**
 25. `ddx doc graph` — show document dependency graph

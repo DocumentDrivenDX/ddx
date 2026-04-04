@@ -18,7 +18,7 @@ import (
 type Runner struct {
 	Registry *Registry
 	Config   Config
-	Executor Executor   // injected; defaults to OSExecutor
+	Executor Executor     // injected; defaults to OSExecutor
 	LookPath LookPathFunc // injected; defaults to exec.LookPath
 }
 
@@ -78,6 +78,35 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	return result, nil
 }
 
+// Capabilities reports the model and reasoning options for a harness.
+func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
+	harness, harnessName, err := r.resolveHarness(RunOptions{Harness: name})
+	if err != nil {
+		return nil, err
+	}
+
+	caps := &HarnessCapabilities{
+		Harness:         harnessName,
+		Available:       true,
+		Binary:          harness.Binary,
+		ReasoningLevels: r.resolveReasoningLevels(harnessName, harness),
+	}
+	if path, err := r.LookPath(harness.Binary); err == nil {
+		caps.Path = path
+	}
+
+	model := r.resolveModel(RunOptions{}, harnessName)
+	if model == "" {
+		model = harness.DefaultModel
+	}
+	if model != "" {
+		caps.Model = model
+		caps.Models = []string{model}
+	}
+
+	return caps, nil
+}
+
 // resolveHarness looks up the harness by name and checks availability.
 func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 	name := opts.Harness
@@ -118,7 +147,22 @@ func (r *Runner) resolveModel(opts RunOptions, harnessName string) string {
 	if m, ok := r.Config.Models[harnessName]; ok {
 		return m
 	}
-	return r.Config.Model
+	if r.Config.Model != "" {
+		return r.Config.Model
+	}
+	return ""
+}
+
+func (r *Runner) resolveReasoningLevels(harnessName string, harness Harness) []string {
+	if r.Config.ReasoningLevels != nil {
+		if levels, ok := r.Config.ReasoningLevels[harnessName]; ok && len(levels) > 0 {
+			return append([]string{}, levels...)
+		}
+	}
+	if len(harness.ReasoningLevels) > 0 {
+		return append([]string{}, harness.ReasoningLevels...)
+	}
+	return []string{}
 }
 
 // resolveTimeout picks the timeout from opts or config.

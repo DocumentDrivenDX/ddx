@@ -2,8 +2,10 @@ package bead
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,6 +215,10 @@ func TestConcurrentCreatesSerialized(t *testing.T) {
 	beads, err := s.ReadAll()
 	require.NoError(t, err)
 	assert.Len(t, beads, 2)
+	_, tmpErr := os.Stat(s.File + ".tmp")
+	assert.Error(t, tmpErr)
+	_, bakErr := os.Stat(s.File + ".bak")
+	assert.Error(t, bakErr)
 }
 
 // ── Circular dependency detection ──────────────────────────────────
@@ -238,26 +244,55 @@ func TestCircularDepDetected(t *testing.T) {
 
 // ── Malformed JSONL resilience ──────────────────────────────────
 
-func TestMalformedJSONLReturnsError(t *testing.T) {
-	s := newTestStore(t)
-
-	// Write corrupt data
-	require.NoError(t, os.WriteFile(s.File, []byte("not json\n"), 0o644))
-
-	_, err := s.ReadAll()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parse")
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	defer func() {
+		os.Stderr = old
+	}()
+	fn()
+	require.NoError(t, w.Close())
+	data, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(data)
 }
 
-func TestPartiallyMalformedJSONL(t *testing.T) {
+func TestMalformedJSONLSkipsBadRecords(t *testing.T) {
 	s := newTestStore(t)
+	backupPath := s.File + ".bak"
 
-	// One good line, one bad
 	jsonl := `{"id":"bx-good","title":"Good","type":"task","status":"open","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}
 not json at all`
 	require.NoError(t, os.WriteFile(s.File, []byte(jsonl), 0o644))
 
-	// Should fail on malformed data (strict mode)
+	var beads []Bead
+	var err error
+	stderr := captureStderr(t, func() {
+		beads, err = s.ReadAll()
+	})
+	require.NoError(t, err)
+	require.Len(t, beads, 1)
+	assert.Equal(t, "bx-good", beads[0].ID)
+	assert.Contains(t, stderr, "bead: read line 2")
+	assert.Contains(t, stderr, "unmarshal")
+	assert.FileExists(t, backupPath)
+	fixed, err := os.ReadFile(s.File)
+	require.NoError(t, err)
+	assert.Contains(t, string(fixed), "\"bx-good\"")
+	assert.NotContains(t, string(fixed), "not json at all")
+}
+
+func TestMalformedJSONLAllBadReturnsError(t *testing.T) {
+	s := newTestStore(t)
+
+	jsonl := "not json at all\nstill bad"
+	require.NoError(t, os.WriteFile(s.File, []byte(jsonl), 0o644))
+
 	_, err := s.ReadAll()
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "0 valid")
+	assert.True(t, strings.Contains(err.Error(), "beads.jsonl"))
 }

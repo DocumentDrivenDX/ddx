@@ -4,24 +4,27 @@ import "time"
 
 // Harness defines a known agent harness.
 type Harness struct {
-	Name         string   // e.g. "codex", "claude", "gemini"
-	Binary       string   // binary name to exec
-	Args         []string // base arguments for exec mode
-	PromptMode   string   // "arg" (final arg), "stdin" (pipe)
-	ModelFlag    string   // flag for model override (e.g. "-m", "--model"), empty if unsupported
-	WorkDirFlag  string   // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
-	EffortFlag   string   // flag for effort/reasoning control, empty if unsupported
-	EffortFormat string   // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
-	TokenPattern string   // regex to extract token count from output, must have one capture group
+	Name            string   // e.g. "codex", "claude", "gemini"
+	Binary          string   // binary name to exec
+	Args            []string // base arguments for exec mode
+	PromptMode      string   // "arg" (final arg), "stdin" (pipe)
+	DefaultModel    string   // built-in model choice when no config override exists
+	ReasoningLevels []string // supported reasoning levels in preference order
+	ModelFlag       string   // flag for model override (e.g. "-m", "--model"), empty if unsupported
+	WorkDirFlag     string   // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
+	EffortFlag      string   // flag for effort/reasoning control, empty if unsupported
+	EffortFormat    string   // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
+	TokenPattern    string   // regex to extract token count from output, must have one capture group
 }
 
 // Config holds agent service configuration.
 type Config struct {
-	Harness       string            `yaml:"harness"`        // default harness name
-	Model         string            `yaml:"model"`          // global model override
-	Models        map[string]string `yaml:"models"`         // per-harness model overrides
-	TimeoutMS     int               `yaml:"timeout_ms"`     // default timeout in ms
-	SessionLogDir string            `yaml:"session_log_dir"` // log directory
+	Harness         string              `yaml:"harness"`          // default harness name
+	Model           string              `yaml:"model"`            // global model override
+	Models          map[string]string   `yaml:"models"`           // per-harness model overrides
+	ReasoningLevels map[string][]string `yaml:"reasoning_levels"` // per-harness reasoning-level options
+	TimeoutMS       int                 `yaml:"timeout_ms"`       // default timeout in ms
+	SessionLogDir   string              `yaml:"session_log_dir"`  // log directory
 }
 
 // RunOptions holds options for a single agent invocation.
@@ -29,9 +32,9 @@ type RunOptions struct {
 	Harness    string
 	Prompt     string // prompt text (or path to file)
 	PromptFile string // explicit file path
-	Model   string
-	Effort  string
-	Timeout time.Duration
+	Model      string
+	Effort     string
+	Timeout    time.Duration
 	WorkDir    string
 }
 
@@ -45,13 +48,13 @@ type QuorumOptions struct {
 
 // Result holds the output of an agent invocation.
 type Result struct {
-	Harness  string        `json:"harness"`
-	Model    string        `json:"model,omitempty"`
-	ExitCode int           `json:"exit_code"`
-	Output   string        `json:"output"`
-	Tokens   int           `json:"tokens,omitempty"`
-	DurationMS int `json:"duration_ms"`
-	Error    string        `json:"error,omitempty"`
+	Harness    string `json:"harness"`
+	Model      string `json:"model,omitempty"`
+	ExitCode   int    `json:"exit_code"`
+	Output     string `json:"output"`
+	Tokens     int    `json:"tokens,omitempty"`
+	DurationMS int    `json:"duration_ms"`
+	Error      string `json:"error,omitempty"`
 }
 
 // SessionEntry is written to the session log.
@@ -74,6 +77,17 @@ type HarnessStatus struct {
 	Binary    string `json:"binary"`
 	Path      string `json:"path,omitempty"` // resolved binary path
 	Error     string `json:"error,omitempty"`
+}
+
+// HarnessCapabilities describes the effective capabilities for a harness.
+type HarnessCapabilities struct {
+	Harness         string   `json:"harness"`
+	Available       bool     `json:"available"`
+	Binary          string   `json:"binary"`
+	Path            string   `json:"path,omitempty"`
+	Model           string   `json:"model,omitempty"`
+	Models          []string `json:"models,omitempty"`
+	ReasoningLevels []string `json:"reasoning_levels,omitempty"`
 }
 
 // Default configuration values.

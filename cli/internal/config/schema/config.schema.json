@@ -107,6 +107,11 @@
           "description": "Default harness name (e.g., codex, claude, gemini)",
           "examples": ["codex", "claude", "gemini"]
         },
+        "model": {
+          "type": "string",
+          "description": "Global model override for agent invocation",
+          "examples": ["o3-mini", "claude-sonnet-4-20250514"]
+        },
         "models": {
           "type": "object",
           "description": "Per-harness model overrides",
@@ -114,6 +119,17 @@
             "type": "string"
           },
           "examples": [{"codex": "o3-mini", "claude": "claude-sonnet-4-20250514"}]
+        },
+        "reasoning_levels": {
+          "type": "object",
+          "description": "Per-harness reasoning-level options",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "examples": [{"codex": ["low", "medium", "high"]}]
         },
         "timeout_ms": {
           "type": "integer",

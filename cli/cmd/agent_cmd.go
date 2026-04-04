@@ -26,6 +26,7 @@ Examples:
   ddx agent run --harness codex --prompt task.md
   ddx agent run --quorum majority --harnesses codex,claude --prompt task.md
   ddx agent list
+  ddx agent capabilities codex
   ddx agent doctor
   ddx agent log`,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -35,6 +36,7 @@ Examples:
 
 	cmd.AddCommand(f.newAgentRunCommand())
 	cmd.AddCommand(f.newAgentListCommand())
+	cmd.AddCommand(f.newAgentCapabilitiesCommand())
 	cmd.AddCommand(f.newAgentDoctorCommand())
 	cmd.AddCommand(f.newAgentLogCommand())
 
@@ -47,10 +49,12 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 		return agent.NewRunner(agent.Config{})
 	}
 	return agent.NewRunner(agent.Config{
-		Harness:       cfg.Agent.Harness,
-		Models:        cfg.Agent.Models,
-		TimeoutMS:     cfg.Agent.TimeoutMS,
-		SessionLogDir: cfg.Agent.SessionLogDir,
+		Harness:         cfg.Agent.Harness,
+		Model:           cfg.Agent.Model,
+		Models:          cfg.Agent.Models,
+		ReasoningLevels: cfg.Agent.ReasoningLevels,
+		TimeoutMS:       cfg.Agent.TimeoutMS,
+		SessionLogDir:   cfg.Agent.SessionLogDir,
 	})
 }
 
@@ -216,6 +220,61 @@ func (f *CommandFactory) newAgentListCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "capabilities [harness]",
+		Short: "Show agent model and reasoning-level capabilities",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r := f.agentRunner()
+
+			harness, _ := cmd.Flags().GetString("harness")
+			if harness == "" && len(args) > 0 {
+				harness = args[0]
+			}
+			if harness == "" {
+				harness = r.Config.Harness
+			}
+
+			caps, err := r.Capabilities(harness)
+			if err != nil {
+				return err
+			}
+
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(caps)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Harness: %s\n", caps.Harness)
+			if caps.Path != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Binary: %s (%s)\n", caps.Binary, caps.Path)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Binary: %s\n", caps.Binary)
+			}
+			if caps.Model != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Model: %s\n", caps.Model)
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Model: (none configured)")
+			}
+			if len(caps.Models) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Model options: %s\n", strings.Join(caps.Models, ", "))
+			}
+			if len(caps.ReasoningLevels) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Reasoning levels: %s\n", strings.Join(caps.ReasoningLevels, ", "))
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Reasoning levels: (none configured)")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("harness", "", "Harness name (default from config)")
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd
 }

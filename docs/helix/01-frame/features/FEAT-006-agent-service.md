@@ -47,8 +47,9 @@ The DDx agent service is the unified interface for dispatching work to AI coding
 10. **Automation levels** — manual, plan, auto, yolo — control how much autonomy the agent gets.
 11. **Timeout management** — per-invocation timeout with configurable default.
 12. **Configuration** — default harness, model overrides, timeout, automation level in `.ddx/config.yaml`.
-13. **Prompt envelope format** — standard JSON format for structured agent I/O (kind, id, title, prompt, inputs, response_schema, callback).
-14. **Response processing** — parse agent response (status, signal, detail, next, issues) and return structured result.
+13. **Capability introspection** — for a selected harness, `ddx agent` can list the reasoning levels and models that are available or configured for that harness before invocation.
+14. **Prompt envelope format** — standard JSON format for structured agent I/O (kind, id, title, prompt, inputs, response_schema, callback).
+15. **Response processing** — parse agent response (status, signal, detail, next, issues) and return structured result.
 
 ### Non-Functional
 
@@ -87,6 +88,16 @@ The DDx agent service is the unified interface for dispatching work to AI coding
 - Given I run `ddx agent list`, then I see which harnesses are installed and authenticated
 - Given I run `ddx agent doctor`, then I see detailed status for each harness
 
+### US-064: Developer Inspects Agent Capabilities
+**As a** developer selecting an agent for a task
+**I want** to see the supported reasoning levels and models for that harness
+**So that** I can choose a valid invocation without trial and error
+
+**Acceptance Criteria:**
+- Given I select a harness, when I ask `ddx agent` for capabilities, then I see the available reasoning levels and models for that harness
+- Given the harness has no explicit model override, then the capability output still shows the harness default model and any valid reasoning-level options
+- Given an invalid or unknown harness selection, then capability introspection returns a clear error instead of an empty or partial list
+
 ### US-063: Developer Reviews Agent Session Logs
 **As a** developer debugging an agent interaction
 **I want** to review the session log for a recent agent invocation
@@ -124,6 +135,7 @@ ddx agent run --harness=codex --prompt task.md      # invoke agent
 ddx agent run --quorum=majority --harnesses=a,b     # multi-agent
 ddx agent run --automation=plan                      # control autonomy
 ddx agent list                                       # available harnesses
+ddx agent capabilities codex                         # inspect harness capabilities
 ddx agent doctor                                     # harness health
 ddx agent log                                        # recent sessions
 ddx agent log <session-id>                           # full session detail
@@ -138,6 +150,8 @@ agent:
   model: ""                         # model override
   models:                           # per-harness model overrides
     claude: claude-sonnet-4-20250514
+  reasoning_levels:                 # per-harness reasoning-level overrides
+    codex: [low, medium, high]
   timeout_ms: 300000                # 5 minute default
   automation: auto                  # manual|plan|auto|yolo
   session_log_dir: .ddx/agent-logs  # session log location

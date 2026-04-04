@@ -1,6 +1,8 @@
 package bead
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -89,26 +91,106 @@ func (s *Store) ReadAll() ([]Bead, error) {
 	if s.backend != nil {
 		return s.backend.ReadAll()
 	}
+	beads, warnings, err := s.readAllRaw()
+	if err != nil {
+		return nil, fmt.Errorf("bead: read %s: %w", s.File, err)
+	}
+	for _, warning := range warnings {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+	if len(warnings) > 0 && len(beads) > 0 {
+		repaired, repairErr := s.repairJSONL()
+		if repairErr != nil {
+			return beads, fmt.Errorf("bead: repair %s: %w", s.File, repairErr)
+		}
+		if repaired {
+			fmt.Fprintf(os.Stderr, "bead: repaired %s; backup written to %s.bak\n", s.File, s.File)
+		}
+	}
+	if len(beads) == 0 && len(warnings) > 0 {
+		return nil, fmt.Errorf("bead: read %s: %d malformed record(s), 0 valid", s.File, len(warnings))
+	}
+	return beads, nil
+}
+
+func (s *Store) readAllRaw() ([]Bead, []string, error) {
 	data, err := os.ReadFile(s.File)
 	if os.IsNotExist(err) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("bead: read: %w", err)
+		return nil, nil, fmt.Errorf("read: %w", err)
 	}
+	beads, warnings, err := parseBeadJSONL(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	return beads, warnings, nil
+}
+
+func parseBeadJSONL(data []byte) ([]Bead, []string, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var beads []Bead
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	var warnings []string
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
 		b, err := unmarshalBead([]byte(line))
 		if err != nil {
-			return nil, fmt.Errorf("bead: parse line: %w", err)
+			warnings = append(warnings, fmt.Sprintf("bead: read line %d: %v", lineNo, err))
+			continue
 		}
 		beads = append(beads, b)
 	}
-	return beads, nil
+	if err := scanner.Err(); err != nil {
+		return nil, nil, fmt.Errorf("scan jsonl: %w", err)
+	}
+	return beads, warnings, nil
+}
+
+func (s *Store) repairJSONL() (bool, error) {
+	var repaired bool
+	err := s.WithLock(func() error {
+		beads, warnings, err := s.readAllRaw()
+		if err != nil {
+			return err
+		}
+		if len(warnings) == 0 || len(beads) == 0 {
+			return nil
+		}
+		backupPath := s.File + ".bak"
+		backupData, err := os.ReadFile(s.File)
+		if err != nil {
+			return fmt.Errorf("read current file: %w", err)
+		}
+		if err := writeAtomicFile(backupPath, backupData); err != nil {
+			return fmt.Errorf("write backup: %w", err)
+		}
+		if err := s.WriteAll(beads); err != nil {
+			return fmt.Errorf("write repaired file: %w", err)
+		}
+		repaired = true
+		return nil
+	})
+	return repaired, err
+}
+
+func writeAtomicFile(path string, data []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // WriteAll writes all beads to the configured backend, sorted by ID.
@@ -188,7 +270,7 @@ func (s *Store) Create(b *Bead) error {
 	}
 
 	return s.WithLock(func() error {
-		beads, err := s.ReadAll()
+		beads, _, err := s.readAllRaw()
 		if err != nil {
 			return err
 		}
@@ -233,7 +315,7 @@ func (s *Store) Get(id string) (*Bead, error) {
 // Update modifies a bead by ID. The mutate function receives a pointer to modify.
 func (s *Store) Update(id string, mutate func(*Bead)) error {
 	return s.WithLock(func() error {
-		beads, err := s.ReadAll()
+		beads, _, err := s.readAllRaw()
 		if err != nil {
 			return err
 		}
@@ -432,7 +514,7 @@ func (s *Store) Status() (*StatusCounts, error) {
 // DepAdd adds a dependency: id depends on depID.
 func (s *Store) DepAdd(id, depID string) error {
 	return s.WithLock(func() error {
-		beads, err := s.ReadAll()
+		beads, _, err := s.readAllRaw()
 		if err != nil {
 			return err
 		}
