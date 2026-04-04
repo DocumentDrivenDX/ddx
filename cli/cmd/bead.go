@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -51,7 +52,11 @@ Examples:
 }
 
 func (f *CommandFactory) beadStore() *bead.Store {
-	return bead.NewStore("")
+	dir := os.Getenv("DDX_BEAD_DIR")
+	if dir == "" && f.WorkingDir != "" {
+		dir = filepath.Join(f.WorkingDir, ".ddx")
+	}
+	return bead.NewStore(dir)
 }
 
 func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
@@ -97,6 +102,18 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetString("parent"); v != "" {
 				b.Parent = v
 			}
+			if setFlags, _ := cmd.Flags().GetStringArray("set"); len(setFlags) > 0 {
+				if b.Extra == nil {
+					b.Extra = make(map[string]any)
+				}
+				for _, kv := range setFlags {
+					k, v, ok := strings.Cut(kv, "=")
+					if !ok {
+						return fmt.Errorf("--set requires key=value format, got: %s", kv)
+					}
+					b.Extra[k] = v
+				}
+			}
 
 			if err := s.Create(b); err != nil {
 				return err
@@ -112,6 +129,7 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 	cmd.Flags().String("acceptance", "", "Acceptance criteria")
 	cmd.Flags().String("description", "", "Description")
 	cmd.Flags().String("parent", "", "Parent bead ID")
+	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
 
 	return cmd
 }
@@ -130,9 +148,14 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
+				data, err := bead.MarshalBead(*b)
+				if err != nil {
+					return err
+				}
+				var pretty json.RawMessage = data
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(b)
+				return enc.Encode(pretty)
 			}
 
 			out := cmd.OutOrStdout()
@@ -210,6 +233,26 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 					b.Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
 					b.Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
 				}
+				if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
+					b.Status = bead.StatusOpen
+					b.Assignee = ""
+					if b.Extra != nil {
+						delete(b.Extra, "claimed-at")
+						delete(b.Extra, "claimed-pid")
+					}
+				}
+				if setFlags, _ := cmd.Flags().GetStringArray("set"); len(setFlags) > 0 {
+					if b.Extra == nil {
+						b.Extra = make(map[string]any)
+					}
+					for _, kv := range setFlags {
+						k, v, ok := strings.Cut(kv, "=")
+						if !ok {
+							continue
+						}
+						b.Extra[k] = v
+					}
+				}
 			})
 		},
 	}
@@ -221,6 +264,8 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 	cmd.Flags().String("acceptance", "", "New acceptance criteria")
 	cmd.Flags().String("assignee", "", "New assignee")
 	cmd.Flags().Bool("claim", false, "Claim: set status=in_progress, assignee=ddx")
+	cmd.Flags().Bool("unclaim", false, "Unclaim: set status=open, clear assignee and claim fields")
+	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
 
 	return cmd
 }
@@ -238,10 +283,10 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 
 func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List beads",
+		Use:     "list",
+		Short:   "List beads",
 		Aliases: []string{"ls"},
-		Args:  cobra.NoArgs,
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			status, _ := cmd.Flags().GetString("status")
