@@ -10,6 +10,13 @@ type NewConfig struct {
 	PersonaBindings map[string]string  `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
 	UpdateCheck     *UpdateCheckConfig `yaml:"update_check,omitempty" json:"update_check,omitempty"`
 	Agent           *AgentConfig       `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Git             *GitConfig         `yaml:"git,omitempty" json:"git,omitempty"`
+}
+
+// GitConfig represents git integration configuration settings.
+type GitConfig struct {
+	AutoCommit   string `yaml:"auto_commit,omitempty" json:"auto_commit,omitempty"`
+	CommitPrefix string `yaml:"commit_prefix,omitempty" json:"commit_prefix,omitempty"`
 }
 
 // AgentConfig represents agent service configuration in .ddx/config.yaml

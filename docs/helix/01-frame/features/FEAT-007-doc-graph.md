@@ -185,9 +185,23 @@ The following dun source files contain the logic to port:
 - Markdown files with `ddx:` frontmatter
 - For server endpoints: FEAT-002
 
+## Git-Aware History (FEAT-012 Integration)
+
+The following commands extend the doc graph with revision-control-aware
+queries. They are defined in FEAT-012 but operate on the document graph:
+
+```bash
+ddx doc history <id> [--since <ref>]   # Commit log for an artifact
+ddx doc diff <id> [<ref1>] [<ref2>]    # Content diff between refs
+ddx doc changed [--since <ref>]        # Artifacts changed since a ref
+```
+
+These require the graph's artifact-ID-to-file-path mapping and are
+surfaced alongside the existing graph/stale/stamp commands.
+
 ## Out of Scope
 
 - Code-to-document tracing (which code implements which spec) — that's dun's `spec-binding` check
 - Automated document updating — DDx detects staleness, agents do the updating
 - Document content validation (correct sections, completeness) — that's workflow-level
-- Version control integration (blame, history) — use git directly
+- Branch management, remote operations, merge conflict resolution (see FEAT-012 Out of Scope)

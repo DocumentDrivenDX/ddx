@@ -20,17 +20,30 @@ import (
 
 // Store manages beads via a pluggable backend.
 type Store struct {
-	Dir      string
-	File     string
-	Prefix   string
-	LockDir  string
-	LockWait time.Duration
-	backend  Backend // nil means use built-in JSONL
+	Collection string
+	Dir        string
+	File       string
+	Prefix     string
+	LockDir    string
+	LockWait   time.Duration
+	backend    Backend // nil means use built-in JSONL
+}
+
+type StoreOption func(*Store)
+
+// WithCollection selects the logical bead collection. The default collection
+// remains "beads", which maps to "beads.jsonl" in the JSONL backend.
+func WithCollection(name string) StoreOption {
+	return func(s *Store) {
+		if cleaned := normalizeCollection(name); cleaned != "" {
+			s.Collection = cleaned
+		}
+	}
 }
 
 // NewStore creates a store with the given directory.
 // Defaults can be overridden via options or environment.
-func NewStore(dir string) *Store {
+func NewStore(dir string, opts ...StoreOption) *Store {
 	if dir == "" {
 		dir = envOr("DDX_BEAD_DIR", ".ddx")
 	}
@@ -50,17 +63,23 @@ func NewStore(dir string) *Store {
 	backendType := envOr("DDX_BEAD_BACKEND", BackendJSONL)
 
 	s := &Store{
-		Dir:      dir,
-		File:     filepath.Join(dir, "beads.jsonl"),
-		Prefix:   prefix,
-		LockDir:  filepath.Join(dir, "beads.lock"),
-		LockWait: parseDurationOr("DDX_BEAD_LOCK_TIMEOUT", 10*time.Second),
+		Collection: DefaultCollection,
+		Dir:        dir,
+		Prefix:     prefix,
+		LockWait:   parseDurationOr("DDX_BEAD_LOCK_TIMEOUT", 10*time.Second),
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	s.File = filepath.Join(dir, s.Collection+".jsonl")
+	s.LockDir = filepath.Join(dir, s.Collection+".lock")
 
 	// Set up external backend if configured
 	switch backendType {
 	case BackendBD, BackendBR:
-		if ext, err := NewExternalBackend(backendType); err == nil {
+		if ext, err := NewExternalBackend(backendType, s.Collection); err == nil {
 			s.backend = ext
 		}
 		// Fall through to JSONL if tool not available
@@ -74,6 +93,11 @@ func NewStoreWithBackend(dir string, b Backend) *Store {
 	s := NewStore(dir)
 	s.backend = b
 	return s
+}
+
+// NewStoreWithCollection creates a store for a named logical collection.
+func NewStoreWithCollection(dir, collection string) *Store {
+	return NewStore(dir, WithCollection(collection))
 }
 
 // Init creates the storage directory and file.
@@ -205,6 +229,15 @@ func writeAtomicFile(path string, data []byte) error {
 		return err
 	}
 	return nil
+}
+
+func normalizeCollection(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return DefaultCollection
+	}
+	name = strings.TrimSuffix(name, ".jsonl")
+	return name
 }
 
 // WriteAll writes all beads to the configured backend, sorted by ID.

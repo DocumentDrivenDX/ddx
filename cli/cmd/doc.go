@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/easel/ddx/internal/config"
 	"github.com/easel/ddx/internal/docgraph"
+	internalgit "github.com/easel/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -45,6 +48,9 @@ Examples:
 	cmd.AddCommand(f.newDocDependentsCommand())
 	cmd.AddCommand(f.newDocValidateCommand())
 	cmd.AddCommand(f.newDocMigrateCommand())
+	cmd.AddCommand(f.newDocHistoryCommand())
+	cmd.AddCommand(f.newDocDiffCommand())
+	cmd.AddCommand(f.newDocChangedCommand())
 
 	return cmd
 }
@@ -150,6 +156,13 @@ func (f *CommandFactory) newDocStampCommand() *cobra.Command {
 				return err
 			}
 
+			// Load config for auto-commit settings (best-effort; ignore errors).
+			var acCfg internalgit.AutoCommitConfig
+			if cfg, cfgErr := config.LoadWithWorkingDir(f.docRoot()); cfgErr == nil && cfg.Git != nil {
+				acCfg.AutoCommit = cfg.Git.AutoCommit
+				acCfg.CommitPrefix = cfg.Git.CommitPrefix
+			}
+
 			for _, w := range warnings {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
@@ -160,6 +173,9 @@ func (f *CommandFactory) newDocStampCommand() *cobra.Command {
 					path = doc.Path
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "stamped %s\n", path)
+				if acErr := internalgit.AutoCommit(path, id, "stamp reviewed", acCfg); acErr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: auto-commit failed for %s: %v\n", path, acErr)
+				}
 			}
 			return nil
 		},
@@ -445,4 +461,249 @@ func printDocGraphText(cmd *cobra.Command, graph *docgraph.Graph) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "%s  %s%s\n", id, doc.Path, deps)
 	}
 	return nil
+}
+
+func (f *CommandFactory) newDocHistoryCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "history <id>",
+		Short: "Show commit log for an artifact",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			graph, err := f.buildDocGraph()
+			if err != nil {
+				return err
+			}
+			doc, ok := graph.Documents[args[0]]
+			if !ok {
+				return fmt.Errorf("document not found: %s", args[0])
+			}
+
+			since, _ := cmd.Flags().GetString("since")
+			asJSON, _ := cmd.Flags().GetBool("json")
+
+			gitArgs := []string{"log", "--follow", "--format=%H\t%ai\t%an\t%s"}
+			if since != "" {
+				gitArgs = append(gitArgs, since+"..HEAD")
+			}
+			gitArgs = append(gitArgs, "--", doc.Path)
+
+			out, gitErr := exec.Command("git", gitArgs...).Output()
+			if gitErr != nil {
+				if exitErr, ok2 := gitErr.(*exec.ExitError); ok2 {
+					if strings.Contains(string(exitErr.Stderr), "not a git repository") {
+						return fmt.Errorf("not a git repository")
+					}
+				}
+				return fmt.Errorf("git log failed: %w", gitErr)
+			}
+
+			type commitEntry struct {
+				Hash    string `json:"hash"`
+				Date    string `json:"date"`
+				Author  string `json:"author"`
+				Message string `json:"message"`
+			}
+
+			lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+			entries := make([]commitEntry, 0, len(lines))
+			for _, line := range lines {
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, "\t", 4)
+				if len(parts) < 4 {
+					continue
+				}
+				hash := parts[0]
+				if len(hash) > 7 {
+					hash = hash[:7]
+				}
+				date := parts[1]
+				if len(date) > 10 {
+					date = date[:10]
+				}
+				entries = append(entries, commitEntry{
+					Hash:    hash,
+					Date:    date,
+					Author:  parts[2],
+					Message: parts[3],
+				})
+			}
+
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(entries)
+			}
+
+			if len(entries) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No commits found.")
+				return nil
+			}
+			for _, e := range entries {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s  %s\n", e.Hash, e.Date, e.Author, e.Message)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("since", "", "Show commits since this ref (e.g. HEAD~10)")
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newDocDiffCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "diff <id> [<ref1>] [<ref2>]",
+		Short: "Show content diff for an artifact",
+		Args:  cobra.RangeArgs(1, 3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			graph, err := f.buildDocGraph()
+			if err != nil {
+				return err
+			}
+			doc, ok := graph.Documents[args[0]]
+			if !ok {
+				return fmt.Errorf("document not found: %s", args[0])
+			}
+
+			var gitArgs []string
+			switch len(args) {
+			case 1:
+				gitArgs = []string{"diff", "--", doc.Path}
+			case 2:
+				gitArgs = []string{"diff", args[1], "--", doc.Path}
+			default:
+				gitArgs = []string{"diff", args[1], args[2], "--", doc.Path}
+			}
+
+			out, gitErr := exec.Command("git", gitArgs...).Output()
+			if gitErr != nil {
+				if exitErr, ok2 := gitErr.(*exec.ExitError); ok2 {
+					if strings.Contains(string(exitErr.Stderr), "not a git repository") {
+						return fmt.Errorf("not a git repository")
+					}
+				}
+				return fmt.Errorf("git diff failed: %w", gitErr)
+			}
+
+			if len(out) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No differences.")
+				return nil
+			}
+			_, err = cmd.OutOrStdout().Write(out)
+			return err
+		},
+	}
+}
+
+func (f *CommandFactory) newDocChangedCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "changed",
+		Short: "List artifacts changed since a git ref",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			since, _ := cmd.Flags().GetString("since")
+			if since == "" {
+				since = "HEAD~5"
+			}
+			asJSON, _ := cmd.Flags().GetBool("json")
+
+			out, gitErr := exec.Command("git", "diff", "--name-status", since, "HEAD").Output()
+			if gitErr != nil {
+				if exitErr, ok := gitErr.(*exec.ExitError); ok {
+					if strings.Contains(string(exitErr.Stderr), "not a git repository") {
+						return fmt.Errorf("not a git repository")
+					}
+				}
+				return fmt.Errorf("git diff failed: %w", gitErr)
+			}
+
+			rootOut, gitErr := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+			if gitErr != nil {
+				return fmt.Errorf("could not determine git root: %w", gitErr)
+			}
+			repoRoot := strings.TrimRight(string(rootOut), "\n")
+
+			type changedEntry struct {
+				ID         string `json:"id"`
+				Path       string `json:"path"`
+				ChangeType string `json:"change_type"`
+			}
+
+			graph, err := f.buildDocGraph()
+			if err != nil {
+				return err
+			}
+
+			var entries []changedEntry
+			for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+				if line == "" {
+					continue
+				}
+				fields := strings.Fields(line)
+				if len(fields) < 2 {
+					continue
+				}
+				statusCode := fields[0]
+				relPath := fields[len(fields)-1]
+
+				if !strings.HasSuffix(relPath, ".md") {
+					continue
+				}
+
+				absPath := filepath.Join(repoRoot, relPath)
+				cleanPath := filepath.Clean(absPath)
+
+				var changeType string
+				switch {
+				case strings.HasPrefix(statusCode, "A"):
+					changeType = "added"
+				case strings.HasPrefix(statusCode, "D"):
+					changeType = "deleted"
+				default:
+					changeType = "modified"
+				}
+
+				if changeType == "deleted" {
+					if id, ok := graph.PathToID[cleanPath]; ok {
+						entries = append(entries, changedEntry{ID: id, Path: relPath, ChangeType: changeType})
+					}
+					continue
+				}
+
+				if id, ok := graph.PathToID[cleanPath]; ok {
+					entries = append(entries, changedEntry{ID: id, Path: relPath, ChangeType: changeType})
+					continue
+				}
+
+				content, readErr := os.ReadFile(absPath)
+				if readErr != nil {
+					continue
+				}
+				fm, _, parseErr := docgraph.ParseFrontmatter(content)
+				if parseErr != nil || !fm.HasFrontmatter || fm.Doc.ID == "" {
+					continue
+				}
+				entries = append(entries, changedEntry{ID: fm.Doc.ID, Path: relPath, ChangeType: changeType})
+			}
+
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(entries)
+			}
+
+			if len(entries) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No artifact changes found.")
+				return nil
+			}
+			for _, e := range entries {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", e.ID, e.Path, e.ChangeType)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("since", "", "Compare from this ref (default: HEAD~5)")
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
 }

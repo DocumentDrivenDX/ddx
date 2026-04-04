@@ -9,15 +9,16 @@ import (
 
 // ExternalBackend delegates storage to an external tool (bd or br).
 type ExternalBackend struct {
-	Tool string // "bd" or "br"
+	Tool       string // "bd" or "br"
+	Collection string
 }
 
 // NewExternalBackend creates a backend that shells out to the given tool.
-func NewExternalBackend(tool string) (*ExternalBackend, error) {
+func NewExternalBackend(tool, collection string) (*ExternalBackend, error) {
 	if _, err := exec.LookPath(tool); err != nil {
 		return nil, fmt.Errorf("bead: backend %s not found in PATH", tool)
 	}
-	return &ExternalBackend{Tool: tool}, nil
+	return &ExternalBackend{Tool: tool, Collection: collection}, nil
 }
 
 // Init is a no-op for external backends — they manage their own storage.

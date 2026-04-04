@@ -4,7 +4,9 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-004
+    - FEAT-010
     - FEAT-007
+    - FEAT-012
 ---
 # Feature: DDx Server
 
@@ -15,7 +17,7 @@ ddx:
 
 ## Overview
 
-`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, the document dependency graph, agent session logs, and (via FEAT-008) an embedded web UI — all from a single binary.
+`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, execution definitions and run history, the document dependency graph, agent session logs, and (via FEAT-008) an embedded web UI — all from a single binary.
 
 ## Architecture
 
@@ -61,16 +63,41 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 20. `GET /api/agent/sessions/:id` — full session detail (prompt, response, tokens)
 21. MCP tool: `ddx_agent_sessions`
 
+**Executions (FEAT-010)**
+22. `GET /api/exec/definitions` — list execution definitions with optional artifact filter
+23. `GET /api/exec/definitions/:id` — show one execution definition
+24. `GET /api/exec/runs` — list execution runs with optional artifact/definition/status filters
+25. `GET /api/exec/runs/:id` — show one execution run with structured result metadata
+26. `GET /api/exec/runs/:id/log` — show raw captured logs for one execution run
+27. MCP tools: `ddx_exec_definitions`, `ddx_exec_show`, `ddx_exec_history`
+
 **Configuration**
-22. Library path, port, optional API key via CLI flags or config file
-23. Default: localhost only, no auth required
+28. Library path, port, optional API key via CLI flags or config file
+29. Default: localhost only, no auth required
 
 ### Non-Functional
 
 - **Performance:** Document reads <200ms, search <500ms, graph build <500ms for 100+ documents
 - **Stateless:** Reads from filesystem on each request. No database.
 - **Single binary:** Embeds web UI (FEAT-008) via `embed.FS`
-- **Security:** Localhost-only by default. Optional API key for non-local access. Agent invocation is CLI-only (not exposed via server — see FEAT-006).
+- **Security:** Localhost-only by default. Optional API key for non-local access.
+
+**Bead Mutations (FEAT-008 UI interaction)**
+33. `POST /api/beads` — create a bead
+34. `PUT /api/beads/:id` — update bead fields (status, labels, description, etc.)
+35. `POST /api/beads/:id/claim` — claim a bead for the current session
+36. `POST /api/beads/:id/unclaim` — release a claim
+37. `POST /api/beads/:id/reopen` — re-open a closed bead with a reason
+38. `POST /api/beads/:id/deps` — add/remove dependencies
+39. MCP tools: `ddx_bead_create`, `ddx_bead_update`, `ddx_bead_claim`
+
+**Execution Dispatch (UI-initiated, localhost-only)**
+40. `POST /api/exec/run/:id` — dispatch an execution run (delegates to
+    `ddx exec run` internally). Localhost-only, requires API key if
+    non-local.
+41. `POST /api/agent/run` — dispatch an agent invocation with harness,
+    model, effort, and prompt. Localhost-only, requires API key if non-local.
+42. MCP tools: `ddx_exec_dispatch`, `ddx_agent_dispatch` (localhost-only)
 
 ## Technology
 
@@ -84,15 +111,29 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 ## Dependencies
 
 - FEAT-004 (Beads) — bead endpoints read from bead store
+- FEAT-010 (Executions) — execution endpoints read definitions and immutable run history
 - FEAT-007 (Doc Graph) — graph/stale endpoints use doc graph engine
 - FEAT-006 (Agent Service) — session log endpoints read agent logs
 - FEAT-008 (Web UI) — embedded SPA served at `/`
 - mcp-go SDK for MCP transport
 
+**Document Write + Commit (FEAT-012)**
+28. `PUT /api/docs/:id` — write document content and auto-commit
+29. MCP tool: `ddx_doc_write` — write document by artifact ID, commit by
+    default
+30. `GET /api/docs/:id/history` — document commit history
+31. `GET /api/docs/:id/diff` — document content diff between refs
+32. MCP tools: `ddx_doc_history`, `ddx_doc_diff`, `ddx_doc_changed`
+
+Write endpoints commit by default (configurable via `git.auto_commit` in
+`.ddx/config.yaml`). Commit messages follow the structured format defined
+in FEAT-012.
+
 ## Out of Scope
 
-- Agent invocation via server (security risk — CLI-only, see FEAT-006)
-- Document writing/editing via API (read-only for v1)
+- Agent/execution invocation from non-localhost without API key (security
+  boundary — dispatch endpoints are localhost-only by default)
 - User authentication beyond API keys
 - Multi-library aggregation
 - Hosting as a cloud service
+- Branch management or merge conflict resolution via API

@@ -1,0 +1,18 @@
+{{ $src := .Get "src" }}
+{{ $cols := .Get "cols" | default "80" }}
+{{ $rows := .Get "rows" | default "24" }}
+<div class="asciinema-container" style="margin: 1.5rem 0;">
+  <div id="player-{{ $src | urlize }}"></div>
+</div>
+<link rel="stylesheet" type="text/css" href="https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.css" />
+<script src="https://unpkg.com/asciinema-player@3.7.1/dist/bundle/asciinema-player.min.js"></script>
+<script>
+  AsciinemaPlayer.create('/demos/{{ $src }}.cast', document.getElementById('player-{{ $src | urlize }}'), {
+    cols: {{ $cols }},
+    rows: {{ $rows }},
+    theme: 'monokai',
+    fit: 'width',
+    autoPlay: true,
+    speed: 1.5
+  });
+</script>

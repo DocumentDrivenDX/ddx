@@ -93,15 +93,75 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    - Zoom/pan for large graphs
    - Layout options (hierarchical top-down, force-directed)
 
-3. **Bead browser, search, and editor**
-   - List beads with columns: ID, title, status, priority, labels, owner
-   - Sortable and filterable by any column
-   - Full-text search across bead titles, descriptions, and acceptance criteria
-   - Visual dependency tree (which beads block which)
-   - Ready queue view (only beads with all deps satisfied)
-   - **Editor**: create new beads, edit existing beads (calls `ddx bead` API)
+3. **Bead views (local-first, client-side data)**
+
+   The beads UI runs entirely in the browser. On load, the client fetches the
+   full bead set from `GET /api/beads` (JSONL is small — hundreds of beads,
+   not millions). All search, filter, sort, and graph traversal happens
+   client-side using an in-browser data layer (see ADR-005).
+
+   **Master-detail list view:**
+   - Searchable list: full-text across title, description, acceptance, labels
+   - Sortable columns: ID, title, status, priority, labels, owner, updated_at
+   - Filterable by status, priority, label, owner
+   - Click a bead to open detail panel (split pane or slide-over)
+   - Detail shows: all fields, dependency tree, execution beads, agent sessions
+   - Graph traversal: click a dependency → navigate to that bead's detail
+   - Drill-down into execution runs linked to the bead (shows pass/fail,
+     logs, duration)
+
+   **Kanban board view:**
+   - Columns represent status: `open`, `in_progress`, `closed`
+   - Cards within columns ordered by priority (P0 top, P4 bottom)
+   - Dependency grouping: beads that block each other cluster visually
+     (similar to Trello, Fuzz by 37signals, GitHub Projects)
+   - Drag-and-drop to change status (calls `ddx bead update` API)
+   - Swimlanes option: group rows by label (e.g., `area:cli`, `area:web`)
+   - Color coding: priority → card border, labels → chips, blocked → dimmed
+   - Collapsed card shows: title, priority badge, label chips, dep count
+   - Expanded card shows: description, acceptance, execution summary
+
+   **Ready queue view:**
+   - Filtered view showing only beads with all dependencies satisfied
+   - Sorted by priority, then by creation date
+   - One-click claim (calls `ddx bead claim` API)
+
+   **Bead detail actions:**
+
+   The detail panel is not just a viewer — it is the primary interaction
+   surface for evaluating and driving work items.
+
+   *Navigation:*
+   - `spec-id` links to the governing artifact (rendered inline or navigates
+     to the document viewer with that artifact's content)
+   - Parent bead link navigates to the parent's detail
+   - Dependency links navigate to each dep's detail
+   - Execution runs link to the execution detail view (logs, results)
+   - Agent session links navigate to the agent log viewer for that session
+
+   *Review and re-evaluation:*
+   - "Review" action: side-by-side view of the bead's acceptance criteria
+     vs the latest execution results and implementation diff. The user or
+     agent evaluates whether the work actually meets the spec.
+   - "Re-review" action on closed beads: re-evaluates against current
+     artifact state — did the governing spec change since the bead was
+     closed? If so, flag as potentially stale.
+   - Artifact drift indicator: if the `spec-id` artifact's content hash
+     changed since the bead was last updated, show a warning badge.
+
+   *Status and lifecycle:*
+   - Re-open a closed bead (status → open) with a reason field
+   - Re-run: dispatch `ddx exec run` or `ddx agent run` against the bead's
+     linked execution definition (calls server API which delegates to CLI)
+   - Claim / unclaim for agent coordination
    - Inline status transitions (open → in_progress → closed)
-   - Dependency management (add/remove deps via UI)
+
+   *Mutation:*
+   - Edit all bead fields inline (title, description, acceptance, labels,
+     priority, spec-id)
+   - Create new beads with guided form
+   - Add/remove dependencies by selecting other beads
+   - All mutations call the HTTP API which writes to the JSONL store
 
 4. **Agent log monitor**
    - Live-updating list of agent invocations (newest first)
@@ -150,15 +210,88 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 - Given some documents are stale, then stale nodes are visually highlighted (red/orange)
 - Given I click a node, then I navigate to that document's detail view
 
-### US-082: Developer Monitors Bead Status
+### US-082: Developer Monitors Bead Status on Kanban Board
 **As a** developer tracking work items
-**I want** to see beads in a visual board with filtering
+**I want** to see beads as cards on a kanban board grouped by status
 **So that** I can quickly understand what's ready, blocked, and in progress
 
 **Acceptance Criteria:**
-- Given beads exist, when I open the bead view, then I see beads grouped by status (open, in_progress, closed)
-- Given I filter by label, then only matching beads are shown
-- Given I click a bead, then I see its full details including dependencies and acceptance criteria
+- Given beads exist, when I open the board view, then I see columns for
+  open, in_progress, and closed with cards sorted by priority
+- Given beads have dependencies, then blocking/blocked relationships are
+  visually indicated (dimmed cards, connector lines, or grouping)
+- Given I drag a card to a new column, then the bead status updates via API
+- Given I click a card, then a detail panel opens showing description,
+  acceptance criteria, execution runs, and the dependency graph
+
+### US-082b: Developer Searches and Traverses Beads
+**As a** developer investigating a work item
+**I want** to search beads and navigate their dependency graph
+**So that** I can trace blocking relationships and inspect execution evidence
+
+**Acceptance Criteria:**
+- Given I type in the search bar, then results filter instantly (client-side,
+  no server round-trip) across title, description, acceptance, and labels
+- Given I'm viewing a bead's detail, when I click a dependency link, then I
+  navigate to that bead's detail
+- Given a bead has linked execution runs, then I see their pass/fail status,
+  duration, and can expand to see logs
+
+### US-082c: Developer Views Bead Execution Evidence
+**As a** developer evaluating whether a bead is truly done
+**I want** to drill into the execution beads and agent sessions associated
+  with a work item
+**So that** I can verify tests passed and the implementation matches acceptance
+
+**Acceptance Criteria:**
+- Given a bead has execution runs, when I open its detail, then I see a list
+  of runs with status, harness, duration, and timestamp
+- Given I click a run, then I see structured results and raw log output
+- Given a bead has agent sessions, then I see prompt/response summaries
+
+### US-082d: Supervisor Reviews Bead Against Governing Artifact
+**As a** supervisor evaluating completed work
+**I want** to review a bead's implementation against its governing spec and
+  acceptance criteria side-by-side
+**So that** I can confirm the work meets the spec or re-open it
+
+**Acceptance Criteria:**
+- Given I click "Review" on a closed bead, then I see the bead's acceptance
+  criteria alongside the latest execution results and a link to the governing
+  artifact's content
+- Given the governing artifact changed since the bead was closed, then a
+  drift warning badge is shown
+- Given I determine the work is insufficient, when I click "Re-open" and
+  provide a reason, then the bead status returns to open with the reason
+  recorded
+
+### US-082e: Supervisor Re-runs Execution from Bead Detail
+**As a** supervisor who wants fresh evidence
+**I want** to re-run an execution or agent invocation directly from the bead
+  detail
+**So that** I can verify the implementation still works after spec changes
+
+**Acceptance Criteria:**
+- Given a bead has a linked execution definition, when I click "Re-run", then
+  the execution is dispatched via the server API
+- Given the run completes, then the result appears in the bead's execution
+  list and the UI refreshes
+- Given I want to run an agent review, when I click "Agent review", then
+  an agent session is dispatched with the bead's context as the prompt
+
+### US-082f: Developer Navigates from Bead to Related Artifacts
+**As a** developer exploring a work item
+**I want** to navigate from a bead to its governing spec, parent bead,
+  dependencies, and execution evidence in one click
+**So that** I can build a complete picture without switching to the terminal
+
+**Acceptance Criteria:**
+- Given a bead has `spec-id: FEAT-001`, when I click the spec link, then I
+  navigate to the document viewer showing FEAT-001's content
+- Given a bead has a parent, when I click the parent link, then I navigate
+  to the parent bead's detail
+- Given a bead has execution runs, when I click a run, then I navigate to
+  the execution detail view with logs and structured results
 
 ### US-083: Developer Edits Document in Browser
 **As a** developer fixing a stale document
@@ -277,9 +410,7 @@ ddx/
 
 ## Out of Scope
 
-- Document editing in the browser (use your editor, view in the web UI)
-- Bead creation/mutation from the web UI (CLI-only for now; read-only dashboard)
 - Real-time sync / collaborative editing
 - Mobile-optimized layout
 - Authentication (localhost-only for v1; auth deferred to FEAT-002 server security)
-- Offline/local-first capabilities (v2 consideration)
+- Server-side search or pagination for beads (client-side only — see ADR-005)

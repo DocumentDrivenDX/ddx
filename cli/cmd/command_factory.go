@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/easel/ddx/internal/config"
+	ddxexec "github.com/easel/ddx/internal/exec"
 	"github.com/easel/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -23,6 +24,9 @@ type CommandFactory struct {
 
 	// Working directory (injected once at startup)
 	WorkingDir string
+
+	// AgentRunnerOverride overrides the agent runner used by execStore (for testing).
+	AgentRunnerOverride ddxexec.AgentRunner
 
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper
@@ -334,6 +338,10 @@ PowerShell:
 	rootCmd.AddCommand(f.newAgentCommand())
 	rootCmd.AddCommand(f.newDocCommand())
 	rootCmd.AddCommand(f.newServerCommand())
+	rootCmd.AddCommand(f.newInstallCommand())
+	rootCmd.AddCommand(f.newInstalledCommand())
+	rootCmd.AddCommand(f.newUninstallCommand())
+	rootCmd.AddCommand(f.newSearchCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{

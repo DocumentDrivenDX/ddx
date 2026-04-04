@@ -111,6 +111,25 @@
       },
       "additionalProperties": false
     },
+    "git": {
+      "type": "object",
+      "description": "Git integration configuration",
+      "properties": {
+        "auto_commit": {
+          "type": "string",
+          "enum": ["always", "prompt", "never"],
+          "default": "never",
+          "description": "Auto-commit mode for document writes (always | prompt | never)"
+        },
+        "commit_prefix": {
+          "type": "string",
+          "default": "docs",
+          "description": "Prefix for auto-commit messages",
+          "examples": ["docs", "chore"]
+        }
+      },
+      "additionalProperties": false
+    },
     "agent": {
       "type": "object",
       "description": "Agent service configuration",

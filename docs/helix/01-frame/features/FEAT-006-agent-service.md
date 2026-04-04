@@ -15,6 +15,11 @@ ddx:
 
 The DDx agent service is the unified interface for dispatching work to AI coding agents (codex, claude, gemini, opencode, cursor, etc.). It handles harness discovery, prompt delivery, output capture, token tracking, session logging, and multi-agent quorum. Workflow tools (HELIX) and check runners (dun) call `ddx agent` instead of implementing their own harness abstraction.
 
+Within the broader DDx execution model (FEAT-010), `ddx agent` is the
+dedicated `agent` executor kind. It remains the canonical surface for direct
+agent dispatch and the authoritative source of raw prompt/response logs for
+agent-backed execution runs.
+
 ## Problem Statement
 
 **Current situation:** Both HELIX and dun independently implement agent dispatch:
@@ -104,8 +109,52 @@ The DDx agent service is the unified interface for dispatching work to AI coding
 **So that** I can see what prompt was sent and what the agent returned
 
 **Acceptance Criteria:**
-- Given agent invocations have occurred, when I run `ddx agent log`, then I see recent sessions with timestamps, harness, tokens, and duration
-- Given I specify a session ID, then I see the full prompt and response
+- Given agent invocations have occurred, when I run `ddx agent log`, then I see recent sessions with timestamps, harness, tokens, duration, and correlation metadata
+- Given I specify a session ID, then I see the full prompt, response, stderr, and exit code for that session
+- Given the session was recorded before full-body capture existed, then the entry still loads and shows the available metadata without breaking
+
+### Session Capture
+
+Agent session evidence is stored locally under `session_log_dir` (default
+`.ddx/agent-logs`) as a dedicated bead-backed collection plus attachment
+files. Each session record captures the invocation metadata plus references to
+the prompt and response bodies needed for inspection.
+
+Minimum session fields:
+
+- `id`
+- `timestamp`
+- `harness`
+- `model`
+- `tokens`
+- `duration_ms`
+- `exit_code`
+- `error`
+- `correlation`
+- references to stored prompt, response, and log bodies
+
+The `correlation` block is workflow-agnostic and may carry keys such as
+`bead_id`, `doc_id`, `workflow`, `request_id`, or `parent_session_id` when
+workflow tools provide them.
+
+Storage and retention are policy-driven:
+
+- The authoritative session metadata record may live in a dedicated
+  bead-schema collection, while prompt, response, stdout, stderr, or other
+  large bodies live in named attachment files.
+- By default, local session logs retain the full captured bodies for
+  inspection.
+- Optional redaction rules may mask sensitive substrings before persistence.
+- Existing metadata-only JSONL session logs remain readable and must not fail
+  session listing or inspection.
+
+Inspection UX:
+
+- `ddx agent log` lists recent sessions using the stored metadata.
+- `ddx agent log <session-id>` shows the full stored bodies and correlation
+  context for one session.
+- API and MCP session-detail surfaces mirror the same session identity and
+  attachment-backed detail model.
 
 ## Implementation Notes
 
@@ -117,6 +166,7 @@ The HELIX bash harness (`scripts/helix`) has proven patterns worth preserving in
 - Cross-model review (alternating agents for quality)
 - Session logging format and directory structure
 - Timeout and error handling
+- Full-body prompt/response capture with backward-compatible session replay
 
 ### Porting from Dun
 

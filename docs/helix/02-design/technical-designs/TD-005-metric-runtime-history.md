@@ -4,9 +4,16 @@ ddx:
   depends_on:
     - FEAT-005
     - FEAT-010
+    - TD-010
     - SD-005
 ---
 # Technical Design: Metric Runtime and History
+
+This design extends [TD-010](/home/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-010-executions.md).
+Generic execution collection naming, attachment publication, and legacy
+fallback rules come from the generic execution substrate; this document adds
+the metric-specific definition fields, run payload shape, and comparison/trend
+projection rules.
 
 ## File Layout
 

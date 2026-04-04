@@ -111,68 +111,28 @@ jobs:
     name: Integration Tests
     needs: ci
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version: '1.21'
         cache-dependency-path: cli/go.sum
-    
-    - name: Install lefthook
-      run: |
-        # Install using Go for better reliability in CI
-        go install github.com/evilmartians/lefthook@latest
-        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
-    - name: Verify git-subtree availability
-      run: |
-        # git-subtree should be included with git, verify it's available
-        if ! git subtree --help >/dev/null 2>&1; then
-          echo "git-subtree not found, attempting to install..."
-          # On some distros it's a separate package
-          sudo apt-get update
-          sudo apt-get install -y git-subtree || true
-          # Verify again
-          if ! git subtree --help >/dev/null 2>&1; then
-            echo "ERROR: git-subtree is not available"
-            exit 1
-          fi
-        fi
-        echo "✓ git-subtree is available"
+    - name: Build binary
+      run: go build -o ../bin/ddx .
 
-    - name: Build CLI
-      run: |
-        cd cli
-        go build -o ../bin/ddx
-    
-    - name: Setup DDx toolkit directory
-      run: |
-        # Create the DDx installation directory with library structure
-        mkdir -p ~/.ddx/library
-        cp -r library/* ~/.ddx/library/ || true
-    
-    - name: Test init command
-      run: |
-        mkdir -p test-project
-        cd test-project
-        git init
-        git config user.email "test@example.com"
-        git config user.name "Test User"
-        ../bin/ddx init
-        test -f .ddx/config.yaml
-    
-    - name: Test list command
-      run: |
-        cd test-project
-        ../bin/ddx list
-    
-    - name: Test pre-commit hooks
-      run: |
-        cd test-project
-        git init
-        lefthook install
-        echo "test" > test.txt
-        git add test.txt
-        git commit -m "Test commit" || true
+    - name: Run E2E smoke tests
+      run: go test -v ./cmd -run TestE2ESmokeJourney -count=1 2>&1 | tee ../e2e-test-output.txt
+
+    - name: Upload E2E test output
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-output
+        path: e2e-test-output.txt
+        retention-days: 7

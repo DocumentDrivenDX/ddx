@@ -14,6 +14,15 @@ import (
 	"time"
 )
 
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 // Runner executes agent invocations.
 type Runner struct {
 	Registry *Registry
@@ -54,6 +63,22 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	}
 
 	model := r.resolveModel(opts, harnessName)
+
+	// Warn on unknown model
+	if model != "" && len(harness.Models) > 0 && !containsString(harness.Models, model) {
+		fmt.Fprintf(os.Stderr, "agent: model %q is not a known model for harness %q; available models: %s\n",
+			model, harnessName, strings.Join(harness.Models, ", "))
+	}
+
+	// Warn on unknown effort
+	if opts.Effort != "" {
+		levels := r.resolveReasoningLevels(harnessName, harness)
+		if len(levels) > 0 && !containsString(levels, opts.Effort) {
+			fmt.Fprintf(os.Stderr, "agent: effort %q is not a known reasoning level for harness %q; available levels: %s\n",
+				opts.Effort, harnessName, strings.Join(levels, ", "))
+		}
+	}
+
 	timeout := r.resolveTimeout(opts)
 
 	// Build args with the resolved prompt (may have come from file)
@@ -74,7 +99,15 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	elapsed := time.Since(start)
 
 	result := r.processResult(harnessName, model, harness, execResult, execErr, elapsed, ctx)
-	r.logSession(result, len(prompt))
+	promptSource := opts.PromptSource
+	if promptSource == "" {
+		if opts.PromptFile != "" {
+			promptSource = opts.PromptFile
+		} else {
+			promptSource = "inline"
+		}
+	}
+	r.logSession(result, len(prompt), prompt, promptSource, opts.Correlation)
 	return result, nil
 }
 
@@ -207,6 +240,7 @@ func (r *Runner) processResult(harnessName, model string, harness Harness, execR
 
 	if execResult != nil {
 		result.Output = execResult.Stdout
+		result.Stderr = execResult.Stderr
 		result.ExitCode = execResult.ExitCode
 	}
 
@@ -247,7 +281,7 @@ func ExtractTokens(output string, harness Harness) int {
 }
 
 // logSession writes a session entry to the log directory.
-func (r *Runner) logSession(result *Result, promptLen int) {
+func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource string, correlation map[string]string) {
 	dir := r.Config.SessionLogDir
 	if dir == "" {
 		return
@@ -259,15 +293,20 @@ func (r *Runner) logSession(result *Result, promptLen int) {
 
 	id := genSessionID()
 	entry := SessionEntry{
-		ID:        id,
-		Timestamp: time.Now().UTC(),
-		Harness:   result.Harness,
-		Model:     result.Model,
-		PromptLen: promptLen,
-		Tokens:    result.Tokens,
-		Duration:  result.DurationMS,
-		ExitCode:  result.ExitCode,
-		Error:     result.Error,
+		ID:           id,
+		Timestamp:    time.Now().UTC(),
+		Harness:      result.Harness,
+		Model:        result.Model,
+		PromptLen:    promptLen,
+		Prompt:       prompt,
+		PromptSource: promptSource,
+		Response:     result.Output,
+		Correlation:  correlation,
+		Stderr:       result.Stderr,
+		Tokens:       result.Tokens,
+		Duration:     result.DurationMS,
+		ExitCode:     result.ExitCode,
+		Error:        result.Error,
 	}
 
 	data, err := json.Marshal(entry)

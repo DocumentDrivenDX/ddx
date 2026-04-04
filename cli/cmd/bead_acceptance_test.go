@@ -73,6 +73,83 @@ func TestBeadCommandsCRUDLifecycle(t *testing.T) {
 	assert.Equal(t, float64(0), status["open"])
 }
 
+func TestBeadCommandsClaimUsesExplicitAssignee(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Claim me", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--claim", "--assignee", "alice")
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, "in_progress", bead["status"])
+	assert.Equal(t, "alice", bead["owner"])
+	assert.NotEmpty(t, bead["claimed-at"])
+	assert.NotEmpty(t, bead["claimed-pid"])
+}
+
+func TestBeadCommandsClaimFallsBackToCallerIdentity(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	t.Setenv("USER", "runtime-agent")
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Claim me too", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--claim")
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, "runtime-agent", bead["owner"])
+}
+
+func TestBeadCommandsEvidenceAppendAndList(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Evidence bead", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "evidence", "add", id, "--kind", "summary", "--summary", "finished", "--body", "details", "--actor", "alice")
+	require.NoError(t, err)
+
+	listOut, err := executeCommand(rootCmd, "bead", "evidence", "list", id, "--json")
+	require.NoError(t, err)
+
+	var events []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(listOut), &events))
+	require.Len(t, events, 1)
+	assert.Equal(t, "summary", events[0]["kind"])
+	assert.Equal(t, "finished", events[0]["summary"])
+	assert.Equal(t, "alice", events[0]["actor"])
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	rawEvents, ok := bead["events"].([]any)
+	require.True(t, ok)
+	require.Len(t, rawEvents, 1)
+}
+
 func TestBeadCommandsDependencyViews(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)

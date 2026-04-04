@@ -52,6 +52,8 @@ Workflow tools build on DDx's infrastructure to provide opinionated development 
 
 A six-phase structured development methodology (Frame, Design, Test, Build, Deploy, Iterate) that uses DDx for document management, persona composition, and template application.
 
+{{< asciinema src="03-plugin-install" >}}
+
 [HELIX on GitHub →](https://github.com/easel/helix)
 
 ### Your Methodology

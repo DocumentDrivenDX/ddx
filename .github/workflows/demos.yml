@@ -1,0 +1,77 @@
+name: Regenerate Demos
+
+on:
+  push:
+    paths:
+      - 'cli/**'
+      - 'scripts/demos/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  demos:
+    name: Record and Render Demos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: cli/go.sum
+
+      - name: Build ddx binary
+        run: |
+          cd cli
+          go build -o ../bin/ddx .
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+
+      - name: Install asciinema
+        run: pip install asciinema
+
+      - name: Install agg
+        run: |
+          curl -fsSL https://github.com/asciinema/agg/releases/latest/download/agg-x86_64-unknown-linux-gnu \
+            -o /usr/local/bin/agg
+          chmod +x /usr/local/bin/agg
+
+      - name: Record demo scripts
+        run: |
+          mkdir -p demos
+          for script in scripts/demos/[0-9]*.sh; do
+            name=$(basename "$script" .sh)
+            asciinema rec --cols 80 --rows 24 --command "bash $script" "demos/${name}.cast"
+          done
+
+      - name: Render GIFs
+        run: |
+          for cast in demos/*.cast; do
+            agg "$cast" "${cast%.cast}.gif"
+          done
+
+      - name: Check for changes vs repo
+        run: |
+          {
+            echo "## Demo Recordings"
+            echo ""
+            if git diff --quiet -- demos/ 2>/dev/null && ! git ls-files --others --exclude-standard demos/ | grep -q .; then
+              echo "No changes detected in demo recordings vs repository."
+            else
+              echo "Demo recordings differ from what is stored in the repository."
+              echo "Download the artifacts from this run to update them."
+              echo ""
+              echo "Changed/new files:"
+              git diff --name-only -- demos/ 2>/dev/null || true
+              git ls-files --others --exclude-standard demos/ 2>/dev/null || true
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload demo artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: demos
+          path: demos/
+          retention-days: 30

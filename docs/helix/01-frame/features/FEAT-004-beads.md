@@ -43,7 +43,9 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 8. **Export** (`ddx bead export`) — write beads as JSONL for interchange with other tools
 9. **Initialization** (`ddx bead init`) — create storage file and directory
 10. **Validation hooks** — workflows register custom validators for create/update operations
-11. **Unknown field preservation** — round-trip fields DDx doesn't know about (enables workflow-specific extensions)
+11. **Claim ownership** (`ddx bead update <id> --claim [--assignee A]`) — claim a bead with explicit assignee control and stable claim metadata
+12. **Execution evidence** (`ddx bead evidence add/list`) — append-only history for close summaries, agent outputs, and experiment outcomes
+13. **Unknown field preservation** — round-trip fields DDx doesn't know about (enables workflow-specific extensions)
 
 ### Non-Functional
 
@@ -99,7 +101,20 @@ For `bd` and `br` backends, DDx shells out to the respective binary. For `jsonl`
 - **Read algorithm:** Queue commands scan `beads.jsonl` line-by-line. Valid JSON objects are loaded into a snapshot; malformed lines are skipped with line-numbered warnings so one bad record does not take down the entire queue.
 - **Repair algorithm:** If a read finds malformed lines but at least one valid bead, DDx takes the store lock, copies the current file to `.ddx/beads.jsonl.bak`, and rewrites the repaired snapshot atomically.
 - **Failure mode:** If every line is malformed, the command returns a contextual error that names the file and malformed-record count.
-- **Design reference:** See [`SD-004-beads-tracker.md`](/home/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-004-beads-tracker.md) for the concrete algorithms, repair flow, and concurrency model.
+- **Design reference:** See [`SD-004-beads-tracker.md`](/home/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-004-beads-tracker.md), [`TD-004-beads-claims-evidence.md`](/home/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-004-beads-claims-evidence.md), and [`TP-004-beads-claims-evidence.md`](/home/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-004-beads-claims-evidence.md) for the concrete algorithms, repair flow, claim semantics, evidence trail, and validation matrix.
+
+### Storage Boundary
+
+The bead backend is the reusable DDx storage engine for bead-schema records.
+The primary work queue is one collection, not the only possible collection.
+
+- The default active-work collection maps to `beads.jsonl` in the JSONL backend.
+- Other DDx services may use separate bead-backed collections for archived
+  work, execution history, agent session indexes, or other record families.
+- Large payloads such as prompt bodies or raw logs live in separate attachment
+  files referenced from the bead-schema record rather than inline in the
+  primary collection row.
+- Backend selection is a store-level concern, not a single-file concern.
 
 ### ID Prefix
 
@@ -130,6 +145,8 @@ ddx bead init
 ddx bead create "Title" [--type T] [--priority N] [--labels L,L] [--acceptance A] [--parent ID] [--description D]
 ddx bead show <id> [--json]
 ddx bead update <id> [--title T] [--status S] [--priority N] [--labels L,L] [--acceptance A] [--assignee A] [--claim]
+ddx bead evidence add <id> [--kind K] [--body B] [--summary S] [--source SRC] [--actor A]
+ddx bead evidence list <id> [--json]
 ddx bead close <id>
 ddx bead list [--status S] [--label L] [--json]
 ddx bead ready [--json]
@@ -204,14 +221,53 @@ ddx bead export [--stdout] [file]
 - Given DDx auto-repairs a partially corrupted file, then it keeps a `.bak` backup of the original contents
 - Given `beads.jsonl` contains only malformed records, then queue reads fail with a contextual error that includes the file path and malformed-record count
 
+### US-025: Operator Claims a Bead With a Specific Assignee
+**As a** developer or agent coordinating work
+**I want** to claim a bead and assign it to a known actor
+**So that** ownership is explicit and not hardcoded to DDx
+
+**Acceptance Criteria:**
+- Given a bead exists, when I run `ddx bead update <id> --claim --assignee alice`, then the bead becomes `in_progress`, `assignee` is `alice`, and `claimed-at` / `claimed-pid` are recorded
+- Given a bead exists, when I run `ddx bead update <id> --claim` without `--assignee`, then DDx uses the runtime caller identity fallback before defaulting to `ddx`
+- Given a claimed bead exists, when I run `ddx bead update <id> --unclaim`, then claim metadata is cleared and the bead returns to `open`
+
+### US-026: Operator Appends Execution Evidence
+**As a** developer or agent
+**I want** to append evidence to a bead without rewriting prior history
+**So that** close summaries and experiment outcomes remain auditable
+
+**Acceptance Criteria:**
+- Given a bead exists, when I run `ddx bead evidence add <id> --kind summary --body "done"`, then a new immutable event is appended with a timestamp and actor
+- Given evidence already exists, when I append another event, then prior entries remain in order and are not rewritten
+- Given I run `ddx bead show <id> --json`, then the full evidence history is returned
+- Given I run `ddx bead list`, `ready`, `blocked`, or `status`, then evidence entries do not change queue semantics
+
 ## Claim Semantics
 
 Beads support advisory ownership claims for agent/workflow coordination:
 
-- `ddx bead update <id> --claim` sets `status=in_progress`, `assignee=<caller>`, records `claimed-at` (ISO-8601 UTC) and `claimed-pid` (current PID)
+- `ddx bead update <id> --claim [--assignee NAME]` sets `status=in_progress`, resolves `assignee` from the explicit flag or runtime caller identity, and records `claimed-at` (ISO-8601 UTC) plus `claimed-pid` (current PID)
 - `ddx bead update <id> --unclaim` sets `status=open`, clears `assignee`, `claimed-at`, `claimed-pid`
 - Claims are advisory — they prevent double-claiming, not hard locks
 - `claimed-at` and `claimed-pid` are standard fields (not unknown-field extensions)
+
+Claim resolution order is:
+
+1. Explicit `--assignee` flag.
+2. Runtime caller identity from the execution context.
+3. `ddx` as the final fallback.
+
+This makes claim ownership explicit for both human operators and agents without hardcoding the caller to the CLI binary name.
+
+## Execution Evidence
+
+Beads carry append-only execution evidence in workflow-specific metadata at `Extra["events"]`.
+
+- Each event records `kind`, `summary`, `body`, `actor`, `created_at`, and `source`.
+- `kind` covers common workflow events such as `claim`, `unclaim`, `close`, `summary`, and `experiment`.
+- Events are appended in order and never rewritten or removed by normal CLI operations.
+- Evidence is visible in `show --json` and server/API responses via the `events` metadata field, but queue derivation ignores it.
+- Workflows may use the evidence trail for operator notes, experiment results, or close summaries without changing the bead's core status semantics.
 
 ## Custom Fields
 
@@ -222,6 +278,7 @@ Workflows need to store fields DDx doesn't know about (e.g., HELIX stores `spec-
 - `ddx bead list --where key=value` — filter by custom field
 - Unknown fields are preserved on all read/write operations
 - Custom fields appear in JSON output and import/export
+- The evidence trail is stored as workflow-specific metadata in `Extra["events"]`, preserving bd/br compatibility while still round-tripping the full history.
 
 This keeps DDx agnostic while giving workflows a typed pass-through mechanism.
 

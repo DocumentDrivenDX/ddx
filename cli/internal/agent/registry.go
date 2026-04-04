@@ -13,6 +13,7 @@ var builtinHarnesses = map[string]Harness{
 		Args:            []string{"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral"},
 		PromptMode:      "arg",
 		DefaultModel:    "o3-mini",
+		Models:          nil, // models change frequently; rely on provider-side validation
 		ReasoningLevels: []string{"low", "medium", "high"},
 		ModelFlag:       "-m",
 		WorkDirFlag:     "-C",
@@ -26,9 +27,10 @@ var builtinHarnesses = map[string]Harness{
 		Args:            []string{"--no-session-persistence", "--print", "-p", "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"},
 		PromptMode:      "arg",
 		DefaultModel:    "claude-sonnet-4-20250514",
+		Models:          nil, // models change frequently; rely on provider-side validation
 		ReasoningLevels: []string{"low", "medium", "high"},
 		ModelFlag:       "--model",
-		WorkDirFlag:     "--cwd",
+		WorkDirFlag:     "",
 		EffortFlag:      "--effort",
 		TokenPattern:    `(?i)total tokens[:\s]+([0-9,]+)`,
 	},
@@ -37,6 +39,7 @@ var builtinHarnesses = map[string]Harness{
 		Binary:          "gemini",
 		Args:            []string{},
 		PromptMode:      "stdin",
+		Models:          nil, // models change frequently; rely on provider-side validation
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},
 	"opencode": {

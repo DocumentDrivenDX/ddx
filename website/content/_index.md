@@ -59,3 +59,7 @@ layout: hextra-home
     subtitle="DDx provides primitives. HELIX, your team's methodology, or no methodology at all — DDx works with any approach."
   >}}
 {{< /hextra/feature-grid >}}
+
+## See It In Action
+
+{{< asciinema src="02-init-explore" >}}

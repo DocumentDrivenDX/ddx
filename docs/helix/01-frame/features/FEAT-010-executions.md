@@ -9,7 +9,7 @@ ddx:
 # Feature: Executions (Definitions and Runs)
 
 **ID:** FEAT-010
-**Status:** Proposed
+**Status:** In Progress
 **Priority:** P1
 **Owner:** DDx Team
 

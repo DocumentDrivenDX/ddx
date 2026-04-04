@@ -200,7 +200,7 @@ func TestCapabilitiesUsesBuiltinDefaultModel(t *testing.T) {
 	caps, err := r.Capabilities("codex")
 	require.NoError(t, err)
 	assert.Equal(t, "o3-mini", caps.Model)
-	assert.Equal(t, []string{"o3-mini"}, caps.Models)
+	assert.Contains(t, caps.Models, "o3-mini") // default model is always in the list
 }
 
 func TestRunModelOverride(t *testing.T) {
@@ -250,7 +250,7 @@ func TestCapabilitiesUsesDefaultsAndConfigOverrides(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "codex", caps.Harness)
 	assert.Equal(t, "gpt-4o", caps.Model)
-	assert.Equal(t, []string{"gpt-4o"}, caps.Models)
+	assert.Contains(t, caps.Models, "gpt-4o") // configured model is in the list
 	assert.Equal(t, []string{"concise", "balanced", "deep"}, caps.ReasoningLevels)
 	assert.NotEmpty(t, caps.Path)
 }
@@ -301,7 +301,20 @@ func TestSessionLogging(t *testing.T) {
 	assert.Equal(t, "codex", entry.Harness)
 	assert.Equal(t, 42, entry.Tokens)
 	assert.Equal(t, 11, entry.PromptLen) // len("test prompt")
+	assert.Equal(t, "test prompt", entry.Prompt)
+	assert.Equal(t, "tokens used\n42\n", entry.Response)
+	assert.Equal(t, "inline", entry.PromptSource)
 	assert.True(t, strings.HasPrefix(entry.ID, "as-"))
+}
+
+func TestSessionEntryLegacyRowCompatibility(t *testing.T) {
+	row := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"tokens":500,"duration_ms":2000,"exit_code":0}`
+	var entry SessionEntry
+	require.NoError(t, json.Unmarshal([]byte(row), &entry))
+	assert.Equal(t, "as-0001", entry.ID)
+	assert.Equal(t, 100, entry.PromptLen)
+	assert.Empty(t, entry.Prompt)
+	assert.Empty(t, entry.Response)
 }
 
 // --- Quorum ---
@@ -367,6 +380,38 @@ func (e *trackingExecutor) Execute(ctx context.Context, binary string, args []st
 	e.calls[binary] = true
 	e.mu.Unlock()
 	return &ExecResult{Stdout: e.output}, nil
+}
+
+func TestRunWithUnknownModelWarns(t *testing.T) {
+	mock := &mockExecutor{output: "ok"}
+	r := newTestRunner(mock)
+
+	result, err := r.Run(RunOptions{Harness: "codex", Prompt: "test", Model: "gpt-99-turbo"})
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "ok", result.Output)
+}
+
+func TestRunWithUnknownEffortWarns(t *testing.T) {
+	mock := &mockExecutor{output: "ok"}
+	r := newTestRunner(mock)
+
+	result, err := r.Run(RunOptions{Harness: "codex", Prompt: "test", Effort: "turbo"})
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "ok", result.Output)
+}
+
+func TestCapabilitiesIncludesDefaultModel(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+
+	caps, err := r.Capabilities("codex")
+	require.NoError(t, err)
+	assert.Contains(t, caps.Models, "o3-mini") // default model always present
+
+	caps, err = r.Capabilities("claude")
+	require.NoError(t, err)
+	assert.Contains(t, caps.Models, "claude-sonnet-4-20250514")
 }
 
 // --- Integration tests (require real harnesses) ---

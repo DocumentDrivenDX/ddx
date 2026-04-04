@@ -35,6 +35,8 @@ make install
 
 **Requirements:** Git 2.0+, git-subtree.
 
+{{< asciinema src="01-install" >}}
+
 ## Initialize Your Project
 
 ```bash
@@ -45,6 +47,8 @@ ddx init
 This creates:
 - `.ddx/config.yaml` — project configuration
 - `.ddx/library/` — your document library with prompts, personas, patterns, templates
+
+{{< asciinema src="02-init-explore" >}}
 
 ## Explore What's Available
 

@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Configuration
 DDX_HOME="${HOME}/.ddx"
 DDX_REPO="https://github.com/easel/ddx"
-DDX_BRANCH="main"
+DDX_API="https://api.github.com/repos/easel/ddx"
 
 # Logging functions
 log() {
@@ -86,6 +86,29 @@ setup_ddx_directory() {
     success "Directory structure created"
 }
 
+# Resolve the version to install
+resolve_version() {
+    if [ -n "${DDX_VERSION:-}" ]; then
+        # Strip leading 'v' if provided, then normalize to tag format
+        VERSION="${DDX_VERSION#v}"
+        TAG="v${VERSION}"
+        log "Using requested version: ${TAG}"
+    else
+        log "Fetching latest release version..."
+        if command -v curl &> /dev/null; then
+            TAG=$(curl -fsSL "${DDX_API}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+        else
+            TAG=$(wget -qO- "${DDX_API}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+        fi
+        if [ -z "$TAG" ]; then
+            error "Could not determine latest release version. Set DDX_VERSION to specify a version."
+        fi
+        VERSION="${TAG#v}"
+        log "Latest release: ${TAG}"
+    fi
+    echo "$TAG"
+}
+
 # Install CLI tool
 install_cli() {
     # Check if DDx is already installed
@@ -101,36 +124,42 @@ install_cli() {
         log "Installing DDx CLI tool..."
     fi
 
+    # Resolve version
+    TAG=$(resolve_version)
+
     # Detect platform
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     ARCH=$(uname -m)
-    
+
     case "$ARCH" in
         x86_64) ARCH="amd64" ;;
         aarch64) ARCH="arm64" ;;
         armv7l) ARCH="arm" ;;
     esac
-    
+
+    case "$OS" in
+        linux|darwin) ;;
+        *)
+            error "Unsupported OS: ${OS}. Supported: linux, darwin."
+            ;;
+    esac
+
     # Determine archive extension based on OS
-    if [ "$OS" = "windows" ]; then
-        ARCHIVE_EXT="zip"
-        BINARY_NAME="ddx.exe"
-    else
-        ARCHIVE_EXT="tar.gz"
-        BINARY_NAME="ddx"
-    fi
-    
+    ARCHIVE_EXT="tar.gz"
+    BINARY_NAME="ddx"
+
     # Download appropriate archive
     ARCHIVE_NAME="ddx-${OS}-${ARCH}.${ARCHIVE_EXT}"
-    DOWNLOAD_URL="${DDX_REPO}/releases/latest/download/${ARCHIVE_NAME}"
+    DOWNLOAD_URL="${DDX_REPO}/releases/download/${TAG}/${ARCHIVE_NAME}"
+    CHECKSUM_URL="${DOWNLOAD_URL}.sha256"
 
-    log "Downloading ${ARCHIVE_NAME} from GitHub releases..."
+    log "Downloading ${ARCHIVE_NAME} from ${DOWNLOAD_URL}..."
 
     # Create temp directory for download
     TEMP_DIR=$(mktemp -d)
     trap "rm -rf ${TEMP_DIR}" EXIT
 
-    # Download with error checking
+    # Download archive with error checking
     if command -v curl &> /dev/null; then
         if ! curl -fsSL "${DOWNLOAD_URL}" -o "${TEMP_DIR}/${ARCHIVE_NAME}"; then
             error "Failed to download ${ARCHIVE_NAME}. Please check your internet connection and try again."
@@ -146,17 +175,39 @@ install_cli() {
         error "Downloaded file is missing or empty. The release may not exist for ${OS}-${ARCH}."
     fi
 
+    # Verify checksum if available
+    if command -v curl &> /dev/null; then
+        CHECKSUM_DATA=$(curl -fsSL "${CHECKSUM_URL}" 2>/dev/null || true)
+    else
+        CHECKSUM_DATA=$(wget -qO- "${CHECKSUM_URL}" 2>/dev/null || true)
+    fi
+    if [ -n "$CHECKSUM_DATA" ]; then
+        log "Verifying checksum..."
+        echo "${CHECKSUM_DATA}" > "${TEMP_DIR}/${ARCHIVE_NAME}.sha256"
+        # The .sha256 file contains "hash  filename" — rewrite to point at local file
+        EXPECTED_HASH=$(awk '{print $1}' "${TEMP_DIR}/${ARCHIVE_NAME}.sha256")
+        if command -v sha256sum &> /dev/null; then
+            ACTUAL_HASH=$(sha256sum "${TEMP_DIR}/${ARCHIVE_NAME}" | awk '{print $1}')
+        elif command -v shasum &> /dev/null; then
+            ACTUAL_HASH=$(shasum -a 256 "${TEMP_DIR}/${ARCHIVE_NAME}" | awk '{print $1}')
+        else
+            warn "No sha256sum or shasum found; skipping checksum verification."
+            ACTUAL_HASH="$EXPECTED_HASH"
+        fi
+        if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+            error "Checksum mismatch for ${ARCHIVE_NAME}. Expected ${EXPECTED_HASH}, got ${ACTUAL_HASH}."
+        fi
+        success "Checksum verified"
+    else
+        warn "No checksum file available; skipping verification."
+    fi
+
     log "Download completed successfully"
-    
+
     # Extract binary from archive
     log "Extracting binary..."
     cd "${TEMP_DIR}"
-    
-    if [ "$ARCHIVE_EXT" = "zip" ]; then
-        unzip -q "${ARCHIVE_NAME}"
-    else
-        tar -xzf "${ARCHIVE_NAME}"
-    fi
+    tar -xzf "${ARCHIVE_NAME}"
 
     # Install binary directly to local bin
     mkdir -p "${LOCAL_BIN}"
@@ -164,8 +215,8 @@ install_cli() {
     # Move binary directly to local bin instead of DDx home
     mv "${BINARY_NAME}" "${LOCAL_BIN}/ddx"
     chmod +x "${LOCAL_BIN}/ddx"
-    
-    success "CLI tool installed"
+
+    success "CLI tool installed (${TAG})"
 }
 
 # Set up shell completions

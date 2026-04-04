@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	"github.com/easel/ddx/internal/bead"
 	"github.com/easel/ddx/internal/config"
 	"github.com/easel/ddx/internal/docgraph"
+	internalgit "github.com/easel/ddx/internal/git"
 	"github.com/easel/ddx/internal/persona"
 )
 
@@ -72,6 +75,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/docs/stale", s.handleDocStale)
 	s.mux.HandleFunc("GET /api/docs/{id}/deps", s.handleDocDeps)
 	s.mux.HandleFunc("GET /api/docs/{id}/dependents", s.handleDocDependents)
+	s.mux.HandleFunc("GET /api/docs/{id}/history", s.handleDocHistory)
+	s.mux.HandleFunc("GET /api/docs/{id}/diff", s.handleDocDiff)
+	s.mux.HandleFunc("PUT /api/docs/{id}", s.handleDocWrite)
 	s.mux.HandleFunc("GET /api/docs/{id}", s.handleDocShow)
 
 	// Agent sessions
@@ -80,6 +86,31 @@ func (s *Server) routes() {
 
 	// MCP
 	s.mux.HandleFunc("POST /mcp", s.handleMCP)
+
+	// Web UI (embedded SPA)
+	distFS, err := fs.Sub(frontendFiles, "frontend/dist")
+	if err == nil {
+		s.mux.Handle("/", spaHandler(http.FS(distFS)))
+	}
+}
+
+// spaHandler serves static files from the embedded FS, falling back to
+// index.html for client-side routes (SPA routing).
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		// Try to open the file from the embedded FS
+		f, err := fsys.Open(path)
+		if err != nil {
+			// File not found — serve index.html for SPA routing
+			r.URL.Path = "/"
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		_ = f.Close()
+		fileServer.ServeHTTP(w, r)
+	})
 }
 
 // --- Health Endpoints ---
@@ -528,6 +559,156 @@ func (s *Server) handleDocDependents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dependents)
 }
 
+func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	doc, ok := graph.Show(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
+		return
+	}
+
+	fullPath := filepath.Join(s.WorkingDir, doc.Path)
+	if err := os.WriteFile(fullPath, []byte(body.Content), 0o644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	committed := false
+	var acCfg internalgit.AutoCommitConfig
+	if cfg, cfgErr := config.LoadWithWorkingDir(s.WorkingDir); cfgErr == nil && cfg.Git != nil {
+		acCfg.AutoCommit = cfg.Git.AutoCommit
+		acCfg.CommitPrefix = cfg.Git.CommitPrefix
+	}
+	if acCfg.AutoCommit == "always" {
+		if acErr := internalgit.AutoCommit(fullPath, id, "write document", acCfg); acErr == nil {
+			committed = true
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "ok",
+		"path":      doc.Path,
+		"committed": committed,
+	})
+}
+
+func (s *Server) handleDocHistory(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	doc, ok := graph.Show(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
+		return
+	}
+
+	gitArgs := []string{"log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path}
+	out, gitErr := exec.Command("git", gitArgs...).Output()
+	if gitErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed"})
+		return
+	}
+
+	type commitEntry struct {
+		Hash    string `json:"hash"`
+		Date    string `json:"date"`
+		Author  string `json:"author"`
+		Message string `json:"message"`
+	}
+
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	entries := make([]commitEntry, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		hash := parts[0]
+		if len(hash) > 7 {
+			hash = hash[:7]
+		}
+		date := parts[1]
+		if len(date) > 10 {
+			date = date[:10]
+		}
+		entries = append(entries, commitEntry{
+			Hash:    hash,
+			Date:    date,
+			Author:  parts[2],
+			Message: parts[3],
+		})
+	}
+
+	writeJSON(w, http.StatusOK, entries)
+}
+
+func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	doc, ok := graph.Show(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
+		return
+	}
+
+	ref := r.URL.Query().Get("ref")
+	var gitArgs []string
+	if ref != "" {
+		gitArgs = []string{"diff", ref, "--", doc.Path}
+	} else {
+		gitArgs = []string{"diff", "--", doc.Path}
+	}
+
+	out, gitErr := exec.Command("git", gitArgs...).Output()
+	if gitErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git diff failed"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"diff": string(out)})
+}
+
 // --- Agent Session Endpoints ---
 
 func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
@@ -827,6 +1008,41 @@ func (s *Server) mcpTools() []mcpTool {
 				},
 			},
 		},
+		{
+			Name:        "ddx_doc_write",
+			Description: "Write content to a document by artifact ID",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Document artifact ID"},
+					"content": map[string]any{"type": "string", "description": "New document content"},
+				},
+				"required": []string{"id", "content"},
+			},
+		},
+		{
+			Name:        "ddx_doc_history",
+			Description: "Get git commit history for a document",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "string", "description": "Document artifact ID"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_doc_diff",
+			Description: "Get git diff for a document",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":  map[string]any{"type": "string", "description": "Document artifact ID"},
+					"ref": map[string]any{"type": "string", "description": "Git ref to diff against (default: working copy vs HEAD)"},
+				},
+				"required": []string{"id"},
+			},
+		},
 	}
 }
 
@@ -878,6 +1094,17 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 	case "ddx_agent_sessions":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentSessions(harness)
+	case "ddx_doc_write":
+		id, _ := call.Arguments["id"].(string)
+		content, _ := call.Arguments["content"].(string)
+		return s.mcpDocWrite(id, content)
+	case "ddx_doc_history":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpDocHistory(id)
+	case "ddx_doc_diff":
+		id, _ := call.Arguments["id"].(string)
+		ref, _ := call.Arguments["ref"].(string)
+		return s.mcpDocDiff(id, ref)
 	default:
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("unknown tool: %s", call.Name)}},
@@ -1224,6 +1451,112 @@ func (s *Server) mcpAgentSessions(harness string) mcpToolResult {
 		return sessions[i].Timestamp.After(sessions[j].Timestamp)
 	})
 	data, _ := json.Marshal(sessions)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocWrite(id, content string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+	}
+	if content == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "content is required"}}, IsError: true}
+	}
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+	doc, ok := graph.Show(id)
+	if !ok {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
+	}
+	fullPath := filepath.Join(s.WorkingDir, doc.Path)
+	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+	committed := false
+	var acCfg internalgit.AutoCommitConfig
+	if cfg, cfgErr := config.LoadWithWorkingDir(s.WorkingDir); cfgErr == nil && cfg.Git != nil {
+		acCfg.AutoCommit = cfg.Git.AutoCommit
+		acCfg.CommitPrefix = cfg.Git.CommitPrefix
+	}
+	if acCfg.AutoCommit == "always" {
+		if acErr := internalgit.AutoCommit(fullPath, id, "write document", acCfg); acErr == nil {
+			committed = true
+		}
+	}
+	data, _ := json.Marshal(map[string]any{"status": "ok", "path": doc.Path, "committed": committed})
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocHistory(id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+	}
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+	doc, ok := graph.Show(id)
+	if !ok {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
+	}
+	out, gitErr := exec.Command("git", "log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path).Output()
+	if gitErr != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git log failed"}}, IsError: true}
+	}
+	type commitEntry struct {
+		Hash    string `json:"hash"`
+		Date    string `json:"date"`
+		Author  string `json:"author"`
+		Message string `json:"message"`
+	}
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	entries := make([]commitEntry, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		hash := parts[0]
+		if len(hash) > 7 {
+			hash = hash[:7]
+		}
+		date := parts[1]
+		if len(date) > 10 {
+			date = date[:10]
+		}
+		entries = append(entries, commitEntry{Hash: hash, Date: date, Author: parts[2], Message: parts[3]})
+	}
+	data, _ := json.Marshal(entries)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocDiff(id, ref string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+	}
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+	doc, ok := graph.Show(id)
+	if !ok {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
+	}
+	var gitArgs []string
+	if ref != "" {
+		gitArgs = []string{"diff", ref, "--", doc.Path}
+	} else {
+		gitArgs = []string{"diff", "--", doc.Path}
+	}
+	out, gitErr := exec.Command("git", gitArgs...).Output()
+	if gitErr != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
+	}
+	data, _ := json.Marshal(map[string]string{"diff": string(out)})
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 

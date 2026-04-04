@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/easel/ddx/internal/bead"
 	"github.com/spf13/cobra"
@@ -44,6 +45,7 @@ Examples:
 	cmd.AddCommand(f.newBeadBlockedCommand())
 	cmd.AddCommand(f.newBeadStatusCommand())
 	cmd.AddCommand(f.newBeadDepCommand())
+	cmd.AddCommand(f.newBeadEvidenceCommand())
 	cmd.AddCommand(f.newBeadImportCommand())
 	cmd.AddCommand(f.newBeadExportCommand())
 
@@ -218,7 +220,11 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 
 			// --claim and --unclaim use dedicated store methods
 			if claim, _ := cmd.Flags().GetBool("claim"); claim {
-				return s.Claim(args[0], "ddx")
+				assignee, _ := cmd.Flags().GetString("assignee")
+				if assignee == "" {
+					assignee = resolveClaimAssignee()
+				}
+				return s.Claim(args[0], assignee)
 			}
 			if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
 				return s.Unclaim(args[0])
@@ -299,13 +305,95 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 	cmd.Flags().Int("priority", 0, "New priority")
 	cmd.Flags().String("labels", "", "New labels (comma-separated)")
 	cmd.Flags().String("acceptance", "", "New acceptance criteria")
-	cmd.Flags().String("assignee", "", "New assignee")
+	cmd.Flags().String("assignee", "", "New assignee or claim assignee fallback")
 	cmd.Flags().String("parent", "", "New parent bead ID")
 	cmd.Flags().String("description", "", "New description")
 	cmd.Flags().String("notes", "", "New notes")
 	cmd.Flags().Bool("claim", false, "Claim: set status=in_progress, assignee=ddx")
 	cmd.Flags().Bool("unclaim", false, "Unclaim: set status=open, clear assignee and claim fields")
 	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
+
+	return cmd
+}
+
+func resolveClaimAssignee() string {
+	for _, key := range []string{"DDX_AGENT_NAME", "USER", "LOGNAME", "USERNAME", "SUDO_USER"} {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	return "ddx"
+}
+
+func (f *CommandFactory) newBeadEvidenceCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "evidence",
+		Short: "Manage append-only execution evidence",
+		Run: func(cmd *cobra.Command, args []string) {
+			_ = cmd.Help()
+		},
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "add <id>",
+		Short: "Append execution evidence to a bead",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			kind, _ := cmd.Flags().GetString("kind")
+			summary, _ := cmd.Flags().GetString("summary")
+			body, _ := cmd.Flags().GetString("body")
+			source, _ := cmd.Flags().GetString("source")
+			actor, _ := cmd.Flags().GetString("actor")
+			if actor == "" {
+				actor = resolveClaimAssignee()
+			}
+			if kind == "" {
+				kind = "summary"
+			}
+			if source == "" {
+				source = "ddx bead evidence add"
+			}
+			return f.beadStore().AppendEvent(args[0], bead.BeadEvent{
+				Kind:    kind,
+				Summary: summary,
+				Body:    body,
+				Actor:   actor,
+				Source:  source,
+			})
+		},
+	})
+	addCmd := cmd.Commands()[0]
+	addCmd.Flags().String("kind", "summary", "Evidence kind")
+	addCmd.Flags().String("summary", "", "Short summary")
+	addCmd.Flags().String("body", "", "Detailed body")
+	addCmd.Flags().String("source", "", "Evidence source")
+	addCmd.Flags().String("actor", "", "Actor identity")
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list <id>",
+		Short: "List execution evidence for a bead",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			events, err := f.beadStore().Events(args[0])
+			if err != nil {
+				return err
+			}
+
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(events)
+			}
+
+			for _, e := range events {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", e.CreatedAt.Format(time.RFC3339), e.Kind, e.Summary)
+			}
+			return nil
+		},
+	})
+	listCmd := cmd.Commands()[1]
+	listCmd.Flags().Bool("json", false, "Output as JSON")
 
 	return cmd
 }

@@ -2,6 +2,8 @@ package exec
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/easel/ddx/internal/agent"
 	"github.com/easel/ddx/internal/bead"
 	"github.com/easel/ddx/internal/docgraph"
 )
@@ -35,6 +38,7 @@ type Store struct {
 	RunsDir              string
 	DefinitionCollection *bead.Store
 	RunCollection        *bead.Store
+	AgentRunner          AgentRunner
 	runCounter           uint64
 }
 
@@ -153,7 +157,92 @@ func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error)
 		return RunRecord{}, err
 	}
 	if def.Executor.Kind == ExecutorKindAgent {
-		return RunRecord{}, fmt.Errorf("agent executor is not yet implemented for exec definition %q", def.ID)
+		if s.AgentRunner == nil {
+			return RunRecord{}, fmt.Errorf("agent runner not configured for exec definition %q", def.ID)
+		}
+
+		var promptFile, promptText string
+		if len(def.Executor.Command) > 0 {
+			promptFile = def.Executor.Command[0]
+		} else {
+			promptText = def.Executor.Env["DDX_AGENT_PROMPT"]
+		}
+
+		workDir := def.Executor.Cwd
+		if workDir == "" {
+			workDir = s.WorkingDir
+		} else if !filepath.IsAbs(workDir) {
+			workDir = filepath.Join(s.WorkingDir, workDir)
+		}
+
+		var timeout time.Duration
+		if def.Executor.TimeoutMS > 0 {
+			timeout = time.Duration(def.Executor.TimeoutMS) * time.Millisecond
+		}
+
+		sessionID := genAgentSessionID()
+		opts := agent.RunOptions{
+			Harness:    def.Executor.Env["DDX_AGENT_HARNESS"],
+			Prompt:     promptText,
+			PromptFile: promptFile,
+			Correlation: map[string]string{
+				"definition_id": def.ID,
+				"artifact_ids":  strings.Join(def.ArtifactIDs, ","),
+				"session_id":    sessionID,
+			},
+			Model:   def.Executor.Env["DDX_AGENT_MODEL"],
+			Effort:  def.Executor.Env["DDX_AGENT_EFFORT"],
+			Timeout: timeout,
+			WorkDir: workDir,
+		}
+
+		start := time.Now().UTC()
+		agentResult, agentErr := s.AgentRunner.Run(opts)
+		finished := time.Now().UTC()
+
+		status := StatusSuccess
+		exitCode := 0
+		var stdout, stderr string
+		if agentErr != nil {
+			status = StatusErrored
+			exitCode = 1
+			stderr = agentErr.Error()
+		} else {
+			exitCode = agentResult.ExitCode
+			stdout = strings.TrimSpace(agentResult.Output)
+			stderr = strings.TrimSpace(agentResult.Stderr)
+			if exitCode != 0 {
+				if exitCode == -1 && strings.Contains(agentResult.Error, "timeout") {
+					status = StatusTimedOut
+				} else {
+					status = StatusFailed
+				}
+			}
+		}
+
+		runID := fmt.Sprintf("%s@%s-%d", def.ID, start.Format(time.RFC3339Nano), atomic.AddUint64(&s.runCounter, 1))
+		record := RunRecord{
+			RunManifest: RunManifest{
+				RunID:          runID,
+				DefinitionID:   def.ID,
+				ArtifactIDs:    def.ArtifactIDs,
+				StartedAt:      start,
+				FinishedAt:     finished,
+				Status:         status,
+				ExitCode:       exitCode,
+				AgentSessionID: sessionID,
+				Attachments:    runAttachmentRefs(s.WorkingDir, runID),
+				Provenance:     provenance(),
+			},
+			Result: RunResult{
+				Stdout: stdout,
+				Stderr: stderr,
+			},
+		}
+		if saveErr := s.saveRunRecord(record); saveErr != nil {
+			return RunRecord{}, saveErr
+		}
+		return record, nil
 	}
 
 	cwd := s.WorkingDir
@@ -511,4 +600,10 @@ func metricStatusForRun(status string) string {
 		return "pass"
 	}
 	return "fail"
+}
+
+func genAgentSessionID() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return "as-" + hex.EncodeToString(b)
 }

@@ -3,15 +3,26 @@ package exec
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/easel/ddx/internal/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type mockAgentRunner struct {
+	result *agent.Result
+	err    error
+}
+
+func (m *mockAgentRunner) Run(opts agent.RunOptions) (*agent.Result, error) {
+	return m.result, m.err
+}
 
 func writeExecArtifact(t *testing.T, wd, id string) {
 	t.Helper()
@@ -145,6 +156,169 @@ func mustExecTime(t *testing.T, value string) time.Time {
 	parsed, err := time.Parse(time.RFC3339, value)
 	require.NoError(t, err)
 	return parsed
+}
+
+func writeAgentExecDefinition(t *testing.T, wd string, def Definition) {
+	t.Helper()
+	store := NewStore(wd)
+	require.NoError(t, store.SaveDefinition(def))
+}
+
+func TestAgentExecutorDelegation(t *testing.T) {
+	wd := t.TempDir()
+	writeExecArtifact(t, wd, "MET-001")
+	writeAgentExecDefinition(t, wd, Definition{
+		ID:          "exec-agent-task@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ExecutorSpec{
+			Kind: ExecutorKindAgent,
+			Env: map[string]string{
+				"DDX_AGENT_HARNESS": "codex",
+				"DDX_AGENT_PROMPT":  "run the task",
+			},
+		},
+		Active:    true,
+		CreatedAt: mustExecTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	store := NewStore(wd)
+	store.AgentRunner = &mockAgentRunner{
+		result: &agent.Result{
+			Harness:  "codex",
+			ExitCode: 0,
+			Output:   "task complete",
+			Stderr:   "",
+		},
+	}
+
+	rec, err := store.Run(context.Background(), "exec-agent-task@1")
+	require.NoError(t, err)
+	assert.Equal(t, StatusSuccess, rec.Status)
+	assert.Equal(t, 0, rec.ExitCode)
+	assert.NotEmpty(t, rec.AgentSessionID)
+	assert.Equal(t, "task complete", rec.Result.Stdout)
+
+	history, err := store.History("MET-001", "")
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	assert.Equal(t, rec.RunID, history[0].RunID)
+	assert.NotEmpty(t, history[0].AgentSessionID)
+}
+
+func TestAgentExecutorDelegationFailure(t *testing.T) {
+	wd := t.TempDir()
+	writeExecArtifact(t, wd, "MET-001")
+	writeAgentExecDefinition(t, wd, Definition{
+		ID:          "exec-agent-task@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ExecutorSpec{
+			Kind: ExecutorKindAgent,
+			Env:  map[string]string{"DDX_AGENT_PROMPT": "run the task"},
+		},
+		Active:    true,
+		CreatedAt: mustExecTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	store := NewStore(wd)
+	store.AgentRunner = &mockAgentRunner{
+		result: &agent.Result{
+			Harness:  "codex",
+			ExitCode: 1,
+			Output:   "",
+			Stderr:   "something went wrong",
+			Error:    "something went wrong",
+		},
+	}
+
+	rec, err := store.Run(context.Background(), "exec-agent-task@1")
+	require.NoError(t, err)
+	assert.Equal(t, StatusFailed, rec.Status)
+	assert.Equal(t, 1, rec.ExitCode)
+	assert.Equal(t, "something went wrong", rec.Result.Stderr)
+}
+
+func TestAgentExecutorDelegationTimeout(t *testing.T) {
+	wd := t.TempDir()
+	writeExecArtifact(t, wd, "MET-001")
+	writeAgentExecDefinition(t, wd, Definition{
+		ID:          "exec-agent-task@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ExecutorSpec{
+			Kind:      ExecutorKindAgent,
+			Env:       map[string]string{"DDX_AGENT_PROMPT": "run the task"},
+			TimeoutMS: 1000,
+		},
+		Active:    true,
+		CreatedAt: mustExecTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	store := NewStore(wd)
+	store.AgentRunner = &mockAgentRunner{
+		result: &agent.Result{
+			Harness:  "codex",
+			ExitCode: -1,
+			Error:    "timeout after 1s",
+		},
+	}
+
+	rec, err := store.Run(context.Background(), "exec-agent-task@1")
+	require.NoError(t, err)
+	assert.Equal(t, StatusTimedOut, rec.Status)
+	assert.Equal(t, -1, rec.ExitCode)
+}
+
+func TestAgentExecutorDelegationRunnerError(t *testing.T) {
+	wd := t.TempDir()
+	writeExecArtifact(t, wd, "MET-001")
+	writeAgentExecDefinition(t, wd, Definition{
+		ID:          "exec-agent-task@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ExecutorSpec{
+			Kind: ExecutorKindAgent,
+			Env:  map[string]string{"DDX_AGENT_PROMPT": "run the task"},
+		},
+		Active:    true,
+		CreatedAt: mustExecTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	store := NewStore(wd)
+	store.AgentRunner = &mockAgentRunner{
+		err: fmt.Errorf("harness not found: fake"),
+	}
+
+	rec, err := store.Run(context.Background(), "exec-agent-task@1")
+	require.NoError(t, err)
+	assert.Equal(t, StatusErrored, rec.Status)
+	assert.Equal(t, 1, rec.ExitCode)
+	assert.Contains(t, rec.Result.Stderr, "harness not found")
+
+	// Verify the run is persisted in history
+	history, err := store.History("MET-001", "")
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	assert.Equal(t, StatusErrored, history[0].Status)
+}
+
+func TestAgentExecutorNilRunner(t *testing.T) {
+	wd := t.TempDir()
+	writeExecArtifact(t, wd, "MET-001")
+	writeAgentExecDefinition(t, wd, Definition{
+		ID:          "exec-agent-task@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ExecutorSpec{
+			Kind: ExecutorKindAgent,
+			Env:  map[string]string{"DDX_AGENT_PROMPT": "run the task"},
+		},
+		Active:    true,
+		CreatedAt: mustExecTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	store := NewStore(wd)
+	// AgentRunner is nil (not set)
+
+	_, err := store.Run(context.Background(), "exec-agent-task@1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "agent runner not configured")
 }
 
 func TestDefinitionRoundTrips(t *testing.T) {

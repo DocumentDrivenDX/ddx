@@ -12,8 +12,8 @@ ddx:
 
 This design specifies the runtime behavior of `ddx bead` and the file-backed
 tracker used by HELIX and other workflows. The key design constraint is that
-`beads.jsonl` must remain safe under concurrent access and recoverable after
-partial corruption without requiring a separate database.
+the default active-work collection must remain safe under concurrent access and
+recoverable after partial corruption without requiring a separate database.
 
 ## Goals
 
@@ -24,11 +24,36 @@ partial corruption without requiring a separate database.
 - Self-heal partially corrupted JSONL when valid beads still exist.
 - Expose enough context to diagnose malformed input without losing the whole queue.
 
+## Reuse Boundary
+
+The bead store is the reusable DDx record-store substrate, but the current
+implementation is too tightly coupled to the primary tracker file.
+
+- The backend interface is bead-shaped, which is useful: it gives DDx one
+  portable record schema with unknown-field preservation and interchangeable
+  backends.
+- The missing boundary is between the storage engine and one specific file such
+  as `beads.jsonl`.
+- DDx should support multiple named bead-backed collections, each with its own
+  retention and indexing behavior.
+
+The reusable pieces are lower-level:
+
+- directory locking
+- atomic temp-file swap
+- repo-local backend selection conventions
+- best-effort repair behavior where a line-oriented store is appropriate
+- a stable bead-schema envelope with domain-specific fields in preserved extras
+
+Execution, metric, archive, and agent-session storage should reuse those
+mechanics through separate bead-backed collections rather than sharing the
+primary active-work file.
+
 ## Data Format
 
 ### Primary File
 
-- Path: `.ddx/beads.jsonl`
+- Path: `.ddx/beads.jsonl` for the default active-work collection
 - Format: one JSON object per line
 - Ordering: written sorted by `id`
 - Semantics: each line is one full bead record; blank lines are ignored
@@ -48,6 +73,50 @@ mechanism that allows HELIX to store fields such as `spec-id`,
 `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, and
 `replaces`.
 
+The design also reserves two workflow-facing shapes:
+
+- `assignee` is the advisory owner recorded by claim operations.
+- `events` is an append-only array of execution evidence records stored in
+  `Extra["events"]`.
+
+Each evidence record carries `kind`, `summary`, `body`, `actor`,
+`created_at`, and `source`. DDx treats the array as ordered history and never
+rewrites or compacts it during normal operations.
+
+## Claim Algorithm
+
+Claim/unclaim stays a normal bead mutation, but ownership is now explicit.
+
+1. Acquire the bead store lock.
+2. Read the current bead snapshot.
+3. Resolve the assignee from the explicit `--assignee` flag, then runtime
+   caller identity, then `ddx` as the fallback.
+4. For `--claim`, set `status=in_progress`, `assignee`, `claimed-at`, and
+   `claimed-pid`.
+5. For `--unclaim`, set `status=open` and clear `assignee`, `claimed-at`, and
+   `claimed-pid`.
+6. Serialize the full snapshot to `.ddx/beads.jsonl.tmp`.
+7. Atomically rename the temp file into place.
+
+Claims remain advisory; the store does not introduce a hard reservation lock.
+The metadata exists so humans and agents can distinguish who holds the claim
+and when it happened.
+
+## Evidence Algorithm
+
+Execution evidence is append-only.
+
+1. Acquire the bead store lock.
+2. Read the current bead snapshot.
+3. Load the target bead and append one evidence entry to `Extra["events"]`.
+4. Populate `kind`, `summary`, `body`, `actor`, `created_at`, and `source`.
+5. Serialize the full snapshot to `.ddx/beads.jsonl.tmp`.
+6. Atomically rename the temp file into place.
+
+This deliberately preserves full history. Evidence writes never mutate or
+remove existing entries, so close summaries and experiment outcomes remain
+auditable.
+
 ## Read Path
 
 The read path is intentionally best-effort.
@@ -58,9 +127,10 @@ The read path is intentionally best-effort.
 4. Unmarshal each non-empty line independently.
 5. Preserve valid beads in a snapshot.
 6. Emit line-numbered warnings for malformed records.
-7. If at least one valid bead exists and at least one malformed record was seen,
+7. Return `events` history and claim metadata exactly as stored.
+8. If at least one valid bead exists and at least one malformed record was seen,
    trigger repair under the store lock.
-8. If no valid bead exists, return a contextual error that names the file and
+9. If no valid bead exists, return a contextual error that names the file and
    malformed-record count.
 
 Why this shape:
@@ -122,6 +192,8 @@ The tracker queue views are derived from one in-memory snapshot.
 - `Total` is the number of parsed beads.
 - `Open`, `Closed`, `Ready`, and `Blocked` are derived from the same snapshot.
 - Status reporting never reparses the file independently of the queue view.
+- Evidence history stored in `Extra["events"]` does not affect queue derivation.
+- Claim metadata does not affect queue derivation beyond the bead's status.
 
 ## Concurrency Model
 
@@ -155,6 +227,13 @@ These are the key tests that validate the design:
 - `TestConcurrentCreatesSerialized`
 - `TestMalformedJSONLSkipsBadRecords`
 - `TestMalformedJSONLAllBadReturnsError`
+- `TestBeadClaimUsesExplicitAssignee`
+- `TestBeadClaimFallsBackToCallerIdentity`
+- `TestBeadUnclaimClearsClaimMetadata`
+- `TestBeadEvidenceAppendPreservesOrder`
+- `TestBeadEvidenceAppendAtomicWithConcurrentWriters`
+- `TestBeadShowJSONIncludesEvidenceHistory`
+- `docs/helix/03-test/test-plans/TP-004-beads-claims-evidence.md`
 
 Expected outcomes:
 
@@ -170,6 +249,8 @@ Expected outcomes:
 - If the repair backup cannot be written, the read returns an error and leaves
   the original file untouched.
 - If a lock cannot be acquired in time, the mutating command fails cleanly.
+- If evidence append fails, the mutation fails atomically and the prior bead
+  snapshot remains unchanged.
 
 ## Non-Goals
 

@@ -16,3 +16,5 @@ const (
 	BackendBD    = "bd"
 	BackendBR    = "br"
 )
+
+const DefaultCollection = "beads"

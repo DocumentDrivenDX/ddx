@@ -111,7 +111,7 @@ func TestExportRoundTripPreservesFields(t *testing.T) {
 
 	orig := &Bead{
 		Title:       "Full bead",
-		IssueType:        "bug",
+		IssueType:   "bug",
 		Priority:    1,
 		Labels:      []string{"backend", "urgent"},
 		Description: "A real bug",
@@ -164,4 +164,40 @@ func TestUpdateStructuralFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "FEAT-002", got.Extra["spec-id"])
 	assert.Equal(t, "hx-epic02", got.Parent)
+}
+
+// ── Execution evidence ─────────────────────────────────────────
+
+func TestEvidenceAppendPreservesOrder(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{Title: "Evidence"}
+	require.NoError(t, s.Create(b))
+
+	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "summary", Summary: "first", Actor: "alice"}))
+	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "summary", Summary: "second", Actor: "bob"}))
+
+	events, err := s.Events(b.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, "first", events[0].Summary)
+	assert.Equal(t, "second", events[1].Summary)
+	assert.Equal(t, "alice", events[0].Actor)
+	assert.Equal(t, "bob", events[1].Actor)
+}
+
+func TestEvidenceRoundTripsThroughExtra(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{Title: "Evidence roundtrip"}
+	require.NoError(t, s.Create(b))
+
+	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "summary", Summary: "done", Actor: "agent"}))
+
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	raw, ok := got.Extra["events"]
+	require.True(t, ok)
+	events := decodeBeadEvents(raw)
+	require.Len(t, events, 1)
+	assert.Equal(t, "done", events[0].Summary)
+	assert.Equal(t, "agent", events[0].Actor)
 }

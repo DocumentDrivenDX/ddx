@@ -86,6 +86,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 
 			// Read prompt from stdin if neither file nor text provided
 			prompt := promptText
+			promptSource := "inline"
 			if prompt == "" && promptFile == "" {
 				// Check if stdin has data
 				stat, _ := os.Stdin.Stat()
@@ -95,7 +96,10 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 						return fmt.Errorf("reading stdin: %w", err)
 					}
 					prompt = string(data)
+					promptSource = "stdin"
 				}
+			} else if promptFile != "" {
+				promptSource = promptFile
 			}
 
 			// Quorum mode
@@ -106,12 +110,13 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				}
 				opts := agent.QuorumOptions{
 					RunOptions: agent.RunOptions{
-						Prompt:     prompt,
-						PromptFile: promptFile,
-						Model:      model,
-						Effort:     effort,
-						Timeout:    timeout,
-						WorkDir:    f.WorkingDir,
+						Prompt:       prompt,
+						PromptFile:   promptFile,
+						PromptSource: promptSource,
+						Model:        model,
+						Effort:       effort,
+						Timeout:      timeout,
+						WorkDir:      f.WorkingDir,
 					},
 					Harnesses: harnessNames,
 					Strategy:  quorum,
@@ -151,13 +156,14 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 
 			// Single harness mode
 			opts := agent.RunOptions{
-				Harness:    harness,
-				Prompt:     prompt,
-				PromptFile: promptFile,
-				Model:      model,
-				Effort:     effort,
-				Timeout:    timeout,
-				WorkDir:    f.WorkingDir,
+				Harness:      harness,
+				Prompt:       prompt,
+				PromptFile:   promptFile,
+				PromptSource: promptSource,
+				Model:        model,
+				Effort:       effort,
+				Timeout:      timeout,
+				WorkDir:      f.WorkingDir,
 			}
 			result, err := r.Run(opts)
 			if err != nil {
@@ -259,18 +265,23 @@ func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Binary: %s\n", caps.Binary)
 			}
 			if caps.Model != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Model: %s\n", caps.Model)
+				modelSource := "default"
+				if r.Config.Models[harness] != "" || r.Config.Model != "" {
+					modelSource = "config override"
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Model: %s (%s)\n", caps.Model, modelSource)
 			} else {
 				fmt.Fprintln(cmd.OutOrStdout(), "Model: (none configured)")
 			}
 			if len(caps.Models) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "Model options: %s\n", strings.Join(caps.Models, ", "))
+				fmt.Fprintf(cmd.OutOrStdout(), "Known models: %s\n", strings.Join(caps.Models, ", "))
 			}
 			if len(caps.ReasoningLevels) > 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "Reasoning levels: %s\n", strings.Join(caps.ReasoningLevels, ", "))
 			} else {
 				fmt.Fprintln(cmd.OutOrStdout(), "Reasoning levels: (none configured)")
 			}
+			fmt.Fprintf(cmd.OutOrStdout(), "\nConfig example (~/.ddx.yml):\n  agent:\n    models:\n      %s: <model-name>\n    harness: %s\n", harness, harness)
 			return nil
 		},
 	}

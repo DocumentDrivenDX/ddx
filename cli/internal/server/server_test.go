@@ -581,7 +581,7 @@ func TestAgentSessionDetail(t *testing.T) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	session := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"tokens":500,"duration_ms":2000,"exit_code":0}`
+	session := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"prompt":"inspect me","response":"done","correlation":{"bead_id":"hx-123"},"tokens":500,"duration_ms":2000,"exit_code":0}`
 	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -597,9 +597,12 @@ func TestAgentSessionDetail(t *testing.T) {
 	}
 
 	var sess struct {
-		ID      string `json:"id"`
-		Harness string `json:"harness"`
-		Tokens  int    `json:"tokens"`
+		ID          string            `json:"id"`
+		Harness     string            `json:"harness"`
+		Tokens      int               `json:"tokens"`
+		Prompt      string            `json:"prompt"`
+		Response    string            `json:"response"`
+		Correlation map[string]string `json:"correlation"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &sess); err != nil {
 		t.Fatal(err)
@@ -609,6 +612,12 @@ func TestAgentSessionDetail(t *testing.T) {
 	}
 	if sess.Tokens != 500 {
 		t.Errorf("expected tokens=500, got %d", sess.Tokens)
+	}
+	if sess.Prompt != "inspect me" || sess.Response != "done" {
+		t.Errorf("expected prompt/response to be returned, got %q / %q", sess.Prompt, sess.Response)
+	}
+	if sess.Correlation["bead_id"] != "hx-123" {
+		t.Errorf("expected bead correlation, got %v", sess.Correlation)
 	}
 }
 
@@ -691,8 +700,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 13 {
-		t.Fatalf("expected 13 MCP tools, got %d", len(tools))
+	if len(tools) != 16 {
+		t.Fatalf("expected 16 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -705,6 +714,7 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_list_beads", "ddx_show_bead", "ddx_bead_ready", "ddx_bead_status",
 		"ddx_doc_graph", "ddx_doc_stale", "ddx_doc_show", "ddx_doc_deps",
 		"ddx_agent_sessions",
+		"ddx_doc_write", "ddx_doc_history", "ddx_doc_diff",
 	}
 	for _, name := range expected {
 		if !names[name] {
@@ -962,5 +972,40 @@ func TestMCPUnknownTool(t *testing.T) {
 	result := resp.Result.(map[string]any)
 	if result["isError"] != true {
 		t.Error("expected isError=true for unknown tool")
+	}
+}
+
+// --- SPA handler tests ---
+
+func TestSPAServesIndexHTML(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "<html") {
+		t.Error("expected HTML content from SPA index")
+	}
+}
+
+func TestSPAFallbackForClientRoute(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// A client-side route like /beads should serve index.html
+	req := httptest.NewRequest("GET", "/beads", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "<html") {
+		t.Error("expected HTML content from SPA index for client route")
 	}
 }

@@ -31,7 +31,13 @@ func (f *CommandFactory) newExecCommand() *cobra.Command {
 }
 
 func (f *CommandFactory) execStore() *ddxexec.Store {
-	return ddxexec.NewStore(f.WorkingDir)
+	store := ddxexec.NewStore(f.WorkingDir)
+	if f.AgentRunnerOverride != nil {
+		store.AgentRunner = f.AgentRunnerOverride
+	} else {
+		store.AgentRunner = f.agentRunner()
+	}
+	return store
 }
 
 func (f *CommandFactory) newExecListCommand() *cobra.Command {

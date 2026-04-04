@@ -5,17 +5,22 @@ ddx:
     - helix.prd
     - FEAT-001
     - FEAT-002
+    - FEAT-005
     - FEAT-006
+    - FEAT-010
     - FEAT-007
     - FEAT-008
     - FEAT-009
+    - FEAT-011
+    - FEAT-012
+    - FEAT-013
 ---
 # DDx Architecture
 
 DDx is a local-first development platform with three cooperating layers:
 
 1. **Command layer** (`ddx` CLI)
-2. **Execution layer** (agent, registry, tracker, and document engines)
+2. **Execution layer** (agent, execution, registry, tracker, and document engines)
 3. **Service layer** (`ddx server`) with API, MCP, and embedded UI surfaces
 
 All data is file-backed with optional local cache and generated artifacts.
@@ -40,6 +45,7 @@ All data is file-backed with optional local cache and generated artifacts.
                      |   - doc                 |
                      |   - bead                 |
                      |   - agent                |
+                     |   - exec                 |
                      |   - update/install/verify |
                      +--------------+-------------+
                                     |
@@ -110,7 +116,36 @@ The engine supports:
 Agent execution remains CLI-owned:
 - agent command constructs a runner config from CLI args, environment, and `.ddx/config.yaml`
 - model and harness selection follows precedence (flags → config → defaults)
-- session files are written to `.ddx/agent-logs` by default and surfaced read-only by server
+- capability introspection exposes the available reasoning levels and models for a selected harness before invocation
+- session evidence is written through a dedicated bead-backed
+  `agent-sessions` collection with separate prompt/response/log attachments,
+  and is surfaced read-only by server
+
+### 4) Execution engine (`internal/exec`)
+
+Execution remains artifact-generic:
+- execution definitions and runs live in dedicated bead-backed collections
+  (`exec-definitions` and `exec-runs`).
+- for the JSONL backend, those collections map to `.ddx/exec-definitions.jsonl`
+  and `.ddx/exec-runs.jsonl`; large result or log payloads live in
+  `.ddx/exec-runs.d/<run-id>/`.
+- other backends preserve the same logical collections while owning their
+  physical storage layout.
+- command handlers own validation, execution, result inspection, and history
+  queries.
+- artifact-linked specializations, such as metrics, project filtered read
+  models over the shared execution store.
+
+The execution engine does not interpret HELIX stage progression. It resolves
+linked artifacts, loads the execution definition, invokes the configured
+executor, and records the run with explicit references back to governing
+artifact and definition IDs.
+
+Both the agent and execution engines use the same storage pattern for durable
+evidence: a bead-backed metadata collection plus named attachment files for
+large captured bodies. This avoids forcing prompt, response, and log payloads
+into one shared row while preserving a uniform inspection model and backend
+family.
 
 ## Service Plane
 

@@ -114,12 +114,13 @@ ddx persona show <name>     # View persona definition
 ddx persona bind <role> <name>  # Bind persona to role
 ```
 
-### MCP Servers
+### Package Registry
 
 ```bash
-ddx mcp list                # List available MCP servers
-ddx mcp install <name>      # Install MCP server
-ddx mcp --status            # Show installed servers
+ddx search <query>          # Search available packages
+ddx install <name>          # Install a package (e.g., ddx install helix)
+ddx installed               # List installed packages
+ddx uninstall <name>        # Remove an installed package
 ```
 
 ## Configuration

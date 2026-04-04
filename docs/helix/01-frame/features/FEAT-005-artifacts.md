@@ -45,7 +45,12 @@ That's it. Any file with a `ddx:` block and an `id` field is an artifact. DDx di
 | `MET` | Metric definition | `docs/metrics/` |
 | `US` | User Story | `docs/helix/01-frame/user-stories/` |
 
-These prefixes are conventions — DDx treats them all the same. Workflows (HELIX) may enforce that certain types exist or follow specific templates.
+These prefixes are conventions — DDx treats them all the same. Workflows
+(HELIX) may enforce that certain types exist or follow specific templates.
+
+Projects may introduce additional conventions such as `AC-*` for acceptance
+criteria or `TC-*` for test cases. DDx does not privilege those types; it only
+tracks their IDs and relationships.
 
 ### Frontmatter Schema
 
@@ -105,6 +110,7 @@ All via `ddx doc` commands (FEAT-007):
 - **Enforce type-specific structure** — "ADRs must have a Decision section" is a workflow concern. DDx validates the graph; dun validates content structure.
 - **Hardcode artifact types** — no switch statements on type prefixes. The graph treats all artifacts equally.
 - **Partition the graph** — all artifacts are in one graph regardless of type or directory.
+- **Execute artifact documents directly** — runtime execution belongs to DDx executions (FEAT-010), not the artifact graph itself.
 
 ## Templates and Prompts
 
@@ -129,6 +135,41 @@ These are **library resources**, not CLI features. Agents and workflows read the
 The doc graph (FEAT-007) can resolve these prompts via input selectors:
 - `artifact-prompt:ADR:create` → the create prompt for ADR artifacts
 - `artifact-template:ADR` → the template for ADR artifacts
+
+## Artifacts and Executions
+
+Artifacts stay declarative. They define meaning, authority, and relationships
+in the document graph. DDx does **not** execute artifact files directly.
+
+Runtime evaluation belongs to DDx execution definitions and execution runs
+(FEAT-010), which are file-backed runtime records linked to artifacts by ID.
+
+### Boundary
+
+- Artifacts declare what matters, who governs it, and how it relates to other
+  artifacts in the graph.
+- Execution definitions describe how to evaluate, verify, or measure one or
+  more artifacts.
+- Execution runs capture one immutable invocation: raw logs, structured result
+  data, status, and provenance.
+- Execution definitions and runs are not artifacts, and they do not
+  participate in document staleness or graph validation.
+- DDx does not infer execution semantics from an artifact type prefix.
+
+### Examples
+
+- A `MET-*` artifact may link to an execution definition that emits numeric
+  observations over time.
+- Metric comparison and trend views are projections over those execution runs,
+  not evidence stored in a separate metric-owned runtime backend.
+- A project may model acceptance criteria or test cases as standalone artifacts
+  and link them to execution definitions that emit pass/fail or richer
+  structured results.
+- An execution definition may evaluate multiple governing artifacts together as
+  long as those links are explicit in the runtime record.
+
+The shared rule is simple: artifact IDs establish meaning and authority; DDx
+executions establish repeatable runtime behavior and evidence.
 
 ## Migration
 

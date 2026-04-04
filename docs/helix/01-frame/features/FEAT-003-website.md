@@ -35,8 +35,15 @@ ddx:
 2. **Quick start** — copy-pasteable installation command, 3-step getting started guide
 3. **Concepts page** — explains document-driven development, document types, how DDx fits with agents and workflow tools
 4. **CLI reference** — command documentation (can be generated from CLI help text)
-5. **Ecosystem page** — shows DDx's position as infrastructure, lists workflow tools built on DDx
+5. **Ecosystem page** — shows DDx's position as infrastructure, lists workflow tools built on DDx, highlights HELIX as first plugin
 6. **Server documentation** — how to run ddx-server, MCP endpoint reference
+7. **Embedded terminal demos** — asciinema recordings of core workflows embedded in hero section and getting-started page:
+   - Install DDx
+   - `ddx init` + `ddx list` + `ddx doctor`
+   - `ddx install helix` (plugin bootstrap)
+   - One-shot project creation with HELIX
+   - Feature evolution with HELIX
+8. **README** — animated GIF/SVG demos, badge row, plugin quick start, link to microsite. The README is the GitHub-facing landing page and must sell at a glance.
 
 ### Non-Functional
 
@@ -67,6 +74,25 @@ ddx:
 - Given I'm on the quick-start section, when I click the install command, then it copies to my clipboard
 - Given I've installed DDx, when I follow the "First steps" guide on the site, then I have a working document library in my project
 
+### US-023: Developer Sees DDx in Action Before Installing
+**As a** developer evaluating DDx
+**I want** to watch a terminal recording of the core workflow
+**So that** I can see what DDx actually does before committing to install it
+
+**Acceptance Criteria:**
+- Given I visit the landing page, when it loads, then I see an embedded terminal recording in or near the hero section
+- Given I visit the getting-started page, then each step has a corresponding recording I can watch
+- Given I visit the ecosystem page, then I see a recording of `ddx install helix` bootstrapping the workflow plugin
+
+### US-024: Developer Evaluates DDx from GitHub README
+**As a** developer who finds DDx on GitHub
+**I want** the README to show me what DDx does in under 30 seconds
+**So that** I decide whether to click through to the full site
+
+**Acceptance Criteria:**
+- Given I open the GitHub repo, when the README renders, then I see an animated terminal demo (GIF or SVG) of the init workflow
+- Given I scroll the README, then I see a plugin install example and a link to the microsite
+
 ### US-022: Developer Understands the Ecosystem
 **As a** developer evaluating DDx
 **I want** to understand how DDx relates to workflow tools and agents
@@ -79,8 +105,9 @@ ddx:
 ## Edge Cases
 
 - Visitor on mobile — site must be responsive
-- Visitor with JavaScript disabled — core content must render without JS
+- Visitor with JavaScript disabled — core content must render without JS (demo recordings degrade to static screenshots or text)
 - Stale documentation — establish process for regenerating CLI docs from source
+- Stale demo recordings — CI regenerates recordings when CLI changes; PR opened if recordings differ
 
 ## Implementation
 
@@ -98,12 +125,23 @@ ddx:
 - DDx Server (MCP endpoints, HTTP API — marked as under development)
 - Ecosystem (stack diagram, what-goes-where table)
 
+### Demo Recording Pipeline
+
+- Reproducible scripts in `scripts/demos/` drive asciinema recordings
+- Each script produces a `.cast` file rendered to GIF/SVG via agg or svg-term
+- Rendered assets live in `website/static/demos/` for Hugo embedding
+- Hugo shortcode or partial wraps asciinema-player for `.cast` playback
+- CI workflow (`.github/workflows/demos.yml`) regenerates on CLI changes
+
 ## Dependencies
 
 - Hugo 0.159+ extended
 - Hextra theme via Hugo modules
 - GitHub Pages hosting
 - Go toolchain (for Hugo modules)
+- asciinema (recording) + agg or svg-term (rendering) for demo pipeline
+- CI workflow for demo regeneration (`.github/workflows/demos.yml`)
+- CI gate: pages deployment depends on CI passing
 
 ## Out of Scope
 

@@ -9,6 +9,7 @@ type Harness struct {
 	Args            []string // base arguments for exec mode
 	PromptMode      string   // "arg" (final arg), "stdin" (pipe)
 	DefaultModel    string   // built-in model choice when no config override exists
+	Models          []string // known valid models for this harness
 	ReasoningLevels []string // supported reasoning levels in preference order
 	ModelFlag       string   // flag for model override (e.g. "-m", "--model"), empty if unsupported
 	WorkDirFlag     string   // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
@@ -29,13 +30,15 @@ type Config struct {
 
 // RunOptions holds options for a single agent invocation.
 type RunOptions struct {
-	Harness    string
-	Prompt     string // prompt text (or path to file)
-	PromptFile string // explicit file path
-	Model      string
-	Effort     string
-	Timeout    time.Duration
-	WorkDir    string
+	Harness      string
+	Prompt       string // prompt text (or path to file)
+	PromptFile   string // explicit file path
+	PromptSource string
+	Correlation  map[string]string
+	Model        string
+	Effort       string
+	Timeout      time.Duration
+	WorkDir      string
 }
 
 // QuorumOptions extends RunOptions for multi-agent consensus.
@@ -52,6 +55,7 @@ type Result struct {
 	Model      string `json:"model,omitempty"`
 	ExitCode   int    `json:"exit_code"`
 	Output     string `json:"output"`
+	Stderr     string `json:"stderr,omitempty"`
 	Tokens     int    `json:"tokens,omitempty"`
 	DurationMS int    `json:"duration_ms"`
 	Error      string `json:"error,omitempty"`
@@ -59,15 +63,20 @@ type Result struct {
 
 // SessionEntry is written to the session log.
 type SessionEntry struct {
-	ID        string    `json:"id"`
-	Timestamp time.Time `json:"timestamp"`
-	Harness   string    `json:"harness"`
-	Model     string    `json:"model,omitempty"`
-	PromptLen int       `json:"prompt_len"`
-	Tokens    int       `json:"tokens,omitempty"`
-	Duration  int       `json:"duration_ms"`
-	ExitCode  int       `json:"exit_code"`
-	Error     string    `json:"error,omitempty"`
+	ID           string            `json:"id"`
+	Timestamp    time.Time         `json:"timestamp"`
+	Harness      string            `json:"harness"`
+	Model        string            `json:"model,omitempty"`
+	PromptLen    int               `json:"prompt_len"`
+	Prompt       string            `json:"prompt,omitempty"`
+	PromptSource string            `json:"prompt_source,omitempty"`
+	Response     string            `json:"response,omitempty"`
+	Correlation  map[string]string `json:"correlation,omitempty"`
+	Stderr       string            `json:"stderr,omitempty"`
+	Tokens       int               `json:"tokens,omitempty"`
+	Duration     int               `json:"duration_ms"`
+	ExitCode     int               `json:"exit_code"`
+	Error        string            `json:"error,omitempty"`
 }
 
 // HarnessStatus reports availability of a harness.

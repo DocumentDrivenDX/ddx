@@ -42,6 +42,16 @@ type Dependency struct {
 	Metadata    string `json:"metadata,omitempty"`
 }
 
+// BeadEvent records append-only execution evidence.
+type BeadEvent struct {
+	Kind      string    `json:"kind"`
+	Summary   string    `json:"summary,omitempty"`
+	Body      string    `json:"body,omitempty"`
+	Actor     string    `json:"actor,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	Source    string    `json:"source,omitempty"`
+}
+
 // Status constants
 const (
 	StatusOpen       = "open"
