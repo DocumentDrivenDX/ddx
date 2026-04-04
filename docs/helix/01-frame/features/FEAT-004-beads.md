@@ -91,12 +91,14 @@ For `bd` and `br` backends, DDx shells out to the respective binary. For `jsonl`
 
 ### ID Prefix
 
-- **Configurable per project:** `bead.id_prefix` in `.ddx/config.yaml` or `DDX_BEAD_PREFIX` env var
-- **Default:** `bx`
-- **Convention:** HELIX projects use `hx`, dun projects use `dn`, etc.
-- **Format:** `<prefix>-` + 8 hex chars (e.g., `hx-7c6f43f4`)
+Following the bd convention, the prefix is **derived from the repository name** by default:
 
-This means the same DDx bead service can manage beads for different projects with distinct, non-colliding ID namespaces.
+- **Auto-detected:** git repo root directory name (e.g., repo `my-project` → prefix `my-project` → IDs like `my-project-a3f2dd`)
+- **Override:** `bead.id_prefix` in `.ddx/config.yaml` or `DDX_BEAD_PREFIX` env var
+- **Fallback:** `bx` if repo name detection fails
+- **Format:** `<prefix>-` + 8 hex chars
+
+This matches how bd derives its prefix, ensuring beads created by DDx and bd in the same repo use the same naming convention.
 
 ## Validation
 

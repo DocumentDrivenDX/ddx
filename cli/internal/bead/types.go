@@ -54,7 +54,7 @@ const (
 	DefaultType     = "task"
 	DefaultStatus   = StatusOpen
 	DefaultPriority = 2
-	DefaultPrefix   = "bx"
+	DefaultPrefix   = "bx" // used only when repo name detection fails
 	MinPriority     = 0
 	MaxPriority     = 4
 )
