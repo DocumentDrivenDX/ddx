@@ -1,3 +1,9 @@
+---
+ddx:
+  id: helix.prd
+  depends_on:
+    - product-vision
+---
 # Product Requirements Document: DDx
 
 **Version:** 3.1.0

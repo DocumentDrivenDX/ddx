@@ -1,3 +1,9 @@
+---
+ddx:
+  id: FEAT-007
+  depends_on:
+    - helix.prd
+---
 # Feature: Document Dependency Graph
 
 **ID:** FEAT-007

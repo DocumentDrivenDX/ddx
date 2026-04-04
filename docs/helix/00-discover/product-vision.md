@@ -1,3 +1,7 @@
+---
+ddx:
+  id: product-vision
+---
 # Product Vision: DDx
 
 ## Mission Statement

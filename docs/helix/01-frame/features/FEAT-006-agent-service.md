@@ -1,3 +1,9 @@
+---
+ddx:
+  id: FEAT-006
+  depends_on:
+    - helix.prd
+---
 # Feature: DDx Agent Service
 
 **ID:** FEAT-006

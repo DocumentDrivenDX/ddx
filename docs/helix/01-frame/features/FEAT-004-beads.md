@@ -1,3 +1,9 @@
+---
+ddx:
+  id: FEAT-004
+  depends_on:
+    - helix.prd
+---
 # Feature: Beads (Work Item Tracker)
 
 **ID:** FEAT-004

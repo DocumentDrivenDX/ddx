@@ -1,3 +1,9 @@
+---
+ddx:
+  id: FEAT-002
+  depends_on:
+    - helix.prd
+---
 # Feature: DDx Server
 
 **ID:** FEAT-002

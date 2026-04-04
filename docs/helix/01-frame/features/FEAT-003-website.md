@@ -1,3 +1,9 @@
+---
+ddx:
+  id: FEAT-003
+  depends_on:
+    - helix.prd
+---
 # Feature: DDx Website
 
 **ID:** FEAT-003

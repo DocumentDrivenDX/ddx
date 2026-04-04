@@ -1,3 +1,9 @@
+---
+ddx:
+  id: FEAT-001
+  depends_on:
+    - helix.prd
+---
 # Feature: DDx CLI
 
 **ID:** FEAT-001
