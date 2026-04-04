@@ -12,13 +12,14 @@ import (
 	"time"
 )
 
-// Store manages beads in a JSONL file.
+// Store manages beads via a pluggable backend.
 type Store struct {
 	Dir      string
 	File     string
 	Prefix   string
 	LockDir  string
 	LockWait time.Duration
+	backend  Backend // nil means use built-in JSONL
 }
 
 // NewStore creates a store with the given directory.
@@ -28,17 +29,40 @@ func NewStore(dir string) *Store {
 		dir = envOr("DDX_BEAD_DIR", ".ddx")
 	}
 	prefix := envOr("DDX_BEAD_PREFIX", DefaultPrefix)
-	return &Store{
+	backendType := envOr("DDX_BEAD_BACKEND", BackendJSONL)
+
+	s := &Store{
 		Dir:      dir,
 		File:     filepath.Join(dir, "beads.jsonl"),
 		Prefix:   prefix,
 		LockDir:  filepath.Join(dir, "beads.lock"),
 		LockWait: 10 * time.Second,
 	}
+
+	// Set up external backend if configured
+	switch backendType {
+	case BackendBD, BackendBR:
+		if ext, err := NewExternalBackend(backendType); err == nil {
+			s.backend = ext
+		}
+		// Fall through to JSONL if tool not available
+	}
+
+	return s
+}
+
+// NewStoreWithBackend creates a store with an explicit backend (for testing).
+func NewStoreWithBackend(dir string, b Backend) *Store {
+	s := NewStore(dir)
+	s.backend = b
+	return s
 }
 
 // Init creates the storage directory and file.
 func (s *Store) Init() error {
+	if s.backend != nil {
+		return s.backend.Init()
+	}
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return fmt.Errorf("bead: init dir: %w", err)
 	}
@@ -58,8 +82,11 @@ func (s *Store) GenID() (string, error) {
 	return fmt.Sprintf("%s-%s", s.Prefix, hex.EncodeToString(b)), nil
 }
 
-// ReadAll loads all beads from the JSONL file.
+// ReadAll loads all beads from the configured backend.
 func (s *Store) ReadAll() ([]Bead, error) {
+	if s.backend != nil {
+		return s.backend.ReadAll()
+	}
 	data, err := os.ReadFile(s.File)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -82,11 +109,15 @@ func (s *Store) ReadAll() ([]Bead, error) {
 	return beads, nil
 }
 
-// WriteAll writes all beads to the JSONL file, sorted by ID.
+// WriteAll writes all beads to the configured backend, sorted by ID.
 func (s *Store) WriteAll(beads []Bead) error {
 	sort.Slice(beads, func(i, j int) bool {
 		return beads[i].ID < beads[j].ID
 	})
+
+	if s.backend != nil {
+		return s.backend.WriteAll(beads)
+	}
 
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return fmt.Errorf("bead: mkdir: %w", err)

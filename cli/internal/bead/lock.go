@@ -15,7 +15,11 @@ import (
 var StaleLockAge = 2 * time.Hour
 
 // WithLock acquires the file lock, runs fn, then releases the lock.
+// For external backends, locking is delegated to the backend tool.
 func (s *Store) WithLock(fn func() error) error {
+	if s.backend != nil {
+		return s.backend.WithLock(fn)
+	}
 	if err := s.acquireLock(); err != nil {
 		return err
 	}
