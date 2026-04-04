@@ -28,14 +28,14 @@ type Store struct {
 // Defaults can be overridden via options or environment.
 func NewStore(dir string) *Store {
 	if dir == "" {
-		dir = envOr("DDX_BEAD_DIR", ".ddx")
+		dir = envOr("DDX_BEAD_DIR", ".beads")
 	}
 	prefix := envOr("DDX_BEAD_PREFIX", detectPrefix())
 	backendType := envOr("DDX_BEAD_BACKEND", BackendJSONL)
 
 	s := &Store{
 		Dir:      dir,
-		File:     filepath.Join(dir, "beads.jsonl"),
+		File:     filepath.Join(dir, "issues.jsonl"),
 		Prefix:   prefix,
 		LockDir:  filepath.Join(dir, "beads.lock"),
 		LockWait: parseDurationOr("DDX_BEAD_LOCK_TIMEOUT", 10*time.Second),

@@ -245,7 +245,8 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 		Short: "Show agent session history",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logDir := agent.DefaultLogDir
+			r := f.agentRunner()
+			logDir := r.Config.SessionLogDir
 			logFile := logDir + "/sessions.jsonl"
 
 			data, err := os.ReadFile(logFile)

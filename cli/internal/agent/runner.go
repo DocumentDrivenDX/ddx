@@ -1,14 +1,12 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -20,6 +18,8 @@ import (
 type Runner struct {
 	Registry *Registry
 	Config   Config
+	Executor Executor   // injected; defaults to OSExecutor
+	LookPath LookPathFunc // injected; defaults to exec.LookPath
 }
 
 // NewRunner creates a runner with defaults.
@@ -36,82 +36,33 @@ func NewRunner(cfg Config) *Runner {
 	return &Runner{
 		Registry: NewRegistry(),
 		Config:   cfg,
+		Executor: &OSExecutor{},
+		LookPath: DefaultLookPath,
 	}
 }
 
 // Run invokes a single agent harness and returns the result.
 func (r *Runner) Run(opts RunOptions) (*Result, error) {
-	// Resolve harness
-	harnessName := opts.Harness
-	if harnessName == "" {
-		harnessName = r.Config.Harness
-	}
-	harness, ok := r.Registry.Get(harnessName)
-	if !ok {
-		return nil, fmt.Errorf("agent: unknown harness: %s", harnessName)
+	harness, harnessName, err := r.resolveHarness(opts)
+	if err != nil {
+		return nil, err
 	}
 
-	// Check availability
-	if _, err := exec.LookPath(harness.Binary); err != nil {
-		return nil, fmt.Errorf("agent: harness %s not available: %s not found in PATH", harnessName, harness.Binary)
+	prompt, err := r.resolvePrompt(opts)
+	if err != nil {
+		return nil, err
 	}
 
-	// Resolve prompt
-	prompt := opts.Prompt
-	if opts.PromptFile != "" {
-		data, err := os.ReadFile(opts.PromptFile)
-		if err != nil {
-			return nil, fmt.Errorf("agent: read prompt file: %w", err)
-		}
-		prompt = string(data)
-	}
-	if prompt == "" {
-		return nil, fmt.Errorf("agent: prompt is required")
-	}
+	model := r.resolveModel(opts, harnessName)
+	timeout := r.resolveTimeout(opts)
 
-	// Resolve model
-	model := opts.Model
-	if model == "" {
-		if m, ok := r.Config.Models[harnessName]; ok {
-			model = m
-		} else {
-			model = r.Config.Model
-		}
-	}
-
-	// Resolve timeout
-	timeout := opts.Timeout
-	if timeout == 0 {
-		timeout = time.Duration(r.Config.TimeoutMS) * time.Millisecond
-	}
-
-	// Build command
-	args := append([]string{}, harness.Args...)
-
-	// Add working directory if supported
-	if opts.WorkDir != "" && harness.WorkDirFlag != "" {
-		args = append(args, harness.WorkDirFlag, opts.WorkDir)
-	}
-
-	// Add model flag
-	if model != "" && harness.ModelFlag != "" {
-		args = append(args, harness.ModelFlag, model)
-	}
-
-	// Add effort flag
-	if opts.Effort != "" && harness.EffortFlag != "" {
-		if harnessName == "codex" {
-			// codex uses -c reasoning.effort=<value>
-			args = append(args, harness.EffortFlag, "reasoning.effort="+opts.Effort)
-		} else {
-			args = append(args, harness.EffortFlag, opts.Effort)
-		}
-	}
-
-	// Add prompt based on mode
-	switch harness.PromptMode {
-	case "arg":
-		args = append(args, prompt)
+	// Build args with the resolved prompt (may have come from file)
+	resolvedOpts := opts
+	resolvedOpts.Prompt = prompt
+	args := BuildArgs(harness, resolvedOpts, model)
+	stdin := ""
+	if harness.PromptMode == "stdin" {
+		stdin = prompt
 	}
 
 	// Execute
@@ -119,69 +70,134 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, harness.Binary, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// For stdin mode, pipe the prompt
-	if harness.PromptMode == "stdin" {
-		cmd.Stdin = strings.NewReader(prompt)
-	}
-
-	err := cmd.Run()
+	execResult, execErr := r.Executor.Execute(ctx, harness.Binary, args, stdin)
 	elapsed := time.Since(start)
 
+	result := r.processResult(harnessName, model, harness, execResult, execErr, elapsed, ctx)
+	r.logSession(result, len(prompt))
+	return result, nil
+}
+
+// resolveHarness looks up the harness by name and checks availability.
+func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
+	name := opts.Harness
+	if name == "" {
+		name = r.Config.Harness
+	}
+	harness, ok := r.Registry.Get(name)
+	if !ok {
+		return Harness{}, "", fmt.Errorf("agent: unknown harness: %s", name)
+	}
+	if _, err := r.LookPath(harness.Binary); err != nil {
+		return Harness{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
+	}
+	return harness, name, nil
+}
+
+// resolvePrompt reads the prompt from text or file.
+func (r *Runner) resolvePrompt(opts RunOptions) (string, error) {
+	prompt := opts.Prompt
+	if opts.PromptFile != "" {
+		data, err := os.ReadFile(opts.PromptFile)
+		if err != nil {
+			return "", fmt.Errorf("agent: read prompt file: %w", err)
+		}
+		prompt = string(data)
+	}
+	if prompt == "" {
+		return "", fmt.Errorf("agent: prompt is required")
+	}
+	return prompt, nil
+}
+
+// resolveModel picks the model from opts, per-harness config, or global config.
+func (r *Runner) resolveModel(opts RunOptions, harnessName string) string {
+	if opts.Model != "" {
+		return opts.Model
+	}
+	if m, ok := r.Config.Models[harnessName]; ok {
+		return m
+	}
+	return r.Config.Model
+}
+
+// resolveTimeout picks the timeout from opts or config.
+func (r *Runner) resolveTimeout(opts RunOptions) time.Duration {
+	if opts.Timeout > 0 {
+		return opts.Timeout
+	}
+	return time.Duration(r.Config.TimeoutMS) * time.Millisecond
+}
+
+// BuildArgs constructs the argument array for a harness invocation.
+// Exported for testing.
+func BuildArgs(h Harness, opts RunOptions, model string) []string {
+	args := append([]string{}, h.Args...)
+
+	if opts.WorkDir != "" && h.WorkDirFlag != "" {
+		args = append(args, h.WorkDirFlag, opts.WorkDir)
+	}
+	if model != "" && h.ModelFlag != "" {
+		args = append(args, h.ModelFlag, model)
+	}
+	if opts.Effort != "" && h.EffortFlag != "" {
+		if h.EffortFormat != "" {
+			args = append(args, h.EffortFlag, fmt.Sprintf(h.EffortFormat, opts.Effort))
+		} else {
+			args = append(args, h.EffortFlag, opts.Effort)
+		}
+	}
+	if h.PromptMode == "arg" {
+		args = append(args, opts.Prompt)
+	}
+	return args
+}
+
+// processResult converts execution output to a Result.
+func (r *Runner) processResult(harnessName, model string, harness Harness, execResult *ExecResult, execErr error, elapsed time.Duration, ctx context.Context) *Result {
 	result := &Result{
 		Harness:    harnessName,
 		Model:      model,
 		DurationMS: int(elapsed.Milliseconds()),
-		Output:     stdout.String(),
 	}
 
-	if err != nil {
+	if execResult != nil {
+		result.Output = execResult.Stdout
+		result.ExitCode = execResult.ExitCode
+	}
+
+	if execErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			result.Error = fmt.Sprintf("timeout after %s", timeout)
+			result.Error = fmt.Sprintf("timeout after %v", elapsed.Round(time.Second))
 			result.ExitCode = -1
-		} else if exitErr, ok := err.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
-			result.Error = stderr.String()
 		} else {
-			result.Error = err.Error()
-			result.ExitCode = -1
+			result.Error = execErr.Error()
+			if result.ExitCode == 0 {
+				result.ExitCode = -1
+			}
 		}
+	} else if execResult != nil && execResult.ExitCode != 0 {
+		result.Error = execResult.Stderr
 	}
 
-	// Extract token count from output
-	result.Tokens = extractTokens(result.Output, harnessName)
-
-	// Log session
-	r.logSession(result, len(prompt))
-
-	return result, nil
+	result.Tokens = ExtractTokens(result.Output, harness)
+	return result
 }
 
-// extractTokens attempts to parse token usage from agent output.
-func extractTokens(output, harness string) int {
-	switch harness {
-	case "codex":
-		// Codex outputs "tokens used\nNNN" at the end
-		re := regexp.MustCompile(`tokens used\n([0-9,]+)`)
-		matches := re.FindStringSubmatch(output)
-		if len(matches) > 1 {
-			cleaned := strings.ReplaceAll(matches[1], ",", "")
-			n, _ := strconv.Atoi(cleaned)
-			return n
-		}
-	case "claude":
-		// Claude may output token info in various formats
-		re := regexp.MustCompile(`(?i)tokens?[:\s]+([0-9,]+)`)
-		matches := re.FindStringSubmatch(output)
-		if len(matches) > 1 {
-			cleaned := strings.ReplaceAll(matches[1], ",", "")
-			n, _ := strconv.Atoi(cleaned)
-			return n
-		}
+// ExtractTokens parses token usage from agent output using the harness's pattern.
+func ExtractTokens(output string, harness Harness) int {
+	if harness.TokenPattern == "" {
+		return 0
+	}
+	re, err := regexp.Compile(harness.TokenPattern)
+	if err != nil {
+		return 0
+	}
+	matches := re.FindStringSubmatch(output)
+	if len(matches) > 1 {
+		cleaned := strings.ReplaceAll(matches[1], ",", "")
+		n, _ := strconv.Atoi(cleaned)
+		return n
 	}
 	return 0
 }

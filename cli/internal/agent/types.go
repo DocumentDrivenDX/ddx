@@ -4,13 +4,15 @@ import "time"
 
 // Harness defines a known agent harness.
 type Harness struct {
-	Name       string   // e.g. "codex", "claude", "gemini"
-	Binary     string   // binary name to exec
-	Args       []string // base arguments for exec mode
-	PromptMode string   // "arg" (final arg), "stdin" (pipe)
-	ModelFlag  string   // flag for model override (e.g. "-m", "--model"), empty if unsupported
-	WorkDirFlag string  // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
-	EffortFlag  string  // flag for effort/reasoning control, empty if unsupported
+	Name         string   // e.g. "codex", "claude", "gemini"
+	Binary       string   // binary name to exec
+	Args         []string // base arguments for exec mode
+	PromptMode   string   // "arg" (final arg), "stdin" (pipe)
+	ModelFlag    string   // flag for model override (e.g. "-m", "--model"), empty if unsupported
+	WorkDirFlag  string   // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
+	EffortFlag   string   // flag for effort/reasoning control, empty if unsupported
+	EffortFormat string   // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
+	TokenPattern string   // regex to extract token count from output, must have one capture group
 }
 
 // Config holds agent service configuration.
@@ -76,8 +78,7 @@ type HarnessStatus struct {
 
 // Default configuration values.
 const (
-	DefaultHarness    = "codex"
-	DefaultTimeoutMS  = 300000 // 5 minutes
-	DefaultAutomation = "auto"
-	DefaultLogDir     = ".ddx/agent-logs"
+	DefaultHarness   = "codex"
+	DefaultTimeoutMS = 300000 // 5 minutes
+	DefaultLogDir    = ".ddx/agent-logs"
 )

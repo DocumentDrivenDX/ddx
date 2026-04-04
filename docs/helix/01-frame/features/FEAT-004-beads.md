@@ -91,9 +91,9 @@ For `bd` and `br` backends, DDx shells out to the respective binary. For `jsonl`
 
 ### JSONL Backend Details
 
-- **Default path:** `.ddx/beads.jsonl` (one JSON object per line, sorted by id)
-- **Configuration:** `DDX_BEAD_DIR` env var or `bead.dir` in `.ddx/config.yaml`
-- **Locking:** Directory-based lock at `.ddx/beads.lock/` with PID file and acquisition timestamp. Configurable timeout (default: 10s).
+- **Default path:** `.beads/issues.jsonl` (one JSON object per line, sorted by id — matches bd convention)
+- **Configuration:** `DDX_BEAD_DIR` env var or `bead.dir` in `.ddx/config.yaml` (default: `.beads`)
+- **Locking:** Directory-based lock at `.beads/issues.lock/` with PID file and acquisition timestamp. Configurable timeout (default: 10s).
 
 ### ID Prefix
 
