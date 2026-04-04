@@ -266,7 +266,7 @@ library:
 			name: "includes_example_variable_definitions",
 			args: []string{"init", "--silent"},
 			setup: func(t *testing.T, te *TestEnvironment) {
-				// Create initial commit required for git subtree
+				// Create initial commit
 				te.CreateFile("README.md", "# Test Project")
 				gitAdd := exec.Command("git", "add", ".")
 				gitAdd.Dir = te.Dir
@@ -293,7 +293,7 @@ library:
 			name: "commits_config_file_to_git",
 			args: []string{"init", "--silent"},
 			setup: func(t *testing.T, te *TestEnvironment) {
-				// Create initial commit (required for git subtree)
+				// Create initial commit
 				te.CreateFile("README.md", "# Test Project")
 
 				gitAdd := exec.Command("git", "add", "README.md")
@@ -308,7 +308,7 @@ library:
 				// Config file should be created
 				assert.FileExists(t, te.ConfigPath, "Config file should exist")
 
-				// Check that config file is tracked in git (part of subtree merge commit)
+				// Check that config file is tracked in git
 				gitLsFiles := exec.Command("git", "ls-files", ".ddx/config.yaml")
 				gitLsFiles.Dir = te.Dir
 				lsOutput, err := gitLsFiles.CombinedOutput()

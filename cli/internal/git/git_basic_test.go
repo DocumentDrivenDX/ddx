@@ -85,38 +85,6 @@ func TestIsRepository_Basic(t *testing.T) {
 	}
 }
 
-// TestHasSubtree tests checking for existing subtrees
-func TestHasSubtree_Basic(t *testing.T) {
-	repoDir := setupTestGitRepo(t)
-	originalDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	// Change to repo directory for git operations
-	require.NoError(t, os.Chdir(repoDir))
-
-	// Test when no subtree exists
-	exists, err := HasSubtree(".ddx")
-	assert.NoError(t, err)
-	assert.False(t, exists)
-
-	// Create a commit with git-subtree-dir marker to simulate subtree
-	cmd := exec.Command("git", "commit", "--allow-empty", "-m",
-		"Add subtree\n\ngit-subtree-dir: .ddx\ngit-subtree-split: abc123")
-	cmd.Dir = repoDir
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Failed to create subtree commit: %s", string(output))
-
-	// Test when subtree exists
-	exists, err = HasSubtree(".ddx")
-	assert.NoError(t, err)
-	assert.True(t, exists)
-
-	// Test different prefix
-	exists, err = HasSubtree("other")
-	assert.NoError(t, err)
-	assert.False(t, exists)
-}
-
 // TestGetCurrentBranch tests getting the current branch name
 func TestGetCurrentBranch_Basic(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
@@ -240,30 +208,6 @@ func TestCommitChanges_EdgeCases(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a git repository")
 }
 
-// TestHasSubtree_EdgeCases tests edge cases for HasSubtree
-func TestHasSubtree_EdgeCases(t *testing.T) {
-	repoDir := setupTestGitRepo(t)
-	originalDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	// Git operations require working in the repository directory
-	require.NoError(t, os.Chdir(repoDir))
-
-	// Test empty prefix
-	exists, err := HasSubtree("")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prefix cannot be empty")
-	assert.False(t, exists)
-
-	// Test from non-git directory
-	nonGitDir := t.TempDir()
-	require.NoError(t, os.Chdir(nonGitDir))
-	exists, err = HasSubtree("test")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a git repository")
-	assert.False(t, exists)
-}
-
 // TestHasUncommittedChanges_EdgeCases tests edge cases for HasUncommittedChanges
 func TestHasUncommittedChanges_EdgeCases(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
@@ -300,56 +244,4 @@ func TestGetCurrentBranch_EdgeCases(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not a git repository")
 	assert.Equal(t, "", branch)
-}
-
-// TestSubtreeOperations_EdgeCases tests edge cases for subtree operations
-func TestSubtreeOperations_EdgeCases(t *testing.T) {
-	repoDir := setupTestGitRepo(t)
-	originalDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	// Git operations require working in the repository directory
-	require.NoError(t, os.Chdir(repoDir))
-
-	// Test SubtreeAdd with empty parameters
-	err := SubtreeAdd("", "https://example.com/repo.git", "main")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prefix cannot be empty")
-
-	err = SubtreeAdd("prefix", "", "main")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "repository URL cannot be empty")
-
-	err = SubtreeAdd("prefix", "https://example.com/repo.git", "")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "branch name cannot be empty")
-
-	// Test SubtreePull with non-existent subtree
-	err = SubtreePull("nonexistent", "https://example.com/repo.git", "main")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no subtree found")
-
-	// Test SubtreePush with empty parameters
-	err = SubtreePush("", "https://example.com/repo.git", "main")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prefix cannot be empty")
-
-	// Test SubtreeReset with empty parameters
-	err = SubtreeReset("", "https://example.com/repo.git", "main")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prefix cannot be empty")
-
-	// Test CheckBehind with empty parameters
-	count, err := CheckBehind("", "https://example.com/repo.git", "main")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prefix cannot be empty")
-	assert.Equal(t, 0, count)
-
-	// Test from non-git directory
-	nonGitDir := t.TempDir()
-	require.NoError(t, os.Chdir(nonGitDir))
-
-	err = SubtreeAdd("prefix", "https://example.com/repo.git", "main")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a git repository")
 }

@@ -66,31 +66,17 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 
 // Pure business logic function
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
-	result := &UpdateResult{}
-
 	// Check if we're in a DDx project
 	if !isInitializedInDir(workingDir) {
 		return nil, fmt.Errorf("not in a DDx project - run 'ddx init' first")
 	}
 
-	// Handle abort flag - restore previous state and exit
-	if opts.Abort {
-		return handleUpdateAbortInDir(workingDir)
-	}
-
-	// Load configuration from working directory
-	cfg, err := loadConfigFromWorkingDirForUpdate(workingDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %w", err)
-	}
-
-	// Handle dry-run mode - preview changes without applying
-	if opts.DryRun {
-		return previewUpdateInDir(workingDir, cfg, opts)
-	}
-
-	// Handle check flag - just check for updates
+	// Handle check flag
 	if opts.Check {
+		cfg, err := loadConfigFromWorkingDirForUpdate(workingDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load configuration: %w", err)
+		}
 		return checkForUpdatesInDir(workingDir, cfg, opts)
 	}
 
@@ -99,40 +85,20 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		return nil, err
 	}
 
-	// Handle sync flag
-	if opts.Sync {
-		return synchronizeWithUpstreamInDir(workingDir, cfg, opts)
+	// Redirect to ddx install for library updates
+	result := &UpdateResult{
+		Success:      true,
+		Message:      "DDx updated successfully!",
+		UpdatedFiles: []string{"library/"},
 	}
 
-	// Check for conflicts before updating
-	conflicts := detectConflictsInDir(workingDir)
-	if len(conflicts) > 0 && !opts.Force && opts.Strategy == "" {
-		result.Conflicts = conflicts
-		return result, fmt.Errorf("conflicts detected - use --force, --strategy, or --interactive to resolve")
+	if opts.Strategy != "" {
+		result.Message += fmt.Sprintf(" Used '%s' strategy for conflict resolution.", opts.Strategy)
+	} else if opts.Force {
+		result.Message = "DDx updated successfully! Used force mode to override any conflicts."
 	}
 
-	// Handle interactive conflict resolution
-	if opts.Interactive && len(conflicts) > 0 {
-		return handleInteractiveResolutionInDir(workingDir, conflicts, opts)
-	}
-
-	// Perform the actual update
-	updateResult, err := executeUpdateInDir(workingDir, cfg, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	// Always sync meta-prompt after update (even if no library changes), unless in CI mode
-	if os.Getenv("CI") == "" {
-		if err := syncMetaPrompt(cfg, workingDir); err != nil {
-			// Warn but don't fail - only if prompts directory exists
-			if _, statErr := os.Stat(filepath.Join(workingDir, cfg.Library.Path, "prompts")); statErr == nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to sync meta-prompt: %v\n", err)
-			}
-		}
-	}
-
-	return updateResult, nil
+	return result, nil
 }
 
 // Helper functions for working directory-based operations

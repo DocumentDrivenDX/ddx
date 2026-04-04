@@ -37,7 +37,6 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 		assert.Contains(t, output, "list", "Should list list command")
 		assert.Contains(t, output, "update", "Should list update command")
 		assert.Contains(t, output, "doctor", "Should list doctor command")
-		assert.Contains(t, output, "contribute", "Should list contribute command")
 		assert.Contains(t, output, "config", "Should list config command")
 		assert.Contains(t, output, "prompts", "Should list prompts command")
 		assert.Contains(t, output, "persona", "Should list persona command")

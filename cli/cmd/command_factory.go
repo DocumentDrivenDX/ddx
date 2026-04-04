@@ -325,13 +325,11 @@ PowerShell:
 	rootCmd.AddCommand(f.newDoctorCommand())
 	rootCmd.AddCommand(f.newUpdateCommand())
 	rootCmd.AddCommand(f.newUpgradeCommand())
-	rootCmd.AddCommand(f.newContributeCommand())
 	rootCmd.AddCommand(f.newConfigCommand())
 	rootCmd.AddCommand(f.newPersonaCommand())
 	rootCmd.AddCommand(f.newMCPCommand())
 	rootCmd.AddCommand(f.newStatusCommand())
 	rootCmd.AddCommand(f.newLogCommand())
-	rootCmd.AddCommand(f.newAuthCommand())
 	rootCmd.AddCommand(f.newBeadCommand())
 	rootCmd.AddCommand(f.newExecCommand())
 	rootCmd.AddCommand(f.newMetricCommand())
@@ -352,135 +350,6 @@ PowerShell:
 	promptsCmd.AddCommand(f.newPromptsListCommand())
 	promptsCmd.AddCommand(f.newPromptsShowCommand())
 	rootCmd.AddCommand(promptsCmd)
-}
-
-// newAuthCommand creates the authentication command
-func (f *CommandFactory) newAuthCommand() *cobra.Command {
-	// Create fresh auth command
-	cmd := &cobra.Command{
-		Use:   "auth",
-		Short: "Manage authentication credentials",
-		Long: `Manage authentication credentials for accessing upstream repositories.
-
-Supports multiple authentication methods:
-- SSH keys (recommended for GitHub, GitLab, Bitbucket)
-- Personal access tokens (HTTPS)
-- OAuth flows (web-based authentication)
-- System credential helpers (git credential, GitHub CLI, etc.)
-
-Examples:
-  ddx auth login github.com               # Interactive authentication
-  ddx auth status                         # Show authentication status
-  ddx auth list                           # List stored credentials
-  ddx auth logout github.com              # Remove stored credentials
-  ddx auth token github.com <token>       # Set personal access token`,
-		Run: func(cmd *cobra.Command, args []string) {
-			_ = cmd.Help()
-		},
-	}
-
-	// Create fresh subcommands
-	loginCmd := f.newAuthLoginCommand()
-	statusCmd := f.newAuthStatusCommand()
-	listCmd := f.newAuthListCommand()
-	logoutCmd := f.newAuthLogoutCommand()
-	tokenCmd := f.newAuthTokenCommand()
-
-	// Add subcommands
-	cmd.AddCommand(loginCmd)
-	cmd.AddCommand(statusCmd)
-	cmd.AddCommand(listCmd)
-	cmd.AddCommand(logoutCmd)
-	cmd.AddCommand(tokenCmd)
-
-	return cmd
-}
-
-// newAuthLoginCommand creates the auth login subcommand
-func (f *CommandFactory) newAuthLoginCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "login [platform|repository]",
-		Short: "Authenticate with a platform or repository",
-		Long: `Authenticate with a platform or repository using interactive authentication.
-
-Supports platforms:
-- github.com (GitHub)
-- gitlab.com (GitLab)
-- bitbucket.org (Bitbucket)
-- Custom Git servers
-
-The command will guide you through the authentication process and securely
-store credentials for future use.`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: runAuthLogin,
-	}
-
-	cmd.Flags().String("method", "", "Authentication method (token, ssh, oauth)")
-	cmd.Flags().StringSlice("scopes", []string{}, "Required scopes for token authentication")
-
-	return cmd
-}
-
-// newAuthStatusCommand creates the auth status subcommand
-func (f *CommandFactory) newAuthStatusCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Show authentication status",
-		Long: `Show the current authentication status for all configured platforms.
-
-Displays:
-- Stored credentials and their status
-- Available authentication methods
-- Credential expiration information
-- Platform-specific details`,
-		RunE: runAuthStatus,
-	}
-}
-
-// newAuthListCommand creates the auth list subcommand
-func (f *CommandFactory) newAuthListCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List stored credentials",
-		Long:  `List all stored authentication credentials.`,
-		RunE:  runAuthList,
-	}
-
-	cmd.Flags().String("format", "table", "Output format (table, json)")
-
-	return cmd
-}
-
-// newAuthLogoutCommand creates the auth logout subcommand
-func (f *CommandFactory) newAuthLogoutCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "logout [platform|repository]",
-		Short: "Remove stored credentials",
-		Long: `Remove stored authentication credentials for a platform or repository.
-
-Examples:
-  ddx auth logout github.com        # Remove GitHub credentials
-  ddx auth logout                   # Remove all credentials`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: runAuthLogout,
-	}
-}
-
-// newAuthTokenCommand creates the auth token subcommand
-func (f *CommandFactory) newAuthTokenCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "token <platform> <token>",
-		Short: "Set personal access token",
-		Long: `Set a personal access token for a specific platform.
-
-This is a direct way to configure authentication without going through
-the interactive login process.
-
-Examples:
-  ddx auth token github.com ghp_xxxxxxxxxxxxxxxxxxxx`,
-		Args: cobra.ExactArgs(2),
-		RunE: runAuthToken,
-	}
 }
 
 // Helper function to get library path from environment or flag

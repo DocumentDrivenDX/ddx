@@ -13,20 +13,19 @@ func (f *CommandFactory) newInitCommand() *cobra.Command {
 
 This command:
 • Creates a .ddx/config.yaml configuration file
-• Sets up git subtree to sync the DDx library
-• Downloads essential resources (prompts, templates, patterns)
-• Configures project-specific settings
+• Creates .ddx/library/ directory structure
+• Commits the config file to git
 
 Examples:
   ddx init                  # Initialize DDx in current project
   ddx init --force          # Reinitialize existing project
-  ddx init --no-git         # Skip git subtree setup`,
+  ddx init --no-git         # Skip git operations`,
 		Args: cobra.NoArgs,
 		RunE: f.runInit,
 	}
 
 	cmd.Flags().BoolP("force", "f", false, "Force initialization even if DDx already exists")
-	cmd.Flags().Bool("no-git", false, "Skip git subtree setup")
+	cmd.Flags().Bool("no-git", false, "Skip git operations")
 	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
 	cmd.Flags().Bool("skip-claude-injection", false, "Skip injecting meta-prompts into CLAUDE.md")
 	cmd.Flags().String("repository", "", "Library repository URL (default: https://github.com/easel/ddx-library)")
@@ -101,18 +100,13 @@ The doctor helps identify and resolve:
 func (f *CommandFactory) newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [resource]",
-		Short: "Update DDx toolkit from master repository",
-		Long: `Update the local DDx toolkit with the latest resources from the master repository.
+		Short: "Update DDx toolkit resources",
+		Long: `Update the local DDx toolkit resources.
 
-This command:
-• Pulls the latest changes from the master DDx repository
-• Updates local resources while preserving customizations
-• Uses git subtree for reliable version control
-• Creates backups before making changes
+To install or update library resources, use 'ddx install' instead.
 
-You can optionally specify a specific resource to update:
-  ddx update templates/nextjs  # Update only the nextjs template
-  ddx update prompts           # Update all prompts`,
+Examples:
+  ddx update --check    # Check for updates`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: f.runUpdate,
 	}
@@ -159,37 +153,6 @@ Examples:
 	return cmd
 }
 
-// newContributeCommand creates a fresh contribute command
-func (f *CommandFactory) newContributeCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "contribute",
-		Short: "Contribute improvements back to master repository",
-		Long: `Contribute local improvements back to the master DDx repository.
-
-This command pushes all changes in .ddx/library to the upstream repository.
-
-The command:
-• Creates a feature branch in the DDx subtree
-• Commits your changes with a descriptive message
-• Pushes to the upstream repository
-• Provides instructions for creating a pull request
-
-Examples:
-  ddx contribute -m "Add new authentication patterns"
-  ddx contribute --branch my-feature -m "New TypeScript templates"
-  ddx contribute --dry-run`,
-		Args: cobra.NoArgs,
-		RunE: f.runContribute,
-	}
-
-	cmd.Flags().StringP("message", "m", "", "Contribution message")
-	cmd.Flags().String("branch", "", "Feature branch name")
-	cmd.Flags().Bool("dry-run", false, "Show what would be contributed without actually doing it")
-	cmd.Flags().Bool("create-pr", false, "Create a pull request after pushing")
-
-	return cmd
-}
-
 // newConfigCommand creates a fresh config command
 func (f *CommandFactory) newConfigCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -223,7 +186,6 @@ Examples:
 	cmd.Flags().String("file", "", "Validate specific configuration file")
 	cmd.Flags().Bool("verbose", false, "Detailed validation output")
 	cmd.Flags().Bool("offline", false, "Skip network checks during validation")
-
 
 	return cmd
 }

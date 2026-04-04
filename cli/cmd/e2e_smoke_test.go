@@ -76,7 +76,7 @@ func TestE2ESmokeJourney(t *testing.T) {
 		require.NoError(t, c.Run(), "git setup: %v", args)
 	}
 
-	// Create an initial commit so git subtree has something to work with
+	// Create an initial commit so git has something to work with
 	readmePath := filepath.Join(workDir, "README.md")
 	require.NoError(t, os.WriteFile(readmePath, []byte("# Smoke Test\n"), 0644))
 	for _, args := range [][]string{

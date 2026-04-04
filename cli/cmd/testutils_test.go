@@ -302,7 +302,7 @@ func (te *TestEnvironment) RunCommand(args ...string) (string, error) {
 }
 
 // InitWithDDx properly initializes DDx in the test environment using ddx init
-// If git is initialized, uses real git subtree with file:// URL to test library
+// If git is initialized, creates an initial commit before running ddx init.
 // Otherwise uses --no-git flag. In CI environments, always uses --no-git.
 func (te *TestEnvironment) InitWithDDx(flags ...string) {
 	te.t.Helper()
@@ -317,7 +317,6 @@ func (te *TestEnvironment) InitWithDDx(flags ...string) {
 	}
 
 	// If git is initialized and we're not using --no-git, create initial commit
-	// This must happen BEFORE ddx init for git subtree to work
 	if te.GitInitialized && !hasNoGitFlag {
 		te.CreateFile("README.md", "# Test Project")
 		gitAdd := exec.Command("git", "add", ".")

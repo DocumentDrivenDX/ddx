@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/easel/ddx/internal/config"
-	"github.com/easel/ddx/internal/git"
 	"github.com/easel/ddx/internal/metaprompt"
 	"github.com/spf13/cobra"
 )
@@ -204,24 +203,23 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		_ = os.MkdirAll(filepath.Join(libraryPath, sub), 0755)
 	}
 
-	// Try to sync library from remote — non-fatal if it fails.
 	if !opts.NoGit {
-		if err := setupGitSubtreeLibraryPure(localConfig, workingDir); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: library sync failed (offline?): %v\nRun 'ddx update' later to sync.\n", err)
-		}
-
-		// Inject initial meta-prompt after library is set up (unless explicitly skipped)
+		// Inject initial meta-prompt if the prompt file actually exists (unless explicitly skipped)
 		if !opts.SkipClaudeInjection {
 			if err := injectInitialMetaPrompt(localConfig, workingDir); err != nil {
 				// Don't fail - meta-prompt is optional enhancement
-				// Only warn if file actually exists but has issues
-				if _, statErr := os.Stat(filepath.Join(workingDir, localConfig.Library.Path, "prompts")); statErr == nil {
-					_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to inject meta-prompt: %v\n", err)
+				// Only warn if the specific prompt file exists but has issues
+				promptPath := localConfig.GetMetaPrompt()
+				if promptPath != "" {
+					fullPromptPath := filepath.Join(workingDir, localConfig.Library.Path, promptPath)
+					if _, statErr := os.Stat(fullPromptPath); statErr == nil {
+						_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to inject meta-prompt: %v\n", err)
+					}
 				}
 			}
 		}
 
-		// Commit config file after subtree setup
+		// Commit config file
 		gitAdd := exec.Command("git", "add", ".ddx/config.yaml")
 		gitAdd.Dir = workingDir
 		if err := gitAdd.Run(); err != nil {
@@ -418,84 +416,6 @@ func validateGitRepository(cmd *cobra.Command) error {
 	}
 
 	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Git repository detected\n")
-	return nil
-}
-
-// setupGitSubtreeLibraryPure is the pure business logic for git-subtree setup
-func setupGitSubtreeLibraryPure(cfg *config.Config, workingDir string) error {
-	// Check if .ddx/library already exists
-	libraryPath := filepath.Join(workingDir, ".ddx/library")
-	if _, err := os.Stat(libraryPath); err == nil {
-		// Library already exists, nothing to do
-		return nil
-	}
-
-	// Check if .ddx exists in git (would conflict with subtree add)
-	// Git subtree requires that the parent directory of the prefix is not already tracked
-	// If .ddx is in git (e.g., from config.yaml commit), git subtree will fail
-	gitLsCmd := exec.Command("git", "ls-tree", "HEAD", ".ddx")
-	gitLsCmd.Dir = workingDir
-	ddxInGit := false
-	if output, err := gitLsCmd.Output(); err == nil && len(output) > 0 {
-		ddxInGit = true
-	}
-
-	repoURL := cfg.Library.Repository.URL
-	branch := cfg.Library.Repository.Branch
-	if branch == "" {
-		branch = "main"
-	}
-
-	// If .ddx exists in git, we can't use git subtree add (it will fail)
-	// Instead, clone the library directly
-	if ddxInGit {
-		// Clone to temp dir then copy
-		tempDir, err := os.MkdirTemp("", "ddx-library-*")
-		if err != nil {
-			return fmt.Errorf("failed to create temp directory: %w", err)
-		}
-		defer os.RemoveAll(tempDir)
-
-		cloneCmd := exec.Command("git", "clone", "--depth=1", "--branch", branch, repoURL, tempDir)
-		if output, err := cloneCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to clone library: %v\nOutput: %s", err, string(output))
-		}
-
-		// Remove .git directory from cloned repo
-		os.RemoveAll(filepath.Join(tempDir, ".git"))
-
-		// Copy to .ddx/library
-		if err := os.MkdirAll(libraryPath, 0755); err != nil {
-			return fmt.Errorf("failed to create library directory: %w", err)
-		}
-
-		cpCmd := exec.Command("cp", "-r", tempDir+"/.", libraryPath)
-		if output, err := cpCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to copy library files: %v\nOutput: %s", err, string(output))
-		}
-
-		return nil
-	}
-
-	// .ddx doesn't exist in git, safe to use git subtree
-	// Note: .ddx directory already exists from config file creation
-	// Git subtree add will work with the staged config.yaml file
-
-	// Change to working directory for git operations
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
-	}
-	if err := os.Chdir(workingDir); err != nil {
-		return fmt.Errorf("failed to change to working directory: %w", err)
-	}
-	defer os.Chdir(currentDir) // Restore on exit
-
-	// Use pure-Go subtree implementation
-	if err := git.SubtreeAdd(".ddx/library", repoURL, branch); err != nil {
-		return fmt.Errorf("git subtree add failed: %v\nYou may need to run 'git subtree add --prefix=.ddx/library %s %s --squash' manually", err, repoURL, branch)
-	}
-
 	return nil
 }
 
