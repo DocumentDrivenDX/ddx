@@ -6,7 +6,7 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 CLI_DIR = cli
 ROOT_BINARY = ddx
 
-.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint
+.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema bead-schema
 
 # Default target - build CLI and copy to root
 all: build
@@ -24,6 +24,9 @@ clean: cli-clean
 
 # Run tests
 test: cli-test
+
+# Validate the shared bead schema
+bead-schema: cli-bead-schema
 
 # Run linter
 lint: cli-lint
@@ -51,6 +54,10 @@ cli-clean:
 cli-test:
 	@echo "Running CLI tests..."
 	cd $(CLI_DIR) && $(MAKE) test
+
+cli-bead-schema:
+	@echo "Validating bead schema..."
+	cd $(CLI_DIR) && $(MAKE) bead-schema
 
 cli-lint:
 	@echo "Running CLI linter..."
@@ -137,6 +144,7 @@ help:
 	@echo "  cli-clean    - Clean CLI build artifacts"
 	@echo "  cli-test     - Run CLI tests"
 	@echo "  cli-lint     - Run CLI linter"
+	@echo "  cli-bead-schema - Validate the shared bead schema"
 	@echo "  cli-deps     - Install CLI dependencies"
 	@echo ""
 	@echo "Release:"
@@ -155,6 +163,7 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make build                           # Build CLI"
+	@echo "  make bead-schema                    # Validate bead schema"
 	@echo "  make dev ARGS='mcp list'             # Run with arguments"
 	@echo "  make mcp-install SERVER=filesystem   # Install to local project"
 	@echo "  make mcp-install-global SERVER=github # Install globally"

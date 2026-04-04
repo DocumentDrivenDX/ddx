@@ -62,6 +62,9 @@ jobs:
         cd cli
         make build
 
+    - name: Validate bead schema
+      run: make bead-schema
+
     - name: Run CI validation
       run: lefthook run ci
       env:

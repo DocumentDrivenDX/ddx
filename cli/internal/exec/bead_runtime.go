@@ -328,12 +328,12 @@ func (s *Store) saveRunRecord(rec RunRecord) error {
 	if rec.DefinitionID == "" {
 		return fmt.Errorf("definition_id is required")
 	}
-	if rec.RunManifest.Attachments == nil {
-		rec.RunManifest.Attachments = make(map[string]string)
+	if rec.Attachments == nil {
+		rec.Attachments = make(map[string]string)
 	}
-	rec.RunManifest.Attachments["stdout"] = runAttachmentRef(s.WorkingDir, rec.RunID, "stdout.log")
-	rec.RunManifest.Attachments["stderr"] = runAttachmentRef(s.WorkingDir, rec.RunID, "stderr.log")
-	rec.RunManifest.Attachments["result"] = runAttachmentRef(s.WorkingDir, rec.RunID, "result.json")
+	rec.Attachments["stdout"] = runAttachmentRef(s.WorkingDir, rec.RunID, "stdout.log")
+	rec.Attachments["stderr"] = runAttachmentRef(s.WorkingDir, rec.RunID, "stderr.log")
+	rec.Attachments["result"] = runAttachmentRef(s.WorkingDir, rec.RunID, "result.json")
 
 	attachmentRoot := filepath.Join(s.WorkingDir, ".ddx", execRunAttachmentDir)
 	if err := os.MkdirAll(attachmentRoot, 0o755); err != nil {

@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert
+.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema
 
 # Default target
 all: clean deps test build
@@ -52,6 +52,11 @@ deps:
 test:
 	@echo "Running tests..."
 	go test -v ./...
+
+# Validate the shared bead record schema
+bead-schema:
+	@echo "Validating bead record schema..."
+	go test ./internal/bead -run 'TestBeadRecordSchema' -count=1
 
 # Run linter
 lint:
@@ -148,6 +153,7 @@ help:
 	@echo "  deps        - Install dependencies"
 	@echo "  test        - Run tests"
 	@echo "  lint        - Run linter"
+	@echo "  bead-schema - Validate the shared bead record schema"
 	@echo "  install     - Install locally for development"
 	@echo "  clean       - Remove build artifacts"
 	@echo "  run         - Run the CLI (set ARGS='...' for arguments)"

@@ -247,6 +247,11 @@ ci:
       root: "cli/"
       run: 'go test -race -cover ./...'
 
+    bead-schema:
+      <<: *go_checks
+      name: "Bead Schema Guard"
+      run: 'make bead-schema'
+
     # Go formatting check all files
     go-fmt-all:
       <<: *go_checks
