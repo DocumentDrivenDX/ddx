@@ -36,7 +36,7 @@ func TestBeadCommandsCRUDLifecycle(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(showOut), &created))
 	assert.Equal(t, createdID, created["id"])
 	assert.Equal(t, "Fix auth bug", created["title"])
-	assert.Equal(t, "bug", created["type"])
+	assert.Equal(t, "bug", created["issue_type"])
 	assert.Equal(t, "open", created["status"])
 	assert.Equal(t, float64(1), created["priority"])
 
@@ -49,7 +49,7 @@ func TestBeadCommandsCRUDLifecycle(t *testing.T) {
 	var updated map[string]any
 	require.NoError(t, json.Unmarshal([]byte(updatedOut), &updated))
 	assert.Equal(t, "in_progress", updated["status"])
-	assert.Equal(t, "me", updated["assignee"])
+	assert.Equal(t, "me", updated["owner"])
 	require.Len(t, updated["labels"], 1)
 
 	listOut, err := executeCommand(rootCmd, "bead", "list", "--status", "in_progress", "--json")
