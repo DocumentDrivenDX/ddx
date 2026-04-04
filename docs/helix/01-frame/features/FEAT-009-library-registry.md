@@ -30,9 +30,24 @@ This replaces the current git-subtree-based sync model with a lighter, more prac
 
 ## Architecture
 
-### Library Repository (`ddx-library`)
+### Registries
 
-The library repo has a flat structure with a registry index:
+DDx supports multiple registries. Each registry is a git repository containing a `registry.yaml` index and installable resources. Registries are checked in order — first match wins.
+
+```yaml
+# .ddx/config.yaml
+registries:
+  - url: https://github.com/easel/ddx-library     # default, always present
+    branch: main
+  - url: https://github.com/mycompany/ddx-private  # company-private
+    branch: main
+```
+
+The default registry (`https://github.com/easel/ddx-library`) is always included even if not explicitly listed. Additional registries are additive — they extend the default, not replace it.
+
+### Registry Repository Structure
+
+Each registry repo has:
 
 ```
 ddx-library/
@@ -46,6 +61,13 @@ ddx-library/
 ├── templates/
 │   └── ...
 ├── patterns/
+│   └── ...
+├── artifacts/                 # Artifact type resources
+│   ├── adr/
+│   │   ├── template.md
+│   │   ├── create.md
+│   │   ├── evolve.md
+│   │   └── check.md
 │   └── ...
 ├── mcp-servers/
 │   └── registry.yml
@@ -100,10 +122,10 @@ ddx install persona/strict-code-reviewer
 1. Fetch the file directly from ddx-library (via GitHub raw URL or git archive)
 2. Copy to `.ddx/library/personas/strict-code-reviewer.md`
 
-### Cache and Registry
+### Cache and State
 
-- **Registry cache:** `~/.cache/ddx/registry.yaml` (refreshed by `ddx update`)
-- **Installation record:** `~/.ddx/installed.yaml` (what's installed, versions, timestamps)
+- **Registry cache:** `~/.cache/ddx/registries/<name>/registry.yaml` (one per registry, refreshed by `ddx update`)
+- **Installation record:** `~/.ddx/installed.yaml` (what's installed, versions, timestamps, source registry)
 - **Library cache:** `~/.cache/ddx/library/` (downloaded resources)
 - **Plugin cache:** `~/.cache/ddx/library/plugins/` (populated for dun discovery)
 
@@ -176,7 +198,6 @@ The current `ddx init` creates a git subtree for `.ddx/library/`. This should be
 
 ## Out of Scope
 
-- Private/enterprise registries (v2)
 - Package signing or verification (v2)
 - Automatic updates (manual `ddx update` + `ddx install` for now)
 - Dependency resolution between packages
