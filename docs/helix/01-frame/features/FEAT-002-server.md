@@ -3,6 +3,8 @@ ddx:
   id: FEAT-002
   depends_on:
     - helix.prd
+    - FEAT-004
+    - FEAT-007
 ---
 # Feature: DDx Server
 
@@ -13,98 +15,84 @@ ddx:
 
 ## Overview
 
-`ddx-server` is a lightweight Go web server that exposes DDx document libraries over HTTP and MCP endpoints. It lets AI agents programmatically browse, search, and read documents without relying on filesystem access.
+`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, the document dependency graph, agent session logs, and (via FEAT-008) an embedded web UI — all from a single binary.
 
-## Problem Statement
+## Architecture
 
-**Current situation:** Agents can only access documents that are on the local filesystem and explicitly provided in their context. There's no way for an agent to discover what documents are available or fetch them on demand.
+```
+ddx-server binary
+├── /            → Web UI (embedded SPA, FEAT-008)
+├── /api/        → HTTP REST API (JSON)
+└── /mcp/        → MCP tool endpoints (Streamable HTTP transport)
+```
 
-**Pain points:**
-- Agents can't browse a document library — they only see what humans copy into their context
-- No MCP interface for document access — agents that support MCP tools can't query DDx libraries
-- Remote agents (cloud-hosted, CI environments) have no access to local document libraries
-- No search across document contents — finding the right document requires human curation
-
-**Desired outcome:** Agents can discover, search, and read DDx documents through standard MCP tool calls or HTTP requests, enabling self-directed context assembly.
+All three surfaces share the same underlying services. The web UI calls the HTTP API. MCP tools call the same service layer.
 
 ## Requirements
 
 ### Functional
 
-1. **Library browsing** — list document categories, list documents within a category, get document metadata
-2. **Document reading** — fetch full content of any document by path
-3. **Search** — full-text search across document contents, filterable by category
-4. **Persona resolution** — given a role name and project config, return the bound persona document
-5. **MCP tool endpoints** — expose all above as MCP tools that agents can call
-6. **HTTP API** — REST endpoints for the same operations (for web UI, scripts, non-MCP consumers)
-7. **Configuration** — specify library path, port, and optional auth via CLI flags or config file
-8. **Serve from local library** — reads directly from `.ddx/library/` on disk, no database
+**Document Library**
+1. `GET /api/documents` — list documents by category
+2. `GET /api/documents/:path` — read document content
+3. `GET /api/search?q=<query>` — full-text search across document contents
+4. `GET /api/personas/:role` — resolve persona for role from project config
+5. MCP tools: `ddx_list_documents`, `ddx_read_document`, `ddx_search`, `ddx_resolve_persona`
+
+**Bead Tracker (FEAT-004)**
+6. `GET /api/beads` — list beads with optional status/label filters
+7. `GET /api/beads/:id` — show one bead with all fields
+8. `GET /api/beads/ready` — list ready beads (no unclosed deps)
+9. `GET /api/beads/blocked` — list blocked beads
+10. `GET /api/beads/status` — summary counts
+11. `GET /api/beads/dep/tree/:id` — dependency tree for a bead
+12. MCP tools: `ddx_list_beads`, `ddx_show_bead`, `ddx_bead_ready`, `ddx_bead_status`
+
+**Document Graph (FEAT-007)**
+13. `GET /api/docs/graph` — full dependency graph as JSON
+14. `GET /api/docs/stale` — list stale documents
+15. `GET /api/docs/:id` — document metadata and staleness status
+16. `GET /api/docs/:id/deps` — upstream dependencies
+17. `GET /api/docs/:id/dependents` — downstream dependents
+18. MCP tools: `ddx_doc_graph`, `ddx_doc_stale`, `ddx_doc_show`, `ddx_doc_deps`
+
+**Agent Session Logs (FEAT-006)**
+19. `GET /api/agent/sessions` — list recent agent sessions
+20. `GET /api/agent/sessions/:id` — full session detail (prompt, response, tokens)
+21. MCP tool: `ddx_agent_sessions`
+
+**Configuration**
+22. Library path, port, optional API key via CLI flags or config file
+23. Default: localhost only, no auth required
 
 ### Non-Functional
 
-- **Performance:** <200ms response time for document reads, <500ms for search
-- **Stateless:** No database, no persistent state. Reads filesystem on each request.
-- **Lightweight:** Single binary, minimal memory footprint, suitable for running alongside development tools
-- **Security:** Optional API key auth for non-local access. Default: localhost only.
+- **Performance:** Document reads <200ms, search <500ms, graph build <500ms for 100+ documents
+- **Stateless:** Reads from filesystem on each request. No database.
+- **Single binary:** Embeds web UI (FEAT-008) via `embed.FS`
+- **Security:** Localhost-only by default. Optional API key for non-local access. Agent invocation is CLI-only (not exposed via server — see FEAT-006).
 
-## User Stories
+## Technology
 
-### US-010: Agent Browses Documents via MCP
-**As an** AI agent with MCP tool access
-**I want** to list available documents and read their contents
-**So that** I can self-assemble the context I need for a task
-
-**Acceptance Criteria:**
-- Given ddx-server is running, when an agent calls the `ddx_list_documents` MCP tool, then it receives a list of documents with types and descriptions
-- Given an agent calls `ddx_read_document` with a path, then it receives the full document content
-- Given an agent calls `ddx_search` with a query, then it receives matching documents ranked by relevance
-
-### US-011: Developer Starts Server Locally
-**As a** developer using agents with MCP support
-**I want** to start ddx-server with a single command
-**So that** my agents can access my document library
-
-**Acceptance Criteria:**
-- Given I'm in a DDx project, when I run `ddx-server`, then it starts serving on localhost:PORT
-- Given I specify `--library-path /path/to/library`, then it serves that library
-- Given I run `ddx-server --port 8080`, then it listens on port 8080
-
-### US-012: Resolve Persona for Role
-**As an** AI agent assigned to a role
-**I want** to fetch the persona document bound to my role
-**So that** I know how to behave for this project
-
-**Acceptance Criteria:**
-- Given a project has `persona_bindings: { code-reviewer: strict-code-reviewer }` in config, when an agent calls `ddx_resolve_persona` with role "code-reviewer", then it receives the full strict-code-reviewer persona document
-
-### US-013: HTTP API for Web Consumers
-**As a** developer building a document browser UI
-**I want** to query the document library over HTTP
-**So that** I can build web interfaces on top of DDx
-
-**Acceptance Criteria:**
-- Given ddx-server is running, when I GET `/api/documents`, then I receive a JSON list of all documents
-- Given I GET `/api/documents/personas/strict-code-reviewer`, then I receive the document content
-- Given I GET `/api/search?q=error+handling`, then I receive matching results
-
-## Edge Cases
-
-- Library path doesn't exist — return clear error on startup
-- Document requested that doesn't exist — 404 with helpful message
-- Empty library — return empty results, not errors
-- Very large documents — stream response, don't buffer entire file
-- Concurrent requests — safe for concurrent reads (filesystem is the source of truth)
+| Component | Choice | Reference |
+|-----------|--------|-----------|
+| HTTP routing | Chi or net/http | ADR-001 |
+| MCP transport | mcp-go (Streamable HTTP) | |
+| Embedded web UI | Go embed.FS | ADR-002 |
+| Frontend | Vite + React + Tailwind | ADR-002, FEAT-008 |
 
 ## Dependencies
 
-- Go standard library (net/http)
-- MCP SDK or protocol implementation
-- DDx document library on disk
+- FEAT-004 (Beads) — bead endpoints read from bead store
+- FEAT-007 (Doc Graph) — graph/stale endpoints use doc graph engine
+- FEAT-006 (Agent Service) — session log endpoints read agent logs
+- FEAT-008 (Web UI) — embedded SPA served at `/`
+- mcp-go SDK for MCP transport
 
 ## Out of Scope
 
-- Document editing/writing through the server (read-only)
-- User authentication beyond API keys (no OAuth, no user accounts)
-- Document change notifications (P2 — future WebSocket feature)
-- Multi-library aggregation (P2)
+- Agent invocation via server (security risk — CLI-only, see FEAT-006)
+- Document writing/editing via API (read-only for v1)
+- User authentication beyond API keys
+- Multi-library aggregation
 - Hosting as a cloud service
