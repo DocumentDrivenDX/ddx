@@ -224,8 +224,6 @@ Examples:
 	cmd.Flags().Bool("verbose", false, "Detailed validation output")
 	cmd.Flags().Bool("offline", false, "Skip network checks during validation")
 
-	// Add migrate subcommand
-	cmd.AddCommand(configMigrateCmd)
 
 	return cmd
 }
@@ -289,30 +287,6 @@ Examples:
 	cmd.Flags().String("config-path", "", "Path to Claude config file")
 	cmd.Flags().Bool("dry-run", false, "Show what would be done without making changes")
 	cmd.Flags().Bool("yes", false, "Skip confirmation prompts")
-
-	return cmd
-}
-
-// newUninstallCommand creates a fresh uninstall command
-func (f *CommandFactory) newUninstallCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "uninstall",
-		Short: "Uninstall DDx from the system",
-		Long: `Completely remove DDx from your system.
-
-This command will:
-• Remove the DDx binary
-• Clean up configuration files
-• Remove shell completions
-• Optionally remove project files
-
-Use with caution as this action cannot be undone.`,
-		RunE: runUninstall,
-	}
-
-	cmd.Flags().Bool("keep-config", false, "Keep configuration files")
-	cmd.Flags().Bool("keep-projects", false, "Keep .ddx directories in projects")
-	cmd.Flags().BoolP("force", "f", false, "Skip confirmation prompts")
 
 	return cmd
 }

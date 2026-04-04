@@ -308,8 +308,6 @@ PowerShell:
 	rootCmd.AddCommand(f.newConfigCommand())
 	rootCmd.AddCommand(f.newPersonaCommand())
 	rootCmd.AddCommand(f.newMCPCommand())
-	rootCmd.AddCommand(f.newInstallCommand())
-	rootCmd.AddCommand(f.newUninstallCommand())
 	rootCmd.AddCommand(f.newStatusCommand())
 	rootCmd.AddCommand(f.newLogCommand())
 	rootCmd.AddCommand(f.newAuthCommand())
@@ -456,30 +454,6 @@ Examples:
 		Args: cobra.ExactArgs(2),
 		RunE: runAuthToken,
 	}
-}
-
-// newInstallCommand creates the install command
-func (f *CommandFactory) newInstallCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "install",
-		Short: "Install DDx to your system",
-		Long: `Install DDx to your system for easy access.
-
-This command downloads and installs DDx to a location in your PATH,
-allowing you to use DDx from anywhere without specifying the full path.
-
-Examples:
-  ddx install                           # Install latest version
-  ddx install --version v1.0.0         # Install specific version
-  ddx install --path ~/.local/bin      # Install to specific location`,
-		RunE: runInstall,
-	}
-
-	cmd.Flags().String("version", "", "Version to install (default: latest)")
-	cmd.Flags().String("path", "", "Installation path (default: ~/.local/bin)")
-	cmd.Flags().Bool("force", false, "Force installation even if already installed")
-
-	return cmd
 }
 
 // Helper function to get library path from environment or flag

@@ -1,7 +1,7 @@
 # Feature: Artifact Tooling (ADR + Solution Design)
 
 **ID:** FEAT-005
-**Status:** Not Started
+**Status:** Complete
 **Priority:** P1
 **Owner:** DDx Team
 
