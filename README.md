@@ -7,7 +7,7 @@
 > Documents drive the agents. DDx drives the documents.
 
 <p align="center">
-  <img src="website/static/demos/06-full-journey.gif" alt="DDx + HELIX: from init to working app" width="700">
+  <img src="website/static/demos/02-init-explore.gif" alt="DDx init and explore" width="700">
 </p>
 
 **[Full Documentation →](https://DocumentDrivenDX.github.io/ddx/)**

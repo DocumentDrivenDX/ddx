@@ -62,7 +62,9 @@ ddx installed             # verify installation
 
 ## Build Something
 
-With DDx and HELIX installed, agents can frame, build, and evolve projects:
+With DDx and HELIX installed, agents can frame, build, and evolve projects.
+See the [HELIX quickstart](https://github.com/DocumentDrivenDX/helix#quickstart)
+for a full walkthrough, or try it yourself:
 
 ```bash
 # Frame: agent creates specs and work items
@@ -71,12 +73,14 @@ ddx agent run --harness claude --prompt frame-prompt.md
 # Build: agent implements per specs with TDD
 ddx agent run --harness claude --prompt build-prompt.md
 
+# Evolve: add a feature
+ddx agent run --harness claude --prompt evolve-prompt.md
+
 # Inspect: see what was built
 ddx bead list             # work items tracked
 ddx agent usage           # token consumption
+ddx doc changed --since HEAD~10  # artifacts touched
 ```
-
-{{< asciinema src="06-full-journey" cols="100" rows="30" >}}
 
 ## Explore What's Available
 

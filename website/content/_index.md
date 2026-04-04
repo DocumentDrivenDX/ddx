@@ -60,10 +60,6 @@ layout: hextra-home
 
 ## See It In Action
 
-Watch DDx + HELIX build a working Go application from scratch — framing specs, implementing with TDD, and evolving with a new feature:
-
-{{< asciinema src="06-full-journey" cols="100" rows="30" >}}
-
-### Quick Setup
-
 {{< asciinema src="02-init-explore" >}}
+
+See the [full DDx + HELIX journey](https://github.com/DocumentDrivenDX/helix#quickstart) — from `ddx init` through building a working application with AI agents.
