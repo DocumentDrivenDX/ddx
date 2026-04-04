@@ -198,10 +198,16 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	}
 	result.ConfigCreated = true
 
-	// Set up git subtree for library synchronization
+	// Create .ddx/library/ structure even if sync fails (offline-safe init).
+	libraryPath := filepath.Join(workingDir, localConfig.Library.Path)
+	for _, sub := range []string{"prompts", "personas", "patterns", "templates", "configs"} {
+		_ = os.MkdirAll(filepath.Join(libraryPath, sub), 0755)
+	}
+
+	// Try to sync library from remote — non-fatal if it fails.
 	if !opts.NoGit {
 		if err := setupGitSubtreeLibraryPure(localConfig, workingDir); err != nil {
-			return nil, NewExitError(1, fmt.Sprintf("Failed to setup library: %v", err))
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: library sync failed (offline?): %v\nRun 'ddx update' later to sync.\n", err)
 		}
 
 		// Inject initial meta-prompt after library is set up (unless explicitly skipped)

@@ -136,51 +136,35 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 	}
 
 	if info.IsDir() {
-		// Copy directory tree, resolving symlinks (HELIX skills are symlinked dirs).
-		err := filepath.Walk(src, func(path string, fi os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			rel, _ := filepath.Rel(src, path)
-			if rel == "." {
-				return nil
-			}
-
-			// Resolve symlinks to their real targets.
-			realPath := path
-			if fi.Mode()&os.ModeSymlink != 0 {
-				resolved, err := filepath.EvalSymlinks(path)
-				if err != nil {
-					return nil // skip broken symlinks
-				}
-				realPath = resolved
-				fi, err = os.Stat(resolved)
-				if err != nil {
-					return nil
-				}
-			}
-
-			dstPath := filepath.Join(dst, rel)
-			if fi.IsDir() {
-				// Recurse into symlinked directories.
-				subFiles, subErr := copyMapping(realPath, &InstallMapping{Source: ".", Target: dstPath})
-				if subErr != nil {
-					return subErr
-				}
-				written = append(written, subFiles...)
-				return filepath.SkipDir
-			}
-			if !fi.Mode().IsRegular() {
-				return nil
-			}
-			if err := copyFile(realPath, dstPath); err != nil {
-				return err
-			}
-			written = append(written, dstPath)
-			return nil
-		})
+		// Copy directory tree. HELIX skills use symlinks, so we resolve each
+		// entry via os.Stat (follows symlinks) rather than os.Lstat.
+		entries, err := os.ReadDir(src)
 		if err != nil {
 			return nil, err
+		}
+		for _, e := range entries {
+			srcPath := filepath.Join(src, e.Name())
+			dstPath := filepath.Join(dst, e.Name())
+
+			// Stat follows symlinks, giving us the real target info.
+			fi, err := os.Stat(srcPath)
+			if err != nil {
+				continue // skip broken symlinks
+			}
+
+			if fi.IsDir() {
+				// Recurse into directory (or symlink-to-directory).
+				subFiles, subErr := copyMapping(srcPath, &InstallMapping{Source: ".", Target: dstPath})
+				if subErr != nil {
+					return nil, subErr
+				}
+				written = append(written, subFiles...)
+			} else if fi.Mode().IsRegular() {
+				if err := copyFile(srcPath, dstPath); err != nil {
+					return nil, err
+				}
+				written = append(written, dstPath)
+			}
 		}
 	} else {
 		// Source is a single file.
