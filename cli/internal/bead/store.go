@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -28,7 +29,7 @@ func NewStore(dir string) *Store {
 	if dir == "" {
 		dir = envOr("DDX_BEAD_DIR", ".ddx")
 	}
-	prefix := envOr("DDX_BEAD_PREFIX", DefaultPrefix)
+	prefix := envOr("DDX_BEAD_PREFIX", detectPrefix())
 	backendType := envOr("DDX_BEAD_BACKEND", BackendJSONL)
 
 	s := &Store{
@@ -492,11 +493,33 @@ func (s *Store) DepTree(rootID string) (string, error) {
 	}
 
 	if rootID != "" {
-		if _, ok := byID[rootID]; !ok {
+		target, ok := byID[rootID]
+		if !ok {
 			return "", fmt.Errorf("bead: not found: %s", rootID)
 		}
 		var sb strings.Builder
-		s.printTree(&sb, byID, rootID, "", true)
+		// Walk up: show the dependency chain (what this node depends on)
+		depChain := s.depChainUp(byID, rootID)
+		if len(depChain) > 0 {
+			// Print deps as the tree root(s), with the target as their child
+			for _, depID := range depChain {
+				if dep, ok := byID[depID]; ok {
+					fmt.Fprintf(&sb, "%s [%s] %s\n", dep.ID, dep.Status, dep.Title)
+				}
+			}
+		}
+		// Print the target node
+		fmt.Fprintf(&sb, "%s [%s] %s\n", target.ID, target.Status, target.Title)
+		// Print dependents (what depends on this node)
+		var children []string
+		for _, other := range sortedKeys(byID) {
+			if byID[other].HasDep(rootID) {
+				children = append(children, other)
+			}
+		}
+		for _, child := range children {
+			s.printTree(&sb, byID, child, "  ", true)
+		}
 		return sb.String(), nil
 	}
 
@@ -554,6 +577,15 @@ func (s *Store) printTree(sb *strings.Builder, byID map[string]*Bead, id, prefix
 	}
 }
 
+// depChainUp returns the direct dependencies of a bead (upstream IDs).
+func (s *Store) depChainUp(byID map[string]*Bead, id string) []string {
+	b, ok := byID[id]
+	if !ok {
+		return nil
+	}
+	return b.DepIDs()
+}
+
 // validateBead checks core invariants that must hold for any bead (create or update).
 func (s *Store) validateBead(b *Bead) error {
 	if strings.TrimSpace(b.Title) == "" {
@@ -572,6 +604,25 @@ func (s *Store) validateBead(b *Bead) error {
 		}
 	}
 	return nil
+}
+
+// detectPrefix derives the bead ID prefix from the repository/directory name,
+// following the bd convention (e.g., repo "my-project" → prefix "my-project").
+// Falls back to DefaultPrefix if detection fails.
+func detectPrefix() string {
+	// Try git repo root name first
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	if out, err := cmd.Output(); err == nil {
+		root := strings.TrimSpace(string(out))
+		if root != "" {
+			return filepath.Base(root)
+		}
+	}
+	// Fall back to current directory name
+	if wd, err := os.Getwd(); err == nil {
+		return filepath.Base(wd)
+	}
+	return DefaultPrefix
 }
 
 func envOr(key, fallback string) string {
