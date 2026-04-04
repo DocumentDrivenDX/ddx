@@ -107,6 +107,7 @@ func TestCreateAndGet(t *testing.T) {
 }
 
 func TestCreateUsesConfiguredPrefix(t *testing.T) {
+	t.Setenv("DDX_BEAD_PREFIX", "")
 	tempDir := t.TempDir()
 	ddxDir := filepath.Join(tempDir, ".ddx")
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))

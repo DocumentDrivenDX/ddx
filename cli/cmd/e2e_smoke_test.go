@@ -35,10 +35,28 @@ func getSmokeTestBinaryPath(t *testing.T) string {
 }
 
 // runInDir executes the binary with args in the given directory and returns combined output.
+// It strips DDx-specific env vars so the subprocess uses only the isolated workDir state.
 func runInDir(t *testing.T, binary, dir string, args ...string) (string, int) {
 	t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = dir
+	// Build a clean environment: keep PATH/HOME/USER/TMPDIR but strip DDx overrides
+	// so the binary resolves config and storage from dir, not from the parent shell.
+	ddxOverrides := map[string]bool{
+		"DDX_BEAD_DIR":          true,
+		"DDX_BEAD_PREFIX":       true,
+		"DDX_BEAD_BACKEND":      true,
+		"DDX_LIBRARY_BASE_PATH": true,
+	}
+	for _, kv := range os.Environ() {
+		key := kv
+		if idx := strings.Index(kv, "="); idx >= 0 {
+			key = kv[:idx]
+		}
+		if !ddxOverrides[key] {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
 	out, err := cmd.CombinedOutput()
 	output := string(out)
 
