@@ -275,6 +275,8 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 							b.Notes = v
 						case "acceptance":
 							b.Acceptance = v
+						case "issue_type":
+							b.IssueType = v
 						default:
 							// Parse booleans and numbers for proper typing
 							switch v {
