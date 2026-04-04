@@ -80,8 +80,8 @@ automation infrastructure without hardcoding workflow semantics into each tool.
    operations like bead triage, agent dispatch, and package installation
 4. **Serve project state to agents and tools** — expose documents, artifacts,
    beads, and execution evidence via MCP endpoints and HTTP
-5. **Support cross-project reuse** — share document libraries between projects
-   and teams via git subtree
+5. **Support cross-project reuse** — share document libraries and workflow
+   plugins through an online registry (`ddx install`)
 7. **Integrate with revision control** — auto-commit document changes to
    protect work, expose document history to agents and tools, enable
    write-then-commit workflows for MCP and UI clients

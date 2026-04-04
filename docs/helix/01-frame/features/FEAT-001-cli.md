@@ -24,12 +24,15 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 2. `ddx list [type]` — browse documents by category with filtering and JSON output
 3. `ddx prompts list/show` — browse and inspect AI prompts
 4. `ddx persona list/show/bind` — manage persona definitions and role bindings
-5. ~~`ddx mcp list/install`~~ — **deprecated**. Third-party MCP server registry
-   removed to avoid confusion with DDx's own MCP server (FEAT-002). MCP server
-   discovery is out of scope for DDx.
+5. ~~`ddx mcp list/install`~~ — **deprecated**. Removed to avoid confusion
+   with DDx's own MCP server (FEAT-002).
+5b. ~~`ddx auth`~~ — **deprecated**. Authentication for git subtree removed
+   alongside subtree itself.
 6. `ddx doctor` — validate library structure, config, git setup, dependencies
-7. `ddx update` — sync library from upstream via git subtree
-8. `ddx contribute` — push library improvements upstream
+7. ~~`ddx update`~~ — **deprecated**. Library sync via git subtree removed.
+   Content comes from `ddx install`. Run `ddx install <name>` to add resources.
+8. ~~`ddx contribute`~~ — **deprecated**. Git subtree push removed. Contribute
+   improvements via PRs to ddx-library or workflow repos directly.
 9. `ddx upgrade` — self-upgrade binary
 10. `ddx status` / `ddx log` — show sync state and change history
 11. Meta-prompt injection into CLAUDE.md during init
