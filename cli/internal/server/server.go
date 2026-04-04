@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,10 +9,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/easel/ddx/internal/agent"
 	"github.com/easel/ddx/internal/bead"
 	"github.com/easel/ddx/internal/config"
 	"github.com/easel/ddx/internal/docgraph"
+	"github.com/easel/ddx/internal/persona"
 )
 
 // Server is the DDx HTTP server exposing REST and MCP endpoints.
@@ -19,6 +23,7 @@ type Server struct {
 	Addr       string
 	WorkingDir string
 	mux        *http.ServeMux
+	startTime  time.Time
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -27,6 +32,7 @@ func New(addr, workingDir string) *Server {
 		Addr:       addr,
 		WorkingDir: workingDir,
 		mux:        http.NewServeMux(),
+		startTime:  time.Now().UTC(),
 	}
 	s.routes()
 	return s
@@ -43,17 +49,88 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) routes() {
+	// Health
+	s.mux.HandleFunc("GET /api/health", s.handleHealth)
+	s.mux.HandleFunc("GET /api/ready", s.handleReady)
+
+	// Documents
 	s.mux.HandleFunc("GET /api/documents", s.handleListDocuments)
 	s.mux.HandleFunc("GET /api/documents/{path...}", s.handleReadDocument)
+	s.mux.HandleFunc("GET /api/search", s.handleSearch)
+	s.mux.HandleFunc("GET /api/personas/{role}", s.handleResolvePersona)
+
+	// Beads
 	s.mux.HandleFunc("GET /api/beads", s.handleListBeads)
 	s.mux.HandleFunc("GET /api/beads/ready", s.handleBeadsReady)
+	s.mux.HandleFunc("GET /api/beads/blocked", s.handleBeadsBlocked)
 	s.mux.HandleFunc("GET /api/beads/status", s.handleBeadsStatus)
+	s.mux.HandleFunc("GET /api/beads/dep/tree/{id}", s.handleBeadDepTree)
+	s.mux.HandleFunc("GET /api/beads/{id}", s.handleShowBead)
+
+	// Doc graph
 	s.mux.HandleFunc("GET /api/docs/graph", s.handleDocGraph)
 	s.mux.HandleFunc("GET /api/docs/stale", s.handleDocStale)
+	s.mux.HandleFunc("GET /api/docs/{id}/deps", s.handleDocDeps)
+	s.mux.HandleFunc("GET /api/docs/{id}/dependents", s.handleDocDependents)
+	s.mux.HandleFunc("GET /api/docs/{id}", s.handleDocShow)
+
+	// Agent sessions
+	s.mux.HandleFunc("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
+	s.mux.HandleFunc("GET /api/agent/sessions", s.handleAgentSessions)
+
+	// MCP
 	s.mux.HandleFunc("POST /mcp", s.handleMCP)
 }
 
-// --- HTTP API Handlers ---
+// --- Health Endpoints ---
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":     "ok",
+		"started_at": s.startTime.Format(time.RFC3339),
+	})
+}
+
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	checks := map[string]string{}
+	ready := true
+
+	// Check library path
+	if s.libraryPath() != "" {
+		checks["library"] = "ok"
+	} else {
+		checks["library"] = "not_configured"
+	}
+
+	// Check bead store
+	store := s.beadStore()
+	if _, err := store.Status(); err != nil {
+		checks["beads"] = "error: " + err.Error()
+		ready = false
+	} else {
+		checks["beads"] = "ok"
+	}
+
+	// Check doc graph
+	if _, err := s.buildDocGraph(); err != nil {
+		checks["docgraph"] = "error: " + err.Error()
+	} else {
+		checks["docgraph"] = "ok"
+	}
+
+	status := http.StatusOK
+	statusStr := "ready"
+	if !ready {
+		status = http.StatusServiceUnavailable
+		statusStr = "not_ready"
+	}
+	writeJSON(w, status, map[string]any{
+		"status": statusStr,
+		"checks": checks,
+	})
+}
+
+// --- Document Endpoints ---
 
 func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 	libPath := s.libraryPath()
@@ -70,7 +147,12 @@ func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 
 	var docs []docEntry
 	categories := []string{"prompts", "templates", "personas", "patterns", "configs", "scripts", "mcp-servers"}
+	typeFilter := r.URL.Query().Get("type")
+
 	for _, cat := range categories {
+		if typeFilter != "" && cat != typeFilter {
+			continue
+		}
 		catDir := filepath.Join(libPath, cat)
 		entries, err := os.ReadDir(catDir)
 		if err != nil {
@@ -96,36 +178,140 @@ func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleReadDocument(w http.ResponseWriter, r *http.Request) {
 	docPath := r.PathValue("path")
 	if docPath == "" {
-		http.Error(w, `{"error":"path required"}`, http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
 		return
 	}
 
 	libPath := s.libraryPath()
 	if libPath == "" {
-		http.Error(w, `{"error":"library not configured"}`, http.StatusNotFound)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "library not configured"})
 		return
 	}
 
 	// Prevent path traversal
 	cleaned := filepath.Clean(docPath)
 	if strings.Contains(cleaned, "..") {
-		http.Error(w, `{"error":"invalid path"}`, http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
 		return
 	}
 
 	fullPath := filepath.Join(libPath, cleaned)
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
-		http.Error(w, `{"error":"document not found"}`, http.StatusNotFound)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
 		return
 	}
 
-	type docContent struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
-	}
-	writeJSON(w, http.StatusOK, docContent{Path: cleaned, Content: string(data)})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"path":    cleaned,
+		"content": string(data),
+	})
 }
+
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "q parameter required"})
+		return
+	}
+
+	libPath := s.libraryPath()
+	if libPath == "" {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+
+	type searchResult struct {
+		Path    string `json:"path"`
+		Type    string `json:"type"`
+		Name    string `json:"name"`
+		Snippet string `json:"snippet,omitempty"`
+	}
+
+	var results []searchResult
+	queryLower := strings.ToLower(query)
+	categories := []string{"prompts", "templates", "personas", "patterns", "configs", "scripts", "mcp-servers"}
+
+	for _, cat := range categories {
+		catDir := filepath.Join(libPath, cat)
+		entries, err := os.ReadDir(catDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			nameLower := strings.ToLower(e.Name())
+			relPath := filepath.Join(cat, e.Name())
+			fullPath := filepath.Join(libPath, relPath)
+
+			// Check filename match
+			nameMatch := strings.Contains(nameLower, queryLower)
+
+			// Check content match
+			var snippet string
+			if data, err := os.ReadFile(fullPath); err == nil {
+				contentLower := strings.ToLower(string(data))
+				if idx := strings.Index(contentLower, queryLower); idx >= 0 {
+					start := idx - 40
+					if start < 0 {
+						start = 0
+					}
+					end := idx + len(query) + 40
+					if end > len(data) {
+						end = len(data)
+					}
+					snippet = strings.TrimSpace(string(data[start:end]))
+				}
+			}
+
+			if nameMatch || snippet != "" {
+				results = append(results, searchResult{
+					Path:    relPath,
+					Type:    cat,
+					Name:    e.Name(),
+					Snippet: snippet,
+				})
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, results)
+}
+
+func (s *Server) handleResolvePersona(w http.ResponseWriter, r *http.Request) {
+	role := r.PathValue("role")
+	if role == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role required"})
+		return
+	}
+
+	bm := persona.NewBindingManagerWithPath(filepath.Join(s.WorkingDir, ".ddx.yml"))
+	personaName, err := bm.GetBinding(role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("no persona bound to role: %s", role)})
+		return
+	}
+
+	loader := persona.NewPersonaLoader(s.WorkingDir)
+	p, err := loader.LoadPersona(personaName)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("persona not found: %s", personaName)})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"role":        role,
+		"persona":     p.Name,
+		"description": p.Description,
+		"roles":       p.Roles,
+		"tags":        p.Tags,
+		"content":     p.Content,
+	})
+}
+
+// --- Bead Endpoints ---
 
 func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
 	store := s.beadStore()
@@ -157,6 +343,22 @@ func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, beads)
 }
 
+func (s *Server) handleShowBead(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	store := s.beadStore()
+	b, err := store.Get(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, b)
+}
+
 func (s *Server) handleBeadsReady(w http.ResponseWriter, r *http.Request) {
 	store := s.beadStore()
 	ready, err := store.Ready()
@@ -170,6 +372,19 @@ func (s *Server) handleBeadsReady(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ready)
 }
 
+func (s *Server) handleBeadsBlocked(w http.ResponseWriter, r *http.Request) {
+	store := s.beadStore()
+	blocked, err := store.Blocked()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	if blocked == nil {
+		blocked = []bead.Bead{}
+	}
+	writeJSON(w, http.StatusOK, blocked)
+}
+
 func (s *Server) handleBeadsStatus(w http.ResponseWriter, r *http.Request) {
 	store := s.beadStore()
 	counts, err := store.Status()
@@ -179,6 +394,24 @@ func (s *Server) handleBeadsStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, counts)
 }
+
+func (s *Server) handleBeadDepTree(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	store := s.beadStore()
+	tree, err := store.DepTree(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "tree": tree})
+}
+
+// --- Doc Graph Endpoints ---
 
 func (s *Server) handleDocGraph(w http.ResponseWriter, r *http.Request) {
 	graph, err := s.buildDocGraph()
@@ -213,11 +446,177 @@ func (s *Server) handleDocStale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stale := graph.StaleDocs()
+	if stale == nil {
+		stale = []docgraph.StaleReason{}
+	}
 	writeJSON(w, http.StatusOK, stale)
 }
 
-func (s *Server) buildDocGraph() (*docgraph.Graph, error) {
-	return docgraph.BuildGraphWithConfig(s.WorkingDir)
+func (s *Server) handleDocShow(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	doc, ok := graph.Show(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
+		return
+	}
+
+	staleReason, isStale := graph.StaleReasonForID(id)
+	resp := map[string]any{
+		"id":         doc.ID,
+		"path":       doc.Path,
+		"title":      doc.Title,
+		"depends_on": doc.DependsOn,
+		"dependents": doc.Dependents,
+		"is_stale":   isStale,
+	}
+	if isStale {
+		resp["stale_reasons"] = staleReason.Reasons
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleDocDeps(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	deps, err := graph.Dependencies(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, deps)
+}
+
+func (s *Server) handleDocDependents(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	dependents, err := graph.DependentIDs(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, dependents)
+}
+
+// --- Agent Session Endpoints ---
+
+func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
+	sessions, err := s.loadSessions()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+
+	// Apply filters
+	harness := r.URL.Query().Get("harness")
+	since := r.URL.Query().Get("since")
+	var sinceTime time.Time
+	if since != "" {
+		if t, err := time.Parse(time.RFC3339, since); err == nil {
+			sinceTime = t
+		}
+	}
+
+	if harness != "" || !sinceTime.IsZero() {
+		var filtered []agent.SessionEntry
+		for _, s := range sessions {
+			if harness != "" && s.Harness != harness {
+				continue
+			}
+			if !sinceTime.IsZero() && s.Timestamp.Before(sinceTime) {
+				continue
+			}
+			filtered = append(filtered, s)
+		}
+		sessions = filtered
+	}
+
+	if sessions == nil {
+		sessions = []agent.SessionEntry{}
+	}
+
+	// Return most recent first
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].Timestamp.After(sessions[j].Timestamp)
+	})
+
+	writeJSON(w, http.StatusOK, sessions)
+}
+
+func (s *Server) handleAgentSessionDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	sessions, err := s.loadSessions()
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no sessions found"})
+		return
+	}
+
+	for _, sess := range sessions {
+		if sess.ID == id {
+			writeJSON(w, http.StatusOK, sess)
+			return
+		}
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+}
+
+func (s *Server) loadSessions() ([]agent.SessionEntry, error) {
+	logFile := filepath.Join(s.WorkingDir, agent.DefaultLogDir, "sessions.jsonl")
+	f, err := os.Open(logFile)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var sessions []agent.SessionEntry
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		var entry agent.SessionEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		sessions = append(sessions, entry)
+	}
+	return sessions, scanner.Err()
 }
 
 // --- MCP Endpoint (JSON-RPC 2.0 over Streamable HTTP) ---
@@ -291,8 +690,6 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	case "tools/call":
 		resp.Result = s.mcpCallTool(req.Params)
 	case "notifications/initialized":
-		// Client acknowledgement, no response needed per spec.
-		// But since we received a JSON-RPC request, return empty result.
 		resp.Result = map[string]any{}
 	default:
 		resp.Error = &rpcError{Code: -32601, Message: "method not found"}
@@ -317,12 +714,31 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"path": map[string]any{
-						"type":        "string",
-						"description": "Document path relative to library root",
-					},
+					"path": map[string]any{"type": "string", "description": "Document path relative to library root"},
 				},
 				"required": []string{"path"},
+			},
+		},
+		{
+			Name:        "ddx_search",
+			Description: "Full-text search across library documents",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string", "description": "Search query"},
+				},
+				"required": []string{"query"},
+			},
+		},
+		{
+			Name:        "ddx_resolve_persona",
+			Description: "Resolve the persona bound to a role",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"role": map[string]any{"type": "string", "description": "Role name to resolve"},
+				},
+				"required": []string{"role"},
 			},
 		},
 		{
@@ -331,15 +747,20 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"status": map[string]any{
-						"type":        "string",
-						"description": "Filter by status (open, in_progress, closed)",
-					},
-					"label": map[string]any{
-						"type":        "string",
-						"description": "Filter by label",
-					},
+					"status": map[string]any{"type": "string", "description": "Filter by status (open, in_progress, closed)"},
+					"label":  map[string]any{"type": "string", "description": "Filter by label"},
 				},
+			},
+		},
+		{
+			Name:        "ddx_show_bead",
+			Description: "Show details of a specific bead",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "string", "description": "Bead ID"},
+				},
+				"required": []string{"id"},
 			},
 		},
 		{
@@ -348,6 +769,62 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "ddx_bead_status",
+			Description: "Get bead summary counts by status",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "ddx_doc_graph",
+			Description: "Get the full document dependency graph",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "ddx_doc_stale",
+			Description: "List stale documents",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "ddx_doc_show",
+			Description: "Show document metadata and staleness",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "string", "description": "Document ID"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_doc_deps",
+			Description: "Get upstream dependencies of a document",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "string", "description": "Document ID"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_agent_sessions",
+			Description: "List recent agent sessions",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"harness": map[string]any{"type": "string", "description": "Filter by harness name"},
+				},
 			},
 		},
 	}
@@ -371,12 +848,36 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 	case "ddx_read_document":
 		path, _ := call.Arguments["path"].(string)
 		return s.mcpReadDocument(path)
+	case "ddx_search":
+		query, _ := call.Arguments["query"].(string)
+		return s.mcpSearch(query)
+	case "ddx_resolve_persona":
+		role, _ := call.Arguments["role"].(string)
+		return s.mcpResolvePersona(role)
 	case "ddx_list_beads":
 		status, _ := call.Arguments["status"].(string)
 		label, _ := call.Arguments["label"].(string)
 		return s.mcpListBeads(status, label)
+	case "ddx_show_bead":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpShowBead(id)
 	case "ddx_bead_ready":
 		return s.mcpBeadReady()
+	case "ddx_bead_status":
+		return s.mcpBeadStatus()
+	case "ddx_doc_graph":
+		return s.mcpDocGraph()
+	case "ddx_doc_stale":
+		return s.mcpDocStale()
+	case "ddx_doc_show":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpDocShow(id)
+	case "ddx_doc_deps":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpDocDeps(id)
+	case "ddx_agent_sessions":
+		harness, _ := call.Arguments["harness"].(string)
+		return s.mcpAgentSessions(harness)
 	default:
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("unknown tool: %s", call.Name)}},
@@ -384,6 +885,8 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 		}
 	}
 }
+
+// --- MCP Tool Implementations ---
 
 func (s *Server) mcpListDocuments() mcpToolResult {
 	libPath := s.libraryPath()
@@ -447,6 +950,94 @@ func (s *Server) mcpReadDocument(path string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
+func (s *Server) mcpSearch(query string) mcpToolResult {
+	if query == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "query is required"}},
+			IsError: true,
+		}
+	}
+
+	libPath := s.libraryPath()
+	if libPath == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+	}
+
+	type searchResult struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+
+	var results []searchResult
+	queryLower := strings.ToLower(query)
+	categories := []string{"prompts", "templates", "personas", "patterns", "configs", "scripts", "mcp-servers"}
+
+	for _, cat := range categories {
+		catDir := filepath.Join(libPath, cat)
+		entries, err := os.ReadDir(catDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			relPath := filepath.Join(cat, e.Name())
+			nameLower := strings.ToLower(e.Name())
+			if strings.Contains(nameLower, queryLower) {
+				results = append(results, searchResult{Path: relPath, Type: cat, Name: e.Name()})
+				continue
+			}
+			fullPath := filepath.Join(libPath, relPath)
+			if data, err := os.ReadFile(fullPath); err == nil {
+				if strings.Contains(strings.ToLower(string(data)), queryLower) {
+					results = append(results, searchResult{Path: relPath, Type: cat, Name: e.Name()})
+				}
+			}
+		}
+	}
+
+	data, _ := json.Marshal(results)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpResolvePersona(role string) mcpToolResult {
+	if role == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "role is required"}},
+			IsError: true,
+		}
+	}
+
+	bm := persona.NewBindingManagerWithPath(filepath.Join(s.WorkingDir, ".ddx.yml"))
+	personaName, err := bm.GetBinding(role)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("no persona bound to role: %s", role)}},
+			IsError: true,
+		}
+	}
+
+	loader := persona.NewPersonaLoader(s.WorkingDir)
+	p, err := loader.LoadPersona(personaName)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("persona not found: %s", personaName)}},
+			IsError: true,
+		}
+	}
+
+	result := map[string]any{
+		"role":        role,
+		"persona":     p.Name,
+		"description": p.Description,
+		"content":     p.Content,
+	}
+	data, _ := json.Marshal(result)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
 func (s *Server) mcpListBeads(status, label string) mcpToolResult {
 	store := s.beadStore()
 	beads, err := store.List(status, label)
@@ -460,6 +1051,25 @@ func (s *Server) mcpListBeads(status, label string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
+func (s *Server) mcpShowBead(id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			IsError: true,
+		}
+	}
+	store := s.beadStore()
+	b, err := store.Get(id)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "bead not found"}},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(b)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
 func (s *Server) mcpBeadReady() mcpToolResult {
 	store := s.beadStore()
 	ready, err := store.Ready()
@@ -470,6 +1080,150 @@ func (s *Server) mcpBeadReady() mcpToolResult {
 		ready = []bead.Bead{}
 	}
 	data, _ := json.Marshal(ready)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpBeadStatus() mcpToolResult {
+	store := s.beadStore()
+	counts, err := store.Status()
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(counts)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocGraph() mcpToolResult {
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			IsError: true,
+		}
+	}
+
+	type graphNode struct {
+		ID         string   `json:"id"`
+		Path       string   `json:"path"`
+		DependsOn  []string `json:"depends_on,omitempty"`
+		Dependents []string `json:"dependents,omitempty"`
+	}
+	nodes := make([]graphNode, 0, len(graph.Documents))
+	for _, doc := range graph.Documents {
+		nodes = append(nodes, graphNode{
+			ID:         doc.ID,
+			Path:       doc.Path,
+			DependsOn:  doc.DependsOn,
+			Dependents: doc.Dependents,
+		})
+	}
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
+	data, _ := json.Marshal(nodes)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocStale() mcpToolResult {
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			IsError: true,
+		}
+	}
+	stale := graph.StaleDocs()
+	if stale == nil {
+		stale = []docgraph.StaleReason{}
+	}
+	data, _ := json.Marshal(stale)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocShow(id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			IsError: true,
+		}
+	}
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			IsError: true,
+		}
+	}
+	doc, ok := graph.Show(id)
+	if !ok {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "document not found"}},
+			IsError: true,
+		}
+	}
+	staleReason, isStale := graph.StaleReasonForID(id)
+	resp := map[string]any{
+		"id":         doc.ID,
+		"path":       doc.Path,
+		"title":      doc.Title,
+		"depends_on": doc.DependsOn,
+		"dependents": doc.Dependents,
+		"is_stale":   isStale,
+	}
+	if isStale {
+		resp["stale_reasons"] = staleReason.Reasons
+	}
+	data, _ := json.Marshal(resp)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocDeps(id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			IsError: true,
+		}
+	}
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			IsError: true,
+		}
+	}
+	deps, err := graph.Dependencies(id)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(deps)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpAgentSessions(harness string) mcpToolResult {
+	sessions, err := s.loadSessions()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+	}
+	if harness != "" {
+		var filtered []agent.SessionEntry
+		for _, sess := range sessions {
+			if sess.Harness == harness {
+				filtered = append(filtered, sess)
+			}
+		}
+		sessions = filtered
+	}
+	if sessions == nil {
+		sessions = []agent.SessionEntry{}
+	}
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].Timestamp.After(sessions[j].Timestamp)
+	})
+	data, _ := json.Marshal(sessions)
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
@@ -495,6 +1249,10 @@ func (s *Server) libraryPath() string {
 
 func (s *Server) beadStore() *bead.Store {
 	return bead.NewStore(filepath.Join(s.WorkingDir, ".ddx"))
+}
+
+func (s *Server) buildDocGraph() (*docgraph.Graph, error) {
+	return docgraph.BuildGraphWithConfig(s.WorkingDir)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
