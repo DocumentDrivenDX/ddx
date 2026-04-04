@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_lib.sh"
 
 # Show install command (echo only — no network required)
-type_command echo 'curl -fsSL https://ddx.dev/install.sh | bash'
+type_command echo 'curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash'
 
 # Show version
 type_command ddx version

@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/_lib.sh"
 
 setup_demo_dir
 
-type_command ddx init --silent --skip-claude-injection
+type_command ddx init
 
 type_command ddx list
 

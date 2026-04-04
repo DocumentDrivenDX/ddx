@@ -70,7 +70,7 @@ narrate "ACT 1: Setup — Install DDx and HELIX"
 
 setup_demo_dir
 
-type_command ddx init --silent --skip-claude-injection
+type_command ddx init
 type_command ddx install helix
 type_command ddx doctor
 

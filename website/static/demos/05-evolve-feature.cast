@@ -1,8 +1,8 @@
-{"version": 2, "width": 80, "height": 24, "timestamp": 1775335639, "env": {"SHELL": "/usr/bin/zsh", "TERM": "screen-256color"}}
-[0.035931, "o", "warning: templates not found in /home/erik/.git-template\r\n"]
-[0.194811, "o", "\r\n$ ddx bead create \"Add task priorities\" --type task --labels \"helix,phase:build\"\r\ntmp.CQmHTv3vsO-49cd5f57\r\n"]
-[1.199577, "o", "\r\n$ ddx bead dep add tmp.CQmHTv3vsO-49cd5f57 tmp.CQmHTv3vsO-687a81d6\r\n"]
-[2.71934, "o", "\r\n$ ddx bead dep tree tmp.CQmHTv3vsO-687a81d6\r\n"]
-[3.236045, "o", "tmp.CQmHTv3vsO-687a81d6 [open] Build task tracker\r\n  └── tmp.CQmHTv3vsO-49cd5f57 [open] Add task priorities\r\n"]
-[4.239401, "o", "\r\n$ ddx bead list\r\n"]
-[4.755366, "o", "tmp.CQmHTv3vsO-49cd5f57  open          P0  Add task priorities [helix,phase:build]\r\ntmp.CQmHTv3vsO-687a81d6  open          P0  Build task tracker [helix,phase:build]\r\ntmp.CQmHTv3vsO-e678fed3  open          P0  Add task CRUD [helix,phase:build]\r\n"]
+{"version": 2, "width": 80, "height": 24, "timestamp": 1775336283, "env": {"SHELL": "/usr/bin/zsh", "TERM": "screen-256color"}}
+[0.049919, "o", "warning: templates not found in /home/erik/.git-template\r\n"]
+[0.381127, "o", "\r\n$ ddx bead create \"Add task priorities\" --type task --labels \"helix,phase:build\"\r\ntmp.YtZlh6MV8i-0ac55a68\r\n"]
+[1.387779, "o", "\r\n$ ddx bead dep add tmp.YtZlh6MV8i-0ac55a68 tmp.YtZlh6MV8i-743989c7\r\n"]
+[2.922301, "o", "\r\n$ ddx bead dep tree tmp.YtZlh6MV8i-743989c7\r\n"]
+[3.450517, "o", "tmp.YtZlh6MV8i-743989c7 [open] Build task tracker\r\n  └── tmp.YtZlh6MV8i-0ac55a68 [open] Add task priorities\r\n"]
+[4.455059, "o", "\r\n$ ddx bead list\r\n"]
+[4.97749, "o", "tmp.YtZlh6MV8i-0ac55a68  open          P0  Add task priorities [helix,phase:build]\r\ntmp.YtZlh6MV8i-743989c7  open          P0  Build task tracker [helix,phase:build]\r\ntmp.YtZlh6MV8i-e8650026  open          P0  Add task CRUD [helix,phase:build]\r\n"]
