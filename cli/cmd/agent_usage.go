@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easel/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/cobra"
 )
 

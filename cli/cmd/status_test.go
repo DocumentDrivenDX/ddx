@@ -47,7 +47,7 @@ func setupStatusTestDir(t *testing.T) (string, func()) {
 
 	// Create .ddx.yml config
 	configContent := `repository:
-  url: "https://github.com/easel/ddx"
+  url: "https://github.com/DocumentDrivenDX/ddx"
   branch: "main"
 version: "v1.2.3"
 last_updated: "2025-01-14T10:30:00Z"

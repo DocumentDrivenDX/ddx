@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easel/ddx/internal/config"
-	"github.com/easel/ddx/internal/docgraph"
-	internalgit "github.com/easel/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 

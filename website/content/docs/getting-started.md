@@ -13,19 +13,19 @@ Get DDx installed, HELIX plugged in, and your first project built in under 10 mi
 
 {{< tab name="curl" >}}
 ```bash
-curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 ```
 {{< /tab >}}
 
 {{< tab name="Go" >}}
 ```bash
-go install github.com/easel/ddx/cli@latest
+go install github.com/DocumentDrivenDX/ddx/cli@latest
 ```
 {{< /tab >}}
 
 {{< tab name="Source" >}}
 ```bash
-git clone https://github.com/easel/ddx
+git clone https://github.com/DocumentDrivenDX/ddx
 cd ddx/cli
 make install
 ```

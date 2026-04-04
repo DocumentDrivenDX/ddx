@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easel/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // Store manages beads via a pluggable backend.

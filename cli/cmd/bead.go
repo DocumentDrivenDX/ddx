@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easel/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
 

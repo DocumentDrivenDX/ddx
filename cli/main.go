@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/easel/ddx/cmd"
+	"github.com/DocumentDrivenDX/ddx/cmd"
 )
 
 var version = "dev"

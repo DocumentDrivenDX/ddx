@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	ddxexec "github.com/easel/ddx/internal/exec"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/spf13/cobra"
 )
 

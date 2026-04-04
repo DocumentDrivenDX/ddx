@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easel/ddx/internal/agent"
-	"github.com/easel/ddx/internal/bead"
-	"github.com/easel/ddx/internal/config"
-	"github.com/easel/ddx/internal/docgraph"
-	internalgit "github.com/easel/ddx/internal/git"
-	"github.com/easel/ddx/internal/persona"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/persona"
 )
 
 // Server is the DDx HTTP server exposing REST and MCP endpoints.

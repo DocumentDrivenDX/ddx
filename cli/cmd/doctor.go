@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/easel/ddx/internal/config"
-	"github.com/easel/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/spf13/cobra"
 )
 
@@ -337,8 +337,8 @@ func generateDiagnosticReport(issues []DiagnosticIssue, verbose bool, workingDir
 		fmt.Println("💡 Additional Troubleshooting Tips:")
 		fmt.Println("  • Run 'ddx doctor' periodically to check system health")
 		fmt.Println("  • Use 'ddx doctor --verbose' for detailed diagnostics")
-		fmt.Println("  • Check DDX documentation at https://github.com/easel/ddx")
-		fmt.Println("  • Report issues at https://github.com/easel/ddx/issues")
+		fmt.Println("  • Check DDX documentation at https://github.com/DocumentDrivenDX/ddx")
+		fmt.Println("  • Report issues at https://github.com/DocumentDrivenDX/ddx/issues")
 	}
 }
 

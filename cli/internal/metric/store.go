@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/easel/ddx/internal/docgraph"
-	ddxexec "github.com/easel/ddx/internal/exec"
+	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
 var errNotMetricArtifact = errors.New("not a metric artifact")

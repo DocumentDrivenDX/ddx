@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/easel/ddx/internal/update"
+	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/easel/ddx/internal/config"
-	"github.com/easel/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/spf13/cobra"
 )
 

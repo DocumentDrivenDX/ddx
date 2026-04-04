@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/easel/ddx/internal/mcp"
+	"github.com/DocumentDrivenDX/ddx/internal/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

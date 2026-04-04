@@ -82,7 +82,7 @@ func TestInitCommand_Contract(t *testing.T) {
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
-					[]byte("version: \"1.0\"\nlibrary:\n  path: \".ddx/library\"\n  repository:\n    url: \"https://github.com/easel/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
+					[]byte("version: \"1.0\"\nlibrary:\n  path: \".ddx/library\"\n  repository:\n    url: \"https://github.com/DocumentDrivenDX/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
 					0644,
 				))
 				return workDir
@@ -115,7 +115,7 @@ func TestInitCommand_Contract(t *testing.T) {
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
-					[]byte("version: \"0.9\"\nlibrary:\n  path: \".ddx/library\"\n  repository:\n    url: \"https://github.com/easel/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
+					[]byte("version: \"0.9\"\nlibrary:\n  path: \".ddx/library\"\n  repository:\n    url: \"https://github.com/DocumentDrivenDX/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
 					0644,
 				))
 				return workDir

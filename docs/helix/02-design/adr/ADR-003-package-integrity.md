@@ -45,7 +45,7 @@ Use **commit SHA pinning + content tree hashing** in a version-controlled lockfi
 version: 1
 packages:
   helix:
-    repo: https://github.com/easel/helix
+    repo: https://github.com/DocumentDrivenDX/helix
     commit: abc123def456789012345678901234567890abcd
     tree_hash: sha256:7c6f43f4a3b2e1d0...
     installed_at: 2026-04-04T12:00:00Z
@@ -57,7 +57,7 @@ packages:
       - path: ~/.local/bin/helix
         hash: sha256:...
   persona/strict-code-reviewer:
-    repo: https://github.com/easel/ddx-library
+    repo: https://github.com/DocumentDrivenDX/ddx-library
     commit: def456789012345678901234567890abcdef0123
     tree_hash: sha256:a3f2dd...
     installed_at: 2026-04-04T12:00:00Z
@@ -95,7 +95,7 @@ Each registry's `registry.yaml` includes checksums for the latest release of eac
 packages:
   helix:
     version: 1.0.0
-    repo: https://github.com/easel/helix
+    repo: https://github.com/DocumentDrivenDX/helix
     commit: abc123...
     tree_hash: sha256:7c6f43...
 ```

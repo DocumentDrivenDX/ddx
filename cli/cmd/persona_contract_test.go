@@ -484,7 +484,7 @@ func TestPersonaBindCommand_Contract(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings: {}`
 				require.NoError(t, os.WriteFile(
@@ -641,7 +641,7 @@ func TestPersonaLoadCommand_Contract(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   code-reviewer: strict-reviewer
@@ -735,7 +735,7 @@ You follow TDD practices.`
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   code-reviewer: strict-reviewer`
@@ -881,7 +881,7 @@ func TestPersonaBindingsCommand_Contract(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   code-reviewer: strict-reviewer

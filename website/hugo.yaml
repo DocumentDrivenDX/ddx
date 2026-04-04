@@ -1,4 +1,4 @@
-baseURL: https://easel.github.io/ddx/
+baseURL: https://DocumentDrivenDX.github.io/ddx/
 languageCode: en-us
 title: DDx — Document-Driven Development
 
@@ -31,7 +31,7 @@ menu:
       pageRef: /docs/server
       weight: 4
     - name: GitHub
-      url: https://github.com/easel/ddx
+      url: https://github.com/DocumentDrivenDX/ddx
       weight: 10
       params:
         icon: github
@@ -52,4 +52,4 @@ params:
 
   editURL:
     enable: true
-    base: https://github.com/easel/ddx/edit/main/website/content
+    base: https://github.com/DocumentDrivenDX/ddx/edit/main/website/content

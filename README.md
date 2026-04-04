@@ -1,7 +1,7 @@
 # DDx — Document-Driven Development eXperience
 
-[![CI](https://github.com/easel/ddx/actions/workflows/ci.yml/badge.svg)](https://github.com/easel/ddx/actions/workflows/ci.yml)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/easel/ddx?filename=cli/go.mod)](https://github.com/easel/ddx)
+[![CI](https://github.com/DocumentDrivenDX/ddx/actions/workflows/ci.yml/badge.svg)](https://github.com/DocumentDrivenDX/ddx/actions/workflows/ci.yml)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/DocumentDrivenDX/ddx?filename=cli/go.mod)](https://github.com/DocumentDrivenDX/ddx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > Documents drive the agents. DDx drives the documents.
@@ -10,7 +10,7 @@
   <img src="website/static/demos/06-full-journey.gif" alt="DDx + HELIX: from init to working app" width="700">
 </p>
 
-**[Full Documentation →](https://easel.github.io/ddx/)**
+**[Full Documentation →](https://DocumentDrivenDX.github.io/ddx/)**
 
 ## What You Just Saw
 
@@ -27,7 +27,7 @@ DDx + HELIX takes a project from zero to working software:
 
 ```bash
 # Install DDx
-curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 
 # Initialize your project
 cd your-project

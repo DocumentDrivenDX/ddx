@@ -3,7 +3,7 @@ package metric
 import (
 	"time"
 
-	ddxexec "github.com/easel/ddx/internal/exec"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
 func metricDefinitionToExec(def Definition) ddxexec.Definition {

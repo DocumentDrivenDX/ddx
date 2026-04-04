@@ -291,7 +291,7 @@ Project guidance for my application.`
 library:
   path: ".ddx/library"
   repository:
-    url: "https://github.com/easel/ddx-library"
+    url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
 

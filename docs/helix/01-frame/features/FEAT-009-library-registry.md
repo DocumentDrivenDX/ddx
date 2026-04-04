@@ -37,13 +37,13 @@ DDx supports multiple registries. Each registry is a git repository containing a
 ```yaml
 # .ddx/config.yaml
 registries:
-  - url: https://github.com/easel/ddx-library     # default, always present
+  - url: https://github.com/DocumentDrivenDX/ddx-library     # default, always present
     branch: main
   - url: https://github.com/mycompany/ddx-private  # company-private
     branch: main
 ```
 
-The default registry (`https://github.com/easel/ddx-library`) is always included even if not explicitly listed. Additional registries are additive — they extend the default, not replace it.
+The default registry (`https://github.com/DocumentDrivenDX/ddx-library`) is always included even if not explicitly listed. Additional registries are additive — they extend the default, not replace it.
 
 ### Registry Repository Structure
 
@@ -88,7 +88,7 @@ name: helix
 version: 1.0.0
 description: Structured development workflow with AI-assisted collaboration
 type: workflow                  # workflow | plugin | persona-pack | template-pack
-source: https://github.com/easel/helix
+source: https://github.com/DocumentDrivenDX/helix
 install:
   skills:
     source: .agents/skills/     # Path in source repo

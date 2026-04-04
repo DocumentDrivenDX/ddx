@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # DDx (Document-Driven Development eXperience) Installation Script
-# Usage: curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 
 set -e
 
@@ -14,8 +14,8 @@ NC='\033[0m' # No Color
 
 # Configuration
 DDX_HOME="${HOME}/.ddx"
-DDX_REPO="https://github.com/easel/ddx"
-DDX_API="https://api.github.com/repos/easel/ddx"
+DDX_REPO="https://github.com/DocumentDrivenDX/ddx"
+DDX_API="https://api.github.com/repos/DocumentDrivenDX/ddx"
 
 # Logging functions
 log() {

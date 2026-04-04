@@ -59,7 +59,7 @@ func InstallResource(resourcePath string) (InstalledEntry, error) {
 		Name:        resourcePath,
 		Version:     "latest",
 		Type:        PackageTypeResource,
-		Source:      "https://github.com/easel/ddx-library",
+		Source:      "https://github.com/DocumentDrivenDX/ddx-library",
 		InstalledAt: time.Now(),
 	}
 

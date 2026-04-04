@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/easel/ddx/internal/agent"
-	ddxexec "github.com/easel/ddx/internal/exec"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

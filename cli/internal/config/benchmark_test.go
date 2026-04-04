@@ -46,7 +46,7 @@ func BenchmarkLoadWithWorkingDir_ConfigPresent(b *testing.B) {
 		Library: &LibraryConfig{
 			Path: "./library",
 			Repository: &RepositoryConfig{
-				URL:    "https://github.com/easel/ddx-library",
+				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 				Branch: "main",
 			},
 		},

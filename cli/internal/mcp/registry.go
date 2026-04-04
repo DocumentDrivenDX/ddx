@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/easel/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

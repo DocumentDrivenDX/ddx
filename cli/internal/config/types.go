@@ -64,7 +64,7 @@ func DefaultNewConfig() *NewConfig {
 		Library: &LibraryConfig{
 			Path: ".ddx/library",
 			Repository: &RepositoryConfig{
-				URL:    "https://github.com/easel/ddx-library",
+				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 				Branch: "main",
 			},
 		},
@@ -99,7 +99,7 @@ func (c *NewConfig) ApplyDefaults() {
 		c.Library = &LibraryConfig{
 			Path: ".ddx/library",
 			Repository: &RepositoryConfig{
-				URL:    "https://github.com/easel/ddx-library",
+				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 				Branch: "main",
 			},
 		}
@@ -109,12 +109,12 @@ func (c *NewConfig) ApplyDefaults() {
 		}
 		if c.Library.Repository == nil {
 			c.Library.Repository = &RepositoryConfig{
-				URL:    "https://github.com/easel/ddx-library",
+				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 				Branch: "main",
 			}
 		} else {
 			if c.Library.Repository.URL == "" {
-				c.Library.Repository.URL = "https://github.com/easel/ddx-library"
+				c.Library.Repository.URL = "https://github.com/DocumentDrivenDX/ddx-library"
 			}
 			if c.Library.Repository.Branch == "" {
 				c.Library.Repository.Branch = "main"

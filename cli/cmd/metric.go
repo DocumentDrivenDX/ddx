@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	ddxexec "github.com/easel/ddx/internal/exec"
-	"github.com/easel/ddx/internal/metric"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
+	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/spf13/cobra"
 )
 

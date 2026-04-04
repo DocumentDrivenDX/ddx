@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/easel/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 

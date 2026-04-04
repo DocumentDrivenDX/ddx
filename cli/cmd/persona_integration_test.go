@@ -460,7 +460,7 @@ func TestPersonaIntegration_ErrorHandling(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "test"`

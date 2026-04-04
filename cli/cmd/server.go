@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/easel/ddx/internal/server"
+	"github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
 )
 

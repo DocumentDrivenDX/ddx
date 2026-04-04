@@ -57,7 +57,7 @@ func TestPromptsCommand(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: test`
@@ -100,7 +100,7 @@ persona_bindings:
 library:
   path: "./library"
   repository:
-    url: "https://github.com/easel/ddx-library"
+    url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
 				ddxDir := ".ddx"
@@ -144,7 +144,7 @@ You are a senior code reviewer. Focus on:
 library:
   path: "./library"
   repository:
-    url: "https://github.com/easel/ddx-library"
+    url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
 				ddxDir := ".ddx"
@@ -172,7 +172,7 @@ persona_bindings: {}`
 library:
   path: "./library"
   repository:
-    url: "https://github.com/easel/ddx-library"
+    url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
 				ddxDir := ".ddx"
@@ -220,7 +220,7 @@ persona_bindings: {}`
 library:
   path: "./library"
   repository:
-    url: "https://github.com/easel/ddx-library"
+    url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
 				ddxDir := ".ddx"

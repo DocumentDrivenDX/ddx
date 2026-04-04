@@ -17,7 +17,7 @@ func TestConfigResourcesDebug(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "test-project"
@@ -54,7 +54,7 @@ func TestBasicConfigRepository(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "ddx-test"
@@ -69,6 +69,6 @@ persona_bindings:
 	require.NotNil(t, cfg.Library.Repository, "Repository should be loaded")
 
 	// Verify repository configuration
-	assert.Equal(t, "https://github.com/easel/ddx-library", cfg.Library.Repository.URL, "Repository URL should be loaded")
+	assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", cfg.Library.Repository.URL, "Repository URL should be loaded")
 	assert.Equal(t, "main", cfg.Library.Repository.Branch, "Repository branch should be loaded")
 }

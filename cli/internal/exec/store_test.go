@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/easel/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

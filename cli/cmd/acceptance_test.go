@@ -423,7 +423,7 @@ func TestAcceptance_ProjectSetupIntegration(t *testing.T) {
 library:
   path: "./library"
   repository:
-    url: "https://github.com/easel/ddx-library"
+    url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`)
 		ddxDir := filepath.Join(tempDir, ".ddx")
@@ -482,7 +482,7 @@ func TestAcceptance_ErrorScenarios(t *testing.T) {
 library:
   path: "./library"
   repository:
-    url: "https://github.com/easel/ddx-library"
+    url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
 					ddxDir := filepath.Join(tempDir, ".ddx")
@@ -518,4 +518,3 @@ persona_bindings: {}`
 		}
 	})
 }
-

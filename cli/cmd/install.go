@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"text/tabwriter"
 
-	"github.com/easel/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/spf13/cobra"
 )
 

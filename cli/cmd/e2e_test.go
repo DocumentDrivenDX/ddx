@@ -168,7 +168,7 @@ func TestE2E_TemplateWithVariables(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "MyProject"
@@ -224,7 +224,7 @@ func TestE2E_UpdateWorkflow(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings: {}
 sync:

@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/easel/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // Test that demonstrates the functional design principles

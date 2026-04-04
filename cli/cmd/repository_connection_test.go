@@ -201,7 +201,7 @@ func TestAcceptance_US021_ConfigureRepositoryConnection(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "test"
@@ -229,7 +229,7 @@ persona_bindings:
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "test"
@@ -367,7 +367,7 @@ func TestRepositoryConfigurationCommands_Contract(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "test"
@@ -401,7 +401,7 @@ persona_bindings:
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 persona_bindings:
   project_name: "test"

@@ -28,7 +28,7 @@ Examples:
 	cmd.Flags().Bool("no-git", false, "Skip git operations")
 	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
 	cmd.Flags().Bool("skip-claude-injection", false, "Skip injecting meta-prompts into CLAUDE.md")
-	cmd.Flags().String("repository", "", "Library repository URL (default: https://github.com/easel/ddx-library)")
+	cmd.Flags().String("repository", "", "Library repository URL (default: https://github.com/DocumentDrivenDX/ddx-library)")
 	cmd.Flags().String("branch", "", "Library repository branch (default: main)")
 
 	return cmd

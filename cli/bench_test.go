@@ -123,7 +123,7 @@ func setupTestProject(b *testing.B) string {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
 `), 0o644)
 

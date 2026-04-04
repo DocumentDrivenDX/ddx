@@ -1,4 +1,4 @@
-module github.com/easel/ddx
+module github.com/DocumentDrivenDX/ddx
 
 go 1.24.0
 

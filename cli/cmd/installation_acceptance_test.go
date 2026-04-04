@@ -1034,7 +1034,7 @@ func (env *InstallationTestEnvironment) setupInstallationState(state string) err
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
 		_ = os.WriteFile(filepath.Join(env.HomeDir, ".ddx", "config.yaml"), configContent, 0644)
 		return nil
@@ -1052,7 +1052,7 @@ library:
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
 		_ = os.WriteFile(filepath.Join(env.HomeDir, ".ddx", "config.yaml"), configContent, 0644)
 		// Remove PATH configuration from shell profiles

@@ -44,7 +44,7 @@ func TestListCommand(t *testing.T) {
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
 				require.NoError(t, os.WriteFile(filepath.Join(testDir, ".ddx", "config.yaml"), config, 0644))
 
@@ -71,7 +71,7 @@ library:
 library:
   path: .ddx/library
   repository:
-    url: https://github.com/easel/ddx-library
+    url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
 				require.NoError(t, os.WriteFile(filepath.Join(testDir, ".ddx", "config.yaml"), config, 0644))
 

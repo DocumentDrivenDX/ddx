@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/easel/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
 func (s *Store) loadDefinitions() ([]Definition, error) {

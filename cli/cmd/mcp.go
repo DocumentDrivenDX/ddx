@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/easel/ddx/internal/config"
-	"github.com/easel/ddx/internal/mcp"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/mcp"
 	"github.com/spf13/cobra"
 )
 

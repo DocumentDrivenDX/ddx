@@ -110,13 +110,13 @@ jobs:
         go install github.com/google/go-licenses@latest
         # Note: go-licenses has issues with Go 1.21+ standard library packages
         # We check only our direct dependencies, ignoring std lib false positives
-        go-licenses check ./... --ignore github.com/easel/ddx 2>&1 | 
+        go-licenses check ./... --ignore github.com/DocumentDrivenDX/ddx 2>&1 | 
           grep -v "does not have module info" | 
           grep -v "contains non-Go code" | 
           grep -v "loading direct and transitive dependency packages" || true
         
         # Check if there are any real license issues (not std lib warnings)
-        if go-licenses check ./... --ignore github.com/easel/ddx 2>&1 | 
+        if go-licenses check ./... --ignore github.com/DocumentDrivenDX/ddx 2>&1 | 
            grep -v "does not have module info" | 
            grep -v "contains non-Go code" | 
            grep -v "loading direct and transitive dependency packages" | 

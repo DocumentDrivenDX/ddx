@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/easel/ddx/internal/config"
-	"github.com/easel/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -186,7 +186,7 @@ func configSet(workingDir string, key, value string, global bool) error {
 					Library: &config.LibraryConfig{
 						Path: ".ddx/library",
 						Repository: &config.RepositoryConfig{
-							URL:    "https://github.com/easel/ddx-library",
+							URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 							Branch: "main",
 						},
 					},

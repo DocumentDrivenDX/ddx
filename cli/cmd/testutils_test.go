@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/easel/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )

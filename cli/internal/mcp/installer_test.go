@@ -3,7 +3,7 @@ package mcp_test
 import (
 	"testing"
 
-	"github.com/easel/ddx/internal/mcp"
+	"github.com/DocumentDrivenDX/ddx/internal/mcp"
 	"github.com/stretchr/testify/assert"
 )
 

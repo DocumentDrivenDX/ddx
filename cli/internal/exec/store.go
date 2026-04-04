@@ -18,9 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/easel/ddx/internal/agent"
-	"github.com/easel/ddx/internal/bead"
-	"github.com/easel/ddx/internal/docgraph"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
 var errNotExecArtifact = errors.New("not an exec artifact")

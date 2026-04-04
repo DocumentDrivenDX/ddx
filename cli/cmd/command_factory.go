@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/easel/ddx/internal/config"
-	ddxexec "github.com/easel/ddx/internal/exec"
-	"github.com/easel/ddx/internal/update"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
+	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -84,8 +84,8 @@ Get started:
   ddx doctor        Check installation and diagnose issues
 
 More information:
-  Documentation: https://github.com/easel/ddx
-  Issues & Support: https://github.com/easel/ddx/issues`,
+  Documentation: https://github.com/DocumentDrivenDX/ddx
+  Issues & Support: https://github.com/DocumentDrivenDX/ddx/issues`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			if verbose {
 				fmt.Printf("DDx %s (commit: %s, built: %s)\n", f.Version, f.Commit, f.Date)

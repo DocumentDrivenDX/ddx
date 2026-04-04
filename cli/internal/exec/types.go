@@ -3,7 +3,7 @@ package exec
 import (
 	"time"
 
-	"github.com/easel/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 )
 
 // AgentRunner is the interface exec needs from agent.
