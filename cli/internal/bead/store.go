@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,7 +38,7 @@ func NewStore(dir string) *Store {
 		File:     filepath.Join(dir, "beads.jsonl"),
 		Prefix:   prefix,
 		LockDir:  filepath.Join(dir, "beads.lock"),
-		LockWait: 10 * time.Second,
+		LockWait: parseDurationOr("DDX_BEAD_LOCK_TIMEOUT", 10*time.Second),
 	}
 
 	// Set up external backend if configured
@@ -623,6 +624,22 @@ func detectPrefix() string {
 		return filepath.Base(wd)
 	}
 	return DefaultPrefix
+}
+
+func parseDurationOr(envKey string, fallback time.Duration) time.Duration {
+	v := os.Getenv(envKey)
+	if v == "" {
+		return fallback
+	}
+	// Try as seconds (plain number)
+	if secs, err := strconv.ParseFloat(v, 64); err == nil {
+		return time.Duration(secs * float64(time.Second))
+	}
+	// Try as Go duration
+	if d, err := time.ParseDuration(v); err == nil {
+		return d
+	}
+	return fallback
 }
 
 func envOr(key, fallback string) string {
