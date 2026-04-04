@@ -232,6 +232,15 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if v, _ := cmd.Flags().GetString("assignee"); cmd.Flags().Changed("assignee") {
 					b.Owner = v
 				}
+				if v, _ := cmd.Flags().GetString("parent"); cmd.Flags().Changed("parent") {
+					b.Parent = v
+				}
+				if v, _ := cmd.Flags().GetString("description"); cmd.Flags().Changed("description") {
+					b.Description = v
+				}
+				if v, _ := cmd.Flags().GetString("notes"); cmd.Flags().Changed("notes") {
+					b.Notes = v
+				}
 				if setFlags, _ := cmd.Flags().GetStringArray("set"); len(setFlags) > 0 {
 					if b.Extra == nil {
 						b.Extra = make(map[string]any)
@@ -241,7 +250,19 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						if !ok {
 							continue
 						}
-						b.Extra[k] = v
+						// Route known field names to struct fields
+						switch k {
+						case "parent":
+							b.Parent = v
+						case "description":
+							b.Description = v
+						case "notes":
+							b.Notes = v
+						case "acceptance":
+							b.Acceptance = v
+						default:
+							b.Extra[k] = v
+						}
 					}
 				}
 			})
@@ -254,6 +275,9 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 	cmd.Flags().String("labels", "", "New labels (comma-separated)")
 	cmd.Flags().String("acceptance", "", "New acceptance criteria")
 	cmd.Flags().String("assignee", "", "New assignee")
+	cmd.Flags().String("parent", "", "New parent bead ID")
+	cmd.Flags().String("description", "", "New description")
+	cmd.Flags().String("notes", "", "New notes")
 	cmd.Flags().Bool("claim", false, "Claim: set status=in_progress, assignee=ddx")
 	cmd.Flags().Bool("unclaim", false, "Unclaim: set status=open, clear assignee and claim fields")
 	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
