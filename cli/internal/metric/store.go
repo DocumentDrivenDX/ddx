@@ -1,7 +1,6 @@
 package metric
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,30 +16,26 @@ import (
 	"time"
 
 	"github.com/easel/ddx/internal/docgraph"
+	ddxexec "github.com/easel/ddx/internal/exec"
 )
 
 var errNotMetricArtifact = errors.New("not a metric artifact")
 
 type Store struct {
-	WorkingDir     string
-	MetricsDir     string
-	DefinitionsDir string
-	HistoryPath    string
+	WorkingDir string
+	execStore  *ddxexec.Store
 }
 
 func NewStore(workingDir string) *Store {
-	base := filepath.Join(workingDir, ".ddx", "metrics")
 	return &Store{
-		WorkingDir:     workingDir,
-		MetricsDir:     base,
-		DefinitionsDir: filepath.Join(base, "definitions"),
-		HistoryPath:    filepath.Join(base, "history.jsonl"),
+		WorkingDir: workingDir,
+		execStore:  ddxexec.NewStore(workingDir),
 	}
 }
 
 func (s *Store) Init() error {
-	if err := os.MkdirAll(s.DefinitionsDir, 0o755); err != nil {
-		return err
+	if s.execStore != nil {
+		return s.execStore.Init()
 	}
 	return nil
 }
@@ -190,36 +185,30 @@ func (s *Store) Trend(metricID string) (TrendSummary, error) {
 }
 
 func (s *Store) LoadDefinition(metricID string) (Definition, error) {
-	entries, err := os.ReadDir(s.DefinitionsDir)
+	if s.execStore == nil {
+		return Definition{}, fmt.Errorf("metric store is not initialized")
+	}
+	defs, err := s.execStore.ListDefinitions(metricID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return Definition{}, fmt.Errorf("metric definition directory missing: %s", s.DefinitionsDir)
-		}
 		return Definition{}, err
 	}
-
 	var (
 		best  Definition
 		found bool
 	)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+	for _, def := range defs {
+		if def.ID == "" {
 			continue
 		}
-		path := filepath.Join(s.DefinitionsDir, entry.Name())
-		raw, err := os.ReadFile(path)
+		mapped, err := metricDefinitionFromExec(def)
 		if err != nil {
 			return Definition{}, err
 		}
-		var def Definition
-		if err := json.Unmarshal(raw, &def); err != nil {
-			return Definition{}, fmt.Errorf("parse metric definition %q: %w", path, err)
-		}
-		if def.MetricID != metricID || !def.Active {
+		if mapped.MetricID != metricID || !mapped.Active {
 			continue
 		}
-		if !found || def.CreatedAt.After(best.CreatedAt) || (def.CreatedAt.Equal(best.CreatedAt) && def.DefinitionID > best.DefinitionID) {
-			best = def
+		if !found || mapped.CreatedAt.After(best.CreatedAt) || (mapped.CreatedAt.Equal(best.CreatedAt) && mapped.DefinitionID > best.DefinitionID) {
+			best = mapped
 			found = true
 		}
 	}
@@ -239,67 +228,38 @@ func (s *Store) SaveDefinition(def Definition) error {
 	if def.MetricID == "" {
 		return fmt.Errorf("metric_id is required")
 	}
-	if err := os.MkdirAll(s.DefinitionsDir, 0o755); err != nil {
-		return err
+	if s.execStore == nil {
+		return fmt.Errorf("metric store is not initialized")
 	}
-	path := filepath.Join(s.DefinitionsDir, def.DefinitionID+".json")
-	return withFileLock(path+".lock", func() error {
-		raw, err := json.MarshalIndent(def, "", "  ")
-		if err != nil {
-			return err
-		}
-		return atomicWriteFile(path, raw, 0o644)
-	})
+	return s.execStore.SaveDefinition(metricDefinitionToExec(def))
 }
 
 func (s *Store) AppendHistory(rec HistoryRecord) error {
-	if err := os.MkdirAll(filepath.Dir(s.HistoryPath), 0o755); err != nil {
-		return err
+	if s.execStore == nil {
+		return fmt.Errorf("metric store is not initialized")
 	}
-	return withFileLock(s.HistoryPath+".lock", func() error {
-		f, err := os.OpenFile(s.HistoryPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		raw, err := json.Marshal(rec)
-		if err != nil {
-			return err
-		}
-		if _, err := f.Write(append(raw, '\n')); err != nil {
-			return err
-		}
-		return f.Sync()
-	})
+	return s.execStore.SaveRunRecord(metricHistoryToRun(rec))
 }
 
 func (s *Store) History(metricID string) ([]HistoryRecord, error) {
-	raw, err := os.ReadFile(s.HistoryPath)
+	if s.execStore == nil {
+		return []HistoryRecord{}, fmt.Errorf("metric store is not initialized")
+	}
+	records, err := s.execStore.History(metricID, "")
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []HistoryRecord{}, nil
-		}
 		return nil, err
 	}
-	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
-	records := []HistoryRecord{}
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
+	out := make([]HistoryRecord, 0, len(records))
+	for _, rec := range records {
+		mapped, err := metricHistoryFromExec(rec)
+		if err != nil {
+			return nil, err
 		}
-		var rec HistoryRecord
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
-			return nil, fmt.Errorf("parse metric history: %w", err)
-		}
-		if rec.MetricID == metricID {
-			records = append(records, rec)
+		if mapped.MetricID == metricID {
+			out = append(out, mapped)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return records, nil
+	return out, nil
 }
 
 func (s *Store) loadMetricArtifact(metricID string) (*docgraph.Document, error) {

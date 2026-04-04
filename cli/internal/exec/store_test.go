@@ -63,10 +63,10 @@ func TestValidateRunHistoryAndBundle(t *testing.T) {
 	assert.Equal(t, "ms", rec.Result.Metric.Unit)
 	assert.Equal(t, "MET-001", rec.Result.Metric.ArtifactID)
 
-	manifestPath := filepath.Join(store.RunsDir, rec.RunID, "manifest.json")
-	resultPath := filepath.Join(store.RunsDir, rec.RunID, "result.json")
-	stdoutPath := filepath.Join(store.RunsDir, rec.RunID, "stdout.log")
-	stderrPath := filepath.Join(store.RunsDir, rec.RunID, "stderr.log")
+	manifestPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "manifest.json")
+	resultPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "result.json")
+	stdoutPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "stdout.log")
+	stderrPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "stderr.log")
 	for _, path := range []string{manifestPath, resultPath, stdoutPath, stderrPath} {
 		_, err := os.Stat(path)
 		require.NoError(t, err)
@@ -126,7 +126,8 @@ func TestConcurrentRunBundleWrites(t *testing.T) {
 	assert.Len(t, history, writers)
 
 	manifestCount := 0
-	err = filepath.WalkDir(store.RunsDir, func(path string, d os.DirEntry, walkErr error) error {
+	runRoot := filepath.Join(wd, ".ddx", execRunAttachmentDir)
+	err = filepath.WalkDir(runRoot, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -166,4 +167,68 @@ func TestDefinitionRoundTrips(t *testing.T) {
 	raw, err := json.Marshal(loaded)
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), "exec-metric-startup-time@1")
+}
+
+func TestListDefinitionsFallsBackToLegacyExecDirectory(t *testing.T) {
+	wd := t.TempDir()
+	legacyDir := filepath.Join(wd, ".ddx", "exec", "definitions")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
+	legacyDef := Definition{
+		ID:          "exec-metric-startup-time@legacy",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ExecutorSpec{
+			Kind:    ExecutorKindCommand,
+			Command: []string{"sh", "-c", "printf 'legacy\\n'"},
+		},
+		Active:    true,
+		CreatedAt: mustExecTime(t, "2026-04-03T15:00:00Z"),
+	}
+	raw, err := json.MarshalIndent(legacyDef, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, legacyDef.ID+".json"), raw, 0o644))
+
+	store := NewStore(wd)
+	defs, err := store.ListDefinitions("MET-001")
+	require.NoError(t, err)
+	require.Len(t, defs, 1)
+	assert.Equal(t, legacyDef.ID, defs[0].ID)
+}
+
+func TestHistoryFallsBackToLegacyExecBundle(t *testing.T) {
+	wd := t.TempDir()
+	legacyRunDir := filepath.Join(wd, ".ddx", "exec", "runs", "exec-metric-startup-time@legacy")
+	require.NoError(t, os.MkdirAll(legacyRunDir, 0o755))
+	manifest := RunManifest{
+		RunID:        "exec-metric-startup-time@legacy",
+		DefinitionID: "exec-metric-startup-time@legacy",
+		ArtifactIDs:  []string{"MET-001"},
+		StartedAt:    mustExecTime(t, "2026-04-03T15:00:00Z"),
+		FinishedAt:   mustExecTime(t, "2026-04-03T15:00:01Z"),
+		Status:       StatusSuccess,
+		ExitCode:     0,
+		Attachments: map[string]string{
+			"stdout": "stdout.log",
+			"stderr": "stderr.log",
+			"result": "result.json",
+		},
+	}
+	result := RunResult{Stdout: "legacy stdout", Stderr: "", Parsed: true, Value: 12.3, Unit: "ms"}
+	manifestRaw, err := json.MarshalIndent(manifest, "", "  ")
+	require.NoError(t, err)
+	resultRaw, err := json.MarshalIndent(result, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(legacyRunDir, "manifest.json"), manifestRaw, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyRunDir, "result.json"), resultRaw, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyRunDir, "stdout.log"), []byte(result.Stdout), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyRunDir, "stderr.log"), []byte(result.Stderr), 0o644))
+
+	store := NewStore(wd)
+	history, err := store.History("MET-001", "")
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	assert.Equal(t, manifest.RunID, history[0].RunID)
+	stdout, stderr, err := store.Log(manifest.RunID)
+	require.NoError(t, err)
+	assert.Equal(t, result.Stdout, stdout)
+	assert.Equal(t, result.Stderr, stderr)
 }

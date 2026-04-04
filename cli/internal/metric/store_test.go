@@ -151,7 +151,7 @@ func TestConcurrentHistoryWrites(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	raw, err := os.ReadFile(store.HistoryPath)
+	raw, err := os.ReadFile(filepath.Join(wd, ".ddx", "exec-runs.jsonl"))
 	require.NoError(t, err)
 	lines := 0
 	for _, b := range raw {

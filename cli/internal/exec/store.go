@@ -16,100 +16,85 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/easel/ddx/internal/bead"
 	"github.com/easel/ddx/internal/docgraph"
 )
 
 var errNotExecArtifact = errors.New("not an exec artifact")
 
+const (
+	execDefinitionCollection = "exec-definitions"
+	execRunCollection        = "exec-runs"
+	execRunAttachmentDir     = "exec-runs.d"
+)
+
 type Store struct {
-	WorkingDir     string
-	ExecDir        string
-	DefinitionsDir string
-	RunsDir        string
-	runCounter     uint64
+	WorkingDir           string
+	ExecDir              string
+	DefinitionsDir       string
+	RunsDir              string
+	DefinitionCollection *bead.Store
+	RunCollection        *bead.Store
+	runCounter           uint64
 }
 
 func NewStore(workingDir string) *Store {
 	base := filepath.Join(workingDir, ".ddx", "exec")
+	beadRoot := filepath.Join(workingDir, ".ddx")
 	return &Store{
-		WorkingDir:     workingDir,
-		ExecDir:        base,
-		DefinitionsDir: filepath.Join(base, "definitions"),
-		RunsDir:        filepath.Join(base, "runs"),
+		WorkingDir:           workingDir,
+		ExecDir:              base,
+		DefinitionsDir:       filepath.Join(base, "definitions"),
+		RunsDir:              filepath.Join(base, "runs"),
+		DefinitionCollection: bead.NewStoreWithCollection(beadRoot, execDefinitionCollection),
+		RunCollection:        bead.NewStoreWithCollection(beadRoot, execRunCollection),
 	}
 }
 
 func (s *Store) Init() error {
-	if err := os.MkdirAll(s.DefinitionsDir, 0o755); err != nil {
+	if s.DefinitionCollection != nil {
+		if err := s.DefinitionCollection.Init(); err != nil {
+			return err
+		}
+	}
+	if s.RunCollection != nil {
+		if err := s.RunCollection.Init(); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(s.WorkingDir, ".ddx", execRunAttachmentDir), 0o755); err != nil {
 		return err
 	}
 	return os.MkdirAll(s.RunsDir, 0o755)
 }
 
 func (s *Store) ListDefinitions(artifactID string) ([]Definition, error) {
-	entries, err := os.ReadDir(s.DefinitionsDir)
+	defs, err := s.loadDefinitions()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []Definition{}, nil
-		}
 		return nil, err
 	}
-
-	defs := make([]Definition, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(s.DefinitionsDir, entry.Name()))
-		if err != nil {
-			return nil, err
-		}
-		var def Definition
-		if err := json.Unmarshal(raw, &def); err != nil {
-			return nil, fmt.Errorf("parse exec definition %q: %w", entry.Name(), err)
-		}
-		if !def.Active {
-			continue
-		}
-		if artifactID != "" && !containsString(def.ArtifactIDs, artifactID) {
-			continue
-		}
-		defs = append(defs, def)
+	if artifactID == "" {
+		return defs, nil
 	}
-	sort.Slice(defs, func(i, j int) bool {
-		if defs[i].CreatedAt.Equal(defs[j].CreatedAt) {
-			return defs[i].ID < defs[j].ID
+	filtered := make([]Definition, 0, len(defs))
+	for _, def := range defs {
+		if containsString(def.ArtifactIDs, artifactID) {
+			filtered = append(filtered, def)
 		}
-		return defs[i].CreatedAt.After(defs[j].CreatedAt)
-	})
-	return defs, nil
+	}
+	return filtered, nil
 }
 
 func (s *Store) ShowDefinition(definitionID string) (Definition, error) {
-	entries, err := os.ReadDir(s.DefinitionsDir)
+	defs, err := s.loadDefinitions()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return Definition{}, fmt.Errorf("exec definition directory missing: %s", s.DefinitionsDir)
-		}
 		return Definition{}, err
 	}
-
 	var (
 		best  Definition
 		found bool
 	)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(s.DefinitionsDir, entry.Name()))
-		if err != nil {
-			return Definition{}, err
-		}
-		var def Definition
-		if err := json.Unmarshal(raw, &def); err != nil {
-			return Definition{}, fmt.Errorf("parse exec definition %q: %w", entry.Name(), err)
-		}
+	for _, def := range defs {
 		if def.ID != definitionID {
 			continue
 		}
@@ -250,93 +235,55 @@ func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error)
 			FinishedAt:   finished,
 			Status:       status,
 			ExitCode:     exitCode,
-			Attachments: map[string]string{
-				"stdout": "stdout.log",
-				"stderr": "stderr.log",
-				"result": "result.json",
-			},
-			Provenance: provenance(),
+			Attachments:  runAttachmentRefs(s.WorkingDir, runID),
+			Provenance:   provenance(),
 		},
 		Result: result,
 	}
-	if writeErr := s.writeRunBundle(record); writeErr != nil {
+	if writeErr := s.saveRunRecord(record); writeErr != nil {
 		return RunRecord{}, writeErr
 	}
 	_ = duration
 	return record, nil
 }
 
+// SaveRunRecord persists a run record without executing the underlying command.
+func (s *Store) SaveRunRecord(rec RunRecord) error {
+	return s.saveRunRecord(rec)
+}
+
 func (s *Store) History(artifactID, definitionID string) ([]RunRecord, error) {
-	entries := []RunRecord{}
-	err := filepath.WalkDir(s.RunsDir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			if strings.HasPrefix(d.Name(), ".tmp-") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if d.Name() != "manifest.json" {
-			return nil
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		var manifest RunManifest
-		if err := json.Unmarshal(raw, &manifest); err != nil {
-			return fmt.Errorf("parse exec manifest %q: %w", path, err)
-		}
-		if artifactID != "" && !containsString(manifest.ArtifactIDs, artifactID) {
-			return nil
-		}
-		if definitionID != "" && manifest.DefinitionID != definitionID {
-			return nil
-		}
-		rec, err := s.readRunBundle(filepath.Dir(path))
-		if err != nil {
-			return err
-		}
-		entries = append(entries, rec)
-		return nil
-	})
+	entries, err := s.loadRuns()
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].StartedAt.Equal(entries[j].StartedAt) {
-			return entries[i].RunID < entries[j].RunID
+	filtered := make([]RunRecord, 0, len(entries))
+	for _, rec := range entries {
+		if artifactID != "" && !containsString(rec.ArtifactIDs, artifactID) {
+			continue
 		}
-		return entries[i].StartedAt.Before(entries[j].StartedAt)
-	})
-	return entries, nil
+		if definitionID != "" && rec.DefinitionID != definitionID {
+			continue
+		}
+		filtered = append(filtered, rec)
+	}
+	return filtered, nil
 }
 
 func (s *Store) Log(runID string) (string, string, error) {
-	bundleDir := filepath.Join(s.RunsDir, runID)
-	stdout, err := os.ReadFile(filepath.Join(bundleDir, "stdout.log"))
-	if err != nil && !os.IsNotExist(err) {
+	rec, err := s.loadRunByID(runID)
+	if err != nil {
 		return "", "", err
 	}
-	stderr, err := os.ReadFile(filepath.Join(bundleDir, "stderr.log"))
-	if err != nil && !os.IsNotExist(err) {
-		return "", "", err
-	}
-	return string(stdout), string(stderr), nil
+	return rec.Result.Stdout, rec.Result.Stderr, nil
 }
 
 func (s *Store) Result(runID string) (RunResult, error) {
-	raw, err := os.ReadFile(filepath.Join(s.RunsDir, runID, "result.json"))
+	rec, err := s.loadRunByID(runID)
 	if err != nil {
 		return RunResult{}, err
 	}
-	var result RunResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return RunResult{}, err
-	}
-	return result, nil
+	return rec.Result, nil
 }
 
 func (s *Store) SaveDefinition(def Definition) error {
@@ -346,17 +293,7 @@ func (s *Store) SaveDefinition(def Definition) error {
 	if len(def.ArtifactIDs) == 0 {
 		return fmt.Errorf("artifact_ids is required")
 	}
-	if err := os.MkdirAll(s.DefinitionsDir, 0o755); err != nil {
-		return err
-	}
-	path := filepath.Join(s.DefinitionsDir, def.ID+".json")
-	return withPathLock(path+".lock", func() error {
-		raw, err := json.MarshalIndent(def, "", "  ")
-		if err != nil {
-			return err
-		}
-		return atomicWriteFile(path, raw, 0o644)
-	})
+	return s.saveDefinitionBead(def)
 }
 
 func (s *Store) writeRunBundle(rec RunRecord) error {
