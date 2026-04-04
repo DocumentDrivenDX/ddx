@@ -71,6 +71,71 @@ func TestParseFrontmatter_PreferDDx(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyDunFrontmatter_RenameNamespace(t *testing.T) {
+	content := []byte("---\ndun:\n  id: legacy.doc\n  depends_on:\n    - parent.one\n---\n# Legacy doc\n")
+	fm, body, err := ParseFrontmatter(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fm.Namespace != "dun" {
+		t.Fatalf("got namespace %q, want dun", fm.Namespace)
+	}
+
+	changed := MigrateLegacyDunFrontmatter(fm.Raw)
+	if !changed {
+		t.Fatal("expected migration change")
+	}
+
+	frontmatter, err := EncodeFrontmatter(fm.Raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := []byte("---\n" + frontmatter + "\n---\n" + body)
+	nextFm, _, err := ParseFrontmatter(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nextFm.Namespace != "ddx" {
+		t.Errorf("got namespace %q, want ddx", nextFm.Namespace)
+	}
+	if nextFm.Doc.ID != "legacy.doc" {
+		t.Errorf("got id %q, want legacy.doc", nextFm.Doc.ID)
+	}
+}
+
+func TestMigrateLegacyDunFrontmatter_MergeWithExistingDDxFields(t *testing.T) {
+	content := []byte("---\nddx:\n  id: mixed.doc\n  prompt: modern\n\ndun:\n  depends_on:\n    - parent.one\n    - parent.two\n---\n# Mixed frontmatter\n")
+	fm, _, err := ParseFrontmatter(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := MigrateLegacyDunFrontmatter(fm.Raw)
+	if !changed {
+		t.Fatal("expected migration change")
+	}
+
+	frontmatter, err := EncodeFrontmatter(fm.Raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := []byte("---\n" + frontmatter + "\n---\n# Mixed frontmatter\n")
+	nextFm, _, err := ParseFrontmatter(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nextFm.Namespace != "ddx" {
+		t.Errorf("got namespace %q, want ddx", nextFm.Namespace)
+	}
+	// Existing ddx prompt should survive.
+	if nextFm.Doc.Prompt != "modern" {
+		t.Errorf("got prompt %q, want modern", nextFm.Doc.Prompt)
+	}
+	// Legacy depends_on should merge when ddx doesn't set it.
+	if len(nextFm.Doc.DependsOn) != 2 {
+		t.Errorf("expected merged depends_on, got %v", nextFm.Doc.DependsOn)
+	}
+}
+
 func TestParseFrontmatter_NoFrontmatter(t *testing.T) {
 	content := []byte("# Just a heading\nSome content.\n")
 	fm, body, err := ParseFrontmatter(content)

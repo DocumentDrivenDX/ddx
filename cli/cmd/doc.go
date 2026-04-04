@@ -3,7 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -42,6 +44,7 @@ Examples:
 	cmd.AddCommand(f.newDocDepsCommand())
 	cmd.AddCommand(f.newDocDependentsCommand())
 	cmd.AddCommand(f.newDocValidateCommand())
+	cmd.AddCommand(f.newDocMigrateCommand())
 
 	return cmd
 }
@@ -237,6 +240,84 @@ func (f *CommandFactory) newDocShowCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newDocMigrateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "migrate [path]",
+		Short: "Convert legacy `dun:` frontmatter to `ddx:`",
+		Long: `Migrate markdown documents by replacing legacy ` + "`" + `dun:` + "`" + ` frontmatter namespaces with ` + "`" + `ddx:` + "`" + `.
+
+Examples:
+  ddx doc migrate
+  ddx doc migrate docs/`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := f.docRoot()
+			if len(args) == 1 {
+				target = args[0]
+			}
+
+			_, err := os.Stat(target)
+			if err != nil {
+				return fmt.Errorf("path not found: %s", target)
+			}
+
+			convertCount := 0
+			skipCount := 0
+
+			err = filepath.WalkDir(target, func(path string, d fs.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if d.IsDir() {
+					return nil
+				}
+				if !strings.HasSuffix(d.Name(), ".md") {
+					return nil
+				}
+
+				content, readErr := os.ReadFile(path)
+				if readErr != nil {
+					return readErr
+				}
+
+				fm, body, parseErr := docgraph.ParseFrontmatter(content)
+				if parseErr != nil || !fm.HasFrontmatter || fm.Namespace != "dun" {
+					if parseErr != nil {
+						return parseErr
+					}
+					skipCount++
+					return nil
+				}
+
+				didMigrate := docgraph.MigrateLegacyDunFrontmatter(fm.Raw)
+				if !didMigrate {
+					skipCount++
+					return nil
+				}
+
+				frontmatterText, encodeErr := docgraph.EncodeFrontmatter(fm.Raw)
+				if encodeErr != nil {
+					return encodeErr
+				}
+
+				updated := []byte(fmt.Sprintf("---\n%s\n---\n%s", frontmatterText, body))
+				if err := os.WriteFile(path, updated, 0644); err != nil {
+					return err
+				}
+				convertCount++
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "migrated %d files, skipped %d files\n", convertCount, skipCount)
+			return nil
+		},
+	}
 	return cmd
 }
 

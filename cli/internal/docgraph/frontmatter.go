@@ -90,6 +90,40 @@ func ParseFrontmatter(content []byte) (Frontmatter, string, error) {
 	}, body, nil
 }
 
+// MigrateLegacyDunFrontmatter converts top-level `dun:` metadata to `ddx:`.
+//
+// Migration is lossless for fields:
+//   - If both `ddx` and `dun` are present, keys from `dun` are merged into `ddx`
+//     when missing.
+//   - If only `dun` is present, it is renamed to `ddx`.
+//   - If `ddx` is already present and no other legacy-compatible namespace exists,
+//     no changes are made.
+func MigrateLegacyDunFrontmatter(root *yaml.Node) bool {
+	if root == nil || root.Kind != yaml.MappingNode {
+		return false
+	}
+
+	ddxNode := findMappingValue(root, "ddx")
+	dunNode := findMappingValue(root, "dun")
+	if dunNode == nil {
+		return false
+	}
+
+	if ddxNode == nil {
+		dunKey := findMappingKey(root, "dun")
+		if dunKey != nil {
+			dunKey.Value = "ddx"
+		}
+		return true
+	}
+
+	// Merge legacy keys into ddx only when missing.
+	mergeIntoDDX(ddxNode, dunNode)
+
+	removeMappingKey(root, "dun")
+	return true
+}
+
 func splitFrontmatter(content []byte) (string, string, bool) {
 	if !bytes.HasPrefix(content, []byte("---")) {
 		return "", string(content), false
@@ -257,6 +291,59 @@ func findMappingValue(node *yaml.Node, key string) *yaml.Node {
 		}
 	}
 	return nil
+}
+
+func findMappingKey(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		k := node.Content[i]
+		if k.Value == key {
+			return k
+		}
+	}
+	return nil
+}
+
+func mergeIntoDDX(ddxNode *yaml.Node, dunNode *yaml.Node) {
+	if ddxNode == nil || dunNode == nil {
+		return
+	}
+	if ddxNode.Kind != yaml.MappingNode {
+		ddxNode.Kind = yaml.MappingNode
+	}
+	if dunNode.Kind != yaml.MappingNode {
+		return
+	}
+
+	existing := map[string]struct{}{}
+	for i := 0; i < len(ddxNode.Content); i += 2 {
+		existing[ddxNode.Content[i].Value] = struct{}{}
+	}
+
+	merged := false
+	for i := 0; i < len(dunNode.Content); i += 2 {
+		keyNode := dunNode.Content[i]
+		valNode := dunNode.Content[i+1]
+		if keyNode == nil || valNode == nil {
+			continue
+		}
+		if _, ok := existing[keyNode.Value]; ok {
+			continue
+		}
+		clonedValue := cloneNode(valNode)
+		ddxNode.Content = append(ddxNode.Content, &yaml.Node{
+			Kind:  keyNode.Kind,
+			Tag:   keyNode.Tag,
+			Value: keyNode.Value,
+		}, clonedValue)
+		existing[keyNode.Value] = struct{}{}
+		merged = true
+	}
+	if merged {
+		sortMappingNodes(ddxNode)
+	}
 }
 
 func removeMappingKey(node *yaml.Node, key string) {
