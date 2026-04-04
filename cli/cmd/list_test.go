@@ -29,11 +29,6 @@ func TestListCommand(t *testing.T) {
 				// Create library structure in .ddx/library
 				libraryDir := filepath.Join(testDir, ".ddx", "library")
 
-				// Create workflow directories
-				workflowsDir := filepath.Join(libraryDir, "workflows")
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
-
 				// Create mcp-servers directories
 				mcpDir := filepath.Join(libraryDir, "mcp-servers")
 				require.NoError(t, os.MkdirAll(filepath.Join(mcpDir, "github"), 0755))
@@ -56,23 +51,20 @@ library:
 				return testDir
 			},
 			validate: func(t *testing.T, output string, err error) {
-				assert.Contains(t, output, "Workflows")
-				// Note: Actual output format depends on implementation
+				assert.Contains(t, output, "Prompts")
 			},
 			expectError: false,
 		},
 		{
 			name: "list specific resource type",
-			args: []string{"list", "workflows"},
+			args: []string{"list", "prompts"},
 			setup: func(t *testing.T) string {
 				testDir := t.TempDir()
 
 				libraryDir := filepath.Join(testDir, ".ddx", "library")
-				workflowsDir := filepath.Join(libraryDir, "workflows")
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "kanban"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "kanban", "workflow.yml"), []byte("name: kanban"), 0644))
+				promptsDir := filepath.Join(libraryDir, "prompts")
+				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
 
 				// Create .ddx/config.yaml config
 				config := []byte(`version: "1.0"
@@ -86,7 +78,7 @@ library:
 				return testDir
 			},
 			validate: func(t *testing.T, output string, err error) {
-				assert.Contains(t, output, "Workflows")
+				assert.Contains(t, output, "Prompts")
 			},
 			expectError: false,
 		},
@@ -111,16 +103,12 @@ library:
 				testDir := t.TempDir()
 
 				libraryDir := filepath.Join(testDir, "library")
-				workflowsDir := filepath.Join(libraryDir, "workflows", "test")
-				require.NoError(t, os.MkdirAll(workflowsDir, 0755))
+				promptsDir := filepath.Join(libraryDir, "prompts", "test")
+				require.NoError(t, os.MkdirAll(promptsDir, 0755))
 
-				// Add a README to the workflow
-				readme := filepath.Join(workflowsDir, "README.md")
-				require.NoError(t, os.WriteFile(readme, []byte("# Test Workflow"), 0644))
-
-				// Add actual workflow file
-				workflow := filepath.Join(workflowsDir, "workflow.yml")
-				require.NoError(t, os.WriteFile(workflow, []byte("name: test"), 0644))
+				// Add a prompt file
+				prompt := filepath.Join(promptsDir, "prompt.md")
+				require.NoError(t, os.WriteFile(prompt, []byte("# Test Prompt"), 0644))
 
 				// Create config
 				config := []byte(`version: "2.0"

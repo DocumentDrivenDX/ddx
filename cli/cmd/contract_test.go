@@ -195,27 +195,28 @@ func TestListCommand_Contract(t *testing.T) {
 
 				// Create test resources in the library
 				libraryDir := filepath.Join(testDir, ".ddx", "library")
-				workflowsDir := filepath.Join(libraryDir, "workflows")
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
+
+				templatesDir := filepath.Join(libraryDir, "templates")
+				require.NoError(t, os.MkdirAll(filepath.Join(templatesDir, "nextjs"), 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(templatesDir, "nextjs", "template.yml"), []byte("name: nextjs"), 0644))
 
 				return testDir
 			},
 			expectCode: 0,
 			validateOutput: func(t *testing.T, output string) {
 				// Contract specifies section headers
-				assert.Contains(t, output, "Workflows")
+				assert.Contains(t, output, "Templates")
 				assert.Contains(t, output, "Prompts")
 			},
 		},
 		{
 			name:        "contract_filter_argument",
 			description: "Filter argument works as specified",
-			args:        []string{"list", "workflows"},
+			args:        []string{"list", "prompts"},
 			setup: func(t *testing.T) string {
 				testDir := t.TempDir()
 
@@ -230,21 +231,21 @@ func TestListCommand_Contract(t *testing.T) {
 
 				// Create test resources in the library
 				libraryDir := filepath.Join(testDir, ".ddx", "library")
-				workflowsDir := filepath.Join(libraryDir, "workflows")
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
 
+				templatesDir := filepath.Join(libraryDir, "templates")
+				require.NoError(t, os.MkdirAll(filepath.Join(templatesDir, "nextjs"), 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(templatesDir, "nextjs", "template.yml"), []byte("name: nextjs"), 0644))
+
 				return testDir
 			},
 			expectCode: 0,
 			validateOutput: func(t *testing.T, output string) {
-				// Should only show workflows
-				assert.Contains(t, output, "Workflows")
-				// Prompts should not be shown when filtering
+				// Should only show prompts
+				assert.Contains(t, output, "Prompts")
 			},
 		},
 	}

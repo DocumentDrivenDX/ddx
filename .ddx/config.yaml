@@ -4,8 +4,6 @@ library:
     repository:
         url: https://github.com/easel/ddx-library
         branch: main
-workflows:
-    safe_word: NODDX
 update_check:
     enabled: true
     frequency: 24h

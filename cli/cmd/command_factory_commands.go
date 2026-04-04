@@ -230,68 +230,6 @@ Examples:
 	return cmd
 }
 
-// newWorkflowCommand creates a fresh workflow command
-func (f *CommandFactory) newWorkflowCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "workflow",
-		Short: "Manage development workflows",
-		Long: `Manage structured development workflows like HELIX.
-
-Workflows provide:
-• Structured development phases
-• Gate criteria for phase transitions
-• Automated enforcement of best practices
-• Progress tracking and reporting
-
-Examples:
-  ddx workflow status           # Show current workflow state
-  ddx workflow list             # List available workflows
-  ddx workflow activate helix   # Activate HELIX workflow
-  ddx workflow advance          # Move to next phase`,
-		RunE: f.runWorkflow,
-	}
-
-	return cmd
-}
-
-// runWorkflow handles the workflow command with factory context
-func (f *CommandFactory) runWorkflow(cmd *cobra.Command, args []string) error {
-	return runWorkflowWithDir(cmd, args, f.WorkingDir)
-}
-
-// newAgentCommand creates a fresh agent command
-func (f *CommandFactory) newAgentCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "agent",
-		Short: "Agent communication interface",
-		Long: `Interface for AI agent communication and workflow routing.
-
-This command is primarily used by AI assistants to:
-• Detect workflow triggers in user messages
-• Route requests to appropriate workflows
-• Provide structured output for agent parsing
-
-Examples:
-  ddx agent request add pagination  # Trigger workflow based on message`,
-		Hidden: true, // Hidden from normal users, for agent use
-	}
-
-	// Add request subcommand
-	requestCmd := &cobra.Command{
-		Use:   "request [message...]",
-		Short: "Process agent request with workflow routing",
-		RunE:  f.runAgentRequest,
-	}
-	cmd.AddCommand(requestCmd)
-
-	return cmd
-}
-
-// runAgentRequest handles agent request with factory context
-func (f *CommandFactory) runAgentRequest(cmd *cobra.Command, args []string) error {
-	return handleAgentRequestWithDir(cmd, args, f.WorkingDir)
-}
-
 // newPersonaCommand creates a fresh persona command
 func (f *CommandFactory) newPersonaCommand() *cobra.Command {
 	cmd := &cobra.Command{

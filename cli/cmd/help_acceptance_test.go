@@ -42,7 +42,6 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 		assert.Contains(t, output, "prompts", "Should list prompts command")
 		assert.Contains(t, output, "persona", "Should list persona command")
 		assert.Contains(t, output, "mcp", "Should list mcp command")
-		assert.Contains(t, output, "workflow", "Should list workflow command")
 
 		// Each command should have a brief description
 		lines := strings.Split(output, "\n")

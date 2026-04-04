@@ -236,9 +236,7 @@ func outputListHuman(cmd *cobra.Command, response *ListResponse, filter, resourc
 
 	// Show usage examples
 	cmd.Println("Usage examples:")
-	cmd.Println("  ddx workflow init helix    # Initialize HELIX workflow")
 	cmd.Println("  ddx mcp install github     # Install GitHub MCP server")
-	cmd.Println("  ddx list workflows         # Show only workflows")
 	cmd.Println("  ddx list --filter react    # Search for react-related items")
 	cmd.Println("  ddx list --json            # Output as JSON")
 

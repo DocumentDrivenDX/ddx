@@ -178,13 +178,14 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 
 				// Create various resources in library directory
 				libDir := filepath.Join(env.Dir, ".ddx", "library")
-				workflowsDir := filepath.Join(libDir, "workflows")
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
 
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
+
+				templatesDir := filepath.Join(libDir, "templates")
+				require.NoError(t, os.MkdirAll(filepath.Join(templatesDir, "nextjs"), 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(templatesDir, "nextjs", "template.yml"), []byte("name: nextjs"), 0644))
 
 				return env.Dir
 			},
@@ -198,7 +199,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 			then: func(t *testing.T, output string, err error) {
 				// Then: I see categorized resources with helpful descriptions
 				assert.NoError(t, err)
-				assert.Contains(t, output, "Workflows", "Should show workflows category")
+				assert.Contains(t, output, "Templates", "Should show templates category")
 				assert.Contains(t, output, "Prompts", "Should show prompts category")
 			},
 		},
@@ -206,33 +207,33 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 			name:     "filter_by_type",
 			scenario: "Filter resources by type",
 			given: func(t *testing.T) string {
-				// Given: I want to see only workflows
+				// Given: I want to see only prompts
 				env := NewTestEnvironment(t)
 				env.InitWithDDx()
 
 				libDir := filepath.Join(env.Dir, ".ddx", "library")
-				workflowsDir := filepath.Join(libDir, "workflows")
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
 
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
 
+				templatesDir := filepath.Join(libDir, "templates")
+				require.NoError(t, os.MkdirAll(filepath.Join(templatesDir, "nextjs"), 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(templatesDir, "nextjs", "template.yml"), []byte("name: nextjs"), 0644))
+
 				return env.Dir
 			},
 			when: func(t *testing.T) (string, error) {
-				// When: I run `ddx list workflows`
+				// When: I run `ddx list prompts`
 				testDir := os.Getenv("TEST_DIR")
 				factory := NewCommandFactory(testDir)
 				rootCmd := factory.NewRootCommand()
-				return executeCommand(rootCmd, "list", "workflows")
+				return executeCommand(rootCmd, "list", "prompts")
 			},
 			then: func(t *testing.T, output string, err error) {
-				// Then: only workflows are shown
+				// Then: only prompts are shown
 				assert.NoError(t, err)
-				assert.Contains(t, output, "Workflows", "Should show workflows")
-				// Prompts should not be shown when filtering
+				assert.Contains(t, output, "Prompts", "Should show prompts")
 			},
 		},
 		{
@@ -253,10 +254,6 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 
 				// Create test resources in the library
 				libraryDir := filepath.Join(testDir, ".ddx", "library")
-				workflowsDir := filepath.Join(libraryDir, "workflows")
-				helixDir := filepath.Join(workflowsDir, "helix")
-				require.NoError(t, os.MkdirAll(helixDir, 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(helixDir, "workflow.yml"), []byte("name: helix"), 0644))
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				claudeDir := filepath.Join(promptsDir, "claude")
@@ -299,9 +296,9 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				env.InitWithDDx()
 
 				libDir := filepath.Join(env.Dir, ".ddx", "library")
-				workflowsDir := filepath.Join(libDir, "workflows")
-				require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-				require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
+				promptsDir := filepath.Join(libDir, "prompts")
+				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
 
 				return env.Dir
 			},
@@ -405,28 +402,21 @@ persona_bindings:
 	})
 }
 
-// TestAcceptance_WorkflowIntegration tests complete user workflows
-func TestAcceptance_WorkflowIntegration(t *testing.T) {
+// TestAcceptance_ProjectSetupIntegration tests complete project setup
+func TestAcceptance_ProjectSetupIntegration(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Skipping workflow integration test in short mode")
+		t.Skip("Skipping integration test in short mode")
 	}
 
 	t.Run("complete_project_setup", func(t *testing.T) {
-		// Scenario: Setting up a new project with DDX
-		//	// originalDir, _ := os.Getwd() // REMOVED: Using CommandFactory injection // REMOVED: Using CommandFactory injection
-
 		// Step 1: Initialize DDX
 		tempDir := t.TempDir()
 
-		// Create library structure with workflows
+		// Create library structure with prompts
 		libraryDir := filepath.Join(tempDir, "library")
-		workflowsDir := filepath.Join(libraryDir, "workflows")
-		require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "helix"), 0755))
-		require.NoError(t, os.MkdirAll(filepath.Join(workflowsDir, "kanban"), 0755))
-
-		// Create workflow files so they can be discovered
-		require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "helix", "workflow.yml"), []byte("name: helix"), 0644))
-		require.NoError(t, os.WriteFile(filepath.Join(workflowsDir, "kanban", "workflow.yml"), []byte("name: kanban"), 0644))
+		promptsDir := filepath.Join(libraryDir, "prompts")
+		require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
 
 		// Create config pointing to library in new format
 		config := []byte(`version: "2.0"
@@ -444,21 +434,17 @@ persona_bindings: {}`)
 		factory := NewCommandFactory(tempDir)
 		rootCmd := factory.NewRootCommand()
 		_, initErr := executeCommand(rootCmd, "init")
-		// Note: May fail if DDX repo not available
 		_ = initErr
 
 		// Step 2: List available resources
 		listOutput, listErr := executeCommand(rootCmd, "list")
 		if listErr == nil && listOutput != "" && !strings.Contains(listOutput, "❌ DDx library not found") {
-			assert.Contains(t, listOutput, "Workflows", "Should list workflows")
+			assert.Contains(t, listOutput, "Prompts", "Should list prompts")
 		} else {
-			t.Log("Skipping template list assertion due to DDx not being initialized or available")
+			t.Log("Skipping list assertion due to DDx not being initialized or available")
 		}
 
-		// Step 3: Apply a template (if available)
-		// Note: Would apply actual template in real scenario
-
-		// Step 4: Verify configuration
+		// Step 3: Verify configuration
 		configOutput, configErr := executeCommand(rootCmd, "config")
 		if configErr == nil {
 			assert.NotEmpty(t, configOutput, "Should show configuration")
@@ -533,209 +519,3 @@ persona_bindings: {}`
 	})
 }
 
-// TestAcceptance_US042_WorkflowCommandExecution tests US-042: Workflow Command Execution
-func TestAcceptance_US042_WorkflowCommandExecution(t *testing.T) {
-	tests := []struct {
-		name     string
-		scenario string
-		given    func(t *testing.T) string
-		when     func(t *testing.T, workDir string) (string, error)
-		then     func(t *testing.T, workDir string, output string, err error)
-	}{
-		{
-			name:     "list_helix_commands",
-			scenario: "AC-001: Command Discovery",
-			given: func(t *testing.T) string {
-				// Given: I have the HELIX workflow available
-				tempDir := t.TempDir()
-
-				// Create library structure with helix commands
-				commandsDir := filepath.Join(tempDir, "library", "workflows", "helix", "commands")
-				require.NoError(t, os.MkdirAll(commandsDir, 0755))
-
-				// Create build-story command
-				buildStoryContent := `# HELIX Command: Build Story
-
-You are a HELIX workflow executor...`
-				require.NoError(t, os.WriteFile(
-					filepath.Join(commandsDir, "build-story.md"),
-					[]byte(buildStoryContent), 0644))
-
-				// Create continue command
-				continueContent := `# HELIX Command: Continue
-
-Continue work on current story...`
-				require.NoError(t, os.WriteFile(
-					filepath.Join(commandsDir, "continue.md"),
-					[]byte(continueContent), 0644))
-
-				return tempDir
-			},
-			when: func(t *testing.T, workDir string) (string, error) {
-				// When: I run `ddx workflow helix commands`
-				factory := NewTestRootCommandWithDir(workDir)
-				rootCmd := factory.NewRootCommand()
-				buf := new(bytes.Buffer)
-				rootCmd.SetOut(buf)
-				rootCmd.SetErr(buf)
-				rootCmd.SetArgs([]string{"workflow", "helix", "commands"})
-
-				err := rootCmd.Execute()
-				return buf.String(), err
-			},
-			then: func(t *testing.T, workDir string, output string, err error) {
-				// Then: I see a list of available commands with descriptions
-				assert.NoError(t, err)
-				assert.Contains(t, output, "Available commands for helix workflow:")
-				assert.Contains(t, output, "build-story")
-				assert.Contains(t, output, "continue")
-			},
-		},
-		{
-			name:     "execute_build_story_command",
-			scenario: "AC-002: Command Execution",
-			given: func(t *testing.T) string {
-				// Given: I have a workflow with commands available
-				tempDir := t.TempDir()
-
-				commandsDir := filepath.Join(tempDir, "library", "workflows", "helix", "commands")
-				require.NoError(t, os.MkdirAll(commandsDir, 0755))
-
-				buildStoryContent := `# HELIX Command: Build Story
-
-You are a HELIX workflow executor tasked with implementing work on a specific user story.
-
-## Command Input
-
-You will receive a user story ID as an argument (e.g., US-001, US-042, etc.).`
-				require.NoError(t, os.WriteFile(
-					filepath.Join(commandsDir, "build-story.md"),
-					[]byte(buildStoryContent), 0644))
-
-				return tempDir
-			},
-			when: func(t *testing.T, workDir string) (string, error) {
-				// When: I run `ddx workflow helix execute build-story US-001`
-				factory := NewTestRootCommandWithDir(workDir)
-				rootCmd := factory.NewRootCommand()
-				buf := new(bytes.Buffer)
-				rootCmd.SetOut(buf)
-				rootCmd.SetErr(buf)
-				rootCmd.SetArgs([]string{"workflow", "helix", "execute", "build-story", "US-001"})
-
-				err := rootCmd.Execute()
-				return buf.String(), err
-			},
-			then: func(t *testing.T, workDir string, output string, err error) {
-				// Then: The build-story command prompt is loaded and displayed
-				assert.NoError(t, err)
-				assert.Contains(t, output, "HELIX Command: Build Story")
-				assert.Contains(t, output, "You are a HELIX workflow executor")
-				assert.Contains(t, output, "Command Arguments: [US-001]")
-			},
-		},
-		{
-			name:     "invalid_workflow_error",
-			scenario: "AC-003: Error Handling - Invalid Workflow",
-			given: func(t *testing.T) string {
-				// Given: I specify a non-existent workflow
-				tempDir := t.TempDir()
-				return tempDir
-			},
-			when: func(t *testing.T, workDir string) (string, error) {
-				// When: I run `ddx workflow invalid commands`
-				factory := NewTestRootCommandWithDir(workDir)
-				rootCmd := factory.NewRootCommand()
-				buf := new(bytes.Buffer)
-				rootCmd.SetOut(buf)
-				rootCmd.SetErr(buf)
-				rootCmd.SetArgs([]string{"workflow", "invalid", "commands"})
-
-				err := rootCmd.Execute()
-				return buf.String(), err
-			},
-			then: func(t *testing.T, workDir string, output string, err error) {
-				// Then: I receive an error message about the workflow not being found
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "workflow 'invalid' not found")
-			},
-		},
-		{
-			name:     "invalid_command_error",
-			scenario: "AC-004: Error Handling - Invalid Command",
-			given: func(t *testing.T) string {
-				// Given: I specify a non-existent command
-				tempDir := t.TempDir()
-
-				commandsDir := filepath.Join(tempDir, "library", "workflows", "helix", "commands")
-				require.NoError(t, os.MkdirAll(commandsDir, 0755))
-
-				return tempDir
-			},
-			when: func(t *testing.T, workDir string) (string, error) {
-				// When: I run `ddx workflow helix execute invalid-command`
-				factory := NewTestRootCommandWithDir(workDir)
-				rootCmd := factory.NewRootCommand()
-				buf := new(bytes.Buffer)
-				rootCmd.SetOut(buf)
-				rootCmd.SetErr(buf)
-				rootCmd.SetArgs([]string{"workflow", "helix", "execute", "invalid-command"})
-
-				err := rootCmd.Execute()
-				return buf.String(), err
-			},
-			then: func(t *testing.T, workDir string, output string, err error) {
-				// Then: I receive an error about the command not being found
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "command 'invalid-command' not found")
-			},
-		},
-		{
-			name:     "command_with_arguments",
-			scenario: "AC-005: Command Arguments",
-			given: func(t *testing.T) string {
-				// Given: A command requires arguments
-				tempDir := t.TempDir()
-
-				commandsDir := filepath.Join(tempDir, "library", "workflows", "helix", "commands")
-				require.NoError(t, os.MkdirAll(commandsDir, 0755))
-
-				buildStoryContent := `# HELIX Command: Build Story
-
-Command accepts arguments for user story processing.`
-				require.NoError(t, os.WriteFile(
-					filepath.Join(commandsDir, "build-story.md"),
-					[]byte(buildStoryContent), 0644))
-
-				return tempDir
-			},
-			when: func(t *testing.T, workDir string) (string, error) {
-				// When: I execute it with arguments
-				factory := NewTestRootCommandWithDir(workDir)
-				rootCmd := factory.NewRootCommand()
-				buf := new(bytes.Buffer)
-				rootCmd.SetOut(buf)
-				rootCmd.SetErr(buf)
-				rootCmd.SetArgs([]string{"workflow", "helix", "execute", "build-story", "US-001", "extra-arg"})
-
-				err := rootCmd.Execute()
-				return buf.String(), err
-			},
-			then: func(t *testing.T, workDir string, output string, err error) {
-				// Then: The arguments are passed to the command context
-				assert.NoError(t, err)
-				assert.Contains(t, output, "Command Arguments: [US-001 extra-arg]")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			//	// originalDir, _ := os.Getwd() // REMOVED: Using CommandFactory injection // REMOVED: Using CommandFactory injection
-
-			workDir := tt.given(t)
-			output, err := tt.when(t, workDir)
-			tt.then(t, workDir, output, err)
-		})
-	}
-}

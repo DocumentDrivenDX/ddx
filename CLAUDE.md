@@ -25,7 +25,7 @@ The project has a dual structure:
   - `personas/` - AI persona definitions for consistent role-based interactions
   - `mcp-servers/` - MCP server registry and configurations
   - `configs/` - Tool configurations (ESLint, Prettier, TypeScript)
-  - `workflows/` - HELIX workflow definitions
+  - `workflows/` - Development workflow definitions
 - `scripts/` - Build and automation scripts
 - `docs/` - Project documentation
 
@@ -78,7 +78,6 @@ The CLI uses git subtree for managing the relationship between individual projec
 1. **CLI Core Minimalism**:
    - The CLI should only contain fundamental operations: init, update, apply, list, doctor, contribute
    - Tool-specific integrations (Obsidian, VSCode, etc.) belong in `.ddx/library/scripts/` or `.ddx/library/tools/`
-   - Workflow implementations must be loaded from `.ddx/library/workflows/`, never hard-coded in the CLI
 
 2. **Feature Addition Pattern**:
    - New capabilities are added as templates, prompts, or scripts in the library
@@ -92,7 +91,6 @@ The CLI uses git subtree for managing the relationship between individual projec
 
    // GOOD: Loading features from library
    ddx apply tools/obsidian/migrate.sh     // Use library scripts
-   ddx workflow init helix                 // Load workflow from library
    ```
 
 ## Testing and Quality
@@ -154,55 +152,7 @@ The CLI follows a noun-verb command structure for clarity and consistency:
 - `ddx persona show <name>` - Show persona details
 - `ddx persona bind <role> <name>` - Bind persona to role
 - `ddx mcp list` - List available MCP servers
-- `ddx workflows list` - List available workflows
-
 The CLI follows the medical metaphor throughout, treating projects as patients that need diagnosis and treatment through appropriate templates and patterns.
-
-## HELIX Workflow System
-
-This project uses the HELIX workflow methodology for structured development.
-
-### Workflow Commands
-
-Use these commands when working on HELIX workflow tasks:
-
-```bash
-# Work on a specific user story
-ddx workflow helix execute build-story US-XXX
-
-# Continue current workflow work
-ddx workflow helix execute continue
-
-# Check workflow status and progress
-ddx workflow helix execute status
-
-# Work on next priority story
-ddx workflow helix execute next
-
-# List available workflow actions
-ddx workflow helix actions
-```
-
-These commands automatically activate a specialized workflow agent that:
-- Detects the current workflow phase from project artifacts (docs, tests, etc.)
-- Loads the appropriate phase enforcer from `.ddx/library/workflows/helix/phases/*/enforcer.md`
-- Applies phase-specific rules and guidance
-- Executes work according to HELIX principles
-
-**When to use**:
-- User says "work on US-001" → Use `ddx workflow helix execute build-story US-001`
-- User says "continue" → Use `ddx workflow helix execute continue`
-- User asks about progress → Use `ddx workflow helix execute status`
-- User says "do the next thing" → Use `ddx workflow helix execute next`
-
-### Workflow Documentation
-
-- **Workflow Guide**: `.ddx/library/workflows/helix/README.md`
-- **Coordinator**: `.ddx/library/workflows/helix/coordinator.md`
-- **Phase Enforcers**: `.ddx/library/workflows/helix/phases/*/enforcer.md`
-- **Principles**: `.ddx/library/workflows/helix/principles.md`
-
-The workflow agent handles all enforcement logic, so CLAUDE.md stays minimal and focused on project-specific context.
 
 ## Persona System
 
@@ -212,7 +162,7 @@ DDX includes a persona system that provides consistent AI personalities for diff
 - **Roles**: Abstract functions that personas fulfill (e.g., `code-reviewer`, `test-engineer`)
 - **Bindings**: Project-specific mappings between roles and personas in `.ddx.yml`
 
-Personas enable consistent, high-quality AI interactions across team members and projects. Workflows can specify required roles, and projects bind specific personas to those roles. See `.ddx/library/personas/` for available personas and `.ddx/library/personas/README.md` for detailed documentation.
+Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `.ddx/library/personas/` for available personas and `.ddx/library/personas/README.md` for detailed documentation.
 
 <!-- DDX-META-PROMPT:START -->
 <!-- Source: claude/system-prompts/focused.md -->

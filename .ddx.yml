@@ -12,7 +12,7 @@ persona_bindings:
     developer: developer-senior-golang
     devops-engineer: devops-engineer-kubernetes
     test-engineer: test-engineer-tdd
-    workflow-coordinator: helix-workflow-enforcer
+
 preferences:
     auto_apply_hooks: true
     backup_before_update: true

@@ -1,495 +1,163 @@
-# DDX - Document-Driven Development eXperience
+# DDx — Document-Driven Development eXperience
 
-> The knowledge management toolkit that solves lost knowledge, enables rapid iteration, and ensures reproducibility in AI-assisted development
+> Tools for maintaining the documents that drive AI agents to build software.
 
-## The Problem
+## The Idea
 
-Every development team faces the same critical challenges:
+AI agents write code. But they only write *good* code when they have good documents to work from — clear specs, proven patterns, consistent personas, well-structured templates. DDx manages those documents.
 
-- **Lost Knowledge**: 73% of developers lose valuable prompts, patterns, and configurations when switching between projects
-- **Duplicated Effort**: Teams spend 15-20 hours monthly recreating solutions that already exist elsewhere
-- **Inconsistent Practices**: No standardization leads to varying code quality and unpredictable AI outputs across teams
-- **Version Chaos**: No systematic tracking of which prompts, templates, or patterns actually work
-- **Knowledge Silos**: Individual expertise remains trapped in local repositories with less than 5% of useful patterns ever shared
+Think of it this way: **documents are your new source code.** You maintain prompts, personas, patterns, and specs. Agents consume them and produce implementations. DDx is the toolkit that makes this workflow reliable.
 
-The cost compounds daily - every moment without a solution means more lost knowledge, more duplicated effort, and more missed opportunities to leverage collective intelligence.
+## What DDx Does
 
-## What is DDX?
-
-DDX (Document-Driven Development eXperience) is a CLI toolkit that revolutionizes how developers manage, share, and reuse development assets. Think of it as npm for your development knowledge - prompts, templates, patterns, and workflows - all version-controlled, shareable, and continuously improving.
-
-### Core Capabilities
-
-- **📚 Asset Management**: Organize and version control prompts, templates, patterns, and configurations
-- **🔄 Git-Native Sync**: Built on git subtree for reliable bidirectional synchronization
-- **🚀 Zero Friction**: Single binary, no dependencies, works everywhere
-- **🤖 AI Integration**: First-class support for AI prompts, personas, and MCP servers
-- **🔍 Project Intelligence**: Analyze and improve your development setup automatically
-- **👥 Community Driven**: Share improvements that benefit everyone
+- **Organizes** your agent-facing documents into a structured library
+- **Syncs** document libraries across projects via git subtree
+- **Shares** proven patterns and personas with the community
+- **Composes** personas, patterns, and project context into agent briefs
+- **Validates** that your document library is healthy and current
 
 ## Quick Start
 
-**One-line installation:**
 ```bash
+# Install
 curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
-```
 
-**Initialize in your project:**
-```bash
+# Initialize in your project
 cd your-project
 ddx init
-```
 
-**Discover what's available:**
-```bash
-ddx list              # See all available resources
-ddx doctor            # Check installation and diagnose issues
-ddx prompts list      # Browse AI prompts
-ddx templates list    # View project templates
-```
-
-**Apply resources:**
-```bash
-ddx templates apply nextjs          # Apply a Next.js template
-ddx prompts show code-review         # View a code review prompt
-ddx patterns apply error-handling    # Add error handling patterns
-```
-
-## How DDX Works
-
-### 1. Local-First Architecture
-
-DDX stores all assets in a `.ddx/` directory within your project, keeping your development knowledge close to your code while maintaining clean separation:
-
-```
-your-project/
-├── .ddx/
-│   ├── prompts/        # AI prompts and instructions
-│   ├── templates/      # Project and file templates
-│   ├── patterns/       # Reusable code patterns
-│   └── configs/        # Tool configurations
-├── src/                # Your application code
-└── .ddx.yml           # DDX configuration
-```
-
-### 2. Git-Based Synchronization
-
-DDX leverages git's proven capabilities for version control and collaboration:
-
-```bash
-ddx update        # Pull latest improvements from the community
-ddx contribute    # Share your improvements back
-```
-
-Every change is tracked, versioned, and attributable. No magic, just git.
-
-### 3. Variable Substitution
-
-Templates and patterns adapt to your project through smart variable substitution:
-
-```yaml
-# .ddx.yml
-variables:
-  project_name: "my-app"
-  database: "postgresql"
-  auth_provider: "auth0"
-```
-
-### 4. Progressive Enhancement
-
-Start simple, grow as needed:
-- Begin with just prompts for AI assistance
-- Add templates as you standardize practices
-- Introduce patterns for common solutions
-- Adopt complete workflows when ready
-
-## Core Commands
-
-DDX uses an intuitive noun-verb structure for clear, discoverable commands:
-
-### Foundation Commands
-| Command | Description |
-|---------|-------------|
-| `ddx init` | Initialize DDX in your project |
-| `ddx doctor` | Check installation health and diagnose issues |
-| `ddx upgrade` | Upgrade DDX binary to latest release version |
-| `ddx update` | Pull latest improvements from master repository |
-| `ddx contribute` | Share your improvements back to community |
-
-### Resource Commands
-| Command | Description |
-|---------|-------------|
-| **Prompts** | AI assistance instructions |
-| `ddx prompts list` | List available prompts |
-| `ddx prompts show <name>` | Display prompt content |
-| `ddx prompts apply <name>` | Copy prompt to project |
-| **Templates** | Project boilerplates |
-| `ddx templates list` | List available templates |
-| `ddx templates apply <name>` | Apply template to project |
-| **Patterns** | Code solutions |
-| `ddx patterns list` | List available patterns |
-| `ddx patterns apply <name>` | Apply pattern to project |
-| **Personas** | AI personality definitions |
-| `ddx persona list` | List available personas |
-| `ddx persona bind <role> <name>` | Assign persona to role |
-| `ddx persona load` | Load personas into CLAUDE.md |
-| **MCP Servers** | Model Context Protocol servers |
-| `ddx mcp list` | List available MCP servers |
-| `ddx mcp install <name>` | Install MCP server locally |
-| **Workflows** | Complete methodologies |
-| `ddx workflows list` | List available workflows |
-| `ddx workflows apply <name>` | Initialize workflow in project |
-
-## The Power of Shared Knowledge
-
-### Individual Benefits
-- **Never Lose Work**: Your best prompts and patterns travel with you
-- **Start Faster**: New projects begin with accumulated knowledge
-- **Learn from Others**: Access community-proven solutions
-- **Consistency**: Same high-quality patterns across all projects
-
-### Team Benefits
-- **Standardization**: Entire team uses same practices
-- **Onboarding**: New members productive immediately
-- **Quality Control**: Validated patterns prevent common mistakes
-- **Knowledge Transfer**: Expertise spreads naturally
-
-### Community Benefits
-- **Collective Intelligence**: Every improvement helps everyone
-- **Battle-Tested Solutions**: Popular patterns proven across projects
-- **Rapid Evolution**: Best practices emerge and spread quickly
-- **Open Innovation**: Anyone can contribute improvements
-
-## Real-World Use Cases
-
-### 1. AI Prompt Management
-Store, version, and share your AI prompts:
-```bash
-# Browse available prompts
+# See what's available
+ddx list
 ddx prompts list
-
-# Use a specific prompt
-ddx prompts show testing/unit-test-generator
-
-# Share an improved prompt
-ddx contribute
+ddx persona list
 ```
 
-### 2. Project Standardization
-Ensure consistent setup across projects:
-```bash
-# Initialize with a template
-ddx init --template nextjs-enterprise
+## Document Library Structure
 
-# Apply your team's standards
-ddx patterns apply team-standards
+DDx maintains a `.ddx/library/` directory in your project:
+
+```
+.ddx/library/
+├── prompts/        # Instructions that direct agent behavior
+├── personas/       # Behavioral definitions (strict reviewer, pragmatic builder, etc.)
+├── patterns/       # Proven solutions agents can follow
+├── templates/      # Project and file blueprints
+├── configs/        # Tool configurations (linters, formatters)
+├── mcp-servers/    # MCP server registry
+└── environments/   # Environment-specific documents
 ```
 
-### 3. Knowledge Preservation
-Capture and reuse solutions:
-```bash
-# Document a solution as a pattern
-ddx patterns create auth-flow
+These are plain Markdown and YAML files. Any agent can read them. Any developer can edit them.
 
-# Apply it in another project
-ddx patterns apply auth-flow
-```
+## Commands
 
-### 4. Tool Configuration
-Share and maintain tool configs:
-```bash
-# Apply ESLint configuration
-ddx configs apply eslint-strict
+### Foundation
+| Command | What it does |
+|---------|-------------|
+| `ddx init` | Initialize document library in your project |
+| `ddx list [type]` | Browse available documents |
+| `ddx doctor` | Validate library health |
+| `ddx update` | Pull latest documents from upstream |
+| `ddx contribute` | Share improvements back |
+| `ddx upgrade` | Upgrade DDx binary |
+| `ddx status` | Show sync state |
 
-# Use team's prettier settings
-ddx configs apply prettier-team
-```
+### Documents
+| Command | What it does |
+|---------|-------------|
+| `ddx prompts list` | List available prompts |
+| `ddx prompts show <name>` | Display a prompt |
+| `ddx templates list` | List templates |
+| `ddx templates apply <name>` | Apply a template |
+| `ddx persona list` | List personas |
+| `ddx persona show <name>` | View persona definition |
+| `ddx persona bind <role> <name>` | Assign persona to role |
+| `ddx mcp list` | List MCP servers |
+| `ddx mcp install <name>` | Install MCP server |
 
-## Advanced Features
+## Persona System
 
-### Persona System
+Personas define how agents behave. DDx ships with personas like:
 
-DDX includes a sophisticated persona system for consistent AI interactions:
+- **strict-code-reviewer** — Pedantic about quality, catches edge cases
+- **pragmatic-implementer** — Ships working code fast, avoids over-engineering
+- **test-engineer-tdd** — Writes tests first, validates thoroughly
+- **simplicity-architect** — Chooses the simplest design that works
+
+Bind personas to roles in your `.ddx.yml`:
 
 ```yaml
-# .ddx.yml
-personas:
-  bindings:
-    code-reviewer: strict-code-reviewer
-    architect: systems-thinker
-    tester: test-driven-developer
+persona_bindings:
+  code-reviewer: strict-code-reviewer
+  architect: simplicity-architect
+  test-engineer: test-engineer-tdd
 ```
 
-Personas ensure AI assistants maintain consistent behavior across your team, providing predictable, high-quality interactions.
+Agents pick up these bindings and adjust their behavior accordingly.
 
-### MCP Server Management
+## How Sync Works
 
-DDX manages Model Context Protocol servers as project-local dependencies:
+DDx uses git subtree to sync your document library with a shared upstream repository:
 
 ```bash
-# Install an MCP server
-ddx mcp install filesystem
-
-# Automatically configures in .claude/settings.json
-# Server runs from local node_modules
+ddx update       # Pull community improvements into your library
+ddx contribute   # Push your improvements upstream
 ```
 
-This ensures reproducible AI tool configurations across your team.
+Every change is tracked in git. No magic, no service dependencies.
 
-### Project Diagnosis
+## Ecosystem
 
-DDX can check your installation and analyze your project:
+DDx is the shared infrastructure layer. Specific methodologies build on top:
+
+```
+Workflow tools (HELIX, etc.)  →  opinionated practices
+DDx (this project)            →  document infrastructure
+AI agents (Claude, etc.)      →  consume docs, produce code
+```
+
+What belongs in DDx: document library management, persona system, template engine, git sync, meta-prompt injection, MCP management.
+
+What belongs elsewhere: development methodologies, phase enforcement, workflow-specific commands.
+
+## Design Principles
+
+1. **Documents are the product** — You maintain documents, agents produce code
+2. **Git-native, file-first** — Plain files in git, no databases or services
+3. **Infrastructure, not methodology** — DDx provides primitives, workflow tools provide opinions
+4. **Composition over monoliths** — Combine small documents, don't maintain giant ones
+5. **Agent-agnostic** — Documents work with any capable AI agent
+
+## Installation
 
 ```bash
-ddx doctor
-
-# Output:
-✓ DDx Binary Executable
-✓ PATH Configuration
-✓ Configuration Valid
-✓ Git Available
-⚠ Network Issues (optional)
-⚠ No CI/CD configuration found
-  → Consider: ddx templates apply github-actions
-✓ TypeScript configured
-```
-
-## Workflows: Structured Methodologies
-
-While DDX excels at managing individual assets, it also supports complete development workflows - comprehensive methodologies that orchestrate multiple assets and practices.
-
-### HELIX Workflow
-
-One powerful workflow available through DDX is **HELIX** - a six-phase engineering methodology that brings decades of software engineering principles to AI-assisted development:
-
-```bash
-# Initialize HELIX in your project
-ddx workflows apply helix
-```
-
-HELIX enforces quality through:
-- **Test-Driven Development**: Tests written before implementation
-- **Phase Gates**: Can't skip ahead or proceed without validation
-- **Human-AI Optimization**: Clear responsibilities for both human and AI
-- **Built-in Security**: DevSecOps practices integrated throughout
-- **Systematic Progress**: Each phase builds on validated previous work
-
-The six phases ensure forward momentum:
-1. **Frame** - Define what to build and why
-2. **Design** - Architect how to build it
-3. **Test** - Write failing tests (Red phase)
-4. **Build** - Implement to pass tests (Green phase)
-5. **Deploy** - Release with monitoring
-6. **Iterate** - Learn and improve
-
-[Learn more about HELIX →](workflows/helix/README.md)
-
-### Custom Workflows
-
-Organizations can create and distribute their own workflows through DDX:
-
-```bash
-# Apply your organization's workflow
-ddx workflows apply company-sdlc
-
-# Share workflow improvements
-ddx contribute --workflow
-```
-
-## Architecture & Design
-
-### Design Principles
-
-1. **Simple**: Single binary, no runtime dependencies
-2. **Reliable**: Built on proven git technology
-3. **Flexible**: Works with any language, framework, or tool
-4. **Respectful**: Never modifies your code without permission
-5. **Portable**: Runs on Mac, Linux, and Windows
-
-### Technical Architecture
-
-```mermaid
-graph TB
-    subgraph "Your Project"
-        CODE[Application Code]
-        DDX[.ddx/ Directory]
-        CONFIG[.ddx.yml]
-    end
-
-    subgraph "DDX CLI"
-        CLI[Command Interface]
-        SYNC[Sync Engine]
-        TEMPLATE[Template Processor]
-    end
-
-    subgraph "Community"
-        REPO[Master Repository]
-        CONTRIB[Contributors]
-    end
-
-    CLI --> DDX
-    SYNC --> REPO
-    CONTRIB --> REPO
-    TEMPLATE --> CONFIG
-
-    style DDX fill:#f9f,stroke:#333,stroke-width:2px
-    style REPO fill:#9f9,stroke:#333,stroke-width:2px
-```
-
-### Security Model
-
-- **Local Execution**: All processing happens on your machine
-- **No Telemetry**: Zero data collection or phone-home
-- **Git Security**: Leverages git's proven security model
-- **Explicit Actions**: Never modifies code without your command
-
-## Success Metrics
-
-Projects using DDX report:
-- **80% reduction** in time spent recreating solutions
-- **60% faster** onboarding for new team members
-- **90% consistency** in code patterns across projects
-- **50% reduction** in pull request review cycles
-
-## Installation Options
-
-### Quick Install (Recommended)
-```bash
+# One-line install
 curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
-```
 
-### Package Managers
-```bash
-# Homebrew (macOS/Linux)
-brew install ddx
-
-# Go install
+# Or with Go
 go install github.com/easel/ddx/cli@latest
 
-# From source
+# Or from source
 git clone https://github.com/easel/ddx
-cd ddx/cli
-make install
+cd ddx/cli && make install
 ```
 
-### System Requirements
-- Git 2.0 or higher
-- git-subtree (required for `ddx contribute` command)
-  - **macOS**: `brew install git` (includes git-subtree)
-  - **Ubuntu/Debian**: `sudo apt-get install git-subtree`
-  - **Fedora/RHEL**: `sudo dnf install git-subtree`
-  - **Arch Linux**: Included with git package
-  - **Windows**: Included with Git for Windows
-  - **Verify**: Run `ddx doctor` to check if installed
-- 50MB disk space
-- Any OS: macOS, Linux, Windows
+**Requires:** Git 2.0+, git-subtree. Run `ddx doctor` to verify.
 
 ## Configuration
 
-DDX uses a simple YAML configuration file (`.ddx.yml`):
-
 ```yaml
 # .ddx.yml
-version: "1.0"
-repository: https://github.com/easel/ddx
-branch: main
-
-# Resources to include
-resources:
-  prompts:
-    - "code-review"
-    - "testing/*"
-  templates:
-    - "nextjs"
-  patterns:
-    - "error-handling"
-
-# Project variables
-variables:
-  project_name: "${PROJECT_NAME:-my-app}"
-  author: "${GIT_AUTHOR_NAME}"
-
-# Workflow configuration (optional)
-workflow:
-  type: "helix"
-  phase: "build"
+version: 1
+library_path: ./library
+repository:
+  url: https://github.com/easel/ddx
+  branch: main
+persona_bindings:
+  code-reviewer: strict-code-reviewer
+  architect: simplicity-architect
 ```
-
-## Community & Contributing
-
-DDX thrives on community contributions. Every improvement benefits everyone.
-
-### Contributing
-
-Share your improvements:
-```bash
-# After improving a prompt or pattern
-ddx contribute
-```
-
-This creates a pull request to the master repository where it can benefit the entire community.
-
-### Getting Help
-
-- **Documentation**: [docs.ddx.dev](https://docs.ddx.dev)
-- **Issues**: [GitHub Issues](https://github.com/easel/ddx/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/easel/ddx/discussions)
-- **Discord**: [Join our Discord](https://discord.gg/ddx)
-
-### Philosophy
-
-DDX embodies the belief that development knowledge should be:
-- **Shareable**: Easy to distribute and reuse
-- **Versionable**: Track what works and what doesn't
-- **Discoverable**: Find solutions quickly
-- **Improvable**: Continuously evolving with community input
-
-## Comparison with Other Tools
-
-| Aspect | DDX | Snippet Managers | Boilerplates | Package Managers |
-|--------|-----|------------------|--------------|------------------|
-| **Scope** | Complete knowledge management | Code snippets only | Project templates | Code libraries |
-| **Versioning** | Git-native | Limited/None | One-time copy | Semantic versioning |
-| **Sharing** | Bidirectional sync | Copy/paste | Clone once | Publish/consume |
-| **AI Support** | First-class | None | None | None |
-| **Updates** | Continuous | Manual | None | One-way |
-| **Workflows** | Full methodology support | None | None | None |
-
-## Roadmap
-
-### Current Focus
-- ✅ Core CLI functionality
-- ✅ Git-based synchronization
-- ✅ Template and pattern system
-- ✅ AI persona support
-- ✅ MCP server management
-- 🚧 Workflow orchestration
-- 🚧 Team collaboration features
-
-### Future Vision
-- [ ] Web-based asset browser
-- [ ] IDE integrations
-- [ ] Private team repositories
-- [ ] Analytics and insights
-- [ ] AI-powered recommendations
-- [ ] Automated quality validation
 
 ## License
 
-DDX is open source software licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
-## Acknowledgments
-
-DDX stands on the shoulders of giants, building upon decades of software engineering wisdom and the collective experience of the development community.
-
-Special thanks to all contributors who share their knowledge and help make development better for everyone.
-
----
-
-**Ready to revolutionize your development workflow?**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
-```
-
-*Join thousands of developers who never lose their best work again.*
+MIT. See [LICENSE](LICENSE).

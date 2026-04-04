@@ -113,16 +113,6 @@ ddx mcp show filesystem              # Show server details
 ddx mcp install filesystem           # Install MCP server
 ```
 
-### Workflows
-
-HELIX workflow definitions.
-
-```bash
-ddx workflows list                   # List available workflows
-ddx workflows show feature-development  # Show workflow details
-ddx workflows run feature-development   # Run a workflow
-```
-
 ## Common Options
 
 Most commands support these common options:

@@ -67,29 +67,6 @@
         }
       ]
     },
-    "workflows": {
-      "type": "object",
-      "description": "Workflow activation and configuration",
-      "properties": {
-        "active": {
-          "type": "array",
-          "description": "Active workflows in priority order (first match wins)",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "examples": [["helix"], ["helix", "kanban"]]
-        },
-        "safe_word": {
-          "type": "string",
-          "description": "Safe word prefix to bypass workflow engagement",
-          "default": "NODDX",
-          "pattern": "^\\S+$",
-          "examples": ["NODDX", "SKIP", "BYPASS"]
-        }
-      },
-      "additionalProperties": false
-    },
     "system": {
       "type": "object",
       "description": "System-level configuration settings",
@@ -158,10 +135,6 @@
           "url": "https://github.com/easel/ddx-library",
           "branch": "main"
         }
-      },
-      "workflows": {
-        "active": ["helix"],
-        "safe_word": "NODDX"
       },
       "persona_bindings": {
         "code-reviewer": "strict-code-reviewer"

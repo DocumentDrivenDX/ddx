@@ -51,7 +51,7 @@ persona_bindings: {}
 }
 
 // Contract validation tests verify that persona CLI commands conform to their API contracts
-// as defined in docs/helix/02-design/contracts/CLI-persona.md
+// as defined in the CLI persona contract
 
 // TestPersonaListCommand_Contract validates persona list command against CLI contract
 func TestPersonaListCommand_Contract(t *testing.T) {
