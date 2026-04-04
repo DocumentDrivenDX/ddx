@@ -313,8 +313,6 @@ PowerShell:
 	rootCmd.AddCommand(f.newAuthCommand())
 	rootCmd.AddCommand(f.newBeadCommand())
 	rootCmd.AddCommand(f.newAgentCommand())
-	rootCmd.AddCommand(f.newADRCommand())
-	rootCmd.AddCommand(f.newSDCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{
