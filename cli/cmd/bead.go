@@ -110,7 +110,14 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 					if !ok {
 						return fmt.Errorf("--set requires key=value format, got: %s", kv)
 					}
-					b.Extra[k] = v
+					switch v {
+					case "true":
+						b.Extra[k] = true
+					case "false":
+						b.Extra[k] = false
+					default:
+						b.Extra[k] = v
+					}
 				}
 			}
 
