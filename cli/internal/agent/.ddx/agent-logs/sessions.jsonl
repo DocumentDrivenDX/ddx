@@ -1,8 +1,0 @@
-{"id":"as-dc5372ab","timestamp":"2026-04-04T13:55:34.848576377Z","harness":"codex","prompt_len":8,"duration_ms":0,"exit_code":0}
-{"id":"as-94d9038a","timestamp":"2026-04-04T13:55:34.84875538Z","harness":"gemini","prompt_len":15,"duration_ms":0,"exit_code":0}
-{"id":"as-abe5bd2c","timestamp":"2026-04-04T13:55:34.849926065Z","harness":"codex","prompt_len":16,"duration_ms":0,"exit_code":0}
-{"id":"as-e479b556","timestamp":"2026-04-04T13:55:34.850137388Z","harness":"codex","model":"o3-mini","prompt_len":4,"duration_ms":0,"exit_code":0}
-{"id":"as-2ad5a654","timestamp":"2026-04-04T13:55:34.850196057Z","harness":"codex","model":"gpt-4o","prompt_len":4,"duration_ms":0,"exit_code":0}
-{"id":"as-f4968851","timestamp":"2026-04-04T13:55:34.850259746Z","harness":"codex","prompt_len":4,"duration_ms":0,"exit_code":1}
-{"id":"as-7f365a99","timestamp":"2026-04-04T13:55:34.851444771Z","harness":"claude","prompt_len":4,"duration_ms":0,"exit_code":0}
-{"id":"as-4bda1526","timestamp":"2026-04-04T13:55:34.851613514Z","harness":"codex","prompt_len":4,"duration_ms":0,"exit_code":0}

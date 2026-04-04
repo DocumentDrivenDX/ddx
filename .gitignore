@@ -410,3 +410,4 @@ site/
 # Keep configuration examples
 !config.example.*
 !settings.example.*
+cli/internal/agent/.ddx/
