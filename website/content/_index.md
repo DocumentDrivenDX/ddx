@@ -41,8 +41,8 @@ layout: hextra-home
     style="background: radial-gradient(ellipse at 50% 80%,rgba(142,53,163,0.15),hsla(0,0%,100%,0));"
   >}}
   {{< hextra/feature-card
-    title="Git-Native Sync"
-    subtitle="Share proven patterns across projects via git subtree. Pull community improvements, push yours back. No services, no lock-in."
+    title="Plugin Registry"
+    subtitle="Install workflow plugins with one command. ddx install helix gets you a complete development methodology. Build your own plugins and share them."
     class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
     style="background: radial-gradient(ellipse at 50% 80%,rgba(53,163,95,0.15),hsla(0,0%,100%,0));"
   >}}
@@ -61,5 +61,11 @@ layout: hextra-home
 {{< /hextra/feature-grid >}}
 
 ## See It In Action
+
+Watch DDx + HELIX build a working Go application from scratch — framing specs, implementing with TDD, and evolving with a new feature:
+
+{{< asciinema src="06-full-journey" cols="100" rows="30" >}}
+
+### Quick Setup
 
 {{< asciinema src="02-init-explore" >}}

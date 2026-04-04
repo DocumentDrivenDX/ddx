@@ -8,19 +8,19 @@ DDx is one layer in a stack. Understanding where it fits helps you know what DDx
 ## The Stack
 
 ```
-┌─────────────────────────────────────────────────────┐
+┌─────���──────────────────��────────────────────────────┐
 │  Workflow Tools                                      │
-│  HELIX, your team's methodology, or custom workflows │
+│  HELIX, your team's methodology, or custom workflows ��
 │  Opinionated: phases, gates, enforcement, practices  │
 ├─────────────────────────────────────────────────────┤
 │  DDx  ← you are here                                │
 │  Shared infrastructure: document libraries, personas,│
-│  templates, git sync, meta-prompts, MCP server       │
-├─────────────────────────────────────────────────────┤
+│  bead tracker, agent dispatch, MCP server            │
+├────────────��───────────────��────────────────────────┤
 │  AI Agents                                           │
 │  Claude, GPT, Gemini, local models                   │
 │  Consume documents, produce implementations          │
-└─────────────────────────────────────────────────────┘
+└────────────────────────────���────────────────────────┘
 ```
 
 ## What Goes Where
@@ -29,30 +29,38 @@ DDx is one layer in a stack. Understanding where it fits helps you know what DDx
 |---------------|--------------------------|
 | Document library structure | Development phases and gates |
 | Persona definitions and bindings | Phase enforcement rules |
-| Template application | Workflow-specific CLI commands |
-| Git subtree sync | Progress tracking |
-| Meta-prompt injection | Methodology-specific practices |
-| MCP server for documents | Story/issue management |
+| Bead tracker (work items) | Workflow-specific validation |
+| Agent dispatch and session logging | Supervisory loops and planning |
+| Plugin registry (`ddx install`) | Methodology-specific practices |
+| MCP server for documents | Story/issue management beyond beads |
 
 ## DDx Artifacts
 
-DDx produces three artifacts from a single repository:
+DDx produces two artifacts from a single repository:
 
 | Artifact | What It Does |
 |----------|-------------|
-| **`ddx` CLI** | Local document management — init, list, sync, personas, templates |
-| **`ddx-server`** | Serve documents over HTTP and MCP for agent consumption |
-| **This website** | Documentation and promotion |
+| **`ddx` CLI** | Document management, bead tracker, agent dispatch, plugin registry |
+| **`ddx-server`** | Serve documents, beads, and agent logs over HTTP and MCP |
 
 ## Workflow Tools
 
-Workflow tools build on DDx's infrastructure to provide opinionated development practices:
+Workflow tools build on DDx's infrastructure to provide opinionated development practices.
 
 ### HELIX
 
-A six-phase structured development methodology (Frame, Design, Test, Build, Deploy, Iterate) that uses DDx for document management, persona composition, and template application.
+A six-phase structured development methodology (Frame, Design, Test, Build, Deploy, Iterate) that uses DDx for document management, bead tracking, and agent dispatch.
+
+```bash
+# Install HELIX with one command
+ddx install helix
+```
 
 {{< asciinema src="03-plugin-install" >}}
+
+Watch the full DDx + HELIX journey — from init to a working application:
+
+{{< asciinema src="06-full-journey" cols="100" rows="30" >}}
 
 [HELIX on GitHub →](https://github.com/easel/helix)
 
@@ -65,9 +73,10 @@ DDx is workflow-agnostic. You can build your own methodology on DDx's primitives
 If you're building a workflow tool on DDx, you get for free:
 
 - **Document library management** — your users already have structured docs
+- **Bead tracker** — shared work-item storage with dependencies and coordination
 - **Persona system** — bind agents to roles with predefined behavior
-- **Template engine** — generate project structures with variable substitution
-- **Git sync** — share patterns across projects
+- **Agent dispatch** — invoke any supported AI agent through one interface
+- **Plugin registry** — distribute your tool as a DDx plugin
 - **MCP access** — agents can discover and read documents programmatically
 
-Focus your tool on what makes your methodology unique. Let DDx handle the document plumbing.
+Focus your tool on what makes your methodology unique. Let DDx handle the infrastructure.

@@ -41,10 +41,15 @@ jobs:
       - name: Record demo scripts
         run: |
           mkdir -p demos
-          for script in scripts/demos/[0-9]*.sh; do
+          # Record mechanical demos (01-05) — no agent required
+          for script in scripts/demos/0[1-5]*.sh; do
             name=$(basename "$script" .sh)
-            asciinema rec --cols 80 --rows 24 --command "bash $script" "demos/${name}.cast"
+            echo "Recording $name..."
+            asciinema rec --cols 80 --rows 24 --command "bash $script" "demos/${name}.cast" || true
           done
+          # 06-full-journey requires agent access — skip in standard CI
+          # Run manually: asciinema rec --cols 100 --rows 30 -c "bash scripts/demos/06-full-journey.sh" demos/06-full-journey.cast
+          echo "Skipping 06-full-journey (requires agent access). Record manually."
 
       - name: Render GIFs
         run: |

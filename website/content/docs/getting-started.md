@@ -5,7 +5,7 @@ prev: /docs
 next: /docs/concepts
 ---
 
-Get DDx installed and your first document library set up in under 5 minutes.
+Get DDx installed, HELIX plugged in, and your first project built in under 10 minutes.
 
 ## Install
 
@@ -33,7 +33,7 @@ make install
 
 {{< /tabs >}}
 
-**Requirements:** Git 2.0+, git-subtree.
+**Requirements:** Git 2.0+.
 
 {{< asciinema src="01-install" >}}
 
@@ -46,33 +46,44 @@ ddx init
 
 This creates:
 - `.ddx/config.yaml` — project configuration
-- `.ddx/library/` — your document library with prompts, personas, patterns, templates
+- `.ddx/library/` — your document library (prompts, personas, patterns, templates)
 
 {{< asciinema src="02-init-explore" >}}
+
+## Install a Workflow Plugin
+
+```bash
+ddx search workflow       # find available plugins
+ddx install helix         # install HELIX methodology
+ddx installed             # verify installation
+```
+
+{{< asciinema src="03-plugin-install" >}}
+
+## Build Something
+
+With DDx and HELIX installed, agents can frame, build, and evolve projects:
+
+```bash
+# Frame: agent creates specs and work items
+ddx agent run --harness claude --prompt frame-prompt.md
+
+# Build: agent implements per specs with TDD
+ddx agent run --harness claude --prompt build-prompt.md
+
+# Inspect: see what was built
+ddx bead list             # work items tracked
+ddx agent usage           # token consumption
+```
+
+{{< asciinema src="06-full-journey" cols="100" rows="30" >}}
 
 ## Explore What's Available
 
 ```bash
 ddx list              # See all document categories
-ddx prompts list      # Browse AI prompts
 ddx persona list      # Browse persona definitions
-```
-
-## Bind a Persona
-
-Configure how agents behave in your project:
-
-```bash
-ddx persona bind code-reviewer strict-code-reviewer
-```
-
-This saves the binding to `.ddx.yml`. When agents work in your project, they pick up the persona and adjust their behavior accordingly.
-
-## Sync with the Community
-
-```bash
-ddx update       # Pull latest improvements from upstream
-ddx contribute   # Push your improvements back
+ddx doctor            # Validate your setup
 ```
 
 ## Check Your Setup

@@ -4,73 +4,73 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/easel/ddx?filename=cli/go.mod)](https://github.com/easel/ddx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Tools for maintaining the documents that drive AI agents to build software.
+> Documents drive the agents. DDx drives the documents.
 
 <p align="center">
-  <img src="website/static/demos/02-init-explore.gif" alt="DDx init and explore demo" width="700">
+  <img src="website/static/demos/06-full-journey.gif" alt="DDx + HELIX: from init to working app" width="700">
 </p>
 
 **[Full Documentation →](https://easel.github.io/ddx/)**
 
-## The Idea
+## What You Just Saw
 
-**Documents are your new source code.** You maintain prompts, personas, patterns, and specs. Agents consume them and produce implementations. DDx is the toolkit that makes this workflow reliable.
+DDx + HELIX takes a project from zero to working software:
+
+1. `ddx init` — create a document library
+2. `ddx install helix` — install the HELIX workflow plugin
+3. Agent frames the project — creates PRD, feature specs, and tracker beads
+4. Agent builds it — TDD, one commit per bead, all tests passing
+5. Agent evolves it — adds a feature, updates specs, extends code
+6. `ddx bead list` — every step tracked, every bead closed
 
 ## Quick Start
 
 ```bash
-# Install
+# Install DDx
 curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
 
-# Initialize in your project
+# Initialize your project
 cd your-project
 ddx init
 
-# See what's available
-ddx prompts list
+# Install HELIX workflow plugin
+ddx install helix
+
+# Explore
+ddx doctor
 ddx persona list
+ddx bead list
 ```
 
-## Install a Workflow Plugin
+## Build Something
 
 ```bash
-# Search for available workflows
-ddx search workflow
+# Frame: create specs and work items
+ddx agent run --harness claude --prompt frame-prompt.md
 
-# Install HELIX structured development methodology
-ddx install helix
+# Build: agent implements per specs, TDD, closes beads
+ddx agent run --harness claude --prompt build-prompt.md
+
+# Evolve: add a feature
+ddx agent run --harness claude --prompt evolve-prompt.md
+
+# Inspect
+ddx bead list          # all beads tracked
+ddx agent usage        # token consumption
+ddx doc history PRD-001  # spec evolution
 ```
-
-## What DDx Does
-
-- **Organizes** your agent-facing documents into a structured library
-- **Syncs** document libraries across projects via git subtree
-- **Shares** proven patterns and personas with the community
-- **Composes** personas, patterns, and project context into agent briefs
 
 ## Key Commands
 
 | Command | What it does |
 |---------|-------------|
-| `ddx init` | Initialize document library in your project |
-| `ddx doctor` | Validate library health |
-| `ddx update` | Pull latest documents from upstream |
-| `ddx contribute` | Share improvements back |
-| `ddx persona bind <role> <name>` | Assign persona to role |
-| `ddx agent run` | Invoke an AI agent with a prompt |
-
-## Persona System
-
-Bind AI personalities to roles in your `.ddx.yml`:
-
-```yaml
-persona_bindings:
-  code-reviewer: strict-code-reviewer
-  architect: simplicity-architect
-  test-engineer: test-engineer-tdd
-```
-
-Ships with personas like `strict-code-reviewer`, `pragmatic-implementer`, `test-engineer-tdd`, and `simplicity-architect`.
+| `ddx init` | Initialize document library |
+| `ddx install <name>` | Install a workflow plugin |
+| `ddx doctor` | Validate installation health |
+| `ddx bead create/list/ready` | Track work items |
+| `ddx agent run` | Invoke an AI agent |
+| `ddx agent usage` | View token consumption |
+| `ddx persona bind` | Assign personas to roles |
 
 ## Ecosystem
 
@@ -79,18 +79,6 @@ Workflow tools (HELIX, etc.)  →  opinionated practices
 DDx (this project)            →  document infrastructure
 AI agents (Claude, etc.)      →  consume docs, produce code
 ```
-
-## Installation
-
-```bash
-# One-line install
-curl -fsSL https://raw.githubusercontent.com/easel/ddx/main/install.sh | bash
-
-# Or with Go
-go install github.com/easel/ddx/cli@latest
-```
-
-**Requires:** Git 2.0+, git-subtree. Run `ddx doctor` to verify.
 
 ## License
 
