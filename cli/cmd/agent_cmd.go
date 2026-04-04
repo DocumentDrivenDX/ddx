@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/easel/ddx/internal/agent"
 	"github.com/spf13/cobra"
@@ -55,9 +56,20 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			promptText, _ := cmd.Flags().GetString("text")
 			harness, _ := cmd.Flags().GetString("harness")
 			model, _ := cmd.Flags().GetString("model")
+			effort, _ := cmd.Flags().GetString("effort")
+			timeoutStr, _ := cmd.Flags().GetString("timeout")
 			quorum, _ := cmd.Flags().GetString("quorum")
 			harnesses, _ := cmd.Flags().GetString("harnesses")
 			asJSON, _ := cmd.Flags().GetBool("json")
+
+			var timeout time.Duration
+			if timeoutStr != "" {
+				var err error
+				timeout, err = time.ParseDuration(timeoutStr)
+				if err != nil {
+					return fmt.Errorf("invalid timeout: %w", err)
+				}
+			}
 
 			// Read prompt from stdin if neither file nor text provided
 			prompt := promptText
@@ -84,6 +96,8 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 						Prompt:     prompt,
 						PromptFile: promptFile,
 						Model:      model,
+						Effort:     effort,
+						Timeout:    timeout,
 						WorkDir:    f.WorkingDir,
 					},
 					Harnesses: harnessNames,
@@ -128,6 +142,8 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				Prompt:     prompt,
 				PromptFile: promptFile,
 				Model:      model,
+				Effort:     effort,
+				Timeout:    timeout,
 				WorkDir:    f.WorkingDir,
 			}
 			result, err := r.Run(opts)
@@ -156,6 +172,8 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("text", "", "Inline prompt text")
 	cmd.Flags().String("harness", "", "Harness name (default from config)")
 	cmd.Flags().String("model", "", "Model override")
+	cmd.Flags().String("effort", "", "Reasoning effort level")
+	cmd.Flags().String("timeout", "", "Timeout duration (e.g. 30s, 5m)")
 	cmd.Flags().String("quorum", "", "Quorum strategy: any, majority, unanimous")
 	cmd.Flags().String("harnesses", "", "Comma-separated harnesses for quorum")
 	cmd.Flags().Bool("json", false, "Output as JSON")

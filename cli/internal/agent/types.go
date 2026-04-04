@@ -4,11 +4,13 @@ import "time"
 
 // Harness defines a known agent harness.
 type Harness struct {
-	Name    string   // e.g. "codex", "claude", "gemini"
-	Binary  string   // binary name to exec
-	Args    []string // base arguments for exec mode
-	// How to pass the prompt: "arg" (as final arg), "stdin" (pipe), "flag" (--prompt)
-	PromptMode string
+	Name       string   // e.g. "codex", "claude", "gemini"
+	Binary     string   // binary name to exec
+	Args       []string // base arguments for exec mode
+	PromptMode string   // "arg" (final arg), "stdin" (pipe)
+	ModelFlag  string   // flag for model override (e.g. "-m", "--model"), empty if unsupported
+	WorkDirFlag string  // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
+	EffortFlag  string  // flag for effort/reasoning control, empty if unsupported
 }
 
 // Config holds agent service configuration.
@@ -17,7 +19,6 @@ type Config struct {
 	Model         string            `yaml:"model"`          // global model override
 	Models        map[string]string `yaml:"models"`         // per-harness model overrides
 	TimeoutMS     int               `yaml:"timeout_ms"`     // default timeout in ms
-	Automation    string            `yaml:"automation"`     // manual|plan|auto|yolo
 	SessionLogDir string            `yaml:"session_log_dir"` // log directory
 }
 
@@ -26,9 +27,9 @@ type RunOptions struct {
 	Harness    string
 	Prompt     string // prompt text (or path to file)
 	PromptFile string // explicit file path
-	Model      string
-	Automation string
-	Timeout    time.Duration
+	Model   string
+	Effort  string
+	Timeout time.Duration
 	WorkDir    string
 }
 

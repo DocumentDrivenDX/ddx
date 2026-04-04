@@ -30,9 +30,6 @@ func NewRunner(cfg Config) *Runner {
 	if cfg.TimeoutMS == 0 {
 		cfg.TimeoutMS = DefaultTimeoutMS
 	}
-	if cfg.Automation == "" {
-		cfg.Automation = DefaultAutomation
-	}
 	if cfg.SessionLogDir == "" {
 		cfg.SessionLogDir = DefaultLogDir
 	}
@@ -92,22 +89,22 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	args := append([]string{}, harness.Args...)
 
 	// Add working directory if supported
-	if opts.WorkDir != "" {
-		switch harnessName {
-		case "codex":
-			args = append(args, "-C", opts.WorkDir)
-		case "claude":
-			args = append(args, "--cwd", opts.WorkDir)
-		}
+	if opts.WorkDir != "" && harness.WorkDirFlag != "" {
+		args = append(args, harness.WorkDirFlag, opts.WorkDir)
 	}
 
 	// Add model flag
-	if model != "" {
-		switch harnessName {
-		case "codex":
-			args = append(args, "-m", model)
-		case "claude":
-			args = append(args, "--model", model)
+	if model != "" && harness.ModelFlag != "" {
+		args = append(args, harness.ModelFlag, model)
+	}
+
+	// Add effort flag
+	if opts.Effort != "" && harness.EffortFlag != "" {
+		if harnessName == "codex" {
+			// codex uses -c reasoning.effort=<value>
+			args = append(args, harness.EffortFlag, "reasoning.effort="+opts.Effort)
+		} else {
+			args = append(args, harness.EffortFlag, opts.Effort)
 		}
 	}
 

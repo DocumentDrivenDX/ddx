@@ -8,16 +8,22 @@ var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "pi", "c
 // builtinHarnesses defines known harnesses and how to invoke them.
 var builtinHarnesses = map[string]Harness{
 	"codex": {
-		Name:       "codex",
-		Binary:     "codex",
-		Args:       []string{"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral"},
-		PromptMode: "arg",
+		Name:        "codex",
+		Binary:      "codex",
+		Args:        []string{"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral"},
+		PromptMode:  "arg",
+		ModelFlag:   "-m",
+		WorkDirFlag: "-C",
+		EffortFlag:  "-c",  // passed as -c reasoning.effort=<value>
 	},
 	"claude": {
-		Name:       "claude",
-		Binary:     "claude",
-		Args:       []string{"--no-session-persistence", "--print"},
-		PromptMode: "arg",
+		Name:        "claude",
+		Binary:      "claude",
+		Args:        []string{"--no-session-persistence", "--print", "-p", "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"},
+		PromptMode:  "arg",
+		ModelFlag:   "--model",
+		WorkDirFlag: "--cwd",
+		EffortFlag:  "--effort",
 	},
 	"gemini": {
 		Name:       "gemini",
