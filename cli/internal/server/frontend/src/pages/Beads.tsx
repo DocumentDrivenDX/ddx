@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { api } from '../api'
 import { useBeadSync, useBeadsByStatus, useBeadSearch, useBeadDependencies, useInvalidateBeads } from '../hooks/useBeads'
 import type { Bead } from '../types'
@@ -248,6 +248,73 @@ function BeadDetail({ id, onClose, onMutate }: { id: string; onClose: () => void
               </div>
             ))}
           </div>
+        </div>
+      )}
+      <ExecutionEvidence beadId={id} />
+    </div>
+  )
+}
+
+function ExecutionEvidence({ beadId }: { beadId: string }) {
+  const [runs, setRuns] = useState<any[]>([])
+  const [selectedRun, setSelectedRun] = useState<string | null>(null)
+  const [runLog, setRunLog] = useState<{ stdout: string; stderr: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    setSelectedRun(null)
+    setRunLog(null)
+    api.execRuns(beadId).then(setRuns).catch(() => setRuns([])).finally(() => setLoading(false))
+  }, [beadId])
+
+  useEffect(() => {
+    if (!selectedRun) { setRunLog(null); return }
+    api.execRunLog(selectedRun).then(setRunLog).catch(() => setRunLog(null))
+  }, [selectedRun])
+
+  if (loading) return null
+  if (runs.length === 0) return null
+
+  const statusColor = (s: string) => {
+    if (s === 'success') return 'text-green-600'
+    if (s === 'failed') return 'text-red-600'
+    return 'text-yellow-600'
+  }
+
+  return (
+    <div>
+      <div className="font-medium text-gray-600 mb-1">Execution Runs ({runs.length})</div>
+      <div className="space-y-1">
+        {runs.map((r: any) => (
+          <button
+            key={r.run_id}
+            onClick={() => setSelectedRun(r.run_id === selectedRun ? null : r.run_id)}
+            className={`w-full text-left text-xs bg-gray-50 rounded p-1.5 hover:bg-gray-100 ${
+              selectedRun === r.run_id ? 'ring-1 ring-blue-400' : ''
+            }`}
+          >
+            <span className={statusColor(r.status)}>{r.status}</span>
+            {' · '}
+            {r.definition_id}
+            {r.started_at && ` · ${new Date(r.started_at).toLocaleString()}`}
+          </button>
+        ))}
+      </div>
+      {selectedRun && runLog && (
+        <div className="mt-2 space-y-2">
+          {runLog.stdout && (
+            <div>
+              <div className="text-xs font-medium text-gray-500">stdout</div>
+              <pre className="text-xs bg-gray-900 text-green-400 rounded p-2 overflow-auto max-h-40">{runLog.stdout}</pre>
+            </div>
+          )}
+          {runLog.stderr && (
+            <div>
+              <div className="text-xs font-medium text-gray-500">stderr</div>
+              <pre className="text-xs bg-gray-900 text-red-400 rounded p-2 overflow-auto max-h-40">{runLog.stderr}</pre>
+            </div>
+          )}
         </div>
       )}
     </div>

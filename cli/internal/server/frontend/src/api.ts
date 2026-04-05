@@ -58,6 +58,19 @@ export const api = {
     postJSON<any>(`/beads/${id}/deps`, { action, dep_id: depId }),
   saveDocument: (path: string, content: string) =>
     putJSON<any>(`/documents/${path}`, { content }),
+  execDefinitions: (artifact?: string) =>
+    fetchJSON<any[]>(`/exec/definitions${artifact ? `?artifact=${artifact}` : ''}`),
+  execRuns: (artifact?: string, definition?: string) => {
+    const params = new URLSearchParams()
+    if (artifact) params.set('artifact', artifact)
+    if (definition) params.set('definition', definition)
+    const qs = params.toString()
+    return fetchJSON<any[]>(`/exec/runs${qs ? `?${qs}` : ''}`)
+  },
+  execRunDetail: (id: string) => fetchJSON<any>(`/exec/runs/${id}`),
+  execRunLog: (id: string) => fetchJSON<any>(`/exec/runs/${id}/log`),
+  execDispatch: (definitionId: string) =>
+    postJSON<any>(`/exec/run/${definitionId}`, {}),
   docGraph: () => fetchJSON<any[]>('/docs/graph'),
   docStale: () => fetchJSON<any[]>('/docs/stale'),
   docShow: (id: string) => fetchJSON<any>(`/docs/${id}`),

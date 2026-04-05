@@ -1,7 +1,46 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { api } from '../api'
 import { useFetch } from '../hooks/useFetch'
 import type { SessionEntry } from '../types'
+
+function TokenSummary({ sessions }: { sessions: SessionEntry[] }) {
+  const summary = useMemo(() => {
+    const byHarness: Record<string, { tokens: number; count: number; duration: number }> = {}
+    for (const s of sessions) {
+      const h = s.harness || 'unknown'
+      if (!byHarness[h]) byHarness[h] = { tokens: 0, count: 0, duration: 0 }
+      byHarness[h].tokens += s.tokens ?? 0
+      byHarness[h].count += 1
+      byHarness[h].duration += s.duration_ms ?? 0
+    }
+    return byHarness
+  }, [sessions])
+
+  const entries = Object.entries(summary)
+  if (entries.length === 0) return null
+
+  const totalTokens = entries.reduce((sum, [, v]) => sum + v.tokens, 0)
+  const totalSessions = entries.reduce((sum, [, v]) => sum + v.count, 0)
+
+  return (
+    <div className="flex gap-4 mb-4 flex-wrap">
+      <div className="bg-gray-50 rounded-lg border px-4 py-2 text-sm">
+        <div className="text-gray-500 text-xs">Total</div>
+        <div className="font-bold">{totalTokens.toLocaleString()} tokens</div>
+        <div className="text-xs text-gray-500">{totalSessions} sessions</div>
+      </div>
+      {entries.map(([harness, data]) => (
+        <div key={harness} className="bg-gray-50 rounded-lg border px-4 py-2 text-sm">
+          <div className="text-gray-500 text-xs">{harness}</div>
+          <div className="font-bold">{data.tokens.toLocaleString()} tokens</div>
+          <div className="text-xs text-gray-500">
+            {data.count} sessions · {(data.duration / 1000).toFixed(0)}s total
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function Agent() {
   const [harnessFilter, setHarnessFilter] = useState('')
@@ -26,6 +65,8 @@ export default function Agent() {
           {harnesses.map((h) => <option key={h} value={h}>{h}</option>)}
         </select>
       </div>
+
+      {!sessions.loading && sessions.data && <TokenSummary sessions={sessions.data as SessionEntry[]} />}
 
       {sessions.loading && <div className="text-gray-400 text-sm">Loading...</div>}
       {sessions.error && <div className="text-red-500 text-sm">Error: {sessions.error}</div>}
