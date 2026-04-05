@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_beads_spec_id ON beads(spec_id);
 async function getSQL() {
   if (!sqlPromise) {
     sqlPromise = initSqlJs({
-      locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
+      locateFile: (file: string) => `/${file}`,
     })
   }
   return sqlPromise
