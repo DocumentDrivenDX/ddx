@@ -1380,6 +1380,16 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_doc_changed",
+			Description: "List artifacts changed since a git ref",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"since": map[string]any{"type": "string", "description": "Git ref to compare from (default: HEAD~5)"},
+				},
+			},
+		},
+		{
 			Name:        "ddx_doc_write",
 			Description: "Write content to a document by artifact ID",
 			InputSchema: map[string]any{
@@ -1497,6 +1507,9 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 		artifact, _ := call.Arguments["artifact"].(string)
 		definition, _ := call.Arguments["definition"].(string)
 		return s.mcpExecHistory(artifact, definition)
+	case "ddx_doc_changed":
+		since, _ := call.Arguments["since"].(string)
+		return s.mcpDocChanged(since)
 	case "ddx_doc_write":
 		id, _ := call.Arguments["id"].(string)
 		content, _ := call.Arguments["content"].(string)
@@ -2085,6 +2098,73 @@ func (s *Server) mcpDocDiff(id, ref string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
 	}
 	data, _ := json.Marshal(map[string]string{"diff": string(out)})
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpDocChanged(since string) mcpToolResult {
+	if since == "" {
+		since = "HEAD~5"
+	}
+	diffCmd := exec.Command("git", "diff", "--name-status", since, "HEAD")
+	diffCmd.Dir = s.WorkingDir
+	out, gitErr := diffCmd.Output()
+	if gitErr != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
+	}
+
+	graph, err := s.buildDocGraph()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+
+	rootCmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	rootCmd.Dir = s.WorkingDir
+	rootOut, rootErr := rootCmd.Output()
+	if rootErr != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "could not determine git root"}}, IsError: true}
+	}
+	repoRoot := strings.TrimRight(string(rootOut), "\n")
+
+	type changedEntry struct {
+		ID         string `json:"id"`
+		Path       string `json:"path"`
+		ChangeType string `json:"change_type"`
+	}
+
+	var entries []changedEntry
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		statusCode := fields[0]
+		relPath := fields[len(fields)-1]
+		if !strings.HasSuffix(relPath, ".md") {
+			continue
+		}
+
+		absPath := filepath.Join(repoRoot, relPath)
+		cleanPath := filepath.Clean(absPath)
+
+		var changeType string
+		switch {
+		case strings.HasPrefix(statusCode, "A"):
+			changeType = "added"
+		case strings.HasPrefix(statusCode, "D"):
+			changeType = "deleted"
+		default:
+			changeType = "modified"
+		}
+
+		if id, ok := graph.PathToID[cleanPath]; ok {
+			entries = append(entries, changedEntry{ID: id, Path: relPath, ChangeType: changeType})
+		}
+	}
+
+	data, _ := json.Marshal(entries)
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
