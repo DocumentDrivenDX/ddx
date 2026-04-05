@@ -420,8 +420,17 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 			status, _ := cmd.Flags().GetString("status")
 			label, _ := cmd.Flags().GetString("label")
 			asJSON, _ := cmd.Flags().GetBool("json")
+			whereSlice, _ := cmd.Flags().GetStringArray("where")
 
-			beads, err := s.List(status, label)
+			where := map[string]string{}
+			for _, kv := range whereSlice {
+				parts := strings.SplitN(kv, "=", 2)
+				if len(parts) == 2 {
+					where[parts[0]] = parts[1]
+				}
+			}
+
+			beads, err := s.List(status, label, where)
 			if err != nil {
 				return err
 			}
@@ -455,6 +464,7 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 	cmd.Flags().String("status", "", "Filter by status")
 	cmd.Flags().String("label", "", "Filter by label")
 	cmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.Flags().StringArray("where", nil, "Filter by field value (key=value); may be repeated")
 
 	return cmd
 }

@@ -235,21 +235,65 @@ func TestListFilters(t *testing.T) {
 	require.NoError(t, s.Close(b2.ID))
 
 	// All
-	all, err := s.List("", "")
+	all, err := s.List("", "", nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 2)
 
 	// By status
-	open, err := s.List(StatusOpen, "")
+	open, err := s.List(StatusOpen, "", nil)
 	require.NoError(t, err)
 	assert.Len(t, open, 1)
 	assert.Equal(t, "Open task", open[0].Title)
 
 	// By label
-	fe, err := s.List("", "frontend")
+	fe, err := s.List("", "frontend", nil)
 	require.NoError(t, err)
 	assert.Len(t, fe, 1)
 	assert.Equal(t, "Closed task", fe[0].Title)
+}
+
+func TestListWhereFilter(t *testing.T) {
+	s := newTestStore(t)
+
+	b1 := &Bead{Title: "Spec task"}
+	require.NoError(t, s.Create(b1))
+	// Set spec-id in Extra via Update
+	require.NoError(t, s.Update(b1.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["spec-id"] = "FEAT-006"
+	}))
+
+	b2 := &Bead{Title: "Other task"}
+	require.NoError(t, s.Create(b2))
+	require.NoError(t, s.Update(b2.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["spec-id"] = "FEAT-007"
+	}))
+
+	// Filter by Extra field
+	got, err := s.List("", "", map[string]string{"spec-id": "FEAT-006"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Spec task", got[0].Title)
+
+	// Filter by known field (status)
+	got, err = s.List("", "", map[string]string{"status": StatusOpen})
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+
+	// Filter by known field with no match
+	got, err = s.List("", "", map[string]string{"status": StatusClosed})
+	require.NoError(t, err)
+	assert.Len(t, got, 0)
+
+	// No where filter returns all
+	got, err = s.List("", "", nil)
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
 }
 
 func TestReadyAndBlocked(t *testing.T) {

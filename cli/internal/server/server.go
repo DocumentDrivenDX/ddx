@@ -1267,7 +1267,7 @@ func (s *Server) mcpResolvePersona(role string) mcpToolResult {
 
 func (s *Server) mcpListBeads(status, label string) mcpToolResult {
 	store := s.beadStore()
-	beads, err := store.List(status, label)
+	beads, err := store.List(status, label, nil)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
 	}

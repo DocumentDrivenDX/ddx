@@ -520,7 +520,9 @@ func (s *Store) Close(id string) error {
 }
 
 // List returns beads matching optional filters.
-func (s *Store) List(status, label string) ([]Bead, error) {
+// where is an optional map of key=value predicates that match against
+// known struct fields and Extra (unknown/workflow-specific) fields.
+func (s *Store) List(status, label string, where map[string]string) ([]Bead, error) {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return nil, err
@@ -533,9 +535,53 @@ func (s *Store) List(status, label string) ([]Bead, error) {
 		if label != "" && !containsString(b.Labels, label) {
 			continue
 		}
+		if !matchesWhere(b, where) {
+			continue
+		}
 		result = append(result, b)
 	}
 	return result, nil
+}
+
+// matchesWhere returns true if the bead satisfies all key=value predicates.
+// It checks known struct fields first, then falls back to Extra.
+func matchesWhere(b Bead, where map[string]string) bool {
+	for k, v := range where {
+		var actual string
+		switch k {
+		case "id":
+			actual = b.ID
+		case "title":
+			actual = b.Title
+		case "status":
+			actual = b.Status
+		case "issue_type":
+			actual = b.IssueType
+		case "owner":
+			actual = b.Owner
+		case "assignee":
+			actual = b.Owner
+		case "parent":
+			actual = b.Parent
+		case "description":
+			actual = b.Description
+		case "acceptance":
+			actual = b.Acceptance
+		case "notes":
+			actual = b.Notes
+		default:
+			// Fall back to Extra map for unknown/workflow-specific fields
+			if b.Extra != nil {
+				if ev, ok := b.Extra[k]; ok {
+					actual = fmt.Sprintf("%v", ev)
+				}
+			}
+		}
+		if actual != v {
+			return false
+		}
+	}
+	return true
 }
 
 // Ready returns open beads whose dependencies are all closed, sorted by
