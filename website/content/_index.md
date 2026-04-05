@@ -20,43 +20,47 @@ layout: hextra-home
 {{< /hextra/hero-subtitle >}}
 </div>
 
-<div class="hx-mb-6">
+<div class="hx-mb-12">
 {{< hextra/hero-button text="Get Started" link="docs/getting-started" >}}
 {{< hextra/hero-button text="Learn More" link="docs/concepts" style="alt" >}}
 </div>
 
+<div class="hx-mt-8"></div>
+
 {{< hextra/feature-grid >}}
   {{< hextra/feature-card
-    title="Document Library Management"
-    subtitle="Structured .ddx/library/ with prompts, personas, patterns, and templates. Organized, discoverable, version-controlled."
+    title="Document Library"
+    subtitle="Structured library with prompts, personas, patterns, and templates. Organized, discoverable, version-controlled."
     class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
     style="background: radial-gradient(ellipse at 50% 80%,rgba(72,120,198,0.15),hsla(0,0%,100%,0));"
   >}}
   {{< hextra/feature-card
-    title="Persona Composition"
-    subtitle="Define how agents behave. Bind personas to roles — strict-code-reviewer, pragmatic-implementer, test-engineer-tdd — and get consistent behavior across projects."
-    class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
-    style="background: radial-gradient(ellipse at 50% 80%,rgba(142,53,163,0.15),hsla(0,0%,100%,0));"
-  >}}
-  {{< hextra/feature-card
     title="Plugin Registry"
-    subtitle="Install workflow plugins with one command. ddx install helix gets you a complete development methodology. Build your own plugins and share them."
+    subtitle="Install workflow plugins with one command. ddx install helix gets you a complete development methodology."
     class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
     style="background: radial-gradient(ellipse at 50% 80%,rgba(53,163,95,0.15),hsla(0,0%,100%,0));"
   >}}
   {{< hextra/feature-card
-    title="MCP Server"
-    subtitle="Serve your document library over MCP endpoints. Agents browse, search, and read documents programmatically."
+    title="Agent Dispatch"
+    subtitle="Run AI agents through one interface. Multi-model quorum reviews. Token tracking and cost awareness across harnesses."
+    class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
+    style="background: radial-gradient(ellipse at 50% 80%,rgba(142,53,163,0.15),hsla(0,0%,100%,0));"
   >}}
   {{< hextra/feature-card
-    title="Meta-Prompt Injection"
-    subtitle="Automatically inject system-level instructions into CLAUDE.md. Right baseline context for every agent session."
+    title="Work Tracker"
+    subtitle="Beads track every work item with dependencies, claims, and execution evidence. The tracker drives the agents."
+  >}}
+  {{< hextra/feature-card
+    title="MCP Server"
+    subtitle="Serve documents, beads, and agent logs over MCP and HTTP. Remote supervisors can observe and steer work."
   >}}
   {{< hextra/feature-card
     title="Workflow-Agnostic"
-    subtitle="DDx provides primitives. HELIX, your team's methodology, or no methodology at all — DDx works with any approach."
+    subtitle="DDx provides primitives. HELIX, your methodology, or none at all — DDx works with any approach."
   >}}
 {{< /hextra/feature-grid >}}
+
+<div class="hx-mt-16"></div>
 
 ## See It In Action
 

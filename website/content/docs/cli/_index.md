@@ -5,138 +5,93 @@ weight: 3
 
 Complete command reference for the `ddx` CLI.
 
-## Foundation Commands
-
-### `ddx init`
-
-Initialize a DDx document library in your project.
+## Setup
 
 ```bash
-ddx init                    # Interactive initialization
-ddx init --no-git           # Skip git subtree setup
-ddx init --force            # Reinitialize existing project
+ddx init                    # Initialize DDx in your project
+ddx doctor                  # Validate installation health
+ddx upgrade                 # Upgrade DDx binary to latest
+ddx status                  # Show version and project info
 ```
 
-Creates `.ddx/config.yaml` and `.ddx/library/` structure.
-
-### `ddx list`
-
-Browse available documents in your library.
-
-```bash
-ddx list                    # All document categories
-ddx list prompts            # Only prompts
-ddx list templates          # Only templates
-ddx list --json             # JSON output
-ddx list --filter react     # Search by name
-```
-
-### `ddx doctor`
-
-Validate your DDx installation and library health.
-
-```bash
-ddx doctor                  # Run all checks
-ddx doctor --verbose        # Detailed output
-```
-
-Checks: binary, PATH, git, library structure, config validity.
-
-### `ddx update`
-
-Pull latest documents from the upstream repository.
-
-```bash
-ddx update                  # Pull latest changes
-ddx update --check          # Check without applying
-ddx update --dry-run        # Preview changes
-```
-
-### `ddx contribute`
-
-Share your document improvements back to the upstream repository.
-
-```bash
-ddx contribute -m "Improved error handling pattern"
-ddx contribute --dry-run    # Preview what would be shared
-```
-
-### `ddx upgrade`
-
-Upgrade the DDx binary to the latest release.
-
-```bash
-ddx upgrade                 # Upgrade to latest
-ddx upgrade --check         # Check for updates only
-```
-
-### `ddx status`
-
-Show version and sync status.
-
-```bash
-ddx status                  # Basic status
-ddx status --changes        # List modified files
-ddx status --diff           # Show differences
-```
-
-### `ddx log`
-
-Show DDx asset history.
-
-```bash
-ddx log                     # Recent history
-ddx log -n 10               # Last 10 commits
-ddx log --oneline           # Compact format
-```
-
-## Document Commands
-
-### Prompts
-
-```bash
-ddx prompts list            # List available prompts
-ddx prompts show <name>     # Display prompt content
-```
-
-### Templates
-
-```bash
-ddx templates list          # List available templates
-ddx templates apply <name>  # Apply template to project
-```
-
-### Personas
-
-```bash
-ddx persona list            # List available personas
-ddx persona show <name>     # View persona definition
-ddx persona bind <role> <name>  # Bind persona to role
-```
-
-### Package Registry
+## Package Registry
 
 ```bash
 ddx search <query>          # Search available packages
-ddx install <name>          # Install a package (e.g., ddx install helix)
+ddx install <name>          # Install a package
 ddx installed               # List installed packages
-ddx uninstall <name>        # Remove an installed package
+ddx uninstall <name>        # Remove a package
+```
+
+## Beads (Work Tracker)
+
+```bash
+ddx bead create "Title" --type task    # Create a work item
+ddx bead list               # List all beads
+ddx bead show <id>          # Show bead details
+ddx bead ready              # Show unblocked beads
+ddx bead close <id>         # Close a completed bead
+ddx bead dep add <id> <dep> # Add dependency
+ddx bead dep tree <id>      # Show dependency tree
+```
+
+## Agent Dispatch
+
+```bash
+ddx agent run --harness claude --prompt file.md   # Run an agent
+ddx agent run --quorum majority --harnesses codex,claude --text "Review this"
+ddx agent list              # Available harnesses
+ddx agent capabilities claude  # Model and effort options
+ddx agent usage             # Token consumption summary
+ddx agent log               # Session history
+```
+
+## Documents
+
+```bash
+ddx doc graph               # Show dependency graph
+ddx doc stale               # List stale documents
+ddx doc stamp <path>        # Mark as reviewed
+ddx doc history <id>        # Git history for an artifact
+ddx doc diff <id>           # Diff since last stamp
+ddx doc changed --since HEAD~5  # Recently changed artifacts
+ddx checkpoint <name>       # Create a named checkpoint
+```
+
+## Library
+
+```bash
+ddx list                    # Browse library contents
+ddx prompts list            # Browse prompts
+ddx persona list            # Browse personas
+ddx persona bind <role> <name>  # Bind persona to role
 ```
 
 ## Configuration
 
 ```bash
-ddx config                  # Show help
-ddx config set <key> <val>  # Set a value
-ddx config get <key>        # Get a value
-ddx config --validate       # Validate config
+ddx config set <key> <val>
+ddx config get <key>
 ```
 
-## Global Options
+### Agent Config (`.ddx/config.yaml`)
+
+```yaml
+agent:
+  harness: claude              # default harness
+  permissions: safe            # safe | supervised | unrestricted
+  models:
+    codex: o3-mini
+    claude: claude-sonnet-4-20250514
+git:
+  auto_commit: never           # always | prompt | never
+  checkpoint_prefix: ddx/
+```
+
+## Global Flags
 
 | Flag | Description |
 |------|------------|
-| `--verbose`, `-v` | Verbose output |
+| `-v`, `--verbose` | Verbose output |
 | `--config` | Config file path |
-| `--library-base-path` | Override library location |
 | `--help` | Show help |
