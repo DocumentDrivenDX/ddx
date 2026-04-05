@@ -219,40 +219,6 @@ Examples:
 	return cmd
 }
 
-// newMCPCommand creates a fresh mcp command
-func (f *CommandFactory) newMCPCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "mcp",
-		Short: "Manage Model Context Protocol servers",
-		Long: `Manage Model Context Protocol (MCP) servers.
-
-MCP servers provide:
-• Extended capabilities for AI assistants
-• Tool integrations (GitHub, Slack, etc.)
-• Custom data sources and APIs
-• Enhanced context awareness
-
-Examples:
-  ddx mcp --list                  # List available MCP servers
-  ddx mcp --install github        # Install GitHub MCP server
-  ddx mcp --status                # Show installed servers`,
-		RunE: f.runMCP,
-	}
-
-	cmd.Flags().Bool("list", false, "List available MCP servers")
-	cmd.Flags().String("install", "", "Install an MCP server")
-	cmd.Flags().Bool("status", false, "Show status of installed servers")
-	cmd.Flags().String("category", "", "Filter by category")
-	cmd.Flags().String("search", "", "Search for servers")
-	cmd.Flags().Bool("verbose", false, "Show detailed information")
-	cmd.Flags().StringSlice("env", []string{}, "Environment variables for server")
-	cmd.Flags().String("config-path", "", "Path to Claude config file")
-	cmd.Flags().Bool("dry-run", false, "Show what would be done without making changes")
-	cmd.Flags().Bool("yes", false, "Skip confirmation prompts")
-
-	return cmd
-}
-
 // newPromptsListCommand creates the prompts list subcommand
 func (f *CommandFactory) newPromptsListCommand() *cobra.Command {
 	cmd := &cobra.Command{

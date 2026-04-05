@@ -327,7 +327,6 @@ PowerShell:
 	rootCmd.AddCommand(f.newUpgradeCommand())
 	rootCmd.AddCommand(f.newConfigCommand())
 	rootCmd.AddCommand(f.newPersonaCommand())
-	rootCmd.AddCommand(f.newMCPCommand())
 	rootCmd.AddCommand(f.newStatusCommand())
 	rootCmd.AddCommand(f.newLogCommand())
 	rootCmd.AddCommand(f.newBeadCommand())

@@ -1,7 +1,0 @@
-{
-  "dependencies": {},
-  "description": "MCP server dependencies for DDx",
-  "name": "mcp-servers",
-  "private": true,
-  "version": "1.0.0"
-}
