@@ -12,6 +12,74 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TestInitRegistersSkills verifies that ddx init writes skill files to ~/.agents/skills/.
+func TestInitRegistersSkills(t *testing.T) {
+	// Create a temp HOME with ~/.agents/ pre-created
+	tempHome := t.TempDir()
+	agentsDir := filepath.Join(tempHome, ".agents")
+	require.NoError(t, os.MkdirAll(agentsDir, 0755))
+
+	// Override HOME so registerSkills writes to our temp dir
+	origHome := os.Getenv("HOME")
+	t.Setenv("HOME", tempHome)
+	defer func() {
+		if origHome == "" {
+			os.Unsetenv("HOME")
+		} else {
+			os.Setenv("HOME", origHome)
+		}
+	}()
+
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
+
+	// Each embedded skill should have a SKILL.md under ~/.agents/skills/<name>/
+	expectedSkills := []string{"ddx-bead", "ddx-agent", "ddx-install", "ddx-status", "ddx-review", "ddx-run"}
+	for _, name := range expectedSkills {
+		skillFile := filepath.Join(agentsDir, "skills", name, "SKILL.md")
+		assert.FileExists(t, skillFile, "skill file should exist for %s", name)
+	}
+}
+
+// TestInitSkillsNoOverwrite verifies that existing skill files are not overwritten.
+func TestInitSkillsNoOverwrite(t *testing.T) {
+	tempHome := t.TempDir()
+	agentsDir := filepath.Join(tempHome, ".agents")
+	skillDir := filepath.Join(agentsDir, "skills", "ddx-bead")
+	require.NoError(t, os.MkdirAll(skillDir, 0755))
+
+	existingContent := "# custom content"
+	skillFile := filepath.Join(skillDir, "SKILL.md")
+	require.NoError(t, os.WriteFile(skillFile, []byte(existingContent), 0644))
+
+	t.Setenv("HOME", tempHome)
+
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
+
+	// Existing file must not be overwritten
+	data, err := os.ReadFile(skillFile)
+	require.NoError(t, err)
+	assert.Equal(t, existingContent, string(data), "existing skill file should not be overwritten")
+}
+
+// TestInitSkillsNoAgentsDir verifies that init succeeds when ~/.agents/ doesn't exist.
+func TestInitSkillsNoAgentsDir(t *testing.T) {
+	tempHome := t.TempDir()
+	// Do NOT create ~/.agents/
+	t.Setenv("HOME", tempHome)
+
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	// Init should succeed even though ~/.agents/ is absent
+	require.NoError(t, err)
+
+	// Skills dir should not have been created
+	assert.NoDirExists(t, filepath.Join(tempHome, ".agents", "skills"))
+}
+
 // TestInitCommand tests the init command
 func TestInitCommand(t *testing.T) {
 	tests := []struct {

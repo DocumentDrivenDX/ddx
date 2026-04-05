@@ -28,6 +28,7 @@ type AgentConfig struct {
 	ReasoningLevels map[string][]string `yaml:"reasoning_levels,omitempty" json:"reasoning_levels,omitempty"`
 	TimeoutMS       int                 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
+	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
 }
 
 // SystemConfig represents system-level configuration settings

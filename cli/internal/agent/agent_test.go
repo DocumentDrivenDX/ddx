@@ -81,10 +81,15 @@ func TestBuildArgsCodexBasic(t *testing.T) {
 	r := NewRegistry()
 	h, _ := r.Get("codex")
 	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
+	// Default (safe): no bypass flags
 	assert.Equal(t, []string{
-		"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral", "--json",
+		"exec", "--ephemeral", "--json",
 		"do stuff",
 	}, args)
+	for _, arg := range args {
+		assert.NotEqual(t, "--dangerously-bypass-approvals-and-sandbox", arg,
+			"safe mode should not include bypass flag")
+	}
 }
 
 func TestBuildArgsCodexAllFlags(t *testing.T) {
@@ -141,6 +146,75 @@ func TestBuildArgsNoModelFlagWhenEmpty(t *testing.T) {
 	// gemini has no ModelFlag, so model should not appear
 	for _, arg := range args {
 		assert.NotEqual(t, "some-model", arg, "harness without ModelFlag should not include model")
+	}
+}
+
+// --- Permission profile tests ---
+
+func TestBuildArgsPermissionsDefault(t *testing.T) {
+	r := NewRegistry()
+	// codex: default (no permissions set) should be safe — no bypass flags
+	h, _ := r.Get("codex")
+	args := BuildArgs(h, RunOptions{Prompt: "task"}, "")
+	for _, arg := range args {
+		assert.NotEqual(t, "--dangerously-bypass-approvals-and-sandbox", arg,
+			"default safe mode must not include codex bypass flag")
+	}
+
+	// claude: default safe — no bypass flags
+	hc, _ := r.Get("claude")
+	argsC := BuildArgs(hc, RunOptions{Prompt: "task"}, "")
+	for _, arg := range argsC {
+		assert.NotEqual(t, "--dangerously-skip-permissions", arg,
+			"default safe mode must not include claude bypass flag")
+		assert.NotEqual(t, "bypassPermissions", arg,
+			"default safe mode must not include bypassPermissions")
+	}
+}
+
+func TestBuildArgsPermissionsUnrestricted(t *testing.T) {
+	r := NewRegistry()
+	// codex unrestricted
+	h, _ := r.Get("codex")
+	args := BuildArgs(h, RunOptions{Prompt: "task", Permissions: "unrestricted"}, "")
+	assert.Contains(t, args, "--dangerously-bypass-approvals-and-sandbox")
+
+	// claude unrestricted
+	hc, _ := r.Get("claude")
+	argsC := BuildArgs(hc, RunOptions{Prompt: "task", Permissions: "unrestricted"}, "")
+	assert.Contains(t, argsC, "--dangerously-skip-permissions")
+	assert.Contains(t, argsC, "bypassPermissions")
+}
+
+func TestBuildArgsPermissionsFlagOverridesConfig(t *testing.T) {
+	// Runner with config permissions = "safe", opts.Permissions = "unrestricted"
+	mock := &mockExecutor{output: "ok"}
+	r := newTestRunner(mock)
+	r.Config.Permissions = "safe"
+
+	_, err := r.Run(RunOptions{
+		Harness:     "codex",
+		Prompt:      "task",
+		Permissions: "unrestricted",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, mock.lastArgs, "--dangerously-bypass-approvals-and-sandbox",
+		"--permissions flag should override config permission level")
+}
+
+func TestBuildArgsPermissionsConfigDefault(t *testing.T) {
+	// Runner with no config permissions — should be safe
+	mock := &mockExecutor{output: "ok"}
+	r := newTestRunner(mock)
+
+	_, err := r.Run(RunOptions{
+		Harness: "codex",
+		Prompt:  "task",
+	})
+	require.NoError(t, err)
+	for _, arg := range mock.lastArgs {
+		assert.NotEqual(t, "--dangerously-bypass-approvals-and-sandbox", arg,
+			"no permissions config should default to safe")
 	}
 }
 
@@ -284,12 +358,12 @@ func TestExtractTokensNoMatch(t *testing.T) {
 	assert.Equal(t, 0, ExtractTokens("no token info", h))
 }
 
-// TC-010: codex harness Args contains "--json"
+// TC-010: codex harness BaseArgs contains "--json"
 func TestCodexArgsContainsJSON(t *testing.T) {
 	r := NewRegistry()
 	h, ok := r.Get("codex")
 	require.True(t, ok)
-	assert.Contains(t, h.Args, "--json")
+	assert.Contains(t, h.BaseArgs, "--json")
 }
 
 // TC-001: ExtractUsage with fixture codex JSONL output containing turn.completed returns correct tokens
@@ -328,13 +402,13 @@ func TestExtractUsageCodexGarbageInput(t *testing.T) {
 	assert.Equal(t, UsageData{}, usage)
 }
 
-// TC-011: claude harness Args contains "--output-format" and "json"
+// TC-011: claude harness BaseArgs contains "--output-format" and "json"
 func TestClaudeArgsContainsOutputFormatJSON(t *testing.T) {
 	r := NewRegistry()
 	h, ok := r.Get("claude")
 	require.True(t, ok)
-	assert.Contains(t, h.Args, "--output-format")
-	assert.Contains(t, h.Args, "json")
+	assert.Contains(t, h.BaseArgs, "--output-format")
+	assert.Contains(t, h.BaseArgs, "json")
 }
 
 // --- Session logging ---

@@ -59,6 +59,7 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 		ReasoningLevels: cfg.Agent.ReasoningLevels,
 		TimeoutMS:       cfg.Agent.TimeoutMS,
 		SessionLogDir:   cfg.Agent.SessionLogDir,
+		Permissions:     cfg.Agent.Permissions,
 	})
 }
 
@@ -79,6 +80,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			harnesses, _ := cmd.Flags().GetString("harnesses")
 			asJSON, _ := cmd.Flags().GetBool("json")
 			worktreeName, _ := cmd.Flags().GetString("worktree")
+			permissions, _ := cmd.Flags().GetString("permissions")
 
 			var timeout time.Duration
 			if timeoutStr != "" {
@@ -132,6 +134,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 						Effort:       effort,
 						Timeout:      timeout,
 						WorkDir:      workDir,
+						Permissions:  permissions,
 					},
 					Harnesses: harnessNames,
 					Strategy:  quorum,
@@ -181,6 +184,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				Effort:       effort,
 				Timeout:      timeout,
 				WorkDir:      workDir,
+				Permissions:  permissions,
 			}
 			result, err := r.Run(opts)
 			if err != nil {
@@ -216,6 +220,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("harnesses", "", "Comma-separated harnesses for quorum")
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().String("worktree", "", "Create/reuse a git worktree for the run")
+	cmd.Flags().String("permissions", "", "Permission level: safe, supervised, unrestricted (overrides config)")
 
 	return cmd
 }

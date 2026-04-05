@@ -8,9 +8,14 @@ var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "pi", "c
 // builtinHarnesses defines known harnesses and how to invoke them.
 var builtinHarnesses = map[string]Harness{
 	"codex": {
-		Name:            "codex",
-		Binary:          "codex",
-		Args:            []string{"--dangerously-bypass-approvals-and-sandbox", "exec", "--ephemeral", "--json"},
+		Name:     "codex",
+		Binary:   "codex",
+		BaseArgs: []string{"exec", "--ephemeral", "--json"},
+		PermissionArgs: map[string][]string{
+			"safe":         {},
+			"supervised":   {},
+			"unrestricted": {"--dangerously-bypass-approvals-and-sandbox"},
+		},
 		PromptMode:      "arg",
 		DefaultModel:    "o3-mini",
 		Models:          nil, // models change frequently; rely on provider-side validation
@@ -21,9 +26,14 @@ var builtinHarnesses = map[string]Harness{
 		EffortFormat:    "reasoning.effort=%s",
 	},
 	"claude": {
-		Name:            "claude",
-		Binary:          "claude",
-		Args:            []string{"--no-session-persistence", "--print", "-p", "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions", "--output-format", "json"},
+		Name:     "claude",
+		Binary:   "claude",
+		BaseArgs: []string{"--no-session-persistence", "--print", "-p", "--output-format", "json"},
+		PermissionArgs: map[string][]string{
+			"safe":         {},
+			"supervised":   {"--permission-mode", "default"},
+			"unrestricted": {"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"},
+		},
 		PromptMode:      "arg",
 		DefaultModel:    "claude-sonnet-4-20250514",
 		Models:          nil, // models change frequently; rely on provider-side validation
@@ -36,7 +46,7 @@ var builtinHarnesses = map[string]Harness{
 	"gemini": {
 		Name:            "gemini",
 		Binary:          "gemini",
-		Args:            []string{},
+		BaseArgs:        []string{},
 		PromptMode:      "stdin",
 		Models:          nil, // models change frequently; rely on provider-side validation
 		ReasoningLevels: []string{"low", "medium", "high"},
@@ -44,21 +54,21 @@ var builtinHarnesses = map[string]Harness{
 	"opencode": {
 		Name:            "opencode",
 		Binary:          "opencode",
-		Args:            []string{},
+		BaseArgs:        []string{},
 		PromptMode:      "stdin",
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},
 	"pi": {
 		Name:            "pi",
 		Binary:          "pi",
-		Args:            []string{},
+		BaseArgs:        []string{},
 		PromptMode:      "stdin",
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},
 	"cursor": {
 		Name:            "cursor",
 		Binary:          "cursor",
-		Args:            []string{},
+		BaseArgs:        []string{},
 		PromptMode:      "stdin",
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/spf13/cobra"
 )
 
@@ -203,6 +205,9 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		_ = os.MkdirAll(filepath.Join(libraryPath, sub), 0755)
 	}
 
+	// Register skills to ~/.agents/skills/ (non-fatal)
+	registerSkills()
+
 	if !opts.NoGit {
 		// Inject initial meta-prompt if the prompt file actually exists (unless explicitly skipped)
 		if !opts.SkipClaudeInjection {
@@ -239,6 +244,61 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	// Configuration already saved above
 
 	return result, nil
+}
+
+// registerSkills writes embedded skill files to ~/.agents/skills/.
+// Non-fatal: if ~/.agents/ doesn't exist or isn't writable, logs a warning and returns.
+// Does not overwrite existing files to respect user customizations.
+func registerSkills() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: could not determine home directory for skill registration: %v\n", err)
+		return
+	}
+
+	agentsDir := filepath.Join(homeDir, ".agents")
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+		return
+	}
+
+	skillsDir := filepath.Join(agentsDir, "skills")
+
+	err = fs.WalkDir(skills.SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if path == "." {
+			return nil
+		}
+
+		destPath := filepath.Join(skillsDir, path)
+
+		if d.IsDir() {
+			if mkErr := os.MkdirAll(destPath, 0755); mkErr != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Warning: could not create skill directory %s: %v\n", destPath, mkErr)
+			}
+			return nil
+		}
+
+		// Don't overwrite existing files
+		if _, statErr := os.Stat(destPath); statErr == nil {
+			return nil
+		}
+
+		data, readErr := skills.SkillFiles.ReadFile(path)
+		if readErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not read embedded skill %s: %v\n", path, readErr)
+			return nil
+		}
+
+		if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not write skill file %s: %v\n", destPath, writeErr)
+		}
+		return nil
+	})
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill registration failed: %v\n", err)
+	}
 }
 
 // isDDxRepository checks if we're in the DDx repository

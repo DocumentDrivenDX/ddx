@@ -4,18 +4,20 @@ import "time"
 
 // Harness defines a known agent harness.
 type Harness struct {
-	Name            string   // e.g. "codex", "claude", "gemini"
-	Binary          string   // binary name to exec
-	Args            []string // base arguments for exec mode
-	PromptMode      string   // "arg" (final arg), "stdin" (pipe)
-	DefaultModel    string   // built-in model choice when no config override exists
-	Models          []string // known valid models for this harness
-	ReasoningLevels []string // supported reasoning levels in preference order
-	ModelFlag       string   // flag for model override (e.g. "-m", "--model"), empty if unsupported
-	WorkDirFlag     string   // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
-	EffortFlag      string   // flag for effort/reasoning control, empty if unsupported
-	EffortFormat    string   // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
-	TokenPattern    string   // regex to extract token count from output, must have one capture group
+	Name            string              // e.g. "codex", "claude", "gemini"
+	Binary          string              // binary name to exec
+	Args            []string            // deprecated: use BaseArgs; kept for compatibility
+	BaseArgs        []string            // args always included regardless of permission level
+	PermissionArgs  map[string][]string // extra args keyed by permission level: "safe", "supervised", "unrestricted"
+	PromptMode      string              // "arg" (final arg), "stdin" (pipe)
+	DefaultModel    string              // built-in model choice when no config override exists
+	Models          []string            // known valid models for this harness
+	ReasoningLevels []string            // supported reasoning levels in preference order
+	ModelFlag       string              // flag for model override (e.g. "-m", "--model"), empty if unsupported
+	WorkDirFlag     string              // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
+	EffortFlag      string              // flag for effort/reasoning control, empty if unsupported
+	EffortFormat    string              // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
+	TokenPattern    string              // regex to extract token count from output, must have one capture group
 }
 
 // Config holds agent service configuration.
@@ -26,6 +28,7 @@ type Config struct {
 	ReasoningLevels map[string][]string `yaml:"reasoning_levels"` // per-harness reasoning-level options
 	TimeoutMS       int                 `yaml:"timeout_ms"`       // default timeout in ms
 	SessionLogDir   string              `yaml:"session_log_dir"`  // log directory
+	Permissions     string              `yaml:"permissions"`      // permission level: safe, supervised, unrestricted
 }
 
 // RunOptions holds options for a single agent invocation.
@@ -39,6 +42,7 @@ type RunOptions struct {
 	Effort       string
 	Timeout      time.Duration
 	WorkDir      string
+	Permissions  string // permission level override: safe, supervised, unrestricted
 }
 
 // QuorumOptions extends RunOptions for multi-agent consensus.

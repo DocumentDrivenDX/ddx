@@ -84,6 +84,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	// Build args with the resolved prompt (may have come from file)
 	resolvedOpts := opts
 	resolvedOpts.Prompt = prompt
+	resolvedOpts.Permissions = resolvePermissions(r.Config.Permissions, opts.Permissions)
 	args := BuildArgs(harness, resolvedOpts, model)
 	stdin := ""
 	if harness.PromptMode == "stdin" {
@@ -206,10 +207,37 @@ func (r *Runner) resolveTimeout(opts RunOptions) time.Duration {
 	return time.Duration(r.Config.TimeoutMS) * time.Millisecond
 }
 
+// resolvePermissions returns the effective permission level, defaulting to "safe".
+func resolvePermissions(cfgPerms, optsPerms string) string {
+	if optsPerms != "" {
+		return optsPerms
+	}
+	if cfgPerms != "" {
+		return cfgPerms
+	}
+	return "safe"
+}
+
 // BuildArgs constructs the argument array for a harness invocation.
 // Exported for testing.
 func BuildArgs(h Harness, opts RunOptions, model string) []string {
-	args := append([]string{}, h.Args...)
+	// Use BaseArgs if set, fall back to legacy Args for compatibility.
+	base := h.BaseArgs
+	if base == nil {
+		base = h.Args
+	}
+	args := append([]string{}, base...)
+
+	// Append permission-specific args.
+	if h.PermissionArgs != nil {
+		level := opts.Permissions
+		if level == "" {
+			level = "safe"
+		}
+		if extra, ok := h.PermissionArgs[level]; ok {
+			args = append(args, extra...)
+		}
+	}
 
 	if opts.WorkDir != "" && h.WorkDirFlag != "" {
 		args = append(args, h.WorkDirFlag, opts.WorkDir)
