@@ -41,6 +41,8 @@ specifications. The PRD stays at the user- and capability-level:
   write-then-commit for MCP/UI clients
 - FEAT-013 defines multi-agent coordination: concurrent bead safety,
   MCP supervisor surface, worktree-aware dispatch
+- FEAT-014 defines agent token awareness: usage tracking, budget enforcement,
+  and model selection guidance across harnesses
 
 ## Problem
 
