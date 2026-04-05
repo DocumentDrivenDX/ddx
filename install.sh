@@ -17,21 +17,21 @@ DDX_HOME="${HOME}/.ddx"
 DDX_REPO="https://github.com/DocumentDrivenDX/ddx"
 DDX_API="https://api.github.com/repos/DocumentDrivenDX/ddx"
 
-# Logging functions
+# Logging functions (all to stderr to avoid polluting command substitution)
 log() {
-    echo -e "${BLUE}[DDx]${NC} $1"
+    echo -e "${BLUE}[DDx]${NC} $1" >&2
 }
 
 success() {
-    echo -e "${GREEN}[DDx]${NC} $1"
+    echo -e "${GREEN}[DDx]${NC} $1" >&2
 }
 
 warn() {
-    echo -e "${YELLOW}[DDx]${NC} $1"
+    echo -e "${YELLOW}[DDx]${NC} $1" >&2
 }
 
 error() {
-    echo -e "${RED}[DDx]${NC} $1"
+    echo -e "${RED}[DDx]${NC} $1" >&2
     exit 1
 }
 
