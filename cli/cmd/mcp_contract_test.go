@@ -635,4 +635,3 @@ func TestInstallationCommands_Contract(t *testing.T) {
 		}
 	})
 }
-

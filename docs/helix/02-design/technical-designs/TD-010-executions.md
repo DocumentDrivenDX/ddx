@@ -58,6 +58,33 @@ Legacy compatibility:
 - new authoritative writes target the bead-backed collections and attachment
   directories above
 
+## Pre-exec Metric Storage Migration
+
+Prior to the exec substrate (before commit `2647ae4`), the metric store wrote
+directly to:
+
+```text
+.ddx/
+└── metrics/
+    ├── definitions/
+    │   └── <definition-id>.json    # one JSON file per definition
+    └── history.jsonl               # append-only JSONL history log
+```
+
+This layout was only present in very early DDx builds before the exec substrate
+was introduced. It was never part of a public or tagged release.
+
+Migration status: **no migration is required.**
+
+The current metric store delegates entirely to the exec substrate. It does not
+read from `.ddx/metrics/` at all. If an old `.ddx/metrics/` directory is
+present, DDx ignores it silently — no crash, no data corruption, no stale reads.
+
+Operators who upgraded from an early pre-release build and want to reclaim disk
+space may safely delete `.ddx/metrics/`. Historical metric runs stored there
+will no longer appear in `ddx metric history`, but this data loss is acceptable
+given that no public release ever wrote to that path.
+
 ## Definition Record Shape
 
 Each definition is stored as one bead-backed row in the `exec-definitions`

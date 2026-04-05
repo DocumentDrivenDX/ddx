@@ -156,7 +156,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 					}
 					fmt.Fprintf(cmd.OutOrStdout(), "[%s] rc=%d tokens=%d duration=%dms\n",
 						result.Harness, result.ExitCode, result.Tokens, result.DurationMS)
-					if result.Output != "" {
+					if result.CondensedOutput != "" {
+						fmt.Fprintln(cmd.OutOrStdout(), result.CondensedOutput)
+					} else if result.Output != "" {
 						fmt.Fprintln(cmd.OutOrStdout(), result.Output)
 					}
 				}
@@ -192,7 +194,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			}
 
 			// Print output
-			if result.Output != "" {
+			if result.CondensedOutput != "" {
+				fmt.Fprint(cmd.OutOrStdout(), result.CondensedOutput)
+			} else if result.Output != "" {
 				fmt.Fprint(cmd.OutOrStdout(), result.Output)
 			}
 			if result.ExitCode != 0 {

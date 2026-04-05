@@ -103,8 +103,8 @@ func (s *Store) importAuto(filePath string) (int, error) {
 	beadsFile := filePath
 	if beadsFile == "" {
 		for _, candidate := range []string{
-			".beads/issues.jsonl",   // bd default
-			".helix/issues.jsonl",   // HELIX legacy tracker
+			".beads/issues.jsonl", // bd default
+			".helix/issues.jsonl", // HELIX legacy tracker
 		} {
 			if _, err := os.Stat(candidate); err == nil {
 				beadsFile = candidate

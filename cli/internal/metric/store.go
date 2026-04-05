@@ -2,24 +2,14 @@ package metric
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
-var errNotMetricArtifact = errors.New("not a metric artifact")
+var errNotMetricArtifact = fmt.Errorf("not a metric artifact")
 
 type Store struct {
 	WorkingDir string
@@ -67,75 +57,15 @@ func (s *Store) Validate(metricID string) (*Definition, *docgraph.Document, erro
 }
 
 func (s *Store) Run(ctx context.Context, metricID string) (HistoryRecord, error) {
-	def, doc, err := s.Validate(metricID)
+	def, _, err := s.Validate(metricID)
 	if err != nil {
 		return HistoryRecord{}, err
 	}
-
-	cwd := s.WorkingDir
-	if def.Cwd != "" {
-		if filepath.IsAbs(def.Cwd) {
-			cwd = def.Cwd
-		} else {
-			cwd = filepath.Join(s.WorkingDir, def.Cwd)
-		}
-	}
-
-	cmd := exec.CommandContext(ctx, def.Command[0], def.Command[1:]...)
-	cmd.Dir = cwd
-	if len(def.Env) > 0 {
-		cmd.Env = append(os.Environ(), flattenEnv(def.Env)...)
-	}
-	start := time.Now().UTC()
-	stdout, stderr, err := captureCommand(cmd)
-	duration := time.Since(start)
-
-	value, unit := normalizeMeasurement(stdout)
-	if unit == "" {
-		unit = def.Thresholds.Unit
-	}
-	comparison := compareValue(value, def)
-	status := StatusPass
-	if err != nil || comparison.Delta > def.Thresholds.Ratchet && def.Thresholds.Ratchet > 0 {
-		status = StatusFail
-	}
-	if err != nil && status == StatusPass {
-		status = StatusFail
-	}
-
-	record := HistoryRecord{
-		RunID:        fmt.Sprintf("%s@%s", metricID, start.Format(time.RFC3339Nano)),
-		MetricID:     metricID,
-		DefinitionID: def.DefinitionID,
-		ObservedAt:   start,
-		Status:       status,
-		Value:        value,
-		Unit:         unit,
-		Comparison:   comparison,
-		DurationMS:   duration.Milliseconds(),
-		Stdout:       strings.TrimSpace(stdout),
-		Stderr:       strings.TrimSpace(stderr),
-		ArtifactID:   doc.ID,
-	}
+	rec, err := s.execStore.Run(ctx, def.DefinitionID)
 	if err != nil {
-		if record.Stderr == "" {
-			record.Stderr = err.Error()
-		} else {
-			record.Stderr = record.Stderr + "\n" + err.Error()
-		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			record.ExitCode = exitErr.ExitCode()
-		} else {
-			record.ExitCode = 1
-		}
-	} else if cmd.ProcessState != nil {
-		record.ExitCode = cmd.ProcessState.ExitCode()
+		return HistoryRecord{}, err
 	}
-	if appendErr := s.AppendHistory(record); appendErr != nil {
-		return HistoryRecord{}, appendErr
-	}
-	return record, nil
+	return metricHistoryFromExec(rec)
 }
 
 func (s *Store) Compare(metricID, against string) (HistoryRecord, ComparisonResult, error) {
@@ -277,29 +207,6 @@ func (s *Store) loadMetricArtifact(metricID string) (*docgraph.Document, error) 
 	return &doc, nil
 }
 
-func compareValue(value float64, def *Definition) ComparisonResult {
-	direction := def.Comparison
-	if direction == "" {
-		direction = ComparisonLowerIsBetter
-	}
-	if def.Thresholds.Warn == 0 {
-		return ComparisonResult{Baseline: value, Delta: 0, Direction: direction}
-	}
-	return comparisonFor(value, def.Thresholds.Warn, direction)
-}
-
-func comparisonFor(current, baseline float64, direction string) ComparisonResult {
-	delta := current - baseline
-	if direction == ComparisonHigherIsBetter {
-		delta = baseline - current
-	}
-	return ComparisonResult{
-		Baseline:  baseline,
-		Delta:     delta,
-		Direction: direction,
-	}
-}
-
 func selectComparisonTarget(history []HistoryRecord, against string) (HistoryRecord, error) {
 	switch against {
 	case "", "latest":
@@ -316,121 +223,14 @@ func selectComparisonTarget(history []HistoryRecord, against string) (HistoryRec
 	}
 }
 
-func normalizeMeasurement(stdout string) (float64, string) {
-	trimmed := strings.TrimSpace(stdout)
-	if trimmed == "" {
-		return 0, ""
+func comparisonFor(current, baseline float64, direction string) ComparisonResult {
+	delta := current - baseline
+	if direction == ComparisonHigherIsBetter {
+		delta = baseline - current
 	}
-	if value, unit, ok := parseJSONMeasurement(trimmed); ok {
-		return value, unit
+	return ComparisonResult{
+		Baseline:  baseline,
+		Delta:     delta,
+		Direction: direction,
 	}
-	if value, unit, ok := parseTextMeasurement(trimmed); ok {
-		return value, unit
-	}
-	return 0, ""
-}
-
-func parseJSONMeasurement(text string) (float64, string, bool) {
-	var obj map[string]any
-	if err := json.Unmarshal([]byte(text), &obj); err != nil {
-		return 0, "", false
-	}
-	if raw, ok := obj["value"]; ok {
-		switch v := raw.(type) {
-		case float64:
-			unit, _ := obj["unit"].(string)
-			return v, unit, true
-		case string:
-			if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-				unit, _ := obj["unit"].(string)
-				return parsed, unit, true
-			}
-		}
-	}
-	return 0, "", false
-}
-
-var measurementPattern = regexp.MustCompile(`(?i)(-?\d+(?:\.\d+)?)(?:\s*)(ms|s|sec|seconds?)?`)
-
-func parseTextMeasurement(text string) (float64, string, bool) {
-	match := measurementPattern.FindStringSubmatch(text)
-	if len(match) < 2 {
-		return 0, "", false
-	}
-	value, err := strconv.ParseFloat(match[1], 64)
-	if err != nil {
-		return 0, "", false
-	}
-	unit := ""
-	if len(match) >= 3 {
-		unit = strings.ToLower(match[2])
-	}
-	return value, unit, true
-}
-
-func captureCommand(cmd *exec.Cmd) (string, string, error) {
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", "", err
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return "", "", err
-	}
-	if err := cmd.Start(); err != nil {
-		return "", "", err
-	}
-	stdoutBytes, _ := io.ReadAll(stdoutPipe)
-	stderrBytes, _ := io.ReadAll(stderrPipe)
-	err = cmd.Wait()
-	return string(stdoutBytes), string(stderrBytes), err
-}
-
-func flattenEnv(env map[string]string) []string {
-	out := make([]string, 0, len(env))
-	for k, v := range env {
-		out = append(out, k+"="+v)
-	}
-	return out
-}
-
-func withFileLock(path string, fn func() error) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
-	return fn()
-}
-
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
 }

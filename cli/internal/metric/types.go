@@ -1,3 +1,8 @@
+// Package metric defines the domain types and store for metric artifact
+// observation. HistoryRecord, TrendSummary, ComparisonResult, Definition, and
+// Thresholds are used by store.go and exec_bridge.go within this package and
+// exported for use by cmd/metric.go. They are NOT projection-only types
+// and cannot be inlined into cmd without creating a circular import.
 package metric
 
 import "time"

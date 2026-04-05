@@ -67,4 +67,3 @@ func (s *Store) runHook(name string, b *Bead) error {
 		return fmt.Errorf("bead: hook %s exit %d: %s", name, exitErr.ExitCode(), msg)
 	}
 }
-

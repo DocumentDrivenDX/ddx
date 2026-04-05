@@ -240,6 +240,7 @@ func (r *Runner) processResult(harnessName, model string, harness Harness, execR
 
 	if execResult != nil {
 		result.Output = execResult.Stdout
+		result.CondensedOutput = CondenseOutput(result.Output, "")
 		result.Stderr = execResult.Stderr
 		result.ExitCode = execResult.ExitCode
 	}

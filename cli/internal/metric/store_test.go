@@ -173,6 +173,33 @@ func mustTime(t *testing.T, value string) time.Time {
 	return parsed
 }
 
+// TestLegacyMetricsDirIgnored verifies that a pre-exec .ddx/metrics/ directory
+// left over from a pre-release build does not cause DDx to crash. The current
+// metric store delegates to the exec substrate and never reads .ddx/metrics/.
+func TestLegacyMetricsDirIgnored(t *testing.T) {
+	wd := t.TempDir()
+
+	// Simulate old-format .ddx/metrics/ data written by the pre-exec metric store.
+	metricsDir := filepath.Join(wd, ".ddx", "metrics")
+	defsDir := filepath.Join(metricsDir, "definitions")
+	require.NoError(t, os.MkdirAll(defsDir, 0o755))
+
+	oldDef := `{"definition_id":"metric-startup-time@1","metric_id":"MET-001","command":["sh","-c","echo 10ms"],"active":true,"created_at":"2026-04-04T10:00:00Z"}`
+	require.NoError(t, os.WriteFile(filepath.Join(defsDir, "metric-startup-time@1.json"), []byte(oldDef), 0o644))
+
+	oldHistory := `{"run_id":"MET-001@1","metric_id":"MET-001","definition_id":"metric-startup-time@1","observed_at":"2026-04-04T10:00:01Z","status":"pass","value":10,"unit":"ms"}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "history.jsonl"), []byte(oldHistory), 0o644))
+
+	// The current store must not crash when .ddx/metrics/ exists.
+	store := NewStore(wd)
+	require.NoError(t, store.Init())
+
+	// History returns empty — legacy metrics/ data is not read.
+	history, err := store.History("MET-001")
+	require.NoError(t, err)
+	assert.Empty(t, history)
+}
+
 func TestSaveDefinitionRoundTrips(t *testing.T) {
 	wd := t.TempDir()
 	store := NewStore(wd)
