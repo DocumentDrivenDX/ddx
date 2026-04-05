@@ -2,9 +2,11 @@
 
 ## Active Concerns
 - go-std (tech-stack, core CLI)
+- ux-radix (quality-attribute, ui)
 - testing (quality-attribute)
 - hugo-hextra (microsite)
 - demo-asciinema (demo)
+- demo-playwright (demo, ui)
 - e2e-playwright (testing)
 
 ## Area Labels
