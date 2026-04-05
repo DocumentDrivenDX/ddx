@@ -701,8 +701,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 16 {
-		t.Fatalf("expected 16 MCP tools, got %d", len(tools))
+	if len(tools) != 19 {
+		t.Fatalf("expected 19 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -715,6 +715,7 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_list_beads", "ddx_show_bead", "ddx_bead_ready", "ddx_bead_status",
 		"ddx_doc_graph", "ddx_doc_stale", "ddx_doc_show", "ddx_doc_deps",
 		"ddx_agent_sessions",
+		"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history",
 		"ddx_doc_write", "ddx_doc_history", "ddx_doc_diff",
 	}
 	for _, name := range expected {
@@ -1196,5 +1197,382 @@ func TestSPAFallbackForClientRoute(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "<html") {
 		t.Error("expected HTML content from SPA index for client route")
+	}
+}
+
+// setupExecTestDir creates a temp directory with exec definition and run data.
+func setupExecTestDir(t *testing.T) string {
+	t.Helper()
+	dir := setupTestDir(t)
+
+	ddxDir := filepath.Join(dir, ".ddx")
+
+	// Create exec-definitions.jsonl
+	defBead := `{"id":"bench-startup","title":"Execution definition for MET-startup","status":"open","priority":2,"issue_type":"exec_definition","created_at":"2026-04-01T00:00:00Z","updated_at":"2026-04-01T00:00:00Z","labels":["artifact:MET-startup","executor:command"],"definition":{"id":"bench-startup","artifact_ids":["MET-startup"],"executor":{"kind":"command","command":["go","test","-bench=."],"timeout_ms":30000},"result":{"metric":{"unit":"ms"}},"evaluation":{"comparison":"lower-is-better"},"active":true,"created_at":"2026-04-01T00:00:00Z"}}`
+	if err := os.WriteFile(filepath.Join(ddxDir, "exec-definitions.jsonl"), []byte(defBead+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create exec-runs.jsonl
+	runBead := `{"id":"bench-startup@2026-04-01T10:00:00Z-1","title":"Execution run for MET-startup","status":"closed","priority":2,"issue_type":"exec_run","created_at":"2026-04-01T10:00:00Z","updated_at":"2026-04-01T10:00:01Z","labels":["artifact:MET-startup","status:success","definition:bench-startup"],"manifest":{"run_id":"bench-startup@2026-04-01T10:00:00Z-1","definition_id":"bench-startup","artifact_ids":["MET-startup"],"started_at":"2026-04-01T10:00:00Z","finished_at":"2026-04-01T10:00:01Z","status":"success","exit_code":0,"attachments":{"stdout":"exec-runs.d/bench-startup@2026-04-01T10:00:00Z-1/stdout.log","stderr":"exec-runs.d/bench-startup@2026-04-01T10:00:00Z-1/stderr.log","result":"exec-runs.d/bench-startup@2026-04-01T10:00:00Z-1/result.json"}}}`
+	if err := os.WriteFile(filepath.Join(ddxDir, "exec-runs.jsonl"), []byte(runBead+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create attachment directory and files
+	runDir := filepath.Join(ddxDir, "exec-runs.d", "bench-startup@2026-04-01T10:00:00Z-1")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runDir, "stdout.log"), []byte("7.2 ms"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runDir, "stderr.log"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resultJSON := `{"metric":{"artifact_id":"MET-startup","definition_id":"bench-startup","observed_at":"2026-04-01T10:00:00Z","status":"pass","value":7.2,"unit":"ms","samples":[7.2]},"stdout":"7.2 ms","value":7.2,"unit":"ms","parsed":true}`
+	if err := os.WriteFile(filepath.Join(runDir, "result.json"), []byte(resultJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	return dir
+}
+
+func TestExecDefinitionsList(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/definitions", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var defs []struct {
+		ID          string   `json:"id"`
+		ArtifactIDs []string `json:"artifact_ids"`
+		Active      bool     `json:"active"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &defs); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(defs) != 1 {
+		t.Fatalf("expected 1 definition, got %d", len(defs))
+	}
+	if defs[0].ID != "bench-startup" {
+		t.Errorf("expected id=bench-startup, got %s", defs[0].ID)
+	}
+}
+
+func TestExecDefinitionsFilterByArtifact(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/definitions?artifact=MET-startup", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var defs []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &defs); err != nil {
+		t.Fatal(err)
+	}
+	if len(defs) != 1 {
+		t.Fatalf("expected 1 definition, got %d", len(defs))
+	}
+
+	// Filter with non-matching artifact
+	req = httptest.NewRequest("GET", "/api/exec/definitions?artifact=MET-nonexistent", nil)
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if err := json.Unmarshal(w.Body.Bytes(), &defs); err != nil {
+		t.Fatal(err)
+	}
+	if len(defs) != 0 {
+		t.Fatalf("expected 0 definitions for non-matching filter, got %d", len(defs))
+	}
+}
+
+func TestExecDefinitionShow(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/definitions/bench-startup", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var def struct {
+		ID       string `json:"id"`
+		Executor struct {
+			Kind string `json:"kind"`
+		} `json:"executor"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &def); err != nil {
+		t.Fatal(err)
+	}
+	if def.ID != "bench-startup" {
+		t.Errorf("expected id=bench-startup, got %s", def.ID)
+	}
+	if def.Executor.Kind != "command" {
+		t.Errorf("expected executor.kind=command, got %s", def.Executor.Kind)
+	}
+}
+
+func TestExecDefinitionShowNotFound(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/definitions/nonexistent", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestExecRunsList(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/runs", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var runs []struct {
+		RunID        string `json:"run_id"`
+		DefinitionID string `json:"definition_id"`
+		Status       string `json:"status"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &runs); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(runs))
+	}
+	if runs[0].Status != "success" {
+		t.Errorf("expected status=success, got %s", runs[0].Status)
+	}
+}
+
+func TestExecRunsFilterByDefinition(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/runs?definition=bench-startup", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var runs []struct {
+		RunID string `json:"run_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &runs); err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(runs))
+	}
+}
+
+func TestExecRunShow(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/runs/bench-startup@2026-04-01T10:00:00Z-1", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result struct {
+		Value  float64 `json:"value"`
+		Unit   string  `json:"unit"`
+		Parsed bool    `json:"parsed"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Value != 7.2 {
+		t.Errorf("expected value=7.2, got %f", result.Value)
+	}
+	if result.Unit != "ms" {
+		t.Errorf("expected unit=ms, got %s", result.Unit)
+	}
+}
+
+func TestExecRunLog(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/runs/bench-startup@2026-04-01T10:00:00Z-1/log", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var logs struct {
+		Stdout string `json:"stdout"`
+		Stderr string `json:"stderr"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &logs); err != nil {
+		t.Fatal(err)
+	}
+	if logs.Stdout != "7.2 ms" {
+		t.Errorf("expected stdout='7.2 ms', got %q", logs.Stdout)
+	}
+}
+
+func TestExecRunNotFound(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/exec/runs/nonexistent", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestMCPExecDefinitions(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_definitions","arguments":{}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Result.Content) == 0 {
+		t.Fatal("expected MCP content")
+	}
+	if !strings.Contains(resp.Result.Content[0].Text, "bench-startup") {
+		t.Error("expected bench-startup in MCP response")
+	}
+}
+
+func TestMCPExecShow(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_show","arguments":{"id":"bench-startup"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Result.Content) == 0 {
+		t.Fatal("expected MCP content")
+	}
+	if !strings.Contains(resp.Result.Content[0].Text, "bench-startup") {
+		t.Error("expected bench-startup in MCP exec show response")
+	}
+}
+
+func TestMCPExecHistory(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_history","arguments":{}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Result.Content) == 0 {
+		t.Fatal("expected MCP content")
+	}
+	if !strings.Contains(resp.Result.Content[0].Text, "bench-startup") {
+		t.Error("expected bench-startup in MCP exec history response")
+	}
+}
+
+func TestMCPToolsListIncludesExec(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	respBody := w.Body.String()
+	for _, tool := range []string{"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history"} {
+		if !strings.Contains(respBody, tool) {
+			t.Errorf("expected tools/list to include %s", tool)
+		}
 	}
 }

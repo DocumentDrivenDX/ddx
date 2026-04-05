@@ -17,6 +17,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 )
@@ -79,6 +80,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/docs/{id}/diff", s.handleDocDiff)
 	s.mux.HandleFunc("PUT /api/docs/{id}", s.handleDocWrite)
 	s.mux.HandleFunc("GET /api/docs/{id}", s.handleDocShow)
+
+	// Executions
+	s.mux.HandleFunc("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
+	s.mux.HandleFunc("GET /api/exec/definitions", s.handleExecDefinitions)
+	s.mux.HandleFunc("GET /api/exec/runs/{id}/log", s.handleExecRunLog)
+	s.mux.HandleFunc("GET /api/exec/runs/{id}", s.handleExecRunShow)
+	s.mux.HandleFunc("GET /api/exec/runs", s.handleExecRuns)
 
 	// Agent sessions
 	s.mux.HandleFunc("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
@@ -717,6 +725,80 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"diff": string(out)})
 }
 
+// --- Execution Endpoints ---
+
+func (s *Server) execStore() *ddxexec.Store {
+	return ddxexec.NewStore(s.WorkingDir)
+}
+
+func (s *Server) handleExecDefinitions(w http.ResponseWriter, r *http.Request) {
+	store := s.execStore()
+	artifactID := r.URL.Query().Get("artifact")
+	defs, err := store.ListDefinitions(artifactID)
+	if err != nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	writeJSON(w, http.StatusOK, defs)
+}
+
+func (s *Server) handleExecDefinitionShow(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	store := s.execStore()
+	def, err := store.ShowDefinition(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, def)
+}
+
+func (s *Server) handleExecRuns(w http.ResponseWriter, r *http.Request) {
+	store := s.execStore()
+	artifactID := r.URL.Query().Get("artifact")
+	definitionID := r.URL.Query().Get("definition")
+	runs, err := store.History(artifactID, definitionID)
+	if err != nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	writeJSON(w, http.StatusOK, runs)
+}
+
+func (s *Server) handleExecRunShow(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	store := s.execStore()
+	result, err := store.Result(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleExecRunLog(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	store := s.execStore()
+	stdout, stderr, err := store.Log(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"stdout": stdout, "stderr": stderr})
+}
+
 // --- Agent Session Endpoints ---
 
 func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
@@ -1017,6 +1099,38 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_exec_definitions",
+			Description: "List execution definitions with optional artifact filter",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"artifact": map[string]any{"type": "string", "description": "Filter by artifact ID"},
+				},
+			},
+		},
+		{
+			Name:        "ddx_exec_show",
+			Description: "Show a specific execution definition",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "string", "description": "Definition ID"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_exec_history",
+			Description: "List execution runs with optional artifact and definition filters",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"artifact":   map[string]any{"type": "string", "description": "Filter by artifact ID"},
+					"definition": map[string]any{"type": "string", "description": "Filter by definition ID"},
+				},
+			},
+		},
+		{
 			Name:        "ddx_doc_write",
 			Description: "Write content to a document by artifact ID",
 			InputSchema: map[string]any{
@@ -1102,6 +1216,16 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 	case "ddx_agent_sessions":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentSessions(harness)
+	case "ddx_exec_definitions":
+		artifact, _ := call.Arguments["artifact"].(string)
+		return s.mcpExecDefinitions(artifact)
+	case "ddx_exec_show":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpExecShow(id)
+	case "ddx_exec_history":
+		artifact, _ := call.Arguments["artifact"].(string)
+		definition, _ := call.Arguments["definition"].(string)
+		return s.mcpExecHistory(artifact, definition)
 	case "ddx_doc_write":
 		id, _ := call.Arguments["id"].(string)
 		content, _ := call.Arguments["content"].(string)
@@ -1459,6 +1583,45 @@ func (s *Server) mcpAgentSessions(harness string) mcpToolResult {
 		return sessions[i].Timestamp.After(sessions[j].Timestamp)
 	})
 	data, _ := json.Marshal(sessions)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpExecDefinitions(artifactID string) mcpToolResult {
+	store := s.execStore()
+	defs, err := store.ListDefinitions(artifactID)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+	}
+	data, _ := json.Marshal(defs)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpExecShow(id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			IsError: true,
+		}
+	}
+	store := s.execStore()
+	def, err := store.ShowDefinition(id)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(def)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpExecHistory(artifactID, definitionID string) mcpToolResult {
+	store := s.execStore()
+	runs, err := store.History(artifactID, definitionID)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+	}
+	data, _ := json.Marshal(runs)
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
