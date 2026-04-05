@@ -20,6 +20,7 @@ func (f *CommandFactory) newExecCommand() *cobra.Command {
 		},
 	}
 
+	cmd.AddCommand(f.newExecDefineCommand())
 	cmd.AddCommand(f.newExecListCommand())
 	cmd.AddCommand(f.newExecShowCommand())
 	cmd.AddCommand(f.newExecValidateCommand())
@@ -27,6 +28,52 @@ func (f *CommandFactory) newExecCommand() *cobra.Command {
 	cmd.AddCommand(f.newExecLogCommand())
 	cmd.AddCommand(f.newExecResultCommand())
 	cmd.AddCommand(f.newExecHistoryCommand())
+	return cmd
+}
+
+func (f *CommandFactory) newExecDefineCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "define <name>",
+		Short: "Create an execution definition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			artifactID, _ := cmd.Flags().GetString("artifact")
+			command, _ := cmd.Flags().GetString("command")
+			execType, _ := cmd.Flags().GetString("type")
+
+			if artifactID == "" {
+				return fmt.Errorf("--artifact is required")
+			}
+			if command == "" {
+				return fmt.Errorf("--command is required")
+			}
+			if execType == "" {
+				execType = "check"
+			}
+
+			def := ddxexec.Definition{
+				ID:          args[0],
+				ArtifactIDs: []string{artifactID},
+				Executor: ddxexec.ExecutorSpec{
+					Kind:    ddxexec.ExecutorKindCommand,
+					Command: strings.Fields(command),
+				},
+				Active:    true,
+				CreatedAt: time.Now().UTC(),
+			}
+			_ = execType
+
+			store := f.execStore()
+			if err := store.SaveDefinition(def); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), def.ID)
+			return nil
+		},
+	}
+	cmd.Flags().String("artifact", "", "Artifact ID to associate with this definition")
+	cmd.Flags().String("command", "", "Command to execute")
+	cmd.Flags().String("type", "", "Execution type: check, metric, or build (default: check)")
 	return cmd
 }
 

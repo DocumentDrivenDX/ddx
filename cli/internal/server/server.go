@@ -586,7 +586,11 @@ func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath := filepath.Join(s.WorkingDir, doc.Path)
+	// doc.Path is already an absolute path from the docgraph.
+	fullPath := doc.Path
+	if !filepath.IsAbs(fullPath) {
+		fullPath = filepath.Join(s.WorkingDir, fullPath)
+	}
 	if err := os.WriteFile(fullPath, []byte(body.Content), 0o644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -631,7 +635,9 @@ func (s *Server) handleDocHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gitArgs := []string{"log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path}
-	out, gitErr := exec.Command("git", gitArgs...).Output()
+	gitCmd := exec.Command("git", gitArgs...)
+	gitCmd.Dir = s.WorkingDir
+	out, gitErr := gitCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed"})
 		return
@@ -700,7 +706,9 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 		gitArgs = []string{"diff", "--", doc.Path}
 	}
 
-	out, gitErr := exec.Command("git", gitArgs...).Output()
+	diffCmd := exec.Command("git", gitArgs...)
+	diffCmd.Dir = s.WorkingDir
+	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git diff failed"})
 		return
@@ -1469,7 +1477,11 @@ func (s *Server) mcpDocWrite(id, content string) mcpToolResult {
 	if !ok {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
 	}
-	fullPath := filepath.Join(s.WorkingDir, doc.Path)
+	// doc.Path is already an absolute path from the docgraph.
+	fullPath := doc.Path
+	if !filepath.IsAbs(fullPath) {
+		fullPath = filepath.Join(s.WorkingDir, fullPath)
+	}
 	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
@@ -1500,7 +1512,9 @@ func (s *Server) mcpDocHistory(id string) mcpToolResult {
 	if !ok {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
 	}
-	out, gitErr := exec.Command("git", "log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path).Output()
+	logCmd := exec.Command("git", "log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path)
+	logCmd.Dir = s.WorkingDir
+	out, gitErr := logCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git log failed"}}, IsError: true}
 	}
@@ -1552,7 +1566,9 @@ func (s *Server) mcpDocDiff(id, ref string) mcpToolResult {
 	} else {
 		gitArgs = []string{"diff", "--", doc.Path}
 	}
-	out, gitErr := exec.Command("git", gitArgs...).Output()
+	mcpDiffCmd := exec.Command("git", gitArgs...)
+	mcpDiffCmd.Dir = s.WorkingDir
+	out, gitErr := mcpDiffCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
 	}

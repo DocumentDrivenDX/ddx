@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -972,6 +973,194 @@ func TestMCPUnknownTool(t *testing.T) {
 	result := resp.Result.(map[string]any)
 	if result["isError"] != true {
 		t.Error("expected isError=true for unknown tool")
+	}
+}
+
+// setupGitTestDir creates a temp directory that is also a git repository,
+// with a markdown document that has DDx frontmatter (so it appears in the doc graph).
+func setupGitTestDir(t *testing.T) (dir string, docID string) {
+	t.Helper()
+	dir = setupTestDir(t)
+
+	// Initialize a git repo in the temp dir.
+	runGit(t, "init", dir)
+	runGit(t, "-C", dir, "config", "user.email", "test@test.com")
+	runGit(t, "-C", dir, "config", "user.name", "Test User")
+
+	// Create a markdown file with DDx frontmatter so the docgraph can find it.
+	docID = "TD-TEST-001"
+	docPath := filepath.Join(dir, "docs", "test-doc.md")
+	if err := os.MkdirAll(filepath.Dir(docPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nddx:\n  id: " + docID + "\n---\n# Test Document\n\nInitial content.\n"
+	if err := os.WriteFile(docPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Commit the file so git log has history.
+	runGit(t, "-C", dir, "add", "docs/test-doc.md")
+	runGit(t, "-C", dir, "commit", "-m", "add test document")
+
+	return dir, docID
+}
+
+// runGit runs a git command and fails the test if it returns an error.
+func runGit(t *testing.T, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestDocWriteEndpoint(t *testing.T) {
+	dir, docID := setupGitTestDir(t)
+	srv := New(":0", dir)
+
+	body := strings.NewReader(`{"content":"# Updated\n\nNew content."}`)
+	req := httptest.NewRequest("PUT", "/api/docs/"+docID, body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result struct {
+		Status string `json:"status"`
+		Path   string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if result.Status != "ok" {
+		t.Errorf("expected status=ok, got %q", result.Status)
+	}
+	if result.Path == "" {
+		t.Error("expected non-empty path in response")
+	}
+}
+
+func TestDocHistoryEndpoint(t *testing.T) {
+	dir, docID := setupGitTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/docs/"+docID+"/history", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var entries []struct {
+		Hash    string `json:"hash"`
+		Date    string `json:"date"`
+		Author  string `json:"author"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("expected JSON array: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected at least one history entry")
+	}
+	if entries[0].Hash == "" {
+		t.Error("expected non-empty hash")
+	}
+	if entries[0].Message == "" {
+		t.Error("expected non-empty message")
+	}
+}
+
+func TestDocDiffEndpoint(t *testing.T) {
+	dir, docID := setupGitTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/docs/"+docID+"/diff", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result struct {
+		Diff string `json:"diff"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("expected JSON object with diff: %v", err)
+	}
+	// diff may be empty (no uncommitted changes) — just verify the key exists
+	_ = result.Diff
+}
+
+func TestBeadEndpoints(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/beads", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var beads []struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &beads); err != nil {
+		t.Fatalf("expected JSON array: %v", err)
+	}
+	if len(beads) == 0 {
+		t.Fatal("expected at least one bead")
+	}
+
+	// Verify IDs are non-empty
+	for _, b := range beads {
+		if b.ID == "" {
+			t.Error("expected non-empty bead ID")
+		}
+	}
+}
+
+func TestMCPDocTools(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/list", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatal("expected result map")
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatal("expected tools array")
+	}
+
+	names := map[string]bool{}
+	for _, tool := range tools {
+		toolMap := tool.(map[string]any)
+		names[toolMap["name"].(string)] = true
+	}
+
+	required := []string{"ddx_doc_write", "ddx_doc_history", "ddx_doc_diff"}
+	for _, name := range required {
+		if !names[name] {
+			t.Errorf("missing MCP tool: %s", name)
+		}
 	}
 }
 
