@@ -96,6 +96,8 @@ Two Playwright configurations:
 - **Secret scanning**: lefthook pre-commit hook via gitleaks
 - **Path traversal**: Server validates all document paths, rejects `..`
 - **Localhost guard**: Dispatch endpoints (exec, agent) reject non-localhost requests
+- **Network auth**: ts-net (Tailscale) for authenticated remote access per ADR-006.
+  No custom API keys. Identity from tailnet membership.
 
 ### testing
 
@@ -113,3 +115,4 @@ Two Playwright configurations:
 | typescript-bun | ADR-005 | SQLite-WASM client-side data layer for beads UI |
 | security-owasp | ADR-003 | Package integrity via commit SHA + tree hash |
 | security-owasp | ADR-004 | Bead-backed collections for runtime storage |
+| security-owasp | ADR-006 | ts-net for network authentication (no API keys) |
