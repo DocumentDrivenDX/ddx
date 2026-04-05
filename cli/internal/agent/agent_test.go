@@ -64,7 +64,6 @@ func TestRegistryGet(t *testing.T) {
 	assert.Equal(t, "arg", h.PromptMode)
 	assert.Equal(t, "-m", h.ModelFlag)
 	assert.Equal(t, "-C", h.WorkDirFlag)
-	assert.NotEmpty(t, h.TokenPattern)
 }
 
 func TestRegistryNamesPreferenceOrder(t *testing.T) {
@@ -267,7 +266,11 @@ func TestCapabilitiesUnknownHarness(t *testing.T) {
 func TestExtractTokensCodex(t *testing.T) {
 	r := NewRegistry()
 	h, _ := r.Get("codex")
-	assert.Equal(t, 1234, ExtractTokens("some output\ntokens used\n1,234\n", h))
+	// codex uses ExtractUsage (JSON path); plain-text output returns 0
+	assert.Equal(t, 0, ExtractTokens("some output\ntokens used\n1,234\n", h))
+	// JSON output is parsed via ExtractUsage
+	jsonOutput := `{"type":"turn.completed","usage":{"input_tokens":1000,"output_tokens":234}}` + "\n"
+	assert.Equal(t, 1234, ExtractTokens(jsonOutput, h))
 }
 
 func TestExtractTokensNoPattern(t *testing.T) {
@@ -338,7 +341,8 @@ func TestClaudeArgsContainsOutputFormatJSON(t *testing.T) {
 
 func TestSessionLogging(t *testing.T) {
 	logDir := t.TempDir()
-	mock := &mockExecutor{output: "tokens used\n42\n"}
+	jsonOutput := `{"type":"turn.completed","usage":{"input_tokens":12,"output_tokens":30}}` + "\n"
+	mock := &mockExecutor{output: jsonOutput}
 	r := newTestRunner(mock)
 	r.Config.SessionLogDir = logDir
 
@@ -355,7 +359,7 @@ func TestSessionLogging(t *testing.T) {
 	assert.Equal(t, 42, entry.Tokens)
 	assert.Equal(t, 11, entry.PromptLen) // len("test prompt")
 	assert.Equal(t, "test prompt", entry.Prompt)
-	assert.Equal(t, "tokens used\n42\n", entry.Response)
+	assert.Equal(t, jsonOutput, entry.Response)
 	assert.Equal(t, "inline", entry.PromptSource)
 	assert.True(t, strings.HasPrefix(entry.ID, "as-"))
 }

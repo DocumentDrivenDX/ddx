@@ -19,7 +19,6 @@ var builtinHarnesses = map[string]Harness{
 		WorkDirFlag:     "-C",
 		EffortFlag:      "-c",
 		EffortFormat:    "reasoning.effort=%s",
-		TokenPattern:    `tokens used\n([0-9,]+)`,
 	},
 	"claude": {
 		Name:            "claude",
