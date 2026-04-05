@@ -4,6 +4,7 @@
 - go-std (tech-stack, core CLI)
 - hugo-hextra (microsite)
 - demo-asciinema (demo)
+- e2e-playwright (testing)
 
 ## Area Labels
 
@@ -31,3 +32,9 @@
 ### demo-asciinema
 - **Embedding**: asciinema shortcode loads player from CDN, plays `.cast` files from `static/demos/`
 - **Cast files**: stored in `website/static/demos/`
+
+### e2e-playwright
+- **Test location**: `website/e2e/microsite.spec.ts`
+- **Config**: `website/playwright.config.ts`
+- **Screenshots**: baseline snapshots in `website/e2e/microsite.spec.ts-snapshots/`
+- **Coverage**: homepage, getting started, CLI, skills, plugins, ecosystem, navigation
