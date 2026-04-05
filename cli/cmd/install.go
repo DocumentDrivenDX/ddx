@@ -55,6 +55,17 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Check if already installed
+	state, err := registry.LoadState()
+	if err == nil {
+		for _, e := range state.Installed {
+			if e.Name == name {
+				fmt.Fprintf(out, "%s %s is already installed (use 'ddx upgrade %s' to update)\n", e.Name, e.Version, name)
+				return nil
+			}
+		}
+	}
+
 	fmt.Fprintf(out, "Installing %s %s from %s...\n", pkg.Name, pkg.Version, pkg.Source)
 
 	entry, err := registry.InstallPackage(pkg)
@@ -62,9 +73,9 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("install package: %w", err)
 	}
 
-	state, err := registry.LoadState()
-	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
+	state, stateErr := registry.LoadState()
+	if stateErr != nil {
+		return fmt.Errorf("loading state: %w", stateErr)
 	}
 	state.AddOrUpdate(entry)
 	if err := registry.SaveState(state); err != nil {
