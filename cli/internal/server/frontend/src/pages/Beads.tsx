@@ -260,6 +260,7 @@ function ExecutionEvidence({ beadId }: { beadId: string }) {
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
   const [runLog, setRunLog] = useState<{ stdout: string; stderr: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [dispatching, setDispatching] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -301,15 +302,39 @@ function ExecutionEvidence({ beadId }: { beadId: string }) {
           </button>
         ))}
       </div>
-      {selectedRun && runLog && (
+      {selectedRun && (
         <div className="mt-2 space-y-2">
-          {runLog.stdout && (
+          {(() => {
+            const run = runs.find((r: any) => r.run_id === selectedRun)
+            return run?.definition_id ? (
+              <button
+                onClick={async () => {
+                  setDispatching(true)
+                  try {
+                    await api.execDispatch(run.definition_id)
+                    // Refresh runs
+                    const updated = await api.execRuns(beadId)
+                    setRuns(updated)
+                  } catch (e) {
+                    console.error('Dispatch failed:', e)
+                  } finally {
+                    setDispatching(false)
+                  }
+                }}
+                disabled={dispatching}
+                className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {dispatching ? 'Running...' : 'Re-run'}
+              </button>
+            ) : null
+          })()}
+          {runLog && runLog.stdout && (
             <div>
               <div className="text-xs font-medium text-gray-500">stdout</div>
               <pre className="text-xs bg-gray-900 text-green-400 rounded p-2 overflow-auto max-h-40">{runLog.stdout}</pre>
             </div>
           )}
-          {runLog.stderr && (
+          {runLog && runLog.stderr && (
             <div>
               <div className="text-xs font-medium text-gray-500">stderr</div>
               <pre className="text-xs bg-gray-900 text-red-400 rounded p-2 overflow-auto max-h-40">{runLog.stderr}</pre>
