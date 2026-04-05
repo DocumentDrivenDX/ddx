@@ -340,6 +340,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newInstalledCommand())
 	rootCmd.AddCommand(f.newUninstallCommand())
 	rootCmd.AddCommand(f.newSearchCommand())
+	rootCmd.AddCommand(f.newOutdatedCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{

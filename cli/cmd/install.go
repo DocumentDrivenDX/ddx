@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"text/tabwriter"
 
@@ -193,6 +194,73 @@ func (f *CommandFactory) runSearch(cmd *cobra.Command, args []string) error {
 			string(pkg.Type),
 			pkg.Description,
 		)
+	}
+	return w.Flush()
+}
+
+func (f *CommandFactory) newOutdatedCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "outdated",
+		Short: "List installed packages with available updates",
+		Long:  `Check installed packages against the registry and list those with newer versions available.`,
+		Args:  cobra.NoArgs,
+		RunE:  f.runOutdated,
+	}
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) runOutdated(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+	asJSON, _ := cmd.Flags().GetBool("json")
+
+	state, err := registry.LoadState()
+	if err != nil {
+		return fmt.Errorf("reading installed state: %w", err)
+	}
+	if len(state.Installed) == 0 {
+		fmt.Fprintln(out, "No packages installed.")
+		return nil
+	}
+
+	reg := registry.BuiltinRegistry()
+
+	type outdatedEntry struct {
+		Name             string `json:"name"`
+		InstalledVersion string `json:"installed_version"`
+		LatestVersion    string `json:"latest_version"`
+	}
+
+	var outdated []outdatedEntry
+	for _, entry := range state.Installed {
+		pkg, err := reg.Find(entry.Name)
+		if err != nil {
+			continue // not in registry, skip
+		}
+		if pkg.Version != entry.Version {
+			outdated = append(outdated, outdatedEntry{
+				Name:             entry.Name,
+				InstalledVersion: entry.Version,
+				LatestVersion:    pkg.Version,
+			})
+		}
+	}
+
+	if len(outdated) == 0 {
+		fmt.Fprintln(out, "All installed packages are up to date.")
+		return nil
+	}
+
+	if asJSON {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(outdated)
+	}
+
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tINSTALLED\tLATEST")
+	for _, o := range outdated {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", o.Name, o.InstalledVersion, o.LatestVersion)
 	}
 	return w.Flush()
 }
