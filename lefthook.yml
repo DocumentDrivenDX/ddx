@@ -51,6 +51,7 @@ pre-commit:
     debug-js:
       name: "Debug statements (JS/TS)"
       glob: "*.{js,jsx,ts,tsx}"
+      exclude: "**/dist/**"
       run: |
         if command -v rg >/dev/null 2>&1; then
           rg -q "(console\.(log|debug|info)|debugger)" {staged_files} && exit 1 || exit 0
@@ -166,6 +167,7 @@ pre-commit:
         - "go.sum"
         - "package-lock.json"
         - "*_test.go"
+        - "**/dist/**"
       fail_text: "Secrets detected! Remove them or add to .gitleaks.toml if false positive"
 
     # Binary and large file check
