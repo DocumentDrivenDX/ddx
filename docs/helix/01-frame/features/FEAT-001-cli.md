@@ -42,6 +42,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 13. `ddx bead list/ready/blocked/status` — query and filter beads
 14. `ddx bead dep add/remove/tree` — dependency DAG management
 15. `ddx bead import/export` — JSONL interchange with bd/br
+15b. `ddx bead evidence` — attach execution evidence to a bead
 16. Claim/unclaim semantics for agent coordination
 17. bd-compatible schema (issue_type, owner, created_at, dependencies)
 18. Configurable ID prefix (auto-detected from repo name)
@@ -54,6 +55,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 23. `ddx agent doctor` — harness health check (binary paths, availability)
 24. `ddx agent log [session-id]` — session history with token tracking
 25. `ddx agent capabilities [harness]` — show reasoning levels and model defaults for a harness
+25b. `ddx agent usage [--since] [--harness] [--format]` — token and cost consumption summary (FEAT-014)
 
 **Execution Service (in progress — FEAT-010)**
 26. `ddx exec list [--artifact ID]` — list execution definitions
@@ -63,15 +65,20 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 30. `ddx exec log <run-id>` — show captured raw logs for one run
 31. `ddx exec result <run-id>` — show structured result data for one run
 32. `ddx exec history [--artifact ID] [--definition ID]` — inspect historical runs
+32b. `ddx exec define <name> --artifact <id> --command <cmd>` — create an execution definition
+32c. `ddx metric validate/run/history/compare/trend` — metric projections over execution substrate
 
-**Document Graph (not started — FEAT-007)**
+**Document Graph (implemented — FEAT-007)**
 33. `ddx doc graph` — show document dependency graph
 34. `ddx doc stale` — list stale documents
 35. `ddx doc stamp` — update review hashes
 36. `ddx doc show/deps/dependents` — query artifact relationships
 37. `ddx doc validate` — check frontmatter, deps, orphans
+37b. `ddx doc history/diff/changed` — git-aware document history (FEAT-012)
+37c. `ddx doc migrate` — convert dun: frontmatter to ddx:
+37d. `ddx checkpoint <name> [--list] [--restore]` — lightweight git tag checkpoints (FEAT-012)
 
-**Package Registry (not started — FEAT-009)**
+**Package Registry (in progress — FEAT-009)**
 38. `ddx install <name>` — install packages from registries
 39. `ddx search <query>` — search available resources
 40. `ddx installed` — list installed packages

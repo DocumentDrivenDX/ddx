@@ -32,9 +32,13 @@ specifications. The PRD stays at the user- and capability-level:
 
 - FEAT-001 defines the CLI surface and operator experience
 - FEAT-002 defines the server, HTTP, and MCP surfaces
+- FEAT-003 defines the promotional website and documentation
 - FEAT-004 defines shared work-item storage
+- FEAT-005 defines the artifact convention and frontmatter schema
 - FEAT-006 defines agent dispatch and session evidence
 - FEAT-007 defines the artifact graph and staleness model
+- FEAT-008 defines the embedded web UI for browsing and managing project state
+- FEAT-009 defines the online library and plugin registry
 - FEAT-010 defines generic execution definitions and immutable run history
 - FEAT-011 defines agent-facing skills for DDx CLI operations
 - FEAT-012 defines git awareness: auto-commit, document history, and
