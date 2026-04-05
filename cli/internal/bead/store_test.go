@@ -453,3 +453,28 @@ func TestReadNonexistentFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, beads)
 }
+
+func TestUnclaimDoesNotReopenClosedBead(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+
+	// Create a bead
+	b := &Bead{ID: "test-unclaim-001", Title: "Test bead", IssueType: "task", Status: StatusOpen}
+	require.NoError(t, s.Create(b))
+
+	// Claim and close it
+	require.NoError(t, s.Claim(b.ID, "worker"))
+	require.NoError(t, s.Close(b.ID))
+
+	// Verify it's closed
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, got.Status)
+
+	// Unclaim should NOT reopen it
+	require.NoError(t, s.Unclaim(b.ID))
+
+	got, err = s.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, got.Status, "unclaim must not reopen a closed bead")
+}

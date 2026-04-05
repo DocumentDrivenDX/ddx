@@ -423,10 +423,13 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 	})
 }
 
-// Unclaim resets a bead from in_progress back to open, clearing claim metadata.
+// Unclaim clears claim metadata. Only reverts status to open if the bead
+// is currently in_progress — a closed bead stays closed.
 func (s *Store) Unclaim(id string) error {
 	return s.Update(id, func(b *Bead) {
-		b.Status = StatusOpen
+		if b.Status == StatusInProgress {
+			b.Status = StatusOpen
+		}
 		b.Owner = ""
 		if b.Extra != nil {
 			delete(b.Extra, "claimed-at")
