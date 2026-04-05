@@ -25,7 +25,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version-file: 'cli/go.mod'
         cache-dependency-path: cli/go.sum
 
     - name: golangci-lint
@@ -91,7 +91,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version-file: 'cli/go.mod'
         cache-dependency-path: cli/go.sum
     
     - name: Build binary
@@ -120,7 +120,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version-file: 'cli/go.mod'
         cache-dependency-path: cli/go.sum
 
     - name: Build binary
