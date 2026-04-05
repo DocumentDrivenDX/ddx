@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -88,6 +89,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/beads/{id}/unclaim", s.handleUnclaimBead)
 	s.mux.HandleFunc("POST /api/beads/{id}/reopen", s.handleReopenBead)
 	s.mux.HandleFunc("POST /api/beads/{id}/deps", s.handleBeadDeps)
+
+	// Execution dispatch (localhost-only)
+	s.mux.HandleFunc("POST /api/exec/run/{id}", s.handleExecDispatch)
+	s.mux.HandleFunc("POST /api/agent/run", s.handleAgentDispatch)
 
 	// Executions
 	s.mux.HandleFunc("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
@@ -1005,6 +1010,79 @@ func (s *Server) handleExecRunLog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"stdout": stdout, "stderr": stderr})
 }
 
+// --- Dispatch Endpoints (localhost-only) ---
+
+func isLocalhost(r *http.Request) bool {
+	host := r.RemoteAddr
+	if idx := strings.LastIndex(host, ":"); idx >= 0 {
+		host = host[:idx]
+	}
+	host = strings.Trim(host, "[]")
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
+}
+
+func (s *Server) handleExecDispatch(w http.ResponseWriter, r *http.Request) {
+	if !isLocalhost(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "definition id is required"})
+		return
+	}
+
+	store := s.execStore()
+	record, err := store.Run(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, record)
+}
+
+func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
+	if !isLocalhost(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+
+	var req struct {
+		Harness string `json:"harness"`
+		Prompt  string `json:"prompt"`
+		Model   string `json:"model"`
+		Effort  string `json:"effort"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Harness == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "harness is required"})
+		return
+	}
+	if req.Prompt == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "prompt is required"})
+		return
+	}
+
+	runner := agent.NewRunner(agent.Config{})
+	opts := agent.RunOptions{
+		Harness: req.Harness,
+		Prompt:  req.Prompt,
+		Model:   req.Model,
+		Effort:  req.Effort,
+		WorkDir: s.WorkingDir,
+	}
+	result, err := runner.Run(opts)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // --- Agent Session Endpoints ---
 
 func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
@@ -1380,6 +1458,31 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_exec_dispatch",
+			Description: "Dispatch an execution run by definition ID (localhost-only)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "string", "description": "Execution definition ID"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_agent_dispatch",
+			Description: "Dispatch an agent invocation (localhost-only)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"harness": map[string]any{"type": "string", "description": "Agent harness name (codex, claude, gemini)"},
+					"prompt":  map[string]any{"type": "string", "description": "Prompt text"},
+					"model":   map[string]any{"type": "string", "description": "Model override"},
+					"effort":  map[string]any{"type": "string", "description": "Effort/reasoning level"},
+				},
+				"required": []string{"harness", "prompt"},
+			},
+		},
+		{
 			Name:        "ddx_doc_changed",
 			Description: "List artifacts changed since a git ref",
 			InputSchema: map[string]any{
@@ -1507,6 +1610,15 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 		artifact, _ := call.Arguments["artifact"].(string)
 		definition, _ := call.Arguments["definition"].(string)
 		return s.mcpExecHistory(artifact, definition)
+	case "ddx_exec_dispatch":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpExecDispatch(id)
+	case "ddx_agent_dispatch":
+		harness, _ := call.Arguments["harness"].(string)
+		prompt, _ := call.Arguments["prompt"].(string)
+		model, _ := call.Arguments["model"].(string)
+		effort, _ := call.Arguments["effort"].(string)
+		return s.mcpAgentDispatch(harness, prompt, model, effort)
 	case "ddx_doc_changed":
 		since, _ := call.Arguments["since"].(string)
 		return s.mcpDocChanged(since)
@@ -2098,6 +2210,42 @@ func (s *Server) mcpDocDiff(id, ref string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
 	}
 	data, _ := json.Marshal(map[string]string{"diff": string(out)})
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpExecDispatch(id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+	}
+	store := s.execStore()
+	record, err := store.Run(context.Background(), id)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+	data, _ := json.Marshal(record)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpAgentDispatch(harness, prompt, model, effort string) mcpToolResult {
+	if harness == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "harness is required"}}, IsError: true}
+	}
+	if prompt == "" {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "prompt is required"}}, IsError: true}
+	}
+	runner := agent.NewRunner(agent.Config{})
+	opts := agent.RunOptions{
+		Harness: harness,
+		Prompt:  prompt,
+		Model:   model,
+		Effort:  effort,
+		WorkDir: s.WorkingDir,
+	}
+	result, err := runner.Run(opts)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+	data, _ := json.Marshal(result)
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 

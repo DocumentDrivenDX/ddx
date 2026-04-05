@@ -701,8 +701,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 23 {
-		t.Fatalf("expected 23 MCP tools, got %d", len(tools))
+	if len(tools) != 25 {
+		t.Fatalf("expected 25 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -717,6 +717,7 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_doc_graph", "ddx_doc_stale", "ddx_doc_show", "ddx_doc_deps",
 		"ddx_agent_sessions",
 		"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history",
+		"ddx_exec_dispatch", "ddx_agent_dispatch",
 		"ddx_doc_changed",
 		"ddx_doc_write", "ddx_doc_history", "ddx_doc_diff",
 	}
@@ -1791,6 +1792,52 @@ func TestMCPBeadClaim(t *testing.T) {
 	}
 	if !strings.Contains(resp.Result.Content[0].Text, "claimed") {
 		t.Error("expected 'claimed' in response")
+	}
+}
+
+func TestExecDispatchLocalhostOnly(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("POST", "/api/exec/run/bench-startup", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-localhost, got %d", w.Code)
+	}
+}
+
+func TestAgentDispatchLocalhostOnly(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"harness":"claude","prompt":"hello"}`
+	req := httptest.NewRequest("POST", "/api/agent/run", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "10.0.0.1:9999"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-localhost, got %d", w.Code)
+	}
+}
+
+func TestAgentDispatchMissingHarness(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"prompt":"hello"}`
+	req := httptest.NewRequest("POST", "/api/agent/run", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing harness, got %d", w.Code)
 	}
 }
 
