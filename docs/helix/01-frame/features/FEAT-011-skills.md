@@ -100,12 +100,33 @@ Wraps multiple commands into one overview:
 - `ddx status` + `ddx doctor` + `ddx bead list` summary
 - Shows stale documents, blocked beads, pending updates
 
+### `/ddx-review` — Guided quorum and fresh-eyes review
+
+Wraps `ddx agent run --quorum` for structured code review:
+- Prompts for scope (file paths, bead ID, or "all changes since <ref>")
+- Assembles the review prompt with context from governing artifacts
+- Dispatches a quorum review across multiple harnesses (e.g., codex + claude)
+- Reports consensus: agreed findings, disagreements, and recommended actions
+- Prevents "codex-style review" hallucinations by using real `ddx agent run`
+  with explicit harness selection and structured output parsing
+
+### `/ddx-run` — Execute a bead with proper agent dispatch
+
+Wraps the bead → agent → verify → close lifecycle:
+- Takes a bead ID (or picks the top ready bead)
+- Reads the bead's spec-id, acceptance criteria, and governing artifacts
+- Assembles a prompt with full context
+- Dispatches via `ddx agent run --harness <selected> --prompt <file>`
+- After agent completes: verifies tests pass, checks acceptance criteria
+- Closes the bead if acceptance met, or reports what failed
+- Prevents agents from "claiming" to have done work without verification
+
 ## Requirements
 
 ### Functional
 
-1. DDx ships at least 4 core skills: `ddx-bead`, `ddx-agent`, `ddx-install`,
-   `ddx-status`
+1. DDx ships at least 6 core skills: `ddx-bead`, `ddx-agent`, `ddx-install`,
+   `ddx-status`, `ddx-review`, `ddx-run`
 2. Skills install to `~/.agents/skills/ddx-*` following the SKILL.md convention
 3. `ddx init` registers DDx skills (symlink or copy)
 4. Skills call DDx CLI commands — they are guidance wrappers, not reimplementations
