@@ -259,9 +259,9 @@ Critical paths before release:
 
 ## Governing Artifacts
 
-- [FEAT-010: Executions](/home/erik/Projects/ddx/docs/helix/01-frame/features/FEAT-010-executions.md)
-- [SD-005: Metric Runtime and History](/home/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-005-metric-runtime-history.md)
-- [TD-005: Metric Runtime and History](/home/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-005-metric-runtime-history.md)
-- [TD-010: Execution Definitions and Runs](/home/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-010-executions.md)
-- [ADR-004: Bead-Backed Runtime Storage](/home/erik/Projects/ddx/docs/helix/02-design/adr/ADR-004-bead-backed-runtime-storage.md)
-- [FEAT-004: Beads](/home/erik/Projects/ddx/docs/helix/01-frame/features/FEAT-004-beads.md)
+- [FEAT-010: Executions](../01-frame/features/FEAT-010-executions.md)
+- [SD-005: Metric Runtime and History](solution-designs/SD-005-metric-runtime-history.md)
+- [TD-005: Metric Runtime and History](technical-designs/TD-005-metric-runtime-history.md)
+- [TD-010: Execution Definitions and Runs](technical-designs/TD-010-executions.md)
+- [ADR-004: Bead-Backed Runtime Storage](adr/ADR-004-bead-backed-runtime-storage.md)
+- [FEAT-004: Beads](../01-frame/features/FEAT-004-beads.md)

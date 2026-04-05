@@ -10,7 +10,7 @@ ddx:
 ---
 # Test Plan: Metric Runtime and History
 
-This plan extends [TP-010](/home/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-010-executions.md).
+This plan extends [TP-010](TP-010-executions.md).
 Generic execution storage, attachment, and legacy-compatibility coverage lives
 there; this plan adds the metric-specific projection and comparison cases.
 
