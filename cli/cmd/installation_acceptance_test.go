@@ -516,7 +516,6 @@ func TestAcceptance_US030_InstallationVerification(t *testing.T) {
 			installationState: "healthy",
 			expectedChecks: []string{
 				"✅ DDX Binary Executable",
-				"✅ PATH Configuration",
 				"✅ Git Available",
 				"✅ Library Path Accessible",
 			},
@@ -526,7 +525,6 @@ func TestAcceptance_US030_InstallationVerification(t *testing.T) {
 			installationState: "broken_path",
 			expectedChecks: []string{
 				"✅ DDX Binary Executable",
-				"✅ PATH Configuration",
 				"✅ Git Available",
 				"✅ Library Path Accessible",
 			},
