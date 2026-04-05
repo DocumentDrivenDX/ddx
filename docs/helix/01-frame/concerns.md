@@ -2,6 +2,7 @@
 
 ## Active Concerns
 - go-std (tech-stack, core CLI)
+- testing (quality-attribute)
 - hugo-hextra (microsite)
 - demo-asciinema (demo)
 - e2e-playwright (testing)
