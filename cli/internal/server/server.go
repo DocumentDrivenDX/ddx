@@ -81,6 +81,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/docs/{id}", s.handleDocWrite)
 	s.mux.HandleFunc("GET /api/docs/{id}", s.handleDocShow)
 
+	// Bead mutations
+	s.mux.HandleFunc("POST /api/beads", s.handleCreateBead)
+	s.mux.HandleFunc("PUT /api/beads/{id}", s.handleUpdateBead)
+	s.mux.HandleFunc("POST /api/beads/{id}/claim", s.handleClaimBead)
+	s.mux.HandleFunc("POST /api/beads/{id}/unclaim", s.handleUnclaimBead)
+	s.mux.HandleFunc("POST /api/beads/{id}/reopen", s.handleReopenBead)
+	s.mux.HandleFunc("POST /api/beads/{id}/deps", s.handleBeadDeps)
+
 	// Executions
 	s.mux.HandleFunc("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
 	s.mux.HandleFunc("GET /api/exec/definitions", s.handleExecDefinitions)
@@ -448,6 +456,204 @@ func (s *Server) handleBeadDepTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": id, "tree": tree})
+}
+
+// --- Bead Mutation Endpoints ---
+
+func (s *Server) handleCreateBead(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title       string   `json:"title"`
+		Type        string   `json:"type"`
+		Priority    *int     `json:"priority"`
+		Labels      []string `json:"labels"`
+		Description string   `json:"description"`
+		Acceptance  string   `json:"acceptance"`
+		Parent      string   `json:"parent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Title == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "title is required"})
+		return
+	}
+
+	store := s.beadStore()
+	b := &bead.Bead{
+		Title:       req.Title,
+		IssueType:   req.Type,
+		Labels:      req.Labels,
+		Description: req.Description,
+		Acceptance:  req.Acceptance,
+		Parent:      req.Parent,
+	}
+	if req.Priority != nil {
+		b.Priority = *req.Priority
+	}
+	if err := store.Create(b); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, b)
+}
+
+func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+
+	var req struct {
+		Status      *string  `json:"status"`
+		Labels      []string `json:"labels"`
+		Description *string  `json:"description"`
+		Acceptance  *string  `json:"acceptance"`
+		Priority    *int     `json:"priority"`
+		Notes       *string  `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	store := s.beadStore()
+	err := store.Update(id, func(b *bead.Bead) {
+		if req.Status != nil {
+			b.Status = *req.Status
+		}
+		if req.Labels != nil {
+			b.Labels = req.Labels
+		}
+		if req.Description != nil {
+			b.Description = *req.Description
+		}
+		if req.Acceptance != nil {
+			b.Acceptance = *req.Acceptance
+		}
+		if req.Priority != nil {
+			b.Priority = *req.Priority
+		}
+		if req.Notes != nil {
+			b.Notes = *req.Notes
+		}
+	})
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	updated, err := store.Get(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleClaimBead(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+
+	var req struct {
+		Assignee string `json:"assignee"`
+		Session  string `json:"session"`
+		Worktree string `json:"worktree"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	store := s.beadStore()
+	if err := store.ClaimWithOptions(id, req.Assignee, req.Session, req.Worktree); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "claimed"})
+}
+
+func (s *Server) handleUnclaimBead(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+
+	store := s.beadStore()
+	if err := store.Unclaim(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "unclaimed"})
+}
+
+func (s *Server) handleReopenBead(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	store := s.beadStore()
+	err := store.Update(id, func(b *bead.Bead) {
+		b.Status = bead.StatusOpen
+		b.Owner = ""
+		if req.Reason != "" && b.Notes != "" {
+			b.Notes = b.Notes + "\n\nReopened: " + req.Reason
+		} else if req.Reason != "" {
+			b.Notes = "Reopened: " + req.Reason
+		}
+	})
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "reopened"})
+}
+
+func (s *Server) handleBeadDeps(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "add" or "remove"
+		DepID  string `json:"dep_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.DepID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "dep_id is required"})
+		return
+	}
+
+	store := s.beadStore()
+	var err error
+	switch req.Action {
+	case "add":
+		err = store.DepAdd(id, req.DepID)
+	case "remove":
+		err = store.DepRemove(id, req.DepID)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be 'add' or 'remove'"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "action": req.Action, "dep_id": req.DepID})
 }
 
 // --- Doc Graph Endpoints ---
@@ -1099,6 +1305,49 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_bead_create",
+			Description: "Create a new bead (work item)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":       map[string]any{"type": "string", "description": "Bead title"},
+					"type":        map[string]any{"type": "string", "description": "Issue type (task, bug, epic, chore)"},
+					"priority":    map[string]any{"type": "integer", "description": "Priority (0=highest, 4=lowest)"},
+					"labels":      map[string]any{"type": "string", "description": "Comma-separated labels"},
+					"description": map[string]any{"type": "string", "description": "Description"},
+					"acceptance":  map[string]any{"type": "string", "description": "Acceptance criteria"},
+				},
+				"required": []string{"title"},
+			},
+		},
+		{
+			Name:        "ddx_bead_update",
+			Description: "Update fields of an existing bead",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":          map[string]any{"type": "string", "description": "Bead ID"},
+					"status":      map[string]any{"type": "string", "description": "New status (open, in_progress, closed)"},
+					"labels":      map[string]any{"type": "string", "description": "Comma-separated labels (replaces existing)"},
+					"description": map[string]any{"type": "string", "description": "New description"},
+					"acceptance":  map[string]any{"type": "string", "description": "New acceptance criteria"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_bead_claim",
+			Description: "Claim a bead for the current session (sets status to in_progress)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":       map[string]any{"type": "string", "description": "Bead ID"},
+					"assignee": map[string]any{"type": "string", "description": "Assignee name"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
 			Name:        "ddx_exec_definitions",
 			Description: "List execution definitions with optional artifact filter",
 			InputSchema: map[string]any{
@@ -1216,6 +1465,28 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 	case "ddx_agent_sessions":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentSessions(harness)
+	case "ddx_bead_create":
+		title, _ := call.Arguments["title"].(string)
+		issueType, _ := call.Arguments["type"].(string)
+		labelsStr, _ := call.Arguments["labels"].(string)
+		description, _ := call.Arguments["description"].(string)
+		acceptance, _ := call.Arguments["acceptance"].(string)
+		var priority int
+		if p, ok := call.Arguments["priority"].(float64); ok {
+			priority = int(p)
+		}
+		return s.mcpBeadCreate(title, issueType, priority, labelsStr, description, acceptance)
+	case "ddx_bead_update":
+		id, _ := call.Arguments["id"].(string)
+		status, _ := call.Arguments["status"].(string)
+		labelsStr, _ := call.Arguments["labels"].(string)
+		description, _ := call.Arguments["description"].(string)
+		acceptance, _ := call.Arguments["acceptance"].(string)
+		return s.mcpBeadUpdate(id, status, labelsStr, description, acceptance)
+	case "ddx_bead_claim":
+		id, _ := call.Arguments["id"].(string)
+		assignee, _ := call.Arguments["assignee"].(string)
+		return s.mcpBeadClaim(id, assignee)
 	case "ddx_exec_definitions":
 		artifact, _ := call.Arguments["artifact"].(string)
 		return s.mcpExecDefinitions(artifact)
@@ -1584,6 +1855,84 @@ func (s *Server) mcpAgentSessions(harness string) mcpToolResult {
 	})
 	data, _ := json.Marshal(sessions)
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpBeadCreate(title, issueType string, priority int, labelsStr, description, acceptance string) mcpToolResult {
+	if title == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "title is required"}},
+			IsError: true,
+		}
+	}
+	store := s.beadStore()
+	b := &bead.Bead{
+		Title:       title,
+		IssueType:   issueType,
+		Priority:    priority,
+		Description: description,
+		Acceptance:  acceptance,
+	}
+	if labelsStr != "" {
+		b.Labels = strings.Split(labelsStr, ",")
+	}
+	if err := store.Create(b); err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(b)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpBeadUpdate(id, status, labelsStr, description, acceptance string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			IsError: true,
+		}
+	}
+	store := s.beadStore()
+	err := store.Update(id, func(b *bead.Bead) {
+		if status != "" {
+			b.Status = status
+		}
+		if labelsStr != "" {
+			b.Labels = strings.Split(labelsStr, ",")
+		}
+		if description != "" {
+			b.Description = description
+		}
+		if acceptance != "" {
+			b.Acceptance = acceptance
+		}
+	})
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			IsError: true,
+		}
+	}
+	updated, _ := store.Get(id)
+	data, _ := json.Marshal(updated)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpBeadClaim(id, assignee string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			IsError: true,
+		}
+	}
+	store := s.beadStore()
+	if err := store.ClaimWithOptions(id, assignee, "", ""); err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			IsError: true,
+		}
+	}
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"id":"%s","status":"claimed"}`, id)}}}
 }
 
 func (s *Server) mcpExecDefinitions(artifactID string) mcpToolResult {

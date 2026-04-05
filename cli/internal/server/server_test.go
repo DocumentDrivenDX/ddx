@@ -701,8 +701,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 19 {
-		t.Fatalf("expected 19 MCP tools, got %d", len(tools))
+	if len(tools) != 22 {
+		t.Fatalf("expected 22 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -713,6 +713,7 @@ func TestMCPToolsList(t *testing.T) {
 	expected := []string{
 		"ddx_list_documents", "ddx_read_document", "ddx_search", "ddx_resolve_persona",
 		"ddx_list_beads", "ddx_show_bead", "ddx_bead_ready", "ddx_bead_status",
+		"ddx_bead_create", "ddx_bead_update", "ddx_bead_claim",
 		"ddx_doc_graph", "ddx_doc_stale", "ddx_doc_show", "ddx_doc_deps",
 		"ddx_agent_sessions",
 		"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history",
@@ -1552,6 +1553,243 @@ func TestMCPExecHistory(t *testing.T) {
 	}
 	if !strings.Contains(resp.Result.Content[0].Text, "bench-startup") {
 		t.Error("expected bench-startup in MCP exec history response")
+	}
+}
+
+func TestCreateBead(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"title":"New task","type":"task","priority":1,"labels":["p0","area:cli"],"description":"A test bead","acceptance":"It works"}`
+	req := httptest.NewRequest("POST", "/api/beads", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var created struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.ID == "" {
+		t.Error("expected non-empty bead ID")
+	}
+	if created.Title != "New task" {
+		t.Errorf("expected title='New task', got %q", created.Title)
+	}
+}
+
+func TestCreateBeadMissingTitle(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"type":"task"}`
+	req := httptest.NewRequest("POST", "/api/beads", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUpdateBead(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"description":"Updated description"}`
+	req := httptest.NewRequest("PUT", "/api/beads/bx-001", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var updated struct {
+		ID          string `json:"id"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != "Updated description" {
+		t.Errorf("expected description='Updated description', got %q", updated.Description)
+	}
+}
+
+func TestUpdateBeadNotFound(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"description":"test"}`
+	req := httptest.NewRequest("PUT", "/api/beads/nonexistent", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestClaimBead(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"assignee":"test-agent"}`
+	req := httptest.NewRequest("POST", "/api/beads/bx-001/claim", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["status"] != "claimed" {
+		t.Errorf("expected status=claimed, got %s", resp["status"])
+	}
+}
+
+func TestUnclaimBead(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// First claim
+	claimBody := `{"assignee":"test-agent"}`
+	req := httptest.NewRequest("POST", "/api/beads/bx-001/claim", strings.NewReader(claimBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("claim failed: %d", w.Code)
+	}
+
+	// Then unclaim
+	req = httptest.NewRequest("POST", "/api/beads/bx-001/unclaim", nil)
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReopenBead(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// bx-002 is closed
+	body := `{"reason":"Need more work"}`
+	req := httptest.NewRequest("POST", "/api/beads/bx-002/reopen", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["status"] != "reopened" {
+		t.Errorf("expected status=reopened, got %s", resp["status"])
+	}
+}
+
+func TestBeadDepsAdd(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"action":"add","dep_id":"bx-002"}`
+	req := httptest.NewRequest("POST", "/api/beads/bx-001/deps", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestMCPBeadCreate(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_create","arguments":{"title":"MCP bead","type":"task"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result.IsError {
+		t.Fatalf("MCP bead create returned error: %s", resp.Result.Content[0].Text)
+	}
+	if !strings.Contains(resp.Result.Content[0].Text, "MCP bead") {
+		t.Error("expected 'MCP bead' in response")
+	}
+}
+
+func TestMCPBeadClaim(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_claim","arguments":{"id":"bx-001","assignee":"agent"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result.IsError {
+		t.Fatalf("MCP bead claim returned error: %s", resp.Result.Content[0].Text)
+	}
+	if !strings.Contains(resp.Result.Content[0].Text, "claimed") {
+		t.Error("expected 'claimed' in response")
 	}
 }
 
