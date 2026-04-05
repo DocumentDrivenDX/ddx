@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -287,8 +288,10 @@ func (env *InstallationTestEnvironment) RunCommand(command string) InstallationR
 			args = append(args, "--verbose")
 		}
 
-		// Execute the doctor command with flags
-		cmd := exec.Command(binaryPath, args...)
+		// Execute the doctor command with flags and timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, binaryPath, args...)
 		// Set working directory to HomeDir so doctor can find .ddx directory
 		cmd.Dir = env.HomeDir
 		output, err := cmd.CombinedOutput()
