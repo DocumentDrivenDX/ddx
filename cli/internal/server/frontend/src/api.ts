@@ -56,6 +56,8 @@ export const api = {
     postJSON<any>(`/beads/${id}/reopen`, { reason }),
   beadDeps: (id: string, action: 'add' | 'remove', depId: string) =>
     postJSON<any>(`/beads/${id}/deps`, { action, dep_id: depId }),
+  saveDocument: (path: string, content: string) =>
+    putJSON<any>(`/documents/${path}`, { content }),
   docGraph: () => fetchJSON<any[]>('/docs/graph'),
   docStale: () => fetchJSON<any[]>('/docs/stale'),
   docShow: (id: string) => fetchJSON<any>(`/docs/${id}`),

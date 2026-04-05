@@ -68,15 +68,82 @@ export default function Documents() {
 }
 
 function DocumentViewer({ path }: { path: string }) {
+  const [editing, setEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const content = useFetch(() => api.documentContent(path), [path])
 
   if (content.loading) return <div className="text-gray-400">Loading...</div>
   if (content.error) return <div className="text-red-500">Error: {content.error}</div>
 
+  const startEditing = () => {
+    setEditContent(content.data ?? '')
+    setEditing(true)
+    setSaveError('')
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveError('')
+    try {
+      await api.saveDocument(path, editContent)
+      setEditing(false)
+      // Force re-fetch by updating content
+      window.location.reload()
+    } catch (e: any) {
+      setSaveError(e.message || 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCancel = () => {
+    setEditing(false)
+    setSaveError('')
+  }
+
   return (
-    <div className="prose prose-sm max-w-none">
-      <div className="text-xs text-gray-400 mb-4 font-mono">{path}</div>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content.data ?? ''}</ReactMarkdown>
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-xs text-gray-400 font-mono">{path}</div>
+        {!editing ? (
+          <button
+            onClick={startEditing}
+            className="px-3 py-1 text-xs bg-gray-100 border rounded hover:bg-gray-200"
+          >
+            Edit
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            {saveError && <span className="text-red-500 text-xs">{saveError}</span>}
+            <button
+              onClick={handleCancel}
+              className="px-3 py-1 text-xs bg-gray-100 border rounded hover:bg-gray-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        )}
+      </div>
+      {editing ? (
+        <textarea
+          value={editContent}
+          onChange={(e) => setEditContent(e.target.value)}
+          className="w-full h-[calc(100vh-14rem)] font-mono text-sm p-4 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+      ) : (
+        <div className="prose prose-sm max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content.data ?? ''}</ReactMarkdown>
+        </div>
+      )}
     </div>
   )
 }

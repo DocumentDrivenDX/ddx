@@ -60,6 +60,7 @@ func (s *Server) routes() {
 
 	// Documents
 	s.mux.HandleFunc("GET /api/documents", s.handleListDocuments)
+	s.mux.HandleFunc("PUT /api/documents/{path...}", s.handleWriteDocument)
 	s.mux.HandleFunc("GET /api/documents/{path...}", s.handleReadDocument)
 	s.mux.HandleFunc("GET /api/search", s.handleSearch)
 	s.mux.HandleFunc("GET /api/personas/{role}", s.handleResolvePersona)
@@ -258,6 +259,42 @@ func (s *Server) handleReadDocument(w http.ResponseWriter, r *http.Request) {
 		"path":    cleaned,
 		"content": string(data),
 	})
+}
+
+func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
+	docPath := r.PathValue("path")
+	if docPath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		return
+	}
+
+	libPath := s.libraryPath()
+	if libPath == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "library not configured"})
+		return
+	}
+
+	cleaned := filepath.Clean(docPath)
+	if strings.Contains(cleaned, "..") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	fullPath := filepath.Join(libPath, cleaned)
+	if err := os.WriteFile(fullPath, []byte(body.Content), 0o644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"path": cleaned, "status": "saved"})
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
