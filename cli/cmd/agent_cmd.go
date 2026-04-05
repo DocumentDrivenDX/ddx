@@ -37,6 +37,7 @@ Examples:
 	}
 
 	cmd.AddCommand(f.newAgentRunCommand())
+	cmd.AddCommand(f.newAgentCondenseCommand())
 	cmd.AddCommand(f.newAgentListCommand())
 	cmd.AddCommand(f.newAgentCapabilitiesCommand())
 	cmd.AddCommand(f.newAgentDoctorCommand())
@@ -212,6 +213,35 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().String("worktree", "", "Create/reuse a git worktree for the run")
 
+	return cmd
+}
+
+func (f *CommandFactory) newAgentCondenseCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "condense",
+		Short: "Filter raw agent output to progress-relevant lines",
+		Long: `Read raw agent output from stdin and write condensed output to stdout.
+
+Keeps: namespace-prefixed progress lines, tool calls, errors/warnings, issue IDs,
+markdown structure (#, |, **), and phase markers. Drops raw diffs, codex
+boilerplate (Commands run:, tokens used), and bulk verbose content.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			namespace, _ := cmd.Flags().GetString("namespace")
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("reading stdin: %w", err)
+			}
+			result := agent.CondenseOutput(string(data), namespace)
+			if result != "" {
+				fmt.Fprint(cmd.OutOrStdout(), result)
+				if !strings.HasSuffix(result, "\n") {
+					fmt.Fprintln(cmd.OutOrStdout())
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("namespace", "helix:", "Caller namespace prefix to keep (e.g. helix:)")
 	return cmd
 }
 
