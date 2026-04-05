@@ -12,6 +12,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -184,52 +185,100 @@ func outputListHuman(cmd *cobra.Command, response *ListResponse, filter, resourc
 		if filter != "" {
 			cmd.Printf("No resources match filter: '%s'\n", filter)
 		}
-		return nil
-	}
+	} else {
 
-	cmd.Println("📋 Available DDx Resources")
-	if filter != "" {
-		cmd.Printf("Filtered by: '%s'\n", filter)
-	}
-	cmd.Println()
-
-	// Show summary if listing all types
-	if resourceType == "" && len(response.Summary) > 1 {
-		cmd.Println("Summary:")
-		caser := cases.Title(language.English)
-		for resType, count := range response.Summary {
-			cmd.Printf("  %s: %d items\n", caser.String(resType), count)
+		cmd.Println("📋 Available DDx Resources")
+		if filter != "" {
+			cmd.Printf("Filtered by: '%s'\n", filter)
 		}
 		cmd.Println()
-	}
 
-	// Group resources by type for display
-	resourcesByType := make(map[string][]Resource)
-	for _, resource := range response.Resources {
-		resourcesByType[resource.Type] = append(resourcesByType[resource.Type], resource)
-	}
-
-	// Display each category
-	resourceTypes := []string{"templates", "workflows", "mcp-servers", "prompts", "personas", "configs", "scripts", "tools", "environments"}
-	caser := cases.Title(language.English)
-	for _, resType := range resourceTypes {
-		resources, exists := resourcesByType[resType]
-		if !exists || len(resources) == 0 {
-			continue
-		}
-
-		cmd.Printf("%s:\n", caser.String(resType))
-		for _, resource := range resources {
-			if resource.IsDirectory {
-				cmd.Printf("  📁 %s", resource.Name)
-			} else {
-				cmd.Printf("  📄 %s", resource.Name)
-			}
-
-			if resource.Description != "" {
-				cmd.Printf(" - %s", resource.Description)
+		// Show summary if listing all types
+		if resourceType == "" && len(response.Summary) > 1 {
+			cmd.Println("Summary:")
+			caser := cases.Title(language.English)
+			for resType, count := range response.Summary {
+				cmd.Printf("  %s: %d items\n", caser.String(resType), count)
 			}
 			cmd.Println()
+		}
+
+		// Group resources by type for display
+		resourcesByType := make(map[string][]Resource)
+		for _, resource := range response.Resources {
+			resourcesByType[resource.Type] = append(resourcesByType[resource.Type], resource)
+		}
+
+		// Display each category
+		resourceTypes := []string{"templates", "workflows", "mcp-servers", "prompts", "personas", "configs", "scripts", "tools", "environments"}
+		caser := cases.Title(language.English)
+		for _, resType := range resourceTypes {
+			resources, exists := resourcesByType[resType]
+			if !exists || len(resources) == 0 {
+				continue
+			}
+
+			cmd.Printf("%s:\n", caser.String(resType))
+			for _, resource := range resources {
+				if resource.IsDirectory {
+					cmd.Printf("  📁 %s", resource.Name)
+				} else {
+					cmd.Printf("  📄 %s", resource.Name)
+				}
+
+				if resource.Description != "" {
+					cmd.Printf(" - %s", resource.Description)
+				}
+				cmd.Println()
+			}
+			cmd.Println()
+		}
+	} // end else (resources found)
+
+	// Show installed and available packages
+	state, err := registry.LoadState()
+	if err == nil {
+		reg := registry.BuiltinRegistry()
+
+		cmd.Println("📦 Installed Packages:")
+		if len(state.Installed) == 0 {
+			cmd.Println("  (none — run 'ddx install <name>' to install)")
+		} else {
+			for _, entry := range state.Installed {
+				cmd.Printf("  %-12s %-8s %-14s (installed %s)\n",
+					entry.Name,
+					entry.Version,
+					string(entry.Type),
+					entry.InstalledAt.Format("2006-01-02"),
+				)
+			}
+		}
+		cmd.Println()
+
+		// Build set of installed names
+		installedNames := make(map[string]bool)
+		for _, entry := range state.Installed {
+			installedNames[entry.Name] = true
+		}
+
+		cmd.Println("📦 Available Packages:")
+		var available []registry.Package
+		for _, pkg := range reg.Packages {
+			if !installedNames[pkg.Name] {
+				available = append(available, pkg)
+			}
+		}
+		if len(available) == 0 {
+			cmd.Println("  (all packages installed)")
+		} else {
+			for _, pkg := range available {
+				cmd.Printf("  %-12s %-8s %-14s %s\n",
+					pkg.Name,
+					pkg.Version,
+					string(pkg.Type),
+					pkg.Description,
+				)
+			}
 		}
 		cmd.Println()
 	}
