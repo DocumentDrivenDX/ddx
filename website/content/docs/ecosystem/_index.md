@@ -27,12 +27,11 @@ DDx is one layer in a stack. Understanding where it fits helps you know what DDx
 
 | Belongs in DDx | Belongs in a Workflow Tool |
 |---------------|--------------------------|
-| Document library structure | Development phases and gates |
-| Persona definitions and bindings | Phase enforcement rules |
-| Bead tracker (work items) | Workflow-specific validation |
-| Agent dispatch and session logging | Supervisory loops and planning |
-| Plugin registry (`ddx install`) | Methodology-specific practices |
-| MCP server for documents | Story/issue management beyond beads |
+| Bead tracker (work items, deps, claims) | Development phases and gates |
+| Execution engine (define, run, record) | Phase enforcement and validation |
+| Agent dispatch and token tracking | Supervisory loops and planning |
+| Plugin registry (`ddx install`) | Methodology-specific skills |
+| MCP server for beads and documents | Story/issue management beyond beads |
 
 ## DDx Artifacts
 

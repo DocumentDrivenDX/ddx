@@ -16,7 +16,7 @@ layout: hextra-home
 
 <div class="hx-mb-12">
 {{< hextra/hero-subtitle >}}
-  The shared infrastructure for document-driven development.&nbsp;<br class="sm:hx-block hx-hidden" />Manage the prompts, personas, patterns, and specs that AI agents consume to build software.
+  The local-first platform for AI-assisted development.&nbsp;<br class="sm:hx-block hx-hidden" />Track work, dispatch agents, manage specs, and install workflow plugins — all from one CLI.
 {{< /hextra/hero-subtitle >}}
 </div>
 
@@ -29,30 +29,30 @@ layout: hextra-home
 
 {{< hextra/feature-grid >}}
   {{< hextra/feature-card
-    title="Document Library"
-    subtitle="Structured library with prompts, personas, patterns, and templates. Organized, discoverable, version-controlled."
+    title="Work Tracker"
+    subtitle="Beads track every task with dependencies, claims, and status. Agents claim work, close beads, and the queue drives what happens next."
     class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
     style="background: radial-gradient(ellipse at 50% 80%,rgba(72,120,198,0.15),hsla(0,0%,100%,0));"
   >}}
   {{< hextra/feature-card
     title="Plugin Registry"
-    subtitle="Install workflow plugins with one command. ddx install helix gets you a complete development methodology."
+    subtitle="One command to install a workflow. ddx install helix gives you structured development with AI agents out of the box."
     class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
     style="background: radial-gradient(ellipse at 50% 80%,rgba(53,163,95,0.15),hsla(0,0%,100%,0));"
   >}}
   {{< hextra/feature-card
-    title="Agent Dispatch"
-    subtitle="Run AI agents through one interface. Multi-model quorum reviews. Token tracking and cost awareness across harnesses."
+    title="Execution Engine"
+    subtitle="Define, run, and record execution evidence. Every agent invocation, test run, and check is captured with structured results."
     class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
     style="background: radial-gradient(ellipse at 50% 80%,rgba(142,53,163,0.15),hsla(0,0%,100%,0));"
   >}}
   {{< hextra/feature-card
-    title="Work Tracker"
-    subtitle="Beads track every work item with dependencies, claims, and execution evidence. The tracker drives the agents."
+    title="Agent Dispatch"
+    subtitle="Run AI agents through one interface. Track token usage and costs across Claude, Codex, and Gemini."
   >}}
   {{< hextra/feature-card
     title="MCP Server"
-    subtitle="Serve documents, beads, and agent logs over MCP and HTTP. Remote supervisors can observe and steer work."
+    subtitle="Serve beads, documents, and execution history over MCP and HTTP. Remote supervisors can observe and steer work."
   >}}
   {{< hextra/feature-card
     title="Workflow-Agnostic"

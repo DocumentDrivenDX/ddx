@@ -3,95 +3,88 @@ title: CLI Reference
 weight: 3
 ---
 
-Complete command reference for the `ddx` CLI.
-
 ## Setup
 
 ```bash
-ddx init                    # Initialize DDx in your project
-ddx doctor                  # Validate installation health
-ddx upgrade                 # Upgrade DDx binary to latest
-ddx status                  # Show version and project info
-```
-
-## Package Registry
-
-```bash
-ddx search <query>          # Search available packages
-ddx install <name>          # Install a package
-ddx installed               # List installed packages
-ddx uninstall <name>        # Remove a package
+ddx init              # Initialize DDx in your project
+ddx install helix     # Install a workflow plugin
+ddx doctor            # Check installation health
+ddx upgrade           # Upgrade DDx binary
 ```
 
 ## Beads (Work Tracker)
 
+The bead tracker is the core of DDx. Beads are work items with dependencies,
+claims, and status. Workflow tools like HELIX use beads to drive execution.
+
 ```bash
-ddx bead create "Title" --type task    # Create a work item
-ddx bead list               # List all beads
-ddx bead show <id>          # Show bead details
-ddx bead ready              # Show unblocked beads
-ddx bead close <id>         # Close a completed bead
-ddx bead dep add <id> <dep> # Add dependency
-ddx bead dep tree <id>      # Show dependency tree
+ddx bead create "Title" --type task
+ddx bead list
+ddx bead show <id>
+ddx bead ready              # unblocked beads
+ddx bead blocked            # beads waiting on deps
+ddx bead update <id> --claim
+ddx bead close <id>
+ddx bead dep add <id> <dep>
+ddx bead dep tree <id>
+```
+
+## Execution Engine
+
+Define reusable execution definitions and run them with recorded evidence.
+
+```bash
+ddx exec define <name> --artifact <id> --command "go test ./..."
+ddx exec run <id>
+ddx exec list
+ddx exec history --artifact <id>
+ddx exec result <run-id>
+ddx exec log <run-id>
 ```
 
 ## Agent Dispatch
 
 ```bash
-ddx agent run --harness claude --prompt file.md   # Run an agent
+ddx agent run --harness claude --prompt file.md
 ddx agent run --quorum majority --harnesses codex,claude --text "Review this"
-ddx agent list              # Available harnesses
-ddx agent capabilities claude  # Model and effort options
-ddx agent usage             # Token consumption summary
-ddx agent log               # Session history
+ddx agent list
+ddx agent usage
+ddx agent capabilities claude
+```
+
+## Package Registry
+
+```bash
+ddx search <query>
+ddx install <name>
+ddx installed
+ddx uninstall <name>
 ```
 
 ## Documents
 
 ```bash
-ddx doc graph               # Show dependency graph
-ddx doc stale               # List stale documents
-ddx doc stamp <path>        # Mark as reviewed
-ddx doc history <id>        # Git history for an artifact
-ddx doc diff <id>           # Diff since last stamp
-ddx doc changed --since HEAD~5  # Recently changed artifacts
-ddx checkpoint <name>       # Create a named checkpoint
-```
-
-## Library
-
-```bash
-ddx list                    # Browse library contents
-ddx prompts list            # Browse prompts
-ddx persona list            # Browse personas
-ddx persona bind <role> <name>  # Bind persona to role
+ddx doc history <id>
+ddx doc changed --since HEAD~5
+ddx checkpoint <name>
+ddx list
 ```
 
 ## Configuration
 
-```bash
-ddx config set <key> <val>
-ddx config get <key>
-```
-
-### Agent Config (`.ddx/config.yaml`)
-
 ```yaml
+# .ddx/config.yaml
 agent:
-  harness: claude              # default harness
-  permissions: safe            # safe | supervised | unrestricted
-  models:
-    codex: o3-mini
-    claude: claude-sonnet-4-20250514
+  harness: claude
+  permissions: safe         # safe | supervised | unrestricted
 git:
-  auto_commit: never           # always | prompt | never
-  checkpoint_prefix: ddx/
+  auto_commit: never        # always | prompt | never
 ```
 
 ## Global Flags
 
 | Flag | Description |
 |------|------------|
-| `-v`, `--verbose` | Verbose output |
+| `-v` | Verbose output |
 | `--config` | Config file path |
 | `--help` | Show help |
