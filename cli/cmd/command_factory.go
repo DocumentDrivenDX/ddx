@@ -335,6 +335,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newMetricCommand())
 	rootCmd.AddCommand(f.newAgentCommand())
 	rootCmd.AddCommand(f.newDocCommand())
+	rootCmd.AddCommand(f.newCheckpointCommand())
 	rootCmd.AddCommand(f.newServerCommand())
 	rootCmd.AddCommand(f.newInstallCommand())
 	rootCmd.AddCommand(f.newInstalledCommand())

@@ -25,7 +25,7 @@ func getSmokeTestBinaryPath(t *testing.T) string {
 	require.NoError(t, err)
 
 	binaryPath := filepath.Join(t.TempDir(), "ddx")
-	buildCmd := exec.Command("go", "build", "-o", binaryPath, ".")
+	buildCmd := exec.Command("go", "build", "-buildvcs=false", "-o", binaryPath, ".")
 	buildCmd.Dir = cliRoot
 	out, err := buildCmd.CombinedOutput()
 	require.NoError(t, err, "go build failed: %s", string(out))

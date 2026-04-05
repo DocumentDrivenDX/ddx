@@ -200,8 +200,28 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			}
 			fmt.Fprintf(out, "Created:  %s\n", b.CreatedAt.Format("2006-01-02 15:04:05"))
 			fmt.Fprintf(out, "Updated:  %s\n", b.UpdatedAt.Format("2006-01-02 15:04:05"))
+			if b.Extra != nil {
+				if v, ok := b.Extra["claimed-at"]; ok {
+					fmt.Fprintf(out, "Claimed:  %v\n", v)
+				}
+				if v, ok := b.Extra["claimed-machine"]; ok {
+					fmt.Fprintf(out, "Machine:  %v\n", v)
+				}
+				if v, ok := b.Extra["claimed-session"]; ok {
+					fmt.Fprintf(out, "Session:  %v\n", v)
+				}
+				if v, ok := b.Extra["claimed-worktree"]; ok {
+					fmt.Fprintf(out, "Worktree: %v\n", v)
+				}
+			}
+			claimKeys := map[string]bool{
+				"claimed-at": true, "claimed-pid": true,
+				"claimed-machine": true, "claimed-session": true, "claimed-worktree": true,
+			}
 			for k, v := range b.Extra {
-				fmt.Fprintf(out, "%s: %v\n", k, v)
+				if !claimKeys[k] {
+					fmt.Fprintf(out, "%s: %v\n", k, v)
+				}
 			}
 			return nil
 		},

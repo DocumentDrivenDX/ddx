@@ -393,6 +393,16 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 // Claim sets a bead to in_progress with claim metadata.
 // Fails if the bead is already claimed (status == in_progress).
 func (s *Store) Claim(id, assignee string) error {
+	return s.ClaimWithOptions(id, assignee, "", "")
+}
+
+// ClaimWithOptions sets a bead to in_progress with extended claim metadata.
+// session and worktree are optional; machine is derived from os.Hostname().
+func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
+	machine, _ := os.Hostname()
+	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
+		machine = envID
+	}
 	return s.Update(id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
@@ -401,6 +411,15 @@ func (s *Store) Claim(id, assignee string) error {
 		b.Owner = assignee
 		b.Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
 		b.Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
+		if machine != "" {
+			b.Extra["claimed-machine"] = machine
+		}
+		if session != "" {
+			b.Extra["claimed-session"] = session
+		}
+		if worktree != "" {
+			b.Extra["claimed-worktree"] = worktree
+		}
 	})
 }
 
@@ -412,6 +431,9 @@ func (s *Store) Unclaim(id string) error {
 		if b.Extra != nil {
 			delete(b.Extra, "claimed-at")
 			delete(b.Extra, "claimed-pid")
+			delete(b.Extra, "claimed-machine")
+			delete(b.Extra, "claimed-session")
+			delete(b.Extra, "claimed-worktree")
 		}
 	})
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -75,6 +77,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			quorum, _ := cmd.Flags().GetString("quorum")
 			harnesses, _ := cmd.Flags().GetString("harnesses")
 			asJSON, _ := cmd.Flags().GetBool("json")
+			worktreeName, _ := cmd.Flags().GetString("worktree")
 
 			var timeout time.Duration
 			if timeoutStr != "" {
@@ -83,6 +86,16 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("invalid timeout: %w", err)
 				}
+			}
+
+			// Resolve worktree if requested
+			workDir := f.WorkingDir
+			if worktreeName != "" {
+				wtPath, err := resolveWorktree(workDir, worktreeName)
+				if err != nil {
+					return fmt.Errorf("worktree: %w", err)
+				}
+				workDir = wtPath
 			}
 
 			// Read prompt from stdin if neither file nor text provided
@@ -117,7 +130,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 						Model:        model,
 						Effort:       effort,
 						Timeout:      timeout,
-						WorkDir:      f.WorkingDir,
+						WorkDir:      workDir,
 					},
 					Harnesses: harnessNames,
 					Strategy:  quorum,
@@ -164,7 +177,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				Model:        model,
 				Effort:       effort,
 				Timeout:      timeout,
-				WorkDir:      f.WorkingDir,
+				WorkDir:      workDir,
 			}
 			result, err := r.Run(opts)
 			if err != nil {
@@ -197,6 +210,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("quorum", "", "Quorum strategy: any, majority, unanimous")
 	cmd.Flags().String("harnesses", "", "Comma-separated harnesses for quorum")
 	cmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.Flags().String("worktree", "", "Create/reuse a git worktree for the run")
 
 	return cmd
 }
@@ -381,4 +395,38 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 	}
 	cmd.Flags().Int("limit", 20, "Number of recent sessions to show")
 	return cmd
+}
+
+// resolveWorktree creates a git worktree at .worktrees/<name> if it does not
+// exist, then returns the absolute path to the worktree directory.
+func resolveWorktree(repoRoot, name string) (string, error) {
+	if repoRoot == "" {
+		// Detect from git
+		out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		if err != nil {
+			return "", fmt.Errorf("cannot detect repo root: %w", err)
+		}
+		repoRoot = strings.TrimSpace(string(out))
+	}
+
+	wtDir := filepath.Join(repoRoot, ".worktrees", name)
+
+	// Check if worktree already exists
+	if _, err := os.Stat(wtDir); err == nil {
+		return wtDir, nil
+	}
+
+	// Create the worktree with a branch of the same name
+	cmd := exec.Command("git", "worktree", "add", wtDir, "-b", name)
+	cmd.Dir = repoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		// If branch already exists, try without -b
+		cmd2 := exec.Command("git", "worktree", "add", wtDir, name)
+		cmd2.Dir = repoRoot
+		if out2, err2 := cmd2.CombinedOutput(); err2 != nil {
+			return "", fmt.Errorf("git worktree add failed: %s\n%s", string(out), string(out2))
+		}
+	}
+
+	return wtDir, nil
 }

@@ -15,8 +15,9 @@ type NewConfig struct {
 
 // GitConfig represents git integration configuration settings.
 type GitConfig struct {
-	AutoCommit   string `yaml:"auto_commit,omitempty" json:"auto_commit,omitempty"`
-	CommitPrefix string `yaml:"commit_prefix,omitempty" json:"commit_prefix,omitempty"`
+	AutoCommit       string `yaml:"auto_commit,omitempty" json:"auto_commit,omitempty"`
+	CommitPrefix     string `yaml:"commit_prefix,omitempty" json:"commit_prefix,omitempty"`
+	CheckpointPrefix string `yaml:"checkpoint_prefix,omitempty" json:"checkpoint_prefix,omitempty"`
 }
 
 // AgentConfig represents agent service configuration in .ddx/config.yaml
