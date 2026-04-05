@@ -38,7 +38,12 @@ jobs:
             -o /usr/local/bin/agg
           chmod +x /usr/local/bin/agg
 
+      - name: Validate existing casts
+        run: bash scripts/demos/validate-casts.sh
+
       - name: Record demo scripts
+        env:
+          GIT_TEMPLATE_DIR: ""
         run: |
           mkdir -p demos
           # Record mechanical demos (01-05) — no agent required
@@ -47,9 +52,11 @@ jobs:
             echo "Recording $name..."
             asciinema rec --cols 80 --rows 24 --command "bash $script" "demos/${name}.cast" || true
           done
+          # 07-quickstart records at 100x30
+          echo "Recording 07-quickstart..."
+          asciinema rec --cols 100 --rows 30 --command "bash scripts/demos/07-quickstart.sh" "demos/07-quickstart.cast" || true
           # 06-full-journey requires agent access — skip in standard CI
-          # Run manually: asciinema rec --cols 100 --rows 30 -c "bash scripts/demos/06-full-journey.sh" demos/06-full-journey.cast
-          echo "Skipping 06-full-journey (requires agent access). Record manually."
+          echo "Skipping 06-full-journey (requires agent access)."
 
       - name: Render GIFs
         run: |
