@@ -23,7 +23,9 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 1. `ddx init` — create `.ddx/library/` structure, generate config, optionally sync from upstream
 2. `ddx list [type]` — browse documents by category with filtering and JSON output
 3. `ddx prompts list/show` — browse and inspect AI prompts
-4. `ddx persona list/show/bind` — manage persona definitions and role bindings
+4. `ddx persona --list/--show/--bind` — manage persona definitions and role
+   bindings (flag-based interface: `--list`, `--show <name>`, `--bind <name>`,
+   `--role <name>`, `--tag <name>`)
 5. ~~`ddx mcp list/install`~~ — **deprecated**. Removed to avoid confusion
    with DDx's own MCP server (FEAT-002).
 5b. ~~`ddx auth`~~ — **deprecated**. Authentication for git subtree removed
