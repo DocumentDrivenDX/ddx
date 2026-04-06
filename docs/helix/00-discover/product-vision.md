@@ -4,9 +4,118 @@ ddx:
 ---
 # Product Vision: DDx
 
+**Version:** 2.0.0
+**Date:** 2026-04-06
+**Status:** Active
+
+## Core Thesis
+
+Fifty years of software engineering has produced a reliable insight:
+well-maintained abstractions at multiple levels — requirements, architecture,
+design, tests — produce better software than working at the code level alone.
+The agentic era does not invalidate this; it amplifies it.
+
+Creating documentation and using it as an abstraction — then refining the
+details around that abstraction — is the best way to enable agents to write
+correct software. DDx encodes that insight into infrastructure, making
+documents first-class, agent-consumable artifacts with identity, relationships,
+and lifecycle tracking.
+
 ## Mission Statement
 
 DDx makes documents the unit of software development — providing the shared infrastructure that developers and workflow tools use to maintain, compose, and deliver the documents AI agents consume to build software.
+
+## What DDx Is
+
+DDx (Document-Driven Development Experience) is a **toolkit and platform for
+document-driven agentic software development**. It is unopinionated about
+methodology — all methodology opinions live in plugins (e.g., HELIX).
+
+DDx provides:
+
+- **Artifact management** — define, version, and manage structured documents
+  (visions, specs, designs, ADRs, etc.) within a repository
+- **Plugin infrastructure** — `ddx init`, `ddx install <plugin>` to add
+  methodology-specific capabilities. DDx stays lean; plugins bring opinions.
+- **Bead-based issue tracker** — ephemeral implementation tasks that synthesize
+  context from project documents into self-contained work items agents can
+  execute without loading additional context
+- **Agent execution infrastructure** — tools for running agents against beads,
+  including adversarial review workflows
+- **Artifact templates with props** — documents templated with typed properties
+  and relationships, forming a graph of interconnected artifacts
+
+## What DDx Is Not
+
+- **Not a methodology.** DDx does not prescribe phases, artifact types, or
+  workflows. Those come from plugins.
+- **Not a storage system.** Artifacts are versioned in Git. Future backends are
+  possible but not DDx's concern.
+- **Not an IDE or editor.** DDx manages documents and tasks; editing happens in
+  whatever tools the user prefers.
+
+## Key Differentiators
+
+### vs. Ad-Hoc Agentic Coding (Vibe Coding)
+
+The mainstream approach — agents making changes with code as the system of
+record — leads to point changes without understanding coupling, no structured
+way to communicate intent, and constant context re-explanation. DDx makes
+documentation the system of record for intent and architecture, while code
+remains the system of record for implementation.
+
+### vs. Code-Only Agent Tools
+
+Systems treating code as the sole system of record accumulate functionality
+without abstraction hierarchy, producing non-orthogonal interfaces and no way
+for agents to understand cross-cutting impact. DDx's progressive abstraction
+layers give every change a defined place and known impact boundary.
+
+### vs. Traditional Documentation-Driven Development
+
+Prior art in DDD fails because documentation gets stale. DDx mitigates this by
+making documents first-class artifacts with relationships, using beads to
+create reconciliation tasks, supporting adversarial review for consistency
+checking, and detecting staleness automatically.
+
+## Design Philosophy
+
+### Multi-Directional Iteration
+
+DDx supports iteration in all directions through the artifact hierarchy:
+
+- **Top-down** — vision changes propagate through PRD, specs, tests, code
+- **Bottom-up** — implementation discoveries feed back up to specs or vision
+- **Middle-out** — spec refinements trigger updates both above and below
+
+The artifact hierarchy is a set of lenses at different zoom levels, not a
+linear pipeline.
+
+### Human-Agent Control Slider
+
+DDx supports a continuum of human involvement:
+
+- **Full agent autonomy** — one-shot prompt, agent runs the entire pipeline
+- **Guided autonomy** — human reviews at abstraction boundaries
+- **Collaborative** — human and agent co-author at every level
+- **Human-driven** — agent assists with research, drafting, review; human decides
+
+### Self-Documenting Workflows
+
+After `ddx init` and plugin install, the resulting project should explain
+itself well enough that a new team member — human or agent — can orient
+quickly.
+
+### Platform Services, Not Opinions
+
+| DDx (Platform) | Plugin (e.g., HELIX) |
+|----------------|---------------------|
+| Artifact storage and versioning | Artifact templates and types |
+| Bead creation, assignment, lifecycle | Phase definitions |
+| Agent execution and orchestration | Cross-cutting concern definitions |
+| Adversarial review infrastructure | Methodology-specific prompts |
+| Metric collection hooks | Metric definitions |
+| Feedback loop infrastructure | Feedback analysis and action |
 
 ## 3-5 Year Vision
 

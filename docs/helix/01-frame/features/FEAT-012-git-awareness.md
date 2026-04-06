@@ -10,7 +10,7 @@ ddx:
 # Feature: Git Awareness and Revision Control Integration
 
 **ID:** FEAT-012
-**Status:** Not Started
+**Status:** In Progress
 **Priority:** P1
 **Owner:** DDx Team
 
@@ -131,11 +131,51 @@ risky phase (e.g., before `helix build` modifies code). DDx can provide:
 
 This is a thin wrapper over git tags, but named in DDx terms.
 
+### S7: Bead Tracker Changes Are Committed
+
+Agents create, update, and close beads throughout a work session. The bead
+tracker file (`.ddx/beads.jsonl`) is project state that must be committed to
+git — it records what work exists, who claimed it, and what's done.
+
+**Current problem:** `.ddx/beads.jsonl` is not gitignored, but nothing in DDx
+ensures it gets committed. Agents that don't know about this convention leave
+bead changes uncommitted, leading to lost tracker state when sessions end or
+branches switch.
+
+**Required behavior:**
+- DDx bead-mutating commands (`ddx bead create`, `update`, `close`, etc.)
+  should auto-commit `beads.jsonl` after successful mutations (governed by the
+  same `git.auto_commit` setting as document changes)
+- `ddx install` should auto-commit plugin-related changes (skill symlinks,
+  bead tracker updates)
+- `ddx init` should generate agent guidance (in CLAUDE.md or AGENTS.md) that
+  instructs agents to commit `beads.jsonl` alongside code changes
+
+**Design constraint:** Bead auto-commits should be lightweight. A single bead
+mutation produces one commit. Batch operations (e.g., `ddx bead import`)
+produce one commit for the whole batch.
+
+### S8: Agent Guidance Generated on Init
+
+`ddx init` should produce agent-facing guidance that ensures agents commit
+DDx-managed state files. Without this, agents treat `.ddx/beads.jsonl` and
+skill symlinks as untracked noise.
+
+**Minimum guidance:**
+- `.ddx/beads.jsonl` should be committed after bead mutations
+- `.agents/skills/` and `.claude/skills/` should be committed after
+  `ddx install` (already implemented)
+- `.ddx/config.yaml` and `.ddx/versions.yaml` should be committed on init
+  (already implemented)
+
+The guidance can be injected into CLAUDE.md (extending the existing
+metaprompt injection) or generated as a standalone AGENTS.md.
+
 ## Requirements
 
 ### Functional
 
-**Early commit (S1, S3, S4)**
+**Early commit (S1, S3, S4, S7)**
 1. DDx operations that write tracked files can auto-commit the change
 2. Auto-commit is configurable: `always` (default for MCP/UI writes),
    `prompt` (ask user), `never` (opt out)
@@ -156,10 +196,24 @@ This is a thin wrapper over git tags, but named in DDx terms.
 12. `ddx checkpoint --list` — list DDx checkpoints
 13. `ddx checkpoint --restore <name>` — restore working tree to checkpoint
 
+**Bead tracker auto-commit (S7)**
+14. `ddx bead` mutating commands auto-commit `.ddx/beads.jsonl` after
+    successful operations (governed by `git.auto_commit`)
+15. `ddx install` auto-commits plugin artifacts (skill symlinks, tracker
+    changes) with `chore: install <name> <version>` message
+16. Batch bead operations produce one commit, not one per record
+
+**Agent guidance generation (S8)**
+17. `ddx init` injects agent guidance into CLAUDE.md (or generates AGENTS.md)
+    that instructs agents to commit DDx-managed state files:
+    `.ddx/beads.jsonl`, `.ddx/config.yaml`, `.agents/skills/`, `.claude/skills/`
+18. The guidance is part of the metaprompt injection and is updated on
+    `ddx init --force`
+
 **Configuration**
-14. `git.auto_commit` in `.ddx/config.yaml`: `always`, `prompt`, `never`
-15. `git.commit_prefix` for customizing commit message format
-16. `git.checkpoint_prefix` for tag naming (default: `ddx/`)
+19. `git.auto_commit` in `.ddx/config.yaml`: `always`, `prompt`, `never`
+20. `git.commit_prefix` for customizing commit message format
+21. `git.checkpoint_prefix` for tag naming (default: `ddx/`)
 
 ### Non-Functional
 
@@ -226,11 +280,40 @@ This is a thin wrapper over git tags, but named in DDx terms.
 - Given I run `ddx checkpoint --restore pre-build`, then the working tree
   matches the tagged state
 
+### US-124: Bead Changes Are Auto-Committed
+**As an** AI agent managing work items
+**I want** bead mutations to be committed automatically
+**So that** tracker state survives session boundaries and is visible to other
+agents and developers
+
+**Acceptance Criteria:**
+- Given auto-commit is enabled, when I run `ddx bead create "Fix login"`,
+  then `.ddx/beads.jsonl` is committed with a structured message
+- Given I run `ddx bead close hx-001`, then the bead state change is committed
+- Given I run `ddx bead import`, then one commit is created for the entire
+  batch, not one per record
+- Given auto-commit is `never`, then bead commands do not create commits
+
+### US-125: Init Generates Agent Guidance for Committing DDx State
+**As a** developer setting up a project
+**I want** `ddx init` to instruct agents about which files to commit
+**So that** agents don't leave DDx state files uncommitted
+
+**Acceptance Criteria:**
+- Given I run `ddx init`, then CLAUDE.md contains guidance listing
+  `.ddx/beads.jsonl`, `.ddx/config.yaml`, `.agents/skills/`, and
+  `.claude/skills/` as files that should be committed
+- Given I run `ddx init --force`, then the guidance is refreshed
+- Given an agent reads the generated guidance, then it knows to `git add`
+  and commit `.ddx/beads.jsonl` after bead operations
+
 ## Dependencies
 
 - `internal/git` package (existing — basic git operations)
+- FEAT-004 (beads — bead mutation operations)
 - FEAT-007 (document graph — artifact ID to file path mapping)
 - FEAT-002 (server — write endpoints)
+- FEAT-009 (plugin registry — `ddx init` and `ddx install`)
 
 ## Out of Scope
 

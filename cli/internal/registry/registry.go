@@ -83,14 +83,21 @@ func BuiltinRegistry() *Registry {
 						Source: ".",
 						Target: ".ddx/plugins/helix",
 					},
-					// Skills installed to both agent and Claude skill directories
+					// Skills installed to project-local and global skill directories.
+					// Project-local (.agents/skills/, .claude/skills/) enables
+					// per-project skill resolution. Global (~/.agents/skills/,
+					// ~/.claude/skills/) enables skills outside of any project.
 					Skills: []InstallMapping{
 						{Source: ".agents/skills/", Target: ".agents/skills/"},
 						{Source: ".agents/skills/", Target: ".claude/skills/"},
+						{Source: ".agents/skills/", Target: "~/.agents/skills/"},
+						{Source: ".agents/skills/", Target: "~/.claude/skills/"},
 					},
 					// CLI script → ~/.local/bin/helix
+					// Uses scripts/helix directly (bin/helix has a symlink
+					// resolution bug when invoked through a symlink).
 					Scripts: &InstallMapping{
-						Source: "bin/helix",
+						Source: "scripts/helix",
 						Target: "~/.local/bin/helix",
 					},
 					Executable: []string{

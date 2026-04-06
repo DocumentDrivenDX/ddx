@@ -13,6 +13,32 @@ import (
 	"time"
 )
 
+// FindProjectRoot walks up from startDir to find the git repository root.
+// It returns the top-level directory of the git working tree. If startDir
+// is not inside a git repository, it returns startDir unchanged.
+//
+// This is analogous to `git rev-parse --show-toplevel` and ensures that
+// ddx always operates from the repository root regardless of the caller's
+// working directory. Without this, running `ddx` from a subdirectory that
+// contains its own `.ddx/` folder would silently use the wrong workspace.
+func FindProjectRoot(startDir string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
+	cmd.Dir = startDir
+	out, err := cmd.Output()
+	if err != nil {
+		// Not in a git repo — fall back to the original directory.
+		return startDir
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		return startDir
+	}
+	return root
+}
+
 // IsRepository checks if the current directory is a git repository
 func IsRepository(path string) bool {
 	// For compatibility with existing tests and code, allow all paths

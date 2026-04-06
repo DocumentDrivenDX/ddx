@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: helix.workflow.principles
   depends_on:
     - helix.workflow

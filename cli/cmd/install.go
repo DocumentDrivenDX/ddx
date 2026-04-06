@@ -36,6 +36,18 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	force, _ := cmd.Flags().GetBool("force")
 
+	// Ensure install operations resolve relative paths against the project
+	// root (WorkingDir), not the caller's cwd. This prevents creating stale
+	// .ddx/ workspaces in subdirectories.
+	if f.WorkingDir != "" {
+		origDir, _ := os.Getwd()
+		if origDir != f.WorkingDir {
+			if err := os.Chdir(f.WorkingDir); err == nil {
+				defer func() { _ = os.Chdir(origDir) }()
+			}
+		}
+	}
+
 	if registry.IsResourcePath(name) {
 		// Individual resource install (e.g. "persona/strict-code-reviewer")
 		fmt.Fprintf(out, "Installing resource %s...\n", name)

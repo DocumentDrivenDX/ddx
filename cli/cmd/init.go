@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
@@ -92,6 +93,17 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		if err := validateGitRepo(workingDir); err != nil {
 			return nil, NewExitError(1, err.Error())
 		}
+	}
+
+	// Guard against nested workspaces: if a parent directory already has a
+	// .ddx/ workspace, refuse to create a second one in a subdirectory.
+	// This prevents the split-tracker bug where commands from different
+	// directories operate on different .ddx/beads.jsonl files.
+	if parent := findParentDDxWorkspace(workingDir); parent != "" {
+		return nil, NewExitError(1, fmt.Sprintf(
+			".ddx/ workspace already exists at %s. "+
+				"DDx anchors to the git repository root; run commands from any directory.",
+			parent))
 	}
 
 	// Check if config already exists
@@ -568,6 +580,42 @@ func validateGitRepository(cmd *cobra.Command) error {
 
 	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Git repository detected\n")
 	return nil
+}
+
+// findParentDDxWorkspace walks up from dir looking for a .ddx/ directory in
+// any ancestor within the same git repository. Returns the ancestor path if
+// found, or "" if none exists. Only checks within the git repo boundary to
+// avoid false positives from stale .ddx/ directories elsewhere on the system.
+func findParentDDxWorkspace(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+
+	// Determine the git root to bound the upward walk.
+	gitRoot := gitpkg.FindProjectRoot(abs)
+	if gitRoot == abs {
+		// dir is already the git root — no parent to check within the repo.
+		return ""
+	}
+
+	// Walk up from the parent to the git root (inclusive).
+	current := filepath.Dir(abs)
+	for {
+		candidate := filepath.Join(current, ".ddx")
+		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
+			return current
+		}
+		if current == gitRoot {
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break // filesystem root — shouldn't happen if gitRoot is set
+		}
+		current = parent
+	}
+	return ""
 }
 
 // injectInitialMetaPrompt injects the configured meta-prompt into CLAUDE.md

@@ -272,6 +272,12 @@ func downloadAndExtract(url, destDir string) (string, error) {
 // symlinkSkills creates symlinks in the target skill directory pointing to the
 // corresponding entries in the installed plugin root. This keeps skills in sync
 // with the plugin rather than creating independent copies.
+//
+// The source entries may themselves be symlinks (e.g. HELIX's
+// .agents/skills/helix-align -> ../../skills/helix-align). We resolve through
+// all symlinks using filepath.EvalSymlinks so the output symlinks point to
+// real directories, not to intermediate symlinks that may contain stale or
+// Docker-only paths.
 func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error) {
 	srcDir := filepath.Join(installedRoot, filepath.FromSlash(skill.Source))
 	dstDir := ExpandHome(skill.Target)
@@ -293,9 +299,20 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 		src := filepath.Join(srcDir, e.Name())
 		dst := filepath.Join(dstDir, e.Name())
 
-		absSrc, err := filepath.Abs(src)
+		// Resolve through all symlinks to get the real, absolute target
+		// path. This prevents broken symlinks when:
+		//  - the source entry is itself a relative symlink
+		//  - the target directory is outside the project (e.g. ~/.claude/skills/)
+		realSrc, err := filepath.EvalSymlinks(src)
 		if err != nil {
-			return nil, fmt.Errorf("resolving path %s: %w", src, err)
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("resolving symlinks for %s: %w", src, err)
+		}
+		realSrc, err = filepath.Abs(realSrc)
+		if err != nil {
+			return nil, fmt.Errorf("resolving absolute path %s: %w", realSrc, err)
 		}
 
 		// Remove existing file/symlink/directory.
@@ -305,8 +322,8 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 			}
 		}
 
-		if err := os.Symlink(absSrc, dst); err != nil {
-			return nil, fmt.Errorf("symlinking %s -> %s: %w", dst, absSrc, err)
+		if err := os.Symlink(realSrc, dst); err != nil {
+			return nil, fmt.Errorf("symlinking %s -> %s: %w", dst, realSrc, err)
 		}
 		written = append(written, dst)
 	}
@@ -323,7 +340,12 @@ func symlinkScript(installedRoot string, mapping *InstallMapping) (string, error
 		return "", fmt.Errorf("script source %s not found in plugin", src)
 	}
 
-	absSrc, err := filepath.Abs(src)
+	// Resolve symlinks and ensure absolute path.
+	absSrc, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		return "", fmt.Errorf("resolving symlinks for %s: %w", src, err)
+	}
+	absSrc, err = filepath.Abs(absSrc)
 	if err != nil {
 		return "", fmt.Errorf("resolving path %s: %w", src, err)
 	}

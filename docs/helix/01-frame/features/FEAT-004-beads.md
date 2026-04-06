@@ -101,6 +101,7 @@ For `bd` and `br` backends, DDx shells out to the respective binary. For `jsonl`
 - **Read algorithm:** Queue commands scan `beads.jsonl` line-by-line. Valid JSON objects are loaded into a snapshot; malformed lines are skipped with line-numbered warnings so one bad record does not take down the entire queue.
 - **Repair algorithm:** If a read finds malformed lines but at least one valid bead, DDx takes the store lock, copies the current file to `.ddx/beads.jsonl.bak`, and rewrites the repaired snapshot atomically.
 - **Failure mode:** If every line is malformed, the command returns a contextual error that names the file and malformed-record count.
+- **Git integration:** `beads.jsonl` is project state and must be committed to git. Auto-commit behavior after bead mutations is defined in FEAT-012 (Git Awareness), requirements S7 and US-124. `ddx init` generates agent guidance that includes `beads.jsonl` as a committable file (FEAT-012 S8, US-125).
 - **Design reference:** See [`SD-004-beads-tracker.md`](../../02-design/solution-designs/SD-004-beads-tracker.md), [`TD-004-beads-claims-evidence.md`](../../02-design/technical-designs/TD-004-beads-claims-evidence.md), and [`TP-004-beads-claims-evidence.md`](../../03-test/test-plans/TP-004-beads-claims-evidence.md) for the concrete algorithms, repair flow, claim semantics, evidence trail, and validation matrix.
 
 ### Storage Boundary

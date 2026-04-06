@@ -97,6 +97,13 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 
 ### Non-Functional
 
+- **Repo-root awareness:** On startup, `ddx` resolves the git repository root
+  via `git rev-parse --show-toplevel` and uses it as the project working
+  directory. All `.ddx/` operations (config, beads, agent logs, plugins) are
+  anchored to the repo root regardless of which subdirectory the user invokes
+  `ddx` from. If the current directory is not inside a git repository, `ddx`
+  falls back to the current working directory. This prevents silent workspace
+  duplication when `ddx init` or `ddx bead` are run from subdirectories.
 - **Performance:** All local operations <1 second, with a startup ratchet on the hot paths. Current benchmarks: CLI startup 7.5ms, `ddx bead create` 10ms with async update checks, config load 0.46ms. Update checks run asynchronously and failures back off for 5 minutes instead of re-firing on every startup. Version gate and staleness hints are sync but zero-cost (local YAML read + string compare, no network). Ratchet coverage lives in `cli/bench_test.go` and `cli/internal/config/benchmark_test.go`; keep `ddx bead create` below 20ms and config load below 1ms on the local perf harness.
 - **Portability:** Single binary, no runtime dependencies. macOS, Linux, Windows.
 - **Installability:** `curl | bash` or `go install`

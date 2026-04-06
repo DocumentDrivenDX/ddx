@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +52,25 @@ Examples:
 	cmd.AddCommand(f.newBeadExportCommand())
 
 	return cmd
+}
+
+// beadAutoCommit commits .ddx/beads.jsonl if git.auto_commit is "always".
+// The operation string describes what happened (e.g. "create ddx-abc123").
+// Errors are silently ignored — auto-commit is best-effort.
+func (f *CommandFactory) beadAutoCommit(operation string) {
+	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
+	if err != nil {
+		return
+	}
+	if cfg.Git == nil {
+		return
+	}
+	acCfg := gitpkg.AutoCommitConfig{
+		AutoCommit:   cfg.Git.AutoCommit,
+		CommitPrefix: cfg.Git.CommitPrefix,
+	}
+	beadsFile := filepath.Join(f.WorkingDir, ".ddx", "beads.jsonl")
+	_ = gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
 }
 
 func (f *CommandFactory) beadStore() *bead.Store {
@@ -134,6 +155,7 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 			if err := s.Create(b); err != nil {
 				return err
 			}
+			f.beadAutoCommit("create " + b.ID)
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", b.ID)
 			return nil
 		},
@@ -244,13 +266,21 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if assignee == "" {
 					assignee = resolveClaimAssignee()
 				}
-				return s.Claim(args[0], assignee)
+				if err := s.Claim(args[0], assignee); err != nil {
+					return err
+				}
+				f.beadAutoCommit("claim " + args[0])
+				return nil
 			}
 			if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
-				return s.Unclaim(args[0])
+				if err := s.Unclaim(args[0]); err != nil {
+					return err
+				}
+				f.beadAutoCommit("unclaim " + args[0])
+				return nil
 			}
 
-			return s.Update(args[0], func(b *bead.Bead) {
+			if err := s.Update(args[0], func(b *bead.Bead) {
 				if v, _ := cmd.Flags().GetString("title"); cmd.Flags().Changed("title") {
 					b.Title = v
 				}
@@ -316,7 +346,11 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						}
 					}
 				}
-			})
+			}); err != nil {
+				return err
+			}
+			f.beadAutoCommit("update " + args[0])
+			return nil
 		},
 	}
 
@@ -424,7 +458,11 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 		Short: "Close a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return f.beadStore().Close(args[0])
+			if err := f.beadStore().Close(args[0]); err != nil {
+				return err
+			}
+			f.beadAutoCommit("close " + args[0])
+			return nil
 		},
 	}
 }
@@ -619,7 +657,11 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 		Short: "Add a dependency (id depends on dep-id)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return f.beadStore().DepAdd(args[0], args[1])
+			if err := f.beadStore().DepAdd(args[0], args[1]); err != nil {
+				return err
+			}
+			f.beadAutoCommit("dep-add " + args[0])
+			return nil
 		},
 	})
 
@@ -628,7 +670,11 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 		Short: "Remove a dependency",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return f.beadStore().DepRemove(args[0], args[1])
+			if err := f.beadStore().DepRemove(args[0], args[1]); err != nil {
+				return err
+			}
+			f.beadAutoCommit("dep-remove " + args[0])
+			return nil
 		},
 	})
 
@@ -669,6 +715,9 @@ func (f *CommandFactory) newBeadImportCommand() *cobra.Command {
 			n, err := s.Import(from, file)
 			if err != nil {
 				return err
+			}
+			if n > 0 {
+				f.beadAutoCommit(fmt.Sprintf("import %d beads", n))
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Imported %d beads\n", n)
 			return nil

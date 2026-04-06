@@ -231,6 +231,29 @@ func TestHasUncommittedChanges_EdgeCases(t *testing.T) {
 	assert.False(t, hasChanges)
 }
 
+// TestFindProjectRoot tests git root resolution
+func TestFindProjectRoot(t *testing.T) {
+	repoDir := setupTestGitRepo(t)
+
+	t.Run("returns repo root from root dir", func(t *testing.T) {
+		root := FindProjectRoot(repoDir)
+		assert.Equal(t, repoDir, root)
+	})
+
+	t.Run("returns repo root from subdirectory", func(t *testing.T) {
+		subDir := filepath.Join(repoDir, "sub", "deep")
+		require.NoError(t, os.MkdirAll(subDir, 0755))
+		root := FindProjectRoot(subDir)
+		assert.Equal(t, repoDir, root)
+	})
+
+	t.Run("returns input for non-git directory", func(t *testing.T) {
+		nonGit := t.TempDir()
+		root := FindProjectRoot(nonGit)
+		assert.Equal(t, nonGit, root)
+	})
+}
+
 // TestGetCurrentBranch_EdgeCases tests edge cases for GetCurrentBranch
 func TestGetCurrentBranch_EdgeCases(t *testing.T) {
 	originalDir, _ := os.Getwd()

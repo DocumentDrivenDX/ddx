@@ -7,7 +7,7 @@ ddx:
 # Feature: Online Library & Plugin Registry
 
 **ID:** FEAT-009
-**Status:** Not Started
+**Status:** In Progress
 **Priority:** P0
 **Owner:** DDx Team
 
