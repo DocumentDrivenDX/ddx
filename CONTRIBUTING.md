@@ -99,6 +99,11 @@ hugo                # Production build to public/
 2. Add factory method in `cli/cmd/command_factory_commands.go`
 3. Register in `cli/cmd/command_factory.go` → `registerSubcommands()`
 4. Add tests in `cli/cmd/<command>_test.go`
+5. Regenerate website docs: `cd cli && make gendocs`
+
+The website CLI reference at `website/content/docs/cli/commands/` is
+auto-generated from cobra metadata — never edit those files by hand. They are
+regenerated automatically during the Docker demo/website build pipeline.
 
 ### Adding Website Content
 
@@ -115,6 +120,21 @@ lefthook run pre-commit
 # Or manually
 cd cli && make lint && make test && make build
 ```
+
+## Releasing
+
+DDx uses a structured release pipeline managed by the `ddx-release` skill.
+The skill lives at `.ddx/skills/ddx-release/SKILL.md` and covers all release
+phases: clean tree → tests → lint → cross-platform build → demos + website
+(Docker) → push + CI → tag → verify.
+
+To cut a release, invoke the skill in an AI-assisted session:
+
+```
+/ddx-release
+```
+
+Or follow the phases in `.ddx/skills/ddx-release/SKILL.md` manually.
 
 ## Testing
 

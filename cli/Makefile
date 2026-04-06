@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema
+.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema gendocs
 
 # Default target
 all: clean deps test build
@@ -142,6 +142,11 @@ obsidian-revert: build
 	@echo "Reverting Obsidian migration..."
 	./$(BUILD_DIR)/ddx obsidian revert --strip-frontmatter workflows/helix
 
+# Generate Hugo markdown docs for every CLI command
+gendocs:
+	@echo "Generating CLI reference docs..."
+	go run ./tools/gendoc
+
 # Show help
 help:
 	@echo "DDx CLI Build System"
@@ -161,6 +166,7 @@ help:
 	@echo "  update-deps - Update dependencies"
 	@echo "  release     - Create release archives"
 	@echo "  dev         - Development mode with file watching"
+	@echo "  gendocs     - Generate CLI reference docs for the website"
 	@echo "  help        - Show this help"
 	@echo ""
 	@echo "Obsidian Integration:"

@@ -56,6 +56,10 @@ docker run --rm \
         echo "Done! Demo files updated in website/static/demos/"
     '
 
+# Generate CLI reference docs (one page per command)
+echo "Generating CLI reference docs..."
+(cd "$PROJECT_ROOT/cli" && go run ./tools/gendoc)
+
 # Build the website in Docker (pinned Hugo version, reproducible)
 echo "Building website in Docker..."
 docker run --rm \

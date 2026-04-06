@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
@@ -197,6 +198,8 @@ func (f *CommandFactory) checkForUpdates(cmd *cobra.Command) {
 	go func() {
 		defer close(done)
 		_, _ = checker.CheckForUpdate(context.Background())
+		// Also refresh plugin version cache while we have a network call in flight.
+		f.refreshPluginVersionCache()
 	}()
 }
 
@@ -331,27 +334,68 @@ func (f *CommandFactory) displayStalenessHints(cmd *cobra.Command) {
 	f.displayPluginStalenessHints(cmd)
 }
 
-// displayPluginStalenessHints checks installed plugins against the builtin registry.
+// displayPluginStalenessHints reads the plugin version cache and shows hints for
+// any installed plugins that have a newer version available.
 func (f *CommandFactory) displayPluginStalenessHints(cmd *cobra.Command) {
 	state, err := registry.LoadState()
 	if err != nil || len(state.Installed) == 0 {
 		return
 	}
 
+	cache := update.NewPluginCache()
+	if err := cache.Load(); err != nil {
+		return // no cache yet — check runs in background, hints appear next time
+	}
+
+	for _, entry := range state.Installed {
+		latestVersion, ok := cache.Data.Plugins[entry.Name]
+		if !ok {
+			continue
+		}
+		needsUpgrade, err := update.NeedsUpgrade(entry.Version, latestVersion)
+		if err == nil && needsUpgrade {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+				"\n💡 %s %s installed, %s available. Run 'ddx install %s' to update.\n",
+				entry.Name, entry.Version, latestVersion, entry.Name)
+		}
+	}
+}
+
+// refreshPluginVersionCache fetches the latest version for each installed plugin
+// from GitHub and writes the result to the plugin cache. Called from the
+// background update goroutine — failures are silent.
+func (f *CommandFactory) refreshPluginVersionCache() {
+	cache := update.NewPluginCache()
+	_ = cache.Load() // ignore missing-file error
+
+	if !cache.IsExpired() {
+		return
+	}
+
+	state, err := registry.LoadState()
+	if err != nil || len(state.Installed) == 0 {
+		return
+	}
+
 	reg := registry.BuiltinRegistry()
+	updated := false
 	for _, entry := range state.Installed {
 		pkg, err := reg.Find(entry.Name)
 		if err != nil {
 			continue
 		}
-		if pkg.Version != entry.Version {
-			needsUpgrade, err := update.NeedsUpgrade(entry.Version, pkg.Version)
-			if err == nil && needsUpgrade {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-					"💡 %s %s installed, %s available. Run 'ddx install %s' to update.\n",
-					entry.Name, entry.Version, pkg.Version, entry.Name)
-			}
+		release, err := update.FetchLatestReleaseForRepo(pkg.Source)
+		if err != nil {
+			continue
 		}
+		latestVersion := strings.TrimPrefix(release.TagName, "v")
+		cache.Data.Plugins[entry.Name] = latestVersion
+		updated = true
+	}
+
+	if updated {
+		cache.Data.LastCheck = time.Now()
+		_ = cache.Save()
 	}
 }
 

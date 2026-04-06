@@ -3,7 +3,12 @@ title: CLI Reference
 weight: 3
 ---
 
-## Setup
+For the full auto-generated reference — one page per command with all flags and
+subcommands — see the [Command Reference](/docs/cli/commands/).
+
+## Quick Reference
+
+### Setup
 
 ```bash
 ddx init              # Initialize DDx in your project
@@ -12,7 +17,7 @@ ddx doctor            # Check installation health
 ddx upgrade           # Upgrade DDx binary
 ```
 
-## Beads (Work Tracker)
+### Beads (Work Tracker)
 
 The bead tracker is the core of DDx. Beads are work items with dependencies,
 claims, and status. Workflow tools like HELIX use beads to drive execution.
@@ -29,7 +34,7 @@ ddx bead dep add <id> <dep>
 ddx bead dep tree <id>
 ```
 
-## Execution Engine
+### Execution Engine
 
 Define reusable execution definitions and run them with recorded evidence.
 
@@ -42,7 +47,7 @@ ddx exec result <run-id>
 ddx exec log <run-id>
 ```
 
-## Agent Dispatch
+### Agent Dispatch
 
 ```bash
 ddx agent run --harness claude --prompt file.md
@@ -52,7 +57,7 @@ ddx agent usage
 ddx agent capabilities claude
 ```
 
-## Package Registry
+### Package Registry
 
 ```bash
 ddx search <query>
@@ -61,7 +66,7 @@ ddx installed
 ddx uninstall <name>
 ```
 
-## Documents
+### Documents
 
 ```bash
 ddx doc history <id>
@@ -70,7 +75,7 @@ ddx checkpoint <name>
 ddx list
 ```
 
-## Configuration
+### Configuration
 
 ```yaml
 # .ddx/config.yaml
@@ -81,7 +86,7 @@ git:
   auto_commit: never        # always | prompt | never
 ```
 
-## Global Flags
+### Global Flags
 
 | Flag | Description |
 |------|------------|
