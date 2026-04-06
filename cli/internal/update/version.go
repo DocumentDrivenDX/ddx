@@ -58,10 +58,9 @@ func NeedsUpgrade(current, latest string) (bool, error) {
 	current = strings.TrimPrefix(current, "v")
 	latest = strings.TrimPrefix(latest, "v")
 
-	// Handle dev versions
+	// Dev builds bypass update checks
 	if strings.Contains(current, "dev") {
-		// Dev versions should always allow upgrade
-		return true, nil
+		return false, nil
 	}
 
 	// Parse semantic versions

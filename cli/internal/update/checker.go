@@ -64,10 +64,19 @@ func (c *Checker) CheckForUpdate(ctx context.Context) (*UpdateCheckResult, error
 		return c.result, nil
 	}
 
-	// If check not needed, return cached result
+	// If check not needed, return cached result — but re-verify the cached
+	// answer is still valid for the current binary version. If the user
+	// upgraded past the cached LatestVersion, the cache is stale.
 	if !c.ShouldCheck() {
+		updateAvailable := c.cache.data.UpdateAvailable
+		if updateAvailable && c.cache.data.LatestVersion != "" {
+			needsUpgrade, err := NeedsUpgrade(c.currentVersion, c.cache.data.LatestVersion)
+			if err != nil || !needsUpgrade {
+				updateAvailable = false
+			}
+		}
 		c.result = &UpdateCheckResult{
-			UpdateAvailable: c.cache.data.UpdateAvailable,
+			UpdateAvailable: updateAvailable,
 			LatestVersion:   c.cache.data.LatestVersion,
 			Error:           nil,
 		}
