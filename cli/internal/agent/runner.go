@@ -57,6 +57,11 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 		return nil, err
 	}
 
+	// Virtual harness: replay from dictionary instead of executing a binary.
+	if harnessName == "virtual" {
+		return r.RunVirtual(opts)
+	}
+
 	prompt, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err
@@ -151,8 +156,11 @@ func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 	if !ok {
 		return Harness{}, "", fmt.Errorf("agent: unknown harness: %s", name)
 	}
-	if _, err := r.LookPath(harness.Binary); err != nil {
-		return Harness{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
+	// Virtual harness doesn't need a binary in PATH.
+	if name != "virtual" {
+		if _, err := r.LookPath(harness.Binary); err != nil {
+			return Harness{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
+		}
 	}
 	return harness, name, nil
 }

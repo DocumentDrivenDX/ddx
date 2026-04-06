@@ -191,6 +191,31 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				return err
 			}
 
+			// Record the prompt→response pair for virtual harness replay.
+			if record, _ := cmd.Flags().GetBool("record"); record && result.ExitCode == 0 {
+				resolvedPrompt := prompt
+				if resolvedPrompt == "" && promptFile != "" {
+					data, _ := os.ReadFile(promptFile)
+					resolvedPrompt = string(data)
+				}
+				entry := &agent.VirtualEntry{
+					Prompt:       resolvedPrompt,
+					Response:     result.Output,
+					Harness:      result.Harness,
+					Model:        result.Model,
+					DelayMS:      result.DurationMS,
+					InputTokens:  result.InputTokens,
+					OutputTokens: result.OutputTokens,
+					CostUSD:      result.CostUSD,
+				}
+				dictDir := agent.VirtualDictionaryDir
+				if err := agent.RecordEntry(dictDir, entry); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to record response: %v\n", err)
+				} else {
+					fmt.Fprintf(os.Stderr, "Recorded response → %s/%s.json\n", dictDir, agent.PromptHash(resolvedPrompt))
+				}
+			}
+
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -221,6 +246,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().String("worktree", "", "Create/reuse a git worktree for the run")
 	cmd.Flags().String("permissions", "", "Permission level: safe, supervised, unrestricted (overrides config)")
+	cmd.Flags().Bool("record", false, "Record prompt→response pair for virtual harness replay")
 
 	return cmd
 }

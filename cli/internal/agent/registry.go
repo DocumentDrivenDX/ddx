@@ -72,6 +72,12 @@ var builtinHarnesses = map[string]Harness{
 		PromptMode:      "stdin",
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},
+	"virtual": {
+		Name:         "virtual",
+		Binary:       "ddx-virtual-agent", // sentinel — never actually exec'd
+		PromptMode:   "arg",
+		DefaultModel: "recorded",
+	},
 }
 
 // Registry manages known harnesses.
@@ -134,8 +140,11 @@ func (r *Registry) Discover() []HarnessStatus {
 			Name:   name,
 			Binary: h.Binary,
 		}
-		path, err := exec.LookPath(h.Binary)
-		if err != nil {
+		// Virtual harness is always available — it replays from dictionary.
+		if name == "virtual" {
+			status.Available = true
+			status.Path = "(built-in)"
+		} else if path, err := exec.LookPath(h.Binary); err != nil {
 			status.Available = false
 			status.Error = "binary not found"
 		} else {
