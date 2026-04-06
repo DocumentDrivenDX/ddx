@@ -6,7 +6,7 @@ ddx:
 ---
 # Product Requirements Document: DDx
 
-**Version:** 4.0.0
+**Version:** 4.1.0
 **Date:** 2026-04-06
 **Status:** Active
 
@@ -48,14 +48,18 @@ specifications. The PRD stays at the user- and capability-level:
   MCP supervisor surface, worktree-aware dispatch
 - FEAT-014 defines agent token awareness: usage tracking, budget enforcement,
   and model selection guidance across harnesses
-- FEAT-015 defines feedback loop infrastructure: structured post-completion
-  feedback capture, plugin hooks, and queryable storage
-- FEAT-016 defines measurement and metrics: bead lifecycle metrics, cost
-  tracking, and plugin-defined metric collection
-- FEAT-017 defines adversarial review infrastructure: second-agent review,
-  structured output, and review-to-bead integration
-- FEAT-018 defines plugin API stability: versioned extension points,
-  documentation, and compatibility contracts
+- ~~FEAT-015~~: feedback loops do not need a dedicated feature — beads already
+  capture structured feedback; experiments may add convenience wrappers later
+- FEAT-016 defines process metrics: bead lifecycle cost, rework rates, and
+  derived measures computed from existing stores (beads, agent sessions).
+  Distinct from FEAT-010 which covers operational metrics you *run*.
+- ~~FEAT-017~~: adversarial review is a form of multi-agent dispatch covered by
+  FEAT-006 quorum infrastructure. The "review against governing artifacts →
+  structured findings → beads" workflow needs a design cycle to find the right
+  abstraction, not a standalone feature.
+- FEAT-018 defines plugin API documentation and stability: document existing
+  extension surfaces (package.yaml, plugin directory layout, SKILL.md, hooks,
+  bead conventions), add schema versioning, commit to backward compatibility
 
 ## Problem
 
@@ -119,16 +123,13 @@ automation infrastructure without hardcoding workflow semantics into each tool.
 10. **Maintain artifact graph integrity** — track relationships between
     documents, detect staleness when upstream artifacts change, and generate
     reconciliation tasks automatically (FEAT-007)
-11. **Capture structured feedback** — provide platform-level feedback loop
-    infrastructure so lessons from bead completions, agent interactions, and
-    project milestones are captured, queryable, and actionable (FEAT-015)
-12. **Measure what matters** — track bead lifecycle metrics, token costs, and
-    plugin-defined measures with collection hooks and reporting (FEAT-016)
-13. **Enable adversarial review** — provide infrastructure for second-agent
-    review of work products, with structured output and review-to-bead
-    integration (FEAT-017)
-14. **Stabilize the plugin API** — document, version, and minimize the
-    extension surface so plugin authors can build with confidence (FEAT-018)
+11. **Track process metrics** — derive bead lifecycle cost, rework rates, and
+    other process measures from existing stores (beads, agent sessions) so
+    teams can understand the economics and efficiency of their workflow
+    (FEAT-016)
+12. **Stabilize the plugin API** — document existing extension surfaces, add
+    schema versioning, and commit to backward compatibility so plugin authors
+    can build with confidence (FEAT-018)
 
 ### Secondary
 1. **Promote the practice** — website explains document-driven development and
@@ -166,8 +167,12 @@ automation infrastructure without hardcoding workflow semantics into each tool.
   possible but not DDx's concern
 - Defining artifact types or templates — those come from plugins. DDx provides
   the infrastructure for storing and relating them.
-- Metric definitions — plugins define what to measure; DDx provides the
-  collection and reporting infrastructure
+- Operational metric definitions — plugins define what to measure; DDx
+  provides the execution and collection infrastructure (FEAT-010)
+- Optimization loop logic — DDx provides primitives (run, measure, compare);
+  plugins define what to try next and when to converge
+- Feedback collection features — beads already capture structured feedback;
+  no separate feedback subsystem needed
 
 ## Users
 
@@ -215,28 +220,16 @@ local operator surface that lets users:
 - reuse and update shared DDx library content across projects
 - invoke DDx operations through agent-facing skills (slash commands) that
   provide guided, validated workflows for complex CLI commands
-- capture structured feedback after bead completions and project milestones
-- track bead lifecycle metrics and token costs across agent invocations
-- query and report on collected metrics and feedback
-
-**Adversarial review infrastructure**
-The exact review contract lives in FEAT-017. At the PRD level, DDx must
-support:
-
-- running a second agent to review a first agent's work against the artifact
-  hierarchy
-- structured output from reviews (not just free-text commentary)
-- integration with the bead tracker so review findings become actionable tasks
-- support for web search during review (verifying technical claims, checking
-  best practices)
+- query process metrics (bead lifecycle cost, rework rates) derived from
+  existing bead and agent session data
 
 **Plugin API**
 The exact API contract lives in FEAT-018. At the PRD level, DDx must provide:
 
-- well-documented extension points with clear contracts
-- semantic versioning of the plugin API surface
-- minimal surface area — expose only what plugins need
-- migration guides when breaking changes are necessary
+- documentation of existing extension surfaces (package.yaml, plugin directory
+  layout, SKILL.md format, hook scripts, bead conventions)
+- schema versioning so plugin authors know what they can depend on
+- backward compatibility commitment for documented surfaces
 
 **Server experience**
 The exact server, HTTP, and MCP contracts live in FEAT-002. At the PRD level,
@@ -275,11 +268,8 @@ The CLI feature spec should also define requirements for:
   operations
 - higher-level projections over execution history for domains such as metrics
   and acceptance evidence
-- feedback collection hooks for plugins to define their own capture and analysis
-- bead lifecycle metrics: time from creation to completion, reopen rates,
-  revision counts
-- plugin-defined metrics with DDx-provided collection and reporting
-  infrastructure
+- process metrics derived from existing stores: bead lifecycle cost (time,
+  tokens, rework), reopen rates, revision counts (FEAT-016)
 
 **Team enablement**
 - getting-started guides that teach the platform alongside whichever plugin
@@ -330,7 +320,7 @@ The server feature spec should also define requirements for:
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|-----------|
 | Documents go stale and get ignored | High | High | Reconciliation beads auto-generated on upstream changes; adversarial review agents check consistency; `ddx doctor` checks freshness |
-| DDx/plugin boundary is fuzzy | High | High | Resolve feedback loops, measurement, and optimization ownership before plugin API v1. Document boundary decisions in ADRs. |
+| DDx/plugin boundary is fuzzy | Medium | High | Resolved for feedback (beads), metrics (FEAT-010 operational / FEAT-016 process), optimization (primitives in DDx, loop in plugins). Document remaining boundaries in FEAT-018. |
 | Framework requires its author to explain it | High | High | Self-documenting project structures; getting-started guides bundled with plugins; team enablement as a P1 requirement |
 | Agent testing and validation is unsolved industry-wide | Medium | High | DDx gives agents better context for first-pass correctness; adversarial review catches more issues; but fundamental problem remains open |
 | MCP spec changes break server | Medium | Medium | Keep MCP integration thin; abstract behind internal API |
@@ -357,9 +347,9 @@ The server feature spec should also define requirements for:
 - [ ] README includes animated terminal recordings of core workflows
 - [ ] Upstream document changes auto-generate reconciliation beads for stale
       dependents
-- [ ] Adversarial review can run a second agent against any bead's output and
-      produce structured findings
-- [ ] Plugin API is versioned, documented, and stable enough for external
-      plugin authors
+- [ ] Process metrics (bead cost, rework rate) queryable from existing data
+- [ ] Multi-agent review workflow produces structured findings from quorum
+      dispatch
+- [ ] Plugin API is documented and stable enough for external plugin authors
 - [ ] A new team member can orient in a DDx-initialized project without
       external explanation
