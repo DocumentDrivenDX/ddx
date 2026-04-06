@@ -36,7 +36,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 9. `ddx upgrade` — self-upgrade binary
 10. `ddx status` / `ddx log` — show sync state and change history
 11. Meta-prompt injection into CLAUDE.md during init
-11b. Project version tracking via `.ddx/versions.yaml` — stamps `ddx_version` on init, gates old binaries from running against newer projects, hints when skills are stale (FEAT-XXX)
+11b. Project version tracking via `.ddx/versions.yaml` — stamps `ddx_version` on init, gates old binaries from running against newer projects, hints when skills are stale (FEAT-015)
 
 **Bead Tracker (implemented — FEAT-004)**
 12. `ddx bead create/show/update/close` — work item CRUD with `--set key=value` for custom fields

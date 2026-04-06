@@ -48,8 +48,9 @@ specifications. The PRD stays at the user- and capability-level:
   MCP supervisor surface, worktree-aware dispatch
 - FEAT-014 defines agent token awareness: usage tracking, budget enforcement,
   and model selection guidance across harnesses
-- ~~FEAT-015~~: feedback loops do not need a dedicated feature — beads already
-  capture structured feedback; experiments may add convenience wrappers later
+- FEAT-015 defines the installation architecture: clean separation of
+  install.sh (binary), ddx install --global (skills), ddx init (project),
+  and ddx install <plugin> (plugin lifecycle)
 - FEAT-016 defines process metrics: bead lifecycle cost, rework rates, and
   derived measures computed from existing stores (beads, agent sessions).
   Distinct from FEAT-010 which covers operational metrics you *run*.
