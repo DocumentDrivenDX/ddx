@@ -367,6 +367,18 @@ func symlinkScript(installedRoot string, mapping *InstallMapping) (string, error
 	return dst, nil
 }
 
+// SymlinkSkillsFromRoot creates skill symlinks from an installed plugin root.
+// Exported for use by local install path.
+func SymlinkSkillsFromRoot(installedRoot string, skill *InstallMapping) ([]string, error) {
+	return symlinkSkills(installedRoot, skill)
+}
+
+// SymlinkScriptFromRoot creates a script symlink from an installed plugin root.
+// Exported for use by local install path.
+func SymlinkScriptFromRoot(installedRoot string, mapping *InstallMapping) (string, error) {
+	return symlinkScript(installedRoot, mapping)
+}
+
 // copyMapping copies files from srcDir/<mapping.Source> to ExpandHome(mapping.Target).
 // If the source is a single file and the target does not end with a path
 // separator, the target is treated as the exact destination file path.

@@ -3,10 +3,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
@@ -28,6 +31,7 @@ Examples:
 		RunE: f.runInstall,
 	}
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
+	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
 	return cmd
 }
 
@@ -46,6 +50,11 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 				defer func() { _ = os.Chdir(origDir) }()
 			}
 		}
+	}
+
+	// Handle --local: install from a local directory instead of registry.
+	if localPath, _ := cmd.Flags().GetString("local"); localPath != "" {
+		return f.installLocal(name, localPath, force, out)
 	}
 
 	if registry.IsResourcePath(name) {
@@ -175,6 +184,104 @@ func commitPluginChanges(name, version string) {
 	msg := fmt.Sprintf("chore: install %s %s", name, version)
 	gitCommit := exec.Command("git", "commit", "-m", msg)
 	_ = gitCommit.Run()
+}
+
+// installLocal installs a plugin from a local directory. It creates a symlink
+// from .ddx/plugins/<name> to the local path, then discovers and symlinks
+// skills the same way a registry install does.
+func (f *CommandFactory) installLocal(name, localPath string, force bool, out io.Writer) error {
+	// Resolve to absolute path.
+	absPath, err := filepath.Abs(localPath)
+	if err != nil {
+		return fmt.Errorf("resolving path %s: %w", localPath, err)
+	}
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return fmt.Errorf("local path does not exist: %s", absPath)
+	}
+
+	// Create .ddx/plugins/ directory.
+	pluginDir := filepath.Join(".ddx", "plugins", name)
+	if err := os.MkdirAll(filepath.Dir(pluginDir), 0755); err != nil {
+		return fmt.Errorf("creating plugins dir: %w", err)
+	}
+
+	// Remove existing plugin (symlink or directory).
+	if info, err := os.Lstat(pluginDir); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || force {
+			if err := os.RemoveAll(pluginDir); err != nil {
+				return fmt.Errorf("removing existing %s: %w", pluginDir, err)
+			}
+		} else {
+			if !force {
+				return fmt.Errorf("%s already exists (use --force to replace)", pluginDir)
+			}
+		}
+	}
+
+	// Create symlink to local path.
+	if err := os.Symlink(absPath, pluginDir); err != nil {
+		return fmt.Errorf("creating symlink %s -> %s: %w", pluginDir, absPath, err)
+	}
+
+	fmt.Fprintf(out, "Linked %s -> %s\n", pluginDir, absPath)
+
+	// Look up the package in registry for skill mappings, or use defaults.
+	reg := registry.BuiltinRegistry()
+	pkg, _ := reg.Find(name)
+
+	entry := registry.InstalledEntry{
+		Name:    name,
+		Version: "local",
+		Type:    registry.PackageTypeWorkflow,
+		Source:  absPath,
+	}
+	entry.Files = append(entry.Files, pluginDir)
+
+	// Discover and symlink skills using the same logic as registry install.
+	if pkg != nil {
+		for i := range pkg.Install.Skills {
+			skill := &pkg.Install.Skills[i]
+			files, err := registry.SymlinkSkillsFromRoot(absPath, skill)
+			if err != nil {
+				fmt.Fprintf(out, "Warning: skill symlink error: %v\n", err)
+				continue
+			}
+			entry.Files = append(entry.Files, files...)
+		}
+
+		// Symlink CLI script if defined.
+		if pkg.Install.Scripts != nil {
+			dst, err := registry.SymlinkScriptFromRoot(absPath, pkg.Install.Scripts)
+			if err != nil {
+				fmt.Fprintf(out, "Warning: script symlink error: %v\n", err)
+			} else {
+				entry.Files = append(entry.Files, dst)
+			}
+		}
+
+		// Set execute bits.
+		for _, rel := range pkg.Install.Executable {
+			p := filepath.Join(absPath, filepath.FromSlash(rel))
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				_ = os.Chmod(p, info.Mode()|0111)
+			}
+		}
+	}
+
+	// Save install state.
+	state, _ := registry.LoadState()
+	if state == nil {
+		state = &registry.InstalledState{}
+	}
+	entry.InstalledAt = time.Now()
+	state.AddOrUpdate(entry)
+	if err := registry.SaveState(state); err != nil {
+		return fmt.Errorf("saving state: %w", err)
+	}
+
+	fmt.Fprintf(out, "Installed %s (local) — %d file(s)\n", name, len(entry.Files))
+	commitPluginChanges(name, "local")
+	return nil
 }
 
 // newInstalledCommand creates the "ddx installed" command.
