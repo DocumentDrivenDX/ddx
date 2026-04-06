@@ -13,22 +13,26 @@ import (
 
 // newInstallCommand creates the "ddx install <name>" command.
 func (f *CommandFactory) newInstallCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "install <name>",
 		Short: "Install a package or resource",
 		Long: `Install a package or resource from the DDx registry.
 
 Examples:
   ddx install helix                        # Install HELIX workflow
+  ddx install helix --force                # Reinstall even if already up to date
   ddx install persona/strict-code-reviewer # Install a single persona`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runInstall,
 	}
+	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
+	return cmd
 }
 
 func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	out := cmd.OutOrStdout()
+	force, _ := cmd.Flags().GetBool("force")
 
 	if registry.IsResourcePath(name) {
 		// Individual resource install (e.g. "persona/strict-code-reviewer")
@@ -69,10 +73,14 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		for _, e := range state.Installed {
 			if e.Name == name {
 				if e.Version == pkg.Version {
-					fmt.Fprintf(out, "%s %s is already up to date\n", e.Name, e.Version)
-					return nil
+					if !force {
+						fmt.Fprintf(out, "%s %s is already up to date\n", e.Name, e.Version)
+						return nil
+					}
+					fmt.Fprintf(out, "Reinstalling %s %s...\n", e.Name, e.Version)
+				} else {
+					fmt.Fprintf(out, "Updating %s from %s to %s...\n", e.Name, e.Version, pkg.Version)
 				}
-				fmt.Fprintf(out, "Updating %s from %s to %s...\n", e.Name, e.Version, pkg.Version)
 			}
 		}
 	}
