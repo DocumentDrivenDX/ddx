@@ -88,24 +88,30 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		}
 	}
 
-	// Process Scripts mapping — always copy the script (never symlink).
-	// The installed root is already in a persistent global location, so a
-	// symlink adds indirection without benefit.
+	// Process Scripts mapping — copy the script to the target path.
+	// If the target is already a symlink, the developer is managing it
+	// themselves (e.g. symlink to their git checkout) — skip with a notice.
 	if pkg.Install.Scripts != nil {
-		srcDir := extractedDir
-		if installedRoot != "" {
-			srcDir = installedRoot
-		}
-		files, err := copyMapping(srcDir, pkg.Install.Scripts)
-		if err != nil {
-			return entry, fmt.Errorf("installing scripts: %w", err)
-		}
-		entry.Files = append(entry.Files, files...)
-
-		// Ensure the installed script is executable.
 		dst := ExpandHome(pkg.Install.Scripts.Target)
-		if info, err := os.Stat(dst); err == nil && !info.IsDir() {
-			_ = os.Chmod(dst, info.Mode()|0111)
+		if li, err := os.Lstat(dst); err == nil && li.Mode()&os.ModeSymlink != 0 {
+			target, _ := os.Readlink(dst)
+			fmt.Fprintf(os.Stderr, "notice: %s is a symlink → %s (developer mode, skipping copy)\n", dst, target)
+			entry.Files = append(entry.Files, dst)
+		} else {
+			srcDir := extractedDir
+			if installedRoot != "" {
+				srcDir = installedRoot
+			}
+			files, err := copyMapping(srcDir, pkg.Install.Scripts)
+			if err != nil {
+				return entry, fmt.Errorf("installing scripts: %w", err)
+			}
+			entry.Files = append(entry.Files, files...)
+
+			// Ensure the installed script is executable.
+			if info, err := os.Stat(dst); err == nil && !info.IsDir() {
+				_ = os.Chmod(dst, info.Mode()|0111)
+			}
 		}
 	}
 

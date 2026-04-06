@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -193,6 +194,9 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check 10: Installed Package Launchers
+	checkInstalledLaunchers(verbose)
+
 	fmt.Println()
 	if allGood && len(issues) == 0 {
 		fmt.Println("🎉 All critical checks passed! DDX is ready to use.")
@@ -376,6 +380,54 @@ func getConfigFileInfo() string {
 	}
 
 	return "not found"
+}
+
+// checkInstalledLaunchers checks whether installed packages with Scripts mappings
+// have a working launcher in the target path (e.g. ~/.local/bin/helix).
+func checkInstalledLaunchers(verbose bool) {
+	state, err := registry.LoadState()
+	if err != nil || len(state.Installed) == 0 {
+		return
+	}
+
+	reg := registry.BuiltinRegistry()
+	for _, entry := range state.Installed {
+		pkg, err := reg.Find(entry.Name)
+		if err != nil || pkg.Install.Scripts == nil {
+			continue
+		}
+
+		dst := registry.ExpandHome(pkg.Install.Scripts.Target)
+		name := filepath.Base(dst)
+		fmt.Printf("✓ Checking %s launcher... ", name)
+
+		li, err := os.Lstat(dst)
+		if os.IsNotExist(err) {
+			fmt.Printf("❌ MISSING (%s not found, run: ddx install %s)\n", dst, pkg.Name)
+			continue
+		}
+		if err != nil {
+			fmt.Printf("❌ error: %v\n", err)
+			continue
+		}
+
+		if li.Mode()&os.ModeSymlink != 0 {
+			target, _ := os.Readlink(dst)
+			if verbose {
+				fmt.Printf("✅ OK (developer symlink → %s)\n", target)
+			} else {
+				fmt.Println("✅ OK (developer symlink)")
+			}
+			continue
+		}
+
+		// Regular file — check it's executable.
+		if li.Mode()&0111 != 0 {
+			fmt.Printf("✅ OK (%s)\n", dst)
+		} else {
+			fmt.Printf("⚠️  not executable (run: chmod +x %s)\n", dst)
+		}
+	}
 }
 
 // checkMetaPromptSync checks if the meta-prompt in CLAUDE.md is in sync with library

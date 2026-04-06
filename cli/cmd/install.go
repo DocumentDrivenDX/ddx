@@ -249,13 +249,20 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 			entry.Files = append(entry.Files, files...)
 		}
 
-		// Copy CLI script if defined.
+		// Copy CLI script if defined (skip if target is a developer symlink).
 		if pkg.Install.Scripts != nil {
-			dst, err := registry.CopyScriptFromRoot(absPath, pkg.Install.Scripts)
-			if err != nil {
-				fmt.Fprintf(out, "Warning: script copy error: %v\n", err)
-			} else {
+			dst := registry.ExpandHome(pkg.Install.Scripts.Target)
+			if li, lErr := os.Lstat(dst); lErr == nil && li.Mode()&os.ModeSymlink != 0 {
+				target, _ := os.Readlink(dst)
+				fmt.Fprintf(out, "notice: %s is a symlink → %s (developer mode, skipping copy)\n", dst, target)
 				entry.Files = append(entry.Files, dst)
+			} else {
+				copied, err := registry.CopyScriptFromRoot(absPath, pkg.Install.Scripts)
+				if err != nil {
+					fmt.Fprintf(out, "Warning: script copy error: %v\n", err)
+				} else {
+					entry.Files = append(entry.Files, copied)
+				}
 			}
 		}
 
