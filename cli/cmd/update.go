@@ -56,6 +56,12 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Upgrade the DDx binary synchronously (always check upstream).
+	if err := f.runUpgrade(cmd, []string{}); err != nil {
+		// Non-fatal: report but continue to plugin updates.
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: binary upgrade check failed: %v\n", err)
+	}
+
 	// Call pure business logic
 	result, err := performUpdate(f.WorkingDir, opts)
 	if err != nil {
@@ -66,13 +72,10 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 	return displayUpdateResult(cmd, result, opts)
 }
 
-// performUpdate checks GitHub for the latest version of each installed package
-// and reinstalls any that are outdated (or all if --force). Also invalidates
-// the DDx binary update cache so the next run re-checks upstream.
+// performUpdate upgrades the DDx binary if a new release is available, then
+// checks GitHub for the latest version of each installed plugin and updates
+// any that are outdated (or all if --force).
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
-	// Always invalidate the binary update cache so the next command re-checks GitHub.
-	update.InvalidateCache()
-
 	state, err := registry.LoadState()
 	if err != nil || len(state.Installed) == 0 {
 		return &UpdateResult{Success: true, Message: "No packages installed."}, nil
