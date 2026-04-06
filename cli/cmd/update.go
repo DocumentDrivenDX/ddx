@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -64,41 +65,58 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 	return displayUpdateResult(cmd, result, opts)
 }
 
-// Pure business logic function
+// performUpdate checks installed packages against the registry and updates any
+// that have a newer version available. If a target is specified (opts.Resource),
+// only that package is updated.
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
-	// Check if we're in a DDx project
-	if !isInitializedInDir(workingDir) {
-		return nil, fmt.Errorf("not in a DDx project - run 'ddx init' first")
+	state, err := registry.LoadState()
+	if err != nil || len(state.Installed) == 0 {
+		return &UpdateResult{Success: true, Message: "No packages installed."}, nil
 	}
 
-	// Handle check flag
-	if opts.Check {
-		cfg, err := loadConfigFromWorkingDirForUpdate(workingDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load configuration: %w", err)
+	reg := registry.BuiltinRegistry()
+
+	var updated []string
+	var alreadyCurrent []string
+
+	for _, entry := range state.Installed {
+		// Filter to specific target if requested.
+		if opts.Resource != "" && entry.Name != opts.Resource {
+			continue
 		}
-		return checkForUpdatesInDir(workingDir, cfg, opts)
+
+		pkg, err := reg.Find(entry.Name)
+		if err != nil {
+			continue // not in registry, skip
+		}
+
+		if pkg.Version == entry.Version {
+			alreadyCurrent = append(alreadyCurrent, entry.Name+" "+entry.Version)
+			continue
+		}
+
+		// Newer version available — reinstall.
+		newEntry, err := registry.InstallPackage(pkg)
+		if err != nil {
+			return nil, fmt.Errorf("updating %s: %w", entry.Name, err)
+		}
+		state.AddOrUpdate(newEntry)
+		updated = append(updated, entry.Name+" "+entry.Version+" → "+pkg.Version)
 	}
 
-	// Validate strategy flags
-	if err := validateUpdateStrategy(opts); err != nil {
-		return nil, err
+	if err := registry.SaveState(state); err != nil {
+		return nil, fmt.Errorf("saving state: %w", err)
 	}
 
-	// Redirect to ddx install for library updates
-	result := &UpdateResult{
+	if len(updated) == 0 {
+		return &UpdateResult{Success: true, Message: "All packages are up to date."}, nil
+	}
+
+	return &UpdateResult{
 		Success:      true,
-		Message:      "DDx updated successfully!",
-		UpdatedFiles: []string{"library/"},
-	}
-
-	if opts.Strategy != "" {
-		result.Message += fmt.Sprintf(" Used '%s' strategy for conflict resolution.", opts.Strategy)
-	} else if opts.Force {
-		result.Message = "DDx updated successfully! Used force mode to override any conflicts."
-	}
-
-	return result, nil
+		Message:      "Updated: " + strings.Join(updated, ", "),
+		UpdatedFiles: updated,
+	}, nil
 }
 
 // Helper functions for working directory-based operations
@@ -449,29 +467,11 @@ func copyDirForRestore(src, dst string) error {
 
 // Output formatting function
 func displayUpdateResult(cmd *cobra.Command, result *UpdateResult, opts *UpdateOptions) error {
-	cyan := color.New(color.FgCyan)
 	green := color.New(color.FgGreen)
-	yellow := color.New(color.FgYellow)
 	red := color.New(color.FgRed)
 
 	out := cmd.OutOrStdout()
 	writer := out.(io.Writer)
-
-	// Display initial message based on operation type
-	if opts.Resource != "" {
-		if opts.DryRun {
-			_, _ = cyan.Fprintf(writer, "🔍 Preview update for DDx toolkit: %s...\n", opts.Resource)
-		} else {
-			_, _ = cyan.Fprintf(writer, "🔄 Updating DDx toolkit: %s...\n", opts.Resource)
-		}
-	} else {
-		if opts.DryRun {
-			_, _ = cyan.Fprintln(writer, "🔍 Preview update for DDx toolkit...")
-		} else {
-			_, _ = cyan.Fprintln(writer, "🔄 Updating DDx toolkit...")
-		}
-	}
-	_, _ = fmt.Fprintln(out)
 
 	// Handle error cases
 	if !result.Success {
@@ -511,16 +511,9 @@ func displayUpdateResult(cmd *cobra.Command, result *UpdateResult, opts *UpdateO
 
 	// Show backup info
 	if result.BackupPath != "" {
-		_, _ = yellow.Fprintf(out, "💾 Backup created at: %s\n", result.BackupPath)
+		_, _ = fmt.Fprintf(out, "💾 Backup created at: %s\n", result.BackupPath)
 		_, _ = fmt.Fprintln(out)
 	}
-
-	// Show next steps
-	_, _ = fmt.Fprintln(out)
-	_, _ = green.Fprintln(writer, "💡 Next steps:")
-	_, _ = fmt.Fprintln(writer, "  • Review updated resources in .ddx/")
-	_, _ = fmt.Fprintln(writer, "  • Run 'ddx diagnose' to check your project health")
-	_, _ = fmt.Fprintln(writer, "  • Apply new patterns with 'ddx apply <pattern>'")
 
 	return nil
 }
