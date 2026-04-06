@@ -117,11 +117,11 @@ func setupTestProject(b *testing.B) string {
 	dir := b.TempDir()
 
 	// Create minimal .ddx/config.yaml
-	os.MkdirAll(dir+"/.ddx/library/prompts", 0o755)
-	os.MkdirAll(dir+"/.ddx/library/personas", 0o755)
+	os.MkdirAll(dir+"/.ddx/plugins/ddx/prompts", 0o755)
+	os.MkdirAll(dir+"/.ddx/plugins/ddx/personas", 0o755)
 	os.WriteFile(dir+"/.ddx/config.yaml", []byte(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -129,7 +129,7 @@ library:
 
 	// Add a few test documents
 	for i := 0; i < 10; i++ {
-		os.WriteFile(dir+"/.ddx/library/prompts/prompt-"+string(rune('a'+i))+".md",
+		os.WriteFile(dir+"/.ddx/plugins/ddx/prompts/prompt-"+string(rune('a'+i))+".md",
 			[]byte("# Prompt\nContent"), 0o644)
 	}
 	return dir

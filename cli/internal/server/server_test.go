@@ -23,7 +23,7 @@ func setupTestDir(t *testing.T) string {
 	}
 	configYAML := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://example.com/lib"
     branch: "main"
@@ -33,7 +33,7 @@ library:
 	}
 
 	// Create library with sample documents
-	libDir := filepath.Join(dir, ".ddx", "library")
+	libDir := filepath.Join(dir, ".ddx", "plugins", "ddx")
 	for _, cat := range []string{"prompts", "templates", "personas"} {
 		catDir := filepath.Join(libDir, cat)
 		if err := os.MkdirAll(catDir, 0o755); err != nil {

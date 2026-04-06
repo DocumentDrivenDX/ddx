@@ -54,7 +54,7 @@ persona_bindings:
 
 				config := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://github.com/test/repo"
     branch: "main"
@@ -209,7 +209,7 @@ func TestConfigCommand_Global(t *testing.T) {
 
 	globalConfig := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://github.com/test/repo"
     branch: "main"

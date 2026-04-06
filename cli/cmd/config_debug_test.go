@@ -15,7 +15,7 @@ func TestConfigResourcesDebug(t *testing.T) {
 	// Create simple config (without resources since we don't support them in new format)
 	configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -39,7 +39,7 @@ persona_bindings:
 	assert.Equal(t, "1.0", cfg.Version, "Version should be loaded")
 	assert.NotNil(t, cfg.Library, "Library should be loaded")
 	if cfg.Library != nil {
-		assert.Equal(t, ".ddx/library", cfg.Library.Path, "Library base path should be loaded")
+		assert.Equal(t, ".ddx/plugins/ddx", cfg.Library.Path, "Library base path should be loaded")
 	}
 	assert.NotNil(t, cfg.PersonaBindings, "PersonaBindings should be loaded")
 }
@@ -52,7 +52,7 @@ func TestBasicConfigRepository(t *testing.T) {
 	// Create config with repository settings
 	configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main

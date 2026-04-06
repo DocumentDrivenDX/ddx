@@ -148,7 +148,7 @@ persona_bindings:
 		require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
 		globalConfig := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -163,7 +163,7 @@ persona_bindings:
 
 		localConfig := `version: "2.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: "https://github.com/project/repo"
     branch: main
@@ -257,7 +257,7 @@ persona_bindings:
 author: "Export User"
 email: "export@example.com"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: "https://github.com/export/repo"
     branch: main

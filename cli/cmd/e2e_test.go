@@ -166,7 +166,7 @@ func TestE2E_TemplateWithVariables(t *testing.T) {
 	// Initialize project with new config format
 	config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -222,7 +222,7 @@ func TestE2E_UpdateWorkflow(t *testing.T) {
 	// Create initial config in new format
 	config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main

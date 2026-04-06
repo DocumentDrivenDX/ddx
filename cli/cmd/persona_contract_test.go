@@ -37,7 +37,7 @@ func createPersonaTestConfig(t *testing.T, testWorkDir string) {
 
 	configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/ddx-library
     branch: main
@@ -80,7 +80,7 @@ func TestPersonaListCommand_Contract(t *testing.T) {
 				// Create config with new schema format
 				configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/ddx-library
     branch: main
@@ -92,7 +92,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "library")
+				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
 
 				// Create personas directory with sample personas
 				personasDir := filepath.Join(libraryDir, "personas")
@@ -142,7 +142,7 @@ You are a test code reviewer.`
 				// Create config with new schema format
 				configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/ddx-library
     branch: main
@@ -154,7 +154,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "library")
+				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
 
 				// Create empty personas directory
 				personasDir := filepath.Join(libraryDir, "personas")
@@ -185,7 +185,7 @@ persona_bindings: {}
 				// Create config with new schema format
 				configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/ddx-library
     branch: main
@@ -197,7 +197,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "library")
+				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
 
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
@@ -257,7 +257,7 @@ tags: [test, tdd]
 				// Create config with new schema format
 				configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/ddx-library
     branch: main
@@ -269,7 +269,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "library")
+				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
 
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
@@ -364,7 +364,7 @@ func TestPersonaShowCommand_Contract(t *testing.T) {
 				t.Setenv("HOME", homeDir)
 
 				createPersonaTestConfig(t, testWorkDir)
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "library")
+				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
 
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
@@ -415,7 +415,7 @@ You are an experienced code reviewer who enforces high standards.
 				t.Setenv("HOME", homeDir)
 
 				createPersonaTestConfig(t, testWorkDir)
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "library")
+				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
 
 				// Create empty personas directory
 				personasDir := filepath.Join(libraryDir, "personas")
@@ -482,7 +482,7 @@ func TestPersonaBindCommand_Contract(t *testing.T) {
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -496,7 +496,7 @@ persona_bindings: {}`
 				// Create personas directory with target persona
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -551,7 +551,7 @@ tags: [strict]
 				// Create empty personas directory
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				personasDir := filepath.Join(homeDir, ".ddx", "library", "personas")
+				personasDir := filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				return workDir
@@ -639,7 +639,7 @@ func TestPersonaLoadCommand_Contract(t *testing.T) {
 				// Create .ddx/config.yaml with persona bindings (new format)
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -667,7 +667,7 @@ This is the project guidance.`
 				// Create personas
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -733,7 +733,7 @@ You follow TDD practices.`
 				// Create .ddx/config.yaml configuration (new format)
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -760,7 +760,7 @@ This is the project guidance.`
 				// Create persona
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -807,7 +807,7 @@ You are a strict code reviewer.`
 				// Create empty personas directory
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				personasDir := filepath.Join(homeDir, ".ddx", "library", "personas")
+				personasDir := filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				return workDir
@@ -879,7 +879,7 @@ func TestPersonaBindingsCommand_Contract(t *testing.T) {
 				// Create .ddx/config.yaml with persona bindings (new format)
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -921,7 +921,7 @@ persona_bindings:
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/repo
     branch: main

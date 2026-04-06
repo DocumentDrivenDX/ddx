@@ -19,7 +19,7 @@ func TestAgentCapabilitiesCommandJSON(t *testing.T) {
 
 	config := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://example.com/lib"
     branch: "main"
@@ -71,7 +71,7 @@ func TestAgentCapabilitiesCommandText(t *testing.T) {
 	// Config with no model override — model should show as "default"
 	config := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://example.com/lib"
     branch: "main"
@@ -105,7 +105,7 @@ func TestAgentCapabilitiesCommandTextConfigOverride(t *testing.T) {
 	// Config with per-harness model override
 	config := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://example.com/lib"
     branch: "main"
@@ -138,7 +138,7 @@ func TestAgentCapabilitiesCommandUnknownHarness(t *testing.T) {
 
 	config := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://example.com/lib"
     branch: "main"

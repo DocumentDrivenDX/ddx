@@ -36,7 +36,7 @@ func TestPersonaIntegration_FullWorkflow(t *testing.T) {
 	// Create initial .ddx/config.yaml configuration
 	initialConfig := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/project
     branch: main
@@ -60,7 +60,7 @@ This is a test project for validating persona workflows.`
 	require.NoError(t, os.WriteFile(claudePath, []byte(initialClaude), 0644))
 
 	// Set library path to project-local library
-	libraryDir := filepath.Join(workDir, ".ddx", "library")
+	libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 
 	// Create personas directory with test personas
 	personasDir := filepath.Join(libraryDir, "personas")
@@ -458,7 +458,7 @@ func TestPersonaIntegration_ErrorHandling(t *testing.T) {
 				env := NewTestEnvironment(t)
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -492,7 +492,7 @@ persona_bindings:
 			setup: func(t *testing.T) {
 				// Create persona with invalid YAML
 				workSubDir := filepath.Join(workDir, "load_persona_with_invalid_content")
-				libraryDir := filepath.Join(workSubDir, ".ddx", "library")
+				libraryDir := filepath.Join(workSubDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -526,7 +526,7 @@ persona_bindings:
 			setup: func(t *testing.T) {
 				// Create empty personas directory
 				tempDir := t.TempDir()
-				libraryDir := filepath.Join(tempDir, ".ddx", "library")
+				libraryDir := filepath.Join(tempDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 			},
@@ -590,7 +590,7 @@ persona_bindings:
 	require.NoError(t, os.WriteFile(configPath, []byte(config), 0644))
 
 	// Create test persona
-	personasDir := filepath.Join(tempHome, ".ddx", "library", "personas")
+	personasDir := filepath.Join(tempHome, ".ddx", "plugins", "ddx", "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 	personaContent := `---

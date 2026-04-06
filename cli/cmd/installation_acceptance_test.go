@@ -351,7 +351,7 @@ func (env *InstallationTestEnvironment) RunCommand(command string) InstallationR
 		// Simulate offline installation by executing our install simulation
 		result := env.ExecuteInstallCommand("install")
 		// Create some library resources to simulate offline package content
-		libPath := filepath.Join(env.HomeDir, ".ddx", "library")
+		libPath := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
 		_ = os.MkdirAll(libPath, 0755)
 		_ = os.WriteFile(filepath.Join(libPath, "README.md"), []byte("# DDx Library"), 0644)
 		return result
@@ -756,7 +756,7 @@ func TestAcceptance_US034_OfflineInstallation(t *testing.T) {
 			assert.Equal(t, 0, version.ExitCode, "DDX should work after offline install")
 
 			// And: All library resources are included
-			assert.True(t, env.FileExists("~/.ddx/library"), "Library resources should be included")
+			assert.True(t, env.FileExists("~/.ddx/plugins/ddx"), "Library resources should be included")
 		})
 	}
 }
@@ -1025,7 +1025,7 @@ func (env *InstallationTestEnvironment) setupInstallationState(state string) err
 		// Install DDX properly
 		env.ExecuteInstallCommand("install")
 		// Create library directory for doctor check
-		libDir := filepath.Join(env.HomeDir, ".ddx", "library")
+		libDir := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
 		_ = os.MkdirAll(libDir, 0755)
 		// Create some sample resources so library appears valid
 		_ = os.MkdirAll(filepath.Join(libDir, "workflows"), 0755)
@@ -1033,7 +1033,7 @@ func (env *InstallationTestEnvironment) setupInstallationState(state string) err
 		// Create configuration file
 		configContent := []byte(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
@@ -1043,7 +1043,7 @@ library:
 		// Install DDX but without PATH configuration
 		env.ExecuteInstallCommand("install")
 		// Create library directory for doctor check
-		libDir := filepath.Join(env.HomeDir, ".ddx", "library")
+		libDir := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
 		_ = os.MkdirAll(libDir, 0755)
 		// Create some sample resources so library appears valid
 		_ = os.MkdirAll(filepath.Join(libDir, "workflows"), 0755)
@@ -1051,7 +1051,7 @@ library:
 		// Create configuration file
 		configContent := []byte(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)

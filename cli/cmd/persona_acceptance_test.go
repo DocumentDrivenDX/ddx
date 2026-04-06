@@ -24,7 +24,7 @@ func setupPersonaTestProject(t *testing.T) *TestEnvironment {
 func setupMockPersonas(t *testing.T, env *TestEnvironment) {
 	t.Helper()
 
-	libPath := filepath.Join(env.Dir, ".ddx", "library")
+	libPath := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
 	personasDir := filepath.Join(libPath, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -111,7 +111,7 @@ func TestAcceptance_US030_LoadPersonasForSession(t *testing.T) {
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/test/project
     branch: main
@@ -145,7 +145,7 @@ This is a test project for validating persona functionality.`
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -289,7 +289,7 @@ Project guidance for my application.`
 				// Create .ddx/config.yaml to make this a valid DDx project
 				config := `version: "1.0"
 library:
-  path: ".ddx/library"
+  path: ".ddx/plugins/ddx"
   repository:
     url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
@@ -306,7 +306,7 @@ persona_bindings: {}`
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -395,7 +395,7 @@ func TestAcceptance_US031_BindPersonasToRoles(t *testing.T) {
 				// Create initial .ddx.yml configuration
 				config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/team/project
     branch: main
@@ -413,7 +413,7 @@ persona_bindings:
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -498,7 +498,7 @@ persona_bindings:
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -860,7 +860,7 @@ func TestAcceptance_US034_DeveloperDiscoveringPersonas(t *testing.T) {
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -946,7 +946,7 @@ tags: [security, vulnerability]
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "library")
+				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 

@@ -64,7 +64,7 @@ func DefaultNewConfig() *NewConfig {
 	return &NewConfig{
 		Version: "1.0",
 		Library: &LibraryConfig{
-			Path: ".ddx/library",
+			Path: ".ddx/plugins/ddx",
 			Repository: &RepositoryConfig{
 				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 				Branch: "main",
@@ -99,7 +99,7 @@ func (c *NewConfig) ApplyDefaults() {
 	}
 	if c.Library == nil {
 		c.Library = &LibraryConfig{
-			Path: ".ddx/library",
+			Path: ".ddx/plugins/ddx",
 			Repository: &RepositoryConfig{
 				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 				Branch: "main",
@@ -107,7 +107,7 @@ func (c *NewConfig) ApplyDefaults() {
 		}
 	} else {
 		if c.Library.Path == "" {
-			c.Library.Path = ".ddx/library"
+			c.Library.Path = ".ddx/plugins/ddx"
 		}
 		if c.Library.Repository == nil {
 			c.Library.Repository = &RepositoryConfig{

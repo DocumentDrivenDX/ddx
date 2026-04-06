@@ -38,6 +38,38 @@ func TestBuiltinRegistry(t *testing.T) {
 	}
 }
 
+func TestBuiltinRegistry_DDxPackage(t *testing.T) {
+	r := BuiltinRegistry()
+
+	pkg, err := r.Find("ddx")
+	if err != nil {
+		t.Fatalf("expected ddx package: %v", err)
+	}
+
+	if pkg.Name != "ddx" {
+		t.Errorf("expected name=ddx, got %q", pkg.Name)
+	}
+	if pkg.Type != PackageTypePlugin {
+		t.Errorf("expected type=plugin, got %q", pkg.Type)
+	}
+	if pkg.Install.Root == nil {
+		t.Fatal("expected install.root to be set")
+	}
+	if pkg.Install.Root.Source != "library" {
+		t.Errorf("expected root source=library, got %q", pkg.Install.Root.Source)
+	}
+	if pkg.Install.Root.Target != ".ddx/plugins/ddx" {
+		t.Errorf("expected root target=.ddx/plugins/ddx, got %q", pkg.Install.Root.Target)
+	}
+	// ddx plugin has no skills or scripts — it's just library resources
+	if len(pkg.Install.Skills) != 0 {
+		t.Errorf("expected no skills, got %d", len(pkg.Install.Skills))
+	}
+	if pkg.Install.Scripts != nil {
+		t.Error("expected no scripts")
+	}
+}
+
 func TestFind(t *testing.T) {
 	r := BuiltinRegistry()
 
@@ -47,6 +79,14 @@ func TestFind(t *testing.T) {
 	}
 	if pkg.Name != "helix" {
 		t.Errorf("expected helix, got %q", pkg.Name)
+	}
+
+	ddxPkg, err := r.Find("ddx")
+	if err != nil {
+		t.Fatalf("expected to find ddx: %v", err)
+	}
+	if ddxPkg.Name != "ddx" {
+		t.Errorf("expected ddx, got %q", ddxPkg.Name)
 	}
 
 	_, err = r.Find("nonexistent-package")
@@ -116,7 +156,7 @@ func TestExpandHome(t *testing.T) {
 		t.Fatalf("cannot get home dir: %v", err)
 	}
 
-	result := expandHome("~/.agents/skills/")
+	result := ExpandHome("~/.agents/skills/")
 	if !strings.HasPrefix(result, home) {
 		t.Errorf("expected expanded path to start with %q, got %q", home, result)
 	}
@@ -126,13 +166,13 @@ func TestExpandHome(t *testing.T) {
 
 	// Non-~ path should be returned unchanged
 	plain := "/absolute/path"
-	if expandHome(plain) != plain {
-		t.Errorf("expected unchanged absolute path, got %q", expandHome(plain))
+	if ExpandHome(plain) != plain {
+		t.Errorf("expected unchanged absolute path, got %q", ExpandHome(plain))
 	}
 
 	relative := "relative/path"
-	if expandHome(relative) != relative {
-		t.Errorf("expected unchanged relative path, got %q", expandHome(relative))
+	if ExpandHome(relative) != relative {
+		t.Errorf("expected unchanged relative path, got %q", ExpandHome(relative))
 	}
 }
 

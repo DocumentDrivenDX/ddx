@@ -17,7 +17,7 @@ func TestDefaultConfig_Basic(t *testing.T) {
 	config := &Config{
 		Version: "2.0",
 		Library: &LibraryConfig{
-			Path: ".ddx/library",
+			Path: ".ddx/plugins/ddx",
 			Repository: &RepositoryConfig{
 				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 				Branch: "main",
@@ -27,7 +27,7 @@ func TestDefaultConfig_Basic(t *testing.T) {
 	}
 
 	assert.Equal(t, "2.0", config.Version)
-	assert.Equal(t, ".ddx/library", config.Library.Path)
+	assert.Equal(t, ".ddx/plugins/ddx", config.Library.Path)
 	assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", config.Library.Repository.URL)
 	assert.Equal(t, "main", config.Library.Repository.Branch)
 	assert.Empty(t, config.PersonaBindings)

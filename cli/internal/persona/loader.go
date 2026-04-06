@@ -25,7 +25,7 @@ func NewPersonaLoader(workingDir string) PersonaLoader {
 	if err != nil || cfg.Library == nil || cfg.Library.Path == "" {
 		// Fallback to a reasonable default if there's an error
 		homeDir, _ := os.UserHomeDir()
-		personasDir = filepath.Join(homeDir, ".ddx", "library", "personas")
+		personasDir = filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
 	} else {
 		personasDir = filepath.Join(cfg.Library.Path, "personas")
 	}

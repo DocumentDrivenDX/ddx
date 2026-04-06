@@ -25,13 +25,12 @@ This monorepo produces three artifacts:
   - `internal/` - Internal packages (config, bead, persona, git, mcp, metaprompt, etc.)
   - `main.go` - Application entry point
 - `website/` - Hugo site with Hextra theme
-- `.ddx/library/` - DDx library resources (synced from ddx-library repo)
+- `library/` - DDx default plugin source (installed to `.ddx/plugins/ddx/` by `ddx init`)
   - `templates/` - Project templates
   - `patterns/` - Reusable code patterns
   - `prompts/` - AI prompts and instructions
   - `personas/` - AI persona definitions
   - `mcp-servers/` - MCP server registry
-  - `configs/` - Tool configurations
 - `docs/helix/` - HELIX frame artifacts (vision, PRD, feature specs)
 - `scripts/` - Build and automation scripts
 
@@ -170,7 +169,7 @@ DDX includes a persona system that provides consistent AI personalities for diff
 - **Roles**: Abstract functions that personas fulfill (e.g., `code-reviewer`, `test-engineer`)
 - **Bindings**: Project-specific mappings between roles and personas in `.ddx.yml`
 
-Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `.ddx/library/personas/` for available personas and `.ddx/library/personas/README.md` for detailed documentation.
+Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `library/personas/` for available personas and `library/personas/README.md` for detailed documentation.
 
 <!-- DDX-META-PROMPT:START -->
 <!-- Source: claude/system-prompts/focused.md -->

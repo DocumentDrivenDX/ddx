@@ -26,8 +26,8 @@ func TestListCommand(t *testing.T) {
 				// Setup test directory with library
 				testDir := t.TempDir()
 
-				// Create library structure in .ddx/library
-				libraryDir := filepath.Join(testDir, ".ddx", "library")
+				// Create library structure in .ddx/plugins/ddx
+				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
 
 				// Create mcp-servers directories
 				mcpDir := filepath.Join(libraryDir, "mcp-servers")
@@ -42,7 +42,7 @@ func TestListCommand(t *testing.T) {
 				// Create .ddx/config.yaml config pointing to library
 				config := []byte(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
@@ -61,7 +61,7 @@ library:
 			setup: func(t *testing.T) string {
 				testDir := t.TempDir()
 
-				libraryDir := filepath.Join(testDir, ".ddx", "library")
+				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
@@ -69,7 +69,7 @@ library:
 				// Create .ddx/config.yaml config
 				config := []byte(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)

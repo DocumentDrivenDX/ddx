@@ -13,7 +13,7 @@ func (f *CommandFactory) newInitCommand() *cobra.Command {
 
 This command:
 • Creates a .ddx/config.yaml configuration file
-• Creates .ddx/library/ directory structure
+• Installs the default DDx library plugin
 • Commits the config file to git
 
 Examples:

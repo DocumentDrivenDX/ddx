@@ -199,7 +199,7 @@ func TestAcceptance_US021_ConfigureRepositoryConnection(t *testing.T) {
 		env := NewTestEnvironment(t)
 		config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -227,7 +227,7 @@ persona_bindings:
 		env := NewTestEnvironment(t)
 		config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -282,7 +282,7 @@ repositories:
 		// Convert advanced config to new format (simplified) - use HTTPS URL for schema validation
 		simpleConfig := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/company/ddx-private
     branch: development
@@ -365,7 +365,7 @@ func TestRepositoryConfigurationCommands_Contract(t *testing.T) {
 		env := NewTestEnvironment(t)
 		config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main
@@ -399,7 +399,7 @@ persona_bindings:
 		env := NewTestEnvironment(t)
 		config := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main

@@ -263,7 +263,7 @@ func (te *TestEnvironment) CreateDefaultConfig() {
 	te.t.Helper()
 	content := fmt.Sprintf(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: %s
     branch: master
@@ -277,7 +277,7 @@ func (te *TestEnvironment) CreateConfigWithCustomURL(url string) {
 	te.t.Helper()
 	content := fmt.Sprintf(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: %s
     branch: master

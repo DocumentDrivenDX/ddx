@@ -55,7 +55,7 @@ func TestPromptsCommand(t *testing.T) {
 				env := NewTestEnvironment(t)
 				configContent := `version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main

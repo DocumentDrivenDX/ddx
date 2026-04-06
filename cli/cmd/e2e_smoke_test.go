@@ -122,7 +122,7 @@ func TestE2ESmokeJourney(t *testing.T) {
 	})
 
 	// Seed a .md persona so persona commands can find it
-	personasDir := filepath.Join(workDir, ".ddx", "library", "personas")
+	personasDir := filepath.Join(workDir, ".ddx", "plugins", "ddx", "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 	personaContent := `---
 name: strict-code-reviewer

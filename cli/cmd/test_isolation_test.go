@@ -90,7 +90,7 @@ func TestNoContamination(t *testing.T) {
 		assert.Equal(t, "1.0", cfg.Version, "Version should be set")
 		assert.NotNil(t, cfg.Library, "Library should be set")
 		if cfg.Library != nil {
-			assert.Equal(t, ".ddx/library", cfg.Library.Path, "Library base path should be set")
+			assert.Equal(t, ".ddx/plugins/ddx", cfg.Library.Path, "Library base path should be set")
 			assert.NotNil(t, cfg.Library.Repository, "Repository should be set")
 		}
 		assert.NotNil(t, cfg.PersonaBindings, "PersonaBindings should be set")

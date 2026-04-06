@@ -184,7 +184,7 @@ func configSet(workingDir string, key, value string, global bool) error {
 				cfg = &config.Config{
 					Version: "1.0",
 					Library: &config.LibraryConfig{
-						Path: ".ddx/library",
+						Path: ".ddx/plugins/ddx",
 						Repository: &config.RepositoryConfig{
 							URL:    "https://github.com/DocumentDrivenDX/ddx-library",
 							Branch: "main",

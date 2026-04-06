@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/spf13/cobra"
 )
@@ -32,7 +33,6 @@ type InitOptions struct {
 type InitResult struct {
 	ConfigCreated bool
 	LibraryExists bool
-	IsDDxRepo     bool
 	Config        *config.Config
 }
 
@@ -64,7 +64,7 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Call pure business logic function
-	result, err := initProject(f.WorkingDir, opts)
+	_, err := initProject(f.WorkingDir, opts)
 	if err != nil {
 		cmd.SilenceUsage = true
 		return err
@@ -72,25 +72,12 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 
 	// Handle user output based on results
 	if !opts.Silent {
-		if result.IsDDxRepo {
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), "📚 Detected DDx repository - configuring library_path to use ../library\n")
-		}
-
-		// Configuration created successfully
-
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "✅ DDx initialized successfully!\n")
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), "Initialized DDx in current project.\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-
-		// Show next steps only if library exists
-		if result.LibraryExists {
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), "Next steps:\n")
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx list          - See available resources\n")
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx apply <name>  - Apply templates or patterns\n")
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx diagnose      - Analyze your project\n")
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx update        - Update toolkit\n")
-			_, _ = fmt.Fprintln(cmd.OutOrStdout())
-		}
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "Next steps:\n")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx install helix   - Install HELIX workflow (optional)\n")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx doctor          - Check installation health\n")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
 	return nil
@@ -136,13 +123,6 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	// Add validation during creation
 	if err := validateConfiguration(localConfig); err != nil {
 		return nil, NewExitError(1, fmt.Sprintf("Configuration validation failed: %v", err))
-	}
-
-	// Check if we're in the DDx repository itself
-	if isDDxRepository(workingDir) {
-		// For DDx repo, point directly to the library directory
-		localConfig.Library.Path = "../library"
-		result.IsDDxRepo = true
 	}
 
 	// Try to load existing config to preserve settings (even if library doesn't exist yet)
@@ -201,7 +181,7 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	}
 	result.ConfigCreated = true
 
-	// Create .ddx/library/ structure even if sync fails (offline-safe init).
+	// Create library directory structure (offline-safe — plugin install may fail).
 	libraryPath := filepath.Join(workingDir, localConfig.Library.Path)
 	for _, sub := range []string{"prompts", "personas", "patterns", "templates", "configs"} {
 		_ = os.MkdirAll(filepath.Join(libraryPath, sub), 0755)
@@ -216,6 +196,22 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	// Copy bootstrap skills to .ddx/skills/, .agents/skills/, and .claude/skills/
 	// All as real files (not symlinks) so they're git-trackable
 	registerProjectSkills(workingDir, opts.Force)
+
+	// Auto-install the default ddx plugin (library resources).
+	// Non-fatal: if offline or install fails, warn and continue.
+	reg := registry.BuiltinRegistry()
+	if pkg, err := reg.Find("ddx"); err == nil {
+		if entry, installErr := registry.InstallPackage(pkg); installErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not install default library: %v\n", installErr)
+		} else {
+			state, _ := registry.LoadState()
+			if state == nil {
+				state = &registry.InstalledState{}
+			}
+			state.AddOrUpdate(entry)
+			_ = registry.SaveState(state)
+		}
+	}
 
 	// Write .ddx/versions.yaml (system-managed, tracks binary version)
 	writeProjectVersions(workingDir, opts.DDxVersion)
@@ -420,32 +416,6 @@ func registerProjectSkills(workingDir string, force bool) {
 			}
 		}
 	}
-}
-
-// isDDxRepository checks if we're in the DDx repository
-func isDDxRepository(workingDir string) bool {
-	// Check for identifying files that indicate this is the DDx repo
-	// Look for cli/main.go and library/ directory
-
-	// Check if we're in the cli directory of DDx repo
-	if filepath.Base(workingDir) == "cli" {
-		// Check for main.go
-		if _, err := os.Stat(filepath.Join(workingDir, "main.go")); err == nil {
-			// Check for ../library directory
-			if _, err := os.Stat(filepath.Join(workingDir, "..", "library")); err == nil {
-				return true
-			}
-		}
-	}
-
-	// Check if we're at the root of DDx repo
-	if _, err := os.Stat(filepath.Join(workingDir, "cli", "main.go")); err == nil {
-		if _, err := os.Stat(filepath.Join(workingDir, "library")); err == nil {
-			return true
-		}
-	}
-
-	return false
 }
 
 // copyDir recursively copies a directory

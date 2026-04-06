@@ -264,7 +264,7 @@ func TestInitCommand_US017_InitializeConfiguration(t *testing.T) {
 				// Create existing config with repository URL
 				existingConfig := fmt.Sprintf(`version: "0.9"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: %s
     branch: master
@@ -359,8 +359,8 @@ library:
 				assert.Contains(t, string(lsOutput), ".ddx/config.yaml", "Config file should be tracked in git")
 
 				// Verify library directory structure exists (init creates it even if sync fails)
-				assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "library"), "Library directory should exist")
-				assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "library", "prompts"), "Prompts directory should exist")
+				assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx"), "Library directory should exist")
+				assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx", "prompts"), "Prompts directory should exist")
 			},
 			expectError: false,
 		},
@@ -444,7 +444,7 @@ func TestInitCommand_US014_SynchronizationSetup(t *testing.T) {
 				// Create existing config with repository URL
 				existingConfig := fmt.Sprintf(`version: "1.0"
 library:
-  path: .ddx/library
+  path: .ddx/plugins/ddx
   repository:
     url: %s
     branch: master

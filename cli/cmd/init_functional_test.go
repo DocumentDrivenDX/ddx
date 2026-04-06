@@ -71,7 +71,6 @@ func TestInitResult_Structure(t *testing.T) {
 	result := &InitResult{
 		ConfigCreated: true,
 		LibraryExists: false,
-		IsDDxRepo:     true,
 	}
 
 	// Verify all fields are accessible
@@ -80,9 +79,6 @@ func TestInitResult_Structure(t *testing.T) {
 	}
 	if result.LibraryExists {
 		t.Error("LibraryExists field not set correctly")
-	}
-	if !result.IsDDxRepo {
-		t.Error("IsDDxRepo field not set correctly")
 	}
 }
 

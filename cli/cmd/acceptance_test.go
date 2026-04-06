@@ -177,7 +177,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				env.InitWithDDx()
 
 				// Create various resources in library directory
-				libDir := filepath.Join(env.Dir, ".ddx", "library")
+				libDir := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
 
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
@@ -211,7 +211,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				env := NewTestEnvironment(t)
 				env.InitWithDDx()
 
-				libDir := filepath.Join(env.Dir, ".ddx", "library")
+				libDir := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
 
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
@@ -253,7 +253,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				require.NoError(t, initCmd.Execute())
 
 				// Create test resources in the library
-				libraryDir := filepath.Join(testDir, ".ddx", "library")
+				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				claudeDir := filepath.Join(promptsDir, "claude")
@@ -295,7 +295,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				env := NewTestEnvironment(t)
 				env.InitWithDDx()
 
-				libDir := filepath.Join(env.Dir, ".ddx", "library")
+				libDir := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))

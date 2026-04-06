@@ -56,7 +56,7 @@ func TestInitCommand_Contract(t *testing.T) {
 			expectCode: 0,
 			validateOutput: func(t *testing.T, output string) {
 				// Contract specifies these output elements
-				assert.Contains(t, output, "Initialized DDx")
+				assert.Contains(t, output, "DDx initialized successfully")
 			},
 		},
 		{
@@ -82,7 +82,7 @@ func TestInitCommand_Contract(t *testing.T) {
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
-					[]byte("version: \"1.0\"\nlibrary:\n  path: \".ddx/library\"\n  repository:\n    url: \"https://github.com/DocumentDrivenDX/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
+					[]byte("version: \"1.0\"\nlibrary:\n  path: \".ddx/plugins/ddx\"\n  repository:\n    url: \"https://github.com/DocumentDrivenDX/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
 					0644,
 				))
 				return workDir
@@ -115,7 +115,7 @@ func TestInitCommand_Contract(t *testing.T) {
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
-					[]byte("version: \"0.9\"\nlibrary:\n  path: \".ddx/library\"\n  repository:\n    url: \"https://github.com/DocumentDrivenDX/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
+					[]byte("version: \"0.9\"\nlibrary:\n  path: \".ddx/plugins/ddx\"\n  repository:\n    url: \"https://github.com/DocumentDrivenDX/ddx-library\"\n    branch: \"main\"\npersona_bindings: {}"),
 					0644,
 				))
 				return workDir
@@ -194,7 +194,7 @@ func TestListCommand_Contract(t *testing.T) {
 				require.NoError(t, initCmd.Execute())
 
 				// Create test resources in the library
-				libraryDir := filepath.Join(testDir, ".ddx", "library")
+				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
@@ -230,7 +230,7 @@ func TestListCommand_Contract(t *testing.T) {
 				require.NoError(t, initCmd.Execute())
 
 				// Create test resources in the library
-				libraryDir := filepath.Join(testDir, ".ddx", "library")
+				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))

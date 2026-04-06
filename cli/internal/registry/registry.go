@@ -24,10 +24,11 @@ type InstallMapping struct {
 
 // PackageInstall describes what to copy during installation.
 type PackageInstall struct {
-	Root     *InstallMapping  `yaml:"root,omitempty"`     // plugin root (e.g., .ddx/plugins/helix)
-	Skills   []InstallMapping `yaml:"skills,omitempty"`   // skills directories (copied to each target)
-	Scripts  *InstallMapping  `yaml:"scripts,omitempty"`  // scripts/binaries
-	Symlinks []SymlinkMapping `yaml:"symlinks,omitempty"` // post-install symlinks
+	Root       *InstallMapping  `yaml:"root,omitempty"`       // plugin root (e.g., .ddx/plugins/helix)
+	Skills     []InstallMapping `yaml:"skills,omitempty"`     // skills directories (copied to each target)
+	Scripts    *InstallMapping  `yaml:"scripts,omitempty"`    // scripts/binaries
+	Symlinks   []SymlinkMapping `yaml:"symlinks,omitempty"`   // post-install symlinks
+	Executable []string         `yaml:"executable,omitempty"` // paths (relative to root) that must be executable
 }
 
 // SymlinkMapping describes a symlink to create during installation.
@@ -57,6 +58,20 @@ func BuiltinRegistry() *Registry {
 	return &Registry{
 		Packages: []Package{
 			{
+				Name:        "ddx",
+				Version:     "0.4.6",
+				Description: "DDx default library: prompts, personas, MCP configs, environments",
+				Type:        PackageTypePlugin,
+				Source:      "https://github.com/DocumentDrivenDX/ddx",
+				Install: PackageInstall{
+					Root: &InstallMapping{
+						Source: "library",
+						Target: ".ddx/plugins/ddx",
+					},
+				},
+				Keywords: []string{"library", "prompts", "personas", "mcp", "default"},
+			},
+			{
 				Name:        "helix",
 				Version:     "1.0.0",
 				Description: "Supervisory autopilot for AI-assisted software delivery",
@@ -77,6 +92,10 @@ func BuiltinRegistry() *Registry {
 					Scripts: &InstallMapping{
 						Source: "bin/helix",
 						Target: "~/.local/bin/helix",
+					},
+					Executable: []string{
+						"bin/helix",
+						"scripts/helix",
 					},
 				},
 				Keywords: []string{"workflow", "methodology", "ai", "development"},

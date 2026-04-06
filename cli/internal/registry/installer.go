@@ -44,7 +44,15 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 			return entry, fmt.Errorf("installing plugin root: %w", err)
 		}
 		entry.Files = append(entry.Files, files...)
-		installedRoot = expandHome(pkg.Install.Root.Target)
+		installedRoot = ExpandHome(pkg.Install.Root.Target)
+
+		// Ensure declared executables have the execute bit set.
+		for _, rel := range pkg.Install.Executable {
+			p := filepath.Join(installedRoot, filepath.FromSlash(rel))
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				_ = os.Chmod(p, info.Mode()|0111)
+			}
+		}
 	}
 
 	// Process Skills mappings — symlink from installed root when available,
@@ -86,8 +94,8 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 
 	// Process symlinks.
 	for _, sym := range pkg.Install.Symlinks {
-		src := expandHome(sym.Source)
-		dst := expandHome(sym.Target)
+		src := ExpandHome(sym.Source)
+		dst := ExpandHome(sym.Target)
 
 		// Create parent dir if needed.
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
@@ -111,7 +119,7 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 }
 
 // InstallResource installs a single resource file (e.g. "persona/strict-code-reviewer")
-// from the ddx-library GitHub repo into the local .ddx/library/<type>/ directory.
+// from the ddx-library GitHub repo into the local .ddx/plugins/ddx/<type>/ directory.
 func InstallResource(resourcePath string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        resourcePath,
@@ -129,7 +137,7 @@ func InstallResource(resourcePath string) (InstalledEntry, error) {
 	resourceType, resourceName := parts[0], parts[1]
 
 	// Determine target directory relative to cwd.
-	target := filepath.Join(".ddx", "library", resourceType+"s")
+	target := filepath.Join(".ddx", "plugins", "ddx", resourceType+"s")
 	if err := os.MkdirAll(target, 0755); err != nil {
 		return entry, fmt.Errorf("creating target directory %s: %w", target, err)
 	}
@@ -153,7 +161,7 @@ func InstallResource(resourcePath string) (InstalledEntry, error) {
 func UninstallPackage(entry *InstalledEntry) error {
 	var errs []string
 	for _, f := range entry.Files {
-		expanded := expandHome(f)
+		expanded := ExpandHome(f)
 		if err := os.Remove(expanded); err != nil && !os.IsNotExist(err) {
 			errs = append(errs, fmt.Sprintf("removing %s: %v", f, err))
 		}
@@ -215,6 +223,11 @@ func downloadAndExtract(url, destDir string) (string, error) {
 
 		dest := filepath.Join(destDir, clean)
 
+		// Skip PAX global headers (GitHub tarballs include these).
+		if hdr.Typeflag == tar.TypeXGlobalHeader {
+			continue
+		}
+
 		// Track the top-level directory name.
 		parts := strings.SplitN(clean, string(filepath.Separator), 2)
 		if topDir == "" && parts[0] != "" && parts[0] != "." {
@@ -261,7 +274,7 @@ func downloadAndExtract(url, destDir string) (string, error) {
 // with the plugin rather than creating independent copies.
 func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error) {
 	srcDir := filepath.Join(installedRoot, filepath.FromSlash(skill.Source))
-	dstDir := expandHome(skill.Target)
+	dstDir := ExpandHome(skill.Target)
 
 	entries, err := os.ReadDir(srcDir)
 	if os.IsNotExist(err) {
@@ -304,7 +317,7 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 // installed plugin root to the target path (e.g. ~/.local/bin/helix).
 func symlinkScript(installedRoot string, mapping *InstallMapping) (string, error) {
 	src := filepath.Join(installedRoot, filepath.FromSlash(mapping.Source))
-	dst := expandHome(mapping.Target)
+	dst := ExpandHome(mapping.Target)
 
 	if _, err := os.Stat(src); os.IsNotExist(err) {
 		return "", fmt.Errorf("script source %s not found in plugin", src)
@@ -332,7 +345,7 @@ func symlinkScript(installedRoot string, mapping *InstallMapping) (string, error
 	return dst, nil
 }
 
-// copyMapping copies files from srcDir/<mapping.Source> to expandHome(mapping.Target).
+// copyMapping copies files from srcDir/<mapping.Source> to ExpandHome(mapping.Target).
 // If the source is a single file and the target does not end with a path
 // separator, the target is treated as the exact destination file path.
 // If the source is a directory (or target ends with /), files are copied
@@ -340,7 +353,7 @@ func symlinkScript(installedRoot string, mapping *InstallMapping) (string, error
 // Returns the list of destination files written.
 func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 	src := filepath.Join(srcDir, filepath.FromSlash(mapping.Source))
-	dst := expandHome(mapping.Target)
+	dst := ExpandHome(mapping.Target)
 
 	info, err := os.Stat(src)
 	if os.IsNotExist(err) {
@@ -409,7 +422,8 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 }
 
 // copyFile copies src to dst, creating parent directories as needed.
-// If dst already exists (file, symlink, or directory), it is removed first.
+// Preserves the source file's permissions. If dst already exists (file,
+// symlink, or directory), it is removed first.
 func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
@@ -422,13 +436,18 @@ func copyFile(src, dst string) error {
 		}
 	}
 
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = in.Close() }()
 
-	out, err := os.Create(dst)
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcInfo.Mode())
 	if err != nil {
 		return err
 	}
@@ -460,8 +479,8 @@ func downloadFile(url, dest string) error {
 	return err
 }
 
-// expandHome expands a leading ~ to the user's home directory.
-func expandHome(path string) string {
+// ExpandHome expands a leading ~ to the user's home directory.
+func ExpandHome(path string) string {
 	if !strings.HasPrefix(path, "~") {
 		return path
 	}

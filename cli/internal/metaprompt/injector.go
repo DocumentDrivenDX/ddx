@@ -11,7 +11,7 @@ import (
 // MetaPromptInjector manages meta-prompt injection into CLAUDE.md
 type MetaPromptInjector interface {
 	// InjectMetaPrompt injects a meta-prompt from library into CLAUDE.md
-	// promptPath is relative to .ddx/library/prompts/ (e.g., "claude/system-prompts/focused.md")
+	// promptPath is relative to the library prompts/ dir (e.g., "claude/system-prompts/focused.md")
 	InjectMetaPrompt(promptPath string) error
 
 	// RemoveMetaPrompt removes the meta-prompt section from CLAUDE.md
@@ -29,7 +29,7 @@ type MetaPromptInjector interface {
 // MetaPromptInjectorImpl implements MetaPromptInjector
 type MetaPromptInjectorImpl struct {
 	claudeFilePath string // Path to CLAUDE.md (typically "CLAUDE.md")
-	libraryPath    string // Path to library root (typically ".ddx/library")
+	libraryPath    string // Path to library root (typically ".ddx/plugins/ddx")
 	workingDir     string // Working directory for relative path resolution
 }
 
@@ -44,7 +44,7 @@ const (
 func NewMetaPromptInjector() MetaPromptInjector {
 	return &MetaPromptInjectorImpl{
 		claudeFilePath: "CLAUDE.md",
-		libraryPath:    ".ddx/library",
+		libraryPath:    ".ddx/plugins/ddx",
 		workingDir:     ".",
 	}
 }

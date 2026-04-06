@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"text/tabwriter"
 
@@ -85,11 +87,42 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Capture old file list before installing so we can remove stale files.
+	var oldFiles map[string]bool
+	if state != nil {
+		if old := state.FindInstalled(name); old != nil {
+			oldFiles = make(map[string]bool, len(old.Files))
+			for _, f := range old.Files {
+				oldFiles[f] = true
+			}
+		}
+	}
+
 	fmt.Fprintf(out, "Installing %s %s from %s...\n", pkg.Name, pkg.Version, pkg.Source)
 
 	entry, err := registry.InstallPackage(pkg)
 	if err != nil {
 		return fmt.Errorf("install package: %w", err)
+	}
+
+	// Remove files from the old version that are no longer in the new version.
+	if oldFiles != nil {
+		newFiles := make(map[string]bool, len(entry.Files))
+		for _, f := range entry.Files {
+			newFiles[f] = true
+		}
+		var removed int
+		for f := range oldFiles {
+			if !newFiles[f] {
+				expanded := registry.ExpandHome(f)
+				if err := os.Remove(expanded); err == nil {
+					removed++
+				}
+			}
+		}
+		if removed > 0 {
+			fmt.Fprintf(out, "Removed %d stale file(s)\n", removed)
+		}
 	}
 
 	state, stateErr := registry.LoadState()
@@ -102,7 +135,34 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(out, "Installed %s %s (%d file(s))\n", pkg.Name, pkg.Version, len(entry.Files))
+
+	// Auto-commit skill symlinks and other trackable changes.
+	commitPluginChanges(name, pkg.Version)
+
 	return nil
+}
+
+// commitPluginChanges stages and commits plugin-related changes in the working tree.
+// Non-fatal: if git operations fail (not a repo, nothing to commit), it's silently skipped.
+func commitPluginChanges(name, version string) {
+	// Stage skill symlinks and any other trackable plugin artifacts.
+	paths := []string{".agents/skills/", ".claude/skills/"}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			gitAdd := exec.Command("git", "add", p)
+			_ = gitAdd.Run()
+		}
+	}
+
+	// Check if there's anything to commit.
+	status := exec.Command("git", "diff", "--cached", "--quiet")
+	if status.Run() == nil {
+		return // nothing staged
+	}
+
+	msg := fmt.Sprintf("chore: install %s %s", name, version)
+	gitCommit := exec.Command("git", "commit", "-m", msg)
+	_ = gitCommit.Run()
 }
 
 // newInstalledCommand creates the "ddx installed" command.
