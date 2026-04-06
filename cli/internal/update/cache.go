@@ -83,6 +83,20 @@ func (c *Cache) Save() error {
 	return nil
 }
 
+// Invalidate resets the cache so the next ShouldCheck() returns true.
+func (c *Cache) Invalidate() {
+	c.data.LastCheck = time.Time{}
+}
+
+// InvalidateCache loads the on-disk cache and resets it so the next check
+// goes to GitHub. Silent on error (best-effort).
+func InvalidateCache() {
+	c := NewCache()
+	_ = c.Load()
+	c.Invalidate()
+	_ = c.Save()
+}
+
 // IsExpired checks whether the cache should be refreshed.
 // Successful checks use the long TTL; failed checks retry sooner to avoid dogpiling.
 func (c *Cache) IsExpired() bool {

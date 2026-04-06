@@ -19,6 +19,20 @@ func FetchLatestRelease() (*GitHubRelease, error) {
 	return fetchLatestRelease(githubAPIURL)
 }
 
+// FetchLatestReleaseForRepo fetches the latest release for a GitHub repo URL
+// e.g. "https://github.com/DocumentDrivenDX/helix"
+func FetchLatestReleaseForRepo(repoURL string) (*GitHubRelease, error) {
+	// Convert https://github.com/owner/repo → https://api.github.com/repos/owner/repo/releases/latest
+	repoURL = strings.TrimRight(repoURL, "/")
+	const githubBase = "https://github.com/"
+	if !strings.HasPrefix(repoURL, githubBase) {
+		return nil, fmt.Errorf("unsupported repo URL: %s", repoURL)
+	}
+	path := strings.TrimPrefix(repoURL, githubBase)
+	apiURL := "https://api.github.com/repos/" + path + "/releases/latest"
+	return fetchLatestRelease(apiURL)
+}
+
 func fetchLatestRelease(url string) (*GitHubRelease, error) {
 	resp, err := http.Get(url)
 	if err != nil {

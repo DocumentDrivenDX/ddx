@@ -3,9 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +58,12 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check if already installed
+	// Fetch actual latest version from GitHub (overrides hardcoded registry version).
+	if release, err := update.FetchLatestReleaseForRepo(pkg.Source); err == nil {
+		pkg.Version = strings.TrimPrefix(release.TagName, "v")
+	}
+
+	// Check if already installed at the latest version.
 	state, err := registry.LoadState()
 	if err == nil {
 		for _, e := range state.Installed {

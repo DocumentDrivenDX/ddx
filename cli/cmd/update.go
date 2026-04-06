@@ -10,6 +10,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -65,10 +66,13 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 	return displayUpdateResult(cmd, result, opts)
 }
 
-// performUpdate checks installed packages against the registry and updates any
-// that have a newer version available. If a target is specified (opts.Resource),
-// only that package is updated.
+// performUpdate checks GitHub for the latest version of each installed package
+// and reinstalls any that are outdated (or all if --force). Also invalidates
+// the DDx binary update cache so the next run re-checks upstream.
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
+	// Always invalidate the binary update cache so the next command re-checks GitHub.
+	update.InvalidateCache()
+
 	state, err := registry.LoadState()
 	if err != nil || len(state.Installed) == 0 {
 		return &UpdateResult{Success: true, Message: "No packages installed."}, nil
@@ -89,17 +93,25 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 			continue // not in registry, skip
 		}
 
-		if pkg.Version == entry.Version {
+		// Fetch actual latest version from GitHub.
+		latestVersion := pkg.Version
+		if release, err := update.FetchLatestReleaseForRepo(pkg.Source); err == nil {
+			latestVersion = strings.TrimPrefix(release.TagName, "v")
+		}
+
+		if !opts.Force && entry.Version == latestVersion {
 			continue
 		}
 
-		// Newer version available — reinstall.
-		newEntry, err := registry.InstallPackage(pkg)
+		// Install the latest version.
+		installPkg := *pkg
+		installPkg.Version = latestVersion
+		newEntry, err := registry.InstallPackage(&installPkg)
 		if err != nil {
 			return nil, fmt.Errorf("updating %s: %w", entry.Name, err)
 		}
 		state.AddOrUpdate(newEntry)
-		updated = append(updated, entry.Name+" "+entry.Version+" → "+pkg.Version)
+		updated = append(updated, entry.Name+" "+entry.Version+" → "+latestVersion)
 	}
 
 	if err := registry.SaveState(state); err != nil {
