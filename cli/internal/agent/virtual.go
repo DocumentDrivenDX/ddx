@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -22,6 +23,7 @@ type VirtualEntry struct {
 	PromptLen    int     `json:"prompt_len"`
 	Prompt       string  `json:"prompt"`
 	Response     string  `json:"response"`
+	ExitCode     int     `json:"exit_code,omitempty"`
 	Harness      string  `json:"harness"`
 	Model        string  `json:"model,omitempty"`
 	DelayMS      int     `json:"delay_ms"`
@@ -29,6 +31,41 @@ type VirtualEntry struct {
 	OutputTokens int     `json:"output_tokens,omitempty"`
 	CostUSD      float64 `json:"cost_usd,omitempty"`
 	RecordedAt   string  `json:"recorded_at"`
+}
+
+// InlineResponse is a single entry in the DDX_VIRTUAL_RESPONSES env var.
+// It uses pattern-based matching (substring or regex) instead of hash-based.
+type InlineResponse struct {
+	PromptMatch string `json:"prompt_match"`        // substring or /regex/ pattern
+	Response    string `json:"response"`            // response text
+	ExitCode    int    `json:"exit_code,omitempty"` // simulated exit code
+	Model       string `json:"model,omitempty"`     // optional model name
+	DelayMS     int    `json:"delay_ms,omitempty"`  // optional simulated delay
+}
+
+// LookupInline searches inline responses for a matching prompt.
+// prompt_match is treated as a regex if wrapped in /.../, otherwise substring.
+func LookupInline(responses []InlineResponse, prompt string) (*InlineResponse, bool) {
+	for i := range responses {
+		r := &responses[i]
+		match := r.PromptMatch
+		if len(match) >= 2 && match[0] == '/' && match[len(match)-1] == '/' {
+			// Regex match
+			re, err := regexp.Compile(match[1 : len(match)-1])
+			if err != nil {
+				continue
+			}
+			if re.MatchString(prompt) {
+				return r, true
+			}
+		} else {
+			// Substring match
+			if strings.Contains(prompt, match) {
+				return r, true
+			}
+		}
+	}
+	return nil, false
 }
 
 // NormalizePrompt applies configured regex→replacement patterns to a prompt
@@ -101,20 +138,30 @@ func LookupEntry(dictDir, prompt string, patterns ...config.NormalizePattern) (*
 	return &entry, nil
 }
 
-// RunVirtual replays a recorded response from the dictionary.
+// RunVirtual replays a recorded response from the dictionary or inline responses.
 func (r *Runner) RunVirtual(opts RunOptions) (*Result, error) {
 	prompt, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err
 	}
 
+	// Check DDX_VIRTUAL_RESPONSES env var first (inline pattern-based matching).
+	if envResponses := os.Getenv("DDX_VIRTUAL_RESPONSES"); envResponses != "" {
+		var responses []InlineResponse
+		if err := json.Unmarshal([]byte(envResponses), &responses); err != nil {
+			return nil, fmt.Errorf("parsing DDX_VIRTUAL_RESPONSES: %w", err)
+		}
+		if ir, ok := LookupInline(responses, prompt); ok {
+			return r.buildVirtualResult(ir.Response, ir.ExitCode, ir.Model, ir.DelayMS, 0, 0, 0, prompt, opts), nil
+		}
+	}
+
+	// Fall back to file-based dictionary lookup.
 	dictDir := filepath.Join(r.Config.SessionLogDir, "..", "agent-dictionary")
-	// Prefer project-local dictionary
 	if _, err := os.Stat(VirtualDictionaryDir); err == nil {
 		dictDir = VirtualDictionaryDir
 	}
 
-	// Load normalization patterns from config.
 	var patterns []config.NormalizePattern
 	if cfg, err := config.Load(); err == nil && cfg.Agent != nil && cfg.Agent.Virtual != nil {
 		patterns = cfg.Agent.Virtual.Normalize
@@ -125,21 +172,27 @@ func (r *Runner) RunVirtual(opts RunOptions) (*Result, error) {
 		return nil, err
 	}
 
-	// Simulate delay for realistic demo recordings.
-	if entry.DelayMS > 0 {
-		time.Sleep(time.Duration(entry.DelayMS) * time.Millisecond)
+	return r.buildVirtualResult(entry.Response, entry.ExitCode, entry.Model, entry.DelayMS,
+		entry.InputTokens, entry.OutputTokens, entry.CostUSD, prompt, opts), nil
+}
+
+func (r *Runner) buildVirtualResult(response string, exitCode int, model string, delayMS int,
+	inputTokens, outputTokens int, costUSD float64, prompt string, opts RunOptions) *Result {
+
+	if delayMS > 0 {
+		time.Sleep(time.Duration(delayMS) * time.Millisecond)
 	}
 
 	result := &Result{
 		Harness:      "virtual",
-		Model:        entry.Model,
-		Output:       entry.Response,
-		ExitCode:     0,
-		DurationMS:   entry.DelayMS,
-		InputTokens:  entry.InputTokens,
-		OutputTokens: entry.OutputTokens,
-		Tokens:       entry.InputTokens + entry.OutputTokens,
-		CostUSD:      entry.CostUSD,
+		Model:        model,
+		Output:       response,
+		ExitCode:     exitCode,
+		DurationMS:   delayMS,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		Tokens:       inputTokens + outputTokens,
+		CostUSD:      costUSD,
 	}
 
 	promptSource := opts.PromptSource
@@ -151,5 +204,5 @@ func (r *Runner) RunVirtual(opts RunOptions) (*Result, error) {
 		}
 	}
 	r.logSession(result, len(prompt), prompt, promptSource, opts.Correlation)
-	return result, nil
+	return result
 }

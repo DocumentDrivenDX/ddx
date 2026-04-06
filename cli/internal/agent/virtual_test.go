@@ -111,6 +111,76 @@ func TestRecordAndLookupWithNormalization(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestLookupInline(t *testing.T) {
+	responses := []InlineResponse{
+		{PromptMatch: "implementation action", Response: "done", ExitCode: 0},
+		{PromptMatch: "/build.*test/", Response: "build output", ExitCode: 1},
+		{PromptMatch: "exact match", Response: "found it"},
+	}
+
+	t.Run("substring match", func(t *testing.T) {
+		ir, ok := LookupInline(responses, "run the implementation action now")
+		require.True(t, ok)
+		assert.Equal(t, "done", ir.Response)
+		assert.Equal(t, 0, ir.ExitCode)
+	})
+
+	t.Run("regex match", func(t *testing.T) {
+		ir, ok := LookupInline(responses, "build and test")
+		require.True(t, ok)
+		assert.Equal(t, "build output", ir.Response)
+		assert.Equal(t, 1, ir.ExitCode)
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		_, ok := LookupInline(responses, "completely unrelated prompt")
+		assert.False(t, ok)
+	})
+
+	t.Run("first match wins", func(t *testing.T) {
+		ir, ok := LookupInline(responses, "implementation action exact match")
+		require.True(t, ok)
+		assert.Equal(t, "done", ir.Response) // first match
+	})
+}
+
+func TestRunVirtualWithInlineResponses(t *testing.T) {
+	dir := t.TempDir()
+	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+
+	runner := NewRunner(Config{
+		Harness:       "virtual",
+		SessionLogDir: logDir,
+	})
+
+	// Set inline responses via env var.
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[
+		{"prompt_match": "hello", "response": "world", "exit_code": 0},
+		{"prompt_match": "fail", "response": "error occurred", "exit_code": 1}
+	]`)
+
+	t.Run("matching prompt returns response", func(t *testing.T) {
+		result, err := runner.RunVirtual(RunOptions{
+			Harness: "virtual",
+			Prompt:  "say hello please",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "world", result.Output)
+		assert.Equal(t, 0, result.ExitCode)
+	})
+
+	t.Run("failure simulation", func(t *testing.T) {
+		result, err := runner.RunVirtual(RunOptions{
+			Harness: "virtual",
+			Prompt:  "this should fail",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "error occurred", result.Output)
+		assert.Equal(t, 1, result.ExitCode)
+	})
+}
+
 func TestRunVirtual(t *testing.T) {
 	dir := t.TempDir()
 	dictDir := filepath.Join(dir, ".ddx", "agent-dictionary")
