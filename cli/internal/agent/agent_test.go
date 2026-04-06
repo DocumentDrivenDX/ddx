@@ -595,6 +595,133 @@ func TestIntegration_CodexEcho(t *testing.T) {
 	assert.NotEmpty(t, result.Output, "should have output")
 }
 
+// --- Opencode harness tests ---
+
+func TestBuildArgsOpencodeBasic(t *testing.T) {
+	r := NewRegistry()
+	h, ok := r.Get("opencode")
+	require.True(t, ok)
+	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
+	assert.Equal(t, []string{"run", "--format", "json", "do stuff"}, args)
+}
+
+func TestBuildArgsOpencodeAllFlags(t *testing.T) {
+	r := NewRegistry()
+	h, _ := r.Get("opencode")
+	args := BuildArgs(h, RunOptions{
+		Prompt:  "build it",
+		WorkDir: "/tmp/project",
+		Effort:  "high",
+	}, "anthropic/claude-sonnet-4-20250514")
+	assert.Contains(t, args, "--dir")
+	assert.Contains(t, args, "/tmp/project")
+	assert.Contains(t, args, "-m")
+	assert.Contains(t, args, "anthropic/claude-sonnet-4-20250514")
+	assert.Contains(t, args, "--variant")
+	assert.Contains(t, args, "high")
+	assert.Equal(t, "build it", args[len(args)-1])
+}
+
+func TestOpencodeHarnessProperties(t *testing.T) {
+	r := NewRegistry()
+	h, ok := r.Get("opencode")
+	require.True(t, ok)
+	assert.Equal(t, "opencode", h.Binary)
+	assert.Equal(t, "arg", h.PromptMode)
+	assert.Equal(t, "--dir", h.WorkDirFlag)
+	assert.Equal(t, "-m", h.ModelFlag)
+	assert.Equal(t, "--variant", h.EffortFlag)
+	assert.Contains(t, h.BaseArgs, "run")
+	assert.Contains(t, h.BaseArgs, "--format")
+	assert.Contains(t, h.BaseArgs, "json")
+}
+
+func TestOpencodePermissionsAllLevels(t *testing.T) {
+	r := NewRegistry()
+	h, _ := r.Get("opencode")
+
+	// All permission levels should produce the same args (opencode run auto-approves)
+	for _, level := range []string{"safe", "supervised", "unrestricted"} {
+		args := BuildArgs(h, RunOptions{Prompt: "task", Permissions: level}, "")
+		expected := []string{"run", "--format", "json", "task"}
+		assert.Equal(t, expected, args, "permission level %q should not add extra flags", level)
+	}
+}
+
+func TestOpencodeModelFlag(t *testing.T) {
+	r := NewRegistry()
+	h, _ := r.Get("opencode")
+	args := BuildArgs(h, RunOptions{Prompt: "test"}, "anthropic/claude-sonnet-4-20250514")
+	assert.Contains(t, args, "-m")
+	assert.Contains(t, args, "anthropic/claude-sonnet-4-20250514")
+}
+
+func TestRunOpencodeWithMockExecutor(t *testing.T) {
+	mock := &mockExecutor{output: `{"result":"done"}`}
+	r := newTestRunner(mock)
+
+	result, err := r.Run(RunOptions{Harness: "opencode", Prompt: "do something"})
+	require.NoError(t, err)
+	assert.Equal(t, "opencode", mock.lastBinary)
+	assert.Equal(t, `{"result":"done"}`, result.Output)
+	assert.Equal(t, 0, result.ExitCode)
+	// Prompt should be in args (arg mode), not stdin
+	assert.Equal(t, "do something", mock.lastArgs[len(mock.lastArgs)-1])
+	assert.Empty(t, mock.lastStdin, "opencode uses arg mode, not stdin")
+}
+
+func TestRunOpencodeWorkDir(t *testing.T) {
+	mock := &mockExecutor{output: "ok"}
+	r := newTestRunner(mock)
+
+	_, err := r.Run(RunOptions{
+		Harness: "opencode",
+		Prompt:  "test",
+		WorkDir: "/tmp/myproject",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, mock.lastArgs, "--dir")
+	assert.Contains(t, mock.lastArgs, "/tmp/myproject")
+}
+
+func TestExtractUsageOpencodeWithUsage(t *testing.T) {
+	fixture := `{"result":"code changes applied","usage":{"input_tokens":3000,"output_tokens":500},"total_cost_usd":0.025}`
+	usage := ExtractUsage("opencode", fixture)
+	assert.Equal(t, 3000, usage.InputTokens)
+	assert.Equal(t, 500, usage.OutputTokens)
+	assert.Equal(t, 0.025, usage.CostUSD)
+}
+
+func TestExtractUsageOpencodeLastLine(t *testing.T) {
+	fixture := "spinner output\nsome preamble\n" + `{"result":"done","usage":{"input_tokens":1200,"output_tokens":300},"total_cost_usd":0.01}`
+	usage := ExtractUsage("opencode", fixture)
+	assert.Equal(t, 1200, usage.InputTokens)
+	assert.Equal(t, 300, usage.OutputTokens)
+	assert.Equal(t, 0.01, usage.CostUSD)
+}
+
+func TestExtractUsageOpencodeNoUsage(t *testing.T) {
+	// JSON output without usage fields — should return zero
+	fixture := `{"result":"done"}`
+	usage := ExtractUsage("opencode", fixture)
+	assert.Equal(t, UsageData{}, usage)
+}
+
+func TestExtractUsageOpencodeGarbage(t *testing.T) {
+	usage := ExtractUsage("opencode", "not json\n{broken\n")
+	assert.Equal(t, UsageData{}, usage)
+}
+
+func TestCapabilitiesOpencode(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	caps, err := r.Capabilities("opencode")
+	require.NoError(t, err)
+	assert.Equal(t, "opencode", caps.Harness)
+	assert.True(t, caps.Available)
+	assert.Equal(t, "opencode", caps.Binary)
+	assert.Equal(t, []string{"minimal", "low", "medium", "high", "max"}, caps.ReasoningLevels)
+}
+
 func TestIntegration_ClaudeEcho(t *testing.T) {
 	if _, err := DefaultLookPath("claude"); err != nil {
 		t.Skip("claude not available")
@@ -602,6 +729,20 @@ func TestIntegration_ClaudeEcho(t *testing.T) {
 	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 60000})
 	result, err := r.Run(RunOptions{
 		Harness: "claude",
+		Prompt:  "Respond with exactly: INTEGRATION_TEST_OK",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ExitCode, "exit code should be 0, error: %s", result.Error)
+	assert.NotEmpty(t, result.Output, "should have output")
+}
+
+func TestIntegration_OpencodeEcho(t *testing.T) {
+	if _, err := DefaultLookPath("opencode"); err != nil {
+		t.Skip("opencode not available")
+	}
+	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 60000})
+	result, err := r.Run(RunOptions{
+		Harness: "opencode",
 		Prompt:  "Respond with exactly: INTEGRATION_TEST_OK",
 	})
 	require.NoError(t, err)

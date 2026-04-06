@@ -373,6 +373,40 @@ func ExtractUsage(harnessName string, output string) UsageData {
 			OutputTokens: envelope.Usage.OutputTokens,
 			CostUSD:      envelope.TotalCostUSD,
 		}
+	case "opencode":
+		// opencode -f json emits a JSON object; parse usage fields if present.
+		var envelope struct {
+			Usage struct {
+				InputTokens  int `json:"input_tokens"`
+				OutputTokens int `json:"output_tokens"`
+			} `json:"usage"`
+			TotalCostUSD float64 `json:"total_cost_usd"`
+		}
+		if err := json.Unmarshal([]byte(output), &envelope); err != nil {
+			// Try last non-empty line (in case of preamble).
+			lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+			last := ""
+			for i := len(lines) - 1; i >= 0; i-- {
+				if strings.TrimSpace(lines[i]) != "" {
+					last = lines[i]
+					break
+				}
+			}
+			if last == "" {
+				return UsageData{}
+			}
+			if err2 := json.Unmarshal([]byte(last), &envelope); err2 != nil {
+				return UsageData{}
+			}
+		}
+		if envelope.Usage.InputTokens == 0 && envelope.Usage.OutputTokens == 0 && envelope.TotalCostUSD == 0 {
+			return UsageData{}
+		}
+		return UsageData{
+			InputTokens:  envelope.Usage.InputTokens,
+			OutputTokens: envelope.Usage.OutputTokens,
+			CostUSD:      envelope.TotalCostUSD,
+		}
 	default:
 		return UsageData{}
 	}

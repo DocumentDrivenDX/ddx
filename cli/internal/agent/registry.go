@@ -52,11 +52,21 @@ var builtinHarnesses = map[string]Harness{
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},
 	"opencode": {
-		Name:            "opencode",
-		Binary:          "opencode",
-		BaseArgs:        []string{},
-		PromptMode:      "stdin",
-		ReasoningLevels: []string{"low", "medium", "high"},
+		Name:     "opencode",
+		Binary:   "opencode",
+		BaseArgs: []string{"run", "--format", "json"},
+		PermissionArgs: map[string][]string{
+			// opencode run auto-approves all tool permissions;
+			// no separate flags needed for any permission level.
+			"safe":         {},
+			"supervised":   {},
+			"unrestricted": {},
+		},
+		PromptMode:      "arg",
+		ReasoningLevels: []string{"minimal", "low", "medium", "high", "max"},
+		ModelFlag:       "-m",
+		WorkDirFlag:     "--dir",
+		EffortFlag:      "--variant",
 	},
 	"pi": {
 		Name:            "pi",
