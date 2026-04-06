@@ -14,11 +14,10 @@ import (
 // This file only contains the prompts subcommand implementations
 
 // runPromptsList implements the prompts list command
-func runPromptsList(cmd *cobra.Command, args []string) error {
-	// Get working directory from command factory context
-	workingDir := "."
-	if factory, ok := cmd.Context().Value("factory").(*CommandFactory); ok {
-		workingDir = factory.WorkingDir
+func (f *CommandFactory) runPromptsList(cmd *cobra.Command, args []string) error {
+	workingDir := f.WorkingDir
+	if workingDir == "" {
+		workingDir = "."
 	}
 
 	// Get library path using working directory
@@ -32,7 +31,7 @@ func runPromptsList(cmd *cobra.Command, args []string) error {
 		libPath = cfg.Library.Path
 	}
 
-	promptsDir := filepath.Join(libPath, "prompts")
+	promptsDir := filepath.Join(workingDir, libPath, "prompts")
 
 	// Check if prompts directory exists
 	if _, err := os.Stat(promptsDir); os.IsNotExist(err) {

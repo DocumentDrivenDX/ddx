@@ -282,8 +282,10 @@ persona_bindings: {}`
 			// This test defines the expected behavior for prompts commands
 			// The actual implementation will be done after tests are written
 
-			// Execute the command
-			rootCmd := getPromptsTestRootCommand("")
+			// Execute the command with an isolated working directory to
+			// prevent test pollution from concurrent tests that may
+			// create .ddx/ directories in shared temp paths.
+			rootCmd := getPromptsTestRootCommand(t.TempDir())
 			output, err := executeCommand(rootCmd, tt.args...)
 
 			// Validate results

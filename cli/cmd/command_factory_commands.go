@@ -222,7 +222,7 @@ func (f *CommandFactory) newPromptsListCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List available prompts",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPromptsList(cmd, args)
+			return f.runPromptsList(cmd, args)
 		},
 	}
 	cmd.Flags().String("search", "", "Search for prompts containing this text")

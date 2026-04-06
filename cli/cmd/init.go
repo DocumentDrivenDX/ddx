@@ -244,8 +244,11 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 			}
 		}
 
+		// Generate AGENTS.md with guidance for AI agents working in this repo.
+		generateAgentsMD(workingDir)
+
 		// Commit config and versions files
-		gitAdd := exec.Command("git", "add", ".ddx/config.yaml", ".ddx/versions.yaml")
+		gitAdd := exec.Command("git", "add", ".ddx/config.yaml", ".ddx/versions.yaml", "AGENTS.md")
 		gitAdd.Dir = workingDir
 		if err := gitAdd.Run(); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to stage config file: %v", err))
@@ -616,6 +619,40 @@ func findParentDDxWorkspace(dir string) string {
 		current = parent
 	}
 	return ""
+}
+
+// generateAgentsMD creates AGENTS.md with guidance for AI agents working in
+// this repo. The file tells agents which paths to commit and which DDx
+// conventions to follow. Skipped if AGENTS.md already exists.
+func generateAgentsMD(workingDir string) {
+	agentsPath := filepath.Join(workingDir, "AGENTS.md")
+	if _, err := os.Stat(agentsPath); err == nil {
+		return // already exists
+	}
+
+	content := `# AGENTS.md
+
+This project uses [DDx](https://github.com/DocumentDrivenDX/ddx) for
+document-driven development.
+
+## Files to commit
+
+After modifying any of these paths, stage and commit them:
+
+- ` + "`" + `.ddx/beads.jsonl` + "`" + ` — work item tracker
+- ` + "`" + `.ddx/config.yaml` + "`" + ` — project configuration
+- ` + "`" + `.agents/skills/` + "`" + ` — agent skill symlinks
+- ` + "`" + `.claude/skills/` + "`" + ` — Claude skill symlinks
+- ` + "`" + `docs/` + "`" + ` — project documentation and artifacts
+
+## Conventions
+
+- Use ` + "`" + `ddx bead` + "`" + ` for work tracking (not custom issue files)
+- Documents with ` + "`" + `ddx:` + "`" + ` frontmatter are tracked in the document graph
+- Run ` + "`" + `ddx doctor` + "`" + ` to check project health
+- Run ` + "`" + `ddx doc stale` + "`" + ` to find documents needing review
+`
+	_ = os.WriteFile(agentsPath, []byte(content), 0644)
 }
 
 // injectInitialMetaPrompt injects the configured meta-prompt into CLAUDE.md
