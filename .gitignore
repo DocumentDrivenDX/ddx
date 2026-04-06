@@ -418,7 +418,11 @@ cli/internal/agent/.ddx/
 .ddx/run-state.json
 .ddx/exec-runs.d/
 .ddx/tsnet/
+.ddx/plugins/
 .helix-logs/
+
+# Temporary demo home (created by run-docker-demos.sh)
+.demo-home/
 
 # Secondary bead store (cli/ has its own during dev)
 cli/.ddx/

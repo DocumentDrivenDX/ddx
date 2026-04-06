@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	installScriptURL = "https://raw.githubusercontent.com/easel/ddx/main/install.sh"
+	installScriptURL = "https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh"
 )
 
 func (f *CommandFactory) runUpgrade(cmd *cobra.Command, args []string) error {

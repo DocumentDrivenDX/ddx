@@ -32,7 +32,16 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		return entry, fmt.Errorf("cloning %s: %w", pkg.Source, err)
 	}
 
-	// Process install mappings.
+	// Process Root mapping first - copy the entire plugin to central location
+	if pkg.Install.Root != nil {
+		files, err := copyMapping(tmpDir, pkg.Install.Root)
+		if err != nil {
+			return entry, fmt.Errorf("installing plugin root: %w", err)
+		}
+		entry.Files = append(entry.Files, files...)
+	}
+
+	// Process Skills mapping (relative to plugin root in temp dir)
 	if pkg.Install.Skills != nil {
 		files, err := copyMapping(tmpDir, pkg.Install.Skills)
 		if err != nil {
@@ -41,12 +50,36 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		entry.Files = append(entry.Files, files...)
 	}
 
+	// Process Scripts mapping (for CLI binaries)
 	if pkg.Install.Scripts != nil {
 		files, err := copyMapping(tmpDir, pkg.Install.Scripts)
 		if err != nil {
 			return entry, fmt.Errorf("installing scripts: %w", err)
 		}
 		entry.Files = append(entry.Files, files...)
+	}
+
+	// Process symlinks.
+	for _, sym := range pkg.Install.Symlinks {
+		src := expandHome(sym.Source)
+		dst := expandHome(sym.Target)
+
+		// Create parent dir if needed.
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return entry, fmt.Errorf("creating symlink dir %s: %w", filepath.Dir(dst), err)
+		}
+
+		// Remove existing symlink/file if present.
+		if _, err := os.Lstat(dst); err == nil {
+			if err := os.RemoveAll(dst); err != nil {
+				return entry, fmt.Errorf("removing existing %s: %w", dst, err)
+			}
+		}
+
+		if err := os.Symlink(src, dst); err != nil {
+			return entry, fmt.Errorf("creating symlink %s -> %s: %w", dst, src, err)
+		}
+		entry.Files = append(entry.Files, dst)
 	}
 
 	return entry, nil

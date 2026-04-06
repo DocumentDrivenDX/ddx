@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -103,6 +104,11 @@ More information:
 		// Initialize config with the local viper instance
 		f.initConfig(cfgFile, libraryPath)
 
+		// Version gate: block old binary from running in newer project
+		if err := f.checkVersionGate(cmd); err != nil {
+			return err
+		}
+
 		// Check for updates (synchronous, once per 24h)
 		f.checkForUpdates(cmd)
 
@@ -113,9 +119,13 @@ More information:
 		return nil
 	}
 
-	// Display update notification after command completes
+	// Display update notification and staleness hints after command completes
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
-		return f.displayUpdateNotification(cmd)
+		if err := f.displayUpdateNotification(cmd); err != nil {
+			return err
+		}
+		f.displayStalenessHints(cmd)
+		return nil
 	}
 
 	// Add all subcommands
@@ -255,6 +265,96 @@ func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
 	return nil
 }
 
+// checkVersionGate blocks execution if the binary is older than the project requires.
+// Returns an error for non-exempt commands when binary version < project's ddx_version.
+func (f *CommandFactory) checkVersionGate(cmd *cobra.Command) error {
+	// Dev builds bypass the gate
+	if f.Version == "" || f.Version == "dev" {
+		return nil
+	}
+
+	// Read project versions
+	projectVersion := readProjectVersions(f.WorkingDir)
+	if projectVersion == "" || projectVersion == "dev" {
+		return nil // No versions.yaml or dev project — skip
+	}
+
+	// Exempt commands that must work even when binary is too old
+	switch cmd.Name() {
+	case "upgrade", "version", "doctor", "init", "help", "completion":
+		return nil
+	}
+
+	// Compare: is the binary older than what the project requires?
+	needsUpgrade, err := update.NeedsUpgrade(f.Version, projectVersion)
+	if err != nil {
+		return nil // Parse error — don't block
+	}
+	if needsUpgrade {
+		return fmt.Errorf("this project requires DDx v%s or newer (you have %s).\nRun 'ddx upgrade' to update your DDx binary",
+			strings.TrimPrefix(projectVersion, "v"),
+			f.Version)
+	}
+
+	return nil
+}
+
+// displayStalenessHints shows soft hints when project skills or plugins are outdated.
+func (f *CommandFactory) displayStalenessHints(cmd *cobra.Command) {
+	// Skip for machine-readable output
+	if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
+		return
+	}
+	if silentFlag, _ := cmd.Flags().GetBool("silent"); silentFlag {
+		return
+	}
+
+	// Dev builds don't hint
+	if f.Version == "" || f.Version == "dev" {
+		return
+	}
+
+	// Check project staleness
+	projectVersion := readProjectVersions(f.WorkingDir)
+	if projectVersion != "" && projectVersion != "dev" {
+		// Is the binary newer than the project?
+		projectNeedsUpgrade, err := update.NeedsUpgrade(projectVersion, f.Version)
+		if err == nil && projectNeedsUpgrade {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+				"\n💡 Project skills from DDx v%s (you have %s). Run 'ddx init --force' to update.\n",
+				strings.TrimPrefix(projectVersion, "v"),
+				f.Version)
+		}
+	}
+
+	// Check plugin staleness (reuse ddx outdated logic)
+	f.displayPluginStalenessHints(cmd)
+}
+
+// displayPluginStalenessHints checks installed plugins against the builtin registry.
+func (f *CommandFactory) displayPluginStalenessHints(cmd *cobra.Command) {
+	state, err := registry.LoadState()
+	if err != nil || len(state.Installed) == 0 {
+		return
+	}
+
+	reg := registry.BuiltinRegistry()
+	for _, entry := range state.Installed {
+		pkg, err := reg.Find(entry.Name)
+		if err != nil {
+			continue
+		}
+		if pkg.Version != entry.Version {
+			needsUpgrade, err := update.NeedsUpgrade(entry.Version, pkg.Version)
+			if err == nil && needsUpgrade {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+					"💡 %s %s installed, %s available. Run 'ddx install %s' to update.\n",
+					entry.Name, entry.Version, pkg.Version, entry.Name)
+			}
+		}
+	}
+}
+
 // registerSubcommands adds all subcommands to the root command
 func (f *CommandFactory) registerSubcommands(rootCmd *cobra.Command) {
 	// Version command
@@ -341,6 +441,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newUninstallCommand())
 	rootCmd.AddCommand(f.newSearchCommand())
 	rootCmd.AddCommand(f.newOutdatedCommand())
+	rootCmd.AddCommand(f.newJqCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{

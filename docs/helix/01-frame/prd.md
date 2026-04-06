@@ -94,6 +94,9 @@ automation infrastructure without hardcoding workflow semantics into each tool.
 8. **Support multi-agent coordination** — make bead operations, document
    writes, and agent dispatch safe under concurrent multi-agent use, with
    MCP as the remote observation and control surface
+9. **Embed essential utilities** — bundle common developer tools (jq, etc.)
+   so workflow tools have a consistent, cross-platform base without external
+   runtime dependencies
 
 ### Secondary
 1. **Promote the practice** — website explains document-driven development and

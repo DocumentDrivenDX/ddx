@@ -24,8 +24,16 @@ type InstallMapping struct {
 
 // PackageInstall describes what to copy during installation.
 type PackageInstall struct {
-	Skills  *InstallMapping `yaml:"skills,omitempty"`
-	Scripts *InstallMapping `yaml:"scripts,omitempty"`
+	Root     *InstallMapping  `yaml:"root,omitempty"`     // plugin root (e.g., ~/.ddx/plugins/helix)
+	Skills   *InstallMapping  `yaml:"skills,omitempty"`   // skills subdirectory
+	Scripts  *InstallMapping  `yaml:"scripts,omitempty"`  // scripts/binaries
+	Symlinks []SymlinkMapping `yaml:"symlinks,omitempty"` // post-install symlinks
+}
+
+// SymlinkMapping describes a symlink to create during installation.
+type SymlinkMapping struct {
+	Source string `yaml:"source"` // the source path (relative to install root)
+	Target string `yaml:"target"` // the target path (where symlink points)
 }
 
 // Package describes a single installable package.
@@ -50,14 +58,25 @@ func BuiltinRegistry() *Registry {
 		Packages: []Package{
 			{
 				Name:        "helix",
-				Version:     "0.1.0",
-				Description: "Structured development workflow with AI-assisted collaboration",
+				Version:     "1.0.0",
+				Description: "Supervisory autopilot for AI-assisted software delivery",
 				Type:        PackageTypeWorkflow,
-				Source:      "https://github.com/easel/helix",
+				Source:      "https://github.com/DocumentDrivenDX/helix",
 				Install: PackageInstall{
+					// Clone plugin to project-local .ddx/plugins/
+					Root: &InstallMapping{
+						Source: ".",
+						Target: ".ddx/plugins/helix",
+					},
+					// Skills from .agents/skills/ in plugin repo
 					Skills: &InstallMapping{
 						Source: ".agents/skills/",
-						Target: "~/.agents/skills/",
+						Target: ".agents/skills/",
+					},
+					// CLI script → ~/.local/bin/helix
+					Scripts: &InstallMapping{
+						Source: "bin/helix",
+						Target: "~/.local/bin/helix",
 					},
 				},
 				Keywords: []string{"workflow", "methodology", "ai", "development"},

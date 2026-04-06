@@ -11,29 +11,44 @@ Get DDx installed and start tracking work in under 5 minutes.
 
 ## Install
 
-{{< tabs >}}
+Run the install script to set up DDx globally:
 
-{{< tab name="curl" >}}
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 ```
-{{< /tab >}}
 
-{{< tab name="Go" >}}
+This installs:
+- `ddx` CLI binary to `~/.local/bin/ddx`
+- DDx skills to `~/.ddx/skills/`
+- Symlinks in `~/.agents/skills/` and `~/.claude/skills/` for Claude Code
+
+Verify the installation:
+
 ```bash
-go install github.com/DocumentDrivenDX/ddx/cli@latest
+ddx version
+ddx doctor
 ```
-{{< /tab >}}
 
-{{< /tabs >}}
+## Initialize a Project
 
-## Initialize and Install HELIX
+In your project directory, run:
 
 ```bash
 ddx init
-ddx install helix
-ddx doctor
 ```
+
+This creates:
+- `.ddx/` - DDx configuration and project-local skills
+- `.ddx/skills/` - Bootstrap skills (ddx-doctor, ddx-run)
+- `.agents/skills` → `.ddx/skills` - Symlink for Claude Code
+
+## Install HELIX Workflow
+
+```bash
+ddx install helix
+```
+
+This installs HELIX to `~/.ddx/plugins/helix/` and adds its skills to your skill search path.
 
 ## Track Work
 
@@ -49,6 +64,16 @@ ddx bead ready
 ```bash
 ddx agent run --harness claude --prompt task.md
 ddx agent usage
+```
+
+## Update
+
+Check for updates:
+
+```bash
+ddx update --check     # Check all
+ddx update ddx         # Update DDx CLI
+ddx update helix      # Update HELIX plugin
 ```
 
 ## Next Steps

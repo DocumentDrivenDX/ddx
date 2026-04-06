@@ -99,29 +99,26 @@ The doctor helps identify and resolve:
 // newUpdateCommand creates a fresh update command
 func (f *CommandFactory) newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update [resource]",
-		Short: "Update DDx toolkit resources",
-		Long: `Update the local DDx toolkit resources.
+		Use:   "update [target]",
+		Short: "Update DDx CLI or installed plugins",
+		Long: `Update DDx CLI or installed plugins to their latest versions.
 
-To install or update library resources, use 'ddx install' instead.
+Targets:
+  ddx        - Update DDx CLI to latest release
+  helix      - Update helix plugin to latest version
+  all        - Update everything (default)
 
 Examples:
-  ddx update --check    # Check for updates`,
+  ddx update           # Update all installed packages
+  ddx update ddx       # Update DDx CLI only
+  ddx update helix    # Update helix plugin only
+  ddx update --check   # Check for updates without applying`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: f.runUpdate,
 	}
 
 	cmd.Flags().Bool("check", false, "Check for updates without applying")
-	cmd.Flags().Bool("force", false, "Force update even if there are local changes")
-	cmd.Flags().Bool("reset", false, "Reset to master state, discarding local changes")
-	cmd.Flags().Bool("sync", false, "Synchronize with upstream repository")
-	cmd.Flags().String("strategy", "", "Conflict resolution strategy (ours/theirs/mine)")
-	cmd.Flags().Bool("backup", false, "Create backup before updating")
-	cmd.Flags().Bool("interactive", false, "Interactive conflict resolution")
-	cmd.Flags().Bool("abort", false, "Abort update and restore previous state")
-	cmd.Flags().Bool("mine", false, "Use local changes in conflict resolution")
-	cmd.Flags().Bool("theirs", false, "Use upstream changes in conflict resolution")
-	cmd.Flags().Bool("dry-run", false, "Preview changes without applying them")
+	cmd.Flags().Bool("force", false, "Force update even if already latest")
 
 	return cmd
 }

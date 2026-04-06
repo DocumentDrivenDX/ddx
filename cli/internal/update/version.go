@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	githubAPIURL = "https://api.github.com/repos/easel/ddx/releases/latest"
+	githubAPIURL = "https://api.github.com/repos/DocumentDrivenDX/ddx/releases/latest"
 )
 
 // FetchLatestRelease fetches the latest release information from GitHub

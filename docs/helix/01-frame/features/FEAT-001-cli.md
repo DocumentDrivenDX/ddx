@@ -36,6 +36,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 9. `ddx upgrade` — self-upgrade binary
 10. `ddx status` / `ddx log` — show sync state and change history
 11. Meta-prompt injection into CLAUDE.md during init
+11b. Project version tracking via `.ddx/versions.yaml` — stamps `ddx_version` on init, gates old binaries from running against newer projects, hints when skills are stale (FEAT-XXX)
 
 **Bead Tracker (implemented — FEAT-004)**
 12. `ddx bead create/show/update/close` — work item CRUD with `--set key=value` for custom fields
@@ -84,6 +85,9 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 40. `ddx installed` — list installed packages
 41. `ddx verify` — check integrity of installed packages
 
+**Embedded Utilities**
+47. `ddx jq <filter> [file...]` — embedded jq processor (powered by gojq), eliminating external jq dependency for HELIX and other workflow tools. Supports standard jq flags: `-r`, `-c`, `-s`, `-n`, `-R`, `-e`, `-j`, `-S`, `--tab`, `--indent`, `--arg`, `--argjson`, `--slurpfile`. Reads from stdin or file arguments. Pure Go, no CGo.
+
 **DDx Skills (not started — FEAT-011)**
 42. DDx ships agent-facing skills (Claude Code slash commands) for its own CLI operations
 43. Skills are installed to `~/.agents/skills/ddx-*` and discoverable via `/ddx-<name>`
@@ -93,7 +97,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 
 ### Non-Functional
 
-- **Performance:** All local operations <1 second, with a startup ratchet on the hot paths. Current benchmarks: CLI startup 7.5ms, `ddx bead create` 10ms with async update checks, config load 0.46ms. Update checks run asynchronously and failures back off for 5 minutes instead of re-firing on every startup. Ratchet coverage lives in `cli/bench_test.go` and `cli/internal/config/benchmark_test.go`; keep `ddx bead create` below 20ms and config load below 1ms on the local perf harness.
+- **Performance:** All local operations <1 second, with a startup ratchet on the hot paths. Current benchmarks: CLI startup 7.5ms, `ddx bead create` 10ms with async update checks, config load 0.46ms. Update checks run asynchronously and failures back off for 5 minutes instead of re-firing on every startup. Version gate and staleness hints are sync but zero-cost (local YAML read + string compare, no network). Ratchet coverage lives in `cli/bench_test.go` and `cli/internal/config/benchmark_test.go`; keep `ddx bead create` below 20ms and config load below 1ms on the local perf harness.
 - **Portability:** Single binary, no runtime dependencies. macOS, Linux, Windows.
 - **Installability:** `curl | bash` or `go install`
 - **E2E smoke tests:** The install-to-use journey must be validated end-to-end in CI: `ddx init` → `ddx list` → `ddx doctor` → `ddx persona list` → `ddx persona bind` → `ddx bead create` → `ddx bead list`. Tests run against the real binary in a temp directory, not mocked. Lefthook orchestrates test execution; CI adds the E2E stage.

@@ -12,13 +12,13 @@ import (
 
 func TestFetchLatestRelease_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/repos/easel/ddx/releases/latest", r.URL.Path)
+		assert.Equal(t, "/repos/DocumentDrivenDX/ddx/releases/latest", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"tag_name":"v1.2.3","name":"v1.2.3","body":"notes","html_url":"https://example.com"}`))
 	}))
 	t.Cleanup(server.Close)
 
-	release, err := fetchLatestRelease(server.URL + "/repos/easel/ddx/releases/latest")
+	release, err := fetchLatestRelease(server.URL + "/repos/DocumentDrivenDX/ddx/releases/latest")
 	require.NoError(t, err)
 	require.NotNil(t, release)
 	assert.Equal(t, "v1.2.3", release.TagName)
@@ -32,7 +32,7 @@ func TestFetchLatestRelease_StatusErrorIncludesContext(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	release, err := fetchLatestRelease(server.URL + "/repos/easel/ddx/releases/latest")
+	release, err := fetchLatestRelease(server.URL + "/repos/DocumentDrivenDX/ddx/releases/latest")
 	require.Error(t, err)
 	assert.Nil(t, release)
 	msg := err.Error()

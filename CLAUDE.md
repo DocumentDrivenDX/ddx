@@ -159,6 +159,9 @@ The CLI follows a noun-verb command structure for clarity and consistency:
 - `ddx persona list/show/bind` - AI personas
 - `ddx mcp list/install` - MCP servers
 
+**Embedded Utilities:**
+- `ddx jq <filter> [file...]` - Embedded jq processor (via gojq), no external jq required
+
 ## Persona System
 
 DDX includes a persona system that provides consistent AI personalities for different roles:

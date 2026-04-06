@@ -13,7 +13,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-DDX_HOME="${HOME}/.ddx"
 DDX_REPO="https://github.com/DocumentDrivenDX/ddx"
 DDX_API="https://api.github.com/repos/DocumentDrivenDX/ddx"
 
@@ -74,16 +73,6 @@ check_prerequisites() {
     fi
 
     success "Prerequisites check passed"
-}
-
-# Setup DDx directory structure
-setup_ddx_directory() {
-    log "Setting up DDx directory structure at ${DDX_HOME}..."
-
-    # Create DDx home directory if it doesn't exist
-    mkdir -p "${DDX_HOME}"
-
-    success "Directory structure created"
 }
 
 # Resolve the version to install
@@ -312,10 +301,10 @@ show_getting_started() {
     echo ""
     echo "🎉 DDx (Document-Driven Development eXperience) installed successfully!"
     echo ""
-    echo "📚 Getting Started:"
-    echo "   ddx --help           Show available commands"
+    echo "📚 Next Steps:"
+    echo "   ddx install --global Install skills to ~/.ddx/ and set up symlinks"
     echo "   ddx init             Initialize DDx in a project"
-    echo "   ddx list             Show available templates and patterns"
+    echo "   ddx install helix    Install a workflow plugin into your project"
     echo "   ddx doctor           Check installation and diagnose issues"
     echo ""
     echo "📖 Documentation:"
@@ -342,7 +331,6 @@ main() {
     echo ""
     
     check_prerequisites
-    setup_ddx_directory
     install_cli
     setup_completions
     update_path
