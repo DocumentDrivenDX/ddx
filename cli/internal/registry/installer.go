@@ -36,31 +36,52 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		return entry, fmt.Errorf("downloading %s: %w", tarballURL, err)
 	}
 
-	// Process Root mapping first - copy the entire plugin to central location
+	// Process Root mapping first - copy the entire plugin to central location.
+	var installedRoot string
 	if pkg.Install.Root != nil {
 		files, err := copyMapping(extractedDir, pkg.Install.Root)
 		if err != nil {
 			return entry, fmt.Errorf("installing plugin root: %w", err)
 		}
 		entry.Files = append(entry.Files, files...)
+		installedRoot = expandHome(pkg.Install.Root.Target)
 	}
 
-	// Process Skills mappings (one per target directory)
+	// Process Skills mappings — symlink from installed root when available,
+	// otherwise fall back to copying from the extracted tarball.
 	for i := range pkg.Install.Skills {
-		files, err := copyMapping(extractedDir, &pkg.Install.Skills[i])
-		if err != nil {
-			return entry, fmt.Errorf("installing skills: %w", err)
+		skill := &pkg.Install.Skills[i]
+		if installedRoot != "" {
+			files, err := symlinkSkills(installedRoot, skill)
+			if err != nil {
+				return entry, fmt.Errorf("symlinking skills: %w", err)
+			}
+			entry.Files = append(entry.Files, files...)
+		} else {
+			files, err := copyMapping(extractedDir, skill)
+			if err != nil {
+				return entry, fmt.Errorf("installing skills: %w", err)
+			}
+			entry.Files = append(entry.Files, files...)
 		}
-		entry.Files = append(entry.Files, files...)
 	}
 
-	// Process Scripts mapping (for CLI binaries)
+	// Process Scripts mapping — symlink from installed root when available,
+	// otherwise fall back to copying from the extracted tarball.
 	if pkg.Install.Scripts != nil {
-		files, err := copyMapping(extractedDir, pkg.Install.Scripts)
-		if err != nil {
-			return entry, fmt.Errorf("installing scripts: %w", err)
+		if installedRoot != "" {
+			dst, err := symlinkScript(installedRoot, pkg.Install.Scripts)
+			if err != nil {
+				return entry, fmt.Errorf("symlinking script: %w", err)
+			}
+			entry.Files = append(entry.Files, dst)
+		} else {
+			files, err := copyMapping(extractedDir, pkg.Install.Scripts)
+			if err != nil {
+				return entry, fmt.Errorf("installing scripts: %w", err)
+			}
+			entry.Files = append(entry.Files, files...)
 		}
-		entry.Files = append(entry.Files, files...)
 	}
 
 	// Process symlinks.
@@ -233,6 +254,82 @@ func downloadAndExtract(url, destDir string) (string, error) {
 		return destDir, nil
 	}
 	return filepath.Join(destDir, topDir), nil
+}
+
+// symlinkSkills creates symlinks in the target skill directory pointing to the
+// corresponding entries in the installed plugin root. This keeps skills in sync
+// with the plugin rather than creating independent copies.
+func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error) {
+	srcDir := filepath.Join(installedRoot, filepath.FromSlash(skill.Source))
+	dstDir := expandHome(skill.Target)
+
+	entries, err := os.ReadDir(srcDir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading skills dir %s: %w", srcDir, err)
+	}
+
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return nil, fmt.Errorf("creating skills dir %s: %w", dstDir, err)
+	}
+
+	var written []string
+	for _, e := range entries {
+		src := filepath.Join(srcDir, e.Name())
+		dst := filepath.Join(dstDir, e.Name())
+
+		absSrc, err := filepath.Abs(src)
+		if err != nil {
+			return nil, fmt.Errorf("resolving path %s: %w", src, err)
+		}
+
+		// Remove existing file/symlink/directory.
+		if _, err := os.Lstat(dst); err == nil {
+			if err := os.RemoveAll(dst); err != nil {
+				return nil, fmt.Errorf("removing existing %s: %w", dst, err)
+			}
+		}
+
+		if err := os.Symlink(absSrc, dst); err != nil {
+			return nil, fmt.Errorf("symlinking %s -> %s: %w", dst, absSrc, err)
+		}
+		written = append(written, dst)
+	}
+	return written, nil
+}
+
+// symlinkScript creates a symlink for a plugin's CLI script/binary from the
+// installed plugin root to the target path (e.g. ~/.local/bin/helix).
+func symlinkScript(installedRoot string, mapping *InstallMapping) (string, error) {
+	src := filepath.Join(installedRoot, filepath.FromSlash(mapping.Source))
+	dst := expandHome(mapping.Target)
+
+	if _, err := os.Stat(src); os.IsNotExist(err) {
+		return "", fmt.Errorf("script source %s not found in plugin", src)
+	}
+
+	absSrc, err := filepath.Abs(src)
+	if err != nil {
+		return "", fmt.Errorf("resolving path %s: %w", src, err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return "", fmt.Errorf("creating dir for %s: %w", dst, err)
+	}
+
+	// Remove existing file/symlink.
+	if _, err := os.Lstat(dst); err == nil {
+		if err := os.RemoveAll(dst); err != nil {
+			return "", fmt.Errorf("removing existing %s: %w", dst, err)
+		}
+	}
+
+	if err := os.Symlink(absSrc, dst); err != nil {
+		return "", fmt.Errorf("symlinking %s -> %s: %w", dst, absSrc, err)
+	}
+	return dst, nil
 }
 
 // copyMapping copies files from srcDir/<mapping.Source> to expandHome(mapping.Target).
