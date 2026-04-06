@@ -45,9 +45,9 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		entry.Files = append(entry.Files, files...)
 	}
 
-	// Process Skills mapping
-	if pkg.Install.Skills != nil {
-		files, err := copyMapping(extractedDir, pkg.Install.Skills)
+	// Process Skills mappings (one per target directory)
+	for i := range pkg.Install.Skills {
+		files, err := copyMapping(extractedDir, &pkg.Install.Skills[i])
 		if err != nil {
 			return entry, fmt.Errorf("installing skills: %w", err)
 		}

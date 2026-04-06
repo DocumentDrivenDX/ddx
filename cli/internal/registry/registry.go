@@ -24,8 +24,8 @@ type InstallMapping struct {
 
 // PackageInstall describes what to copy during installation.
 type PackageInstall struct {
-	Root     *InstallMapping  `yaml:"root,omitempty"`     // plugin root (e.g., ~/.ddx/plugins/helix)
-	Skills   *InstallMapping  `yaml:"skills,omitempty"`   // skills subdirectory
+	Root     *InstallMapping  `yaml:"root,omitempty"`     // plugin root (e.g., .ddx/plugins/helix)
+	Skills   []InstallMapping `yaml:"skills,omitempty"`   // skills directories (copied to each target)
 	Scripts  *InstallMapping  `yaml:"scripts,omitempty"`  // scripts/binaries
 	Symlinks []SymlinkMapping `yaml:"symlinks,omitempty"` // post-install symlinks
 }
@@ -63,15 +63,15 @@ func BuiltinRegistry() *Registry {
 				Type:        PackageTypeWorkflow,
 				Source:      "https://github.com/DocumentDrivenDX/helix",
 				Install: PackageInstall{
-					// Clone plugin to project-local .ddx/plugins/
+					// Copy plugin to project-local .ddx/plugins/
 					Root: &InstallMapping{
 						Source: ".",
 						Target: ".ddx/plugins/helix",
 					},
-					// Skills from .agents/skills/ in plugin repo
-					Skills: &InstallMapping{
-						Source: ".agents/skills/",
-						Target: ".agents/skills/",
+					// Skills installed to both agent and Claude skill directories
+					Skills: []InstallMapping{
+						{Source: ".agents/skills/", Target: ".agents/skills/"},
+						{Source: ".agents/skills/", Target: ".claude/skills/"},
 					},
 					// CLI script → ~/.local/bin/helix
 					Scripts: &InstallMapping{
