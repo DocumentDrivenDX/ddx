@@ -351,8 +351,6 @@ func parseJqArgs(args []string) (*jqOpts, error) {
 
 		case arg == "--args":
 			// Remaining args are string values, not files
-			i++
-			// jq makes these available as $ARGS.positional
 			i = len(args)
 			continue
 
