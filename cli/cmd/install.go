@@ -61,8 +61,11 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		for _, e := range state.Installed {
 			if e.Name == name {
-				fmt.Fprintf(out, "%s %s is already installed (use 'ddx upgrade %s' to update)\n", e.Name, e.Version, name)
-				return nil
+				if e.Version == pkg.Version {
+					fmt.Fprintf(out, "%s %s is already up to date\n", e.Name, e.Version)
+					return nil
+				}
+				fmt.Fprintf(out, "Updating %s from %s to %s...\n", e.Name, e.Version, pkg.Version)
 			}
 		}
 	}
