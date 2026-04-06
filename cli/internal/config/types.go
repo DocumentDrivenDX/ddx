@@ -29,6 +29,18 @@ type AgentConfig struct {
 	TimeoutMS       int                 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
+	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
+}
+
+// VirtualConfig configures the virtual agent harness.
+type VirtualConfig struct {
+	Normalize []NormalizePattern `yaml:"normalize,omitempty" json:"normalize,omitempty"`
+}
+
+// NormalizePattern is a regex→replacement pair applied to prompts before hashing.
+type NormalizePattern struct {
+	Pattern string `yaml:"pattern" json:"pattern"`
+	Replace string `yaml:"replace" json:"replace"`
 }
 
 // SystemConfig represents system-level configuration settings

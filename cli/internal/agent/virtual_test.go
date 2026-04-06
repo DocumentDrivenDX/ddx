@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,6 +51,63 @@ func TestRecordAndLookup(t *testing.T) {
 
 	// Lookup with different prompt should fail.
 	_, err = LookupEntry(dir, "different prompt")
+	assert.Error(t, err)
+}
+
+func TestNormalizePrompt(t *testing.T) {
+	patterns := []config.NormalizePattern{
+		{Pattern: `/tmp/[a-zA-Z0-9._]+`, Replace: "<TMPDIR>"},
+		{Pattern: `hx-[a-f0-9]{8}`, Replace: "<BEAD_ID>"},
+	}
+
+	t.Run("replaces temp paths", func(t *testing.T) {
+		input := "Work in /tmp/tmp.ABC123 on task"
+		got := NormalizePrompt(input, patterns)
+		assert.Equal(t, "Work in <TMPDIR> on task", got)
+	})
+
+	t.Run("replaces bead IDs", func(t *testing.T) {
+		input := "Build hx-038ea52b and hx-7103bc49"
+		got := NormalizePrompt(input, patterns)
+		assert.Equal(t, "Build <BEAD_ID> and <BEAD_ID>", got)
+	})
+
+	t.Run("no patterns returns unchanged", func(t *testing.T) {
+		input := "plain prompt"
+		got := NormalizePrompt(input, nil)
+		assert.Equal(t, "plain prompt", got)
+	})
+
+	t.Run("invalid regex skipped", func(t *testing.T) {
+		bad := []config.NormalizePattern{{Pattern: `[invalid`, Replace: "x"}}
+		input := "test"
+		got := NormalizePrompt(input, bad)
+		assert.Equal(t, "test", got)
+	})
+}
+
+func TestRecordAndLookupWithNormalization(t *testing.T) {
+	dir := t.TempDir()
+	patterns := []config.NormalizePattern{
+		{Pattern: `/tmp/[a-zA-Z0-9._]+`, Replace: "<TMPDIR>"},
+	}
+
+	entry := &VirtualEntry{
+		Prompt:   "Process /tmp/tmp.RUN1 files",
+		Response: "done",
+		Harness:  "claude",
+	}
+
+	err := RecordEntry(dir, entry, patterns...)
+	require.NoError(t, err)
+
+	// Lookup with a different temp path should match (same normalized hash).
+	found, err := LookupEntry(dir, "Process /tmp/tmp.RUN2 files", patterns...)
+	require.NoError(t, err)
+	assert.Equal(t, "done", found.Response)
+
+	// Lookup without normalization should NOT match.
+	_, err = LookupEntry(dir, "Process /tmp/tmp.RUN2 files")
 	assert.Error(t, err)
 }
 

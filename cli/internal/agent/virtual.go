@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // VirtualDictionaryDir is the default directory for recorded prompt→response pairs.
@@ -28,6 +31,20 @@ type VirtualEntry struct {
 	RecordedAt   string  `json:"recorded_at"`
 }
 
+// NormalizePrompt applies configured regex→replacement patterns to a prompt
+// before hashing. This allows prompts with dynamic content (temp paths,
+// timestamps, bead IDs) to produce stable hashes across runs.
+func NormalizePrompt(prompt string, patterns []config.NormalizePattern) string {
+	for _, p := range patterns {
+		re, err := regexp.Compile(p.Pattern)
+		if err != nil {
+			continue // skip invalid patterns
+		}
+		prompt = re.ReplaceAllString(prompt, p.Replace)
+	}
+	return prompt
+}
+
 // PromptHash computes a truncated SHA-256 hash of a prompt for use as a
 // dictionary filename. The hash is 16 hex characters (64 bits), which is
 // sufficient to avoid collisions in practice while keeping filenames readable.
@@ -37,12 +54,14 @@ func PromptHash(prompt string) string {
 }
 
 // RecordEntry saves a prompt→response pair to the dictionary directory.
-func RecordEntry(dictDir string, entry *VirtualEntry) error {
+// If normalize patterns are provided, they are applied before hashing.
+func RecordEntry(dictDir string, entry *VirtualEntry, patterns ...config.NormalizePattern) error {
 	if err := os.MkdirAll(dictDir, 0755); err != nil {
 		return fmt.Errorf("creating dictionary dir: %w", err)
 	}
 
-	entry.PromptHash = PromptHash(entry.Prompt)
+	normalized := NormalizePrompt(entry.Prompt, patterns)
+	entry.PromptHash = PromptHash(normalized)
 	entry.PromptLen = len(entry.Prompt)
 	if entry.RecordedAt == "" {
 		entry.RecordedAt = time.Now().UTC().Format(time.RFC3339)
@@ -61,8 +80,10 @@ func RecordEntry(dictDir string, entry *VirtualEntry) error {
 }
 
 // LookupEntry finds a recorded response for a prompt by its hash.
-func LookupEntry(dictDir, prompt string) (*VirtualEntry, error) {
-	hash := PromptHash(prompt)
+// If normalize patterns are provided, they are applied before hashing.
+func LookupEntry(dictDir, prompt string, patterns ...config.NormalizePattern) (*VirtualEntry, error) {
+	normalized := NormalizePrompt(prompt, patterns)
+	hash := PromptHash(normalized)
 	path := filepath.Join(dictDir, hash+".json")
 
 	data, err := os.ReadFile(path)
@@ -93,7 +114,13 @@ func (r *Runner) RunVirtual(opts RunOptions) (*Result, error) {
 		dictDir = VirtualDictionaryDir
 	}
 
-	entry, err := LookupEntry(dictDir, prompt)
+	// Load normalization patterns from config.
+	var patterns []config.NormalizePattern
+	if cfg, err := config.Load(); err == nil && cfg.Agent != nil && cfg.Agent.Virtual != nil {
+		patterns = cfg.Agent.Virtual.Normalize
+	}
+
+	entry, err := LookupEntry(dictDir, prompt, patterns...)
 	if err != nil {
 		return nil, err
 	}

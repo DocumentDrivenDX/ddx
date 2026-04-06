@@ -209,10 +209,16 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 					CostUSD:      result.CostUSD,
 				}
 				dictDir := agent.VirtualDictionaryDir
-				if err := agent.RecordEntry(dictDir, entry); err != nil {
+				// Load normalization patterns from config.
+				var patterns []config.NormalizePattern
+				if cfg, cfgErr := config.Load(); cfgErr == nil && cfg.Agent != nil && cfg.Agent.Virtual != nil {
+					patterns = cfg.Agent.Virtual.Normalize
+				}
+				if err := agent.RecordEntry(dictDir, entry, patterns...); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to record response: %v\n", err)
 				} else {
-					fmt.Fprintf(os.Stderr, "Recorded response → %s/%s.json\n", dictDir, agent.PromptHash(resolvedPrompt))
+					normalized := agent.NormalizePrompt(resolvedPrompt, patterns)
+					fmt.Fprintf(os.Stderr, "Recorded response → %s/%s.json\n", dictDir, agent.PromptHash(normalized))
 				}
 			}
 
