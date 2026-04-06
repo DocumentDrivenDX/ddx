@@ -5,6 +5,7 @@ import Documents from './pages/Documents'
 import Beads from './pages/Beads'
 import Graph from './pages/Graph'
 import Agent from './pages/Agent'
+import Personas from './pages/Personas'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/beads" element={<Beads />} />
         <Route path="/graph" element={<Graph />} />
         <Route path="/agent" element={<Agent />} />
+        <Route path="/personas" element={<Personas />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

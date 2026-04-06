@@ -7,6 +7,7 @@ const links = [
   { to: '/beads', label: 'Beads' },
   { to: '/graph', label: 'Graph' },
   { to: '/agent', label: 'Agent' },
+  { to: '/personas', label: 'Personas' },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {

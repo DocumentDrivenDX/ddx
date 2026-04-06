@@ -77,5 +77,7 @@ export const api = {
   agentSessions: (harness?: string) =>
     fetchJSON<any[]>(`/agent/sessions${harness ? `?harness=${harness}` : ''}`),
   agentSessionDetail: (id: string) => fetchJSON<any>(`/agent/sessions/${id}`),
+  personas: () => fetchJSON<any[]>('/personas'),
+  personaDetail: (role: string) => fetchJSON<any>(`/personas/${role}`),
   health: () => fetchJSON<any>('/health'),
 }

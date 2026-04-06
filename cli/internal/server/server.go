@@ -63,6 +63,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/documents/{path...}", s.handleWriteDocument)
 	s.mux.HandleFunc("GET /api/documents/{path...}", s.handleReadDocument)
 	s.mux.HandleFunc("GET /api/search", s.handleSearch)
+	s.mux.HandleFunc("GET /api/personas", s.handleListPersonas)
 	s.mux.HandleFunc("GET /api/personas/{role}", s.handleResolvePersona)
 
 	// Beads
@@ -367,6 +368,26 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, results)
+}
+
+func (s *Server) handleListPersonas(w http.ResponseWriter, r *http.Request) {
+	loader := persona.NewPersonaLoader(s.WorkingDir)
+	personas, err := loader.ListPersonas()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+
+	result := make([]map[string]any, 0, len(personas))
+	for _, p := range personas {
+		result = append(result, map[string]any{
+			"name":        p.Name,
+			"description": p.Description,
+			"roles":       p.Roles,
+			"tags":        p.Tags,
+		})
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleResolvePersona(w http.ResponseWriter, r *http.Request) {
