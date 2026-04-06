@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -279,4 +283,143 @@ func TestJqCommand_PrettyPrintDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "\n")
 	assert.Contains(t, out, "  ") // indentation
+}
+
+// --- Property-based UTF-8 round-trip tests ---
+
+// randUTF8String generates a random string containing a mix of ASCII and
+// multi-byte UTF-8 characters. It draws from: ASCII printable, Latin
+// extended, CJK, emoji, math symbols, and explicit problem characters
+// (em-dash, zero-width space, BOM, etc.).
+func randUTF8String(rng *rand.Rand, maxLen int) string {
+	// Character pools covering various UTF-8 byte widths.
+	pools := [][]rune{
+		// 1-byte: ASCII printable (avoid backslash and quote to keep JSON simple)
+		[]rune("abcdefghijklmnopqrstuvwxyz0123456789 !@#$%^&*()-=+[]{}|;:,.<>?/~`"),
+		// 2-byte: Latin extended, Greek, Cyrillic
+		[]rune("àáâãäåæçèéêëìíîïðñòóôõöùúûüýþÿαβγδεζ"),
+		// 3-byte: CJK, punctuation, known problem characters
+		[]rune("你好世界東京日本語한국어—–\u2018\u2019\u201C\u201D\u2022\u2026\u20AC\u00A3\u00A5\u00A9\u00AE\u2122\u00A7\u00B6\u2020\u2021\u200B\u200C\u200D\uFEFF"),
+		// 4-byte: Emoji, math symbols
+		[]rune("\U0001F389\U0001F680\U0001F4BB\U0001F525\u2705\u274C\U0001F3AF\U0001F3D7\U0001F4E6\U0001F9EA\U0001F52C\U0001F4CA\U0001F3AD\U0001F3EA"),
+	}
+
+	n := rng.Intn(maxLen) + 1
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		pool := pools[rng.Intn(len(pools))]
+		b.WriteRune(pool[rng.Intn(len(pool))])
+	}
+	return b.String()
+}
+
+func TestJqProperty_UTF8RoundTrip(t *testing.T) {
+	// Property: for any valid UTF-8 string s, encoding s as a JSON object
+	// field value then processing through "ddx jq '.'" must produce valid
+	// JSON whose decoded field value equals the original string.
+	rng := rand.New(rand.NewSource(42)) // deterministic seed
+	const iterations = 500
+
+	for i := 0; i < iterations; i++ {
+		s := randUTF8String(rng, 200)
+		if !utf8.ValidString(s) {
+			continue // skip if generator produced invalid UTF-8
+		}
+
+		// Build input JSON with the random string as a value.
+		input := map[string]interface{}{"text": s, "n": i}
+		inputBytes, err := json.Marshal(input)
+		require.NoError(t, err, "iteration %d: marshal input", i)
+
+		// Run through ddx jq with identity filter.
+		out, err := runJqCommand(t, string(inputBytes), "-c", ".")
+		require.NoError(t, err, "iteration %d: jq failed for input %q", i, s)
+
+		// Parse the output JSON.
+		var result map[string]interface{}
+		err = json.Unmarshal([]byte(strings.TrimSpace(out)), &result)
+		require.NoError(t, err, "iteration %d: output is not valid JSON: %q (input string: %q)", i, out, s)
+
+		// The text field must round-trip exactly.
+		assert.Equal(t, s, result["text"],
+			"iteration %d: text field corrupted through jq", i)
+	}
+}
+
+func TestJqProperty_UTF8MutationRoundTrip(t *testing.T) {
+	// Property: for any valid UTF-8 string s, using ddx jq to mutate a
+	// different field must not corrupt the string field.
+	rng := rand.New(rand.NewSource(99))
+	const iterations = 500
+
+	for i := 0; i < iterations; i++ {
+		s := randUTF8String(rng, 200)
+		if !utf8.ValidString(s) {
+			continue
+		}
+
+		input := map[string]interface{}{"text": s, "delay_ms": 100}
+		inputBytes, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		// Mutate a different field — this is the exact pattern from the bug report.
+		out, err := runJqCommand(t, string(inputBytes), "-c", ".delay_ms = 0")
+		require.NoError(t, err, "iteration %d: jq mutation failed for %q", i, s)
+
+		var result map[string]interface{}
+		err = json.Unmarshal([]byte(strings.TrimSpace(out)), &result)
+		require.NoError(t, err, "iteration %d: output JSON invalid: %q", i, out)
+
+		assert.Equal(t, s, result["text"],
+			"iteration %d: text corrupted after mutating delay_ms", i)
+		assert.Equal(t, float64(0), result["delay_ms"],
+			"iteration %d: delay_ms not set to 0", i)
+	}
+}
+
+func TestJqProperty_UTF8FileRoundTrip(t *testing.T) {
+	// Property: write JSON to a file, process with ddx jq to a new file,
+	// read back — the string must survive the full file I/O cycle.
+	// This tests the exact pattern from the bug report:
+	//   ddx jq '.delay_ms = 0' file.json > file.json.tmp && mv ...
+	rng := rand.New(rand.NewSource(7))
+	const iterations = 200
+	dir := t.TempDir()
+
+	for i := 0; i < iterations; i++ {
+		s := randUTF8String(rng, 300)
+		if !utf8.ValidString(s) {
+			continue
+		}
+
+		input := map[string]interface{}{"text": s, "delay_ms": 100, "seq": i}
+		inputBytes, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		inFile := filepath.Join(dir, fmt.Sprintf("in-%d.json", i))
+		require.NoError(t, os.WriteFile(inFile, inputBytes, 0644))
+
+		// Process through ddx jq via file arg (not stdin).
+		factory := NewCommandFactory(dir)
+		root := factory.NewRootCommand()
+		var buf bytes.Buffer
+		root.SetOut(&buf)
+		root.SetErr(&buf)
+		root.SetArgs([]string{"jq", "-c", ".delay_ms = 0", inFile})
+		require.NoError(t, root.Execute(), "iteration %d", i)
+
+		// Write output to a new file and read it back (simulating redirect+mv).
+		outFile := filepath.Join(dir, fmt.Sprintf("out-%d.json", i))
+		require.NoError(t, os.WriteFile(outFile, buf.Bytes(), 0644))
+
+		data, err := os.ReadFile(outFile)
+		require.NoError(t, err)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(bytes.TrimSpace(data), &result)
+		require.NoError(t, err, "iteration %d: file output not valid JSON: %q", i, string(data))
+
+		assert.Equal(t, s, result["text"],
+			"iteration %d: text corrupted through file round-trip", i)
+	}
 }
