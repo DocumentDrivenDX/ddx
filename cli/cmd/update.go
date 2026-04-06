@@ -77,7 +77,6 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 	reg := registry.BuiltinRegistry()
 
 	var updated []string
-	var alreadyCurrent []string
 
 	for _, entry := range state.Installed {
 		// Filter to specific target if requested.
@@ -91,7 +90,6 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		}
 
 		if pkg.Version == entry.Version {
-			alreadyCurrent = append(alreadyCurrent, entry.Name+" "+entry.Version)
 			continue
 		}
 
