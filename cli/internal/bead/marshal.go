@@ -26,22 +26,22 @@ func unmarshalBead(data []byte) (Bead, error) {
 	var b Bead
 
 	if v, ok := raw["id"]; ok {
-		json.Unmarshal(v, &b.ID)
+		_ = json.Unmarshal(v, &b.ID)
 	}
 	if v, ok := raw["title"]; ok {
-		json.Unmarshal(v, &b.Title)
+		_ = json.Unmarshal(v, &b.Title)
 	}
 	if v, ok := raw["issue_type"]; ok {
-		json.Unmarshal(v, &b.IssueType)
+		_ = json.Unmarshal(v, &b.IssueType)
 	}
 	if v, ok := raw["status"]; ok {
-		json.Unmarshal(v, &b.Status)
+		_ = json.Unmarshal(v, &b.Status)
 	}
 	if v, ok := raw["priority"]; ok {
-		json.Unmarshal(v, &b.Priority)
+		_ = json.Unmarshal(v, &b.Priority)
 	}
 	if v, ok := raw["owner"]; ok {
-		json.Unmarshal(v, &b.Owner)
+		_ = json.Unmarshal(v, &b.Owner)
 	}
 	if v, ok := raw["created_at"]; ok {
 		var t time.Time
@@ -50,7 +50,7 @@ func unmarshalBead(data []byte) (Bead, error) {
 		}
 	}
 	if v, ok := raw["created_by"]; ok {
-		json.Unmarshal(v, &b.CreatedBy)
+		_ = json.Unmarshal(v, &b.CreatedBy)
 	}
 	if v, ok := raw["updated_at"]; ok {
 		var t time.Time
@@ -59,22 +59,22 @@ func unmarshalBead(data []byte) (Bead, error) {
 		}
 	}
 	if v, ok := raw["labels"]; ok {
-		json.Unmarshal(v, &b.Labels)
+		_ = json.Unmarshal(v, &b.Labels)
 	}
 	if v, ok := raw["parent"]; ok {
-		json.Unmarshal(v, &b.Parent)
+		_ = json.Unmarshal(v, &b.Parent)
 	}
 	if v, ok := raw["description"]; ok {
-		json.Unmarshal(v, &b.Description)
+		_ = json.Unmarshal(v, &b.Description)
 	}
 	if v, ok := raw["acceptance"]; ok {
-		json.Unmarshal(v, &b.Acceptance)
+		_ = json.Unmarshal(v, &b.Acceptance)
 	}
 	if v, ok := raw["notes"]; ok {
-		json.Unmarshal(v, &b.Notes)
+		_ = json.Unmarshal(v, &b.Notes)
 	}
 	if v, ok := raw["dependencies"]; ok {
-		json.Unmarshal(v, &b.Dependencies)
+		_ = json.Unmarshal(v, &b.Dependencies)
 	}
 
 	// Defaults
@@ -94,7 +94,7 @@ func unmarshalBead(data []byte) (Bead, error) {
 			b.Extra = make(map[string]any)
 		}
 		var val any
-		json.Unmarshal(v, &val)
+		_ = json.Unmarshal(v, &val)
 		b.Extra[k] = val
 	}
 

@@ -36,9 +36,9 @@ func (s *Store) acquireLock() error {
 		err := os.Mkdir(s.LockDir, 0o755)
 		if err == nil {
 			// Write PID and acquired_at
-			os.WriteFile(filepath.Join(s.LockDir, "pid"),
+			_ = os.WriteFile(filepath.Join(s.LockDir, "pid"),
 				[]byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
-			os.WriteFile(filepath.Join(s.LockDir, "acquired_at"),
+			_ = os.WriteFile(filepath.Join(s.LockDir, "acquired_at"),
 				[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644)
 			return nil
 		}

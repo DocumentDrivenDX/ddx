@@ -443,6 +443,6 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 
 func genSessionID() string {
 	b := make([]byte, 4)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return "as-" + hex.EncodeToString(b)
 }
