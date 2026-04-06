@@ -1,9 +1,12 @@
 package git
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -23,8 +26,15 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 		return nil
 	}
 
-	// Only "always" is handled automatically; "prompt" is not yet interactive.
-	if cfg.AutoCommit != "always" {
+	if cfg.AutoCommit == "prompt" {
+		fmt.Fprintf(os.Stderr, "Auto-commit %s? [y/N] ", filePath)
+		reader := bufio.NewReader(os.Stdin)
+		answer, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(answer)) != "y" {
+			return nil
+		}
+		// Fall through to commit logic.
+	} else if cfg.AutoCommit != "always" {
 		return nil
 	}
 
