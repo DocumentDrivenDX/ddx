@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and run demo Docker container to regenerate casts
+# Build and run demo Docker container to regenerate casts and website
 # Usage: ./run-docker-demos.sh
 
 set -e
@@ -56,9 +56,22 @@ docker run --rm \
         echo "Done! Demo files updated in website/static/demos/"
     '
 
+# Build the website in Docker (pinned Hugo version, reproducible)
+echo "Building website in Docker..."
+docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -v "$PROJECT_ROOT:/workspace" \
+    -v "$DEMO_HOME:/home/demo" \
+    -e HOME="/home/demo" \
+    -w /workspace/website \
+    ddx-demos \
+    hugo --gc --minify
+
 # Clean up temp home
 rm -rf "$DEMO_HOME"
 
 echo ""
 echo "Demo recordings regenerated. Files in website/static/demos/"
 ls -la "$PROJECT_ROOT/website/static/demos/"
+echo ""
+echo "Website built in website/public/"

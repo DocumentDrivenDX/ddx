@@ -87,14 +87,20 @@ make build-all
 
 This builds for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64.
 
-### Phase 5: Demo Recordings
+### Phase 5: Demo Recordings + Website Build
 
-Rebuild all demo screencasts in Docker. The Docker pipeline ensures
-reproducible, environment-independent recordings.
+Rebuild all demo screencasts and the Hugo microsite in Docker. The Docker
+pipeline pins tool versions (asciinema, agg, Hugo extended) for reproducible,
+environment-independent output.
 
 ```bash
 bash scripts/demos/run-docker-demos.sh
 ```
+
+This single command:
+1. Records all demo screencasts
+2. Renders .gif files from each cast
+3. Builds the website with `hugo --gc --minify`
 
 Then validate the cast files:
 
@@ -102,30 +108,19 @@ Then validate the cast files:
 bash scripts/demos/validate-casts.sh
 ```
 
-Both commands must succeed. If demos fail, the CLI behavior has changed and
-the demo scripts need updating.
+Both must succeed. If demos fail, the CLI behavior has changed — update the
+demo scripts. Check `website/public/` for website output.
 
-### Phase 6: Website Build
+### Phase 6: Commit Demo & Website Updates
 
-Build the Hugo microsite locally to catch any broken content.
-
-```bash
-cd website
-hugo --gc --minify
-```
-
-Must complete without errors. Check `website/public/` for output.
-
-### Phase 7: Commit Demo & Website Updates
-
-If Phase 5 or 6 produced changes (updated .cast/.gif files, website content):
+If Phase 5 produced changes (updated .cast/.gif files, website content):
 
 ```bash
 git add website/static/demos/*.cast website/static/demos/*.gif
 git commit -m "chore: regenerate demo recordings for release"
 ```
 
-### Phase 8: Push & Verify CI
+### Phase 7: Push & Verify CI
 
 Push to main and verify GitHub Actions pass.
 
@@ -144,7 +139,7 @@ gh run list --limit 5
 gh run view <run-id>
 ```
 
-### Phase 9: Tag the Release
+### Phase 8: Tag the Release
 
 Only after CI is green:
 
@@ -161,7 +156,7 @@ This triggers the **Release workflow** (`release.yml`) which:
 4. Creates GitHub Release with changelog and artifacts
 5. Triggers **Pages workflow** (`pages.yml`) to rebuild the website with version info
 
-### Phase 10: Verify Release
+### Phase 9: Verify Release
 
 After the Release workflow completes:
 
@@ -187,12 +182,11 @@ clean tree
   └─→ tests pass
        └─→ lint clean
             └─→ cross-platform build
-                 └─→ demos recorded + validated
-                      └─→ website builds
-                           └─→ commit updates
-                                └─→ push + CI green
-                                     └─→ tag + release workflow
-                                          └─→ verify release artifacts
+                 └─→ demos + website built in Docker (validated)
+                      └─→ commit updates
+                           └─→ push + CI green
+                                └─→ tag + release workflow
+                                     └─→ verify release artifacts
 ```
 
 ## Troubleshooting
@@ -209,7 +203,6 @@ clean tree
 ## Environment Requirements
 
 - Go (version matching `cli/go.mod`)
-- Docker (for demo recordings)
-- Hugo extended (for website build)
+- Docker (for demo recordings + website build — pins asciinema, agg, Hugo versions)
 - `gh` CLI (for checking CI status and releases)
 - `golangci-lint` (optional, for comprehensive linting)
