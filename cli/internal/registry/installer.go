@@ -1,16 +1,18 @@
 package registry
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-// InstallPackage clones the source repo and copies declared install mappings.
+// InstallPackage downloads the source release tarball and copies declared install mappings.
 // It records installed files in the returned InstalledEntry.
 func InstallPackage(pkg *Package) (InstalledEntry, error) {
 	entry := InstalledEntry{
@@ -21,29 +23,31 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		InstalledAt: time.Now(),
 	}
 
-	// Shallow-clone the source repo to a temp directory.
+	// Download and extract the release tarball to a temp directory.
 	tmpDir, err := os.MkdirTemp("", "ddx-install-"+pkg.Name+"-*")
 	if err != nil {
 		return entry, fmt.Errorf("creating temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	if err := shallowClone(pkg.Source, tmpDir); err != nil {
-		return entry, fmt.Errorf("cloning %s: %w", pkg.Source, err)
+	tarballURL := githubTarballURL(pkg.Source, pkg.Version)
+	extractedDir, err := downloadAndExtract(tarballURL, tmpDir)
+	if err != nil {
+		return entry, fmt.Errorf("downloading %s: %w", tarballURL, err)
 	}
 
 	// Process Root mapping first - copy the entire plugin to central location
 	if pkg.Install.Root != nil {
-		files, err := copyMapping(tmpDir, pkg.Install.Root)
+		files, err := copyMapping(extractedDir, pkg.Install.Root)
 		if err != nil {
 			return entry, fmt.Errorf("installing plugin root: %w", err)
 		}
 		entry.Files = append(entry.Files, files...)
 	}
 
-	// Process Skills mapping (relative to plugin root in temp dir)
+	// Process Skills mapping
 	if pkg.Install.Skills != nil {
-		files, err := copyMapping(tmpDir, pkg.Install.Skills)
+		files, err := copyMapping(extractedDir, pkg.Install.Skills)
 		if err != nil {
 			return entry, fmt.Errorf("installing skills: %w", err)
 		}
@@ -52,7 +56,7 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 
 	// Process Scripts mapping (for CLI binaries)
 	if pkg.Install.Scripts != nil {
-		files, err := copyMapping(tmpDir, pkg.Install.Scripts)
+		files, err := copyMapping(extractedDir, pkg.Install.Scripts)
 		if err != nil {
 			return entry, fmt.Errorf("installing scripts: %w", err)
 		}
@@ -139,25 +143,107 @@ func UninstallPackage(entry *InstalledEntry) error {
 	return nil
 }
 
-// shallowClone performs a shallow git clone of url into dir.
-func shallowClone(url, dir string) error {
-	cmd := exec.Command("git", "clone", "--depth=1", url, dir)
-	cmd.Stdout = os.Stderr // progress output to stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+// githubTarballURL builds a GitHub release tarball URL from a repo URL and version tag.
+// e.g. "https://github.com/owner/repo" + "1.0.0" →
+//
+//	"https://github.com/owner/repo/archive/refs/tags/v1.0.0.tar.gz"
+func githubTarballURL(repoURL, version string) string {
+	tag := version
+	if !strings.HasPrefix(tag, "v") {
+		tag = "v" + tag
+	}
+	return strings.TrimRight(repoURL, "/") + "/archive/refs/tags/" + tag + ".tar.gz"
+}
+
+// downloadAndExtract downloads a .tar.gz from url into destDir and returns
+// the path of the single top-level directory extracted from the archive.
+func downloadAndExtract(url, destDir string) (string, error) {
+	resp, err := http.Get(url) //nolint:noctx
+	if err != nil {
+		return "", fmt.Errorf("fetching %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fetching %s: HTTP %s", url, resp.Status)
+	}
+
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading gzip: %w", err)
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+	var topDir string
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("reading tar: %w", err)
+		}
+
+		// Sanitize path to prevent directory traversal.
+		clean := filepath.Clean(hdr.Name)
+		if strings.HasPrefix(clean, "..") {
+			continue
+		}
+
+		dest := filepath.Join(destDir, clean)
+
+		// Track the top-level directory name.
+		parts := strings.SplitN(clean, string(filepath.Separator), 2)
+		if topDir == "" && parts[0] != "" && parts[0] != "." {
+			topDir = parts[0]
+		}
+
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(dest, 0755); err != nil {
+				return "", err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+				return "", err
+			}
+			f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, hdr.FileInfo().Mode())
+			if err != nil {
+				return "", err
+			}
+			if _, err := io.Copy(f, tr); err != nil {
+				_ = f.Close()
+				return "", err
+			}
+			_ = f.Close()
+		case tar.TypeSymlink:
+			if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+				return "", err
+			}
+			_ = os.Remove(dest)
+			if err := os.Symlink(hdr.Linkname, dest); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	if topDir == "" {
+		return destDir, nil
+	}
+	return filepath.Join(destDir, topDir), nil
 }
 
 // copyMapping copies files from srcDir/<mapping.Source> to expandHome(mapping.Target).
+// If the source is a single file and the target does not end with a path
+// separator, the target is treated as the exact destination file path.
+// If the source is a directory (or target ends with /), files are copied
+// into the target directory.
 // Returns the list of destination files written.
 func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 	src := filepath.Join(srcDir, filepath.FromSlash(mapping.Source))
 	dst := expandHome(mapping.Target)
-
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return nil, fmt.Errorf("creating target dir %s: %w", dst, err)
-	}
-
-	var written []string
 
 	info, err := os.Stat(src)
 	if os.IsNotExist(err) {
@@ -168,9 +254,15 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 		return nil, err
 	}
 
+	var written []string
+
 	if info.IsDir() {
-		// Copy directory tree. HELIX skills use symlinks, so we resolve each
-		// entry via os.Stat (follows symlinks) rather than os.Lstat.
+		// Copy directory tree into dst (create dst as a directory).
+		if err := os.MkdirAll(dst, 0755); err != nil {
+			return nil, fmt.Errorf("creating target dir %s: %w", dst, err)
+		}
+
+		// HELIX skills use symlinks, so resolve each entry via os.Stat.
 		entries, err := os.ReadDir(src)
 		if err != nil {
 			return nil, err
@@ -179,14 +271,12 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 			srcPath := filepath.Join(src, e.Name())
 			dstPath := filepath.Join(dst, e.Name())
 
-			// Stat follows symlinks, giving us the real target info.
 			fi, err := os.Stat(srcPath)
 			if err != nil {
 				continue // skip broken symlinks
 			}
 
 			if fi.IsDir() {
-				// Recurse into directory (or symlink-to-directory).
 				subFiles, subErr := copyMapping(srcPath, &InstallMapping{Source: ".", Target: dstPath})
 				if subErr != nil {
 					return nil, subErr
@@ -200,8 +290,18 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 			}
 		}
 	} else {
-		// Source is a single file.
-		dstFile := filepath.Join(dst, filepath.Base(src))
+		// Source is a single file. If target ends with /, copy into that
+		// directory using the source filename; otherwise treat target as
+		// the exact destination file path.
+		var dstFile string
+		if strings.HasSuffix(mapping.Target, "/") {
+			if err := os.MkdirAll(dst, 0755); err != nil {
+				return nil, fmt.Errorf("creating target dir %s: %w", dst, err)
+			}
+			dstFile = filepath.Join(dst, filepath.Base(src))
+		} else {
+			dstFile = dst
+		}
 		if err := copyFile(src, dstFile); err != nil {
 			return nil, err
 		}
@@ -243,13 +343,24 @@ func copyFile(src, dst string) error {
 
 // downloadFile fetches url and writes it to dest.
 func downloadFile(url, dest string) error {
-	// Use curl or wget as a simple approach; avoids importing net/http for now.
-	cmd := exec.Command("curl", "-fsSL", "-o", dest, url)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("curl %s: %w", url, err)
+	resp, err := http.Get(url) //nolint:noctx
+	if err != nil {
+		return fmt.Errorf("fetching %s: %w", url, err)
 	}
-	return nil
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("fetching %s: HTTP %s", url, resp.Status)
+	}
+
+	f, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	_, err = io.Copy(f, resp.Body)
+	return err
 }
 
 // expandHome expands a leading ~ to the user's home directory.
