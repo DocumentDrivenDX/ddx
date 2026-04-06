@@ -359,6 +359,78 @@ func (f *CommandFactory) runUninstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// newVerifyCommand creates the "ddx verify" command.
+func (f *CommandFactory) newVerifyCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "verify",
+		Short: "Verify installed package integrity",
+		Long:  `Check that all files recorded for installed packages still exist and symlinks resolve correctly.`,
+		Args:  cobra.NoArgs,
+		RunE:  f.runVerify,
+	}
+}
+
+func (f *CommandFactory) runVerify(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+
+	state, err := registry.LoadState()
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
+	}
+
+	if len(state.Installed) == 0 {
+		fmt.Fprintln(out, "No packages installed.")
+		return nil
+	}
+
+	var totalIssues int
+	for _, entry := range state.Installed {
+		var issues []string
+		for _, f := range entry.Files {
+			expanded := registry.ExpandHome(f)
+			info, err := os.Lstat(expanded)
+			if os.IsNotExist(err) {
+				issues = append(issues, fmt.Sprintf("  missing: %s", f))
+				continue
+			}
+			if err != nil {
+				issues = append(issues, fmt.Sprintf("  error: %s: %v", f, err))
+				continue
+			}
+			// Check symlinks resolve.
+			if info.Mode()&os.ModeSymlink != 0 {
+				target, err := os.Readlink(expanded)
+				if err != nil {
+					issues = append(issues, fmt.Sprintf("  broken symlink: %s", f))
+					continue
+				}
+				// Resolve relative symlinks against their parent directory.
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(expanded), target)
+				}
+				if _, err := os.Stat(target); os.IsNotExist(err) {
+					issues = append(issues, fmt.Sprintf("  broken symlink: %s -> %s", f, target))
+				}
+			}
+		}
+
+		if len(issues) == 0 {
+			fmt.Fprintf(out, "%s %s: OK (%d files)\n", entry.Name, entry.Version, len(entry.Files))
+		} else {
+			fmt.Fprintf(out, "%s %s: %d issue(s)\n", entry.Name, entry.Version, len(issues))
+			for _, issue := range issues {
+				fmt.Fprintln(out, issue)
+			}
+			totalIssues += len(issues)
+		}
+	}
+
+	if totalIssues > 0 {
+		return fmt.Errorf("%d integrity issue(s) found — run 'ddx install <name> --force' to repair", totalIssues)
+	}
+	return nil
+}
+
 // newSearchCommand creates the "ddx search <query>" command.
 func (f *CommandFactory) newSearchCommand() *cobra.Command {
 	return &cobra.Command{

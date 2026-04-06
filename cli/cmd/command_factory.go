@@ -485,6 +485,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newUninstallCommand())
 	rootCmd.AddCommand(f.newSearchCommand())
 	rootCmd.AddCommand(f.newOutdatedCommand())
+	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
 
 	// Add prompts command group
