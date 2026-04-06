@@ -55,6 +55,20 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		}
 	}
 
+	// Create project-local symlink to global plugin root so that project-relative
+	// paths (e.g. .ddx/plugins/helix/workflows/) resolve correctly.
+	// Only when the root target is a global (~/...) path — skip for project-local targets.
+	if installedRoot != "" && pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		localPluginDir := filepath.Join(".ddx", "plugins", pkg.Name)
+		if err := os.MkdirAll(filepath.Dir(localPluginDir), 0755); err == nil {
+			// Remove existing file/symlink/directory.
+			if _, err := os.Lstat(localPluginDir); err == nil {
+				_ = os.RemoveAll(localPluginDir)
+			}
+			_ = os.Symlink(installedRoot, localPluginDir)
+		}
+	}
+
 	// Process Skills mappings — symlink from installed root when available,
 	// otherwise fall back to copying from the extracted tarball.
 	for i := range pkg.Install.Skills {
@@ -74,21 +88,24 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		}
 	}
 
-	// Process Scripts mapping — symlink from installed root when available,
-	// otherwise fall back to copying from the extracted tarball.
+	// Process Scripts mapping — always copy the script (never symlink).
+	// The installed root is already in a persistent global location, so a
+	// symlink adds indirection without benefit.
 	if pkg.Install.Scripts != nil {
+		srcDir := extractedDir
 		if installedRoot != "" {
-			dst, err := symlinkScript(installedRoot, pkg.Install.Scripts)
-			if err != nil {
-				return entry, fmt.Errorf("symlinking script: %w", err)
-			}
-			entry.Files = append(entry.Files, dst)
-		} else {
-			files, err := copyMapping(extractedDir, pkg.Install.Scripts)
-			if err != nil {
-				return entry, fmt.Errorf("installing scripts: %w", err)
-			}
-			entry.Files = append(entry.Files, files...)
+			srcDir = installedRoot
+		}
+		files, err := copyMapping(srcDir, pkg.Install.Scripts)
+		if err != nil {
+			return entry, fmt.Errorf("installing scripts: %w", err)
+		}
+		entry.Files = append(entry.Files, files...)
+
+		// Ensure the installed script is executable.
+		dst := ExpandHome(pkg.Install.Scripts.Target)
+		if info, err := os.Stat(dst); err == nil && !info.IsDir() {
+			_ = os.Chmod(dst, info.Mode()|0111)
 		}
 	}
 
@@ -330,53 +347,28 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 	return written, nil
 }
 
-// symlinkScript creates a symlink for a plugin's CLI script/binary from the
-// installed plugin root to the target path (e.g. ~/.local/bin/helix).
-func symlinkScript(installedRoot string, mapping *InstallMapping) (string, error) {
-	src := filepath.Join(installedRoot, filepath.FromSlash(mapping.Source))
-	dst := ExpandHome(mapping.Target)
-
-	if _, err := os.Stat(src); os.IsNotExist(err) {
-		return "", fmt.Errorf("script source %s not found in plugin", src)
-	}
-
-	// Resolve symlinks and ensure absolute path.
-	absSrc, err := filepath.EvalSymlinks(src)
-	if err != nil {
-		return "", fmt.Errorf("resolving symlinks for %s: %w", src, err)
-	}
-	absSrc, err = filepath.Abs(absSrc)
-	if err != nil {
-		return "", fmt.Errorf("resolving path %s: %w", src, err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return "", fmt.Errorf("creating dir for %s: %w", dst, err)
-	}
-
-	// Remove existing file/symlink.
-	if _, err := os.Lstat(dst); err == nil {
-		if err := os.RemoveAll(dst); err != nil {
-			return "", fmt.Errorf("removing existing %s: %w", dst, err)
-		}
-	}
-
-	if err := os.Symlink(absSrc, dst); err != nil {
-		return "", fmt.Errorf("symlinking %s -> %s: %w", dst, absSrc, err)
-	}
-	return dst, nil
-}
-
 // SymlinkSkillsFromRoot creates skill symlinks from an installed plugin root.
 // Exported for use by local install path.
 func SymlinkSkillsFromRoot(installedRoot string, skill *InstallMapping) ([]string, error) {
 	return symlinkSkills(installedRoot, skill)
 }
 
-// SymlinkScriptFromRoot creates a script symlink from an installed plugin root.
-// Exported for use by local install path.
-func SymlinkScriptFromRoot(installedRoot string, mapping *InstallMapping) (string, error) {
-	return symlinkScript(installedRoot, mapping)
+// CopyScriptFromRoot copies a script from an installed plugin root to the
+// target path. Exported for use by local install path.
+func CopyScriptFromRoot(installedRoot string, mapping *InstallMapping) (string, error) {
+	files, err := copyMapping(installedRoot, mapping)
+	if err != nil {
+		return "", err
+	}
+	// Ensure executable.
+	dst := ExpandHome(mapping.Target)
+	if info, err := os.Stat(dst); err == nil && !info.IsDir() {
+		_ = os.Chmod(dst, info.Mode()|0111)
+	}
+	if len(files) > 0 {
+		return files[0], nil
+	}
+	return dst, nil
 }
 
 // copyMapping copies files from srcDir/<mapping.Source> to ExpandHome(mapping.Target).
@@ -401,6 +393,14 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 	var written []string
 
 	if info.IsDir() {
+		// If dst is an existing symlink (e.g. from a prior --local install),
+		// remove it before creating the real directory.
+		if li, err := os.Lstat(dst); err == nil && li.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(dst); err != nil {
+				return nil, fmt.Errorf("removing symlink at %s: %w", dst, err)
+			}
+		}
+
 		// Copy directory tree into dst (create dst as a directory).
 		if err := os.MkdirAll(dst, 0755); err != nil {
 			return nil, fmt.Errorf("creating target dir %s: %w", dst, err)

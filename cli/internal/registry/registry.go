@@ -78,10 +78,12 @@ func BuiltinRegistry() *Registry {
 				Type:        PackageTypeWorkflow,
 				Source:      "https://github.com/DocumentDrivenDX/helix",
 				Install: PackageInstall{
-					// Copy plugin to project-local .ddx/plugins/
+					// Copy plugin to global ~/.ddx/plugins/ so it persists
+					// across projects and global symlinks (scripts, skills)
+					// resolve correctly.
 					Root: &InstallMapping{
 						Source: ".",
-						Target: ".ddx/plugins/helix",
+						Target: "~/.ddx/plugins/helix",
 					},
 					// Skills installed to project-local and global skill directories.
 					// Project-local (.agents/skills/, .claude/skills/) enables

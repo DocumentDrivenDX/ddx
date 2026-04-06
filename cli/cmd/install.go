@@ -249,11 +249,11 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 			entry.Files = append(entry.Files, files...)
 		}
 
-		// Symlink CLI script if defined.
+		// Copy CLI script if defined.
 		if pkg.Install.Scripts != nil {
-			dst, err := registry.SymlinkScriptFromRoot(absPath, pkg.Install.Scripts)
+			dst, err := registry.CopyScriptFromRoot(absPath, pkg.Install.Scripts)
 			if err != nil {
-				fmt.Fprintf(out, "Warning: script symlink error: %v\n", err)
+				fmt.Fprintf(out, "Warning: script copy error: %v\n", err)
 			} else {
 				entry.Files = append(entry.Files, dst)
 			}

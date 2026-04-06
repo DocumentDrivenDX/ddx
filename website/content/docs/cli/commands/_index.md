@@ -32,4 +32,5 @@ Auto-generated reference for every `ddx` command.
 | [`ddx uninstall`](/docs/cli/commands/ddx_uninstall/) | Remove an installed package |
 | [`ddx update`](/docs/cli/commands/ddx_update/) | Update DDx CLI or installed plugins |
 | [`ddx upgrade`](/docs/cli/commands/ddx_upgrade/) | Upgrade DDx to the latest version |
+| [`ddx verify`](/docs/cli/commands/ddx_verify/) | Verify installed package integrity |
 | [`ddx version`](/docs/cli/commands/ddx_version/) | Show version information |
