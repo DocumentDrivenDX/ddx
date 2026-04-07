@@ -129,16 +129,34 @@ func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, bas
 }
 
 // createCompareWorktree creates a git worktree for a comparison arm.
-func createCompareWorktree(repoDir, compareID, harnessName string) (string, error) {
-	wtDir := filepath.Join(repoDir, ".worktrees", fmt.Sprintf("%s-%s", compareID, harnessName))
+// It resolves the git root from the working directory to handle subdirectories.
+func createCompareWorktree(workDir, compareID, harnessName string) (string, error) {
+	// Resolve the actual git root — workDir may be a subdirectory
+	gitRoot, err := resolveGitRoot(workDir)
+	if err != nil {
+		return "", fmt.Errorf("resolving git root: %w", err)
+	}
+
+	wtDir := filepath.Join(gitRoot, ".worktrees", fmt.Sprintf("%s-%s", compareID, harnessName))
 
 	// Create worktree from HEAD (detached)
 	cmd := exec.Command("git", "worktree", "add", "--detach", wtDir, "HEAD")
-	cmd.Dir = repoDir
+	cmd.Dir = gitRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git worktree add: %s\n%s", err, string(out))
 	}
 	return wtDir, nil
+}
+
+// resolveGitRoot finds the git repository root from any directory within it.
+func resolveGitRoot(dir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not a git repository: %s", dir)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // captureGitDiff captures the unified diff of all changes in a worktree.
@@ -194,6 +212,10 @@ func runPostCommand(dir, command string) (string, bool) {
 
 // cleanupCompareWorktrees removes worktrees created for a comparison.
 func (r *Runner) cleanupCompareWorktrees(repoDir, compareID string) {
+	// Resolve git root in case repoDir is a subdirectory
+	if root, err := resolveGitRoot(repoDir); err == nil {
+		repoDir = root
+	}
 	wtBase := filepath.Join(repoDir, ".worktrees")
 	entries, err := os.ReadDir(wtBase)
 	if err != nil {
