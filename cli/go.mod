@@ -24,7 +24,7 @@ require (
 )
 
 require (
-	github.com/DocumentDrivenDX/forge v0.0.1
+	github.com/DocumentDrivenDX/forge v0.0.3
 	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
