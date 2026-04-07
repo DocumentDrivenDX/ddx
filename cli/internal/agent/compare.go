@@ -38,13 +38,38 @@ func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
 		baseDir, _ = os.Getwd()
 	}
 
-	// Run arms in parallel
+	// Create worktrees sequentially (git worktree add takes a lock)
+	// then run agent arms in parallel.
+	worktrees := make([]string, len(opts.Harnesses))
+	if opts.Sandbox {
+		for i, harness := range opts.Harnesses {
+			label := harness
+			if l, ok := opts.ArmLabels[i]; ok {
+				label = l
+			}
+			wt, err := createCompareWorktree(baseDir, id, label)
+			if err != nil {
+				record.Arms[i] = ComparisonArm{
+					Harness:  label,
+					ExitCode: 1,
+					Error:    fmt.Sprintf("worktree: %s", err),
+				}
+				continue
+			}
+			worktrees[i] = wt
+		}
+	}
+
 	var wg sync.WaitGroup
 	for i, harness := range opts.Harnesses {
+		// Skip arms that failed worktree creation
+		if opts.Sandbox && worktrees[i] == "" && record.Arms[i].Error != "" {
+			continue
+		}
 		wg.Add(1)
 		go func(idx int, harnessName string) {
 			defer wg.Done()
-			record.Arms[idx] = r.runCompareArm(opts, idx, harnessName, baseDir, id, prompt)
+			record.Arms[idx] = r.runCompareArm(opts, idx, harnessName, baseDir, id, prompt, worktrees[idx])
 		}(i, harness)
 	}
 	wg.Wait()
@@ -57,8 +82,8 @@ func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
 	return record, nil
 }
 
-// runCompareArm executes one harness arm, optionally in a worktree.
-func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, baseDir, compareID, prompt string) ComparisonArm {
+// runCompareArm executes one harness arm, optionally in a pre-created worktree.
+func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, baseDir, compareID, prompt, worktreePath string) ComparisonArm {
 	label := harnessName
 	if l, ok := opts.ArmLabels[armIdx]; ok {
 		label = l
@@ -67,15 +92,7 @@ func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, bas
 
 	// Determine working directory
 	workDir := baseDir
-	var worktreePath string
-	if opts.Sandbox {
-		var err error
-		worktreePath, err = createCompareWorktree(baseDir, compareID, harnessName)
-		if err != nil {
-			arm.ExitCode = 1
-			arm.Error = fmt.Sprintf("worktree: %s", err)
-			return arm
-		}
+	if worktreePath != "" {
 		workDir = worktreePath
 	}
 
@@ -103,7 +120,7 @@ func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, bas
 		arm.Error = err.Error()
 	} else {
 		arm.Model = result.Model
-		arm.Output = result.Output
+		arm.Output = ExtractOutput(harnessName, result.Output)
 		arm.Tokens = result.Tokens
 		arm.InputTokens = result.InputTokens
 		arm.OutputTokens = result.OutputTokens
