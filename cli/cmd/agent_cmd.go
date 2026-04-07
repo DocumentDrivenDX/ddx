@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
@@ -42,6 +43,7 @@ Examples:
 	cmd.AddCommand(f.newAgentCapabilitiesCommand())
 	cmd.AddCommand(f.newAgentDoctorCommand())
 	cmd.AddCommand(f.newAgentLogCommand())
+	cmd.AddCommand(f.newAgentBenchmarkCommand())
 	cmd.AddCommand(f.newAgentUsageCommand())
 
 	return cmd
@@ -548,6 +550,84 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Int("limit", 20, "Number of recent sessions to show")
+	return cmd
+}
+
+func (f *CommandFactory) newAgentBenchmarkCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "benchmark",
+		Short: "Run a benchmark suite comparing agent harnesses",
+		Long: `Execute a benchmark suite to compare multiple agent harnesses across prompts.
+
+The benchmark suite is defined in JSON format with arms (harness configurations)
+and prompts to run. Results include token counts, costs, durations, and can be
+saved for later analysis.
+
+Examples:
+  ddx agent benchmark --suite benchmarks/coding.json
+  ddx agent benchmark --suite benchmarks/coding.json --output results.json
+  ddx agent benchmark --suite benchmarks/coding.json --json`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			suitePath, _ := cmd.Flags().GetString("suite")
+			outputPath, _ := cmd.Flags().GetString("output")
+			asJSON, _ := cmd.Flags().GetBool("json")
+
+			if suitePath == "" {
+				return fmt.Errorf("--suite is required")
+			}
+
+			suite, err := agent.LoadBenchmarkSuite(suitePath)
+			if err != nil {
+				return fmt.Errorf("loading benchmark suite: %w", err)
+			}
+
+			runner := f.agentRunner()
+			result, err := runner.RunBenchmark(suite)
+			if err != nil {
+				return fmt.Errorf("running benchmark: %w", err)
+			}
+
+			var output []byte
+			if asJSON || outputPath != "" {
+				output, err = json.MarshalIndent(result, "", "  ")
+				if err != nil {
+					return fmt.Errorf("marshaling result: %w", err)
+				}
+			} else {
+				// Print summary table
+				var sb strings.Builder
+				w := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
+
+				fmt.Fprintln(w, "Arm\tCompleted\tFailed\tTokens\tCost\tAvg Duration")
+				fmt.Fprintln(w, "---\t---------\t------\t------\t----\t------------")
+
+				for _, arm := range result.Summary.Arms {
+					costStr := fmt.Sprintf("$%.4f", arm.TotalCostUSD)
+					durationStr := fmt.Sprintf("%dms", arm.AvgDurationMS)
+					fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%s\t%s\n",
+						arm.Label, arm.Completed, arm.Failed, arm.TotalTokens, costStr, durationStr)
+				}
+
+				w.Flush()
+				output = []byte(sb.String())
+			}
+
+			if outputPath != "" {
+				if err := os.WriteFile(outputPath, output, 0644); err != nil {
+					return fmt.Errorf("writing output file: %w", err)
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "Results written to %s\n", outputPath)
+			} else {
+				cmd.OutOrStdout().Write(output)
+			}
+
+			return nil
+		},
+	}
+	cmd.Flags().String("suite", "", "Path to benchmark suite JSON file (required)")
+	cmd.Flags().String("output", "", "Path to save results as JSON")
+	cmd.Flags().Bool("json", false, "Output results as JSON")
 	return cmd
 }
 
