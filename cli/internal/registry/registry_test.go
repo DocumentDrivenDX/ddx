@@ -232,3 +232,34 @@ func TestLoadSaveState(t *testing.T) {
 		t.Error("expected non-zero InstalledAt")
 	}
 }
+
+func TestVerifyFiles_AllMissing(t *testing.T) {
+	entry := InstalledEntry{
+		Name:  "phantom",
+		Files: []string{"/nonexistent/path/a", "/nonexistent/path/b"},
+	}
+	if entry.VerifyFiles() {
+		t.Error("expected VerifyFiles to return false when all files missing")
+	}
+}
+
+func TestVerifyFiles_NoFiles(t *testing.T) {
+	entry := InstalledEntry{Name: "empty"}
+	if entry.VerifyFiles() {
+		t.Error("expected VerifyFiles to return false when no files recorded")
+	}
+}
+
+func TestVerifyFiles_SomeExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	realFile := tmpDir + "/exists.txt"
+	_ = os.WriteFile(realFile, []byte("x"), 0644)
+
+	entry := InstalledEntry{
+		Name:  "partial",
+		Files: []string{"/nonexistent/file", realFile},
+	}
+	if !entry.VerifyFiles() {
+		t.Error("expected VerifyFiles to return true when at least one file exists")
+	}
+}

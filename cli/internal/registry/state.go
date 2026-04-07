@@ -77,6 +77,33 @@ func SaveState(state *InstalledState) error {
 	return nil
 }
 
+// VerifyFiles checks whether any recorded files for the entry exist on disk.
+// Returns true if at least one file exists, false if all are missing.
+func (e *InstalledEntry) VerifyFiles() bool {
+	if len(e.Files) == 0 {
+		return false
+	}
+	for _, f := range e.Files {
+		expanded := ExpandHome(f)
+		if _, err := os.Stat(expanded); err == nil {
+			return true
+		}
+		// Check if it's a symlink that resolves
+		if info, err := os.Lstat(expanded); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(expanded)
+			if err == nil {
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(expanded), target)
+				}
+				if _, err := os.Stat(target); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // FindInstalled returns the entry for name, or nil if not installed.
 func (s *InstalledState) FindInstalled(name string) *InstalledEntry {
 	for i := range s.Installed {

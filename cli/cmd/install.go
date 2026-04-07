@@ -316,12 +316,17 @@ func (f *CommandFactory) runInstalled(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tINSTALLED")
+	fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tSTATUS\tINSTALLED")
 	for _, e := range state.Installed {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		status := "ok"
+		if !e.VerifyFiles() {
+			status = "BROKEN"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			e.Name,
 			e.Version,
 			string(e.Type),
+			status,
 			e.InstalledAt.Format("2006-01-02"),
 		)
 	}
