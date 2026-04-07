@@ -443,3 +443,4 @@ cli/gendoc
 !cli/internal/server/frontend/dist/
 
 .claude/worktrees/
+cli/internal/server/frontend/public/sql-wasm.wasm
