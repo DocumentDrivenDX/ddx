@@ -433,6 +433,100 @@ func ExtractUsage(harnessName string, output string) UsageData {
 			OutputTokens: envelope.Usage.OutputTokens,
 			CostUSD:      envelope.TotalCostUSD,
 		}
+	case "pi":
+		// pi outputs JSONL - cost is in intermediate events, summary at end has no cost
+		// Scan backwards to find the last line with cost data
+		lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+		var inputTokens, outputTokens int
+		var costUSD float64
+		for i := len(lines) - 1; i >= 0; i-- {
+			line := strings.TrimSpace(lines[i])
+			if line == "" {
+				continue
+			}
+			// Try to parse as pi event with usage/cost
+			// Format: {"type":"text_end","message":{"usage":{"input":N,"output":M,"cost":{"total":X}}}}
+			var event struct {
+				Type    string `json:"type"`
+				Message struct {
+					Usage struct {
+						Input  int `json:"input"`
+						Output int `json:"output"`
+						Cost   struct {
+							Total float64 `json:"total"`
+						} `json:"cost"`
+					} `json:"usage"`
+				} `json:"message"`
+				Partial struct {
+					Usage struct {
+						Input  int `json:"input"`
+						Output int `json:"output"`
+						Cost   struct {
+							Total float64 `json:"total"`
+						} `json:"cost"`
+					} `json:"usage"`
+				} `json:"partial"`
+			}
+			if err := json.Unmarshal([]byte(line), &event); err != nil {
+				continue
+			}
+			// Check message.usage first, then partial.usage
+			if event.Message.Usage.Input > 0 || event.Message.Usage.Output > 0 {
+				inputTokens = event.Message.Usage.Input
+				outputTokens = event.Message.Usage.Output
+				costUSD = event.Message.Usage.Cost.Total
+				break
+			}
+			if event.Partial.Usage.Input > 0 || event.Partial.Usage.Output > 0 {
+				inputTokens = event.Partial.Usage.Input
+				outputTokens = event.Partial.Usage.Output
+				costUSD = event.Partial.Usage.Cost.Total
+				break
+			}
+		}
+		return UsageData{
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+			CostUSD:      costUSD,
+		}
+	case "gemini":
+		// gemini outputs single JSON with stats.models[].tokens (no cost in JSON)
+		lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+		last := ""
+		for i := len(lines) - 1; i >= 0; i-- {
+			if strings.TrimSpace(lines[i]) != "" {
+				last = lines[i]
+				break
+			}
+		}
+		if last == "" {
+			return UsageData{}
+		}
+		var envelope struct {
+			Stats struct {
+				Models map[string]struct {
+					Tokens struct {
+						Input int `json:"input"`
+						Total int `json:"total"`
+					} `json:"tokens"`
+				} `json:"models"`
+			} `json:"stats"`
+		}
+		if err := json.Unmarshal([]byte(last), &envelope); err != nil {
+			return UsageData{}
+		}
+		inputTokens := 0
+		outputTokens := 0
+		for _, model := range envelope.Stats.Models {
+			inputTokens += model.Tokens.Input
+			outputTokens += model.Tokens.Total - model.Tokens.Input
+		}
+		// Gemini JSON output doesn't include cost
+		return UsageData{
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+			CostUSD:      0,
+		}
 	default:
 		return UsageData{}
 	}
@@ -452,10 +546,35 @@ func ExtractOutput(harnessName string, rawOutput string) string {
 	case "forge", "opencode":
 		// forge and opencode return clean text directly
 		return rawOutput
+	case "pi", "gemini":
+		return extractOutputPiGemini(rawOutput)
 	default:
 		// Unknown harnesses return output as-is
 		return rawOutput
 	}
+}
+
+func extractOutputPiGemini(rawOutput string) string {
+	// pi outputs JSONL (last line has summary), gemini outputs single JSON
+	// Try to parse the last non-empty line for the response field
+	lines := strings.Split(strings.TrimRight(rawOutput, "\n"), "\n")
+	last := ""
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.TrimSpace(lines[i]) != "" {
+			last = lines[i]
+			break
+		}
+	}
+	if last == "" {
+		return rawOutput
+	}
+	var envelope struct {
+		Response string `json:"response"`
+	}
+	if err := json.Unmarshal([]byte(last), &envelope); err != nil {
+		return rawOutput
+	}
+	return envelope.Response
 }
 
 func extractOutputCodex(rawOutput string) string {

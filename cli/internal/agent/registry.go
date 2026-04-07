@@ -3,7 +3,7 @@ package agent
 import "os/exec"
 
 // PreferenceOrder defines the default harness preference when multiple are available.
-var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "forge", "pi", "cursor"}
+var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "forge", "pi"}
 
 // builtinHarnesses defines known harnesses and how to invoke them.
 var builtinHarnesses = map[string]Harness{
@@ -48,7 +48,7 @@ var builtinHarnesses = map[string]Harness{
 		Binary:          "gemini",
 		BaseArgs:        []string{},
 		PromptMode:      "stdin",
-		Models:          nil, // models change frequently; rely on provider-side validation
+		ModelFlag:       "-m",
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},
 	"opencode": {
@@ -77,15 +77,10 @@ var builtinHarnesses = map[string]Harness{
 	"pi": {
 		Name:            "pi",
 		Binary:          "pi",
-		BaseArgs:        []string{},
-		PromptMode:      "stdin",
-		ReasoningLevels: []string{"low", "medium", "high"},
-	},
-	"cursor": {
-		Name:            "cursor",
-		Binary:          "cursor",
-		BaseArgs:        []string{},
-		PromptMode:      "stdin",
+		BaseArgs:        []string{"--mode", "json", "--print"},
+		PromptMode:      "arg",
+		ModelFlag:       "--model",
+		EffortFlag:      "--thinking",
 		ReasoningLevels: []string{"low", "medium", "high"},
 	},
 	"virtual": {
