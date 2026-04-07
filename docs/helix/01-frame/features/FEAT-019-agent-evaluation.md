@@ -3,7 +3,9 @@ ddx:
   id: FEAT-019
   depends_on:
     - helix.prd
+    - FEAT-004
     - FEAT-006
+    - FEAT-012
     - FEAT-014
 ---
 # Feature: Agent Evaluation and Prompt Comparison
@@ -26,14 +28,20 @@ capture everything, grade the results." Workflow tools (HELIX) and quality
 runners (dun) compose these primitives into methodology-specific evaluation
 policies.
 
-### Relationship to FEAT-010 (Executions)
+### Ownership split
 
-FEAT-010 exec and FEAT-019 comparison are **peer concepts**, not
-parent-child. Exec runs one operation and captures one result. Comparison
-runs N operations in parallel and captures comparative results. They share
-infrastructure (bead linkage, provenance, structured results) but have
-fundamentally different shapes. Do not attempt to model comparison as an
-exec projection.
+- **FEAT-006** owns comparison dispatch (`ddx agent run --compare`),
+  `ComparisonRecord` persistence, and arm execution mechanics.
+- **FEAT-019** (this spec) owns **grading**, **replay**, and
+  **benchmark suite execution** — the evaluation layer built on top
+  of comparison dispatch.
+- **FEAT-010** owns the generic exec substrate. Comparison records may
+  use FEAT-010 storage if needed but comparison dispatch is not an exec
+  projection — it has a fundamentally different shape (N parallel arms
+  vs one sequential run).
+- **FEAT-004** owns bead semantics including evidence. FEAT-019 adds
+  evidence fields (session linkage) but does not modify bead close
+  behavior.
 
 ### Relationship to HELIX
 
@@ -129,22 +137,41 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 19. `--format json` for machine-readable output (consumed by dun checks,
     HELIX evaluation gates, CI pipelines).
 
-**Bead-close metadata** (foundation for replay)
-20. `ddx bead close` accepts `--model`, `--harness`, `--tokens`, `--cost`
-    flags and records them as structured evidence on the bead.
-21. `ddx bead show` displays the agent metadata when present.
-22. This metadata is the foundation for replay — without it, we can't
-    reconstruct what model/harness produced a bead's result.
+**Benchmark suites**
+19a. `ddx agent benchmark --suite <path>` loads a JSON suite definition
+     with arms (harness/model/tier configurations) and prompts, runs all
+     prompts across all arms, and produces aggregate per-arm statistics.
+19b. Suite format: `BenchmarkSuite` JSON with `name`, `version`, `arms[]`,
+     `prompts[]`, optional `sandbox`, `post_run`, `timeout`.
+19c. Output: per-arm summary (completed, failed, total tokens, cost,
+     avg duration) plus full comparison records per prompt.
+19d. `--output <path>` saves full results as JSON for historical tracking.
+
+**Bead-session linkage** (foundation for replay)
+20. When a bead is closed after an agent run, record the `session_id` (from
+    `sessions.jsonl`) and `closing_commit_sha` as bead evidence. The session
+    already owns model, harness, tokens, and cost — do not duplicate those
+    fields on the bead. `ddx bead show` resolves agent metadata from the
+    linked session.
+21. If no session link is recorded (manual close, legacy beads), replay
+    still works but reports "baseline session unknown" and cannot provide
+    a diff comparison.
 
 **Replay from bead**
-23. `ddx agent replay <bead-id> --model <model> --harness <harness>` reads
-    the bead's title, description, and acceptance criteria to reconstruct a
-    prompt, dispatches to the specified model/harness in a sandbox worktree,
-    runs `--post-run` evaluation, and reports the result.
-24. Replay compares the new result against the original commit's diff when
-    available (the bead's closing commit is discoverable via `git log`).
-25. Replay is the key primitive for answering "what if we reran this bead
-    with qwen3.5-27b instead of claude-opus?"
+22. `ddx agent replay <bead-id> --model <model> --harness <harness>` is the
+    key primitive for answering "what if we reran this bead with a different
+    model?"
+23. Replay reconstructs the original prompt from the linked session (not from
+    bead prose). If the session is unavailable, falls back to bead
+    title/description/acceptance as a degraded prompt.
+24. Replay base state: by default, replay checks out the `closing_commit_sha`
+    parent (the state before the original implementation). `--at-head` mode
+    replays against current HEAD instead ("would this model solve the task
+    today?"). The default answers "would this model have produced the same
+    result then?"
+25. Replay runs in a sandbox worktree, captures diff, runs `--post-run`
+    evaluation, and reports a comparison of the new diff against the
+    original commit's diff.
 
 ### Non-Functional
 
@@ -313,24 +340,28 @@ working tree
 **So that** I can compare the new model's output against the known-good result
 
 **Acceptance Criteria:**
-- Given a closed bead with agent metadata, when I run
+- Given a closed bead with a linked session, when I run
   `ddx agent replay <bead-id> --model qwen3.5-27b --harness forge`,
-  then the bead's prompt is reconstructed and dispatched to the model
-- Given the replay completes in a sandbox, then I see the diff, build/test
-  results, tokens, cost, and duration
-- Given the original commit is discoverable, then the replay output shows
-  a comparison of the new diff against the original
+  then the original prompt is reconstructed from the session and dispatched
+- Given the replay completes in a sandbox worktree checked out at the
+  parent of `closing_commit_sha`, then I see the diff compared against
+  the original commit's diff
+- Given `--at-head`, the replay runs against current HEAD instead
+- Given a bead without a linked session, then replay falls back to bead
+  prose and reports "baseline session unknown"
 
-### US-195: Bead Captures Agent Provenance on Close
+### US-195: Bead Links to Agent Session on Close
 **As a** developer building a replay corpus
-**I want** `ddx bead close` to record which model and harness produced the result
-**So that** future replays know what the baseline was
+**I want** bead close to record the session ID and closing commit
+**So that** future replays can reconstruct the exact prompt and baseline
 
 **Acceptance Criteria:**
-- Given I close a bead with `--model opus-4-6 --harness claude --tokens 1500 --cost 0.28`,
-  then `ddx bead show` displays these as structured evidence
-- Given a bead was closed without agent metadata, then replay still works
-  but reports "baseline model unknown"
+- Given an agent run closes bead ddx-xxx, then `session_id` and
+  `closing_commit_sha` are recorded as bead evidence
+- Given `ddx bead show ddx-xxx`, then model/harness/tokens/cost are
+  resolved from the linked session (not stored on the bead)
+- Given a bead closed without an agent run, then no session link exists
+  and `ddx bead show` omits agent metadata
 
 ## Dependencies
 
