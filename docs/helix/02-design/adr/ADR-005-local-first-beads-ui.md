@@ -8,32 +8,38 @@ ddx:
 ---
 # ADR-005: Local-First Client-Side Data Layer for Beads UI
 
-**Status:** Accepted
+**Status:** Accepted (revised 2026-04-07)
 **Date:** 2026-04-04
-**Context:** The DDx web UI needs a beads view with rich search, filtering,
-graph traversal, and kanban board functionality. The design must avoid
-building server-side search infrastructure and instead leverage browser-native
-data technologies.
+**Revised:** 2026-04-07
+**Context:** The DDx web UI needs a beads view with search, filtering,
+dependency traversal, and kanban board functionality. The design must avoid
+building server-side search infrastructure and instead leverage the browser.
 
 ## Decision
 
 The beads UI fetches the full bead dataset on load and performs all search,
-filter, sort, and graph traversal client-side. The in-browser data layer uses
-**SQLite compiled to WASM** (via `sql.js` or `@electric-sql/pglite`) for
-structured queries, with TanStack Query managing the fetch/cache lifecycle.
+filter, sort, and graph traversal client-side using **plain JavaScript arrays**
+with TanStack Query managing the fetch/cache lifecycle.
+
+### Revision History
+
+**v1 (2026-04-04):** Chose SQLite WASM (sql.js) for client-side queries.
+
+**v2 (2026-04-07):** Replaced sql.js with plain arrays. SQLite WASM introduced
+unacceptable deployment complexity:
+
+- 660KB WASM binary required in the build output
+- WASM MIME type (`application/wasm`) not served correctly by Go's embed FS
+  SPA handler, causing fatal Emscripten crashes with no error recovery
+- `go run` caching issues meant the WASM binary was not consistently embedded
+- The dataset (~200 beads, <100KB JSON) is far too small to benefit from SQL
+  indexes, FTS5, or recursive CTEs — `Array.filter()` executes in <1ms
 
 ### Why Not Server-Side Search?
 
 DDx beads are small datasets (hundreds to low thousands of records, each
 a few KB of JSON). Building server-side search, pagination, and filtering
-would add:
-
-- Server complexity: search indexes, query parsing, pagination cursors
-- Network latency: every filter change = round trip
-- State sync: client and server must agree on filter state
-- Maintenance: two implementations of the same query logic
-
-Client-side data eliminates all of this. The browser is the query engine.
+would add unnecessary complexity. The browser handles it trivially.
 
 ### Data Flow
 
@@ -41,10 +47,10 @@ Client-side data eliminates all of this. The browser is the query engine.
 Server                          Browser
 ──────                          ───────
 GET /api/beads ──────────────→  TanStack Query cache
-  (full JSONL,                    │
-   typically <100KB)              ▼
-                               SQLite WASM
-                               (in-memory db)
+  (full JSON array,               │
+   typically <100KB)               ▼
+                               Plain JS array
+                               (in-memory)
                                   │
                          ┌────────┼────────┐
                          ▼        ▼        ▼
@@ -52,109 +58,56 @@ GET /api/beads ──────────────→  TanStack Query cac
                       View     Board    Results
 ```
 
-1. On mount, TanStack Query fetches `GET /api/beads` (returns all beads as
-   JSON array)
-2. Response is loaded into an in-memory SQLite database (WASM)
-3. All views (list, kanban, search, graph) query the local SQLite
-4. Mutations (`POST`, `PUT`) call the server API, then invalidate the
-   TanStack Query cache → re-fetch → reload SQLite
-5. Polling or SSE keeps the local copy fresh (configurable interval)
+1. On mount, TanStack Query fetches `GET /api/beads` (returns all beads)
+2. Response is stored as a plain array in memory
+3. All views query using `Array.filter()`, `.sort()`, `.find()`
+4. Full-text search uses case-insensitive substring matching across all
+   text fields (id, title, description, acceptance, labels, owner, spec-id)
+5. Mutations (`POST`, `PUT`) call the server API, then invalidate the
+   TanStack Query cache → re-fetch
+6. Polling keeps the local copy fresh (30s interval)
 
-### SQLite WASM Schema
+### Query Implementation
 
-```sql
-CREATE TABLE beads (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  status TEXT NOT NULL,
-  issue_type TEXT,
-  priority INTEGER DEFAULT 2,
-  owner TEXT,
-  description TEXT,
-  acceptance TEXT,
-  spec_id TEXT,
-  labels TEXT,           -- comma-separated, indexed via FTS
-  parent TEXT,
-  created_at TEXT,
-  updated_at TEXT,
-  raw_json TEXT          -- full JSON for fields not in columns
-);
+```typescript
+// Status filtering
+beads.filter(b => b.status === status)
+  .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at))
 
-CREATE TABLE bead_deps (
-  bead_id TEXT NOT NULL,
-  dep_id TEXT NOT NULL,
-  PRIMARY KEY (bead_id, dep_id)
-);
+// Full-text search
+const q = query.toLowerCase()
+beads.filter(b => [b.id, b.title, b.description, b.acceptance, b.labels.join(' ')]
+  .join(' ').toLowerCase().includes(q))
 
--- Full-text search across text fields
-CREATE VIRTUAL TABLE beads_fts USING fts5(
-  id, title, description, acceptance, labels,
-  content='beads', content_rowid='rowid'
-);
+// Ready beads (open, all deps closed)
+beads.filter(b => b.status === 'open' &&
+  (deps.get(b.id) ?? []).every(depId => beadIndex.get(depId)?.status === 'closed'))
 
-CREATE INDEX idx_beads_status ON beads(status);
-CREATE INDEX idx_beads_priority ON beads(priority);
-CREATE INDEX idx_beads_spec_id ON beads(spec_id);
+// Transitive dependencies (BFS)
+function queryDependencies(beadId: string): Bead[] {
+  const visited = new Set<string>()
+  const queue = [...(depsMap.get(beadId) ?? [])]
+  const result: Bead[] = []
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    if (visited.has(id)) continue
+    visited.add(id)
+    const b = beadIndex.get(id)
+    if (b) { result.push(b); queue.push(...(depsMap.get(id) ?? [])) }
+  }
+  return result
+}
 ```
 
-### Why SQLite WASM Over Alternatives
+### Why Plain Arrays Over Alternatives
 
 | Option | Verdict | Reason |
 |--------|---------|--------|
-| **SQLite WASM (sql.js)** | **Chosen** | Full SQL, FTS5 for search, graph queries via recursive CTEs, mature, ~1MB WASM |
-| **WebSQL** | Rejected | Deprecated, removed from standards, Chrome-only |
-| **IndexedDB + js search** | Considered | No SQL, manual indexing, poor full-text search |
-| **OPFS + SQLite** | Future | Persistent storage, but adds complexity for v1 |
-| **PGlite (Postgres WASM)** | Overkill | 3MB+, Postgres features not needed for this dataset |
-| **Plain array + filter()** | Fragile | Works for 50 beads, breaks at 500 with complex queries |
-
-### Graph Traversal
-
-Dependency graph traversal uses recursive CTEs:
-
-```sql
--- All transitive dependencies of a bead
-WITH RECURSIVE deps AS (
-  SELECT dep_id FROM bead_deps WHERE bead_id = ?
-  UNION
-  SELECT bd.dep_id FROM bead_deps bd
-  JOIN deps d ON bd.bead_id = d.dep_id
-)
-SELECT b.* FROM beads b JOIN deps d ON b.id = d.dep_id;
-
--- "Ready" beads: no open dependencies
-SELECT b.* FROM beads b
-WHERE b.status = 'open'
-AND NOT EXISTS (
-  SELECT 1 FROM bead_deps bd
-  JOIN beads dep ON bd.dep_id = dep.id
-  WHERE bd.bead_id = b.id AND dep.status != 'closed'
-);
-```
-
-### Kanban Board Data Model
-
-The kanban board is a view over the SQLite data:
-
-```sql
--- Columns: one per status
-SELECT * FROM beads WHERE status = ? ORDER BY priority ASC, created_at ASC;
-
--- Swimlanes: group by label prefix
-SELECT * FROM beads
-WHERE status = ? AND labels LIKE '%area:cli%'
-ORDER BY priority ASC;
-
--- Dependency clusters: beads sharing a dep chain
-WITH RECURSIVE cluster AS (
-  SELECT bead_id, dep_id FROM bead_deps WHERE bead_id = ?
-  UNION
-  SELECT bd.bead_id, bd.dep_id FROM bead_deps bd
-  JOIN cluster c ON bd.dep_id = c.bead_id OR bd.bead_id = c.dep_id
-)
-SELECT DISTINCT bead_id FROM cluster
-UNION SELECT DISTINCT dep_id FROM cluster;
-```
+| **Plain arrays + filter()** | **Chosen** | Zero dependencies, zero build complexity, <1ms for 200 beads |
+| **SQLite WASM (sql.js)** | Rejected (v2) | 660KB WASM, MIME type issues, fatal crashes, deployment fragility |
+| **MiniSearch** | Deferred | ~28KB, good fuzzy search, but substring matching suffices for now |
+| **IndexedDB** | Rejected | Async API adds complexity, no benefit for ephemeral cache |
+| **PGlite (Postgres WASM)** | Rejected | 3MB+, massive overkill |
 
 ### Execution Evidence Join
 
@@ -162,34 +115,22 @@ Execution runs linked to beads are fetched on demand (not preloaded):
 
 ```
 Click bead detail → fetch GET /api/exec/runs?artifact=<bead-id>
-                   → fetch GET /api/agent/sessions?bead=<bead-id>
 ```
 
-These are loaded into separate TanStack Query caches, not SQLite, because
+These are loaded into separate TanStack Query caches because
 they're per-bead detail data, not list data.
 
 ## Consequences
 
 - **No server-side search needed** — the server's `GET /api/beads` is a
   simple dump. No query parameters, no pagination, no search index.
-- **Instant UI interactions** — filter/search/sort are sub-millisecond
-  because they query local SQLite, not the network.
-- **~1MB WASM overhead** — sql.js adds ~1MB to the initial bundle. This is
-  acceptable for a developer tool dashboard.
+- **Instant UI interactions** — filter/search/sort are sub-millisecond.
+- **Zero added bundle weight** — no WASM, no search library dependency.
+- **No deployment complexity** — no WASM files to serve, no MIME types
+  to configure, no build pipeline steps.
 - **Stale data window** — between polling intervals, the local copy may be
   behind. Mutations trigger immediate re-fetch to minimize this.
-- **Scale limit** — this approach works for up to ~10,000 beads (~5MB JSON).
-  Beyond that, server-side pagination becomes necessary. DDx projects are
-  unlikely to exceed this.
-- **Offline potential** — if we later add OPFS persistence, the beads view
-  works offline. This is a free option, not a v1 requirement.
-
-## Alternatives Considered
-
-- **Server-side search with ElasticSearch/Bleve:** Massive overkill for
-  hundreds of records. Adds infrastructure DDx doesn't need.
-- **TanStack Table with client-side arrays:** Works for simple filtering
-  but can't do recursive graph traversal or FTS efficiently.
-- **CRDT-based sync (PowerSync, ElectricSQL):** Interesting for real-time
-  multi-user, but DDx is single-user dashboard backed by files. Git is the
-  sync mechanism.
+- **Scale limit** — this approach works comfortably for up to ~5,000 beads.
+  At 10,000+ with complex search requirements, consider adding MiniSearch
+  (~28KB) or moving search server-side. DDx projects are unlikely to
+  exceed 1,000 beads.
