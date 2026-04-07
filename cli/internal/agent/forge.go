@@ -67,8 +67,10 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 		&tool.BashTool{WorkDir: wd},
 	}
 
-	// Build system prompt
-	sysPrompt := prompt.New("You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files. Use the available tools to complete tasks.").
+	// Build system prompt using forge presets.
+	// Preset can be overridden via FORGE_PRESET env var (default: "forge").
+	preset := envOrDefault("FORGE_PRESET", "forge")
+	sysPrompt := prompt.NewFromPreset(preset).
 		WithTools(tools).
 		WithContextFiles(prompt.LoadContextFiles(wd)).
 		WithWorkDir(wd).

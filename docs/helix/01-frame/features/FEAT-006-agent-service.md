@@ -20,6 +20,40 @@ dedicated `agent` executor kind. It remains the canonical surface for direct
 agent dispatch and the authoritative source of raw prompt/response logs for
 agent-backed execution runs.
 
+## Forge Integration Boundary
+
+Forge is an embeddable Go agent runtime — a tool-calling LLM loop.
+DDx embeds forge as a library via `forge.Run()`. The boundary:
+
+**Forge owns** (do not duplicate in DDx):
+- Agent loop (prompt → LLM → tool calls → repeat)
+- Provider abstraction (OpenAI-compatible, Anthropic, virtual)
+- Tool execution (read, write, edit, bash)
+- Prompt construction (presets, context file loading, guidelines)
+- Session event logging (JSONL per session) and replay
+- Cost estimation via built-in pricing table
+
+**DDx owns** (do not push into forge):
+- Harness registry and discovery (forge is one of many harnesses)
+- Model tier resolution (smart/fast per harness)
+- Comparison dispatch, grading, replay from bead
+- Bead linkage and execution evidence
+- Aggregate usage tracking (`ddx agent usage`)
+- Configuration in `.ddx/config.yaml` (maps to forge config)
+
+**Integration rules:**
+- DDx calls `forge.Run()` and maps `forge.Result` to `agent.Result`
+- Configuration (provider, model, base URL, preset, max iterations)
+  flows from `.ddx/config.yaml` and env vars into `forge.Request`
+- DDx does not re-implement prompt building — it calls
+  `prompt.NewFromPreset()` and passes through
+- DDx does not manage forge tools — it constructs the standard tool
+  set and passes `WorkDir`
+- Forge session events log to the DDx session log dir so
+  `ddx agent log` has a unified view
+- Forge's `Result.ToolCalls` are preserved in comparison arms for
+  richer evaluation (subprocess harnesses don't have this)
+
 ## Problem Statement
 
 **Current situation:** Both HELIX and dun independently implement agent dispatch:
