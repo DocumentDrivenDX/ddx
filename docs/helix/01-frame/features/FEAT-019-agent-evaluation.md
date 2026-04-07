@@ -9,7 +9,7 @@ ddx:
 # Feature: Agent Evaluation and Prompt Comparison
 
 **ID:** FEAT-019
-**Status:** Framing
+**Status:** In Progress
 **Priority:** P1
 **Owner:** DDx Team
 
@@ -26,15 +26,32 @@ capture everything, grade the results." Workflow tools (HELIX) and quality
 runners (dun) compose these primitives into methodology-specific evaluation
 policies.
 
+### Relationship to FEAT-010 (Executions)
+
+FEAT-010 exec and FEAT-019 comparison are **peer concepts**, not
+parent-child. Exec runs one operation and captures one result. Comparison
+runs N operations in parallel and captures comparative results. They share
+infrastructure (bead linkage, provenance, structured results) but have
+fundamentally different shapes. Do not attempt to model comparison as an
+exec projection.
+
+### Relationship to HELIX
+
+DDx owns the comparison, grading, and replay primitives. HELIX owns the
+policies that use them: when to experiment, which variables to sweep,
+quality gates using experiment results, automatic model selection, and
+exploration loops. "Try 10 ideas to improve metric X" is a HELIX workflow
+loop that calls DDx comparison primitives — it is not a DDx execution mode.
+
 ## Problem Statement
 
 **Current situation:**
 - `ddx agent run` can dispatch to any harness and capture output/tokens/cost.
 - Quorum mode runs multiple harnesses and checks consensus (pass/fail).
 - Forge gives DDx full control of the agent loop with tool call logging.
-- There is no way to systematically compare harness outputs for the same
-  prompt, capture the side effects (file changes, commands run), or grade
-  the quality of results.
+- Beads define work. Commits capture verified results. But there is no
+  structured way to compare harness outputs for the same prompt, replay a
+  bead with a different model, or grade the quality of results.
 
 **Pain points:**
 - When evaluating whether a local model (via forge) can replace a cloud
@@ -43,9 +60,12 @@ policies.
   compared without isolation — running two agents in the same worktree
   produces interference.
 - No way to answer "is this prompt good enough?" without manual review.
+- Closed beads don't record which model/harness produced the result, so
+  replaying with a different model requires manual prompt reconstruction.
 
-**Desired outcome:** A comparison and grading primitive that lets operators
-answer: "For this prompt, how does harness A compare to harness B?" with
+**Desired outcome:** Comparison, grading, and replay primitives that let
+operators answer: "For this prompt, how does harness A compare to harness
+B?" and "What if we reran this bead with a different model?" — with
 concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 
 ## Requirements
@@ -109,6 +129,23 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 19. `--format json` for machine-readable output (consumed by dun checks,
     HELIX evaluation gates, CI pipelines).
 
+**Bead-close metadata** (foundation for replay)
+20. `ddx bead close` accepts `--model`, `--harness`, `--tokens`, `--cost`
+    flags and records them as structured evidence on the bead.
+21. `ddx bead show` displays the agent metadata when present.
+22. This metadata is the foundation for replay — without it, we can't
+    reconstruct what model/harness produced a bead's result.
+
+**Replay from bead**
+23. `ddx agent replay <bead-id> --model <model> --harness <harness>` reads
+    the bead's title, description, and acceptance criteria to reconstruct a
+    prompt, dispatches to the specified model/harness in a sandbox worktree,
+    runs `--post-run` evaluation, and reports the result.
+24. Replay compares the new result against the original commit's diff when
+    available (the bead's closing commit is discoverable via `git log`).
+25. Replay is the key primitive for answering "what if we reran this bead
+    with qwen3.5-27b instead of claude-opus?"
+
 ### Non-Functional
 
 - **Isolation:** Worktree sandboxes must prevent cross-arm interference.
@@ -171,8 +208,11 @@ permission layer or external sandbox tooling.
 # Compare two harnesses on the same prompt
 ddx agent run --compare --harnesses=forge,claude --prompt task.md
 
-# Compare with sandbox preserved for inspection
-ddx agent run --compare --harnesses=forge,claude --prompt task.md --keep-sandbox
+# Compare with per-arm model selection
+ddx agent run --compare \
+  --arm forge:qwen3.5-27b:forge-fast \
+  --arm claude:claude-opus-4-6:claude-smart \
+  --prompt task.md --sandbox
 
 # Compare with post-run test
 ddx agent run --compare --harnesses=forge,claude --prompt task.md \
@@ -189,6 +229,16 @@ ddx agent compare --list
 
 # Show comparison detail
 ddx agent compare --show cmp-abc123 --format json
+
+# Replay a closed bead with a different model
+ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness forge
+
+# Replay with post-run verification
+ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness forge \
+  --post-run "cd cli && make test"
+
+# Run a benchmark suite
+ddx agent benchmark --suite benchmarks/implementation.json --output results.json
 ```
 
 ### Configuration
@@ -257,6 +307,31 @@ working tree
 - Given an arm fails mid-run, then its worktree is still cleaned up
   (unless `--keep-sandbox`)
 
+### US-194: Developer Replays a Bead With a Different Model
+**As a** developer evaluating local model capability
+**I want** to rerun a previously-closed bead with a different model
+**So that** I can compare the new model's output against the known-good result
+
+**Acceptance Criteria:**
+- Given a closed bead with agent metadata, when I run
+  `ddx agent replay <bead-id> --model qwen3.5-27b --harness forge`,
+  then the bead's prompt is reconstructed and dispatched to the model
+- Given the replay completes in a sandbox, then I see the diff, build/test
+  results, tokens, cost, and duration
+- Given the original commit is discoverable, then the replay output shows
+  a comparison of the new diff against the original
+
+### US-195: Bead Captures Agent Provenance on Close
+**As a** developer building a replay corpus
+**I want** `ddx bead close` to record which model and harness produced the result
+**So that** future replays know what the baseline was
+
+**Acceptance Criteria:**
+- Given I close a bead with `--model opus-4-6 --harness claude --tokens 1500 --cost 0.28`,
+  then `ddx bead show` displays these as structured evidence
+- Given a bead was closed without agent metadata, then replay still works
+  but reports "baseline model unknown"
+
 ## Dependencies
 
 - FEAT-006 (Agent Service) — harness registry, quorum parallelism, worktree
@@ -267,9 +342,16 @@ working tree
 
 ## Out of Scope
 
-- Prompt optimization / automatic prompt rewriting
-- Model benchmarking suites or leaderboards
-- A/B testing with live traffic
+- **Exec projection** — comparison is a peer to FEAT-010 exec, not a
+  child. Do not model comparisons as exec runs.
+- **Exploration loops** — "try 10 ideas to improve metric X" is a HELIX
+  workflow loop that calls DDx comparison primitives, not a DDx execution
+  mode.
+- **Model selection policies** — HELIX decides which model for which task
+  based on comparison results. DDx provides the data.
+- **Prompt optimization** — automatic prompt rewriting is out of scope.
+  DDx provides comparison and grading; HELIX provides the iteration loop.
+- **Structured git trailers** — bead + session log already have the data.
+  Don't duplicate into git commit metadata.
 - Container or VM-level sandboxing
-- Grading rubric authoring tools (rubrics are user-provided markdown)
 - Cross-repo or cross-project comparison
