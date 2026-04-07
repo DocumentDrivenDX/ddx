@@ -44,7 +44,7 @@ func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
 		wg.Add(1)
 		go func(idx int, harnessName string) {
 			defer wg.Done()
-			record.Arms[idx] = r.runCompareArm(opts, harnessName, baseDir, id, prompt)
+			record.Arms[idx] = r.runCompareArm(opts, idx, harnessName, baseDir, id, prompt)
 		}(i, harness)
 	}
 	wg.Wait()
@@ -58,8 +58,12 @@ func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
 }
 
 // runCompareArm executes one harness arm, optionally in a worktree.
-func (r *Runner) runCompareArm(opts CompareOptions, harnessName, baseDir, compareID, prompt string) ComparisonArm {
-	arm := ComparisonArm{Harness: harnessName}
+func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, baseDir, compareID, prompt string) ComparisonArm {
+	label := harnessName
+	if l, ok := opts.ArmLabels[armIdx]; ok {
+		label = l
+	}
+	arm := ComparisonArm{Harness: label}
 
 	// Determine working directory
 	workDir := baseDir
@@ -75,11 +79,17 @@ func (r *Runner) runCompareArm(opts CompareOptions, harnessName, baseDir, compar
 		workDir = worktreePath
 	}
 
+	// Resolve per-arm model override
+	model := opts.Model
+	if m, ok := opts.ArmModels[armIdx]; ok {
+		model = m
+	}
+
 	// Run the agent
 	runOpts := RunOptions{
 		Harness:     harnessName,
 		Prompt:      prompt,
-		Model:       opts.Model,
+		Model:       model,
 		Effort:      opts.Effort,
 		Timeout:     opts.Timeout,
 		WorkDir:     workDir,

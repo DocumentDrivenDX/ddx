@@ -85,6 +85,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			sandbox, _ := cmd.Flags().GetBool("sandbox")
 			keepSandbox, _ := cmd.Flags().GetBool("keep-sandbox")
 			postRun, _ := cmd.Flags().GetString("post-run")
+			arms, _ := cmd.Flags().GetStringArray("arm")
 
 			var timeout time.Duration
 			if timeoutStr != "" {
@@ -125,10 +126,30 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 
 			// Comparison mode
 			if compare {
-				if harnesses == "" {
-					return fmt.Errorf("--harnesses required for --compare mode")
+				var harnessNames []string
+				armModels := map[int]string{}
+				armLabels := map[int]string{}
+
+				// Parse --arm flags: "harness:model:label" or "harness:model" or "harness"
+				if len(arms) > 0 {
+					for i, arm := range arms {
+						parts := strings.SplitN(arm, ":", 3)
+						harnessNames = append(harnessNames, parts[0])
+						if len(parts) >= 2 && parts[1] != "" {
+							armModels[i] = parts[1]
+						}
+						if len(parts) >= 3 {
+							armLabels[i] = parts[2]
+						} else if len(parts) >= 2 && parts[1] != "" {
+							armLabels[i] = parts[0] + "/" + parts[1]
+						}
+					}
+				} else if harnesses != "" {
+					harnessNames = strings.Split(harnesses, ",")
+				} else {
+					return fmt.Errorf("--arm or --harnesses required for --compare mode")
 				}
-				harnessNames := strings.Split(harnesses, ",")
+
 				opts := agent.CompareOptions{
 					RunOptions: agent.RunOptions{
 						Prompt:       prompt,
@@ -141,6 +162,8 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 						Permissions:  permissions,
 					},
 					Harnesses:   harnessNames,
+					ArmModels:   armModels,
+					ArmLabels:   armLabels,
 					Sandbox:     sandbox,
 					KeepSandbox: keepSandbox,
 					PostRun:     postRun,
@@ -312,6 +335,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().Bool("sandbox", false, "Run each comparison arm in an isolated git worktree")
 	cmd.Flags().Bool("keep-sandbox", false, "Preserve worktrees after comparison")
 	cmd.Flags().String("post-run", "", "Command to run in each worktree after the agent completes")
+	cmd.Flags().StringArray("arm", nil, "Comparison arm: harness:model:label (repeatable)")
 
 	return cmd
 }

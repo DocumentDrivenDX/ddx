@@ -113,10 +113,12 @@ type HarnessCapabilities struct {
 // CompareOptions configures a comparison dispatch.
 type CompareOptions struct {
 	RunOptions
-	Harnesses   []string // harnesses to compare
-	Sandbox     bool     // run each arm in an isolated worktree
-	KeepSandbox bool     // preserve worktrees after comparison
-	PostRun     string   // command to run in each worktree after the agent completes
+	Harnesses   []string          // harnesses to compare (may include duplicates with different models)
+	ArmModels   map[int]string    // per-arm model overrides keyed by arm index
+	ArmLabels   map[int]string    // per-arm display labels (e.g. "claude-fast")
+	Sandbox     bool              // run each arm in an isolated worktree
+	KeepSandbox bool              // preserve worktrees after comparison
+	PostRun     string            // command to run in each worktree after the agent completes
 }
 
 // ComparisonArm holds the result of one harness arm in a comparison.
