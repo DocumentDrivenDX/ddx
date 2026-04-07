@@ -40,7 +40,7 @@ agent-backed execution runs.
 
 ### Functional
 
-1. **Harness registry** — built-in support for codex, claude, gemini, opencode, pi, cursor. Extensible via config.
+1. **Harness registry** — built-in support for codex, claude, gemini, opencode, pi, cursor. Extensible via config. Codex, claude, and opencode are at full parity (model selection, permission profiles, working directory, effort/reasoning control, JSON output, usage extraction).
 2. **Harness discovery** — detect which harnesses are available on the system (binary exists, authenticated, etc.). Cache results.
 3. **Agent invocation** — `ddx agent run --harness=<name>` sends a prompt to the specified agent and captures output.
 4. **Prompt delivery** — accept prompt from stdin, file, or inline argument. Support prompt envelope format.
@@ -254,15 +254,45 @@ agent:
 
 **Harness flag mapping:**
 
-| Profile | codex flags | claude flags |
-|---------|------------|--------------|
-| safe | (none — default codex behavior) | (none — default claude behavior) |
-| supervised | `--auto-approve-reads` | `--permission-mode default` |
-| unrestricted | `--dangerously-bypass-approvals-and-sandbox` | `--permission-mode bypassPermissions --dangerously-skip-permissions` |
+| Profile | codex flags | claude flags | opencode flags |
+|---------|------------|--------------|----------------|
+| safe | (none — default codex behavior) | (none — default claude behavior) | (none — `run` auto-approves) |
+| supervised | `--auto-approve-reads` | `--permission-mode default` | (none — no granular control) |
+| unrestricted | `--dangerously-bypass-approvals-and-sandbox` | `--permission-mode bypassPermissions --dangerously-skip-permissions` | (none — `run` auto-approves) |
+
+> **Note:** opencode's `run` subcommand auto-approves all tool permissions in
+> non-interactive mode. There is no separate yolo/bypass flag; all permission
+> levels map to the same invocation.
 
 **Safety invariant:** If `agent.permissions` is not explicitly set in config
 AND the `--permissions` flag is not provided, DDx defaults to `safe` and
 logs a one-time notice explaining the available modes.
+
+## Provider Usage Data Sources
+
+Each harness exposes different levels of usage data. DDx captures what is
+available and uses it for usage tracking (FEAT-014) and self-throttling.
+
+| Source | codex | claude | opencode |
+|--------|-------|--------|----------|
+| **Per-invocation tokens** | `turn.completed` JSONL: `input_tokens`, `cached_input_tokens`, `output_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens` (if present) |
+| **Per-invocation cost** | Not reported | `total_cost_usd` in JSON envelope | `total_cost_usd` (if present) |
+| **Per-invocation model info** | Not reported | `modelUsage` block: per-model token breakdown, `contextWindow`, `maxOutputTokens` | Not reported |
+| **Historical stats file** | None known | `~/.claude/stats-cache.json`: daily activity, daily tokens by model, cumulative model usage | None known |
+| **Account limits** | TUI `/status` only (PTY scraping; fragile) | Not exposed programmatically | Not exposed |
+| **Budget passthrough** | None | `--max-budget-usd` flag (per-session cap) | None |
+
+### Key implications for self-throttling (see FEAT-014)
+
+- **Claude** is the richest: real cost per invocation, historical stats file,
+  and a built-in budget cap flag. DDx can read `stats-cache.json` for
+  account-wide activity and pass `--max-budget-usd` for API-key users.
+- **Codex** provides token counts but no cost or account limits. The only
+  source for rate-limit headroom is the TUI `/status` command, which requires
+  PTY scraping (as demonstrated by steipete/CodexBar). DDx should track its
+  own session-log-based usage as the primary signal.
+- **opencode** has JSON output support but token/cost reporting in the
+  envelope is not yet confirmed in all versions. DDx parses opportunistically.
 
 ## Out of Scope
 
