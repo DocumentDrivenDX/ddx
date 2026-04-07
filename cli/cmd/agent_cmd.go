@@ -81,6 +81,10 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			asJSON, _ := cmd.Flags().GetBool("json")
 			worktreeName, _ := cmd.Flags().GetString("worktree")
 			permissions, _ := cmd.Flags().GetString("permissions")
+			compare, _ := cmd.Flags().GetBool("compare")
+			sandbox, _ := cmd.Flags().GetBool("sandbox")
+			keepSandbox, _ := cmd.Flags().GetBool("keep-sandbox")
+			postRun, _ := cmd.Flags().GetString("post-run")
 
 			var timeout time.Duration
 			if timeoutStr != "" {
@@ -117,6 +121,57 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				}
 			} else if promptFile != "" {
 				promptSource = promptFile
+			}
+
+			// Comparison mode
+			if compare {
+				if harnesses == "" {
+					return fmt.Errorf("--harnesses required for --compare mode")
+				}
+				harnessNames := strings.Split(harnesses, ",")
+				opts := agent.CompareOptions{
+					RunOptions: agent.RunOptions{
+						Prompt:       prompt,
+						PromptFile:   promptFile,
+						PromptSource: promptSource,
+						Model:        model,
+						Effort:       effort,
+						Timeout:      timeout,
+						WorkDir:      workDir,
+						Permissions:  permissions,
+					},
+					Harnesses:   harnessNames,
+					Sandbox:     sandbox,
+					KeepSandbox: keepSandbox,
+					PostRun:     postRun,
+				}
+				record, err := r.RunCompare(opts)
+				if err != nil {
+					return err
+				}
+				if asJSON {
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(record)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Comparison %s (%d arms)\n", record.ID, len(record.Arms))
+				for _, arm := range record.Arms {
+					status := "OK"
+					if arm.ExitCode != 0 {
+						status = fmt.Sprintf("FAIL (rc=%d)", arm.ExitCode)
+					}
+					cost := ""
+					if arm.CostUSD > 0 {
+						cost = fmt.Sprintf(" cost=$%.4f", arm.CostUSD)
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "  %-12s %s  tokens=%d  duration=%dms%s\n",
+						arm.Harness, status, arm.Tokens, arm.DurationMS, cost)
+					if arm.Diff != "" {
+						lines := strings.Count(arm.Diff, "\n")
+						fmt.Fprintf(cmd.OutOrStdout(), "             diff: %d lines\n", lines)
+					}
+				}
+				return nil
 			}
 
 			// Quorum mode
@@ -253,6 +308,10 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("worktree", "", "Create/reuse a git worktree for the run")
 	cmd.Flags().String("permissions", "", "Permission level: safe, supervised, unrestricted (overrides config)")
 	cmd.Flags().Bool("record", false, "Record prompt→response pair for virtual harness replay")
+	cmd.Flags().Bool("compare", false, "Compare harnesses on the same prompt")
+	cmd.Flags().Bool("sandbox", false, "Run each comparison arm in an isolated git worktree")
+	cmd.Flags().Bool("keep-sandbox", false, "Preserve worktrees after comparison")
+	cmd.Flags().String("post-run", "", "Command to run in each worktree after the agent completes")
 
 	return cmd
 }
