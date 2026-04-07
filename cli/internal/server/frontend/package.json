@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "mkdir -p public && cp node_modules/sql.js/dist/sql-wasm.wasm public/",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",

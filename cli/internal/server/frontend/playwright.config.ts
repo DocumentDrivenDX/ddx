@@ -13,10 +13,10 @@ export default defineConfig({
     headless: true,
   },
   webServer: {
-    command: 'go run . server --port 18080',
+    command: `${cliRoot}/build/ddx server --port 18080`,
     cwd: cliRoot,
     port: 18080,
     reuseExistingServer: true,
-    timeout: 15000,
+    timeout: 10000,
   },
 })

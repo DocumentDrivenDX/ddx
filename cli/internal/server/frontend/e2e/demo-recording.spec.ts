@@ -1,60 +1,154 @@
 import { test, expect } from '@playwright/test'
 
-// DDx Server UI — Demo Recording
-// This test navigates all pages with realistic interactions to produce
-// a video recording suitable for embedding in the microsite.
+// DDx Server UI — Demo Recording (TP-002 TC-009)
 //
-// Run with video enabled:
-//   npx playwright test e2e/demo-recording.spec.ts --config=playwright.demo.config.ts
+// Produces a polished video walkthrough of all 6 pages with real data
+// interactions. Designed for embedding in the DDx microsite.
+//
+// Run:
+//   npm run demo:record
+// Output:
+//   demo-output/ contains a .webm video file
 
 test.describe('DDx Server UI Demo', () => {
   test('full walkthrough', async ({ page }) => {
-    // Dashboard
+    // ---------------------------------------------------------------
+    // 1. Dashboard — overview of the project
+    // ---------------------------------------------------------------
     await page.goto('/')
     await page.waitForSelector('h1')
-    await page.waitForTimeout(1500)
+    // Wait for all API data to populate cards
+    await page.waitForSelector('text=ok', { timeout: 5000 })
+    await page.waitForTimeout(2500)
 
-    // Navigate to Documents
+    // ---------------------------------------------------------------
+    // 2. Documents — browse and read a document
+    // ---------------------------------------------------------------
     await page.click('a[href="/documents"]')
+    await page.waitForSelector('h1:has-text("Documents")')
     await page.waitForTimeout(1000)
-    // Select a document if available
-    const docButton = page.locator('.space-y-0\\.5 button').first()
-    if (await docButton.isVisible()) {
-      await docButton.click()
-      await page.waitForTimeout(1500)
+
+    // Select the first document to show rendered markdown
+    const firstDoc = page.locator('.overflow-auto button').first()
+    if (await firstDoc.isVisible({ timeout: 3000 })) {
+      await firstDoc.click()
+      await page.waitForSelector('.prose', { timeout: 5000 })
+      await page.waitForTimeout(2000)
+
+      // Show the edit toggle briefly
+      const editBtn = page.locator('button:has-text("Edit")')
+      if (await editBtn.isVisible()) {
+        await editBtn.click()
+        await page.waitForTimeout(1200)
+        await page.click('button:has-text("Cancel")')
+        await page.waitForTimeout(800)
+      }
     }
 
-    // Navigate to Beads
-    await page.click('a[href="/beads"]')
-    await page.waitForSelector('text=OPEN')
-    await page.waitForTimeout(1000)
-
-    // Use search
-    const searchInput = page.locator('input[placeholder*="Search beads"]')
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('helix')
-      await page.waitForTimeout(800)
-      await searchInput.fill('')
+    // Demonstrate type filtering
+    const typeSelect = page.locator('select')
+    const options = await typeSelect.locator('option').allTextContents()
+    if (options.length > 1) {
+      await typeSelect.selectOption({ index: 1 })
+      await page.waitForTimeout(1000)
+      await typeSelect.selectOption({ index: 0 }) // back to "All types"
       await page.waitForTimeout(500)
     }
 
-    // Click a bead card if available
-    const beadCard = page.locator('.space-y-2 > [draggable="true"]').first()
-    if (await beadCard.isVisible()) {
-      await beadCard.click()
-      await page.waitForTimeout(1500)
+    // Demonstrate search
+    const docSearch = page.locator('input[placeholder*="Search"]')
+    if (await docSearch.isVisible()) {
+      await docSearch.fill('persona')
+      await page.waitForTimeout(1000)
+      await docSearch.fill('')
+      await page.waitForTimeout(500)
     }
 
-    // Navigate to Graph
-    await page.click('a[href="/graph"]')
-    await page.waitForTimeout(2000)
-
-    // Navigate to Agent
-    await page.click('a[href="/agent"]')
+    // ---------------------------------------------------------------
+    // 3. Beads — kanban board, search, detail, create
+    // ---------------------------------------------------------------
+    await page.click('a[href="/beads"]')
+    await page.waitForSelector('text=OPEN')
     await page.waitForTimeout(1500)
 
-    // Back to Dashboard
-    await page.click('a[href="/"]')
+    // Search for beads
+    const beadSearch = page.locator('input[placeholder*="Search beads"]')
+    if (await beadSearch.isVisible()) {
+      await beadSearch.fill('helix')
+      await page.waitForTimeout(1200)
+      await beadSearch.fill('')
+      await page.waitForTimeout(600)
+    }
+
+    // Click a bead card to show detail panel
+    const beadCard = page.locator('[draggable="true"]').first()
+    if (await beadCard.isVisible()) {
+      await beadCard.click()
+      await page.waitForTimeout(2000)
+      // Close detail
+      const closeBtn = page.locator('button:has-text("×")')
+      if (await closeBtn.isVisible()) {
+        await closeBtn.click()
+        await page.waitForTimeout(500)
+      }
+    }
+
+    // Create a new bead
+    await page.click('button:has-text("New Bead")')
+    await page.waitForSelector('form')
+    await page.waitForTimeout(800)
+
+    // Fill out the form
+    const titleInput = page.locator('form input[type="text"]').first()
+    await titleInput.fill('Demo: example work item')
+    await page.waitForTimeout(400)
+
+    const descriptionArea = page.locator('form textarea').first()
+    await descriptionArea.fill('Created during the DDx server UI demo walkthrough.')
+    await page.waitForTimeout(400)
+
+    const labelsInput = page.locator('form input[placeholder*="helix"]')
+    if (await labelsInput.isVisible()) {
+      await labelsInput.fill('demo, walkthrough')
+      await page.waitForTimeout(400)
+    }
+
     await page.waitForTimeout(1000)
+    // Submit
+    await page.click('button:has-text("Create Bead")')
+    await page.waitForTimeout(1500)
+
+    // ---------------------------------------------------------------
+    // 4. Graph — document dependency visualization
+    // ---------------------------------------------------------------
+    await page.click('a[href="/graph"]')
+    await page.waitForTimeout(2500)
+
+    // ---------------------------------------------------------------
+    // 5. Agent — session history
+    // ---------------------------------------------------------------
+    await page.click('a[href="/agent"]')
+    await page.waitForTimeout(2000)
+
+    // ---------------------------------------------------------------
+    // 6. Personas — browse and view a persona
+    // ---------------------------------------------------------------
+    await page.click('a[href="/personas"]')
+    await page.waitForSelector('h2:has-text("Personas")')
+    await page.waitForTimeout(1000)
+
+    const firstPersona = page.locator('.w-80 button').first()
+    if (await firstPersona.isVisible({ timeout: 3000 })) {
+      await firstPersona.click()
+      await page.waitForSelector('pre', { timeout: 5000 })
+      await page.waitForTimeout(2000)
+    }
+
+    // ---------------------------------------------------------------
+    // 7. Back to Dashboard — closing shot
+    // ---------------------------------------------------------------
+    await page.click('a[href="/"]')
+    await page.waitForSelector('h1')
+    await page.waitForTimeout(2000)
   })
 })
