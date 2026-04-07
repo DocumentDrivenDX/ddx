@@ -56,21 +56,21 @@ func TestCapabilitiesForge(t *testing.T) {
 // --- Provider construction ---
 
 func TestBuildForgeProviderOpenAI(t *testing.T) {
-	cfg := ForgeConfig{Provider: "openai-compat", BaseURL: "http://localhost:1234/v1"}
+	cfg := ForgeRunConfig{Provider: "openai-compat", BaseURL: "http://localhost:1234/v1"}
 	p, err := buildForgeProvider(cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
 
 func TestBuildForgeProviderAnthropic(t *testing.T) {
-	cfg := ForgeConfig{Provider: "anthropic", APIKey: "test-key"}
+	cfg := ForgeRunConfig{Provider: "anthropic", APIKey: "test-key"}
 	p, err := buildForgeProvider(cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
 
 func TestBuildForgeProviderUnknown(t *testing.T) {
-	cfg := ForgeConfig{Provider: "invalid"}
+	cfg := ForgeRunConfig{Provider: "invalid"}
 	_, err := buildForgeProvider(cfg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown forge provider")

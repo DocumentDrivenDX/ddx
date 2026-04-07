@@ -23,13 +23,27 @@ func containsString(slice []string, s string) bool {
 	return false
 }
 
+// ForgeConfigFunc returns forge config from .ddx/config.yaml. Nil return = no config.
+type ForgeConfigFunc func() *ForgeYAMLConfig
+
+// ForgeYAMLConfig mirrors config.ForgeConfig without importing the config package.
+type ForgeYAMLConfig struct {
+	Provider      string
+	BaseURL       string
+	APIKey        string
+	Model         string
+	Preset        string
+	MaxIterations int
+}
+
 // Runner executes agent invocations.
 type Runner struct {
-	Registry      *Registry
-	Config        Config
-	Executor      Executor     // injected; defaults to OSExecutor
-	LookPath      LookPathFunc // injected; defaults to exec.LookPath
-	ForgeProvider interface{}  // injected forge.Provider for testing; nil = resolve from config
+	Registry          *Registry
+	Config            Config
+	Executor          Executor         // injected; defaults to OSExecutor
+	LookPath          LookPathFunc     // injected; defaults to exec.LookPath
+	ForgeProvider     interface{}      // injected forge.Provider for testing; nil = resolve from config
+	ForgeConfigLoader ForgeConfigFunc  // injected; loads forge config from .ddx/config.yaml
 }
 
 // NewRunner creates a runner with defaults.

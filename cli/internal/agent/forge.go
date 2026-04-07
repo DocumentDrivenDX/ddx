@@ -16,13 +16,14 @@ import (
 	"github.com/DocumentDrivenDX/forge/tool"
 )
 
-// ForgeConfig holds configuration for the embedded forge executor.
-type ForgeConfig struct {
-	Provider      string `yaml:"provider"`       // "openai-compat" or "anthropic"
-	BaseURL       string `yaml:"base_url"`       // provider endpoint
-	APIKey        string `yaml:"api_key"`        // API key
-	Model         string `yaml:"model"`          // model name
-	MaxIterations int    `yaml:"max_iterations"` // max tool-call rounds
+// ForgeRunConfig holds resolved configuration for one forge invocation.
+type ForgeRunConfig struct {
+	Provider      string
+	BaseURL       string
+	APIKey        string
+	Model         string
+	Preset        string
+	MaxIterations int
 }
 
 // RunForge executes a prompt using the embedded forge library.
@@ -42,21 +43,24 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 		wd, _ = os.Getwd()
 	}
 
-	// Use injected provider (testing) or build from config/env.
+	// Resolve forge configuration (config.yaml → env vars → opts)
+	forgeCfg := r.resolveForgeConfig(model)
+
+	// Use injected provider (testing) or build from resolved config.
 	var provider forge.Provider
-	maxIter := 20
 	if r.ForgeProvider != nil {
 		provider = r.ForgeProvider.(forge.Provider)
 	} else {
-		forgeCfg := r.resolveForgeConfig(model)
 		var err error
 		provider, err = buildForgeProvider(forgeCfg)
 		if err != nil {
 			return nil, fmt.Errorf("agent: forge provider: %w", err)
 		}
-		if forgeCfg.MaxIterations > 0 {
-			maxIter = forgeCfg.MaxIterations
-		}
+	}
+
+	maxIter := forgeCfg.MaxIterations
+	if maxIter == 0 {
+		maxIter = 20
 	}
 
 	// Build tools
@@ -68,9 +72,7 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 	}
 
 	// Build system prompt using forge presets.
-	// Preset can be overridden via FORGE_PRESET env var (default: "forge").
-	preset := envOrDefault("FORGE_PRESET", "forge")
-	sysPrompt := prompt.NewFromPreset(preset).
+	sysPrompt := prompt.NewFromPreset(forgeCfg.Preset).
 		WithTools(tools).
 		WithContextFiles(prompt.LoadContextFiles(wd)).
 		WithWorkDir(wd).
@@ -103,14 +105,29 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 	forgeResult, err := forge.Run(ctx, req)
 	elapsed := time.Since(start)
 
+	// Map forge tool calls to DDx ToolCallEntry
+	var toolCalls []ToolCallEntry
+	for _, tc := range forgeResult.ToolCalls {
+		entry := ToolCallEntry{
+			Tool:     tc.Tool,
+			Input:    string(tc.Input),
+			Output:   tc.Output,
+			Duration: int(tc.Duration.Milliseconds()),
+			Error:    tc.Error,
+		}
+		toolCalls = append(toolCalls, entry)
+	}
+
 	result := &Result{
-		Harness:      "forge",
-		Model:        forgeResult.Model,
-		Output:       forgeResult.Output,
-		InputTokens:  forgeResult.Tokens.Input,
-		OutputTokens: forgeResult.Tokens.Output,
-		Tokens:       forgeResult.Tokens.Total,
-		DurationMS:   int(elapsed.Milliseconds()),
+		Harness:        "forge",
+		Model:          forgeResult.Model,
+		Output:         forgeResult.Output,
+		InputTokens:    forgeResult.Tokens.Input,
+		OutputTokens:   forgeResult.Tokens.Output,
+		Tokens:         forgeResult.Tokens.Total,
+		DurationMS:     int(elapsed.Milliseconds()),
+		ToolCalls:      toolCalls,
+		ForgeSessionID: forgeResult.SessionID,
 	}
 
 	if forgeResult.CostUSD >= 0 {
@@ -138,18 +155,62 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 	return result, nil
 }
 
-// resolveForgeConfig builds a ForgeConfig from environment and runner config.
-func (r *Runner) resolveForgeConfig(model string) ForgeConfig {
-	cfg := ForgeConfig{
-		Provider:      envOrDefault("FORGE_PROVIDER", "openai-compat"),
-		BaseURL:       envOrDefault("FORGE_BASE_URL", "http://localhost:1234/v1"),
-		APIKey:        os.Getenv("FORGE_API_KEY"),
-		Model:         model,
+// resolveForgeConfig builds a ForgeRunConfig from .ddx/config.yaml, env vars, and opts.
+// Priority: opts > env vars > config > built-in defaults.
+func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
+	cfg := ForgeRunConfig{
+		Provider:      "openai-compat",
+		BaseURL:       "http://localhost:1234/v1",
+		Preset:        "forge",
 		MaxIterations: 20,
 	}
-	if v := os.Getenv("FORGE_MODEL"); v != "" && cfg.Model == "" {
+
+	// Layer 1: .ddx/config.yaml (if ForgeConfigLoader is set)
+	if r.ForgeConfigLoader != nil {
+		if fc := r.ForgeConfigLoader(); fc != nil {
+			if fc.Provider != "" {
+				cfg.Provider = fc.Provider
+			}
+			if fc.BaseURL != "" {
+				cfg.BaseURL = fc.BaseURL
+			}
+			if fc.APIKey != "" {
+				cfg.APIKey = fc.APIKey
+			}
+			if fc.Model != "" {
+				cfg.Model = fc.Model
+			}
+			if fc.Preset != "" {
+				cfg.Preset = fc.Preset
+			}
+			if fc.MaxIterations > 0 {
+				cfg.MaxIterations = fc.MaxIterations
+			}
+		}
+	}
+
+	// Layer 2: environment variables override config
+	if v := os.Getenv("FORGE_PROVIDER"); v != "" {
+		cfg.Provider = v
+	}
+	if v := os.Getenv("FORGE_BASE_URL"); v != "" {
+		cfg.BaseURL = v
+	}
+	if v := os.Getenv("FORGE_API_KEY"); v != "" {
+		cfg.APIKey = v
+	}
+	if v := os.Getenv("FORGE_MODEL"); v != "" {
 		cfg.Model = v
 	}
+	if v := os.Getenv("FORGE_PRESET"); v != "" {
+		cfg.Preset = v
+	}
+
+	// Layer 3: opts.Model overrides everything
+	if model != "" {
+		cfg.Model = model
+	}
+
 	return cfg
 }
 
@@ -160,8 +221,8 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
-// buildForgeProvider creates a forge.Provider from config.
-func buildForgeProvider(cfg ForgeConfig) (forge.Provider, error) {
+// buildForgeProvider creates a forge.Provider from resolved config.
+func buildForgeProvider(cfg ForgeRunConfig) (forge.Provider, error) {
 	switch cfg.Provider {
 	case "openai-compat", "openai":
 		return oai.New(oai.Config{

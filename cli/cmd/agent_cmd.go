@@ -54,7 +54,7 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 	if err != nil || cfg.Agent == nil {
 		return agent.NewRunner(agent.Config{})
 	}
-	return agent.NewRunner(agent.Config{
+	r := agent.NewRunner(agent.Config{
 		Harness:         cfg.Agent.Harness,
 		Model:           cfg.Agent.Model,
 		Models:          cfg.Agent.Models,
@@ -63,6 +63,25 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 		SessionLogDir:   cfg.Agent.SessionLogDir,
 		Permissions:     cfg.Agent.Permissions,
 	})
+
+	// Wire forge config loader — reads from .ddx/config.yaml on each invocation.
+	r.ForgeConfigLoader = func() *agent.ForgeYAMLConfig {
+		c, err := config.LoadWithWorkingDir(f.WorkingDir)
+		if err != nil || c.Agent == nil || c.Agent.Forge == nil {
+			return nil
+		}
+		fc := c.Agent.Forge
+		return &agent.ForgeYAMLConfig{
+			Provider:      fc.Provider,
+			BaseURL:       fc.BaseURL,
+			APIKey:        fc.APIKey,
+			Model:         fc.Model,
+			Preset:        fc.Preset,
+			MaxIterations: fc.MaxIterations,
+		}
+	}
+
+	return r
 }
 
 func (f *CommandFactory) newAgentRunCommand() *cobra.Command {

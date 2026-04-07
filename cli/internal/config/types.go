@@ -30,6 +30,17 @@ type AgentConfig struct {
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
 	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
+	Forge           *ForgeConfig        `yaml:"forge,omitempty" json:"forge,omitempty"`
+}
+
+// ForgeConfig configures the embedded forge agent harness.
+type ForgeConfig struct {
+	Provider      string `yaml:"provider,omitempty" json:"provider,omitempty"`       // "openai-compat" or "anthropic"
+	BaseURL       string `yaml:"base_url,omitempty" json:"base_url,omitempty"`       // provider endpoint
+	APIKey        string `yaml:"api_key,omitempty" json:"api_key,omitempty"`         // API key
+	Model         string `yaml:"model,omitempty" json:"model,omitempty"`             // default model
+	Preset        string `yaml:"preset,omitempty" json:"preset,omitempty"`           // prompt preset (forge/codex/claude/cursor/minimal)
+	MaxIterations int    `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // max tool-call rounds
 }
 
 // VirtualConfig configures the virtual agent harness.

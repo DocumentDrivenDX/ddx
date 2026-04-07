@@ -55,18 +55,20 @@ type QuorumOptions struct {
 
 // Result holds the output of an agent invocation.
 type Result struct {
-	Harness         string  `json:"harness"`
-	Model           string  `json:"model,omitempty"`
-	ExitCode        int     `json:"exit_code"`
-	Output          string  `json:"output"`
-	CondensedOutput string  `json:"condensed_output,omitempty"`
-	Stderr          string  `json:"stderr,omitempty"`
-	Tokens          int     `json:"tokens,omitempty"`
-	InputTokens     int     `json:"input_tokens,omitempty"`
-	OutputTokens    int     `json:"output_tokens,omitempty"`
-	CostUSD         float64 `json:"cost_usd,omitempty"`
-	DurationMS      int     `json:"duration_ms"`
-	Error           string  `json:"error,omitempty"`
+	Harness         string          `json:"harness"`
+	Model           string          `json:"model,omitempty"`
+	ExitCode        int             `json:"exit_code"`
+	Output          string          `json:"output"`
+	CondensedOutput string          `json:"condensed_output,omitempty"`
+	Stderr          string          `json:"stderr,omitempty"`
+	Tokens          int             `json:"tokens,omitempty"`
+	InputTokens     int             `json:"input_tokens,omitempty"`
+	OutputTokens    int             `json:"output_tokens,omitempty"`
+	CostUSD         float64         `json:"cost_usd,omitempty"`
+	DurationMS      int             `json:"duration_ms"`
+	Error           string          `json:"error,omitempty"`
+	ToolCalls       []ToolCallEntry `json:"tool_calls,omitempty"`    // populated by forge, nil for subprocess
+	ForgeSessionID  string          `json:"forge_session_id,omitempty"` // forge session ID for event log cross-reference
 }
 
 // SessionEntry is written to the session log.
@@ -121,21 +123,32 @@ type CompareOptions struct {
 	PostRun     string            // command to run in each worktree after the agent completes
 }
 
+// ToolCallEntry records one tool execution during an agent run.
+// Mirrors forge.ToolCallLog without importing the forge package in types.
+type ToolCallEntry struct {
+	Tool     string `json:"tool"`
+	Input    string `json:"input"`
+	Output   string `json:"output,omitempty"`
+	Duration int    `json:"duration_ms,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
 // ComparisonArm holds the result of one harness arm in a comparison.
 type ComparisonArm struct {
-	Harness    string  `json:"harness"`
-	Model      string  `json:"model,omitempty"`
-	Output     string  `json:"output"`
-	Diff       string  `json:"diff,omitempty"`       // git diff of side effects
-	PostRunOut string  `json:"post_run_out,omitempty"` // post-run command output
-	PostRunOK  *bool   `json:"post_run_ok,omitempty"`  // post-run pass/fail
-	Tokens     int     `json:"tokens,omitempty"`
-	InputTokens  int   `json:"input_tokens,omitempty"`
-	OutputTokens int   `json:"output_tokens,omitempty"`
-	CostUSD    float64 `json:"cost_usd,omitempty"`
-	DurationMS int     `json:"duration_ms"`
-	ExitCode   int     `json:"exit_code"`
-	Error      string  `json:"error,omitempty"`
+	Harness      string          `json:"harness"`
+	Model        string          `json:"model,omitempty"`
+	Output       string          `json:"output"`
+	Diff         string          `json:"diff,omitempty"`         // git diff of side effects
+	ToolCalls    []ToolCallEntry `json:"tool_calls,omitempty"`   // forge tool call log (nil for subprocess)
+	PostRunOut   string          `json:"post_run_out,omitempty"` // post-run command output
+	PostRunOK    *bool           `json:"post_run_ok,omitempty"`  // post-run pass/fail
+	Tokens       int             `json:"tokens,omitempty"`
+	InputTokens  int             `json:"input_tokens,omitempty"`
+	OutputTokens int             `json:"output_tokens,omitempty"`
+	CostUSD      float64         `json:"cost_usd,omitempty"`
+	DurationMS   int             `json:"duration_ms"`
+	ExitCode     int             `json:"exit_code"`
+	Error        string          `json:"error,omitempty"`
 }
 
 // ComparisonGrade holds the evaluation of one arm by a grading harness.
