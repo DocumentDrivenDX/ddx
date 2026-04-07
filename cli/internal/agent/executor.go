@@ -17,6 +17,9 @@ type ExecResult struct {
 // Executor abstracts command execution for testability.
 type Executor interface {
 	Execute(ctx context.Context, binary string, args []string, stdin string) (*ExecResult, error)
+	// ExecuteInDir runs the command in the specified directory.
+	// Falls back to Execute if dir is empty.
+	ExecuteInDir(ctx context.Context, binary string, args []string, stdin, dir string) (*ExecResult, error)
 }
 
 // OSExecutor executes commands via os/exec.
@@ -24,7 +27,15 @@ type OSExecutor struct{}
 
 // Execute runs a command and captures output.
 func (e *OSExecutor) Execute(ctx context.Context, binary string, args []string, stdin string) (*ExecResult, error) {
+	return e.ExecuteInDir(ctx, binary, args, stdin, "")
+}
+
+// ExecuteInDir runs a command in the specified directory and captures output.
+func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []string, stdin, dir string) (*ExecResult, error) {
 	cmd := exec.CommandContext(ctx, binary, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

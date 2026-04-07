@@ -25,6 +25,10 @@ type mockExecutor struct {
 }
 
 func (m *mockExecutor) Execute(ctx context.Context, binary string, args []string, stdin string) (*ExecResult, error) {
+	return m.ExecuteInDir(ctx, binary, args, stdin, "")
+}
+
+func (m *mockExecutor) ExecuteInDir(ctx context.Context, binary string, args []string, stdin, dir string) (*ExecResult, error) {
 	m.lastBinary = binary
 	m.lastArgs = args
 	m.lastStdin = stdin
@@ -541,6 +545,10 @@ type trackingExecutor struct {
 }
 
 func (e *trackingExecutor) Execute(ctx context.Context, binary string, args []string, stdin string) (*ExecResult, error) {
+	return e.ExecuteInDir(ctx, binary, args, stdin, "")
+}
+
+func (e *trackingExecutor) ExecuteInDir(ctx context.Context, binary string, args []string, stdin, dir string) (*ExecResult, error) {
 	e.mu.Lock()
 	e.calls[binary] = true
 	e.mu.Unlock()

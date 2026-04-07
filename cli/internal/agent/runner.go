@@ -107,7 +107,13 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	execResult, execErr := r.Executor.Execute(ctx, harness.Binary, args, stdin)
+	// Use ExecuteInDir when WorkDir is set — this handles harnesses like
+	// claude that have no --cwd flag by setting cmd.Dir on the subprocess.
+	execDir := ""
+	if opts.WorkDir != "" && harness.WorkDirFlag == "" {
+		execDir = opts.WorkDir
+	}
+	execResult, execErr := r.Executor.ExecuteInDir(ctx, harness.Binary, args, stdin, execDir)
 	elapsed := time.Since(start)
 
 	result := r.processResult(harnessName, model, harness, execResult, execErr, elapsed, ctx)
