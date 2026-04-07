@@ -19,7 +19,9 @@ var Pricing = map[string]ModelPricing{
 
 	// Local models (free)
 	"qwen/qwen3-coder-next": {InputPer1M: 0, OutputPer1M: 0},
+	"qwen/qwen3-coder-30b":  {InputPer1M: 0, OutputPer1M: 0},
 	"minimax/minimax-m2.5":  {InputPer1M: 0, OutputPer1M: 0},
+	"google/gemma-4-26b-a4b": {InputPer1M: 0, OutputPer1M: 0},
 }
 
 // EstimateCost returns the estimated cost in USD for the given model and token counts.
