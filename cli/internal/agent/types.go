@@ -110,6 +110,50 @@ type HarnessCapabilities struct {
 	ReasoningLevels []string `json:"reasoning_levels,omitempty"`
 }
 
+// CompareOptions configures a comparison dispatch.
+type CompareOptions struct {
+	RunOptions
+	Harnesses   []string // harnesses to compare
+	Sandbox     bool     // run each arm in an isolated worktree
+	KeepSandbox bool     // preserve worktrees after comparison
+	PostRun     string   // command to run in each worktree after the agent completes
+}
+
+// ComparisonArm holds the result of one harness arm in a comparison.
+type ComparisonArm struct {
+	Harness    string  `json:"harness"`
+	Model      string  `json:"model,omitempty"`
+	Output     string  `json:"output"`
+	Diff       string  `json:"diff,omitempty"`       // git diff of side effects
+	PostRunOut string  `json:"post_run_out,omitempty"` // post-run command output
+	PostRunOK  *bool   `json:"post_run_ok,omitempty"`  // post-run pass/fail
+	Tokens     int     `json:"tokens,omitempty"`
+	InputTokens  int   `json:"input_tokens,omitempty"`
+	OutputTokens int   `json:"output_tokens,omitempty"`
+	CostUSD    float64 `json:"cost_usd,omitempty"`
+	DurationMS int     `json:"duration_ms"`
+	ExitCode   int     `json:"exit_code"`
+	Error      string  `json:"error,omitempty"`
+}
+
+// ComparisonGrade holds the evaluation of one arm by a grading harness.
+type ComparisonGrade struct {
+	Arm       string `json:"arm"`
+	Score     int    `json:"score"`
+	MaxScore  int    `json:"max_score"`
+	Pass      bool   `json:"pass"`
+	Rationale string `json:"rationale"`
+}
+
+// ComparisonRecord is the complete record of a comparison run.
+type ComparisonRecord struct {
+	ID        string            `json:"id"`
+	Timestamp time.Time         `json:"timestamp"`
+	Prompt    string            `json:"prompt"`
+	Arms      []ComparisonArm   `json:"arms"`
+	Grades    []ComparisonGrade `json:"grades,omitempty"`
+}
+
 // Default configuration values.
 const (
 	DefaultHarness   = "codex"
