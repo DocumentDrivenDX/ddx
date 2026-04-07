@@ -100,11 +100,11 @@ func TestBuildArgsCodexAllFlags(t *testing.T) {
 		Prompt:  "build it",
 		WorkDir: "/tmp/project",
 		Effort:  "high",
-	}, "o3-mini")
+	}, "gpt-5.4")
 	assert.Contains(t, args, "-C")
 	assert.Contains(t, args, "/tmp/project")
 	assert.Contains(t, args, "-m")
-	assert.Contains(t, args, "o3-mini")
+	assert.Contains(t, args, "gpt-5.4")
 	assert.Contains(t, args, "-c")
 	assert.Contains(t, args, "reasoning.effort=high")
 	// prompt is last
@@ -125,9 +125,9 @@ func TestBuildArgsClaudeBasic(t *testing.T) {
 func TestBuildArgsClaudeWithModel(t *testing.T) {
 	r := NewRegistry()
 	h, _ := r.Get("claude")
-	args := BuildArgs(h, RunOptions{Prompt: "test"}, "claude-sonnet-4-20250514")
+	args := BuildArgs(h, RunOptions{Prompt: "test"}, "claude-sonnet-4-6")
 	assert.Contains(t, args, "--model")
-	assert.Contains(t, args, "claude-sonnet-4-20250514")
+	assert.Contains(t, args, "claude-sonnet-4-6")
 }
 
 func TestBuildArgsGeminiStdin(t *testing.T) {
@@ -260,12 +260,12 @@ func TestRunPromptFile(t *testing.T) {
 func TestRunModelResolution(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
-	r.Config.Models = map[string]string{"codex": "o3-mini"}
+	r.Config.Models = map[string]string{"codex": "gpt-5.4"}
 
 	_, err := r.Run(RunOptions{Harness: "codex", Prompt: "test"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "-m")
-	assert.Contains(t, mock.lastArgs, "o3-mini")
+	assert.Contains(t, mock.lastArgs, "gpt-5.4")
 }
 
 func TestCapabilitiesUsesBuiltinDefaultModel(t *testing.T) {
@@ -273,19 +273,19 @@ func TestCapabilitiesUsesBuiltinDefaultModel(t *testing.T) {
 
 	caps, err := r.Capabilities("codex")
 	require.NoError(t, err)
-	assert.Equal(t, "o3-mini", caps.Model)
-	assert.Contains(t, caps.Models, "o3-mini") // default model is always in the list
+	assert.Equal(t, "gpt-5.4", caps.Model)
+	assert.Contains(t, caps.Models, "gpt-5.4") // default model is always in the list
 }
 
 func TestRunModelOverride(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
-	r.Config.Models = map[string]string{"codex": "o3-mini"}
+	r.Config.Models = map[string]string{"codex": "gpt-5.4"}
 
 	_, err := r.Run(RunOptions{Harness: "codex", Prompt: "test", Model: "gpt-4o"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "gpt-4o")
-	assert.NotContains(t, mock.lastArgs, "o3-mini")
+	assert.NotContains(t, mock.lastArgs, "gpt-5.4")
 }
 
 func TestRunNonZeroExit(t *testing.T) {
@@ -572,11 +572,11 @@ func TestCapabilitiesIncludesDefaultModel(t *testing.T) {
 
 	caps, err := r.Capabilities("codex")
 	require.NoError(t, err)
-	assert.Contains(t, caps.Models, "o3-mini") // default model always present
+	assert.Contains(t, caps.Models, "gpt-5.4") // default model always present
 
 	caps, err = r.Capabilities("claude")
 	require.NoError(t, err)
-	assert.Contains(t, caps.Models, "claude-sonnet-4-20250514")
+	assert.Contains(t, caps.Models, "claude-sonnet-4-6")
 }
 
 // --- Integration tests (require real harnesses) ---
@@ -612,11 +612,11 @@ func TestBuildArgsOpencodeAllFlags(t *testing.T) {
 		Prompt:  "build it",
 		WorkDir: "/tmp/project",
 		Effort:  "high",
-	}, "anthropic/claude-sonnet-4-20250514")
+	}, "anthropic/claude-sonnet-4-6")
 	assert.Contains(t, args, "--dir")
 	assert.Contains(t, args, "/tmp/project")
 	assert.Contains(t, args, "-m")
-	assert.Contains(t, args, "anthropic/claude-sonnet-4-20250514")
+	assert.Contains(t, args, "anthropic/claude-sonnet-4-6")
 	assert.Contains(t, args, "--variant")
 	assert.Contains(t, args, "high")
 	assert.Equal(t, "build it", args[len(args)-1])
@@ -651,9 +651,9 @@ func TestOpencodePermissionsAllLevels(t *testing.T) {
 func TestOpencodeModelFlag(t *testing.T) {
 	r := NewRegistry()
 	h, _ := r.Get("opencode")
-	args := BuildArgs(h, RunOptions{Prompt: "test"}, "anthropic/claude-sonnet-4-20250514")
+	args := BuildArgs(h, RunOptions{Prompt: "test"}, "anthropic/claude-sonnet-4-6")
 	assert.Contains(t, args, "-m")
-	assert.Contains(t, args, "anthropic/claude-sonnet-4-20250514")
+	assert.Contains(t, args, "anthropic/claude-sonnet-4-6")
 }
 
 func TestRunOpencodeWithMockExecutor(t *testing.T) {

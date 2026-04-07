@@ -8,19 +8,13 @@ type ModelPricing struct {
 
 // Pricing is the built-in model pricing table.
 var Pricing = map[string]ModelPricing{
-	// OpenAI
-	"o3-mini":     {InputPer1M: 1.10, OutputPer1M: 4.40},
-	"gpt-4o":      {InputPer1M: 2.50, OutputPer1M: 10.00},
-	"gpt-4o-mini": {InputPer1M: 0.15, OutputPer1M: 0.60},
-	"gpt-5.4":     {InputPer1M: 2.00, OutputPer1M: 8.00},
+	// OpenAI (current generation)
+	"gpt-5.4":      {InputPer1M: 2.00, OutputPer1M: 8.00},
 	"gpt-5.4-mini": {InputPer1M: 0.30, OutputPer1M: 1.20},
 
-	// Anthropic
-	"claude-sonnet-4-20250514": {InputPer1M: 3.00, OutputPer1M: 15.00},
-	"claude-opus-4-20250514":   {InputPer1M: 15.00, OutputPer1M: 75.00},
-	"claude-haiku-4-20250514":  {InputPer1M: 0.80, OutputPer1M: 4.00},
-	"claude-opus-4-6":          {InputPer1M: 15.00, OutputPer1M: 75.00},
-	"claude-sonnet-4-6":        {InputPer1M: 3.00, OutputPer1M: 15.00},
+	// Anthropic (current generation)
+	"claude-opus-4-6":           {InputPer1M: 15.00, OutputPer1M: 75.00},
+	"claude-sonnet-4-6":         {InputPer1M: 3.00, OutputPer1M: 15.00},
 	"claude-haiku-4-5-20251001": {InputPer1M: 0.80, OutputPer1M: 4.00},
 
 	// Local models (free)

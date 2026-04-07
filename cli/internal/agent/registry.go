@@ -17,7 +17,7 @@ var builtinHarnesses = map[string]Harness{
 			"unrestricted": {"--dangerously-bypass-approvals-and-sandbox"},
 		},
 		PromptMode:      "arg",
-		DefaultModel:    "o3-mini",
+		DefaultModel:    "gpt-5.4",
 		Models:          nil, // models change frequently; rely on provider-side validation
 		ReasoningLevels: []string{"low", "medium", "high"},
 		ModelFlag:       "-m",
@@ -35,7 +35,7 @@ var builtinHarnesses = map[string]Harness{
 			"unrestricted": {"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"},
 		},
 		PromptMode:      "arg",
-		DefaultModel:    "claude-sonnet-4-20250514",
+		DefaultModel:    "claude-sonnet-4-6",
 		Models:          nil, // models change frequently; rely on provider-side validation
 		ReasoningLevels: []string{"low", "medium", "high"},
 		ModelFlag:       "--model",

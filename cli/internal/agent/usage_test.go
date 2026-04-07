@@ -102,11 +102,11 @@ func aggregateFromFile(logFile, harnessFilter string, since time.Time) (map[stri
 func TestTC006_UsageAggregation(t *testing.T) {
 	now := time.Now().UTC()
 	entries := []SessionEntry{
-		makeEntry("s1", "codex", "o3-mini", now, 10000, 1000, 0, 30000),
-		makeEntry("s2", "codex", "o3-mini", now, 20000, 2000, 0, 40000),
-		makeEntry("s3", "codex", "o3-mini", now, 30000, 3000, 0, 50000),
-		makeEntry("s4", "claude", "claude-sonnet-4-20250514", now, 50000, 4000, 0, 35000),
-		makeEntry("s5", "claude", "claude-sonnet-4-20250514", now, 60000, 5000, 0, 45000),
+		makeEntry("s1", "codex", "gpt-5.4", now, 10000, 1000, 0, 30000),
+		makeEntry("s2", "codex", "gpt-5.4", now, 20000, 2000, 0, 40000),
+		makeEntry("s3", "codex", "gpt-5.4", now, 30000, 3000, 0, 50000),
+		makeEntry("s4", "claude", "claude-sonnet-4-6", now, 50000, 4000, 0, 35000),
+		makeEntry("s5", "claude", "claude-sonnet-4-6", now, 60000, 5000, 0, 45000),
 	}
 	path := writeSessionsJSONL(t, entries)
 	since := now.Add(-time.Hour)
@@ -140,10 +140,10 @@ func TestTC007_SinceToday(t *testing.T) {
 	yesterday := today.Add(-24 * time.Hour)
 
 	entries := []SessionEntry{
-		makeEntry("old1", "codex", "o3-mini", yesterday.Add(-time.Hour), 1000, 100, 0, 10000),
-		makeEntry("old2", "codex", "o3-mini", yesterday, 2000, 200, 0, 10000),
-		makeEntry("new1", "codex", "o3-mini", now, 3000, 300, 0, 10000),
-		makeEntry("new2", "claude", "claude-sonnet-4-20250514", now.Add(-time.Minute), 4000, 400, 0, 10000),
+		makeEntry("old1", "codex", "gpt-5.4", yesterday.Add(-time.Hour), 1000, 100, 0, 10000),
+		makeEntry("old2", "codex", "gpt-5.4", yesterday, 2000, 200, 0, 10000),
+		makeEntry("new1", "codex", "gpt-5.4", now, 3000, 300, 0, 10000),
+		makeEntry("new2", "claude", "claude-sonnet-4-6", now.Add(-time.Minute), 4000, 400, 0, 10000),
 	}
 	path := writeSessionsJSONL(t, entries)
 
@@ -161,9 +161,9 @@ func TestTC007_SinceToday(t *testing.T) {
 func TestTC008_HarnessFilter(t *testing.T) {
 	now := time.Now().UTC()
 	entries := []SessionEntry{
-		makeEntry("c1", "codex", "o3-mini", now, 5000, 500, 0, 10000),
-		makeEntry("c2", "codex", "o3-mini", now, 5000, 500, 0, 10000),
-		makeEntry("cl1", "claude", "claude-sonnet-4-20250514", now, 8000, 800, 0, 20000),
+		makeEntry("c1", "codex", "gpt-5.4", now, 5000, 500, 0, 10000),
+		makeEntry("c2", "codex", "gpt-5.4", now, 5000, 500, 0, 10000),
+		makeEntry("cl1", "claude", "claude-sonnet-4-6", now, 8000, 800, 0, 20000),
 	}
 	path := writeSessionsJSONL(t, entries)
 	since := now.Add(-time.Hour)
@@ -179,10 +179,10 @@ func TestTC008_HarnessFilter(t *testing.T) {
 // TC-009: Cost estimation from pricing table for a codex session with known model.
 func TestTC009_CostEstimation(t *testing.T) {
 	now := time.Now().UTC()
-	// o3-mini: $1.10/1M input, $4.40/1M output
-	// 1,000,000 input + 1,000,000 output = $5.50
+	// gpt-5.4: $2.00/1M input, $8.00/1M output
+	// 1,000,000 input + 1,000,000 output = $10.00
 	entries := []SessionEntry{
-		makeEntry("x1", "codex", "o3-mini", now, 1_000_000, 1_000_000, 0, 30000),
+		makeEntry("x1", "codex", "gpt-5.4", now, 1_000_000, 1_000_000, 0, 30000),
 	}
 	path := writeSessionsJSONL(t, entries)
 	since := now.Add(-time.Hour)
@@ -191,14 +191,14 @@ func TestTC009_CostEstimation(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, agg, "codex")
-	expected := 1.10 + 4.40 // $5.50
+	expected := 2.00 + 8.00 // $10.00
 	assert.InDelta(t, expected, agg["codex"].CostUSD, 0.001)
 }
 
 // TestEstimateCostKnownModel verifies the pricing function directly.
 func TestEstimateCostKnownModel(t *testing.T) {
-	cost := EstimateCost("o3-mini", 1_000_000, 1_000_000)
-	assert.InDelta(t, 5.50, cost, 0.001)
+	cost := EstimateCost("gpt-5.4", 1_000_000, 1_000_000)
+	assert.InDelta(t, 10.00, cost, 0.001)
 }
 
 // TestEstimateCostUnknownModel returns -1 for unknown models.

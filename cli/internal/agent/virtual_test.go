@@ -27,7 +27,7 @@ func TestRecordAndLookup(t *testing.T) {
 		Prompt:       "Create a hello world program",
 		Response:     "Here is a hello world program...",
 		Harness:      "claude",
-		Model:        "claude-sonnet-4-20250514",
+		Model:        "claude-sonnet-4-6",
 		DelayMS:      2000,
 		InputTokens:  100,
 		OutputTokens: 50,

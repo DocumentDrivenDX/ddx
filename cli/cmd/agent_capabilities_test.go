@@ -25,7 +25,7 @@ library:
     branch: "main"
 agent:
   harness: codex
-  model: o3-mini
+  model: gpt-5.4
   reasoning_levels:
     codex:
       - low
@@ -56,8 +56,8 @@ agent:
 	require.Equal(t, "codex", caps.Harness)
 	require.True(t, caps.Available)
 	require.Equal(t, "codex", caps.Binary)
-	require.Equal(t, "o3-mini", caps.Model)
-	require.Contains(t, caps.Models, "o3-mini") // default model always present
+	require.Equal(t, "gpt-5.4", caps.Model)
+	require.Contains(t, caps.Models, "gpt-5.4") // default model always present
 	require.Equal(t, []string{"low", "medium", "high"}, caps.ReasoningLevels)
 }
 
