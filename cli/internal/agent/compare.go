@@ -120,7 +120,7 @@ func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, bas
 		arm.Error = err.Error()
 	} else {
 		arm.Model = result.Model
-		arm.Output = result.Output
+		arm.Output = ExtractOutput(harnessName, result.Output)
 		arm.Tokens = result.Tokens
 		arm.InputTokens = result.InputTokens
 		arm.OutputTokens = result.OutputTokens

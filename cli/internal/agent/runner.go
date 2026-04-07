@@ -424,6 +424,72 @@ func ExtractUsage(harnessName string, output string) UsageData {
 	}
 }
 
+// ExtractOutput extracts clean text from raw agent output based on harness format.
+// For codex: scans JSONL for type=item.completed with item.type=agent_message, returns item.text
+// For claude: parses JSON envelope and returns the 'result' field
+// For forge/opencode: returns output as-is (no transformation needed)
+// For unknown harnesses or malformed input: returns output as-is
+func ExtractOutput(harnessName string, rawOutput string) string {
+	switch harnessName {
+	case "codex":
+		return extractOutputCodex(rawOutput)
+	case "claude":
+		return extractOutputClaude(rawOutput)
+	case "forge", "opencode":
+		// forge and opencode return clean text directly
+		return rawOutput
+	default:
+		// Unknown harnesses return output as-is
+		return rawOutput
+	}
+}
+
+func extractOutputCodex(rawOutput string) string {
+	for _, line := range strings.Split(rawOutput, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var item struct {
+			Type string `json:"type"`
+			Item struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"item"`
+		}
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			continue
+		}
+		if item.Type == "output" && item.Item.Type == "agent_message" {
+			return item.Item.Text
+		}
+	}
+	return rawOutput
+}
+
+func extractOutputClaude(rawOutput string) string {
+	var envelope struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(rawOutput), &envelope); err == nil {
+		return envelope.Result
+	}
+	// Try last non-empty line (in case of preamble)
+	lines := strings.Split(strings.TrimRight(rawOutput, "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			var envelope struct {
+				Result string `json:"result"`
+			}
+			if err := json.Unmarshal([]byte(line), &envelope); err == nil {
+				return envelope.Result
+			}
+		}
+	}
+	return rawOutput
+}
+
 // ExtractTokens parses token usage from agent output using the harness's pattern.
 // For codex, it delegates to ExtractUsage and returns total tokens (input + output).
 func ExtractTokens(output string, harness Harness) int {
