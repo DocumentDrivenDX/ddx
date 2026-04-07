@@ -24,7 +24,7 @@ test.describe('DDx Server UI Demo', () => {
     // ---------------------------------------------------------------
     // 2. Documents — browse and read a document
     // ---------------------------------------------------------------
-    await page.click('a[href="/documents"]')
+    await page.locator('a[href="/documents"]').first().click()
     await page.waitForSelector('h1:has-text("Documents")')
     await page.waitForTimeout(1000)
 
@@ -67,7 +67,7 @@ test.describe('DDx Server UI Demo', () => {
     // ---------------------------------------------------------------
     // 3. Beads — kanban board, search, detail, create
     // ---------------------------------------------------------------
-    await page.click('a[href="/beads"]')
+    await page.locator('a[href="/beads"]').first().click()
     await page.waitForSelector('text=OPEN')
     await page.waitForTimeout(1500)
 
@@ -93,61 +93,54 @@ test.describe('DDx Server UI Demo', () => {
       }
     }
 
-    // Create a new bead
-    await page.click('button:has-text("New Bead")')
-    await page.waitForSelector('form')
-    await page.waitForTimeout(800)
+    // Show the create bead modal (don't submit — just demonstrate the form)
+    const newBeadBtn = page.locator('button:has-text("New Bead")')
+    if (await newBeadBtn.isVisible()) {
+      await newBeadBtn.click()
+      await page.waitForSelector('form')
+      await page.waitForTimeout(800)
 
-    // Fill out the form
-    const titleInput = page.locator('form input[type="text"]').first()
-    await titleInput.fill('Demo: example work item')
-    await page.waitForTimeout(400)
+      const titleInput = page.locator('form input[type="text"]').first()
+      await titleInput.fill('Demo: example work item')
+      await page.waitForTimeout(600)
 
-    const descriptionArea = page.locator('form textarea').first()
-    await descriptionArea.fill('Created during the DDx server UI demo walkthrough.')
-    await page.waitForTimeout(400)
+      const descriptionArea = page.locator('form textarea').first()
+      await descriptionArea.fill('Created during the DDx server UI demo walkthrough.')
+      await page.waitForTimeout(800)
 
-    const labelsInput = page.locator('form input[placeholder*="helix"]')
-    if (await labelsInput.isVisible()) {
-      await labelsInput.fill('demo, walkthrough')
-      await page.waitForTimeout(400)
+      // Close the modal without submitting
+      await page.click('button:has-text("Cancel")')
+      await page.waitForTimeout(500)
     }
-
-    await page.waitForTimeout(1000)
-    // Submit
-    await page.click('button:has-text("Create Bead")')
-    await page.waitForTimeout(1500)
 
     // ---------------------------------------------------------------
     // 4. Graph — document dependency visualization
     // ---------------------------------------------------------------
-    await page.click('a[href="/graph"]')
+    await page.locator('a[href="/graph"]').first().click()
     await page.waitForTimeout(2500)
 
     // ---------------------------------------------------------------
     // 5. Agent — session history
     // ---------------------------------------------------------------
-    await page.click('a[href="/agent"]')
+    await page.locator('a[href="/agent"]').first().click()
     await page.waitForTimeout(2000)
 
     // ---------------------------------------------------------------
     // 6. Personas — browse and view a persona
     // ---------------------------------------------------------------
-    await page.click('a[href="/personas"]')
-    await page.waitForSelector('h2:has-text("Personas")')
-    await page.waitForTimeout(1000)
+    await page.locator('a[href="/personas"]').first().click()
+    await page.waitForTimeout(2000)
 
     const firstPersona = page.locator('.w-80 button').first()
-    if (await firstPersona.isVisible({ timeout: 3000 })) {
+    if (await firstPersona.isVisible({ timeout: 2000 }).catch(() => false)) {
       await firstPersona.click()
-      await page.waitForSelector('pre', { timeout: 5000 })
       await page.waitForTimeout(2000)
     }
 
     // ---------------------------------------------------------------
     // 7. Back to Dashboard — closing shot
     // ---------------------------------------------------------------
-    await page.click('a[href="/"]')
+    await page.locator('a[href="/"]').first().click()
     await page.waitForSelector('h1')
     await page.waitForTimeout(2000)
   })

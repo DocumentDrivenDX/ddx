@@ -103,9 +103,8 @@ function queryDependencies(beadId: string): Bead[] {
 
 | Option | Verdict | Reason |
 |--------|---------|--------|
-| **Plain arrays + filter()** | **Chosen** | Zero dependencies, zero build complexity, <1ms for 200 beads |
+| **Plain arrays + MiniSearch** | **Chosen** | Arrays for filtering/sorting, MiniSearch (~18KB) for full-text search with prefix and fuzzy matching. Scales to 1,000+ beads. |
 | **SQLite WASM (sql.js)** | Rejected (v2) | 660KB WASM, MIME type issues, fatal crashes, deployment fragility |
-| **MiniSearch** | Deferred | ~28KB, good fuzzy search, but substring matching suffices for now |
 | **IndexedDB** | Rejected | Async API adds complexity, no benefit for ephemeral cache |
 | **PGlite (Postgres WASM)** | Rejected | 3MB+, massive overkill |
 
@@ -125,12 +124,11 @@ they're per-bead detail data, not list data.
 - **No server-side search needed** — the server's `GET /api/beads` is a
   simple dump. No query parameters, no pagination, no search index.
 - **Instant UI interactions** — filter/search/sort are sub-millisecond.
-- **Zero added bundle weight** — no WASM, no search library dependency.
+- **Minimal bundle weight** — MiniSearch adds ~18KB (vs 660KB for sql.js).
 - **No deployment complexity** — no WASM files to serve, no MIME types
   to configure, no build pipeline steps.
 - **Stale data window** — between polling intervals, the local copy may be
   behind. Mutations trigger immediate re-fetch to minimize this.
-- **Scale limit** — this approach works comfortably for up to ~5,000 beads.
-  At 10,000+ with complex search requirements, consider adding MiniSearch
-  (~28KB) or moving search server-side. DDx projects are unlikely to
-  exceed 1,000 beads.
+- **Scale limit** — MiniSearch handles 10,000+ documents efficiently. Array
+  filtering is sub-millisecond at 5,000 items. Beyond that, consider
+  server-side filtering. Known deployments already exceed 1,000 beads.

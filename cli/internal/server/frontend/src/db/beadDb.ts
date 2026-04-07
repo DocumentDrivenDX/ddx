@@ -1,11 +1,13 @@
+import MiniSearch from 'minisearch'
 import type { Bead } from '../types'
 
-// In-memory bead store — plain JSON array with simple filtering.
-// Replaces the previous sql.js/WASM implementation.
+// In-memory bead store — plain JSON array with MiniSearch for full-text search.
+// Handles 1,000+ beads efficiently (~28KB library, no WASM).
 
 let beads: Bead[] = []
 let depsMap: Map<string, string[]> = new Map() // beadId → [depId, ...]
 let beadIndex: Map<string, Bead> = new Map()   // id → bead
+let searchIndex: MiniSearch<Bead> | null = null
 
 export async function initDb(): Promise<void> {
   // No-op — kept for API compatibility with useBeadSync
@@ -20,6 +22,19 @@ export async function loadBeads(incoming: Bead[]): Promise<void> {
       depsMap.set(b.id, b.dependencies.map(d => d.depends_on_id))
     }
   }
+
+  // Rebuild search index
+  searchIndex = new MiniSearch<Bead>({
+    fields: ['id', 'title', 'description', 'acceptance', '_labels', 'owner', '_specId'],
+    storeFields: ['id'],
+    extractField: (doc, field) => {
+      if (field === '_labels') return (doc.labels ?? []).join(' ')
+      if (field === '_specId') return (doc as any)['spec-id'] ?? (doc as any).spec_id ?? ''
+      return (doc as any)[field] ?? ''
+    },
+    searchOptions: { prefix: true, fuzzy: 0.2 },
+  })
+  searchIndex.addAll(incoming)
 }
 
 export function queryBeadsByStatus(status: string): Bead[] {
@@ -34,19 +49,11 @@ export function queryAllBeads(): Bead[] {
 
 export function searchBeads(query: string): Bead[] {
   if (!query.trim()) return queryAllBeads()
-  const q = query.toLowerCase()
-  return beads.filter(b => {
-    const hay = [
-      b.id,
-      b.title,
-      b.description ?? '',
-      b.acceptance ?? '',
-      (b.labels ?? []).join(' '),
-      b.owner ?? '',
-      (b as any)['spec-id'] ?? (b as any).spec_id ?? '',
-    ].join(' ').toLowerCase()
-    return hay.includes(q)
-  })
+  if (!searchIndex) return queryAllBeads()
+
+  const results = searchIndex.search(query, { prefix: true, fuzzy: 0.2 })
+  const ids = new Set(results.map(r => r.id))
+  return beads.filter(b => ids.has(b.id))
 }
 
 export function queryReadyBeads(): Bead[] {

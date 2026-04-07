@@ -3,105 +3,137 @@ title: DDx Server
 weight: 4
 ---
 
-`ddx-server` exposes your document library over HTTP and MCP endpoints, letting AI agents browse, search, and read documents programmatically.
-
-{{< callout type="info" >}}
-DDx Server is under active development. This page describes the planned architecture and API.
-{{< /callout >}}
-
-## Why a Server?
-
-The DDx CLI manages documents locally. But agents often need to **discover** documents — to find out what's available and fetch what's relevant. The server bridges that gap:
-
-- **MCP endpoints** let agents call tools like `ddx_list_documents` and `ddx_read_document`
-- **HTTP API** supports web interfaces, scripts, and non-MCP consumers
-- **Search** enables finding documents by content, not just path
+`ddx server` is a lightweight Go web server that exposes your document library, bead tracker, document graph, agent session logs, and personas over HTTP and MCP endpoints — with an embedded web UI for visual management.
 
 ## Quick Start
 
 ```bash
-# Start serving your local library
-ddx-server --library-path .ddx/library
+# Start the server (reads from current project)
+ddx server
 
-# Specify a port
-ddx-server --port 8080
+# Custom port
+ddx server --port 3000
 
-# With API key for non-local access
-ddx-server --api-key your-secret-key
+# Open in browser
+open http://127.0.0.1:8080
 ```
 
-## MCP Endpoints
+## Demo
 
-When an agent connects to `ddx-server` via MCP, these tools become available:
+<video controls autoplay muted loop width="100%" style="border-radius: 8px; border: 1px solid #e5e7eb;">
+  <source src="/demos/ddx-server-ui.webm" type="video/webm">
+  Your browser does not support the video tag.
+</video>
 
-### `ddx_list_documents`
+## Web UI
 
-List documents in the library, optionally filtered by type.
+The embedded web UI provides a browser-based interface for managing your DDx project. Six pages cover the full surface:
 
-```json
-{
-  "type": "personas"
-}
-```
+| Page | URL | What it does |
+|------|-----|-------------|
+| **Dashboard** | `/` | Project overview: document count, bead status, stale docs, server health |
+| **Documents** | `/documents` | Browse, search, filter by type, view rendered markdown, edit in-place |
+| **Beads** | `/beads` | Kanban board with drag-and-drop, full-text search, create/claim/close/reopen |
+| **Graph** | `/graph` | Interactive document dependency graph visualization |
+| **Agent** | `/agent` | Agent session history with prompt/response/token details |
+| **Personas** | `/personas` | Browse personas, view by role, inspect content |
 
-Returns document names, types, and brief descriptions.
+### Beads Kanban Board
 
-### `ddx_read_document`
+The beads page is a full project tracker with:
 
-Fetch the full content of a document by path.
+- **Three-column kanban**: Open, In Progress, Closed
+- **Drag-and-drop**: Move beads between columns to update status
+- **Full-text search**: Powered by MiniSearch across all bead fields
+- **Create beads**: Modal form with title, type, priority, labels, description, acceptance criteria
+- **Detail panel**: Click any bead to see full details, dependencies, and execution evidence
+- **Bead actions**: Claim, unclaim, close, reopen with reason
 
-```json
-{
-  "path": "personas/strict-code-reviewer"
-}
-```
+### Document Library
 
-Returns the complete document content.
-
-### `ddx_search`
-
-Search across document contents.
-
-```json
-{
-  "query": "error handling",
-  "type": "patterns"
-}
-```
-
-Returns matching documents ranked by relevance.
-
-### `ddx_resolve_persona`
-
-Given a role name, resolve it to the bound persona document using the project's configuration.
-
-```json
-{
-  "role": "code-reviewer"
-}
-```
-
-Returns the full persona document for the bound persona.
+- **Browse by type**: Filter documents by category (prompts, personas, patterns, etc.)
+- **Search**: Find documents by name
+- **Rendered markdown**: View documents with full GitHub-flavored markdown rendering
+- **Edit in-place**: Switch to raw editing mode, save changes directly
 
 ## HTTP API
 
-The same operations are available over REST:
+All data is available programmatically over REST:
+
+### Documents & Search
 
 | Method | Path | Description |
-|--------|------|------------|
-| `GET` | `/api/documents` | List all documents |
-| `GET` | `/api/documents?type=personas` | List by type |
-| `GET` | `/api/documents/{path}` | Read a document |
-| `GET` | `/api/search?q=error+handling` | Search documents |
-| `GET` | `/api/persona/{role}` | Resolve persona for role |
+|--------|------|-------------|
+| `GET` | `/api/documents` | List all library documents |
+| `GET` | `/api/documents/:path` | Read document content |
+| `PUT` | `/api/documents/:path` | Write document (auto-commits) |
+| `GET` | `/api/search?q=<query>` | Full-text search across documents |
+| `GET` | `/api/personas` | List all personas |
+| `GET` | `/api/personas/:role` | Resolve persona for a role |
 
-All responses are JSON.
+### Bead Tracker
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/beads` | List all beads |
+| `GET` | `/api/beads/:id` | Show a specific bead |
+| `GET` | `/api/beads/ready` | List ready beads (no open deps) |
+| `GET` | `/api/beads/blocked` | List blocked beads |
+| `GET` | `/api/beads/status` | Summary counts by status |
+| `GET` | `/api/beads/dep/tree/:id` | Dependency tree |
+| `POST` | `/api/beads` | Create a bead |
+| `PUT` | `/api/beads/:id` | Update bead fields |
+| `POST` | `/api/beads/:id/claim` | Claim a bead |
+| `POST` | `/api/beads/:id/unclaim` | Release a claim |
+| `POST` | `/api/beads/:id/reopen` | Reopen with reason |
+| `POST` | `/api/beads/:id/deps` | Add/remove dependencies |
+
+### Document Graph
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/docs/graph` | Full dependency graph |
+| `GET` | `/api/docs/stale` | Stale documents |
+| `GET` | `/api/docs/:id` | Document metadata and staleness |
+| `GET` | `/api/docs/:id/deps` | Upstream dependencies |
+| `GET` | `/api/docs/:id/dependents` | Downstream dependents |
+| `GET` | `/api/docs/:id/history` | Document commit history |
+
+### Execution & Agent Sessions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/exec/runs` | List execution runs |
+| `GET` | `/api/exec/runs/:id` | Show execution run detail |
+| `GET` | `/api/exec/runs/:id/log` | Execution run logs |
+| `POST` | `/api/exec/run/:id` | Dispatch an execution |
+| `GET` | `/api/agent/sessions` | List agent sessions |
+| `GET` | `/api/agent/sessions/:id` | Session detail |
+
+### System
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/health` | Liveness check |
+| `GET` | `/api/ready` | Readiness check |
+
+## MCP Endpoints
+
+AI agents can connect to `ddx server` via MCP (Streamable HTTP at `POST /mcp`). Available tools:
+
+**Documents:** `ddx_list_documents`, `ddx_read_document`, `ddx_search`, `ddx_resolve_persona`, `ddx_doc_write`, `ddx_doc_history`, `ddx_doc_diff`, `ddx_doc_changed`
+
+**Beads:** `ddx_list_beads`, `ddx_show_bead`, `ddx_bead_ready`, `ddx_bead_status`, `ddx_bead_create`, `ddx_bead_update`, `ddx_bead_claim`
+
+**Graph:** `ddx_doc_graph`, `ddx_doc_stale`, `ddx_doc_show`, `ddx_doc_deps`
+
+**Execution:** `ddx_exec_definitions`, `ddx_exec_show`, `ddx_exec_history`, `ddx_exec_dispatch`
+
+**Agent:** `ddx_agent_sessions`, `ddx_agent_dispatch`
 
 ## Architecture
 
-DDx Server is stateless and lightweight:
-
-- **Reads from filesystem** — no database, no persistent state
-- **Single binary** — same Go toolchain as the CLI
-- **Concurrent-safe** — handles parallel requests safely
-- **Minimal footprint** — suitable for running alongside development tools
+- **Single binary** — server and web UI are embedded in the `ddx` CLI
+- **Stateless** — reads from filesystem on each request, no database
+- **Localhost by default** — binds to `127.0.0.1` for security
+- **File-backed** — all data comes from git-tracked files (`.ddx/beads.jsonl`, library docs, agent logs)
