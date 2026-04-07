@@ -21,7 +21,7 @@ var DefaultModelTiers = map[string]map[ModelTier]string{
 	},
 	"forge": {
 		TierSmart: "qwen/qwen3-coder-next",
-		TierFast:  "minimax/minimax-m2.5",
+		TierFast:  "qwen3.5-27b",
 	},
 	"opencode": {
 		TierSmart: "anthropic/claude-opus-4-6",

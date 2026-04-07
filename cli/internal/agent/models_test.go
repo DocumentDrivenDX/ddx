@@ -12,7 +12,7 @@ func TestResolveModelTier(t *testing.T) {
 	assert.Equal(t, "claude-opus-4-6", ResolveModelTier("claude", TierSmart))
 	assert.Equal(t, "claude-sonnet-4-6", ResolveModelTier("claude", TierFast))
 	assert.Equal(t, "qwen/qwen3-coder-next", ResolveModelTier("forge", TierSmart))
-	assert.Equal(t, "minimax/minimax-m2.5", ResolveModelTier("forge", TierFast))
+	assert.Equal(t, "qwen3.5-27b", ResolveModelTier("forge", TierFast))
 	assert.Equal(t, "", ResolveModelTier("unknown", TierSmart))
 }
 
