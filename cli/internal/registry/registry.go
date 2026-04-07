@@ -73,7 +73,7 @@ func BuiltinRegistry() *Registry {
 			},
 			{
 				Name:        "helix",
-				Version:     "1.0.0",
+				Version:     "0.3.2",
 				Description: "Supervisory autopilot for AI-assisted software delivery",
 				Type:        PackageTypeWorkflow,
 				Source:      "https://github.com/DocumentDrivenDX/helix",
@@ -103,7 +103,6 @@ func BuiltinRegistry() *Registry {
 						Target: "~/.local/bin/helix",
 					},
 					Executable: []string{
-						"bin/helix",
 						"scripts/helix",
 					},
 				},
