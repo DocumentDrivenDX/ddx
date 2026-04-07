@@ -25,10 +25,11 @@ func containsString(slice []string, s string) bool {
 
 // Runner executes agent invocations.
 type Runner struct {
-	Registry *Registry
-	Config   Config
-	Executor Executor     // injected; defaults to OSExecutor
-	LookPath LookPathFunc // injected; defaults to exec.LookPath
+	Registry      *Registry
+	Config        Config
+	Executor      Executor     // injected; defaults to OSExecutor
+	LookPath      LookPathFunc // injected; defaults to exec.LookPath
+	ForgeProvider interface{}  // injected forge.Provider for testing; nil = resolve from config
 }
 
 // NewRunner creates a runner with defaults.
@@ -60,6 +61,11 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	// Virtual harness: replay from dictionary instead of executing a binary.
 	if harnessName == "virtual" {
 		return r.RunVirtual(opts)
+	}
+
+	// Forge harness: run in-process via the forge library.
+	if harnessName == "forge" {
+		return r.RunForge(opts)
 	}
 
 	prompt, err := r.resolvePrompt(opts)
@@ -156,8 +162,8 @@ func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 	if !ok {
 		return Harness{}, "", fmt.Errorf("agent: unknown harness: %s", name)
 	}
-	// Virtual harness doesn't need a binary in PATH.
-	if name != "virtual" {
+	// Embedded harnesses don't need a binary in PATH.
+	if name != "virtual" && name != "forge" {
 		if _, err := r.LookPath(harness.Binary); err != nil {
 			return Harness{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
 		}

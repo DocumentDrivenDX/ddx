@@ -3,7 +3,7 @@ package agent
 import "os/exec"
 
 // PreferenceOrder defines the default harness preference when multiple are available.
-var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "pi", "cursor"}
+var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "forge", "pi", "cursor"}
 
 // builtinHarnesses defines known harnesses and how to invoke them.
 var builtinHarnesses = map[string]Harness{
@@ -67,6 +67,12 @@ var builtinHarnesses = map[string]Harness{
 		ModelFlag:       "-m",
 		WorkDirFlag:     "--dir",
 		EffortFlag:      "--variant",
+	},
+	"forge": {
+		Name:         "forge",
+		Binary:       "ddx", // embedded — runs in-process via forge.Run(), not as a subprocess
+		PromptMode:   "arg",
+		DefaultModel: "",    // uses forge config or provider default
 	},
 	"pi": {
 		Name:            "pi",
@@ -150,10 +156,10 @@ func (r *Registry) Discover() []HarnessStatus {
 			Name:   name,
 			Binary: h.Binary,
 		}
-		// Virtual harness is always available — it replays from dictionary.
-		if name == "virtual" {
+		// Embedded harnesses are always available — no binary lookup needed.
+		if name == "virtual" || name == "forge" {
 			status.Available = true
-			status.Path = "(built-in)"
+			status.Path = "(embedded)"
 		} else if path, err := exec.LookPath(h.Binary); err != nil {
 			status.Available = false
 			status.Error = "binary not found"

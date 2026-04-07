@@ -49,7 +49,7 @@ func newTestRunner(exec *mockExecutor) *Runner {
 
 func TestRegistryBuiltinHarnesses(t *testing.T) {
 	r := NewRegistry()
-	for _, name := range []string{"codex", "claude", "gemini", "opencode", "pi", "cursor"} {
+	for _, name := range []string{"codex", "claude", "gemini", "opencode", "forge", "pi", "cursor"} {
 		assert.True(t, r.Has(name), "should have builtin harness: %s", name)
 	}
 	assert.False(t, r.Has("nonexistent"))
@@ -69,7 +69,7 @@ func TestRegistryGet(t *testing.T) {
 func TestRegistryNamesPreferenceOrder(t *testing.T) {
 	r := NewRegistry()
 	names := r.Names()
-	require.Len(t, names, 7)
+	require.Len(t, names, 8)
 	assert.Equal(t, "codex", names[0])
 	assert.Equal(t, "claude", names[1])
 	assert.Equal(t, "gemini", names[2])

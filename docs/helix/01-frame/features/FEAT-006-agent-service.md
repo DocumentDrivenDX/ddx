@@ -40,9 +40,10 @@ agent-backed execution runs.
 
 ### Functional
 
-1. **Harness registry** — built-in support for codex, claude, gemini, opencode, pi, cursor. Extensible via config. Codex, claude, and opencode are at full parity (model selection, permission profiles, working directory, effort/reasoning control, JSON output, usage extraction).
-2. **Harness discovery** — detect which harnesses are available on the system (binary exists, authenticated, etc.). Cache results.
+1. **Harness registry** — built-in support for codex, claude, gemini, opencode, forge, pi, cursor. Extensible via config. Codex, claude, and opencode are at full subprocess parity. Forge is the embedded native agent (see below).
+2. **Harness discovery** — detect which harnesses are available on the system (binary exists, authenticated, etc.). Embedded harnesses (forge, virtual) are always available. Cache results.
 3. **Agent invocation** — `ddx agent run --harness=<name>` sends a prompt to the specified agent and captures output.
+3a. **Embedded forge agent** — `ddx agent run --harness=forge` runs the [forge](https://github.com/DocumentDrivenDX/forge) agent loop in-process via `forge.Run()`. No subprocess, no binary lookup. Forge provides a tool-calling LLM loop with read/write/edit/bash tools, supporting any OpenAI-compatible endpoint (LM Studio, Ollama, OpenAI) or Anthropic. Local models run at zero cost. Configuration via `FORGE_PROVIDER`, `FORGE_BASE_URL`, `FORGE_MODEL` env vars or `.forge/config.yaml`.
 4. **Prompt delivery** — accept prompt from stdin, file, or inline argument. Support prompt envelope format.
 5. **Output capture** — capture agent stdout/stderr, parse structured responses, track token usage where available.
 6. **Session logging** — log each agent invocation (prompt, response, tokens, duration, harness) to a session log directory.
@@ -156,6 +157,74 @@ Inspection UX:
 - API and MCP session-detail surfaces mirror the same session identity and
   attachment-backed detail model.
 
+## Comparison Dispatch
+
+DDx's existing quorum mechanism runs the same prompt through multiple
+harnesses and checks for consensus. **Comparison dispatch** extends this
+for evaluation: run the same prompt through multiple harnesses, capture
+all outputs and side effects, and record structured comparison results.
+
+```bash
+# Compare forge (local model) against claude on the same task
+ddx agent run --compare --harnesses=forge,claude --prompt task.md
+
+# Each arm runs in an isolated worktree to capture side effects
+ddx agent run --compare --harnesses=forge,claude --prompt task.md --sandbox
+```
+
+### Sandboxed comparison runs
+
+When `--sandbox` is specified (or implied by `--compare`), each harness
+arm runs in a temporary git worktree:
+
+1. Create a worktree per harness: `.worktrees/compare-<id>-<harness>/`
+2. Run the agent in that worktree (forge: `WorkDir`, subprocess: `WorkDirFlag`)
+3. After completion, capture `git diff` as the "effect artifact"
+4. Record: prompt, output text, git diff, tool call log (forge), tokens, cost
+5. Clean up worktrees (or preserve with `--keep-sandbox`)
+
+This ensures harness arms don't interfere with each other or with the
+user's working tree, and provides a concrete artifact (the diff) for
+grading.
+
+### Comparison record schema
+
+Each comparison run produces a `ComparisonRecord` in the session log:
+
+```json
+{
+  "id": "cmp-<hash>",
+  "timestamp": "...",
+  "prompt": "...",
+  "arms": [
+    {
+      "harness": "forge",
+      "model": "qwen/qwen3-coder-next",
+      "output": "...",
+      "diff": "...",
+      "tool_calls": [...],
+      "tokens": { "input": 3465, "output": 120 },
+      "cost_usd": 0,
+      "duration_ms": 8500,
+      "exit_code": 0
+    },
+    {
+      "harness": "claude",
+      "model": "claude-sonnet-4-20250514",
+      "output": "...",
+      "diff": "...",
+      "tokens": { "input": 5000, "output": 800 },
+      "cost_usd": 0.045,
+      "duration_ms": 12000,
+      "exit_code": 0
+    }
+  ],
+  "grade": null
+}
+```
+
+The `grade` field is populated by `ddx agent grade` (see FEAT-019).
+
 ## Implementation Notes
 
 ### Porting from HELIX
@@ -254,15 +323,15 @@ agent:
 
 **Harness flag mapping:**
 
-| Profile | codex flags | claude flags | opencode flags |
-|---------|------------|--------------|----------------|
-| safe | (none — default codex behavior) | (none — default claude behavior) | (none — `run` auto-approves) |
-| supervised | `--auto-approve-reads` | `--permission-mode default` | (none — no granular control) |
-| unrestricted | `--dangerously-bypass-approvals-and-sandbox` | `--permission-mode bypassPermissions --dangerously-skip-permissions` | (none — `run` auto-approves) |
+| Profile | codex flags | claude flags | opencode flags | forge behavior |
+|---------|------------|--------------|----------------|----------------|
+| safe | (none — default codex behavior) | (none — default claude behavior) | (none — `run` auto-approves) | Tools always execute (embedded) |
+| supervised | `--auto-approve-reads` | `--permission-mode default` | (none — no granular control) | Tools always execute (embedded) |
+| unrestricted | `--dangerously-bypass-approvals-and-sandbox` | `--permission-mode bypassPermissions --dangerously-skip-permissions` | (none — `run` auto-approves) | Tools always execute (embedded) |
 
 > **Note:** opencode's `run` subcommand auto-approves all tool permissions in
-> non-interactive mode. There is no separate yolo/bypass flag; all permission
-> levels map to the same invocation.
+> non-interactive mode. Forge runs in-process with direct tool execution — there
+> is no permission layer. Both behave as effectively unrestricted.
 
 **Safety invariant:** If `agent.permissions` is not explicitly set in config
 AND the `--permissions` flag is not provided, DDx defaults to `safe` and
@@ -273,14 +342,14 @@ logs a one-time notice explaining the available modes.
 Each harness exposes different levels of usage data. DDx captures what is
 available and uses it for usage tracking (FEAT-014) and self-throttling.
 
-| Source | codex | claude | opencode |
-|--------|-------|--------|----------|
-| **Per-invocation tokens** | `turn.completed` JSONL: `input_tokens`, `cached_input_tokens`, `output_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens` (if present) |
-| **Per-invocation cost** | Not reported | `total_cost_usd` in JSON envelope | `total_cost_usd` (if present) |
-| **Per-invocation model info** | Not reported | `modelUsage` block: per-model token breakdown, `contextWindow`, `maxOutputTokens` | Not reported |
-| **Historical stats file** | None known | `~/.claude/stats-cache.json`: daily activity, daily tokens by model, cumulative model usage | None known |
-| **Account limits** | TUI `/status` only (PTY scraping; fragile) | Not exposed programmatically | Not exposed |
-| **Budget passthrough** | None | `--max-budget-usd` flag (per-session cap) | None |
+| Source | codex | claude | opencode | forge (embedded) |
+|--------|-------|--------|----------|-----------------|
+| **Per-invocation tokens** | `turn.completed` JSONL: `input_tokens`, `cached_input_tokens`, `output_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens` (if present) | Direct from `forge.Result.Tokens` — `Input`, `Output`, `Total` |
+| **Per-invocation cost** | Not reported | `total_cost_usd` in JSON envelope | `total_cost_usd` (if present) | `forge.Result.CostUSD` — built-in pricing table; $0 for local models, -1 for unknown |
+| **Per-invocation model info** | Not reported | `modelUsage` block: per-model token breakdown, `contextWindow`, `maxOutputTokens` | Not reported | `forge.Result.Model` — provider-reported model name |
+| **Historical stats file** | None known | `~/.claude/stats-cache.json`: daily activity, daily tokens by model, cumulative model usage | None known | `.forge/sessions/*.jsonl` — structured event logs per session |
+| **Account limits** | TUI `/status` only (PTY scraping; fragile) | Not exposed programmatically | Not exposed | N/A — local models have no rate limits |
+| **Budget passthrough** | None | `--max-budget-usd` flag (per-session cap) | None | `MaxIterations` on forge.Request |
 
 ### Key implications for self-throttling (see FEAT-014)
 
@@ -293,6 +362,10 @@ available and uses it for usage tracking (FEAT-014) and self-throttling.
   own session-log-based usage as the primary signal.
 - **opencode** has JSON output support but token/cost reporting in the
   envelope is not yet confirmed in all versions. DDx parses opportunistically.
+- **Forge** is the richest for DDx because it's embedded: typed `Result`
+  struct with exact tokens, cost, model, session ID, and tool call logs —
+  no parsing needed. Local models (via LM Studio/Ollama) report $0 cost.
+  Session event logs in `.forge/sessions/` provide full replay capability.
 
 ## Out of Scope
 

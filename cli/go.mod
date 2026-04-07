@@ -1,8 +1,6 @@
 module github.com/DocumentDrivenDX/ddx
 
-go 1.24.0
-
-toolchain go1.24.7
+go 1.26.1
 
 require (
 	github.com/fatih/color v1.18.0
@@ -16,6 +14,17 @@ require (
 )
 
 require (
+	github.com/anthropics/anthropic-sdk-go v1.30.0 // indirect
+	github.com/openai/openai-go v1.12.0 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
+	golang.org/x/sync v0.17.0 // indirect
+)
+
+require (
+	github.com/DocumentDrivenDX/forge v0.0.1
 	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
