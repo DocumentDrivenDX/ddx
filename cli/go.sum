@@ -2,6 +2,8 @@ github.com/DocumentDrivenDX/forge v0.0.1 h1:U1qXorLHo08fK/zl3rp3exFchY+Lr4RA/qmq
 github.com/DocumentDrivenDX/forge v0.0.1/go.mod h1:k6S0WAYcMdM3fOsRJDBqJhmRqxZ8PVSMHM/XWGvdvAA=
 github.com/DocumentDrivenDX/forge v0.0.3 h1:PfJGcILr/5/Qm3dssgANghafeSXbvs8/UOVCVarvk4s=
 github.com/DocumentDrivenDX/forge v0.0.3/go.mod h1:k6S0WAYcMdM3fOsRJDBqJhmRqxZ8PVSMHM/XWGvdvAA=
+github.com/DocumentDrivenDX/forge v0.0.4 h1:GkwDuvHkD0bC0mBspmmAvQEACnMPl81dIt1Rd6LdJzQ=
+github.com/DocumentDrivenDX/forge v0.0.4/go.mod h1:k6S0WAYcMdM3fOsRJDBqJhmRqxZ8PVSMHM/XWGvdvAA=
 github.com/anthropics/anthropic-sdk-go v1.30.0 h1:5kGeZTNWE9UVChnM1xEbpjKEr9zka5C/W+QoZhP9BPo=
 github.com/anthropics/anthropic-sdk-go v1.30.0/go.mod h1:dSIO7kSrOI7MA4fE6RRVaw8tyWP7HNQU5/H/KS4cax8=
 github.com/cpuguy83/go-md2man/v2 v2.0.3 h1:qMCsGGgs+MAzDFyp9LpAe1Lqy/fY/qCovCm0qnXZOBM=
