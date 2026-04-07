@@ -326,12 +326,45 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 		// path. This prevents broken symlinks when:
 		//  - the source entry is itself a relative symlink
 		//  - the target directory is outside the project (e.g. ~/.claude/skills/)
+		//
+		// GitHub tarballs resolve relative symlinks to absolute paths from
+		// the build machine (e.g. ../../skills/helix-align becomes
+		// /home/user/Projects/helix/skills/helix-align). These are broken
+		// on any other machine. When EvalSymlinks fails, read the link
+		// target and try to resolve it relative to the installed root.
 		realSrc, err := filepath.EvalSymlinks(src)
 		if err != nil {
-			if os.IsNotExist(err) {
+			// Try to recover broken symlinks from tarballs.
+			linkTarget, readErr := os.Readlink(src)
+			if readErr != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return nil, fmt.Errorf("resolving symlinks for %s: %w", src, err)
+			}
+
+			// The link target may be absolute (broken from tarball) or relative.
+			// For relative targets like ../../skills/helix-align, resolve
+			// against the directory containing the symlink.
+			if !filepath.IsAbs(linkTarget) {
+				resolved := filepath.Join(filepath.Dir(src), linkTarget)
+				resolved = filepath.Clean(resolved)
+				if info, statErr := os.Stat(resolved); statErr == nil && info.IsDir() {
+					realSrc = resolved
+				}
+			}
+			// If still unresolved, try matching the basename in the installed
+			// root's skills/ directory (the real location).
+			if realSrc == "" {
+				candidate := filepath.Join(installedRoot, "skills", e.Name())
+				if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
+					realSrc = candidate
+				}
+			}
+			if realSrc == "" {
+				// Truly broken — skip this entry.
 				continue
 			}
-			return nil, fmt.Errorf("resolving symlinks for %s: %w", src, err)
 		}
 		realSrc, err = filepath.Abs(realSrc)
 		if err != nil {

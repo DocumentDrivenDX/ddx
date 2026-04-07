@@ -2,9 +2,13 @@ package registry
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuiltinRegistry(t *testing.T) {
@@ -231,6 +235,111 @@ func TestLoadSaveState(t *testing.T) {
 	if got.InstalledAt.IsZero() {
 		t.Error("expected non-zero InstalledAt")
 	}
+}
+
+func TestSymlinkSkills_BrokenTarballSymlinks(t *testing.T) {
+	// Simulate the GitHub tarball bug: .agents/skills/ contains symlinks
+	// with absolute paths from the build machine (e.g. /home/erik/Projects/helix/skills/...)
+	// that don't exist on the installing machine.
+	root := t.TempDir()
+
+	// Create the real skill directories (as they exist after Root copy)
+	realSkillDir := filepath.Join(root, "skills", "helix-test")
+	require.NoError(t, os.MkdirAll(realSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(realSkillDir, "SKILL.md"), []byte("test"), 0o644))
+
+	// Create broken symlinks (as tarball would produce)
+	agentsSkillDir := filepath.Join(root, ".agents", "skills")
+	require.NoError(t, os.MkdirAll(agentsSkillDir, 0o755))
+	// This symlink points to an absolute path that doesn't exist
+	require.NoError(t, os.Symlink("/nonexistent/build-machine/skills/helix-test",
+		filepath.Join(agentsSkillDir, "helix-test")))
+
+	// symlinkSkills should recover by finding skills/helix-test in the root
+	dstDir := filepath.Join(t.TempDir(), ".claude", "skills")
+	written, err := symlinkSkills(root, &InstallMapping{
+		Source: ".agents/skills/",
+		Target: dstDir,
+	})
+	require.NoError(t, err)
+	require.Len(t, written, 1, "should have created 1 symlink despite broken source symlink")
+
+	// The created symlink should point to the real skill dir
+	target, err := os.Readlink(filepath.Join(dstDir, "helix-test"))
+	require.NoError(t, err)
+	assert.Contains(t, target, "skills/helix-test")
+
+	// And the target should actually exist
+	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
+	assert.NoError(t, err, "skill content should be accessible through symlink")
+}
+
+func TestSymlinkSkills_WorkingSymlinks(t *testing.T) {
+	// Normal case: .agents/skills/ has relative symlinks that resolve correctly
+	root := t.TempDir()
+
+	realSkillDir := filepath.Join(root, "skills", "helix-test")
+	require.NoError(t, os.MkdirAll(realSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(realSkillDir, "SKILL.md"), []byte("test"), 0o644))
+
+	agentsSkillDir := filepath.Join(root, ".agents", "skills")
+	require.NoError(t, os.MkdirAll(agentsSkillDir, 0o755))
+	// Relative symlink that works
+	require.NoError(t, os.Symlink("../../skills/helix-test",
+		filepath.Join(agentsSkillDir, "helix-test")))
+
+	dstDir := filepath.Join(t.TempDir(), ".claude", "skills")
+	written, err := symlinkSkills(root, &InstallMapping{
+		Source: ".agents/skills/",
+		Target: dstDir,
+	})
+	require.NoError(t, err)
+	require.Len(t, written, 1)
+
+	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
+	assert.NoError(t, err)
+}
+
+func TestSymlinkSkills_RealDirectories(t *testing.T) {
+	// Case: .agents/skills/ has real directories (not symlinks)
+	// This happens after a clean ddx install (copyMapping resolves symlinks)
+	root := t.TempDir()
+
+	skillDir := filepath.Join(root, ".agents", "skills", "helix-test")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("test"), 0o644))
+
+	dstDir := filepath.Join(t.TempDir(), ".claude", "skills")
+	written, err := symlinkSkills(root, &InstallMapping{
+		Source: ".agents/skills/",
+		Target: dstDir,
+	})
+	require.NoError(t, err)
+	require.Len(t, written, 1)
+
+	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
+	assert.NoError(t, err)
+}
+
+func TestSymlinkSkills_NoPreExistingTargetDir(t *testing.T) {
+	// Case: target .claude/skills/ doesn't exist yet (fresh user)
+	root := t.TempDir()
+
+	skillDir := filepath.Join(root, ".agents", "skills", "helix-test")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("test"), 0o644))
+
+	// Target directory does NOT exist — should be created
+	dstDir := filepath.Join(t.TempDir(), "fresh-user", ".claude", "skills")
+	written, err := symlinkSkills(root, &InstallMapping{
+		Source: ".agents/skills/",
+		Target: dstDir,
+	})
+	require.NoError(t, err)
+	require.Len(t, written, 1)
+
+	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
+	assert.NoError(t, err, "should create target dir and symlink even when .claude/ doesn't exist")
 }
 
 func TestVerifyFiles_AllMissing(t *testing.T) {
