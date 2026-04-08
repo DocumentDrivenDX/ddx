@@ -224,7 +224,7 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			fmt.Fprintf(out, "Updated:  %s\n", b.UpdatedAt.Format("2006-01-02 15:04:05"))
 			// Show agent session evidence if present
 			if b.Extra != nil {
-				if sessionID, ok := b.Extra["agent_session_id"]; ok && sessionID != "" {
+				if sessionID, ok := b.Extra["session_id"]; ok && sessionID != "" {
 					fmt.Fprintf(out, "Session:  %v\n", sessionID)
 					// Try to resolve session details
 					if sess := f.resolveAgentSession(fmt.Sprint(sessionID)); sess != nil {
@@ -262,7 +262,7 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			claimKeys := map[string]bool{
 				"claimed-at": true, "claimed-pid": true,
 				"claimed-machine": true, "claimed-session": true, "claimed-worktree": true,
-				"agent_session_id": true, "closing_commit_sha": true,
+				"session_id": true, "closing_commit_sha": true,
 			}
 			for k, v := range b.Extra {
 				if !claimKeys[k] {

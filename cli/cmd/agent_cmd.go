@@ -728,7 +728,7 @@ Examples:
 			// Extract session ID from bead evidence
 			sessionID := ""
 			if b.Extra != nil {
-				if sid, ok := b.Extra["agent_session_id"]; ok {
+				if sid, ok := b.Extra["session_id"]; ok {
 					sessionID = fmt.Sprint(sid)
 				}
 			}
@@ -746,15 +746,19 @@ Examples:
 				}
 			}
 
-			// Fallback to bead description if no session prompt
+			// Fallback to bead prose if no session prompt (title → description → acceptance)
 			if prompt == "" {
-				if b.Description != "" {
+				switch {
+				case b.Title != "":
+					prompt = b.Title
+					fmt.Fprintf(cmd.OutOrStdout(), "Note: Using bead title as prompt (baseline session unknown)\n")
+				case b.Description != "":
 					prompt = b.Description
-					fmt.Fprintf(cmd.OutOrStdout(), "Note: Using bead description (no session linked)\n")
-				} else if b.Acceptance != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Note: Using bead description as prompt (baseline session unknown)\n")
+				case b.Acceptance != "":
 					prompt = b.Acceptance
-					fmt.Fprintf(cmd.OutOrStdout(), "Note: Using bead acceptance criteria (no session linked)\n")
-				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "Note: Using bead acceptance criteria as prompt (baseline session unknown)\n")
+				default:
 					return fmt.Errorf("no prompt available from session or bead")
 				}
 			}

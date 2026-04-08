@@ -554,7 +554,7 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 			b.Extra = make(map[string]any)
 		}
 		if sessionID != "" {
-			b.Extra["agent_session_id"] = sessionID
+			b.Extra["session_id"] = sessionID
 		}
 		if commitSHA != "" {
 			b.Extra["closing_commit_sha"] = commitSHA
@@ -567,10 +567,13 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 	})
 }
 
-// detectCurrentCommit returns the current git commit SHA, or empty if not in a git repo.
+// detectCurrentCommit returns the current git HEAD SHA, or empty if not in a git repo.
 func (s *Store) detectCurrentCommit() string {
-	// Simple git command execution - could be moved to git package
-	return ""
+	out, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // List returns beads matching optional filters.

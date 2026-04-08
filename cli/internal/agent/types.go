@@ -90,6 +90,9 @@ type SessionEntry struct {
 	Duration     int               `json:"duration_ms"`
 	ExitCode     int               `json:"exit_code"`
 	Error        string            `json:"error,omitempty"`
+	TotalTokens  int               `json:"total_tokens,omitempty"`  // input + output; populated on every run
+	BaseRev      string            `json:"base_rev,omitempty"`      // git SHA the execution started from (execute-bead only)
+	ResultRev    string            `json:"result_rev,omitempty"`    // git SHA of landed/preserved iteration (execute-bead only)
 }
 
 // ProviderStatus tracks provider connectivity and credit status.
@@ -180,6 +183,6 @@ type ComparisonRecord struct {
 // Default configuration values.
 const (
 	DefaultHarness   = "codex"
-	DefaultTimeoutMS = 300000 // 5 minutes
+	DefaultTimeoutMS = 600000 // 10 minutes
 	DefaultLogDir    = ".ddx/agent-logs"
 )

@@ -684,6 +684,7 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 		Tokens:       result.Tokens,
 		InputTokens:  result.InputTokens,
 		OutputTokens: result.OutputTokens,
+		TotalTokens:  result.InputTokens + result.OutputTokens,
 		CostUSD:      result.CostUSD,
 		Duration:     result.DurationMS,
 		ExitCode:     result.ExitCode,
