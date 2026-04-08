@@ -40,6 +40,14 @@ func (r *Runner) BuildCandidatePlans(req RouteRequest, stateOverride map[string]
 	return plans
 }
 
+// catalog returns the catalog to use for routing. Defaults to BuiltinCatalog.
+func (r *Runner) catalog() *Catalog {
+	if r.Catalog != nil {
+		return r.Catalog
+	}
+	return BuiltinCatalog
+}
+
 // evaluateCandidate produces a CandidatePlan for one harness against a RouteRequest.
 func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteRequest, stateOverride map[string]HarnessState) CandidatePlan {
 	plan := CandidatePlan{
@@ -73,26 +81,119 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 		return plan
 	}
 
-	// Resolve the concrete model for this candidate.
-	plan.ConcreteModel = r.resolveModel(RunOptions{Model: req.ModelPin}, name)
-	if plan.ConcreteModel == "" {
-		plan.ConcreteModel = harness.DefaultModel
-	}
+	cat := r.catalog()
 
 	// Set requested ref and canonical target for diagnostics.
 	if req.HarnessOverride != "" {
 		plan.RequestedRef = "harness-override:" + req.HarnessOverride
 	} else if req.ModelPin != "" {
+		// Exact pin: only harnesses with ExactPinSupport can serve this.
+		if !harness.ExactPinSupport {
+			plan.RejectReason = fmt.Sprintf("harness %s does not support exact model pins", name)
+			plan.Viable = false
+			return plan
+		}
 		plan.RequestedRef = "pin:" + req.ModelPin
 		plan.CanonicalTarget = req.ModelPin
+		plan.ConcreteModel = req.ModelPin
 	} else if req.ModelRef != "" {
+		// Logical ref: resolve through catalog for this harness's surface.
+		concreteModel, ok := cat.Resolve(req.ModelRef, harness.Surface)
+		if !ok {
+			plan.RejectReason = fmt.Sprintf("model ref %q not available on surface %q", req.ModelRef, harness.Surface)
+			plan.Viable = false
+			return plan
+		}
 		plan.RequestedRef = "ref:" + req.ModelRef
+		plan.CanonicalTarget = req.ModelRef
+		plan.ConcreteModel = concreteModel
+		// Surface deprecation warning if the ref is deprecated.
+		if entry, ok := cat.Entry(req.ModelRef); ok && entry.Deprecated {
+			plan.DeprecationWarning = fmt.Sprintf("model ref %q is deprecated; use %q instead", req.ModelRef, entry.ReplacedBy)
+		}
 	} else if req.Profile != "" {
-		plan.RequestedRef = "profile:" + req.Profile
+		// Profile: resolve through catalog for this surface.
+		concreteModel, ok := cat.Resolve(req.Profile, harness.Surface)
+		if ok {
+			plan.RequestedRef = "profile:" + req.Profile
+			plan.CanonicalTarget = req.Profile
+			plan.ConcreteModel = concreteModel
+		} else {
+			// Profile not in catalog for this surface — fall back to DefaultModelTiers.
+			plan.RequestedRef = "profile:" + req.Profile
+			plan.ConcreteModel = r.resolveModel(RunOptions{}, name)
+			if plan.ConcreteModel == "" {
+				plan.ConcreteModel = harness.DefaultModel
+			}
+		}
+	} else {
+		// No selector: use configured or harness default model.
+		plan.ConcreteModel = r.resolveModel(RunOptions{}, name)
+		if plan.ConcreteModel == "" {
+			plan.ConcreteModel = harness.DefaultModel
+		}
 	}
 
 	plan.Viable = true
 	return plan
+}
+
+// NormalizeRouteRequest builds a RouteRequest from CLI flags and config using
+// the precedence rules from SD-015 and the routing plan:
+//
+//  1. If flags.Harness is set → HarnessOverride (constrains routing to one harness).
+//  2. If flags.Model is set → try catalog resolution:
+//     - If known in catalog: ModelRef.
+//     - If not known: ModelPin (exact pin, bypasses catalog).
+//  3. If flags.Profile is set → Profile.
+//  4. Else fall back to cfg.Model (same catalog resolution) or cfg.Profile.
+//  5. If nothing is set → cfg.Harness becomes HarnessOverride (legacy fallback).
+func NormalizeRouteRequest(flags RouteFlags, cfg Config, catalog *Catalog) RouteRequest {
+	if catalog == nil {
+		catalog = BuiltinCatalog
+	}
+
+	req := RouteRequest{
+		Effort:      flags.Effort,
+		Permissions: flags.Permissions,
+	}
+
+	// 1. Harness override constrains routing to one harness.
+	if flags.Harness != "" {
+		req.HarnessOverride = flags.Harness
+	} else if cfg.Harness != "" {
+		req.HarnessOverride = cfg.Harness
+	}
+
+	// 2. Model flag: catalog resolution or exact pin.
+	if flags.Model != "" {
+		modelRef, modelPin := catalog.NormalizeModelRef(flags.Model)
+		req.ModelRef = modelRef
+		req.ModelPin = modelPin
+		return req
+	}
+
+	// 3. Profile flag.
+	if flags.Profile != "" {
+		req.Profile = flags.Profile
+		return req
+	}
+
+	// 4. Config defaults: model first, then profile.
+	if cfg.Model != "" {
+		modelRef, modelPin := catalog.NormalizeModelRef(cfg.Model)
+		req.ModelRef = modelRef
+		req.ModelPin = modelPin
+		return req
+	}
+	if cfg.Profile != "" {
+		req.Profile = cfg.Profile
+		return req
+	}
+
+	// 5. Nothing configured — request is underspecified; routing will use
+	// harness default or first-available fallback.
+	return req
 }
 
 // fastHarnessState derives a HarnessState from binary availability (no I/O).

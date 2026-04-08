@@ -50,6 +50,7 @@ type LLMPresetYAML struct {
 type Runner struct {
 	Registry          *Registry
 	Config            Config
+	Catalog           *Catalog        // model catalog for routing; defaults to BuiltinCatalog
 	Executor          Executor        // injected; defaults to OSExecutor
 	LookPath          LookPathFunc    // injected; defaults to exec.LookPath
 	ForgeProvider     interface{}     // injected forge.Provider for testing; nil = resolve from config
@@ -70,6 +71,7 @@ func NewRunner(cfg Config) *Runner {
 	return &Runner{
 		Registry: NewRegistry(),
 		Config:   cfg,
+		Catalog:  BuiltinCatalog,
 		Executor: &OSExecutor{},
 		LookPath: DefaultLookPath,
 	}

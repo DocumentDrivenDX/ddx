@@ -27,13 +27,24 @@ type Harness struct {
 
 // Config holds agent service configuration.
 type Config struct {
-	Harness         string              `yaml:"harness"`          // default harness name
-	Model           string              `yaml:"model"`            // global model override
+	Profile         string              `yaml:"profile"`          // default routing intent: cheap, fast, smart
+	Harness         string              `yaml:"harness"`          // optional forced harness override
+	Model           string              `yaml:"model"`            // optional default model ref or exact pin
 	Models          map[string]string   `yaml:"models"`           // per-harness model overrides
 	ReasoningLevels map[string][]string `yaml:"reasoning_levels"` // per-harness reasoning-level options
 	TimeoutMS       int                 `yaml:"timeout_ms"`       // default timeout in ms
 	SessionLogDir   string              `yaml:"session_log_dir"`  // log directory
 	Permissions     string              `yaml:"permissions"`      // permission level: safe, supervised, unrestricted
+}
+
+// RouteFlags holds raw CLI flag values before normalization into a RouteRequest.
+// These come directly from parsed command-line arguments.
+type RouteFlags struct {
+	Profile     string // --profile: cheap, fast, smart
+	Model       string // --model: logical ref or exact pin
+	Harness     string // --harness: forced harness override
+	Effort      string // --effort: low, medium, high
+	Permissions string // --permissions: safe, supervised, unrestricted
 }
 
 // RunOptions holds options for a single agent invocation.
@@ -232,9 +243,10 @@ type CandidatePlan struct {
 	SupportsEffort      bool         `json:"supports_effort"`
 	SupportsPermissions bool         `json:"supports_permissions"`
 	State               HarnessState `json:"state"`
-	CostClass           string       `json:"cost_class,omitempty"`         // local, cheap, medium, expensive
-	EstimatedCostUSD    float64      `json:"estimated_cost_usd,omitempty"` // -1 = unknown
-	RejectReason        string       `json:"reject_reason,omitempty"`      // non-empty means rejected
+	CostClass           string       `json:"cost_class,omitempty"`          // local, cheap, medium, expensive
+	EstimatedCostUSD    float64      `json:"estimated_cost_usd,omitempty"`  // -1 = unknown
+	RejectReason        string       `json:"reject_reason,omitempty"`       // non-empty means rejected
+	DeprecationWarning  string       `json:"deprecation_warning,omitempty"` // non-empty when requested ref is deprecated
 	Score               float64      `json:"score,omitempty"`
 	Viable              bool         `json:"viable"`
 }
