@@ -405,5 +405,7 @@ working tree
   DDx provides comparison and grading; HELIX provides the iteration loop.
 - **Structured git trailers** — bead + session log already have the data.
   Don't duplicate into git commit metadata.
+- **Autonomy semantics and exploration policy** — DDx does not define what autonomy levels mean or when to run experiments; HELIX decides when and how many iterations to attempt
+- **Escalation and supervisory rules** — whether to accept a result, retry, or escalate is HELIX methodology behavior; DDx provides the comparison and grading data
 - Container or VM-level sandboxing
 - Cross-repo or cross-project comparison

@@ -369,3 +369,5 @@ managed flow.
 - Merge conflict resolution (report conflicts, don't resolve them)
 - Git configuration management
 - Submodule or subtree operations (handled by existing `ddx update/contribute`)
+- **When to invoke execute-bead and what to do with the outcome** — DDx provides the git mechanics; HELIX decides when to run execute-bead, whether to retry, and how to act on preserved vs landed iterations
+- **Conflict classification and escalation** — whether a merge conflict is resolvable or physics-level is a HELIX methodology decision, not a DDx git operation

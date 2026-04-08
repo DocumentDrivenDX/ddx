@@ -20,6 +20,47 @@ dedicated `agent` executor kind. It remains the canonical surface for direct
 agent dispatch and the authoritative source of raw prompt/response logs for
 agent-backed execution runs.
 
+## HELIX/DDx Boundary
+
+DDx is the workflow-agnostic substrate. HELIX is the methodology layer built on
+top of it. This boundary is explicit and stable.
+
+**DDx owns (platform primitives):**
+- Document graph indexing and traversal, including `[[ID]]` body-link indexing
+  and execution-document discoverability through the graph
+- `ddx agent execute-bead` as the canonical git-aware, agent-backed bead
+  execution primitive, including dirty-tree checkpointing, isolated worktrees,
+  hidden ref preservation, and fast-forward landing
+- Agent harness/model/effort/preset resolution, session capture,
+  transcript/runtime evidence, token/cost/runtime metrics
+- Immutable execution runs and metric projections over those runs
+- Required execution semantics and metric ratchet evaluation sufficient to
+  decide merge vs preserve
+- Repo-local config/preset/bootstrap surfaces (`.ddx/config.yaml`, installed
+  DDx skills, preset resolution)
+
+**HELIX owns (methodology layer — not DDx's concern):**
+- Autonomy semantics (`low` / `medium` / `high`) and what those modes mean
+  behaviorally
+- Graph traversal policy beyond the primitives DDx exposes (authority ordering,
+  impact-flow strategy, search fallback)
+- Conflict classification (resolvable vs physics-level)
+- Escalation behavior, follow-on bead creation, and supervisory stop/continue
+  rules
+- Workflow routing (`input`, `run`, planning vs execution,
+  review/report/measure orchestration)
+- Prompt design, bead prompt structure, and prompt engineering strategy
+- Artifact decomposition and change-flow policy across the HELIX artifact stack
+
+**Anti-drift rules (DDx must not absorb these):**
+- Do not define HELIX autonomy semantics in DDx
+- Do not define HELIX workflow routing or orchestration logic in DDx
+- Do not invent a prompt-version registry or separate prompt provenance system
+- Do not create a second execution/metrics/provenance store outside the existing
+  exec/session substrate
+- Do not require HELIX to build a parallel graph engine — DDx claims graph
+  indexing/traversal support and must deliver it
+
 ## Forge Integration Boundary
 
 Forge is an embeddable Go agent runtime — a tool-calling LLM loop.
@@ -478,6 +519,10 @@ available and uses it for usage tracking (FEAT-014) and self-throttling.
 
 ## Out of Scope
 
+- **HELIX autonomy semantics** — DDx does not define what `low`, `medium`, or `high` autonomy means behaviorally; that is HELIX's methodology layer
+- **Workflow routing and orchestration** — DDx does not decide when to invoke execute-bead, what to do with the outcome, or how to sequence workflow phases; that is HELIX's concern
+- **Escalation and supervisory policy** — follow-on bead creation, stop/continue rules, and conflict escalation are HELIX-owned
+- **Prompt design and engineering strategy** — bead prompt structure, prompt optimization, and rubric content are HELIX-owned; DDx provides the dispatch and grading mechanics
 - **Server-side agent dispatch** — `ddx agent run` is CLI-only for security.
   The localhost-only dispatch endpoints in FEAT-002 (items 40-41) delegate to
   the CLI internally and require API key for non-local access.
