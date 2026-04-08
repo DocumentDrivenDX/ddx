@@ -394,7 +394,8 @@ ddx/
                 │   │   ├── Documents.tsx
                 │   │   ├── Graph.tsx
                 │   │   ├── Beads.tsx
-                │   │   └── Agent.tsx
+                │   │   ├── Agent.tsx
+                │   │   └── Personas.tsx
                 │   └── components/
                 └── dist/          # Build output (embedded into Go)
 ```
