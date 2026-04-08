@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
@@ -502,4 +505,44 @@ PowerShell:
 // Helper function to get library path from environment or flag
 func getLibraryPathFromEnv() string {
 	return os.Getenv("DDX_LIBRARY_BASE_PATH")
+}
+
+// resolveAgentSession looks up a session by ID from the agent session log.
+// Returns nil if the session is not found or cannot be read.
+func (f *CommandFactory) resolveAgentSession(sessionID string) *agent.SessionEntry {
+	if sessionID == "" {
+		return nil
+	}
+
+	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
+	if err != nil {
+		return nil
+	}
+
+	sessionLogDir := ".ddx/agent-logs"
+	if cfg.Agent != nil && cfg.Agent.SessionLogDir != "" {
+		sessionLogDir = cfg.Agent.SessionLogDir
+	}
+
+	logFile := filepath.Join(f.WorkingDir, sessionLogDir, "sessions.jsonl")
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		var entry agent.SessionEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		if entry.ID == sessionID {
+			return &entry
+		}
+	}
+	return nil
 }
