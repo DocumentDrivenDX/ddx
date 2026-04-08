@@ -34,7 +34,7 @@ UI. Tests run against a live `ddx server` instance with real project data
 cd cli/internal/server/frontend
 
 # Install browsers (first time)
-npx playwright install chromium
+bunx playwright install chromium
 
 # Functional e2e tests
 bun run test:e2e
