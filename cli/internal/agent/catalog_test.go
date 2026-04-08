@@ -135,7 +135,7 @@ func TestAgentRoutingSurfacesDeprecatedReplacementWarning(t *testing.T) {
 	assert.True(t, codexPlan.Viable, "codex should be viable for codex-mini (has codex surface mapping)")
 	assert.NotEmpty(t, codexPlan.DeprecationWarning, "deprecated ref should produce a deprecation warning")
 	assert.Contains(t, codexPlan.DeprecationWarning, "codex-mini")
-	assert.Contains(t, codexPlan.DeprecationWarning, "gpt-5.4-mini") // ReplacedBy
+	assert.Contains(t, codexPlan.DeprecationWarning, "cheap") // ReplacedBy logical ref
 }
 
 // --- Embedded Boundary Tests (TP-020) ---

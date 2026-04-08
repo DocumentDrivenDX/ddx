@@ -126,6 +126,6 @@ var BuiltinCatalog = NewCatalog([]CatalogEntry{
 			"codex": "gpt-5.4-mini",
 		},
 		Deprecated: true,
-		ReplacedBy: "gpt-5.4-mini",
+		ReplacedBy: "cheap",
 	},
 })
