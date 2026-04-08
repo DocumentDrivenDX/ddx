@@ -148,6 +148,21 @@ DDx embeds forge as a library via `forge.Run()`. The boundary:
 - Given I specify a session ID, then I see the full prompt, response, stderr, and exit code for that session
 - Given the session was recorded before full-body capture existed, then the entry still loads and shows the available metadata without breaking
 
+### US-065: Developer Runs Agent Against a Bead
+**As** a developer or workflow tool
+**I want** `ddx agent execute-bead` to run an agent on a bead in an isolated, auditable way
+**So that** the result is safely landed or preserved without manual git operations
+
+**Acceptance Criteria:**
+- Given a valid bead ID, when `ddx agent execute-bead <id>` is invoked, then DDx resolves the bead and governing artifacts and begins the workflow (step 1).
+- Given `--from` is omitted, when the base revision is resolved (step 2), then DDx uses `HEAD`.
+- Given `--harness`, `--model`, and `--effort` are provided, when the agent runs (step 5), then execute-bead honors them exactly as a normal `ddx agent run` invocation would.
+- Given execution completes, when the worktree is cleaned up (step 12), then no temporary worktree created by execute-bead remains in the filesystem.
+- Given `--no-merge` is set, when the iteration completes, then DDx creates a committed attempt and preserves it under a hidden ref (step 11) — it is not landed regardless of execution outcomes.
+- Given graph-discovered required executions fail (step 9), when the merge decision is made (step 10), then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch.
+- Given all required executions pass and ratchets are satisfied (step 9), when the merge decision is made (step 10) and `--no-merge` is not set, then DDx lands the result by fast-forward.
+- Given execute-bead completes, when the run record is inspected, then it contains built-in runtime metrics as specified in FEAT-014 US-145, captured automatically for the iteration.
+
 ### Session Capture
 
 Agent session evidence is stored locally under `session_log_dir` (default

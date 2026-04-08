@@ -375,6 +375,15 @@ working tree
 - Given a bead closed without an agent run, then no session link exists
   and `ddx bead show` omits agent metadata
 
+### US-196: Evaluation Primitives Consume Preserved Execute-bead Iterations
+**As** a developer evaluating bead execution quality
+**I want** FEAT-019 evaluation tools to operate on preserved execute-bead iterations
+**So that** comparison, grading, and benchmarking build on execute-bead results rather than a competing execution model
+
+**Acceptance Criteria:**
+- Given multiple `ddx agent execute-bead <id> --no-merge` runs from the same base revision exist, when `ddx agent compare` or `ddx agent benchmark` consumes them, then those preserved iterations are valid inputs — no separate evaluation-specific execution path is required to produce the corpus.
+- Given an evaluation consumes a preserved execute-bead iteration, when provenance is inspected, then it traces back to the originating execute-bead session ID and hidden ref — no evaluation-owned provenance record duplicates execute-bead evidence.
+
 ## Dependencies
 
 - FEAT-006 (Agent Service) — harness registry, quorum parallelism, worktree

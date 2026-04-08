@@ -219,6 +219,19 @@ The HTTP/MCP surface is read-only for v1. Execution invocation remains CLI-only.
 - Given a repository contains prior metric runtime data, when DDx adopts `ddx exec`, then new execution and metric writes land in bead-backed collections and legacy `.ddx/exec/` or `.ddx/metrics/` data remains readable as a fallback during migration
 - Given the chosen policy, then the behavior is documented and testable rather than implicit
 
+### US-095: Execute-bead Compatibility and Definition Source Priority
+**As** a workflow tool invoking execute-bead
+**I want** DDx to resolve graph-authored execution definitions as authoritative
+**So that** runtime behavior matches the documents in git
+
+**Acceptance Criteria:**
+- Given a graph-authored execution definition exists for an artifact, when `ddx exec validate` or `ddx exec run` resolves that artifact's definition, then the graph-authored document takes precedence over any runtime-managed definition in the `exec-definitions` collection.
+- Given only a runtime-managed definition exists for an artifact, when `ddx exec run` is invoked, then it proceeds using the runtime-managed definition without error.
+- Given an execution definition is marked `required: true`, when its execution run terminates with a non-success status, then the result is classified as merge-blocking and any execute-bead workflow consuming it preserves rather than lands.
+- Given a metric-producing execution run completes, when `ddx metric` queries for that metric, then the result is served from the `exec-runs` collection — no `.ddx/metrics/` directory is created or required.
+- Given an agent-backed execution run completes, when the run record is inspected, then it retains a stable link to the underlying agent session ID resolvable via `ddx agent log`.
+- Given `ddx agent execute-bead` triggers execution documents, when the resulting runs are queried, then they appear in `ddx exec history` and `ddx metric` output through the standard inspection surfaces.
+
 ## Dependencies
 
 - FEAT-005 (Artifacts) — execution definitions link runtime behavior to artifact IDs

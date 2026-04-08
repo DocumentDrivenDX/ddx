@@ -178,6 +178,12 @@ Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646`
 These refs are local only. DDx does not push them. Tools and humans may use
 them for replay and introspection via the execute-bead session evidence.
 
+### Acceptance Criteria (execute-bead git operations)
+
+- Given execute-bead creates a hidden ref, when the ref is inspected, then its name matches `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` exactly.
+- Given execute-bead completes (any outcome), when the filesystem is inspected, then no worktree matching the execute-bead worktree path pattern remains.
+- Given the target branch is fast-forward updated by execute-bead, when `git log --merges` is inspected, then no merge commit exists — history is linear.
+
 ## Graceful Degradation
 
 If `IsRepository(".")` returns false, all git-dependent features (auto-commit,

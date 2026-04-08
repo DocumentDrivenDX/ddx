@@ -286,6 +286,15 @@ agent:
 - Given I read an old session log without `input_tokens`, then it loads
   without error (fields default to zero)
 
+### US-145: Execute-bead Runtime Metrics Are Captured Automatically
+**As** a developer reviewing bead execution history
+**I want** runtime metrics recorded for every execute-bead iteration without manual instrumentation
+**So that** iterations are comparable and cost is always visible
+
+**Acceptance Criteria:**
+- Given `ddx agent execute-bead` runs with a harness that exposes token and cost data (e.g., claude, codex), when the iteration completes, then the run record contains `harness`, `model`, `session_id`, `elapsed_ms`, `input_tokens`, `output_tokens`, `total_tokens`, and `cost_usd` — with `cost_usd` set to `0` for local models and `-1` when the harness does not report cost.
+- Given runtime token and cost data is captured, when the iteration commit summary is written (landed or preserved under a hidden ref), then the summary includes harness, model, total tokens, cost, base revision, and result revision so post-hoc comparison requires only the summary — not opening session attachments.
+
 ## Dependencies
 
 - FEAT-006 (Agent Service) — session logging, harness registry

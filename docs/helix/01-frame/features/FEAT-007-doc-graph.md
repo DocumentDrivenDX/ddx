@@ -90,6 +90,7 @@ Content here...
 8. **Stale query** (`ddx doc stale`) — list stale documents
 9. **Input resolution** — resolve `inputs` selectors (`node:`, `refs:`, `code_refs:`, `paths:`) to actual content for prompt assembly
 10. **Graph configuration** — optional `.ddx/graphs/*.yaml` files defining required roots, ID-to-path mappings, and cascade rules
+11. **Body-link indexing** — scan document bodies for `[[ID]]` reference syntax and index those as graph edges alongside frontmatter-declared `depends_on` edges. Support plain IDs (`[[FEAT-001]]`), slugged IDs (`[[US-036-list-mcp-servers]]`), and dotted IDs (`[[helix.workflow.artifact-hierarchy]]`). Return the union of body links and frontmatter edges without duplicate edges.
 
 ### Non-Functional
 
@@ -137,6 +138,18 @@ ddx doc dependents <id>             # Show what depends on a document
 **Acceptance Criteria:**
 - Given ddx-server is running, when an agent calls `ddx_doc_deps` with a design doc ID, then it receives the list of upstream governing documents
 - Given an agent calls `ddx_doc_stale`, then it knows which documents need attention before proceeding
+
+### US-073: Graph Indexes Body Links and Supports Reverse Traversal
+**As** DDx (and tools consuming the graph)
+**I want** document body `[[ID]]` references indexed as graph edges
+**So that** dependency relationships declared in prose are machine-queryable without grep
+
+**Acceptance Criteria:**
+- Given a markdown document containing `[[FEAT-011]]`, `[[US-036-list-mcp-servers]]`, and `[[helix.workflow.artifact-hierarchy]]` in its body, when DDx constructs the graph, then those references are indexed as resolvable graph edges.
+- Given both `ddx.depends_on: [A]` frontmatter and a `[[A]]` body reference in the same document, when the graph is queried, then a single edge to A is returned — not two.
+- Given documents B and C each contain `[[A]]` in their bodies, when dependents of A are queried, then B and C are returned from the graph index without requiring an external file scan.
+- Given an execution document declares `ddx.depends_on: [FEAT-001]`, when the graph is queried, then the execution document is returned as a discoverable graph artifact linked to FEAT-001.
+- Given malformed `[[...]]` syntax (e.g., `[[]]`, `[[has spaces]]`) or an `[[UnknownID]]` reference, when the graph is constructed, then the reference is skipped silently and graph construction completes without error.
 
 ### US-072: Check Runner Delegates Graph Operations
 **As** dun (check runner)

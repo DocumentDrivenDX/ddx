@@ -315,6 +315,17 @@ agents and developers
 - FEAT-002 (server — write endpoints)
 - FEAT-009 (plugin registry — `ddx init` and `ddx install`)
 
+### US-126: Execute-bead Git Lifecycle Is Safe and Contained
+**As** a developer running execute-bead
+**I want** the git operations to be controlled and leave my repo in a predictable state
+**So that** my working tree is never lost or corrupted by an execute-bead run
+
+**Acceptance Criteria:**
+- Given the caller's working tree has uncommitted changes when `ddx agent execute-bead` starts, when the workflow begins, then DDx creates a checkpoint commit from those changes and uses it as the effective base revision — the caller's staged and unstaged changes are not discarded or reset.
+- Given `ddx agent execute-bead` runs, when it begins, then DDx creates a managed isolated worktree; when execution completes (success, failure, or crash recovery), then no worktree created by that execute-bead invocation remains in the filesystem.
+- Given an iteration is merge-eligible, when DDx prepares a fast-forward landing, then the only rebase performed is a rebase of the execution branch onto the latest target branch tip — `git log --merges` shows no merge commit; history remains linear.
+- Given an iteration is not merged (required execution failed, ratchet regression, or `--no-merge` set), when DDx preserves the iteration, then a ref matching `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` is created and the target branch is not updated.
+
 ## Managed Exception: ddx agent execute-bead
 
 The general DDx git safety posture is conservative (see SD-012). One managed

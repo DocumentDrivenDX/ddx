@@ -44,6 +44,12 @@ of truth. `ddx exec validate/run/history/result/log` resolve and operate on both
 sources; graph-authored definitions take precedence when both exist for the same
 artifact.
 
+### Acceptance Criteria (definition source priority and metric projection)
+
+- Given a graph-authored execution document and a runtime-managed definition in `exec-definitions` both exist for the same artifact ID, when `ddx exec validate` or `ddx exec run` resolves that artifact, then the graph-authored document is used as the authoritative definition.
+- Given only a runtime-managed definition exists for an artifact, when `ddx exec run` is invoked, then it proceeds using the runtime-managed definition without error.
+- Given DDx processes execution results from a run, when `ddx metric` is queried for the resulting metric, then no `.ddx/metrics/` directory is created — results are served entirely from `exec-runs` collection records.
+
 ## Storage Model
 
 Executions use named bead-backed collections rather than a bespoke `.ddx/exec/`

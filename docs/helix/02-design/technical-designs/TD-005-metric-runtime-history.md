@@ -208,6 +208,12 @@ The evaluation model is narrow: results → metrics → ratchet/blocker outcome.
 Field names are generic scalars, not unit-specific. The `unit` field in the
 `result.metric` block identifies what the number means.
 
+### Acceptance Criteria (ratchet evaluation feeding execute-bead)
+
+- Given a metric execution run completes with a value exceeding `thresholds.ratchet` in the blocking direction, when execute-bead evaluates the outcome, then the iteration is classified as not merge-eligible and is preserved under a hidden ref rather than landed.
+- Given a metric execution run completes with a value between `thresholds.warn` and `thresholds.ratchet`, when execute-bead evaluates the outcome, then a warning is emitted but the iteration remains merge-eligible.
+- Given a non-required, non-ratcheted metric execution run completes, when execute-bead evaluates the outcome, then the run is stored as evidence and does not affect the merge/preserve decision.
+
 ## Compare and Trend
 
 - Metric compare reads generic execution history, filters by `MET-*` artifact
