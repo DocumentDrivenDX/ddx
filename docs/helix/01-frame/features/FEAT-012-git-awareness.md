@@ -4,7 +4,6 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-001
-    - FEAT-002
     - FEAT-007
 ---
 # Feature: Git Awareness and Revision Control Integration
@@ -354,8 +353,11 @@ agents and developers
 - `internal/git` package (existing — basic git operations)
 - FEAT-004 (beads — bead mutation operations)
 - FEAT-007 (document graph — artifact ID to file path mapping)
-- FEAT-002 (server — write endpoints)
 - FEAT-009 (plugin registry — `ddx init` and `ddx install`)
+
+Note: FEAT-002 (Server) depends on FEAT-012, not the reverse. FEAT-012 defines
+the git mechanics (write+commit, history, checkpoints); FEAT-002 exposes those
+capabilities as HTTP and MCP endpoints. The dependency runs FEAT-002 → FEAT-012.
 
 ## Out of Scope
 
