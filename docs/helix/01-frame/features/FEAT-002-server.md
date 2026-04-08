@@ -118,12 +118,12 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 - mcp-go SDK for MCP transport
 
 **Document Write + Commit (FEAT-012)**
-28. `PUT /api/docs/:id` — write document content and auto-commit
-29. MCP tool: `ddx_doc_write` — write document by artifact ID, commit by
+43. `PUT /api/docs/:id` — write document content and auto-commit
+44. MCP tool: `ddx_doc_write` — write document by artifact ID, commit by
     default
-30. `GET /api/docs/:id/history` — document commit history
-31. `GET /api/docs/:id/diff` — document content diff between refs
-32. MCP tools: `ddx_doc_history`, `ddx_doc_diff`, `ddx_doc_changed`
+45. `GET /api/docs/:id/history` — document commit history
+46. `GET /api/docs/:id/diff` — document content diff between refs
+47. MCP tools: `ddx_doc_history`, `ddx_doc_diff`, `ddx_doc_changed`
 
 Write endpoints commit by default (configurable via `git.auto_commit` in
 `.ddx/config.yaml`). Commit messages follow the structured format defined
