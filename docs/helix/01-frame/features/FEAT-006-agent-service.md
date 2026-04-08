@@ -13,53 +13,12 @@ ddx:
 
 ## Overview
 
-The DDx agent service is the unified interface for dispatching work to AI coding agents (codex, claude, gemini, opencode, cursor, etc.). It handles harness discovery, prompt delivery, output capture, token tracking, session logging, and multi-agent quorum. Workflow tools (HELIX) and check runners (dun) call `ddx agent` instead of implementing their own harness abstraction.
+The DDx agent service is the unified interface for dispatching work to AI coding agents (codex, claude, gemini, opencode, cursor, etc.). It handles harness discovery, prompt delivery, output capture, token tracking, session logging, and multi-agent quorum. Workflow tools and check runners call `ddx agent` instead of implementing their own harness abstraction.
 
 Within the broader DDx execution model (FEAT-010), `ddx agent` is the
 dedicated `agent` executor kind. It remains the canonical surface for direct
 agent dispatch and the authoritative source of raw prompt/response logs for
 agent-backed execution runs.
-
-## HELIX/DDx Boundary
-
-DDx is the workflow-agnostic substrate. HELIX is the methodology layer built on
-top of it. This boundary is explicit and stable.
-
-**DDx owns (platform primitives):**
-- Document graph indexing and traversal, including `[[ID]]` body-link indexing
-  and execution-document discoverability through the graph
-- `ddx agent execute-bead` as the canonical git-aware, agent-backed bead
-  execution primitive, including dirty-tree checkpointing, isolated worktrees,
-  hidden ref preservation, and fast-forward landing
-- Agent harness/model/effort/preset resolution, session capture,
-  transcript/runtime evidence, token/cost/runtime metrics
-- Immutable execution runs and metric projections over those runs
-- Required execution semantics and metric ratchet evaluation sufficient to
-  decide merge vs preserve
-- Repo-local config/preset/bootstrap surfaces (`.ddx/config.yaml`, installed
-  DDx skills, preset resolution)
-
-**HELIX owns (methodology layer — not DDx's concern):**
-- Autonomy semantics (`low` / `medium` / `high`) and what those modes mean
-  behaviorally
-- Graph traversal policy beyond the primitives DDx exposes (authority ordering,
-  impact-flow strategy, search fallback)
-- Conflict classification (resolvable vs physics-level)
-- Escalation behavior, follow-on bead creation, and supervisory stop/continue
-  rules
-- Workflow routing (`input`, `run`, planning vs execution,
-  review/report/measure orchestration)
-- Prompt design, bead prompt structure, and prompt engineering strategy
-- Artifact decomposition and change-flow policy across the HELIX artifact stack
-
-**Anti-drift rules (DDx must not absorb these):**
-- Do not define HELIX autonomy semantics in DDx
-- Do not define HELIX workflow routing or orchestration logic in DDx
-- Do not invent a prompt-version registry or separate prompt provenance system
-- Do not create a second execution/metrics/provenance store outside the existing
-  exec/session substrate
-- Do not require HELIX to build a parallel graph engine — DDx claims graph
-  indexing/traversal support and must deliver it
 
 ## Forge Integration Boundary
 
@@ -142,12 +101,12 @@ DDx embeds forge as a library via `forge.Run()`. The boundary:
 ## User Stories
 
 ### US-060: Workflow Tool Invokes Agent
-**As** HELIX (or another workflow tool)
+**As** a workflow tool
 **I want** to call `ddx agent run --harness=codex --prompt task.md`
 **So that** I don't need my own agent dispatch code
 
 **Acceptance Criteria:**
-- Given codex is available, when HELIX calls `ddx agent run`, then the prompt is sent and the response is captured
+- Given codex is available, when a workflow tool calls `ddx agent run`, then the prompt is sent and the response is captured
 - Given the invocation completes, then a session log entry is created with prompt, response, tokens, and duration
 - Given the agent times out, then `ddx agent run` returns a clear timeout error
 
@@ -519,10 +478,10 @@ available and uses it for usage tracking (FEAT-014) and self-throttling.
 
 ## Out of Scope
 
-- **HELIX autonomy semantics** — DDx does not define what `low`, `medium`, or `high` autonomy means behaviorally; that is HELIX's methodology layer
-- **Workflow routing and orchestration** — DDx does not decide when to invoke execute-bead, what to do with the outcome, or how to sequence workflow phases; that is HELIX's concern
-- **Escalation and supervisory policy** — follow-on bead creation, stop/continue rules, and conflict escalation are HELIX-owned
-- **Prompt design and engineering strategy** — bead prompt structure, prompt optimization, and rubric content are HELIX-owned; DDx provides the dispatch and grading mechanics
+- **Autonomy semantics** — DDx does not define what autonomy levels mean behaviorally; that is delegated to workflow plugins
+- **Workflow routing and orchestration** — DDx does not decide when to invoke execute-bead, what to do with the outcome, or how to sequence workflow phases; that is delegated to workflow tools
+- **Escalation and supervisory policy** — follow-on bead creation, stop/continue rules, and conflict escalation are workflow plugin concerns
+- **Prompt design and engineering strategy** — bead prompt structure, prompt optimization, and rubric content are delegated to plugins; DDx provides the dispatch and grading mechanics
 - **Server-side agent dispatch** — `ddx agent run` is CLI-only for security.
   The localhost-only dispatch endpoints in FEAT-002 (items 40-41) delegate to
   the CLI internally and require API key for non-local access.

@@ -15,7 +15,7 @@ ddx:
 
 DDx tracks dependencies between documents using YAML frontmatter metadata. When an upstream document changes, DDx detects which downstream documents are stale and need review. This is the "keep documents honest" capability — the infrastructure that prevents document drift.
 
-Workflow tools (HELIX) and check runners (dun) consume the graph to enforce document quality. DDx owns the graph model, staleness detection, hashing, and stamping. Dun keeps its check types (`helix-doc-dag`, `helix-change-cascade`) but delegates graph operations to DDx.
+Workflow tools and check runners consume the graph to enforce document quality. DDx owns the graph model, staleness detection, hashing, and stamping. Check runners delegate graph operations to DDx rather than implementing their own.
 
 ## Problem Statement
 
@@ -268,5 +268,5 @@ surfaced alongside the existing graph/stale/stamp commands.
 - Automated document updating — DDx detects staleness, agents do the updating
 - Document content validation (correct sections, completeness) — that's workflow-level
 - Branch management, remote operations, merge conflict resolution (see FEAT-012 Out of Scope)
-- **Graph traversal policy** — authority ordering, impact-flow strategy, and search fallback policy are methodology-layer concerns (HELIX); DDx provides the graph primitives (edges, dependents, staleness), not the traversal strategy
-- **Artifact decomposition policy** — how to break a change across the HELIX artifact stack is HELIX's concern; DDx indexes the artifacts and their relationships
+- **Graph traversal policy** — authority ordering, impact-flow strategy, and search fallback policy are delegated to workflow plugins; DDx provides the graph primitives (edges, dependents, staleness), not the traversal strategy
+- **Artifact decomposition policy** — how to break a change across an artifact stack is a plugin concern; DDx indexes the artifacts and their relationships

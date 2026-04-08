@@ -326,5 +326,5 @@ model downgrade (e.g., opus → sonnet) when headroom is low.
 - Intercepting harness HTTP traffic for real-time rate-limit headers
 - Gemini token capture (blocked on auth investigation)
 - Cross-machine usage aggregation (see FEAT-013)
-- **Prompt design and model selection strategy** — DDx captures token/cost data; HELIX decides which model to use for which task and how to structure prompts
+- **Prompt design and model selection strategy** — DDx captures token/cost data; workflow tools and plugins decide which model to use for which task and how to structure prompts
 - **Budget policy and spend governance** — DDx provides usage data and throttling primitives; organizational budget policy and approval workflows are out of scope

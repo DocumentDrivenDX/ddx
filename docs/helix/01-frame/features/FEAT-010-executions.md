@@ -26,7 +26,7 @@ invoked.
 
 This gives DDx a reusable runtime substrate for metrics, acceptance checks,
 test-case evaluation, and other evidence-producing operations without teaching
-DDx about HELIX phases or workflow-specific actions.
+DDx about workflow phases or tool-specific actions.
 
 ## Problem Statement
 
@@ -193,7 +193,7 @@ The HTTP/MCP surface is read-only for v1. Execution invocation remains CLI-only.
 - Given I inspect one run, then I can see its status, logs, structured result, and provenance
 
 ### US-092: Workflow Tool Queries Reusable Execution Evidence
-**As** HELIX, dun, or another tool
+**As** a workflow tool or check runner
 **I want** to query execution history by artifact ID
 **So that** I can build higher-level decisions without inventing my own log format
 
@@ -240,9 +240,9 @@ The HTTP/MCP surface is read-only for v1. Execution invocation remains CLI-only.
 
 ## Out of Scope
 
-- Workflow-specific action semantics such as HELIX phase routing or issue closing rules
-- **Autonomy semantics and escalation policy** — DDx does not define what autonomy levels mean or when to escalate; those are HELIX methodology-layer decisions
-- **When to invoke execution and what to do with results** — DDx provides the execution substrate; HELIX decides when to run executions and how to act on outcomes
+- Workflow-specific action semantics such as phase routing or tool-specific issue closing rules — delegated to workflow plugins
+- **Autonomy semantics and escalation policy** — DDx does not define what autonomy levels mean or when to escalate; those are delegated to workflow plugins
+- **When to invoke execution and what to do with results** — DDx provides the execution substrate; workflow tools decide when to run executions and how to act on outcomes
 - Automatic generation of execution definitions from artifact prose
 - Server-side execution invocation over HTTP/MCP
 - Centralized hosted execution history storage

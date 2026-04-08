@@ -123,7 +123,7 @@ than "is it stale?" — it's "what happened?"
 
 ### S6: Workflow Checkpoints Before and After Phases
 
-HELIX (or any workflow) wants to tag a known-good state before entering a
+A workflow tool wants to tag a known-good state before entering a
 risky phase (e.g., before `helix build` modifies code). DDx can provide:
 
 - `ddx checkpoint "pre-build"` — creates a lightweight git tag
@@ -270,7 +270,7 @@ metaprompt injection) or generated as a standalone AGENTS.md.
   and the working tree is not left in a dirty state
 
 ### US-123: Workflow Creates Checkpoints
-**As a** workflow tool (HELIX)
+**As a** workflow tool
 **I want** to tag a known-good state before risky operations
 **So that** I can restore if something goes wrong
 
@@ -369,5 +369,5 @@ managed flow.
 - Merge conflict resolution (report conflicts, don't resolve them)
 - Git configuration management
 - Submodule or subtree operations (handled by existing `ddx update/contribute`)
-- **When to invoke execute-bead and what to do with the outcome** — DDx provides the git mechanics; HELIX decides when to run execute-bead, whether to retry, and how to act on preserved vs landed iterations
-- **Conflict classification and escalation** — whether a merge conflict is resolvable or physics-level is a HELIX methodology decision, not a DDx git operation
+- **When to invoke execute-bead and what to do with the outcome** — DDx provides the git mechanics; workflow tools decide when to run execute-bead, whether to retry, and how to act on preserved vs landed iterations
+- **Conflict classification and escalation** — whether a merge conflict is resolvable or requires escalation is a workflow plugin policy decision, not a DDx git operation

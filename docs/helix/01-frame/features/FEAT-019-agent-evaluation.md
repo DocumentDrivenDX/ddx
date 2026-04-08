@@ -51,17 +51,17 @@ iterations — it does not define a competing foundational execution model.
 execution. FEAT-019 replay and benchmark capabilities are built on preserved
 `execute-bead` iterations: multiple `execute-bead --no-merge` attempts from
 the same base produce a corpus that FEAT-019 can compare, grade, and report
-on. "Try N ideas on this bead and pick the best" is a workflow loop (HELIX)
+on. "Try N ideas on this bead and pick the best" is a workflow plugin loop
 that calls `execute-bead --no-merge` repeatedly and then uses FEAT-019
 evaluation primitives — it is not a DDx execution mode.
 
-### Relationship to HELIX
+### Relationship to workflow tools
 
-DDx owns the comparison, grading, and replay primitives. HELIX owns the
-policies that use them: when to experiment, which variables to sweep,
+DDx owns the comparison, grading, and replay primitives. Workflow plugins own
+the policies that use them: when to experiment, which variables to sweep,
 quality gates using experiment results, automatic model selection, and
-exploration loops. "Try 10 ideas to improve metric X" is a HELIX workflow
-loop that calls DDx comparison primitives — it is not a DDx execution mode.
+exploration loops. "Try 10 ideas to improve metric X" is a workflow plugin loop
+that calls DDx comparison primitives — it is not a DDx execution mode.
 
 ## Problem Statement
 
@@ -147,7 +147,7 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 18. `ddx agent compare --show <id>` displays the full comparison record
     including per-arm outputs, diffs, and grades.
 19. `--format json` for machine-readable output (consumed by dun checks,
-    HELIX evaluation gates, CI pipelines).
+    workflow evaluation gates, CI pipelines).
 
 **Benchmark suites**
 19a. `ddx agent benchmark --suite <path>` loads a JSON suite definition
@@ -212,9 +212,9 @@ DDx does **not** provide:
 - Model selection policies
 - Grading rubric content (beyond a sensible default)
 
-Workflow tools compose these primitives. HELIX might define: "Before
-promoting a bead, run the implementation prompt through forge+claude,
-require grade ≥8/10 on both arms." Dun might define a check:
+Workflow tools compose these primitives. For example, a workflow plugin might
+define: "Before promoting a bead, run the implementation prompt through
+forge+claude, require grade ≥8/10 on both arms." A check runner might define:
 "regression-test this prompt against the recorded baseline."
 
 ### Sandboxing strategy
@@ -396,16 +396,15 @@ working tree
 
 - **Exec projection** — comparison is a peer to FEAT-010 exec, not a
   child. Do not model comparisons as exec runs.
-- **Exploration loops** — "try 10 ideas to improve metric X" is a HELIX
-  workflow loop that calls DDx comparison primitives, not a DDx execution
-  mode.
-- **Model selection policies** — HELIX decides which model for which task
-  based on comparison results. DDx provides the data.
+- **Exploration loops** — "try 10 ideas to improve metric X" is a workflow
+  plugin loop that calls DDx comparison primitives, not a DDx execution mode.
+- **Model selection policies** — workflow tools decide which model for which
+  task based on comparison results. DDx provides the data.
 - **Prompt optimization** — automatic prompt rewriting is out of scope.
-  DDx provides comparison and grading; HELIX provides the iteration loop.
+  DDx provides comparison and grading; plugins provide the iteration loop.
 - **Structured git trailers** — bead + session log already have the data.
   Don't duplicate into git commit metadata.
-- **Autonomy semantics and exploration policy** — DDx does not define what autonomy levels mean or when to run experiments; HELIX decides when and how many iterations to attempt
-- **Escalation and supervisory rules** — whether to accept a result, retry, or escalate is HELIX methodology behavior; DDx provides the comparison and grading data
+- **Autonomy semantics and exploration policy** — DDx does not define what autonomy levels mean or when to run experiments; those are delegated to workflow plugins
+- **Escalation and supervisory rules** — whether to accept a result, retry, or escalate is workflow plugin policy; DDx provides the comparison and grading data
 - Container or VM-level sandboxing
 - Cross-repo or cross-project comparison
