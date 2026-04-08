@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
@@ -16,7 +17,21 @@ const (
 	installScriptURL = "https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh"
 )
 
+var (
+	fetchLatestReleaseForUpgrade = update.FetchLatestRelease
+	executeUpgradeScript         = executeUpgrade
+	refreshInstalledPackages     = performUpdate
+)
+
 func (f *CommandFactory) runUpgrade(cmd *cobra.Command, args []string) error {
+	return f.runUpgradeWithOptions(cmd, args, true)
+}
+
+func (f *CommandFactory) runBinaryUpgrade(cmd *cobra.Command, args []string) error {
+	return f.runUpgradeWithOptions(cmd, args, false)
+}
+
+func (f *CommandFactory) runUpgradeWithOptions(cmd *cobra.Command, args []string, syncInstalled bool) error {
 	checkOnly, _ := cmd.Flags().GetBool("check")
 	force, _ := cmd.Flags().GetBool("force")
 
@@ -36,7 +51,7 @@ func (f *CommandFactory) runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	// Fetch latest release from GitHub
-	latestRelease, err := update.FetchLatestRelease()
+	latestRelease, err := fetchLatestReleaseForUpgrade()
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
@@ -54,38 +69,57 @@ func (f *CommandFactory) runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to compare versions: %w", err)
 	}
 
-	if !needsUpgrade && !force {
-		_, _ = green.Fprintln(out, "✅ You are already running the latest version of DDx!")
-		return nil
-	}
-
 	if checkOnly {
-		if needsUpgrade {
+		if needsUpgrade || force {
 			_, _ = yellow.Fprintln(out, "⬆️  A new version of DDx is available!")
 			_, _ = fmt.Fprintln(out)
 			_, _ = fmt.Fprintln(out, "To upgrade, run:")
 			_, _ = green.Fprintln(out, "  ddx upgrade")
+		} else {
+			_, _ = green.Fprintln(out, "✅ You are already running the latest version of DDx!")
 		}
 		return nil
 	}
 
-	// Perform upgrade
-	if force {
-		_, _ = yellow.Fprintf(out, "⚠️  Force upgrading to %s...\n", latestVersion)
+	if needsUpgrade || force {
+		if force {
+			_, _ = yellow.Fprintf(out, "⚠️  Force upgrading to %s...\n", latestVersion)
+		} else {
+			_, _ = cyan.Fprintf(out, "⬆️  Upgrading DDx from %s to %s...\n", currentVersion, latestVersion)
+		}
+		_, _ = fmt.Fprintln(out)
+
+		// Download and execute install script
+		if err := executeUpgradeScript(out); err != nil {
+			return fmt.Errorf("upgrade failed: %w", err)
+		}
+
+		_, _ = fmt.Fprintln(out)
+		_, _ = green.Fprintln(out, "✅ DDx has been upgraded successfully!")
+		_, _ = fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out, "Run 'ddx version' to verify the new version.")
 	} else {
-		_, _ = cyan.Fprintf(out, "⬆️  Upgrading DDx from %s to %s...\n", currentVersion, latestVersion)
-	}
-	_, _ = fmt.Fprintln(out)
-
-	// Download and execute install script
-	if err := executeUpgrade(out); err != nil {
-		return fmt.Errorf("upgrade failed: %w", err)
+		_, _ = green.Fprintln(out, "✅ You are already running the latest version of DDx!")
 	}
 
-	_, _ = fmt.Fprintln(out)
-	_, _ = green.Fprintln(out, "✅ DDx has been upgraded successfully!")
-	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "Run 'ddx version' to verify the new version.")
+	f.Version = strings.TrimPrefix(latestVersion, "v")
+
+	if syncInstalled {
+		result, err := refreshInstalledPackages(
+			f.WorkingDir,
+			&UpdateOptions{
+				Force:             force,
+				BundledDDXVersion: f.Version,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("refreshing installed packages: %w", err)
+		}
+		if result != nil && result.Message != "" && result.Message != "No packages installed." {
+			_, _ = fmt.Fprintln(out)
+			_, _ = fmt.Fprintln(out, result.Message)
+		}
+	}
 
 	return nil
 }

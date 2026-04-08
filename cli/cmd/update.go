@@ -15,18 +15,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	fetchLatestPackageRelease = update.FetchLatestReleaseForRepo
+	installRegistryPackage    = registry.InstallPackage
+)
+
 // UpdateOptions represents update command configuration
 type UpdateOptions struct {
-	Check       bool
-	Force       bool
-	Reset       bool
-	Sync        bool
-	Strategy    string
-	Backup      bool
-	Interactive bool
-	Abort       bool
-	DryRun      bool
-	Resource    string // selective update resource
+	Check             bool
+	Force             bool
+	Reset             bool
+	Sync              bool
+	Strategy          string
+	Backup            bool
+	Interactive       bool
+	Abort             bool
+	DryRun            bool
+	Resource          string // selective update resource
+	BundledDDXVersion string
 }
 
 // ConflictInfo represents information about a detected conflict
@@ -56,14 +62,16 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Upgrade the DDx binary synchronously (always check upstream).
-	if err := f.runUpgrade(cmd, []string{}); err != nil {
+	// Upgrade the DDx binary synchronously (always check upstream) without
+	// refreshing installed packages here; performUpdate below owns that step.
+	if err := f.runBinaryUpgrade(cmd, []string{}); err != nil {
 		// Non-fatal: report but continue to plugin updates.
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: binary upgrade check failed: %v\n", err)
 	}
+	opts.BundledDDXVersion = strings.TrimPrefix(f.Version, "v")
 
 	// Call pure business logic
-	result, err := performUpdate(f.WorkingDir, opts)
+	result, err := refreshInstalledPackages(f.WorkingDir, opts)
 	if err != nil {
 		return err
 	}
@@ -98,8 +106,11 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 
 		// Fetch actual latest version from GitHub.
 		latestVersion := pkg.Version
-		if release, err := update.FetchLatestReleaseForRepo(pkg.Source); err == nil {
+		if release, err := fetchLatestPackageRelease(pkg.Source); err == nil {
 			latestVersion = strings.TrimPrefix(release.TagName, "v")
+		}
+		if entry.Name == "ddx" {
+			latestVersion = preferBundledDDXVersion(latestVersion, opts.BundledDDXVersion)
 		}
 
 		if !opts.Force && entry.Version == latestVersion {
@@ -109,7 +120,7 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		// Install the latest version.
 		installPkg := *pkg
 		installPkg.Version = latestVersion
-		newEntry, err := registry.InstallPackage(&installPkg)
+		newEntry, err := installRegistryPackage(&installPkg)
 		if err != nil {
 			return nil, fmt.Errorf("updating %s: %w", entry.Name, err)
 		}
@@ -130,6 +141,24 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		Message:      "Updated: " + strings.Join(updated, ", "),
 		UpdatedFiles: updated,
 	}, nil
+}
+
+func preferBundledDDXVersion(latestVersion, bundledVersion string) string {
+	bundledVersion = strings.TrimPrefix(strings.TrimSpace(bundledVersion), "v")
+	if bundledVersion == "" || bundledVersion == "dev" || strings.HasSuffix(bundledVersion, "-dev") {
+		return latestVersion
+	}
+	if latestVersion == "" {
+		return bundledVersion
+	}
+	needsUpgrade, err := update.NeedsUpgrade(latestVersion, bundledVersion)
+	if err != nil {
+		return bundledVersion
+	}
+	if needsUpgrade {
+		return bundledVersion
+	}
+	return latestVersion
 }
 
 // Helper functions for working directory-based operations
