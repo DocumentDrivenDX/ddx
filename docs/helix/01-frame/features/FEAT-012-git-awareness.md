@@ -215,6 +215,35 @@ metaprompt injection) or generated as a standalone AGENTS.md.
 20. `git.commit_prefix` for customizing commit message format
 21. `git.checkpoint_prefix` for tag naming (default: `ddx/`)
 
+**Execute-Bead Git Operations**
+
+The general DDx git safety posture is conservative (see SD-012). One managed
+exception exists: `ddx agent execute-bead` requires a controlled set of git
+operations beyond the read-plus-commit baseline. These are explicitly permitted
+only within the execute-bead workflow:
+
+22. Checkpoint a dirty caller worktree before execution (creates a commit, does
+    not discard changes)
+23. Create an isolated temporary worktree from the resolved base revision
+24. Rebase the execution branch onto the latest target branch tip — only to
+    prepare a fast-forward landing, never for history rewriting
+25. Fast-forward update the target branch when merge conditions are satisfied
+26. Preserve non-landed iterations under hidden refs using the naming scheme:
+    `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` where
+    `<timestamp>` is `YYYYMMDDTHHMMSSZ` (UTC compact ISO-8601, e.g.,
+    `20260408T130000Z`) and `<base-shortsha>` is at least 12 characters
+27. **No-orphan-worktree invariant:** Execution worktrees are always removed
+    after the workflow completes (success, failure, or crash recovery); a crash
+    during cleanup must not leave a persistent orphan worktree; the next
+    execute-bead invocation detects and removes orphaned worktrees matching the
+    execute-bead path pattern before proceeding
+28. Hidden refs are local and not pushed by DDx; preserved iterations can be
+    enumerated with `git for-each-ref 'refs/ddx/iterations/<bead-id>/*'`
+
+All other DDx git operations remain conservative: DDx does not force-push,
+rebase outside execute-bead, delete branches, or amend commits outside this
+managed flow.
+
 ### Non-Functional
 
 - **Safety:** Never force-push, rebase, or delete branches. DDx only creates
@@ -307,14 +336,6 @@ agents and developers
 - Given an agent reads the generated guidance, then it knows to `git add`
   and commit `.ddx/beads.jsonl` after bead operations
 
-## Dependencies
-
-- `internal/git` package (existing — basic git operations)
-- FEAT-004 (beads — bead mutation operations)
-- FEAT-007 (document graph — artifact ID to file path mapping)
-- FEAT-002 (server — write endpoints)
-- FEAT-009 (plugin registry — `ddx init` and `ddx install`)
-
 ### US-126: Execute-bead Git Lifecycle Is Safe and Contained
 **As** a developer running execute-bead
 **I want** the git operations to be controlled and leave my repo in a predictable state
@@ -328,46 +349,13 @@ agents and developers
 - Given execute-bead left an orphan worktree due to a crash, when the next execute-bead invocation starts, then DDx detects and removes orphaned worktrees matching the execute-bead path pattern before proceeding.
 - Given two execute-bead invocations on the same bead run concurrently or in rapid succession from the same base, then each produces a distinct hidden ref because the `YYYYMMDDTHHMMSSZ-<12charsha>` combination is unique per invocation; DDx does not serialize or lock across concurrent invocations.
 
-## Managed Exception: ddx agent execute-bead
+## Dependencies
 
-The general DDx git safety posture is conservative (see SD-012). One managed
-exception exists: `ddx agent execute-bead` requires a controlled set of git
-operations beyond the read-plus-commit baseline. These are explicitly permitted
-only within the execute-bead workflow:
-
-**Allowed within execute-bead:**
-- Checkpoint a dirty caller worktree before execution (creates a commit, does
-  not discard changes)
-- Create an isolated temporary worktree from the resolved base revision
-- Rebase the execution branch onto the latest target branch tip — only to
-  prepare a fast-forward landing, never for history rewriting
-- Fast-forward update the target branch when merge conditions are satisfied
-- Preserve non-landed iterations under hidden refs (see hidden-ref scheme below)
-
-**No-orphan-worktree invariant:** Execution worktrees are always removed after
-the workflow completes, whether the attempt lands or is only preserved. A crash
-during cleanup must not leave a persistent orphan worktree.
-
-**Hidden-ref naming scheme:**
-
-Non-landed iterations are preserved under:
-```
-refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>
-```
-
-Where:
-- `<timestamp>` is in `YYYYMMDDTHHMMSSZ` format (UTC, compact ISO-8601), e.g., `20260408T130000Z`
-- `<base-shortsha>` is at least a 12-character prefix of the base commit SHA
-
-Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646def01`
-
-These refs are local and not pushed by DDx. Tools and humans may read them for
-replay and introspection. Preserved iterations can be enumerated with:
-`git for-each-ref 'refs/ddx/iterations/<bead-id>/*'`
-
-**All other DDx git operations remain conservative.** DDx does not force-push,
-rebase outside execute-bead, delete branches, or amend commits outside this
-managed flow.
+- `internal/git` package (existing — basic git operations)
+- FEAT-004 (beads — bead mutation operations)
+- FEAT-007 (document graph — artifact ID to file path mapping)
+- FEAT-002 (server — write endpoints)
+- FEAT-009 (plugin registry — `ddx init` and `ddx install`)
 
 ## Out of Scope
 
