@@ -72,7 +72,7 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 			return nil
 		}
 		fc := c.Agent.Forge
-		return &agent.ForgeYAMLConfig{
+		yaml := &agent.ForgeYAMLConfig{
 			Provider:      fc.Provider,
 			BaseURL:       fc.BaseURL,
 			APIKey:        fc.APIKey,
@@ -80,6 +80,19 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 			Preset:        fc.Preset,
 			MaxIterations: fc.MaxIterations,
 		}
+		if fc.Models != nil {
+			yaml.Models = make(map[string]*agent.LLMPresetYAML, len(fc.Models))
+			for name, p := range fc.Models {
+				yaml.Models[name] = &agent.LLMPresetYAML{
+					Model:     p.Model,
+					Provider:  p.Provider,
+					Endpoints: p.Endpoints,
+					APIKey:    p.APIKey,
+					Strategy:  p.Strategy,
+				}
+			}
+		}
+		return yaml
 	}
 
 	return r

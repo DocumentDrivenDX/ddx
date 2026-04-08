@@ -34,6 +34,16 @@ type ForgeYAMLConfig struct {
 	Model         string
 	Preset        string
 	MaxIterations int
+	Models        map[string]*LLMPresetYAML // named LLM presets
+}
+
+// LLMPresetYAML mirrors config.LLMPresetConfig without importing the config package.
+type LLMPresetYAML struct {
+	Model     string
+	Provider  string
+	Endpoints []string
+	APIKey    string
+	Strategy  string
 }
 
 // Runner executes agent invocations.

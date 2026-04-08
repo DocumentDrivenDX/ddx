@@ -35,12 +35,22 @@ type AgentConfig struct {
 
 // ForgeConfig configures the embedded forge agent harness.
 type ForgeConfig struct {
-	Provider      string `yaml:"provider,omitempty" json:"provider,omitempty"`       // "openai-compat" or "anthropic"
-	BaseURL       string `yaml:"base_url,omitempty" json:"base_url,omitempty"`       // provider endpoint
-	APIKey        string `yaml:"api_key,omitempty" json:"api_key,omitempty"`         // API key
-	Model         string `yaml:"model,omitempty" json:"model,omitempty"`             // default model
-	Preset        string `yaml:"preset,omitempty" json:"preset,omitempty"`           // prompt preset (forge/codex/claude/cursor/minimal)
-	MaxIterations int    `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // max tool-call rounds
+	Provider      string                      `yaml:"provider,omitempty" json:"provider,omitempty"`       // "openai-compat" or "anthropic"
+	BaseURL       string                      `yaml:"base_url,omitempty" json:"base_url,omitempty"`       // provider endpoint
+	APIKey        string                      `yaml:"api_key,omitempty" json:"api_key,omitempty"`         // API key
+	Model         string                      `yaml:"model,omitempty" json:"model,omitempty"`             // default model
+	Preset        string                      `yaml:"preset,omitempty" json:"preset,omitempty"`           // prompt preset (forge/codex/claude/cursor/minimal)
+	MaxIterations int                         `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // max tool-call rounds
+	Models        map[string]*LLMPresetConfig `yaml:"models,omitempty" json:"models,omitempty"`           // named LLM presets
+}
+
+// LLMPresetConfig defines a named LLM configuration with optional multi-endpoint support.
+type LLMPresetConfig struct {
+	Model     string   `yaml:"model" json:"model"`                             // model name passed to the provider
+	Provider  string   `yaml:"provider,omitempty" json:"provider,omitempty"`   // override forge.provider (default: openai-compat)
+	Endpoints []string `yaml:"endpoints,omitempty" json:"endpoints,omitempty"` // one or more base URLs; single entry = no balancing
+	APIKey    string   `yaml:"api_key,omitempty" json:"api_key,omitempty"`     // override forge.api_key
+	Strategy  string   `yaml:"strategy,omitempty" json:"strategy,omitempty"`   // endpoint selection: round-robin (default) | first-available
 }
 
 // VirtualConfig configures the virtual agent harness.

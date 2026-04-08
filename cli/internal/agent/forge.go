@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/DocumentDrivenDX/forge"
@@ -25,6 +26,9 @@ type ForgeRunConfig struct {
 	Preset        string
 	MaxIterations int
 }
+
+// roundRobinCounter is shared across all forge runs for endpoint rotation.
+var roundRobinCounter uint64
 
 // RunForge executes a prompt using the embedded forge library.
 // This runs in-process — no subprocess, no binary lookup.
@@ -157,6 +161,7 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 
 // resolveForgeConfig builds a ForgeRunConfig from .ddx/config.yaml, env vars, and opts.
 // Priority: opts > env vars > config > built-in defaults.
+// If model resolves to a named preset in forge.models, the preset's endpoint and model are applied.
 func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
 	cfg := ForgeRunConfig{
 		Provider:      "openai-compat",
@@ -164,6 +169,8 @@ func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
 		Preset:        "forge",
 		MaxIterations: 20,
 	}
+
+	var yamlModels map[string]*LLMPresetYAML
 
 	// Layer 1: .ddx/config.yaml (if ForgeConfigLoader is set)
 	if r.ForgeConfigLoader != nil {
@@ -186,6 +193,7 @@ func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
 			if fc.MaxIterations > 0 {
 				cfg.MaxIterations = fc.MaxIterations
 			}
+			yamlModels = fc.Models
 		}
 	}
 
@@ -211,7 +219,35 @@ func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
 		cfg.Model = model
 	}
 
+	// Layer 4: if cfg.Model names a preset, resolve it to endpoint + model.
+	if preset, ok := yamlModels[cfg.Model]; ok {
+		cfg.Model = preset.Model
+		if preset.Provider != "" {
+			cfg.Provider = preset.Provider
+		}
+		if preset.APIKey != "" {
+			cfg.APIKey = preset.APIKey
+		}
+		if len(preset.Endpoints) > 0 {
+			cfg.BaseURL = selectEndpoint(preset.Endpoints, preset.Strategy)
+		}
+	}
+
 	return cfg
+}
+
+// selectEndpoint picks one endpoint from the list using the specified strategy.
+// Strategies: "round-robin" (default), "first-available" (first entry, no rotation).
+func selectEndpoint(endpoints []string, strategy string) string {
+	if len(endpoints) == 1 {
+		return endpoints[0]
+	}
+	if strategy == "first-available" {
+		return endpoints[0]
+	}
+	// Default: round-robin using a global atomic counter.
+	idx := atomic.AddUint64(&roundRobinCounter, 1) - 1
+	return endpoints[idx%uint64(len(endpoints))]
 }
 
 func envOrDefault(key, def string) string {

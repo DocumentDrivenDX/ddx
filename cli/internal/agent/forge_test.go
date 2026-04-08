@@ -300,6 +300,61 @@ func TestForgeRunDispatchesInProcess(t *testing.T) {
 	assert.Empty(t, mock.lastBinary, "forge should run in-process, not via executor")
 }
 
+// F-10: LLM preset resolution — named preset expands to model + endpoint.
+func TestForgeResolveConfigLLMPreset(t *testing.T) {
+	endpoints := []string{
+		"http://vidar:1234/v1",
+		"http://grendel:1234/v1",
+		"http://bragi:1234/v1",
+	}
+	presets := map[string]*LLMPresetYAML{
+		"qwen-local": {
+			Model:     "qwen2.5-coder-32b-instruct",
+			Provider:  "openai-compat",
+			Endpoints: endpoints,
+			Strategy:  "round-robin",
+		},
+	}
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	r.ForgeConfigLoader = func() *ForgeYAMLConfig {
+		return &ForgeYAMLConfig{Models: presets}
+	}
+
+	t.Run("preset name resolves to model and endpoint", func(t *testing.T) {
+		cfg := r.resolveForgeConfig("qwen-local")
+		assert.Equal(t, "qwen2.5-coder-32b-instruct", cfg.Model)
+		assert.Contains(t, endpoints, cfg.BaseURL)
+		assert.Equal(t, "openai-compat", cfg.Provider)
+	})
+
+	t.Run("round-robin rotates endpoints across calls", func(t *testing.T) {
+		// Reset counter for deterministic test
+		roundRobinCounter = 0
+		seen := map[string]bool{}
+		for i := 0; i < 9; i++ {
+			cfg := r.resolveForgeConfig("qwen-local")
+			seen[cfg.BaseURL] = true
+		}
+		assert.Len(t, seen, 3, "round-robin should rotate through all 3 endpoints")
+	})
+
+	t.Run("first-available always returns first endpoint", func(t *testing.T) {
+		presets["qwen-local"].Strategy = "first-available"
+		for i := 0; i < 5; i++ {
+			cfg := r.resolveForgeConfig("qwen-local")
+			assert.Equal(t, endpoints[0], cfg.BaseURL)
+		}
+		presets["qwen-local"].Strategy = "round-robin"
+	})
+
+	t.Run("unknown model name treated as raw model", func(t *testing.T) {
+		cfg := r.resolveForgeConfig("some-raw-model")
+		assert.Equal(t, "some-raw-model", cfg.Model)
+	})
+}
+
 // --- Helpers ---
 
 type notFoundError struct {

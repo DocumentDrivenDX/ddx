@@ -7,3 +7,17 @@ library:
 update_check:
     enabled: true
     frequency: 24h
+agent:
+    forge:
+        provider: openai-compat
+        preset: forge
+        max_iterations: 30
+        models:
+            qwen-local:
+                model: qwen2.5-coder-32b-instruct
+                provider: openai-compat
+                strategy: round-robin
+                endpoints:
+                    - http://vidar:1234/v1
+                    - http://grendel:1234/v1
+                    - http://bragi:1234/v1
