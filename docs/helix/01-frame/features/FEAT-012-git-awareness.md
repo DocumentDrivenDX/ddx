@@ -325,6 +325,8 @@ agents and developers
 - Given `ddx agent execute-bead` runs, when it begins, then DDx creates a managed isolated worktree; when execution completes (success, failure, or crash recovery), then no worktree created by that execute-bead invocation remains in the filesystem.
 - Given an iteration is merge-eligible, when DDx prepares a fast-forward landing, then the only rebase performed is a rebase of the execution branch onto the latest target branch tip — `git log --merges` shows no merge commit; history remains linear.
 - Given an iteration is not merged (required execution failed, ratchet regression, or `--no-merge` set), when DDx preserves the iteration, then a ref matching `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` is created and the target branch is not updated.
+- Given execute-bead left an orphan worktree due to a crash, when the next execute-bead invocation starts, then DDx detects and removes orphaned worktrees matching the execute-bead path pattern before proceeding.
+- Given two execute-bead invocations on the same bead run concurrently or in rapid succession from the same base, then each produces a distinct hidden ref because the `YYYYMMDDTHHMMSSZ-<12charsha>` combination is unique per invocation; DDx does not serialize or lock across concurrent invocations.
 
 ## Managed Exception: ddx agent execute-bead
 

@@ -224,10 +224,16 @@ provenance system.
    and reasoning controls.
 6. Capture full session evidence: transcript, tool calls, and runtime metadata.
 7. Resolve applicable execution documents from the document graph inside the
-   execution worktree (see FEAT-007).
+   execution worktree (see FEAT-007). **Execution documents are resolved from
+   the base revision before the agent runs.** If the agent modifies execution
+   document definitions or ratchet thresholds during its run, the pre-run
+   versions govern the current iteration's evaluation.
 8. Run all required execution documents plus relevant metric/observation
    executions.
 9. Evaluate required execution results and metric ratchets (see TD-005).
+   - For `kind: command` executions, success means exit code 0.
+   - For `kind: agent` executions, success means exit code 0 (structured result schema validation is optional and governed by the definition).
+   - When a `required: true` execution also has a ratchet threshold, landing is blocked if EITHER condition fails (OR semantics) — non-success status OR ratchet regression blocks the merge.
 10. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
     semantics.
 11. Otherwise, preserve the iteration result under a hidden ref and do not merge
