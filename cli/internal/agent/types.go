@@ -1,0 +1,188 @@
+package agent
+
+import "time"
+
+// Harness defines a known agent harness.
+type Harness struct {
+	Name            string              // e.g. "codex", "claude", "gemini"
+	Binary          string              // binary name to exec
+	Args            []string            // deprecated: use BaseArgs; kept for compatibility
+	BaseArgs        []string            // args always included regardless of permission level
+	PermissionArgs  map[string][]string // extra args keyed by permission level: "safe", "supervised", "unrestricted"
+	PromptMode      string              // "arg" (final arg), "stdin" (pipe)
+	DefaultModel    string              // built-in model choice when no config override exists
+	Models          []string            // known valid models for this harness
+	ReasoningLevels []string            // supported reasoning levels in preference order
+	ModelFlag       string              // flag for model override (e.g. "-m", "--model"), empty if unsupported
+	WorkDirFlag     string              // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
+	EffortFlag      string              // flag for effort/reasoning control, empty if unsupported
+	EffortFormat    string              // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
+	TokenPattern    string              // regex to extract token count from output, must have one capture group
+}
+
+// Config holds agent service configuration.
+type Config struct {
+	Harness         string              `yaml:"harness"`          // default harness name
+	Model           string              `yaml:"model"`            // global model override
+	Models          map[string]string   `yaml:"models"`           // per-harness model overrides
+	ReasoningLevels map[string][]string `yaml:"reasoning_levels"` // per-harness reasoning-level options
+	TimeoutMS       int                 `yaml:"timeout_ms"`       // default timeout in ms
+	SessionLogDir   string              `yaml:"session_log_dir"`  // log directory
+	Permissions     string              `yaml:"permissions"`      // permission level: safe, supervised, unrestricted
+}
+
+// RunOptions holds options for a single agent invocation.
+type RunOptions struct {
+	Harness      string
+	Prompt       string // prompt text (or path to file)
+	PromptFile   string // explicit file path
+	PromptSource string
+	Correlation  map[string]string
+	Model        string
+	Effort       string
+	Timeout      time.Duration
+	WorkDir      string
+	Permissions  string // permission level override: safe, supervised, unrestricted
+}
+
+// QuorumOptions extends RunOptions for multi-agent consensus.
+type QuorumOptions struct {
+	RunOptions
+	Harnesses []string // multiple harnesses to invoke
+	Strategy  string   // any, majority, unanimous, or numeric
+	Threshold int      // numeric threshold (when Strategy is "")
+}
+
+// Result holds the output of an agent invocation.
+type Result struct {
+	Harness         string          `json:"harness"`
+	Model           string          `json:"model,omitempty"`
+	ExitCode        int             `json:"exit_code"`
+	Output          string          `json:"output"`
+	CondensedOutput string          `json:"condensed_output,omitempty"`
+	Stderr          string          `json:"stderr,omitempty"`
+	Tokens          int             `json:"tokens,omitempty"`
+	InputTokens     int             `json:"input_tokens,omitempty"`
+	OutputTokens    int             `json:"output_tokens,omitempty"`
+	CostUSD         float64         `json:"cost_usd,omitempty"`
+	DurationMS      int             `json:"duration_ms"`
+	Error           string          `json:"error,omitempty"`
+	ToolCalls       []ToolCallEntry `json:"tool_calls,omitempty"`       // populated by forge, nil for subprocess
+	ForgeSessionID  string          `json:"forge_session_id,omitempty"` // forge session ID for event log cross-reference
+}
+
+// SessionEntry is written to the session log.
+type SessionEntry struct {
+	ID           string            `json:"id"`
+	Timestamp    time.Time         `json:"timestamp"`
+	Harness      string            `json:"harness"`
+	Model        string            `json:"model,omitempty"`
+	PromptLen    int               `json:"prompt_len"`
+	Prompt       string            `json:"prompt,omitempty"`
+	PromptSource string            `json:"prompt_source,omitempty"`
+	Response     string            `json:"response,omitempty"`
+	Correlation  map[string]string `json:"correlation,omitempty"`
+	Stderr       string            `json:"stderr,omitempty"`
+	Tokens       int               `json:"tokens,omitempty"`
+	InputTokens  int               `json:"input_tokens,omitempty"`
+	OutputTokens int               `json:"output_tokens,omitempty"`
+	CostUSD      float64           `json:"cost_usd,omitempty"`
+	Duration     int               `json:"duration_ms"`
+	ExitCode     int               `json:"exit_code"`
+	Error        string            `json:"error,omitempty"`
+	TotalTokens  int               `json:"total_tokens,omitempty"` // input + output; populated on every run
+	BaseRev      string            `json:"base_rev,omitempty"`     // git SHA the execution started from (execute-bead only)
+	ResultRev    string            `json:"result_rev,omitempty"`   // git SHA of landed/preserved iteration (execute-bead only)
+}
+
+// ProviderStatus tracks provider connectivity and credit status.
+type ProviderStatus struct {
+	Reachable bool   `json:"reachable"`
+	CreditsOK bool   `json:"credits_ok,omitempty"` // false if out of credits/quota
+	Error     string `json:"error,omitempty"`
+}
+
+// HarnessStatus reports availability of a harness.
+type HarnessStatus struct {
+	Name      string          `json:"name"`
+	Available bool            `json:"available"`
+	Binary    string          `json:"binary"`
+	Path      string          `json:"path,omitempty"` // resolved binary path
+	Error     string          `json:"error,omitempty"`
+	Provider  *ProviderStatus `json:"provider,omitempty"` // provider connectivity status
+}
+
+// HarnessCapabilities describes the effective capabilities for a harness.
+type HarnessCapabilities struct {
+	Harness         string   `json:"harness"`
+	Available       bool     `json:"available"`
+	Binary          string   `json:"binary"`
+	Path            string   `json:"path,omitempty"`
+	Model           string   `json:"model,omitempty"`
+	Models          []string `json:"models,omitempty"`
+	ReasoningLevels []string `json:"reasoning_levels,omitempty"`
+}
+
+// CompareOptions configures a comparison dispatch.
+type CompareOptions struct {
+	RunOptions
+	Harnesses   []string       // harnesses to compare (may include duplicates with different models)
+	ArmModels   map[int]string // per-arm model overrides keyed by arm index
+	ArmLabels   map[int]string // per-arm display labels (e.g. "claude-fast")
+	Sandbox     bool           // run each arm in an isolated worktree
+	KeepSandbox bool           // preserve worktrees after comparison
+	PostRun     string         // command to run in each worktree after the agent completes
+}
+
+// ToolCallEntry records one tool execution during an agent run.
+// Mirrors forge.ToolCallLog without importing the forge package in types.
+type ToolCallEntry struct {
+	Tool     string `json:"tool"`
+	Input    string `json:"input"`
+	Output   string `json:"output,omitempty"`
+	Duration int    `json:"duration_ms,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// ComparisonArm holds the result of one harness arm in a comparison.
+type ComparisonArm struct {
+	Harness      string          `json:"harness"`
+	Model        string          `json:"model,omitempty"`
+	Output       string          `json:"output"`
+	Diff         string          `json:"diff,omitempty"`         // git diff of side effects
+	ToolCalls    []ToolCallEntry `json:"tool_calls,omitempty"`   // forge tool call log (nil for subprocess)
+	PostRunOut   string          `json:"post_run_out,omitempty"` // post-run command output
+	PostRunOK    *bool           `json:"post_run_ok,omitempty"`  // post-run pass/fail
+	Tokens       int             `json:"tokens,omitempty"`
+	InputTokens  int             `json:"input_tokens,omitempty"`
+	OutputTokens int             `json:"output_tokens,omitempty"`
+	CostUSD      float64         `json:"cost_usd,omitempty"`
+	DurationMS   int             `json:"duration_ms"`
+	ExitCode     int             `json:"exit_code"`
+	Error        string          `json:"error,omitempty"`
+}
+
+// ComparisonGrade holds the evaluation of one arm by a grading harness.
+type ComparisonGrade struct {
+	Arm       string `json:"arm"`
+	Score     int    `json:"score"`
+	MaxScore  int    `json:"max_score"`
+	Pass      bool   `json:"pass"`
+	Rationale string `json:"rationale"`
+}
+
+// ComparisonRecord is the complete record of a comparison run.
+type ComparisonRecord struct {
+	ID        string            `json:"id"`
+	Timestamp time.Time         `json:"timestamp"`
+	Prompt    string            `json:"prompt"`
+	Arms      []ComparisonArm   `json:"arms"`
+	Grades    []ComparisonGrade `json:"grades,omitempty"`
+}
+
+// Default configuration values.
+const (
+	DefaultHarness   = "codex"
+	DefaultTimeoutMS = 600000 // 10 minutes
+	DefaultLogDir    = ".ddx/agent-logs"
+)

@@ -1,0 +1,42 @@
+{
+  "name": "Implementation Capability Benchmark",
+  "description": "Tests model ability to read code, understand architecture, and produce correct multi-file implementations. Designed to find the boundary between local and cloud model capabilities.",
+  "version": "1.0.0",
+  "arms": [
+    {"label": "forge-smart", "harness": "forge", "tier": "smart"},
+    {"label": "forge-fast",  "harness": "forge", "tier": "fast"},
+    {"label": "codex-smart", "harness": "codex", "tier": "smart"},
+    {"label": "codex-fast",  "harness": "codex", "tier": "fast"},
+    {"label": "claude-smart","harness": "claude", "tier": "smart"},
+    {"label": "claude-fast", "harness": "claude", "tier": "fast"}
+  ],
+  "prompts": [
+    {
+      "id": "impl-format-table",
+      "name": "Implement FormatComparisonTable",
+      "tags": ["coding", "single-file", "medium"],
+      "prompt": "Read cli/internal/agent/types.go to understand the ComparisonRecord, ComparisonArm, and ComparisonGrade types. Then create a new file cli/internal/agent/format.go (package agent) containing:\n\n1. func FormatComparisonTable(record *ComparisonRecord) string — formats the comparison as an ASCII table with columns: Arm, Status (OK/FAIL), Model, Tokens (in/out), Cost, Duration. Include a totals row.\n\n2. func FormatGradeTable(record *ComparisonRecord) string — formats grades as a table with columns: Arm, Score, Pass, Rationale (truncated to 60 chars).\n\nBoth functions should use tabwriter for alignment. Include proper imports. Do not create test files."
+    },
+    {
+      "id": "impl-benchmark-cmd",
+      "name": "Wire Benchmark CLI Command",
+      "tags": ["coding", "multi-file", "complex"],
+      "prompt": "Read cli/internal/agent/benchmark.go to understand BenchmarkSuite, RunBenchmark, and SaveBenchmarkResult. Read cli/cmd/agent_cmd.go to understand the command factory pattern.\n\nAdd a new subcommand 'ddx agent benchmark' that:\n1. Takes --suite <path> flag pointing to a benchmark JSON file\n2. Takes --output <path> flag for saving results (default: stdout as JSON)\n3. Loads the suite via LoadBenchmarkSuite\n4. Calls runner.RunBenchmark(suite)\n5. Prints a summary table to stderr showing per-arm stats\n6. Writes full results to --output or stdout\n\nAdd the command to the agent command group in the existing newAgentCommand function. Follow the existing patterns in agent_cmd.go. Do not create test files."
+    },
+    {
+      "id": "impl-extract-output",
+      "name": "Fix Output Extraction from JSON Envelopes",
+      "tags": ["bugfix", "multi-file", "complex"],
+      "prompt": "There is a bug in the comparison output: codex and claude harnesses return raw JSON envelopes as their output, but we need to extract the actual text content.\n\nRead cli/internal/agent/runner.go (ExtractUsage function for reference patterns), then read cli/internal/agent/compare.go.\n\nAdd a function ExtractOutput(harnessName string, rawOutput string) string to runner.go that:\n- For codex: scans JSONL lines for type=item.completed with item.type=agent_message, returns item.text\n- For claude: parses JSON envelope, returns the 'result' field\n- For forge: returns output as-is (already clean)\n- For unknown harnesses: returns output as-is\n\nThen call ExtractOutput in runCompareArm after the agent run completes, so arm.Output contains clean text.\n\nAlso write cli/internal/agent/extract_test.go with tests for each harness type including: codex JSONL with agent_message, claude JSON envelope, forge passthrough, malformed input returns raw output."
+    },
+    {
+      "id": "analysis-arch-review",
+      "name": "Architecture Review of Agent Package",
+      "tags": ["analysis", "architecture", "long"],
+      "prompt": "Read all .go files in cli/internal/agent/ (types.go, runner.go, registry.go, forge.go, compare.go, grade.go, benchmark.go, models.go, pricing.go, virtual.go, quorum.go, executor.go, condense.go). Then provide:\n\n1. A dependency map: which files import/depend on which other files within the package\n2. Identify any circular or unnecessary coupling\n3. List the public API surface (exported functions and types) and note which ones are only used by tests vs production code\n4. Identify code duplication — are there patterns repeated across forge.go, runner.go, and compare.go that should be factored out?\n5. Suggest at most 3 concrete refactoring improvements, ranked by impact. For each, explain what to change and why.\n\nBe specific — cite file names and line ranges. Do not make changes, just analyze."
+    }
+  ],
+  "sandbox": true,
+  "post_run": "cd cli && go build ./... 2>&1 && go test ./internal/agent/ -count=1 -run '^Test[^I]' 2>&1",
+  "timeout": "10m"
+}
