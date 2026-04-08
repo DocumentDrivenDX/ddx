@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -37,6 +38,24 @@ type CommandFactory struct {
 	updateChecker *update.Checker
 	updateDone    chan struct{}
 	updateMu      sync.Mutex
+}
+
+var isInteractiveOutput = func(w io.Writer) bool {
+	file, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+var updateAvailability = func(checker *update.Checker) (bool, string, error) {
+	return checker.IsUpdateAvailable()
 }
 
 // NewCommandFactory creates a new command factory with default settings
@@ -214,6 +233,10 @@ func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
 		return nil
 	}
 
+	if !isInteractiveOutput(cmd.OutOrStdout()) {
+		return nil
+	}
+
 	if done != nil {
 		select {
 		case <-done:
@@ -245,7 +268,7 @@ func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
 		return nil
 	}
 
-	available, version, err := checker.IsUpdateAvailable()
+	available, version, err := updateAvailability(checker)
 	if err != nil || !available {
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Warning: Could not check for updates: %v\n", err)
@@ -304,6 +327,10 @@ func (f *CommandFactory) checkVersionGate(cmd *cobra.Command) error {
 
 // displayStalenessHints shows soft hints when project skills or plugins are outdated.
 func (f *CommandFactory) displayStalenessHints(cmd *cobra.Command) {
+	if !isInteractiveOutput(cmd.OutOrStdout()) {
+		return
+	}
+
 	// Skip for machine-readable output
 	if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
 		return
