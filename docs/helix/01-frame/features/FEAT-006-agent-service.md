@@ -191,6 +191,63 @@ Inspection UX:
 - API and MCP session-detail surfaces mirror the same session identity and
   attachment-backed detail model.
 
+## Bead Execution Workflow
+
+`ddx agent execute-bead <bead-id> [--from <rev>] [--no-merge]` is the
+canonical agent-driven bead execution workflow. It is an agent workflow mode
+layered on top of the existing harness/session machinery — not a separate
+provenance system.
+
+### Workflow steps
+
+1. Resolve the bead and its governing artifacts from the DDx document graph.
+2. Resolve the git base revision: `--from <rev>` if provided, otherwise `HEAD`.
+3. If the caller's worktree is dirty, create a checkpoint commit first and use
+   that checkpoint as the actual base.
+4. Create an isolated execution worktree from the resolved base.
+5. Run the agent against the bead using the standard `ddx agent` harness, model,
+   and reasoning controls.
+6. Capture full session evidence: transcript, tool calls, and runtime metadata.
+7. Resolve applicable execution documents from the document graph inside the
+   execution worktree (see FEAT-007).
+8. Run all required execution documents plus relevant metric/observation
+   executions.
+9. Evaluate required execution results and metric ratchets (see TD-005).
+10. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
+    semantics.
+11. Otherwise, preserve the iteration result under a hidden ref and do not merge
+    (see SD-012 for the hidden-ref naming scheme).
+12. Always remove the temporary worktree after preserving enough evidence for
+    replay and introspection.
+
+### Always-on runtime metrics
+
+`execute-bead` always captures built-in runtime metrics for each iteration,
+independent of graph-authored execution documents (see FEAT-014):
+
+- harness, model, session ID
+- elapsed duration
+- input tokens, output tokens, total tokens
+- cost (where available)
+- base revision, result revision
+
+### Iteration commit summary
+
+Each execute-bead iteration produces a commit (landed or preserved under a
+hidden ref) with a minimum summary surface that enables post-hoc evaluation
+without opening session attachments:
+
+- bead ID
+- base revision and result revision
+- harness and model
+- required execution outcome summary (pass / fail / skipped)
+- ratchet evaluation summary
+- merge vs preserve outcome
+
+Full conversation transcript, tool call detail, and session evidence are stored
+in DDx runtime storage (session logs and exec-run attachments), not in git
+history.
+
 ## Comparison Dispatch
 
 DDx's existing quorum mechanism runs the same prompt through multiple
@@ -287,6 +344,9 @@ The dun Go harness has patterns worth preserving:
 ddx agent run --harness=codex --prompt task.md      # invoke agent
 ddx agent run --quorum=majority --harnesses=a,b     # multi-agent
 ddx agent run --automation=plan                      # control autonomy
+ddx agent execute-bead <bead-id>                    # canonical bead execution workflow
+ddx agent execute-bead <bead-id> --from <rev>       # use specific git base
+ddx agent execute-bead <bead-id> --no-merge         # preserve iteration without landing
 ddx agent list                                       # available harnesses
 ddx agent capabilities codex                         # inspect harness capabilities
 ddx agent doctor                                     # harness health

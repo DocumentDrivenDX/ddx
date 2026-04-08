@@ -24,12 +24,32 @@ generic substrate owns:
 - read/write compatibility with legacy exec layouts
 - CLI and server inspection behavior for definitions, runs, logs, and results
 
+## Definition Sources
+
+Execution definitions have two authoritative sources:
+
+1. **Graph-authored execution documents** — git-tracked markdown files with
+   `ddx:` frontmatter (see FEAT-007). These are the preferred source when using
+   `ddx agent execute-bead`. DDx discovers them by traversing the document graph
+   from the target bead and its governing artifacts. They participate in ordinary
+   document indexing and staleness tracking.
+
+2. **Runtime-managed definitions** — machine-readable records stored in the
+   `exec-definitions` collection. These are valid for `ddx exec` operations that
+   do not require graph discovery.
+
+DDx may maintain an internal indexed or compiled representation of graph-authored
+execution documents for runtime speed, but the git-tracked document is the source
+of truth. `ddx exec validate/run/history/result/log` resolve and operate on both
+sources; graph-authored definitions take precedence when both exist for the same
+artifact.
+
 ## Storage Model
 
 Executions use named bead-backed collections rather than a bespoke `.ddx/exec/`
 metadata format.
 
-- `exec-definitions` stores machine-readable execution definitions
+- `exec-definitions` stores machine-readable runtime-managed execution definitions
 - `exec-runs` stores immutable execution-run metadata rows
 - `exec-runs.d/` stores attachment-backed payloads for one run
 

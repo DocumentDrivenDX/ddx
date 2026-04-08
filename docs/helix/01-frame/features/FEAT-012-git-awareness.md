@@ -315,6 +315,42 @@ agents and developers
 - FEAT-002 (server — write endpoints)
 - FEAT-009 (plugin registry — `ddx init` and `ddx install`)
 
+## Managed Exception: ddx agent execute-bead
+
+The general DDx git safety posture is conservative (see SD-012). One managed
+exception exists: `ddx agent execute-bead` requires a controlled set of git
+operations beyond the read-plus-commit baseline. These are explicitly permitted
+only within the execute-bead workflow:
+
+**Allowed within execute-bead:**
+- Checkpoint a dirty caller worktree before execution (creates a commit, does
+  not discard changes)
+- Create an isolated temporary worktree from the resolved base revision
+- Rebase the execution branch onto the latest target branch tip — only to
+  prepare a fast-forward landing, never for history rewriting
+- Fast-forward update the target branch when merge conditions are satisfied
+- Preserve non-landed iterations under hidden refs (see hidden-ref scheme below)
+
+**No-orphan-worktree invariant:** Execution worktrees are always removed after
+the workflow completes, whether the attempt lands or is only preserved. A crash
+during cleanup must not leave a persistent orphan worktree.
+
+**Hidden-ref naming scheme:**
+
+Non-landed iterations are preserved under:
+```
+refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>
+```
+
+Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646`
+
+These refs are local and not pushed by DDx. Tools and humans may read them for
+replay and introspection.
+
+**All other DDx git operations remain conservative.** DDx does not force-push,
+rebase outside execute-bead, delete branches, or amend commits outside this
+managed flow.
+
 ## Out of Scope
 
 - Branch management (creating, switching, merging branches)

@@ -133,6 +133,18 @@ API-key users get `--max-budget-usd` passthrough for claude.
 17. When budget is exhausted, `ddx agent run` returns a clear error with
     current spend and configured limit.
 
+**Always-on execute-bead runtime metrics**
+18. `ddx agent execute-bead` must capture built-in runtime metrics for every
+    iteration, independent of any graph-authored execution documents. These are
+    DDx runtime facts, not substitutes for project-authored metric docs.
+    Minimum fields (where available):
+    - `harness`, `model`, `session_id`
+    - `elapsed_ms` (wall-clock duration of the agent run)
+    - `input_tokens`, `output_tokens`, `total_tokens`
+    - `cost_usd` (`-1` when unknown, `0` for local models)
+    - `base_rev` (git revision the execution started from)
+    - `result_rev` (git revision of the landed or preserved iteration commit)
+
 ### Non-Functional
 
 - **Performance:** `ddx agent usage` scans JSONL linearly. For typical logs

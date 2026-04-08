@@ -132,7 +132,8 @@ and dots.
 DDx git operations are additive and read-only against history:
 
 - **Never force-push.** DDx does not invoke `git push` at all.
-- **Never rebase.** DDx does not invoke `git rebase`.
+- **Never rebase.** DDx does not invoke `git rebase` (except the managed
+  execute-bead exception below).
 - **Never delete branches.** DDx does not invoke `git branch -d` or
   `git branch -D`.
 - **Never amend.** All commits are new commits; no `--amend`.
@@ -142,7 +143,40 @@ DDx git operations are additive and read-only against history:
 
 These invariants are enforced by the limited surface of `internal/git`: only
 `git add`, `git commit`, `git log`, `git diff`, `git tag`, and `git checkout`
-(for restore) are invoked.
+(for restore) are invoked outside the execute-bead managed flow.
+
+## Managed Exception: ddx agent execute-bead
+
+`ddx agent execute-bead` is the one controlled exception to the conservative
+safety posture. The following git operations are explicitly permitted within
+this workflow only:
+
+| Operation | Purpose |
+|-----------|---------|
+| Checkpoint commit on dirty worktree | Preserve caller state before execution begins |
+| `git worktree add` | Create isolated execution environment |
+| `git rebase <base>` | Prepare a fast-forward landing only — not for history rewriting |
+| Fast-forward branch update | Land a successful, merge-eligible iteration |
+| `git update-ref refs/ddx/...` | Preserve a non-landed iteration under a hidden ref |
+| `git worktree remove` | Clean up after the workflow (always runs) |
+
+**No-orphan-worktree invariant:** DDx must remove the execution worktree after
+the workflow completes, whether the iteration lands or is only preserved. A
+crash during cleanup may leave a worktree, but DDx startup or the next
+`execute-bead` invocation should detect and remove orphaned worktrees matching
+the `refs/ddx/iterations/` namespace.
+
+**Hidden-ref naming scheme:**
+
+Non-landed iterations are preserved under:
+```
+refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>
+```
+
+Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646`
+
+These refs are local only. DDx does not push them. Tools and humans may use
+them for replay and introspection via the execute-bead session evidence.
 
 ## Graceful Degradation
 

@@ -185,6 +185,56 @@ The following dun source files contain the logic to port:
 - Markdown files with `ddx:` frontmatter
 - For server endpoints: FEAT-002
 
+## Execution Documents
+
+Execution documents are a category of graph-discovered artifact that declare
+what validations, checks, and measurements should run for a bead or set of
+governing artifacts. They live in the worktree as ordinary markdown files with
+`ddx:` frontmatter and participate in DDx document indexing alongside other
+graph artifacts.
+
+### Frontmatter convention
+
+```yaml
+---
+ddx:
+  id: exec.FEAT-001.acceptance-smoke
+  depends_on:
+    - FEAT-001
+  execution:
+    kind: command             # command | agent
+    required: true            # true = merge-blocking in execute-bead
+    command: ["make", "test"]
+    cwd: cli
+    timeout_ms: 120000
+---
+# Acceptance Smoke Test for FEAT-001
+...
+```
+
+### Key fields
+
+| Field | Description |
+|-------|-------------|
+| `ddx.id` | Unique document ID; by convention prefixed `exec.` |
+| `ddx.depends_on` | Governing artifacts this execution is linked to |
+| `ddx.execution.kind` | Executor kind: `command` or `agent` |
+| `ddx.execution.required` | `true` means this execution is merge-blocking in `execute-bead` |
+
+### Discovery
+
+`ddx agent execute-bead` resolves applicable execution documents from the graph
+inside the execution worktree by following dependency links from the target bead
+and its governing artifacts. DDx indexes execution documents like other graph
+artifacts; no separate registry is required.
+
+### Relationship to FEAT-010
+
+Execution documents are the git-backed, authored source of truth for what
+`ddx exec` runs. FEAT-010's exec substrate stores immutable run history.
+FEAT-007's graph owns the discovery and indexing of execution document
+definitions.
+
 ## Git-Aware History (FEAT-012 Integration)
 
 The following commands extend the doc graph with revision-control-aware

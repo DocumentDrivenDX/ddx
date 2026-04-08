@@ -22,19 +22,21 @@ structured results. This feature adds the evaluation surface: sandboxed
 comparison runs that capture side effects, automated grading of outputs,
 and comparison records that make prompt quality measurable.
 
-This is deliberately a **platform primitive**, not a prompt engineering
-framework. DDx provides: "run N harnesses on the same prompt in isolation,
-capture everything, grade the results." Workflow tools (HELIX) and quality
-runners (dun) compose these primitives into methodology-specific evaluation
-policies.
+This is deliberately an **optional evaluation and reporting layer** built on
+top of the `ddx agent execute-bead` primitive (FEAT-006). The primary
+bead-execution workflow is `execute-bead`, which runs an agent, evaluates
+required executions, and lands or preserves the iteration. FEAT-019 provides:
+compare, grade, replay, and benchmark capabilities over those preserved
+iterations — it does not define a competing foundational execution model.
 
 ### Ownership split
 
-- **FEAT-006** owns comparison dispatch (`ddx agent run --compare`),
-  `ComparisonRecord` persistence, and arm execution mechanics.
+- **FEAT-006** owns `execute-bead` (the canonical bead execution workflow),
+  comparison dispatch (`ddx agent run --compare`), `ComparisonRecord`
+  persistence, and arm execution mechanics.
 - **FEAT-019** (this spec) owns **grading**, **replay**, and
-  **benchmark suite execution** — the evaluation layer built on top
-  of comparison dispatch.
+  **benchmark suite execution** — the evaluation and reporting layer built
+  on top of execute-bead preserved iterations and comparison dispatch.
 - **FEAT-010** owns the generic exec substrate. Comparison records may
   use FEAT-010 storage if needed but comparison dispatch is not an exec
   projection — it has a fundamentally different shape (N parallel arms
@@ -42,6 +44,16 @@ policies.
 - **FEAT-004** owns bead semantics including evidence. FEAT-019 adds
   evidence fields (session linkage) but does not modify bead close
   behavior.
+
+### Relationship to execute-bead
+
+`ddx agent execute-bead` is the primary primitive for agent-driven bead
+execution. FEAT-019 replay and benchmark capabilities are built on preserved
+`execute-bead` iterations: multiple `execute-bead --no-merge` attempts from
+the same base produce a corpus that FEAT-019 can compare, grade, and report
+on. "Try N ideas on this bead and pick the best" is a workflow loop (HELIX)
+that calls `execute-bead --no-merge` repeatedly and then uses FEAT-019
+evaluation primitives — it is not a DDx execution mode.
 
 ### Relationship to HELIX
 

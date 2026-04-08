@@ -89,8 +89,14 @@ An execution definition describes:
 - optional evaluation rules such as pass/fail interpretation or scalar-field
   extraction
 
-Definitions are DDx-managed runtime records. They are not artifacts and do not
-participate in document staleness.
+Execution definitions may be authored as git-tracked documents (graph-authored
+definitions, discovered via FEAT-007) or managed as DDx runtime records
+(runtime-managed definitions stored in the `exec-definitions` collection).
+Graph-authored definitions participate in ordinary DDx document indexing and
+are the preferred source when using `ddx agent execute-bead`. Runtime-managed
+definitions in the `exec-definitions` collection remain valid for `ddx exec`
+operations that do not require graph discovery. In either case, execution
+runs are always immutable runtime records in the exec-runs substrate.
 
 ### Execution Run
 

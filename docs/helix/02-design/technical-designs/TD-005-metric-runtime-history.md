@@ -67,8 +67,8 @@ collection.
   "evaluation": {
     "comparison": "lower-is-better",
     "thresholds": {
-      "warn_ms": 20,
-      "ratchet_ms": 30
+      "warn": 20,
+      "ratchet": 30
     }
   },
   "active": true,
@@ -184,6 +184,29 @@ directory, but it must not publish a partial row.
 5. Compute comparison output against the configured baseline.
 6. Write the generic execution-run row and referenced attachments atomically
    enough that published rows never point at missing files.
+
+## Ratchet Evaluation and execute-bead Landing
+
+Metric ratchets feed into `ddx agent execute-bead` merge/preserve decisions.
+The evaluation model is narrow: results → metrics → ratchet/blocker outcome.
+
+**Outcome rules:**
+- A required execution that fails (non-zero exit or `run_status != "success"`)
+  blocks the merge landing.
+- A ratchet regression — where the current run's value exceeds the `ratchet`
+  threshold in the direction that matters (`lower-is-better` or `higher-is-better`)
+  relative to the configured threshold — prevents merge. The iteration is
+  preserved under a hidden ref instead.
+- Non-required, non-ratcheted metric runs are recorded evidence only; they do
+  not affect the landing decision.
+
+**Threshold fields:**
+- `thresholds.warn` — emit a warning when this value is exceeded; no blocking
+- `thresholds.ratchet` — block landing when this value is exceeded (or not
+  reached, depending on direction)
+
+Field names are generic scalars, not unit-specific. The `unit` field in the
+`result.metric` block identifies what the number means.
 
 ## Compare and Trend
 
