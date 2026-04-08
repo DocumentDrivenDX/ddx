@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test } from '@playwright/test'
 
 // DDx Server UI — Demo Recording (TP-002 TC-009)
 //
