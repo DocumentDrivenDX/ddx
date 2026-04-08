@@ -317,6 +317,14 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 		return nil, fmt.Errorf("creating skills dir %s: %w", dstDir, err)
 	}
 
+	allowed := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		allowed[e.Name()] = true
+	}
+	if err := pruneStaleSkillLinks(installedRoot, dstDir, allowed); err != nil {
+		return nil, err
+	}
+
 	var written []string
 	for _, e := range entries {
 		src := filepath.Join(srcDir, e.Name())
@@ -384,6 +392,95 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 		written = append(written, dst)
 	}
 	return written, nil
+}
+
+func pruneStaleSkillLinks(installedRoot, dstDir string, allowed map[string]bool) error {
+	if installedRoot == "" {
+		return nil
+	}
+
+	entries, err := os.ReadDir(dstDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading skills dir %s: %w", dstDir, err)
+	}
+
+	absRoot, err := filepath.Abs(installedRoot)
+	if err != nil {
+		absRoot = installedRoot
+	}
+
+	for _, e := range entries {
+		name := e.Name()
+		if allowed[name] {
+			continue
+		}
+
+		dstPath := filepath.Join(dstDir, name)
+		info, err := os.Lstat(dstPath)
+		if err != nil {
+			continue
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+
+		target, err := resolveSymlinkTarget(dstPath)
+		if err != nil {
+			continue
+		}
+		if !isWithinRoot(target, absRoot) {
+			continue
+		}
+
+		if err := os.RemoveAll(dstPath); err != nil {
+			return fmt.Errorf("removing stale skill link %s: %w", dstPath, err)
+		}
+	}
+	return nil
+}
+
+func resolveSymlinkTarget(path string) (string, error) {
+	target, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		if abs, absErr := filepath.Abs(target); absErr == nil {
+			return abs, nil
+		}
+		return target, nil
+	}
+
+	linkTarget, readErr := os.Readlink(path)
+	if readErr != nil {
+		return "", err
+	}
+
+	if !filepath.IsAbs(linkTarget) {
+		linkTarget = filepath.Join(filepath.Dir(path), linkTarget)
+	}
+	linkTarget = filepath.Clean(linkTarget)
+	if abs, absErr := filepath.Abs(linkTarget); absErr == nil {
+		linkTarget = abs
+	}
+	return linkTarget, nil
+}
+
+func isWithinRoot(target, root string) bool {
+	if root == "" || target == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	if rel == ".." {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // SymlinkSkillsFromRoot creates skill symlinks from an installed plugin root.

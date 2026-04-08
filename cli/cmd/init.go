@@ -213,9 +213,18 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	// Non-fatal: if offline or install fails, warn and continue.
 	reg := registry.BuiltinRegistry()
 	if pkg, err := reg.Find("ddx"); err == nil {
+		var oldFiles []string
+		if state, _ := registry.LoadState(); state != nil {
+			if old := state.FindInstalled(pkg.Name); old != nil {
+				oldFiles = append([]string{}, old.Files...)
+			}
+		}
+
 		if entry, installErr := registry.InstallPackage(pkg); installErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not install default library: %v\n", installErr)
 		} else {
+			_ = removeStaleFilesFromInstall(oldFiles, entry.Files)
+
 			state, _ := registry.LoadState()
 			if state == nil {
 				state = &registry.InstalledState{}
@@ -370,6 +379,35 @@ func readProjectVersions(workingDir string) string {
 	return ""
 }
 
+func cleanupBootstrapSkills(targetDir string, keep []string) {
+	entries, err := os.ReadDir(targetDir)
+	if err != nil {
+		return
+	}
+
+	keepSet := make(map[string]bool, len(keep))
+	for _, name := range keep {
+		keepSet[name] = true
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "ddx-") {
+			continue
+		}
+		if keepSet[name] {
+			continue
+		}
+
+		skillDir := filepath.Join(targetDir, name)
+		if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
+			continue
+		}
+
+		_ = os.RemoveAll(skillDir)
+	}
+}
+
 // registerProjectSkills copies embedded bootstrap skills to project directories.
 // Skills are copied as real files (not symlinks) so they're tracked by git.
 // Copies to: .ddx/skills/, .agents/skills/, .claude/skills/
@@ -387,6 +425,7 @@ func registerProjectSkills(workingDir string, force bool) {
 
 	for _, targetDir := range targetDirs {
 		_ = os.MkdirAll(targetDir, 0755)
+		cleanupBootstrapSkills(targetDir, bootstrapSkills)
 
 		for _, skillName := range bootstrapSkills {
 			_ = os.MkdirAll(filepath.Join(targetDir, skillName), 0755)

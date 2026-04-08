@@ -109,13 +109,10 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Capture old file list before installing so we can remove stale files.
-	var oldFiles map[string]bool
+	var oldFiles []string
 	if state != nil {
 		if old := state.FindInstalled(name); old != nil {
-			oldFiles = make(map[string]bool, len(old.Files))
-			for _, f := range old.Files {
-				oldFiles[f] = true
-			}
+			oldFiles = append([]string{}, old.Files...)
 		}
 	}
 
@@ -126,24 +123,9 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("install package: %w", err)
 	}
 
-	// Remove files from the old version that are no longer in the new version.
-	if oldFiles != nil {
-		newFiles := make(map[string]bool, len(entry.Files))
-		for _, f := range entry.Files {
-			newFiles[f] = true
-		}
-		var removed int
-		for f := range oldFiles {
-			if !newFiles[f] {
-				expanded := registry.ExpandHome(f)
-				if err := os.Remove(expanded); err == nil {
-					removed++
-				}
-			}
-		}
-		if removed > 0 {
-			fmt.Fprintf(out, "Removed %d stale file(s)\n", removed)
-		}
+	removed := removeStaleFilesFromInstall(oldFiles, entry.Files)
+	if removed > 0 {
+		fmt.Fprintf(out, "Removed %d stale file(s)\n", removed)
 	}
 
 	state, stateErr := registry.LoadState()
@@ -161,6 +143,29 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	commitPluginChanges(name, pkg.Version)
 
 	return nil
+}
+
+func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
+	if len(oldFiles) == 0 {
+		return 0
+	}
+
+	newSet := make(map[string]bool, len(newFiles))
+	for _, f := range newFiles {
+		newSet[f] = true
+	}
+
+	removed := 0
+	for _, f := range oldFiles {
+		if newSet[f] {
+			continue
+		}
+		expanded := registry.ExpandHome(f)
+		if err := os.RemoveAll(expanded); err == nil {
+			removed++
+		}
+	}
+	return removed
 }
 
 // commitPluginChanges stages and commits plugin-related changes in the working tree.

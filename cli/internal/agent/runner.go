@@ -699,3 +699,70 @@ func genSessionID() string {
 	_, _ = rand.Read(b)
 	return "as-" + hex.EncodeToString(b)
 }
+
+// TestProviderConnectivity sends a lightweight probe to check if the provider is reachable and has credits.
+// Returns ProviderStatus with connectivity information.
+func (r *Runner) TestProviderConnectivity(harnessName string, timeout time.Duration) ProviderStatus {
+	status := ProviderStatus{Reachable: false}
+
+	// Skip embedded harnesses - they don't have external providers
+	if harnessName == "virtual" || harnessName == "forge" {
+		status.Reachable = true
+		status.CreditsOK = true
+		return status
+	}
+
+	harness, ok := r.Registry.Get(harnessName)
+	if !ok {
+		status.Error = "unknown harness"
+		return status
+	}
+
+	// Check if binary exists first
+	if harnessName != "virtual" && harnessName != "forge" {
+		if _, err := r.LookPath(harness.Binary); err != nil {
+			status.Error = "binary not found"
+			return status
+		}
+	}
+
+	// Send a lightweight probe request to test connectivity
+	probePrompt := "echo ok"
+	opts := RunOptions{
+		Harness: harnessName,
+		Prompt:  probePrompt,
+		Timeout: timeout,
+	}
+
+	start := time.Now()
+	result, err := r.Run(opts)
+	duration := time.Since(start)
+
+	if err != nil {
+		status.Error = fmt.Sprintf("probe failed: %v (%.0fs)", err, duration.Seconds())
+		// Check for common error patterns indicating credit/quota issues
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "429") || strings.Contains(errStr, "quota") ||
+			strings.Contains(errStr, "credit") || strings.Contains(errStr, "insufficient") {
+			status.CreditsOK = false
+		}
+		return status
+	}
+
+	// Check exit code and error from result
+	if result.ExitCode != 0 || result.Error != "" {
+		errStr := strings.ToLower(result.Error)
+		status.Error = fmt.Sprintf("probe failed: %s (%.0fs)", result.Error, duration.Seconds())
+		// Check for credit/quota errors
+		if strings.Contains(errStr, "429") || strings.Contains(errStr, "quota") ||
+			strings.Contains(errStr, "credit") || strings.Contains(errStr, "insufficient") {
+			status.CreditsOK = false
+		}
+		return status
+	}
+
+	// Probe succeeded
+	status.Reachable = true
+	status.CreditsOK = true
+	return status
+}

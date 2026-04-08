@@ -92,13 +92,21 @@ type SessionEntry struct {
 	Error        string            `json:"error,omitempty"`
 }
 
+// ProviderStatus tracks provider connectivity and credit status.
+type ProviderStatus struct {
+	Reachable bool   `json:"reachable"`
+	CreditsOK bool   `json:"credits_ok,omitempty"` // false if out of credits/quota
+	Error     string `json:"error,omitempty"`
+}
+
 // HarnessStatus reports availability of a harness.
 type HarnessStatus struct {
-	Name      string `json:"name"`
-	Available bool   `json:"available"`
-	Binary    string `json:"binary"`
-	Path      string `json:"path,omitempty"` // resolved binary path
-	Error     string `json:"error,omitempty"`
+	Name         string        `json:"name"`
+	Available    bool          `json:"available"`
+	Binary       string        `json:"binary"`
+	Path         string        `json:"path,omitempty"` // resolved binary path
+	Error        string        `json:"error,omitempty"`
+	Provider     *ProviderStatus `json:"provider,omitempty"` // provider connectivity status
 }
 
 // HarnessCapabilities describes the effective capabilities for a harness.

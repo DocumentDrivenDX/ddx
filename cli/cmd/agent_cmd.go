@@ -481,31 +481,67 @@ func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 }
 
 func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check agent harness health",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r := f.agentRunner()
+			checkConnectivity, _ := cmd.Flags().GetBool("connectivity")
+			timeoutStr, _ := cmd.Flags().GetString("timeout")
 			statuses := r.Registry.Discover()
 
-			available := 0
-			for _, s := range statuses {
-				status := "NOT FOUND"
-				if s.Available {
-					status = fmt.Sprintf("OK (%s)", s.Path)
-					available++
+			// Parse timeout (default 15s for connectivity checks)
+			probeTimeout := 15 * time.Second
+			if timeoutStr != "" {
+				if t, err := time.ParseDuration(timeoutStr); err == nil {
+					probeTimeout = t
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-12s %s\n", s.Name, status)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "\n%d/%d harnesses available\n", available, len(statuses))
+
+			available := 0
+			functional := 0
+			for i, s := range statuses {
+				statusStr := "NOT FOUND"
+				if s.Available {
+					available++
+					statusStr = fmt.Sprintf("OK (%s)", s.Path)
+
+					// Optionally test provider connectivity
+					if checkConnectivity {
+						providerStatus := r.TestProviderConnectivity(s.Name, probeTimeout)
+						statuses[i].Provider = &providerStatus
+
+						if providerStatus.Reachable && providerStatus.CreditsOK {
+							statusStr = fmt.Sprintf("OK (%s) ✓ provider reachable", s.Path)
+							functional++
+						} else if providerStatus.Reachable && !providerStatus.CreditsOK {
+							statusStr = fmt.Sprintf("⚠️  (%s) provider out of credits/quota", s.Path)
+						} else if providerStatus.Error != "" {
+							statusStr = fmt.Sprintf("⚠️  (%s) %s", s.Path, providerStatus.Error)
+						}
+					}
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "%-12s %s\n", s.Name, statusStr)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "\n%d/%d harnesses available", available, len(statuses))
+			if checkConnectivity && available > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), " (%d functional)", functional)
+			}
+			fmt.Fprintln(cmd.OutOrStdout())
 
 			if available == 0 {
-				return fmt.Errorf("no agent harnesses found — install codex, claude, or another supported agent")
+				fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  No agent harnesses found.")
+				fmt.Fprintln(cmd.OutOrStdout(), "💡 Install codex, claude, or another supported agent.")
+				return nil
 			}
 			return nil
 		},
 	}
+	cmd.Flags().Bool("connectivity", false, "Test provider connectivity and credit status")
+	cmd.Flags().String("timeout", "", "Timeout for connectivity checks (default 15s)")
+	return cmd
 }
 
 func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
