@@ -503,3 +503,34 @@ func TestAgentDoctorReportsRoutingRelevantHarnessState(t *testing.T) {
 	assert.Equal(t, "7 day", state.Quota.LimitWindow)
 	assert.Equal(t, "April 12", state.Quota.ResetDate)
 }
+
+// TestBuildCandidatePlansHarnessOverrideWithProfileResolvesConcreteModel verifies
+// that when both HarnessOverride and Profile are set, evaluateCandidate still
+// populates ConcreteModel via the catalog. Regression test for the bug where
+// the HarnessOverride branch only set RequestedRef and left ConcreteModel empty.
+func TestBuildCandidatePlansHarnessOverrideWithProfileResolvesConcreteModel(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"codex": healthyState(),
+	}
+
+	plans := r.BuildCandidatePlans(RouteRequest{
+		HarnessOverride: "codex",
+		Profile:         "cheap",
+	}, states)
+
+	var codexPlan *CandidatePlan
+	for i := range plans {
+		if plans[i].Harness == "codex" {
+			codexPlan = &plans[i]
+			break
+		}
+	}
+
+	require.NotNil(t, codexPlan, "codex plan should be present")
+	assert.True(t, codexPlan.Viable, "codex plan should be viable")
+	assert.NotEmpty(t, codexPlan.ConcreteModel, "ConcreteModel must not be empty when HarnessOverride+Profile are set")
+	// catalog: cheap on codex surface -> gpt-5.4-mini
+	assert.Equal(t, "gpt-5.4-mini", codexPlan.ConcreteModel)
+}

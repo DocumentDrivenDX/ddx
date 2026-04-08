@@ -86,6 +86,45 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 	// Set requested ref and canonical target for diagnostics.
 	if req.HarnessOverride != "" {
 		plan.RequestedRef = "harness-override:" + req.HarnessOverride
+		// HarnessOverride only constrains harness selection; model resolution must
+		// still happen via the remaining request fields.
+		if req.ModelPin != "" {
+			if !harness.ExactPinSupport {
+				plan.RejectReason = fmt.Sprintf("harness %s does not support exact model pins", name)
+				plan.Viable = false
+				return plan
+			}
+			plan.CanonicalTarget = req.ModelPin
+			plan.ConcreteModel = req.ModelPin
+		} else if req.ModelRef != "" {
+			concreteModel, ok := cat.Resolve(req.ModelRef, harness.Surface)
+			if !ok {
+				plan.RejectReason = fmt.Sprintf("model ref %q not available on surface %q", req.ModelRef, harness.Surface)
+				plan.Viable = false
+				return plan
+			}
+			plan.CanonicalTarget = req.ModelRef
+			plan.ConcreteModel = concreteModel
+			if entry, ok := cat.Entry(req.ModelRef); ok && entry.Deprecated {
+				plan.DeprecationWarning = fmt.Sprintf("model ref %q is deprecated; use %q instead", req.ModelRef, entry.ReplacedBy)
+			}
+		} else if req.Profile != "" {
+			concreteModel, ok := cat.Resolve(req.Profile, harness.Surface)
+			if ok {
+				plan.CanonicalTarget = req.Profile
+				plan.ConcreteModel = concreteModel
+			} else {
+				plan.ConcreteModel = r.resolveModel(RunOptions{}, name)
+				if plan.ConcreteModel == "" {
+					plan.ConcreteModel = harness.DefaultModel
+				}
+			}
+		} else {
+			plan.ConcreteModel = r.resolveModel(RunOptions{}, name)
+			if plan.ConcreteModel == "" {
+				plan.ConcreteModel = harness.DefaultModel
+			}
+		}
 	} else if req.ModelPin != "" {
 		// Exact pin: only harnesses with ExactPinSupport can serve this.
 		if !harness.ExactPinSupport {
