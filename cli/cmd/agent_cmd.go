@@ -628,7 +628,9 @@ Examples:
 						arm.Label, arm.Completed, arm.Failed, arm.TotalTokens, costStr, durationStr)
 				}
 
-				w.Flush()
+				if err := w.Flush(); err != nil {
+					return fmt.Errorf("flushing summary output: %w", err)
+				}
 				output = []byte(sb.String())
 			}
 
@@ -638,7 +640,9 @@ Examples:
 				}
 				fmt.Fprintf(cmd.ErrOrStderr(), "Results written to %s\n", outputPath)
 			} else {
-				cmd.OutOrStdout().Write(output)
+				if _, err := cmd.OutOrStdout().Write(output); err != nil {
+					return fmt.Errorf("writing command output: %w", err)
+				}
 			}
 
 			return nil
