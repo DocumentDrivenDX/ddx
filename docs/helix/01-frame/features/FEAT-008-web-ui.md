@@ -185,7 +185,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 
 - **Performance:** Initial page load <2s. API calls <200ms. Graph renders smoothly for 100+ nodes.
 - **Deployment:** Single binary. No external runtime dependencies. No separate frontend server in production.
-- **Development:** `npm run dev` proxies to Go server. Hot reload for frontend. `go run` for backend.
+- **Development:** `bun run dev` proxies to Go server. Hot reload for frontend. `go run` for backend.
 - **Responsive:** Usable on tablet/laptop screens. Not optimized for mobile.
 
 ## User Stories
