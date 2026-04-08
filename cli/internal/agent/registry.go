@@ -28,7 +28,6 @@ var builtinHarnesses = map[string]Harness{
 		CostClass:       "medium",
 		IsLocal:         false,
 		ExactPinSupport: true,
-		QuotaCommand:    "/status",
 	},
 	"claude": {
 		Name:     "claude",
@@ -51,7 +50,6 @@ var builtinHarnesses = map[string]Harness{
 		CostClass:       "medium",
 		IsLocal:         false,
 		ExactPinSupport: true,
-		QuotaCommand:    "/usage",
 	},
 	"gemini": {
 		Name:            "gemini",

@@ -378,6 +378,36 @@ func TestProbeHarnessStateNotInstalled(t *testing.T) {
 	assert.NotEmpty(t, state.Error)
 }
 
+// quotaTestHarness returns a harness fixture with a non-interactive quota CLI command
+// configured, used to exercise the probeQuota code path in tests.
+func quotaTestHarness() Harness {
+	return Harness{
+		Name:         "quota-test",
+		Binary:       "quota-test",
+		PromptMode:   "arg",
+		QuotaCommand: "usage",
+	}
+}
+
+// TestProbeQuotaUsesDirectInvocationNotLLMFlags verifies that probeQuota invokes the
+// binary with only the QuotaCommand args — not LLM invocation flags like
+// --no-session-persistence, --print, or --output-format.
+func TestProbeQuotaUsesDirectInvocationNotLLMFlags(t *testing.T) {
+	mock := &mockExecutor{output: "83% of 5h limit"}
+	r := NewRunner(Config{SessionLogDir: ""})
+	r.LookPath = mockLookPath
+	r.Executor = mock
+	r.Registry.harnesses["quota-test"] = quotaTestHarness()
+
+	r.ProbeHarnessState("quota-test", 5*time.Second)
+
+	// Quota probe must use only the QuotaCommand args — no LLM invocation flags.
+	assert.Equal(t, []string{"usage"}, mock.lastArgs,
+		"probeQuota must not pass LLM invocation flags as args")
+	assert.NotContains(t, mock.lastArgs, "--print")
+	assert.NotContains(t, mock.lastArgs, "--output-format")
+}
+
 // TestProbeHarnessStateQuotaOKWhenUnder95(t *testing.T) verifies that quota is
 // still OK when usage is below the 95% threshold.
 func TestProbeHarnessStateQuotaOKWhenUnder95(t *testing.T) {
@@ -386,8 +416,9 @@ func TestProbeHarnessStateQuotaOKWhenUnder95(t *testing.T) {
 	r.Executor = &mockExecutor{
 		output: "83% of 5h limit",
 	}
+	r.Registry.harnesses["quota-test"] = quotaTestHarness()
 
-	state := r.ProbeHarnessState("claude", 5*time.Second)
+	state := r.ProbeHarnessState("quota-test", 5*time.Second)
 	assert.True(t, state.Installed)
 	assert.True(t, state.Reachable)
 	assert.True(t, state.QuotaOK)
@@ -403,8 +434,9 @@ func TestProbeHarnessStateQuotaBlockedAt95(t *testing.T) {
 	r.Executor = &mockExecutor{
 		output: "97% of 5h limit",
 	}
+	r.Registry.harnesses["quota-test"] = quotaTestHarness()
 
-	state := r.ProbeHarnessState("claude", 5*time.Second)
+	state := r.ProbeHarnessState("quota-test", 5*time.Second)
 	assert.True(t, state.Installed)
 	assert.False(t, state.QuotaOK, "quota should be blocked at 97% usage")
 	require.NotNil(t, state.Quota)
@@ -455,8 +487,9 @@ func TestAgentDoctorReportsRoutingRelevantHarnessState(t *testing.T) {
 	r.Executor = &mockExecutor{
 		output: "75% of 7 day limit, resets April 12",
 	}
+	r.Registry.harnesses["quota-test"] = quotaTestHarness()
 
-	state := r.ProbeHarnessState("claude", 5*time.Second)
+	state := r.ProbeHarnessState("quota-test", 5*time.Second)
 
 	// All routing-relevant fields should be populated.
 	assert.True(t, state.Installed)

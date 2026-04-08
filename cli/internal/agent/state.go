@@ -108,7 +108,11 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 	return state
 }
 
-// probeQuota invokes the harness with its quota command and parses the output.
+// probeQuota invokes the harness binary with its quota CLI args and parses the output.
+// QuotaCommand must be a whitespace-separated list of CLI arguments for non-interactive
+// quota introspection (e.g. "usage" for a "binary usage" subcommand). It must NOT be
+// an interactive slash command like "/usage" — those only work in interactive sessions
+// and would be passed as an LLM prompt, consuming tokens without returning quota data.
 func (r *Runner) probeQuota(harnessName string, harness Harness, timeout time.Duration) (*QuotaInfo, error) {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
@@ -116,14 +120,9 @@ func (r *Runner) probeQuota(harnessName string, harness Harness, timeout time.Du
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Build args for a non-interactive invocation with the quota command as prompt.
-	// We use a stripped-down arg set: just the quota command as prompt, no worktree,
-	// no model override — we only want the quota summary output.
-	opts := RunOptions{
-		Harness: harnessName,
-		Prompt:  harness.QuotaCommand,
-	}
-	args := BuildArgs(harness, opts, "")
+	// Invoke the binary directly with QuotaCommand as CLI args.
+	// This is a non-LLM invocation: no LLM flags, no prompt, no API call.
+	args := strings.Fields(harness.QuotaCommand)
 
 	result, err := r.Executor.ExecuteInDir(ctx, harness.Binary, args, "", "")
 	if err != nil {

@@ -22,7 +22,7 @@ type Harness struct {
 	CostClass       string              // local, cheap, medium, expensive
 	IsLocal         bool                // true for embedded/local harnesses (no cloud cost)
 	ExactPinSupport bool                // true if harness can accept an exact concrete model pin
-	QuotaCommand    string              // CLI prompt to invoke for quota introspection (e.g. "/usage", "/status")
+	QuotaCommand    string              // CLI args for non-interactive quota introspection (e.g. "usage", "status"); empty = skip probe. Must NOT be an interactive slash command.
 }
 
 // Config holds agent service configuration.
