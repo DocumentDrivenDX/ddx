@@ -44,10 +44,10 @@ All three surfaces share the same underlying services (document library, bead st
 ### Build Pipeline
 
 ```
-frontend/           → Vite + TypeScript + React
-  npm run build     → frontend/dist/
-server/             → Go with embed.FS
-  go build          → ddx-server (single binary with embedded UI)
+cli/internal/server/frontend/   → Vite + TypeScript + React
+  bun run build                 → cli/internal/server/frontend/dist/
+cli/internal/server/            → Go with embed.FS
+  go build                      → ddx-server (single binary with embedded UI)
 ```
 
 During development, Vite's dev server proxies `/api/` to the running Go server.
@@ -344,7 +344,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 var frontendFiles embed.FS
 
 func main() {
-    distFS, _ := fs.Sub(frontendFiles, "frontend/dist")
+    distFS, _ := fs.Sub(frontendFiles, "frontend/dist") // relative to embed.go in cli/internal/server/
     
     mux := http.NewServeMux()
     mux.Handle("/api/", apiRouter)
@@ -368,10 +368,10 @@ func spaHandler(fs http.FileSystem) http.Handler {
 
 ```bash
 # Terminal 1: Go server
-cd server && go run . --library-path ../.ddx/library
+cd cli/internal/server && go run . --library-path ../../../.ddx/library
 
 # Terminal 2: Vite dev server with proxy
-cd frontend && npm run dev
+cd cli/internal/server/frontend && bun run dev
 # vite.config.ts proxies /api/ and /mcp/ to localhost:8080
 ```
 
@@ -379,24 +379,26 @@ cd frontend && npm run dev
 
 ```
 ddx/
-├── server/
-│   ├── main.go            # Server entry point
-│   ├── api/               # HTTP API handlers
-│   ├── mcp/               # MCP endpoint handlers
-│   └── embed.go           # embed.FS declaration
-├── frontend/
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── pages/
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── Documents.tsx
-│   │   │   ├── Graph.tsx
-│   │   │   ├── Beads.tsx
-│   │   │   └── Agent.tsx
-│   │   └── components/
-│   └── dist/              # Build output (embedded into Go)
+└── cli/
+    └── internal/
+        └── server/
+            ├── server.go          # Server entry point
+            ├── api/               # HTTP API handlers
+            ├── mcp/               # MCP endpoint handlers
+            ├── embed.go           # embed.FS declaration
+            └── frontend/
+                ├── package.json
+                ├── vite.config.ts
+                ├── src/
+                │   ├── App.tsx
+                │   ├── pages/
+                │   │   ├── Dashboard.tsx
+                │   │   ├── Documents.tsx
+                │   │   ├── Graph.tsx
+                │   │   ├── Beads.tsx
+                │   │   └── Agent.tsx
+                │   └── components/
+                └── dist/          # Build output (embedded into Go)
 ```
 
 ## Dependencies
