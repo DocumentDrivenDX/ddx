@@ -36,7 +36,7 @@ The DDx server (`ddx-server`) serves a web UI for browsing documents, beads, the
 ddx-server binary
 ├── /            → Web UI (embedded SPA)
 ├── /api/        → HTTP REST API (JSON)
-└── /mcp/        → MCP endpoints (SSE transport)
+└── /mcp/        → MCP endpoints (Streamable HTTP transport)
 ```
 
 All three surfaces share the same underlying services (document library, bead store, doc graph, agent logs). The web UI calls the HTTP API.
