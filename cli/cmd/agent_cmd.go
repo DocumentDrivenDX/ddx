@@ -41,6 +41,8 @@ Examples:
 	cmd.AddCommand(f.newAgentCondenseCommand())
 	cmd.AddCommand(f.newAgentListCommand())
 	cmd.AddCommand(f.newAgentCapabilitiesCommand())
+	cmd.AddCommand(f.newAgentPresetsCommand())
+	cmd.AddCommand(f.newAgentResolveCommand())
 	cmd.AddCommand(f.newAgentDoctorCommand())
 	cmd.AddCommand(f.newAgentLogCommand())
 	cmd.AddCommand(f.newAgentBenchmarkCommand())
@@ -94,6 +96,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			promptFile, _ := cmd.Flags().GetString("prompt")
 			promptText, _ := cmd.Flags().GetString("text")
 			harness, _ := cmd.Flags().GetString("harness")
+			preset, _ := cmd.Flags().GetString("preset")
 			model, _ := cmd.Flags().GetString("model")
 			effort, _ := cmd.Flags().GetString("effort")
 			timeoutStr, _ := cmd.Flags().GetString("timeout")
@@ -107,6 +110,33 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			keepSandbox, _ := cmd.Flags().GetBool("keep-sandbox")
 			postRun, _ := cmd.Flags().GetString("post-run")
 			arms, _ := cmd.Flags().GetStringArray("arm")
+
+			// Resolve preset: infer harness if needed, apply preset config.
+			if preset != "" {
+				if harness == "" {
+					harness = r.Config.Harness
+				}
+				if harness == "" {
+					harness = agent.DefaultHarness
+				}
+				presDef, err := r.ResolvePreset(harness, agent.Preset(preset))
+				if err != nil {
+					return err
+				}
+				if model == "" {
+					model = presDef.Model
+				}
+				if effort == "" {
+					effort = presDef.Effort
+				}
+				if timeoutStr == "" && presDef.TimeoutMS > 0 {
+					timeoutStr = fmt.Sprintf("%ds", presDef.TimeoutMS/1000)
+				}
+				if permissions == "" {
+					permissions = presDef.Permissions
+				}
+				r.Config.Harness = harness
+			}
 
 			var timeout time.Duration
 			if timeoutStr != "" {
@@ -343,6 +373,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("prompt", "", "Path to prompt file")
 	cmd.Flags().String("text", "", "Inline prompt text")
 	cmd.Flags().String("harness", "", "Harness name (default from config)")
+	cmd.Flags().String("preset", "", "Preset name (fast, smart, reasoning)")
 	cmd.Flags().String("model", "", "Model override")
 	cmd.Flags().String("effort", "", "Reasoning effort level")
 	cmd.Flags().String("timeout", "", "Timeout duration (e.g. 30s, 5m)")
@@ -358,6 +389,67 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("post-run", "", "Command to run in each worktree after the agent completes")
 	cmd.Flags().StringArray("arm", nil, "Comparison arm: harness:model:label (repeatable)")
 
+	return cmd
+}
+
+func (f *CommandFactory) newAgentPresetsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "presets",
+		Short: "List available presets",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			presets := agent.PresetConfigs()
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(presets)
+			}
+			for _, p := range presets {
+				fmt.Fprintln(cmd.OutOrStdout(), p)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newAgentResolveCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "resolve <harness> <preset>",
+		Short: "Resolve a harness + preset to a runnable configuration",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r := f.agentRunner()
+			harness := args[0]
+			preset := agent.Preset(args[1])
+
+			def, err := r.ResolvePreset(harness, preset)
+			if err != nil {
+				return err
+			}
+
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(def)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Preset:    %s\n", def.Preset)
+			fmt.Fprintf(cmd.OutOrStdout(), "Harness:   %s\n", def.Harness)
+			if def.Model != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Model:     %s\n", def.Model)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Effort:    %s\n", def.Effort)
+			if def.TimeoutMS > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Timeout:   %ds\n", def.TimeoutMS/1000)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Perms:     %s\n", def.Permissions)
+			return nil
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd
 }
 

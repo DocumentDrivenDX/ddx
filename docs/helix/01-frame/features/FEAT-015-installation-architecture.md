@@ -220,6 +220,16 @@ project/
 
 4. **Minimal install.sh**: The curl script does one thing (install binary). Everything else is handled by `ddx` commands that have proper error handling, embedded assets, and testability.
 
+5. **Chained symlinks for `.claude/skills/`**: `.claude/skills/` entries chain through `.agents/skills/` rather than pointing directly into the plugin root. This means `.claude/skills/helix-align → ../.agents/skills/helix-align`, which itself resolves to `../.ddx/plugins/helix/.agents/skills/helix-align`. This requires a `Chain` flag on `InstallMapping` so the installer knows to create the indirect symlink.
+
+6. **`--local` keeps absolute root symlink**: `ddx install helix --local ~/Projects/helix` creates `.ddx/plugins/helix → /home/dev/Projects/helix` (absolute). This is correct for developer use — the checkout isn't at a predictable relative position. But `.agents/skills/` still gets relative symlinks into `.ddx/plugins/helix/`, which the kernel resolves through the absolute symlink transparently.
+
+7. **Git tracking of symlinks into gitignored directories**: If a user gitignores `.ddx/plugins/`, the skill symlinks at `.agents/skills/helix-align` are committed (they're relative symlinks) but will be broken on fresh clone until `ddx install helix` is run. This is intentional — `ddx install` is a post-clone setup step, similar to `npm install`. `ddx doctor` should detect broken plugin skill symlinks and suggest running `ddx install <plugin>`.
+
+8. **Migration from global to project-local**: Users with existing `~/.ddx/plugins/helix` from older installs need no migration — the old global directory is simply unused. New `ddx install helix` writes to `.ddx/plugins/helix/` (project-local). The old global directory can be manually removed.
+
+9. **Tarball symlink resolution**: GitHub tarballs preserve internal symlinks (e.g., `.agents/skills/helix-align → ../../skills/helix-align`). The installer's `symlinkSkills` must NOT resolve these with `filepath.EvalSymlinks` (which produces absolute paths). Instead, create the relative symlink pointing to the tarball entry as-is — the kernel follows the chain transparently on POSIX systems.
+
 ## Out of Scope
 
 - Windows-specific installation (future)
@@ -229,7 +239,7 @@ project/
 
 ## Acceptance Criteria
 
-### AC-001: Clean Machine Installation
+### AC-001: Clean Machine Installation — NOT IMPLEMENTED
 ```bash
 # In Docker container with nothing installed
 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
@@ -238,7 +248,7 @@ ddx version          # → shows version
 ls ~/.ddx/ 2>&1      # → no such directory (install.sh doesn't create it)
 ```
 
-### AC-002: Global Skill Installation
+### AC-002: Global Skill Installation — NOT IMPLEMENTED
 ```bash
 # After AC-001
 ddx install --global
@@ -247,7 +257,7 @@ ls ~/.agents/skills/ddx-bead # → symlink to ~/.ddx/skills/ddx-bead
 ls ~/.claude/skills/ddx-bead # → symlink to ~/.agents/skills/ddx-bead
 ```
 
-### AC-003: Repository Initialization
+### AC-003: Repository Initialization — PARTIAL (ddx init exists, copies skills, but no versions.yaml)
 ```bash
 # In empty project directory
 ddx init
@@ -257,7 +267,7 @@ ls .claude/skills/ddx-doctor/ # → real files or relative symlink to .agents
 git add .agents/ .claude/     # → works (real files tracked by git)
 ```
 
-### AC-004: Plugin Installation (Project-Scoped)
+### AC-004: Plugin Installation (Project-Scoped) — BROKEN (installs globally with absolute symlinks)
 ```bash
 # In initialized project
 ddx install helix
@@ -266,13 +276,13 @@ readlink .agents/skills/helix-align           # → ../.ddx/plugins/helix/.agent
 readlink .claude/skills/helix-align           # → ../.agents/skills/helix-align
 ```
 
-### AC-005: Missing DDx Detection
+### AC-005: Missing DDx Detection — NOT IMPLEMENTED
 ```bash
 # Clone a project with .ddx/skills/ddx-doctor/ but no ddx binary
 # ddx-doctor skill detects missing binary and prompts install
 ```
 
-### AC-006: Version Tracking
+### AC-006: Version Tracking — NOT IMPLEMENTED
 ```bash
 # ddx init writes versions.yaml
 ddx init
@@ -280,7 +290,7 @@ cat .ddx/versions.yaml  # → ddx_version: "0.3.0" (current binary version)
 git log --oneline -1     # → commit includes .ddx/versions.yaml
 ```
 
-### AC-007: Version Gate (binary too old)
+### AC-007: Version Gate (binary too old) — NOT IMPLEMENTED
 ```bash
 # Simulate: edit versions.yaml to require newer version
 echo 'ddx_version: "99.0.0"' > .ddx/versions.yaml
@@ -289,14 +299,14 @@ ddx version              # → works (exempt command)
 ddx upgrade              # → works (exempt command)
 ```
 
-### AC-008: Staleness Hint (binary newer)
+### AC-008: Staleness Hint (binary newer) — NOT IMPLEMENTED
 ```bash
 # Simulate: edit versions.yaml to older version
 echo 'ddx_version: "0.0.1"' > .ddx/versions.yaml
 ddx bead list            # → normal output + hint: "💡 Project skills from DDx v0.0.1..."
 ```
 
-### AC-009: Force Refresh
+### AC-009: Force Refresh — NOT IMPLEMENTED
 ```bash
 # After staleness hint
 ddx init --force
@@ -304,14 +314,14 @@ cat .ddx/versions.yaml   # → ddx_version updated to current
 cat .agents/skills/ddx-doctor/SKILL.md  # → overwritten with latest
 ```
 
-### AC-010: Dev Build Bypass
+### AC-010: Dev Build Bypass — NOT IMPLEMENTED
 ```bash
 # Dev build (version="dev") should not trigger gate
 # Even if versions.yaml says v99.0.0
 ddx bead list            # → works normally, no error
 ```
 
-### AC-011: Docker Test Coverage
+### AC-011: Docker Test Coverage — NOT IMPLEMENTED
 All above scenarios run in Docker containers:
 - `tests/docker/Dockerfile.clean` — minimal image for AC-001
 - `tests/docker/Dockerfile.with-ddx` — pre-installed for AC-002, AC-003, AC-004

@@ -143,6 +143,27 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	return result, nil
 }
 
+// ResolvePreset resolves a harness + preset to a complete runnable config.
+func (r *Runner) ResolvePreset(harness string, preset Preset) (*PresetDefinition, error) {
+	h, _, err := r.resolveHarness(RunOptions{Harness: harness})
+	if err != nil {
+		return nil, err
+	}
+	def, err := ResolvePreset(harness, preset)
+	if err != nil {
+		return nil, err
+	}
+	def.Harness = harness
+	def = ResolvePresetWithOverrides(def, r.Config)
+	if def.Effort != "" {
+		levels := r.resolveReasoningLevels(harness, h)
+		if len(levels) > 0 && !containsString(levels, def.Effort) {
+			def.Effort = levels[len(levels)-1]
+		}
+	}
+	return &def, nil
+}
+
 // Capabilities reports the model and reasoning options for a harness.
 func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 	harness, harnessName, err := r.resolveHarness(RunOptions{Harness: name})
