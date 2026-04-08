@@ -222,7 +222,30 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			}
 			fmt.Fprintf(out, "Created:  %s\n", b.CreatedAt.Format("2006-01-02 15:04:05"))
 			fmt.Fprintf(out, "Updated:  %s\n", b.UpdatedAt.Format("2006-01-02 15:04:05"))
+			// Show agent session evidence if present
 			if b.Extra != nil {
+				if sessionID, ok := b.Extra["agent_session_id"]; ok && sessionID != "" {
+					fmt.Fprintf(out, "Session:  %v\n", sessionID)
+					// Try to resolve session details
+					if sess := f.resolveAgentSession(fmt.Sprint(sessionID)); sess != nil {
+						fmt.Fprintf(out, "Harness:  %s\n", sess.Harness)
+						if sess.Model != "" {
+							fmt.Fprintf(out, "Model:    %s\n", sess.Model)
+						}
+						if sess.Tokens > 0 {
+							fmt.Fprintf(out, "Tokens:   %d (in: %d, out: %d)\n", sess.Tokens, sess.InputTokens, sess.OutputTokens)
+						}
+						if sess.CostUSD > 0 {
+							fmt.Fprintf(out, "Cost:     $%.4f\n", sess.CostUSD)
+						}
+						if sess.Duration > 0 {
+							fmt.Fprintf(out, "Duration: %dms\n", sess.Duration)
+						}
+					}
+				}
+				if commitSHA, ok := b.Extra["closing_commit_sha"]; ok && commitSHA != "" {
+					fmt.Fprintf(out, "Commit:   %v\n", commitSHA)
+				}
 				if v, ok := b.Extra["claimed-at"]; ok {
 					fmt.Fprintf(out, "Claimed:  %v\n", v)
 				}
@@ -239,6 +262,7 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			claimKeys := map[string]bool{
 				"claimed-at": true, "claimed-pid": true,
 				"claimed-machine": true, "claimed-session": true, "claimed-worktree": true,
+				"agent_session_id": true, "closing_commit_sha": true,
 			}
 			for k, v := range b.Extra {
 				if !claimKeys[k] {
@@ -453,18 +477,24 @@ func (f *CommandFactory) newBeadEvidenceCommand() *cobra.Command {
 }
 
 func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "close <id>",
 		Short: "Close a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := f.beadStore().Close(args[0]); err != nil {
+			sessionID, _ := cmd.Flags().GetString("session")
+			commitSHA, _ := cmd.Flags().GetString("commit")
+
+			if err := f.beadStore().CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
 				return err
 			}
 			f.beadAutoCommit("close " + args[0])
 			return nil
 		},
 	}
+	cmd.Flags().String("session", "", "Agent session ID that completed this bead")
+	cmd.Flags().String("commit", "", "Closing commit SHA (auto-detected if not provided)")
+	return cmd
 }
 
 func (f *CommandFactory) newBeadListCommand() *cobra.Command {

@@ -45,6 +45,7 @@ Examples:
 	cmd.AddCommand(f.newAgentLogCommand())
 	cmd.AddCommand(f.newAgentBenchmarkCommand())
 	cmd.AddCommand(f.newAgentUsageCommand())
+	cmd.AddCommand(f.newAgentReplayCommand())
 
 	return cmd
 }
@@ -683,6 +684,167 @@ Examples:
 	cmd.Flags().String("suite", "", "Path to benchmark suite JSON file (required)")
 	cmd.Flags().String("output", "", "Path to save results as JSON")
 	cmd.Flags().Bool("json", false, "Output results as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newAgentReplayCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "replay <bead-id>",
+		Short: "Replay a bead with a different agent harness or model",
+		Long: `Reconstructs the prompt from the bead's linked agent session and re-runs it
+with a different harness or model for comparison.
+
+Examples:
+  ddx agent replay ddx-abc123 --harness claude --model claude-opus-4-6
+  ddx agent replay ddx-abc123 --harness forge --at-head
+  ddx agent replay ddx-abc123 --sandbox`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			beadID := args[0]
+			harness, _ := cmd.Flags().GetString("harness")
+			model, _ := cmd.Flags().GetString("model")
+			atHead, _ := cmd.Flags().GetBool("at-head")
+			sandbox, _ := cmd.Flags().GetBool("sandbox")
+
+			// Get the bead
+			b, err := f.beadStore().Get(beadID)
+			if err != nil {
+				return fmt.Errorf("bead not found: %w", err)
+			}
+
+			// Extract session ID from bead evidence
+			sessionID := ""
+			if b.Extra != nil {
+				if sid, ok := b.Extra["agent_session_id"]; ok {
+					sessionID = fmt.Sprint(sid)
+				}
+			}
+
+			// Get the prompt - from session or fallback to bead prose
+			var prompt string
+			var baseCommit string
+			if sessionID != "" {
+				sess := f.resolveAgentSession(sessionID)
+				if sess != nil {
+					prompt = sess.Prompt
+					// Store original metadata for comparison
+					fmt.Fprintf(cmd.OutOrStdout(), "Replaying from session %s\n", sessionID)
+					fmt.Fprintf(cmd.OutOrStdout(), "Original: %s with %s\n", sess.Harness, sess.Model)
+				}
+			}
+
+			// Fallback to bead description if no session prompt
+			if prompt == "" {
+				if b.Description != "" {
+					prompt = b.Description
+					fmt.Fprintf(cmd.OutOrStdout(), "Note: Using bead description (no session linked)\n")
+				} else if b.Acceptance != "" {
+					prompt = b.Acceptance
+					fmt.Fprintf(cmd.OutOrStdout(), "Note: Using bead acceptance criteria (no session linked)\n")
+				} else {
+					return fmt.Errorf("no prompt available from session or bead")
+				}
+			}
+
+			// Determine base commit
+			if !atHead {
+				if b.Extra != nil {
+					if sha, ok := b.Extra["closing_commit_sha"]; ok && sha != "" {
+						// Use parent of closing commit
+						shaStr := fmt.Sprint(sha)
+						out, err := exec.Command("git", "rev-parse", shaStr+"^").Output()
+						if err == nil {
+							baseCommit = strings.TrimSpace(string(out))
+							fmt.Fprintf(cmd.OutOrStdout(), "Base commit: %s (parent of %s)\n", baseCommit, shaStr)
+						}
+					}
+				}
+			}
+
+			// If no base commit determined, use current HEAD
+			if baseCommit == "" {
+				out, err := exec.Command("git", "rev-parse", "HEAD").Output()
+				if err == nil {
+					baseCommit = strings.TrimSpace(string(out))
+					fmt.Fprintf(cmd.OutOrStdout(), "Base commit: %s (current HEAD)\n", baseCommit)
+				}
+			}
+
+			// Setup workdir for sandbox mode
+			workDir := ""
+			if sandbox {
+				wtName := fmt.Sprintf("replay-%s-%s", beadID, harness)
+				wtDir, err := resolveWorktree(f.WorkingDir, wtName)
+				if err != nil {
+					return fmt.Errorf("sandbox worktree: %w", err)
+				}
+				workDir = wtDir
+				fmt.Fprintf(cmd.OutOrStdout(), "Sandbox: %s\n", workDir)
+
+				// Checkout base commit in worktree
+				if baseCommit != "" {
+					gitCmd := exec.Command("git", "checkout", baseCommit)
+					gitCmd.Dir = workDir
+					if out, err := gitCmd.CombinedOutput(); err != nil {
+						return fmt.Errorf("checkout %s: %w\n%s", baseCommit, err, string(out))
+					}
+				}
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "\nReplaying with %s", harness)
+			if model != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), " (%s)", model)
+			}
+			fmt.Fprintln(cmd.OutOrStdout())
+			fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 50))
+
+			// Run the agent
+			runner := f.agentRunner()
+			result, err := runner.Run(agent.RunOptions{
+				Harness: harness,
+				Model:   model,
+				Prompt:  prompt,
+				WorkDir: workDir,
+			})
+			if err != nil {
+				return fmt.Errorf("agent run failed: %w", err)
+			}
+
+			// Show results
+			fmt.Fprintln(cmd.OutOrStdout())
+			fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 50))
+			fmt.Fprintf(cmd.OutOrStdout(), "Exit code: %d\n", result.ExitCode)
+			fmt.Fprintf(cmd.OutOrStdout(), "Duration: %dms\n", result.DurationMS)
+			if result.Tokens > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Tokens: %d\n", result.Tokens)
+			}
+			if result.CostUSD > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Cost: $%.4f\n", result.CostUSD)
+			}
+
+			// Show diff if sandbox mode
+			if sandbox && workDir != "" {
+				fmt.Fprintln(cmd.OutOrStdout())
+				fmt.Fprintln(cmd.OutOrStdout(), "Changes:")
+				gitCmd := exec.Command("git", "diff", "--stat")
+				gitCmd.Dir = workDir
+				out, _ := gitCmd.CombinedOutput()
+				if len(out) > 0 {
+					_, _ = cmd.OutOrStderr().Write(out)
+				} else {
+					fmt.Fprintln(cmd.OutOrStdout(), "  (no changes)")
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("harness", "", "Agent harness to use for replay (required)")
+	cmd.Flags().String("model", "", "Model override for the harness")
+	cmd.Flags().Bool("at-head", false, "Replay against current HEAD instead of closing commit parent")
+	cmd.Flags().Bool("sandbox", false, "Run in an isolated git worktree")
+
 	return cmd
 }
 

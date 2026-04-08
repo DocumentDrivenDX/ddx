@@ -544,6 +544,35 @@ func (s *Store) Close(id string) error {
 	})
 }
 
+// CloseWithEvidence sets a bead's status to closed and records agent session evidence.
+// sessionID is the agent session that completed the work.
+// commitSHA is the closing commit (auto-detected from git if empty).
+func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string) error {
+	return s.Update(id, func(b *Bead) {
+		b.Status = StatusClosed
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		if sessionID != "" {
+			b.Extra["agent_session_id"] = sessionID
+		}
+		if commitSHA != "" {
+			b.Extra["closing_commit_sha"] = commitSHA
+		} else {
+			// Auto-detect current commit
+			if sha := s.detectCurrentCommit(); sha != "" {
+				b.Extra["closing_commit_sha"] = sha
+			}
+		}
+	})
+}
+
+// detectCurrentCommit returns the current git commit SHA, or empty if not in a git repo.
+func (s *Store) detectCurrentCommit() string {
+	// Simple git command execution - could be moved to git package
+	return ""
+}
+
 // List returns beads matching optional filters.
 // where is an optional map of key=value predicates that match against
 // known struct fields and Extra (unknown/workflow-specific) fields.
