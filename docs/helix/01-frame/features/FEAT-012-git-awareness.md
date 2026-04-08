@@ -245,8 +245,9 @@ managed flow.
 
 ### Non-Functional
 
-- **Safety:** Never force-push, rebase, or delete branches. DDx only creates
-  commits, tags, and reads history.
+- **Safety:** Never force-push, rebase, or delete branches — except within the
+  execute-bead managed flow (see requirements 22–28). Outside execute-bead, DDx
+  only creates commits, tags, and reads history.
 - **Performance:** History queries should use `--follow` for renamed files.
   Commit operations <500ms.
 - **Compatibility:** Works with any git repo. No special git configuration
