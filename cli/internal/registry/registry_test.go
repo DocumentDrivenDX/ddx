@@ -372,3 +372,91 @@ func TestVerifyFiles_SomeExist(t *testing.T) {
 		t.Error("expected VerifyFiles to return true when at least one file exists")
 	}
 }
+
+func TestPruneStaleSkillLinks_RemovesStaleLinksWithinRoot(t *testing.T) {
+	root := t.TempDir()
+	dstDir := t.TempDir()
+
+	// Create a real skill directory inside root
+	realSkill := filepath.Join(root, "skills", "helix-old")
+	require.NoError(t, os.MkdirAll(realSkill, 0o755))
+
+	// Create a symlink in dstDir pointing INTO root (stale — not in allowed)
+	staleLink := filepath.Join(dstDir, "helix-old")
+	require.NoError(t, os.Symlink(realSkill, staleLink))
+
+	// allowed map does NOT include "helix-old"
+	allowed := map[string]bool{"helix-new": true}
+
+	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
+
+	_, err := os.Lstat(staleLink)
+	assert.True(t, os.IsNotExist(err), "stale symlink within root should be removed")
+}
+
+func TestPruneStaleSkillLinks_PreservesLinksOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	dstDir := t.TempDir()
+	outsideDir := t.TempDir()
+
+	// Symlink pointing OUTSIDE root (e.g. user-installed third-party skill)
+	externalLink := filepath.Join(dstDir, "external-skill")
+	require.NoError(t, os.Symlink(outsideDir, externalLink))
+
+	// external-skill is NOT in allowed, but target is outside root — must be preserved
+	allowed := map[string]bool{}
+
+	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
+
+	_, err := os.Lstat(externalLink)
+	assert.NoError(t, err, "symlink pointing outside root should be preserved")
+}
+
+func TestPruneStaleSkillLinks_PreservesAllowedLinks(t *testing.T) {
+	root := t.TempDir()
+	dstDir := t.TempDir()
+
+	realSkill := filepath.Join(root, "skills", "helix-keep")
+	require.NoError(t, os.MkdirAll(realSkill, 0o755))
+
+	keepLink := filepath.Join(dstDir, "helix-keep")
+	require.NoError(t, os.Symlink(realSkill, keepLink))
+
+	// helix-keep IS in allowed — must not be removed
+	allowed := map[string]bool{"helix-keep": true}
+
+	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
+
+	_, err := os.Lstat(keepLink)
+	assert.NoError(t, err, "allowed symlink should not be removed")
+}
+
+func TestPruneStaleSkillLinks_PreservesRealDirectories(t *testing.T) {
+	root := t.TempDir()
+	dstDir := t.TempDir()
+
+	// A real directory (not a symlink) must never be removed by pruneStaleSkillLinks
+	realDir := filepath.Join(dstDir, "ddx-doctor")
+	require.NoError(t, os.MkdirAll(realDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(realDir, "SKILL.md"), []byte("# Doctor"), 0o644))
+
+	allowed := map[string]bool{} // not in allowed
+
+	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
+
+	assert.DirExists(t, realDir, "real directory (not a symlink) should not be removed")
+}
+
+func TestPruneStaleSkillLinks_EmptyInstalledRoot(t *testing.T) {
+	// When installedRoot is empty, pruneStaleSkillLinks must be a no-op
+	dstDir := t.TempDir()
+
+	staleLink := filepath.Join(dstDir, "some-skill")
+	someDir := t.TempDir()
+	require.NoError(t, os.Symlink(someDir, staleLink))
+
+	require.NoError(t, pruneStaleSkillLinks("", dstDir, map[string]bool{}))
+
+	_, err := os.Lstat(staleLink)
+	assert.NoError(t, err, "nothing should be removed when installedRoot is empty")
+}

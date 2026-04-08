@@ -34,6 +34,89 @@ func TestInitRegistersSkills(t *testing.T) {
 	}
 }
 
+// TestCleanupBootstrapSkills_RemovesStaleSkills verifies stale ddx-* skills are removed.
+func TestCleanupBootstrapSkills_RemovesStaleSkills(t *testing.T) {
+	targetDir := t.TempDir()
+
+	// Create a stale ddx-* skill (no longer in bootstrap list)
+	staleDir := filepath.Join(targetDir, "ddx-stale")
+	require.NoError(t, os.MkdirAll(staleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(staleDir, "SKILL.md"), []byte("# Stale"), 0o644))
+
+	// Create a kept skill
+	keepDir := filepath.Join(targetDir, "ddx-doctor")
+	require.NoError(t, os.MkdirAll(keepDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(keepDir, "SKILL.md"), []byte("# Doctor"), 0o644))
+
+	cleanupBootstrapSkills(targetDir, []string{"ddx-doctor"})
+
+	_, err := os.Stat(staleDir)
+	assert.True(t, os.IsNotExist(err), "stale ddx-* skill should be removed")
+	assert.DirExists(t, keepDir, "kept ddx-* skill should remain")
+}
+
+// TestCleanupBootstrapSkills_PreservesNonDdxDirs verifies non-ddx- dirs are untouched.
+func TestCleanupBootstrapSkills_PreservesNonDdxDirs(t *testing.T) {
+	targetDir := t.TempDir()
+
+	otherDir := filepath.Join(targetDir, "helix-align")
+	require.NoError(t, os.MkdirAll(otherDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(otherDir, "SKILL.md"), []byte("# Helix"), 0o644))
+
+	cleanupBootstrapSkills(targetDir, []string{"ddx-doctor"})
+
+	assert.DirExists(t, otherDir, "non-ddx- skill should not be removed")
+}
+
+// TestCleanupBootstrapSkills_SkipsDirsWithoutSKILLMD verifies dirs without SKILL.md are untouched.
+func TestCleanupBootstrapSkills_SkipsDirsWithoutSKILLMD(t *testing.T) {
+	targetDir := t.TempDir()
+
+	noSkillDir := filepath.Join(targetDir, "ddx-no-skill")
+	require.NoError(t, os.MkdirAll(noSkillDir, 0o755))
+	// no SKILL.md written
+
+	cleanupBootstrapSkills(targetDir, []string{"ddx-doctor"})
+
+	assert.DirExists(t, noSkillDir, "ddx-* dir without SKILL.md should not be removed")
+}
+
+// TestRegisterProjectSkills_CleansUpStaleBootstrapSkills verifies stale bootstrap skills
+// are removed when registerProjectSkills is called with an updated bootstrap list.
+func TestRegisterProjectSkills_CleansUpStaleBootstrapSkills(t *testing.T) {
+	workingDir := t.TempDir()
+
+	// Manually plant a stale bootstrap skill in all three target directories
+	targetDirs := []string{
+		filepath.Join(workingDir, ".ddx", "skills"),
+		filepath.Join(workingDir, ".agents", "skills"),
+		filepath.Join(workingDir, ".claude", "skills"),
+	}
+	for _, dir := range targetDirs {
+		staleDir := filepath.Join(dir, "ddx-stale-old")
+		require.NoError(t, os.MkdirAll(staleDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(staleDir, "SKILL.md"), []byte("# Old"), 0o644))
+	}
+
+	// registerProjectSkills uses the current bootstrap list which does not include ddx-stale-old
+	registerProjectSkills(workingDir, false)
+
+	// Stale skill must be cleaned up in every target directory
+	for _, dir := range targetDirs {
+		staleDir := filepath.Join(dir, "ddx-stale-old")
+		_, err := os.Stat(staleDir)
+		assert.True(t, os.IsNotExist(err), "stale skill ddx-stale-old should be removed from %s", dir)
+	}
+
+	// Current bootstrap skills must be present in every target directory
+	for _, dir := range targetDirs {
+		for _, skill := range []string{"ddx-doctor", "ddx-run"} {
+			skillFile := filepath.Join(dir, skill, "SKILL.md")
+			assert.FileExists(t, skillFile, "bootstrap skill %s should exist in %s", skill, dir)
+		}
+	}
+}
+
 // TestInitSkillsNoOverwrite verifies that existing skill files are not overwritten.
 func TestInitSkillsNoOverwrite(t *testing.T) {
 	te := NewTestEnvironment(t, WithGitInit(false))
