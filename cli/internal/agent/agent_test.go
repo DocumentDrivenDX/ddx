@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -959,6 +960,15 @@ func TestIntegration_GeminiEcho(t *testing.T) {
 	if _, err := DefaultLookPath("gemini"); err != nil {
 		t.Skip("gemini not available")
 	}
+	// Skip if gemini credentials are not configured (avoids hanging until timeout).
+	// gemini CLI stores credentials in ~/.gemini/ or uses GEMINI_API_KEY.
+	if os.Getenv("GEMINI_API_KEY") == "" {
+		homeDir, _ := os.UserHomeDir()
+		credPath := filepath.Join(homeDir, ".gemini", "credentials.json")
+		if _, err := os.Stat(credPath); os.IsNotExist(err) {
+			t.Skip("gemini credentials not configured (set GEMINI_API_KEY or provide ~/.gemini/credentials.json)")
+		}
+	}
 	// Gemini has slow initialization (skill loading), so use a longer timeout
 	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 180000})
 	result, err := r.Run(RunOptions{
@@ -968,4 +978,63 @@ func TestIntegration_GeminiEcho(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode, "exit code should be 0, error: %s", result.Error)
 	assert.NotEmpty(t, result.Output, "should have output")
+}
+
+// --- OSExecutor early-cancel tests ---
+
+func TestMatchesCancelPattern(t *testing.T) {
+	cases := []struct {
+		line string
+		want bool
+	}{
+		{"Error 429 Too Many Requests", true},
+		{"401 Unauthorized", true},
+		{"403 Forbidden", true},
+		{"rate limit exceeded", true},
+		{"quota exceeded for project", true},
+		{"not logged in, please authenticate", true},
+		{"no credentials found", true},
+		{"authentication required", true},
+		{"invalid api key provided", true},
+		{"insufficient credits remaining", true},
+		{"normal output line", false},
+		{"", false},
+		{"running task...", false},
+	}
+	for _, tc := range cases {
+		got := matchesCancelPattern(tc.line)
+		if tc.want && got == "" {
+			t.Errorf("line %q: expected a match, got none", tc.line)
+		}
+		if !tc.want && got != "" {
+			t.Errorf("line %q: expected no match, got %q", tc.line, got)
+		}
+	}
+}
+
+func TestOSExecutor_EarlyCancel(t *testing.T) {
+	// Shell prints an auth error on stderr then sleeps. Without early-cancel
+	// this would block for the full timeout.
+	ex := &OSExecutor{}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := ex.ExecuteInDir(ctx, "sh", []string{"-c",
+		`echo "Error: 429 rate limit exceeded" >&2; sleep 60`}, "", "")
+	require.NoError(t, err)
+	assert.True(t, result.EarlyCancel, "should have been cancelled early")
+	assert.NotEmpty(t, result.CancelReason)
+	assert.Contains(t, result.Stderr, "429")
+	assert.Equal(t, -1, result.ExitCode)
+}
+
+func TestOSExecutor_NormalExit(t *testing.T) {
+	ex := &OSExecutor{}
+	ctx := context.Background()
+	result, err := ex.ExecuteInDir(ctx, "sh", []string{"-c", `echo "hello"; exit 0`}, "", "")
+	require.NoError(t, err)
+	assert.False(t, result.EarlyCancel)
+	assert.Empty(t, result.CancelReason)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Contains(t, result.Stdout, "hello")
 }

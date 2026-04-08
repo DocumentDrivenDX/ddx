@@ -317,7 +317,10 @@ func (r *Runner) processResult(harnessName, model string, harness Harness, execR
 		result.ExitCode = execResult.ExitCode
 	}
 
-	if execErr != nil {
+	if execResult != nil && execResult.EarlyCancel {
+		result.Error = fmt.Sprintf("cancelled: auth/rate-limit detected (%s)", execResult.CancelReason)
+		result.ExitCode = -1
+	} else if execErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			result.Error = fmt.Sprintf("timeout after %v", elapsed.Round(time.Second))
 			result.ExitCode = -1
