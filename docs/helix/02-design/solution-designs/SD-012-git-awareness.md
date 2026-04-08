@@ -173,14 +173,18 @@ Non-landed iterations are preserved under:
 refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>
 ```
 
-Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646`
+Where:
+- `<timestamp>` is in `YYYYMMDDTHHMMSSZ` format (UTC, compact ISO-8601), e.g., `20260408T130000Z`
+- `<base-shortsha>` is at least a 12-character prefix of the base commit SHA
 
-These refs are local only. DDx does not push them. Tools and humans may use
-them for replay and introspection via the execute-bead session evidence.
+Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646def01`
+
+These refs are local only. DDx does not push them. Preserved iterations can be
+enumerated with `git for-each-ref 'refs/ddx/iterations/<bead-id>/*'`.
 
 ### Acceptance Criteria (execute-bead git operations)
 
-- Given execute-bead creates a hidden ref, when the ref is inspected, then its name matches `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` exactly.
+- Given execute-bead creates a hidden ref, when the ref is inspected, then its name matches `refs/ddx/iterations/<bead-id>/YYYYMMDDTHHMMSSZ-<12charsha>` with a UTC compact timestamp and at least 12-character SHA.
 - Given execute-bead completes (any outcome), when the filesystem is inspected, then no worktree matching the execute-bead worktree path pattern remains.
 - Given the target branch is fast-forward updated by execute-bead, when `git log --merges` is inspected, then no merge commit exists — history is linear.
 

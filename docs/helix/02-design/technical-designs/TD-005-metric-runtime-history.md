@@ -202,8 +202,10 @@ The evaluation model is narrow: results → metrics → ratchet/blocker outcome.
 
 **Threshold fields:**
 - `thresholds.warn` — emit a warning when this value is exceeded; no blocking
-- `thresholds.ratchet` — block landing when this value is exceeded (or not
-  reached, depending on direction)
+- `thresholds.ratchet` — block landing when the current value strictly exceeds
+  this threshold (`value > ratchet`, not equal-to). For multi-sample runs
+  (multiple entries in `samples`), use the maximum value for threshold comparison
+  unless the definition specifies otherwise.
 
 Field names are generic scalars, not unit-specific. The `unit` field in the
 `result.metric` block identifies what the number means.

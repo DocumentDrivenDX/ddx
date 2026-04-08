@@ -353,10 +353,15 @@ Non-landed iterations are preserved under:
 refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>
 ```
 
-Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646`
+Where:
+- `<timestamp>` is in `YYYYMMDDTHHMMSSZ` format (UTC, compact ISO-8601), e.g., `20260408T130000Z`
+- `<base-shortsha>` is at least a 12-character prefix of the base commit SHA
+
+Example: `refs/ddx/iterations/ddx-abc12345/20260408T130000Z-418a646def01`
 
 These refs are local and not pushed by DDx. Tools and humans may read them for
-replay and introspection.
+replay and introspection. Preserved iterations can be enumerated with:
+`git for-each-ref 'refs/ddx/iterations/<bead-id>/*'`
 
 **All other DDx git operations remain conservative.** DDx does not force-push,
 rebase outside execute-bead, delete branches, or amend commits outside this
