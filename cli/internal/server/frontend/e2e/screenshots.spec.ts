@@ -38,4 +38,11 @@ test.describe('DDx Server UI Screenshots', () => {
     await page.waitForTimeout(500)
     await expect(page).toHaveScreenshot('agent.png', { fullPage: true })
   })
+
+  test('personas page', async ({ page }) => {
+    await page.goto('/personas')
+    await page.waitForSelector('text=Personas')
+    await page.waitForTimeout(500)
+    await expect(page).toHaveScreenshot('personas.png', { fullPage: true })
+  })
 })
