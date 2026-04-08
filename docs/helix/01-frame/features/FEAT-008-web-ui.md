@@ -56,10 +56,10 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Frontend framework | **Solid** or **React** | Solid is smaller/faster; React has larger ecosystem. Decide at implementation. |
+| Frontend framework | **React** | Decided in ADR-002 (Accepted 2026-04-04) |
 | Build tool | **Vite** | Industry standard, fast, good Go embed integration |
 | Styling | **Tailwind CSS** | Consistent with website (Hextra uses Tailwind) |
-| Data fetching | **TanStack Query** | Caching, refetching, works with both React and Solid |
+| Data fetching | **TanStack Query** | Caching, refetching, works with React |
 | Graph visualization | **D3.js** or **Cytoscape.js** | For document dependency graph rendering |
 | Embedding | **Go embed.FS** | Compile frontend into the binary — no external files needed |
 | Go HTTP | **Chi** or **net/http** | Standard library compatible routing |
