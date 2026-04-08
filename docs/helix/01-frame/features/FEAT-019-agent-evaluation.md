@@ -404,7 +404,7 @@ working tree
   DDx provides comparison and grading; plugins provide the iteration loop.
 - **Structured git trailers** — bead + session log already have the data.
   Don't duplicate into git commit metadata.
-- **Autonomy semantics and exploration policy** — DDx does not define what autonomy levels mean or when to run experiments; those are delegated to workflow plugins
-- **Escalation and supervisory rules** — whether to accept a result, retry, or escalate is workflow plugin policy; DDx provides the comparison and grading data
+- **Autonomy semantics and exploration policy** — DDx does not define what autonomy levels mean or when to run experiments; those are delegated to workflow tools
+- **Escalation and supervisory rules** — whether to accept a result, retry, or escalate is workflow tool policy; DDx provides the comparison and grading data
 - Container or VM-level sandboxing
 - Cross-repo or cross-project comparison

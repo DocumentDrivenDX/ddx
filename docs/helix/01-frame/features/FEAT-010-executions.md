@@ -240,8 +240,8 @@ The HTTP/MCP surface is read-only for v1. Execution invocation remains CLI-only.
 
 ## Out of Scope
 
-- Workflow-specific action semantics such as phase routing or tool-specific issue closing rules — delegated to workflow plugins
-- **Autonomy semantics and escalation policy** — DDx does not define what autonomy levels mean or when to escalate; those are delegated to workflow plugins
+- Workflow-specific action semantics such as phase routing or tool-specific issue closing rules — delegated to workflow tools
+- **Autonomy semantics and escalation policy** — DDx does not define what autonomy levels mean or when to escalate; those are delegated to workflow tools
 - **When to invoke execution and what to do with results** — DDx provides the execution substrate; workflow tools decide when to run executions and how to act on outcomes
 - Automatic generation of execution definitions from artifact prose
 - Server-side execution invocation over HTTP/MCP

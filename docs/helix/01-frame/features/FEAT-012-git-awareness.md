@@ -377,4 +377,4 @@ managed flow.
 - Git configuration management
 - Submodule or subtree operations (handled by existing `ddx update/contribute`)
 - **When to invoke execute-bead and what to do with the outcome** — DDx provides the git mechanics; workflow tools decide when to run execute-bead, whether to retry, and how to act on preserved vs landed iterations
-- **Conflict classification and escalation** — whether a merge conflict is resolvable or requires escalation is a workflow plugin policy decision, not a DDx git operation
+- **Conflict classification and escalation** — whether a merge conflict is resolvable or requires escalation is a workflow tool policy decision, not a DDx git operation

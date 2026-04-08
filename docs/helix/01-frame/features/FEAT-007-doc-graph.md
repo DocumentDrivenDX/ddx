@@ -268,5 +268,5 @@ surfaced alongside the existing graph/stale/stamp commands.
 - Automated document updating — DDx detects staleness, agents do the updating
 - Document content validation (correct sections, completeness) — that's workflow-level
 - Branch management, remote operations, merge conflict resolution (see FEAT-012 Out of Scope)
-- **Graph traversal policy** — authority ordering, impact-flow strategy, and search fallback policy are delegated to workflow plugins; DDx provides the graph primitives (edges, dependents, staleness), not the traversal strategy
+- **Graph traversal policy** — authority ordering, impact-flow strategy, and search fallback policy are delegated to workflow tools; DDx provides the graph primitives (edges, dependents, staleness), not the traversal strategy
 - **Artifact decomposition policy** — how to break a change across an artifact stack is a plugin concern; DDx indexes the artifacts and their relationships

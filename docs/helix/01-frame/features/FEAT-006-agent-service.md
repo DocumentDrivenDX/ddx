@@ -255,15 +255,31 @@ independent of graph-authored execution documents (see FEAT-014):
 ### Iteration commit summary
 
 Each execute-bead iteration produces a commit (landed or preserved under a
-hidden ref) with a minimum summary surface that enables post-hoc evaluation
-without opening session attachments:
+hidden ref). The commit message contains a structured JSON trailer block
+with the minimum surface needed for post-hoc evaluation without opening
+session attachments:
 
-- bead ID
-- base revision and result revision
-- harness and model
-- required execution outcome summary (pass / fail / skipped)
-- ratchet evaluation summary
-- merge vs preserve outcome
+```
+ddx-iteration: {
+  "bead_id": "ddx-abc12345",
+  "session_id": "forge-1744128000000",
+  "harness": "forge",
+  "model": "qwen3.5-27b",
+  "total_tokens": 12500,
+  "cost_usd": 0,
+  "base_rev": "418a646def01",
+  "result_rev": "63f71eeabc12",
+  "required_exec_summary": "pass",
+  "ratchet_summary": "ok",
+  "outcome": "landed"
+}
+```
+
+Field notes:
+- `cost_usd`: `0` for local models; `-1` when the harness does not report cost
+- `required_exec_summary`: `"pass"`, `"fail"`, or `"skipped"` (no exec docs found)
+- `ratchet_summary`: `"ok"`, `"warn"`, or `"blocked"`
+- `outcome`: `"landed"` or `"preserved"`
 
 Full conversation transcript, tool call detail, and session evidence are stored
 in DDx runtime storage (session logs and exec-run attachments), not in git
@@ -484,9 +500,9 @@ available and uses it for usage tracking (FEAT-014) and self-throttling.
 
 ## Out of Scope
 
-- **Autonomy semantics** — DDx does not define what autonomy levels mean behaviorally; that is delegated to workflow plugins
+- **Autonomy semantics** — DDx does not define what autonomy levels mean behaviorally; that is delegated to workflow tools
 - **Workflow routing and orchestration** — DDx does not decide when to invoke execute-bead, what to do with the outcome, or how to sequence workflow phases; that is delegated to workflow tools
-- **Escalation and supervisory policy** — follow-on bead creation, stop/continue rules, and conflict escalation are workflow plugin concerns
+- **Escalation and supervisory policy** — follow-on bead creation, stop/continue rules, and conflict escalation are workflow tool concerns
 - **Prompt design and engineering strategy** — bead prompt structure, prompt optimization, and rubric content are delegated to plugins; DDx provides the dispatch and grading mechanics
 - **Server-side agent dispatch** — `ddx agent run` is CLI-only for security.
   The localhost-only dispatch endpoints in FEAT-002 (items 40-41) delegate to
