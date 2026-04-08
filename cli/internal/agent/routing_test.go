@@ -504,6 +504,116 @@ func TestAgentDoctorReportsRoutingRelevantHarnessState(t *testing.T) {
 	assert.Equal(t, "April 12", state.Quota.ResetDate)
 }
 
+// TestBuildCandidatePlansHarnessOverrideWithModelPinSetsConcreteModel verifies that
+// when HarnessOverride and ModelPin are both set, ConcreteModel is populated from
+// the pin value, and that harnesses without ExactPinSupport are rejected.
+func TestBuildCandidatePlansHarnessOverrideWithModelPinSetsConcreteModel(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	// Verify positive path: HarnessOverride + ModelPin on codex (ExactPinSupport=true).
+	states := map[string]HarnessState{
+		"codex": healthyState(),
+	}
+
+	plans := r.BuildCandidatePlans(RouteRequest{
+		HarnessOverride: "codex",
+		ModelPin:        "gpt-5.4-mini",
+	}, states)
+
+	var codexPlan *CandidatePlan
+	for i := range plans {
+		if plans[i].Harness == "codex" {
+			codexPlan = &plans[i]
+			break
+		}
+	}
+
+	require.NotNil(t, codexPlan, "codex plan should be present")
+	assert.True(t, codexPlan.Viable, "codex with ExactPinSupport should be viable for HarnessOverride+ModelPin")
+	assert.Equal(t, "gpt-5.4-mini", codexPlan.ConcreteModel, "ConcreteModel must equal the pin value")
+
+	// Verify rejection path: HarnessOverride + ModelPin on a harness without ExactPinSupport.
+	r.Registry.harnesses["no-pin-harness"] = Harness{
+		Name:            "no-pin-harness",
+		Binary:          "no-pin-harness",
+		Surface:         "no-pin",
+		CostClass:       "medium",
+		ExactPinSupport: false,
+		IsLocal:         false,
+	}
+
+	statesNoPinOnly := map[string]HarnessState{
+		"no-pin-harness": healthyState(),
+	}
+
+	plansNoPin := r.BuildCandidatePlans(RouteRequest{
+		HarnessOverride: "no-pin-harness",
+		ModelPin:        "gpt-5.4-mini",
+	}, statesNoPinOnly)
+
+	var noPinPlan *CandidatePlan
+	for i := range plansNoPin {
+		if plansNoPin[i].Harness == "no-pin-harness" {
+			noPinPlan = &plansNoPin[i]
+			break
+		}
+	}
+
+	require.NotNil(t, noPinPlan, "no-pin-harness plan should be present")
+	assert.False(t, noPinPlan.Viable, "harness without ExactPinSupport should be rejected for HarnessOverride+ModelPin")
+	assert.Contains(t, noPinPlan.RejectReason, "does not support exact model pins")
+}
+
+// TestBuildCandidatePlansHarnessOverrideWithModelRefResolvesCatalogAndDeprecation
+// verifies that when HarnessOverride and ModelRef are both set, ConcreteModel is
+// resolved from the catalog for the harness's surface, and deprecation warnings
+// are propagated when the ref is deprecated.
+func TestBuildCandidatePlansHarnessOverrideWithModelRefResolvesCatalogAndDeprecation(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"codex": healthyState(),
+	}
+
+	// "codex-mini" is deprecated in BuiltinCatalog and mapped to the codex surface.
+	plans := r.BuildCandidatePlans(RouteRequest{
+		HarnessOverride: "codex",
+		ModelRef:        "codex-mini",
+	}, states)
+
+	var codexPlan *CandidatePlan
+	for i := range plans {
+		if plans[i].Harness == "codex" {
+			codexPlan = &plans[i]
+			break
+		}
+	}
+
+	require.NotNil(t, codexPlan, "codex plan should be present")
+	assert.True(t, codexPlan.Viable, "codex should be viable for HarnessOverride+ModelRef with a known ref")
+	assert.NotEmpty(t, codexPlan.ConcreteModel, "ConcreteModel must be populated via catalog resolution")
+	assert.NotEmpty(t, codexPlan.DeprecationWarning, "deprecated ref should produce a deprecation warning")
+	assert.Contains(t, codexPlan.DeprecationWarning, "codex-mini")
+
+	// Also verify rejection when the ModelRef is unknown on the harness surface.
+	plansUnknown := r.BuildCandidatePlans(RouteRequest{
+		HarnessOverride: "codex",
+		ModelRef:        "qwen3", // qwen3 is embedded-openai only, not on codex surface
+	}, states)
+
+	var codexUnknown *CandidatePlan
+	for i := range plansUnknown {
+		if plansUnknown[i].Harness == "codex" {
+			codexUnknown = &plansUnknown[i]
+			break
+		}
+	}
+
+	require.NotNil(t, codexUnknown, "codex plan should be present for unknown ref test")
+	assert.False(t, codexUnknown.Viable, "codex should be rejected when ModelRef is not available on its surface")
+	assert.Contains(t, codexUnknown.RejectReason, "not available on surface")
+}
+
 // TestBuildCandidatePlansHarnessOverrideWithProfileResolvesConcreteModel verifies
 // that when both HarnessOverride and Profile are set, evaluateCandidate still
 // populates ConcreteModel via the catalog. Regression test for the bug where
