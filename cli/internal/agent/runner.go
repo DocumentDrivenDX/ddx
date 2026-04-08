@@ -187,11 +187,14 @@ func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 		caps.Models = []string{model}
 	}
 
-	// Build effective profile → model mappings for this harness.
-	if tiers, ok := DefaultModelTiers[harnessName]; ok && len(tiers) > 0 {
-		caps.ProfileMappings = make(map[string]string)
-		for tier, m := range tiers {
-			caps.ProfileMappings[string(tier)] = m
+	// Build effective profile → model mappings for this harness from the catalog.
+	cat := r.catalog()
+	for _, profile := range []string{"cheap", "fast", "smart"} {
+		if m, ok := cat.Resolve(profile, harness.Surface); ok {
+			if caps.ProfileMappings == nil {
+				caps.ProfileMappings = make(map[string]string)
+			}
+			caps.ProfileMappings[profile] = m
 		}
 	}
 

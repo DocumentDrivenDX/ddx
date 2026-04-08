@@ -456,7 +456,7 @@ func TestAgentCapabilitiesShowsEffectiveProfileMappings(t *testing.T) {
 	assert.False(t, caps.IsLocal)
 	assert.True(t, caps.ExactPinSupport)
 	assert.True(t, caps.SupportsEffort)
-	// codex has tier mappings in DefaultModelTiers.
+	// codex has profile mappings in the catalog.
 	assert.NotEmpty(t, caps.ProfileMappings, "codex should have profile mappings")
 }
 
