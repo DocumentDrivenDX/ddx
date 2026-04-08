@@ -23,18 +23,21 @@ test.describe('DDx Server UI Screenshots', () => {
 
   test('documents page', async ({ page }) => {
     await page.goto('/documents')
+    await page.waitForSelector('h1')
     await page.waitForTimeout(500)
     await expect(page).toHaveScreenshot('documents.png', { fullPage: true })
   })
 
   test('graph page', async ({ page }) => {
     await page.goto('/graph')
+    await page.waitForSelector('h1')
     await page.waitForTimeout(500)
     await expect(page).toHaveScreenshot('graph.png', { fullPage: true })
   })
 
   test('agent page', async ({ page }) => {
     await page.goto('/agent')
+    await page.waitForSelector('h1')
     await page.waitForTimeout(500)
     await expect(page).toHaveScreenshot('agent.png', { fullPage: true })
   })
