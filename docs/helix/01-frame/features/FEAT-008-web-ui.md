@@ -382,9 +382,7 @@ ddx/
 └── cli/
     └── internal/
         └── server/
-            ├── server.go          # Server entry point
-            ├── api/               # HTTP API handlers
-            ├── mcp/               # MCP endpoint handlers
+            ├── server.go          # HTTP API and MCP handlers
             ├── embed.go           # embed.FS declaration
             └── frontend/
                 ├── package.json
