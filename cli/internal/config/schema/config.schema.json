@@ -4,13 +4,17 @@
   "title": "DDx Configuration Schema",
   "description": "Schema for DDx project configuration files (.ddx/config.yaml)",
   "type": "object",
-  "required": ["version"],
+  "required": [
+    "version"
+  ],
   "properties": {
     "version": {
       "type": "string",
       "pattern": "^\\d+\\.\\d+$",
       "description": "Configuration schema version (e.g., '1.0')",
-      "examples": ["1.0"]
+      "examples": [
+        "1.0"
+      ]
     },
     "library": {
       "type": "object",
@@ -20,7 +24,11 @@
           "type": "string",
           "default": "./library",
           "description": "Path to DDx library relative to config.yaml",
-          "examples": ["./library", "../shared/ddx-library", "/opt/ddx/library"]
+          "examples": [
+            "./library",
+            "../shared/ddx-library",
+            "/opt/ddx/library"
+          ]
         },
         "repository": {
           "type": "object",
@@ -39,13 +47,22 @@
               "type": "string",
               "description": "Branch to sync from repository",
               "default": "main",
-              "examples": ["main", "master", "stable", "v2"]
+              "examples": [
+                "main",
+                "master",
+                "stable",
+                "v2"
+              ]
             },
             "subtree": {
               "type": "string",
               "description": "Path within repository to sync (what gets synced to library path)",
               "default": "library",
-              "examples": ["library", "assets", "content"]
+              "examples": [
+                "library",
+                "assets",
+                "content"
+              ]
             }
           },
           "additionalProperties": false
@@ -61,7 +78,10 @@
           "type": "string",
           "minLength": 1,
           "description": "Override the bead ID prefix used by the tracker",
-          "examples": ["nif", "bx"]
+          "examples": [
+            "nif",
+            "bx"
+          ]
         }
       },
       "additionalProperties": false
@@ -85,9 +105,15 @@
       "description": "System-level configuration settings",
       "properties": {
         "meta_prompt": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "Path to meta-prompt file (null to disable)",
-          "examples": ["claude/system-prompts/focused.md", null]
+          "examples": [
+            "claude/system-prompts/focused.md",
+            null
+          ]
         }
       },
       "additionalProperties": false
@@ -106,7 +132,12 @@
           "default": "24h",
           "pattern": "^\\d+[hdwmy]$",
           "description": "Check frequency (Go duration format: h=hours, d=days, w=weeks, m=months, y=years)",
-          "examples": ["24h", "12h", "7d", "1w"]
+          "examples": [
+            "24h",
+            "12h",
+            "7d",
+            "1w"
+          ]
         }
       },
       "additionalProperties": false
@@ -117,7 +148,11 @@
       "properties": {
         "auto_commit": {
           "type": "string",
-          "enum": ["always", "prompt", "never"],
+          "enum": [
+            "always",
+            "prompt",
+            "never"
+          ],
           "default": "never",
           "description": "Auto-commit mode for document writes (always | prompt | never)"
         },
@@ -125,7 +160,10 @@
           "type": "string",
           "default": "docs",
           "description": "Prefix for auto-commit messages",
-          "examples": ["docs", "chore"]
+          "examples": [
+            "docs",
+            "chore"
+          ]
         }
       },
       "additionalProperties": false
@@ -137,12 +175,19 @@
         "harness": {
           "type": "string",
           "description": "Default harness name (e.g., codex, claude, gemini)",
-          "examples": ["codex", "claude", "gemini"]
+          "examples": [
+            "codex",
+            "claude",
+            "gemini"
+          ]
         },
         "model": {
           "type": "string",
           "description": "Global model override for agent invocation",
-          "examples": ["o3-mini", "claude-sonnet-4-20250514"]
+          "examples": [
+            "o3-mini",
+            "claude-sonnet-4-20250514"
+          ]
         },
         "models": {
           "type": "object",
@@ -150,7 +195,12 @@
           "additionalProperties": {
             "type": "string"
           },
-          "examples": [{"codex": "o3-mini", "claude": "claude-sonnet-4-20250514"}]
+          "examples": [
+            {
+              "codex": "o3-mini",
+              "claude": "claude-sonnet-4-20250514"
+            }
+          ]
         },
         "reasoning_levels": {
           "type": "object",
@@ -161,19 +211,125 @@
               "type": "string"
             }
           },
-          "examples": [{"codex": ["low", "medium", "high"]}]
+          "examples": [
+            {
+              "codex": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          ]
         },
         "timeout_ms": {
           "type": "integer",
           "description": "Default timeout in milliseconds",
           "default": 300000,
-          "examples": [300000, 600000]
+          "examples": [
+            300000,
+            600000
+          ]
         },
         "session_log_dir": {
           "type": "string",
           "description": "Directory for agent session logs",
           "default": ".ddx/agent-logs",
-          "examples": [".ddx/agent-logs", "/tmp/agent-logs"]
+          "examples": [
+            ".ddx/agent-logs",
+            "/tmp/agent-logs"
+          ]
+        },
+        "permissions": {
+          "type": "string",
+          "description": "Default permission level for agent invocations",
+          "enum": [
+            "safe",
+            "supervised",
+            "unrestricted"
+          ]
+        },
+        "forge": {
+          "type": "object",
+          "description": "Configuration for the embedded forge agent harness",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "description": "Provider type: openai-compat or anthropic",
+              "examples": [
+                "openai-compat",
+                "anthropic"
+              ]
+            },
+            "base_url": {
+              "type": "string",
+              "description": "Provider endpoint URL",
+              "examples": [
+                "http://localhost:1234/v1"
+              ]
+            },
+            "api_key": {
+              "type": "string",
+              "description": "API key for the provider"
+            },
+            "model": {
+              "type": "string",
+              "description": "Default model name"
+            },
+            "preset": {
+              "type": "string",
+              "description": "Prompt preset (forge/codex/claude/cursor/minimal)",
+              "examples": [
+                "forge",
+                "minimal"
+              ]
+            },
+            "max_iterations": {
+              "type": "integer",
+              "description": "Maximum tool-call rounds",
+              "default": 20
+            },
+            "models": {
+              "type": "object",
+              "description": "Named LLM presets with optional multi-endpoint support",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "model"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "Model name passed to the provider"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "description": "Provider override"
+                  },
+                  "endpoints": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "One or more base URLs; multiple = load balanced"
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "description": "API key override"
+                  },
+                  "strategy": {
+                    "type": "string",
+                    "description": "Endpoint selection strategy",
+                    "enum": [
+                      "round-robin",
+                      "first-available"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
