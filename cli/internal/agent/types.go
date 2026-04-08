@@ -18,6 +18,11 @@ type Harness struct {
 	EffortFlag      string              // flag for effort/reasoning control, empty if unsupported
 	EffortFormat    string              // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
 	TokenPattern    string              // regex to extract token count from output, must have one capture group
+	Surface         string              // catalog surface identifier: "codex", "claude", "embedded-openai", "embedded-anthropic"
+	CostClass       string              // local, cheap, medium, expensive
+	IsLocal         bool                // true for embedded/local harnesses (no cloud cost)
+	ExactPinSupport bool                // true if harness can accept an exact concrete model pin
+	QuotaCommand    string              // CLI prompt to invoke for quota introspection (e.g. "/usage", "/status")
 }
 
 // Config holds agent service configuration.
@@ -114,13 +119,20 @@ type HarnessStatus struct {
 
 // HarnessCapabilities describes the effective capabilities for a harness.
 type HarnessCapabilities struct {
-	Harness         string   `json:"harness"`
-	Available       bool     `json:"available"`
-	Binary          string   `json:"binary"`
-	Path            string   `json:"path,omitempty"`
-	Model           string   `json:"model,omitempty"`
-	Models          []string `json:"models,omitempty"`
-	ReasoningLevels []string `json:"reasoning_levels,omitempty"`
+	Harness             string            `json:"harness"`
+	Available           bool              `json:"available"`
+	Binary              string            `json:"binary"`
+	Path                string            `json:"path,omitempty"`
+	Model               string            `json:"model,omitempty"`
+	Models              []string          `json:"models,omitempty"`
+	ReasoningLevels     []string          `json:"reasoning_levels,omitempty"`
+	Surface             string            `json:"surface,omitempty"`          // catalog surface identifier
+	CostClass           string            `json:"cost_class,omitempty"`       // local, cheap, medium, expensive
+	IsLocal             bool              `json:"is_local"`                   // true if embedded/local (no cloud cost)
+	ExactPinSupport     bool              `json:"exact_pin_support"`          // true if harness accepts exact model pin
+	ProfileMappings     map[string]string `json:"profile_mappings,omitempty"` // effective profile → model for this harness
+	SupportsEffort      bool              `json:"supports_effort"`            // true if harness has effort/reasoning flag
+	SupportsPermissions bool              `json:"supports_permissions"`       // true if harness has permission-level flags
 }
 
 // CompareOptions configures a comparison dispatch.
@@ -178,6 +190,53 @@ type ComparisonRecord struct {
 	Prompt    string            `json:"prompt"`
 	Arms      []ComparisonArm   `json:"arms"`
 	Grades    []ComparisonGrade `json:"grades,omitempty"`
+}
+
+// HarnessState captures the runtime routing-relevant state of a harness.
+type HarnessState struct {
+	Installed     bool       `json:"installed"`
+	Reachable     bool       `json:"reachable"`
+	Authenticated bool       `json:"authenticated"`
+	QuotaOK       bool       `json:"quota_ok"`
+	Degraded      bool       `json:"degraded"`
+	PolicyOK      bool       `json:"policy_ok"`
+	LastChecked   time.Time  `json:"last_checked,omitempty"`
+	Error         string     `json:"error,omitempty"`
+	Quota         *QuotaInfo `json:"quota,omitempty"`
+}
+
+// QuotaInfo holds parsed quota data from CLI introspection.
+type QuotaInfo struct {
+	PercentUsed int    `json:"percent_used"`
+	LimitWindow string `json:"limit_window,omitempty"` // e.g. "5h", "7 day"
+	ResetDate   string `json:"reset_date,omitempty"`   // e.g. "April 12"
+}
+
+// RouteRequest is the normalized routing ask built from CLI flags and config.
+type RouteRequest struct {
+	Profile         string // cheap, fast, smart
+	ModelRef        string // logical catalog ref or alias
+	ModelPin        string // exact concrete model string (bypasses catalog policy)
+	Effort          string // low, medium, high, etc.
+	Permissions     string // safe, supervised, unrestricted
+	HarnessOverride string // forces routing to one harness only
+}
+
+// CandidatePlan is a routing evaluation result for one harness.
+type CandidatePlan struct {
+	Harness             string       `json:"harness"`
+	Surface             string       `json:"surface,omitempty"`          // catalog surface: embedded-openai, embedded-anthropic, codex, claude
+	RequestedRef        string       `json:"requested_ref,omitempty"`    // profile or model ref from the request
+	CanonicalTarget     string       `json:"canonical_target,omitempty"` // resolved catalog canonical target
+	ConcreteModel       string       `json:"concrete_model,omitempty"`   // concrete model string to pass to harness
+	SupportsEffort      bool         `json:"supports_effort"`
+	SupportsPermissions bool         `json:"supports_permissions"`
+	State               HarnessState `json:"state"`
+	CostClass           string       `json:"cost_class,omitempty"`         // local, cheap, medium, expensive
+	EstimatedCostUSD    float64      `json:"estimated_cost_usd,omitempty"` // -1 = unknown
+	RejectReason        string       `json:"reject_reason,omitempty"`      // non-empty means rejected
+	Score               float64      `json:"score,omitempty"`
+	Viable              bool         `json:"viable"`
 }
 
 // Default configuration values.

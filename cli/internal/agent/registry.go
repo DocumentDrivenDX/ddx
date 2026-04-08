@@ -24,6 +24,11 @@ var builtinHarnesses = map[string]Harness{
 		WorkDirFlag:     "-C",
 		EffortFlag:      "-c",
 		EffortFormat:    "reasoning.effort=%s",
+		Surface:         "codex",
+		CostClass:       "medium",
+		IsLocal:         false,
+		ExactPinSupport: true,
+		QuotaCommand:    "/status",
 	},
 	"claude": {
 		Name:     "claude",
@@ -42,6 +47,11 @@ var builtinHarnesses = map[string]Harness{
 		WorkDirFlag:     "",
 		EffortFlag:      "--effort",
 		TokenPattern:    `(?i)total tokens[:\s]+([0-9,]+)`,
+		Surface:         "claude",
+		CostClass:       "medium",
+		IsLocal:         false,
+		ExactPinSupport: true,
+		QuotaCommand:    "/usage",
 	},
 	"gemini": {
 		Name:            "gemini",
@@ -50,6 +60,10 @@ var builtinHarnesses = map[string]Harness{
 		PromptMode:      "stdin",
 		ModelFlag:       "-m",
 		ReasoningLevels: []string{"low", "medium", "high"},
+		Surface:         "gemini",
+		CostClass:       "medium",
+		IsLocal:         false,
+		ExactPinSupport: true,
 	},
 	"opencode": {
 		Name:     "opencode",
@@ -67,12 +81,20 @@ var builtinHarnesses = map[string]Harness{
 		ModelFlag:       "-m",
 		WorkDirFlag:     "--dir",
 		EffortFlag:      "--variant",
+		Surface:         "embedded-openai",
+		CostClass:       "medium",
+		IsLocal:         false,
+		ExactPinSupport: true,
 	},
 	"forge": {
-		Name:         "forge",
-		Binary:       "ddx", // embedded — runs in-process via forge.Run(), not as a subprocess
-		PromptMode:   "arg",
-		DefaultModel: "", // uses forge config or provider default
+		Name:            "forge",
+		Binary:          "ddx", // embedded — runs in-process via forge.Run(), not as a subprocess
+		PromptMode:      "arg",
+		DefaultModel:    "", // uses forge config or provider default
+		Surface:         "embedded-openai",
+		CostClass:       "local",
+		IsLocal:         true,
+		ExactPinSupport: true,
 	},
 	"pi": {
 		Name:            "pi",
@@ -82,12 +104,19 @@ var builtinHarnesses = map[string]Harness{
 		ModelFlag:       "--model",
 		EffortFlag:      "--thinking",
 		ReasoningLevels: []string{"low", "medium", "high"},
+		Surface:         "pi",
+		CostClass:       "medium",
+		IsLocal:         false,
+		ExactPinSupport: true,
 	},
 	"virtual": {
 		Name:         "virtual",
 		Binary:       "ddx-virtual-agent", // sentinel — never actually exec'd
 		PromptMode:   "arg",
 		DefaultModel: "recorded",
+		Surface:      "virtual",
+		CostClass:    "local",
+		IsLocal:      true,
 	},
 }
 

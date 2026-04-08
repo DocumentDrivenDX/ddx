@@ -161,10 +161,16 @@ func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 	}
 
 	caps := &HarnessCapabilities{
-		Harness:         harnessName,
-		Available:       true,
-		Binary:          harness.Binary,
-		ReasoningLevels: r.resolveReasoningLevels(harnessName, harness),
+		Harness:             harnessName,
+		Available:           true,
+		Binary:              harness.Binary,
+		ReasoningLevels:     r.resolveReasoningLevels(harnessName, harness),
+		Surface:             harness.Surface,
+		CostClass:           harness.CostClass,
+		IsLocal:             harness.IsLocal,
+		ExactPinSupport:     harness.ExactPinSupport,
+		SupportsEffort:      harness.EffortFlag != "",
+		SupportsPermissions: len(harness.PermissionArgs) > 0,
 	}
 	if path, err := r.LookPath(harness.Binary); err == nil {
 		caps.Path = path
@@ -177,6 +183,14 @@ func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 	if model != "" {
 		caps.Model = model
 		caps.Models = []string{model}
+	}
+
+	// Build effective profile → model mappings for this harness.
+	if tiers, ok := DefaultModelTiers[harnessName]; ok && len(tiers) > 0 {
+		caps.ProfileMappings = make(map[string]string)
+		for tier, m := range tiers {
+			caps.ProfileMappings[string(tier)] = m
+		}
 	}
 
 	return caps, nil
