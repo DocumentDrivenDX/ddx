@@ -44,7 +44,7 @@ All three surfaces share the same underlying services (document library, bead st
 ### Build Pipeline
 
 ```
-frontend/           → Vite + TypeScript + React/Solid
+frontend/           → Vite + TypeScript + React
   npm run build     → frontend/dist/
 server/             → Go with embed.FS
   go build          → ddx-server (single binary with embedded UI)
@@ -405,7 +405,7 @@ ddx/
 - FEAT-004 (Beads) — for bead board
 - FEAT-007 (Doc graph) — for dependency graph visualization
 - FEAT-006 (Agent service) — for session log viewer
-- Vite, TypeScript, React or Solid, TanStack Query, D3.js or Cytoscape.js
+- Vite, TypeScript, React, TanStack Query, D3.js or Cytoscape.js
 - Go embed.FS, Chi or net/http, mcp-go
 
 ## Out of Scope
