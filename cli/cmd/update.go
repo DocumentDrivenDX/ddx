@@ -56,14 +56,15 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Upgrade the DDx binary synchronously (always check upstream).
-	if err := f.runUpgrade(cmd, []string{}); err != nil {
+	// Upgrade the DDx binary synchronously (always check upstream) without
+	// refreshing installed packages here; performUpdate below owns that step.
+	if err := f.runBinaryUpgrade(cmd, []string{}); err != nil {
 		// Non-fatal: report but continue to plugin updates.
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: binary upgrade check failed: %v\n", err)
 	}
 
 	// Call pure business logic
-	result, err := performUpdate(f.WorkingDir, opts)
+	result, err := refreshInstalledPackages(f.WorkingDir, opts)
 	if err != nil {
 		return err
 	}
