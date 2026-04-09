@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -520,29 +519,11 @@ func flattenEnv(values map[string]string) []string {
 }
 
 func captureCommand(cmd *osexec.Cmd) (string, string, error) {
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", "", err
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return "", "", err
-	}
-	if err := cmd.Start(); err != nil {
-		return "", "", err
-	}
-	stdout, err := io.ReadAll(stdoutPipe)
-	if err != nil {
-		_ = cmd.Wait()
-		return "", "", err
-	}
-	stderr, err := io.ReadAll(stderrPipe)
-	if err != nil {
-		_ = cmd.Wait()
-		return "", "", err
-	}
-	waitErr := cmd.Wait()
-	return string(stdout), string(stderr), waitErr
+	var stdoutBuf, stderrBuf strings.Builder
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	err := cmd.Run()
+	return stdoutBuf.String(), stderrBuf.String(), err
 }
 
 var measurementPattern = regexp.MustCompile(`(?i)(-?\d+(?:\.\d+)?)(?:\s*)(ms|s|sec|seconds?)?`)
