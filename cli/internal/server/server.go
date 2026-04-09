@@ -64,7 +64,7 @@ func (s *Server) ListenAndServe() error {
 
 		// ts-net listener
 		go func() {
-			errCh <- s.listenTsnet(errCh)
+			errCh <- s.listenTsnet()
 		}()
 
 		return <-errCh
@@ -73,7 +73,7 @@ func (s *Server) ListenAndServe() error {
 }
 
 // listenTsnet starts a Tailscale ts-net TLS listener and serves the same mux.
-func (s *Server) listenTsnet(errCh chan error) error {
+func (s *Server) listenTsnet() error {
 	tc := s.TsnetConfig
 	hostname := tc.Hostname
 	if hostname == "" {
