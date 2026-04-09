@@ -1913,6 +1913,70 @@ func TestMCPAgentDispatchUntrustedForbidden(t *testing.T) {
 	}
 }
 
+func TestMCPExecDispatchTrustedAllowed(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_dispatch","arguments":{"id":"bench-startup"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatal("expected result map")
+	}
+	content, _ := result["content"].([]any)
+	if len(content) == 0 {
+		t.Fatal("expected content in response")
+	}
+	text, _ := content[0].(map[string]any)["text"].(string)
+	if strings.Contains(text, "forbidden") {
+		t.Errorf("expected trusted dispatch to not be forbidden, got %q", text)
+	}
+}
+
+func TestMCPAgentDispatchTrustedAllowed(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_agent_dispatch","arguments":{"harness":"claude","prompt":"hello"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatal("expected result map")
+	}
+	content, _ := result["content"].([]any)
+	if len(content) == 0 {
+		t.Fatal("expected content in response")
+	}
+	text, _ := content[0].(map[string]any)["text"].(string)
+	if strings.Contains(text, "forbidden") {
+		t.Errorf("expected trusted dispatch to not be forbidden, got %q", text)
+	}
+}
+
 func TestMCPToolsListIncludesExec(t *testing.T) {
 	dir := setupExecTestDir(t)
 	srv := New(":0", dir)
