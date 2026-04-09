@@ -444,6 +444,34 @@ func TestExecuteBeadCompoundErrorAgentAndHeadRevFailure(t *testing.T) {
 		"Reason must reflect the HeadRev failure")
 }
 
+// TestExecuteBeadInvalidBeadID verifies that beadIDs with characters illegal
+// in git ref names are rejected with a clear error before any git or agent
+// operations are attempted.
+func TestExecuteBeadInvalidBeadID(t *testing.T) {
+	invalidIDs := []string{
+		"bead with spaces",
+		"bead~1",
+		"bead^1",
+		"bead:name",
+		"bead[0]",
+	}
+	for _, id := range invalidIDs {
+		t.Run(id, func(t *testing.T) {
+			git := &fakeExecuteBeadGit{mainHeadRev: "aaaa1111"}
+			runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+			f := newExecuteBeadFactory(t, git, runner)
+
+			root := f.NewRootCommand()
+			_, cmdErr := executeCommand(root, "agent", "execute-bead", id)
+			require.Error(t, cmdErr)
+			assert.Contains(t, cmdErr.Error(), "invalid bead ID")
+
+			// No git or agent operations should have been attempted.
+			assert.Empty(t, git.addedWTs, "no worktree should be created for invalid bead ID")
+		})
+	}
+}
+
 // TestExecuteBeadEvidenceFields verifies that runtime evidence fields are
 // populated in the JSON output.
 func TestExecuteBeadEvidenceFields(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	osexec "os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -184,8 +185,13 @@ type beadAgentRunner interface {
 	Run(opts agent.RunOptions) (*agent.Result, error)
 }
 
+var validBeadID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
 func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []string, gitOps executeBeadGitOps) error {
 	beadID := args[0]
+	if !validBeadID.MatchString(beadID) {
+		return fmt.Errorf("invalid bead ID %q: must contain only letters, digits, dots, underscores, and hyphens", beadID)
+	}
 	fromRev, _ := cmd.Flags().GetString("from")
 	noMerge, _ := cmd.Flags().GetBool("no-merge")
 	harness, _ := cmd.Flags().GetString("harness")
