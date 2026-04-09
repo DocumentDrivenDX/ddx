@@ -28,9 +28,7 @@ func TestLoadConfig_DefaultOnly_Basic(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Isolate from global config by setting temporary HOME
-	originalHome := os.Getenv("HOME")
-	defer func() { _ = os.Setenv("HOME", originalHome) }()
-	_ = os.Setenv("HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 
 	config, err := LoadWithWorkingDir(tempDir)
 
