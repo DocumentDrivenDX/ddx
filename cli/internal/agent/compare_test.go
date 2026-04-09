@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DocumentDrivenDX/forge"
-	"github.com/DocumentDrivenDX/forge/provider/virtual"
+	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/agent/provider/virtual"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,10 +44,10 @@ func TestCompareBasic(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "done",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 100, Output: 20, Total: 120},
+				Usage:   agentlib.TokenUsage{Input: 100, Output: 20, Total: 120},
 			},
 		}},
 	})
@@ -78,34 +78,34 @@ func TestCompareBasic(t *testing.T) {
 func TestCompareSandboxIsolation(t *testing.T) {
 	repo := setupTestRepo(t)
 
-	// Forge provider writes a file; virtual provider doesn't.
-	forgeProvider := virtual.New(virtual.Config{
+	// Agent provider writes a file; virtual provider doesn't.
+	agentProvider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "wrote a file",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 50, Output: 10, Total: 60},
-				ToolCalls: []forge.ToolCall{{
+				Usage:   agentlib.TokenUsage{Input: 50, Output: 10, Total: 60},
+				ToolCalls: []agentlib.ToolCall{{
 					ID:        "tc-1",
 					Name:      "write",
-					Arguments: json.RawMessage(`{"path":"new_file.txt","content":"from forge"}`),
+					Arguments: json.RawMessage(`{"path":"new_file.txt","content":"from agent"}`),
 				}},
 			},
 		}, {
 			// After tool execution, return final response
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "wrote new_file.txt",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 80, Output: 15, Total: 95},
+				Usage:   agentlib.TokenUsage{Input: 80, Output: 15, Total: 95},
 			},
 		}},
 	})
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.AgentProvider = forgeProvider
+	r.AgentProvider = agentProvider
 
 	// Set up inline virtual responses
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"/.*/","response":"virtual done","exit_code":0}]`)
@@ -127,25 +127,25 @@ func TestCompareSandboxIsolation(t *testing.T) {
 func TestCompareCapturesDiff(t *testing.T) {
 	repo := setupTestRepo(t)
 
-	// Use a forge provider that writes a file via tool call
+	// Use an agent provider that writes a file via tool call
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "add readme",
-			Response: forge.Response{
-				ToolCalls: []forge.ToolCall{{
+			Response: agentlib.Response{
+				ToolCalls: []agentlib.ToolCall{{
 					ID:        "tc-1",
 					Name:      "write",
 					Arguments: json.RawMessage(`{"path":"README.md","content":"# Hello\n"}`),
 				}},
 				Model: "test-model",
-				Usage: forge.TokenUsage{Input: 50, Output: 10, Total: 60},
+				Usage: agentlib.TokenUsage{Input: 50, Output: 10, Total: 60},
 			},
 		}, {
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "created README.md",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 80, Output: 15, Total: 95},
+				Usage:   agentlib.TokenUsage{Input: 80, Output: 15, Total: 95},
 			},
 		}},
 	})
@@ -173,10 +173,10 @@ func TestCompareEmptyDiff(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "nothing to change",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 50, Output: 10, Total: 60},
+				Usage:   agentlib.TokenUsage{Input: 50, Output: 10, Total: 60},
 			},
 		}},
 	})
@@ -202,7 +202,7 @@ func TestCompareCleansUpWorktrees(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "ok",
 				Model:   "test-model",
 			},
@@ -237,7 +237,7 @@ func TestCompareKeepSandbox(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "ok",
 				Model:   "test-model",
 			},
@@ -282,10 +282,10 @@ func TestCompareRecordSchema(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "done",
 				Model:   "schema-model",
-				Usage:   forge.TokenUsage{Input: 200, Output: 40, Total: 240},
+				Usage:   agentlib.TokenUsage{Input: 200, Output: 40, Total: 240},
 			},
 		}},
 	})
@@ -320,11 +320,11 @@ func TestCompareRecordSchema(t *testing.T) {
 func TestCompareArmFailure(t *testing.T) {
 	repo := setupTestRepo(t)
 
-	// Forge provider succeeds
+	// Agent provider succeeds
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "ok",
 				Model:   "test-model",
 			},

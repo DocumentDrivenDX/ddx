@@ -19,7 +19,7 @@ func TestGradeConstructsPrompt(t *testing.T) {
 		Timestamp: time.Now(),
 		Prompt:    "implement feature X",
 		Arms: []ComparisonArm{
-			{Harness: "agent", Output: "forge output", Diff: "diff --git a/file.go"},
+			{Harness: "agent", Output: "agent output", Diff: "diff --git a/file.go"},
 			{Harness: "claude", Output: "claude output", Diff: "diff --git b/file.go"},
 		},
 	}
@@ -30,7 +30,7 @@ func TestGradeConstructsPrompt(t *testing.T) {
 	// The grading prompt sent to the harness should contain the task and arm data
 	sentPrompt := mock.lastArgs[len(mock.lastArgs)-1] // codex is arg mode
 	assert.Contains(t, sentPrompt, "implement feature X")
-	assert.Contains(t, sentPrompt, "forge output")
+	assert.Contains(t, sentPrompt, "agent output")
 	assert.Contains(t, sentPrompt, "claude output")
 	assert.Contains(t, sentPrompt, "diff --git a/file.go")
 }

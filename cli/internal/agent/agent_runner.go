@@ -8,13 +8,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DocumentDrivenDX/forge"
-	"github.com/DocumentDrivenDX/forge/prompt"
-	"github.com/DocumentDrivenDX/forge/provider/anthropic"
-	oai "github.com/DocumentDrivenDX/forge/provider/openai"
-	"github.com/DocumentDrivenDX/forge/provider/virtual"
-	"github.com/DocumentDrivenDX/forge/session"
-	"github.com/DocumentDrivenDX/forge/tool"
+	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/agent/prompt"
+	"github.com/DocumentDrivenDX/agent/provider/anthropic"
+	oai "github.com/DocumentDrivenDX/agent/provider/openai"
+	"github.com/DocumentDrivenDX/agent/provider/virtual"
+	"github.com/DocumentDrivenDX/agent/session"
+	"github.com/DocumentDrivenDX/agent/tool"
 )
 
 // AgentRunConfig holds resolved configuration for one agent invocation.
@@ -51,9 +51,9 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	agentCfg := r.resolveAgentConfig(model)
 
 	// Use injected provider (testing) or build from resolved config.
-	var provider forge.Provider
+	var provider agentlib.Provider
 	if r.AgentProvider != nil {
-		provider = r.AgentProvider.(forge.Provider)
+		provider = r.AgentProvider.(agentlib.Provider)
 	} else {
 		var err error
 		provider, err = buildAgentProvider(agentCfg)
@@ -68,7 +68,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	}
 
 	// Build tools
-	tools := []forge.Tool{
+	tools := []agentlib.Tool{
 		&tool.ReadTool{WorkDir: wd},
 		&tool.WriteTool{WorkDir: wd},
 		&tool.EditTool{WorkDir: wd},
@@ -91,7 +91,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	logger := session.NewLogger(logDir, sessionID)
 	defer logger.Close() //nolint:errcheck
 
-	req := forge.Request{
+	req := agentlib.Request{
 		Prompt:        promptText,
 		SystemPrompt:  sysPrompt,
 		Provider:      provider,
@@ -106,7 +106,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	defer cancel()
 
 	start := time.Now()
-	agentResult, err := forge.Run(ctx, req)
+	agentResult, err := agentlib.Run(ctx, req)
 	elapsed := time.Since(start)
 
 	// Map agent tool calls to DDx ToolCallEntry
@@ -141,7 +141,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	if err != nil {
 		result.Error = err.Error()
 		result.ExitCode = 1
-	} else if agentResult.Status != forge.StatusSuccess {
+	} else if agentResult.Status != agentlib.StatusSuccess {
 		result.ExitCode = 1
 		result.Error = string(agentResult.Status)
 	}
@@ -257,8 +257,8 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
-// buildAgentProvider creates a forge.Provider from resolved config.
-func buildAgentProvider(cfg AgentRunConfig) (forge.Provider, error) {
+// buildAgentProvider creates an agentlib.Provider from resolved config.
+func buildAgentProvider(cfg AgentRunConfig) (agentlib.Provider, error) {
 	switch cfg.Provider {
 	case "openai-compat", "openai":
 		return oai.New(oai.Config{

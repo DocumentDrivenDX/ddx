@@ -53,7 +53,7 @@ type Runner struct {
 	Catalog           *Catalog        // model catalog for routing; defaults to BuiltinCatalog
 	Executor          Executor        // injected; defaults to OSExecutor
 	LookPath          LookPathFunc    // injected; defaults to exec.LookPath
-	AgentProvider     interface{}     // injected forge.Provider for testing; nil = resolve from config
+	AgentProvider     interface{}     // injected agentlib.Provider for testing; nil = resolve from config
 	AgentConfigLoader AgentConfigFunc // injected; loads agent runner config from .ddx/config.yaml
 }
 

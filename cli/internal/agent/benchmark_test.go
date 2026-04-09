@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DocumentDrivenDX/forge"
-	"github.com/DocumentDrivenDX/forge/provider/virtual"
+	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/agent/provider/virtual"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,10 +34,10 @@ func TestRunBenchmarkWithVirtualProvider(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "benchmark answer",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 100, Output: 20, Total: 120},
+				Usage:   agentlib.TokenUsage{Input: 100, Output: 20, Total: 120},
 			},
 		}},
 	})

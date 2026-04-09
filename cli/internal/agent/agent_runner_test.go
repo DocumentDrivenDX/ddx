@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DocumentDrivenDX/forge"
-	"github.com/DocumentDrivenDX/forge/provider/virtual"
+	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/agent/provider/virtual"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,15 +78,15 @@ func TestBuildAgentProviderUnknown(t *testing.T) {
 
 // --- RunAgent with virtual provider (deterministic) ---
 
-// A-01: RunAgent dispatches to forge.Run with virtual provider.
+// A-01: RunAgent dispatches to agentlib.Run with virtual provider.
 func TestAgentRunVirtualProvider(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "hello",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "world",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 100, Output: 20, Total: 120},
+				Usage:   agentlib.TokenUsage{Input: 100, Output: 20, Total: 120},
 			},
 		}},
 	})
@@ -123,10 +123,10 @@ func TestAgentRunToolExecution(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "create hello.txt",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "Created hello.txt with the requested content",
 				Model:   "test-model",
-				Usage:   forge.TokenUsage{Input: 150, Output: 30, Total: 180},
+				Usage:   agentlib.TokenUsage{Input: 150, Output: 30, Total: 180},
 			},
 		}},
 	})
@@ -179,10 +179,10 @@ func TestAgentRunSessionLogging(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "log test",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "logged",
 				Model:   "log-model",
-				Usage:   forge.TokenUsage{Input: 200, Output: 50, Total: 250},
+				Usage:   agentlib.TokenUsage{Input: 200, Output: 50, Total: 250},
 			},
 		}},
 	})
@@ -213,7 +213,7 @@ func TestAgentRunModelResolution(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
-			Response:    forge.Response{Content: "ok", Model: "resolved-model"},
+			Response:    agentlib.Response{Content: "ok", Model: "resolved-model"},
 		}},
 	})
 
@@ -250,10 +250,10 @@ func TestAgentRunCostMapping(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "cost test",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "ok",
 				Model:   "local-model",
-				Usage:   forge.TokenUsage{Input: 100, Output: 10, Total: 110},
+				Usage:   agentlib.TokenUsage{Input: 100, Output: 10, Total: 110},
 			},
 		}},
 	})
@@ -273,7 +273,7 @@ func TestAgentRunDispatchesInProcess(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "dispatch test",
-			Response: forge.Response{
+			Response: agentlib.Response{
 				Content: "in-process",
 				Model:   "virtual",
 			},
