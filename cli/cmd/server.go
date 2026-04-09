@@ -9,6 +9,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// resolveTsnetAuthKey applies auth key precedence:
+// TS_AUTHKEY env var > --tsnet-auth-key CLI flag > config file auth_key.
+// The env var is preferred because CLI flags are visible in ps/history.
+func resolveTsnetAuthKey(envKey, flagKey, configKey string) string {
+	if envKey != "" {
+		return envKey
+	}
+	if flagKey != "" {
+		return flagKey
+	}
+	return configKey
+}
+
 func (f *CommandFactory) newServerCommand() *cobra.Command {
 	var port int
 	var addr string
@@ -75,11 +88,7 @@ MCP (POST /mcp):
 				tc.Hostname = tsnetHostname
 			}
 			// Prefer TS_AUTHKEY env var; CLI flag is a fallback (secrets on CLI are visible in ps/history)
-			if envKey := os.Getenv("TS_AUTHKEY"); envKey != "" {
-				tc.AuthKey = envKey
-			} else if tsnetAuthKey != "" {
-				tc.AuthKey = tsnetAuthKey
-			}
+			tc.AuthKey = resolveTsnetAuthKey(os.Getenv("TS_AUTHKEY"), tsnetAuthKey, tc.AuthKey)
 			if tc.Enabled {
 				srv.TsnetConfig = tc
 				fmt.Fprintf(cmd.OutOrStdout(), "DDx ts-net enabled (hostname: %s)\n", func() string {
