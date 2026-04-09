@@ -24,10 +24,13 @@ ddx:
 | `cli` | Core DDx binary, commands, internal packages |
 | `api` | Server HTTP/MCP endpoints |
 | `agent` | DDx agent runtime, execution, routing, and migration work |
+| `bead` | Bead tracker maintenance, bead-governance reviews, and bead-scoped workflow contract work |
 | `ui` | Web UI frontend (React SPA) |
 | `site` | website/, microsite content and deployment |
 | `docs` | Governing docs, plans, reviews, and alignment reports |
 | `infra` | CI, Docker, release infrastructure |
+
+Bead-scoped work uses `area:bead` as an additive label, not a replacement for any domain-specific area labels. A bead should still carry the broader labels that match the work it governs so concern matching remains explicit.
 
 ## Project Overrides
 
