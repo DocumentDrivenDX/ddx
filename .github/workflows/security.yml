@@ -1,0 +1,209 @@
+name: Security
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/security.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # Secret scanning
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for comprehensive scanning
+    
+    - name: TruffleHog OSS
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'HEAD' }}
+        extra_args: --debug --only-verified
+    
+    - name: Gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Check for hardcoded secrets in Go code
+      run: |
+        # Custom checks for Go-specific patterns
+        found=0
+        if grep -r --include="*.go" -E "(password|secret|token|key)\s*:?=\s*\"[^\"]{8,}\"" . | grep -v test | grep -v example; then
+          echo "⚠️ Potential hardcoded secrets found in Go files"
+          found=1
+        fi
+        if [ $found -eq 0 ]; then
+          echo "✅ No hardcoded secrets detected in Go files"
+        fi
+        exit $found
+
+  # Dependency vulnerability scanning
+  dependency-scan:
+    name: Dependency Scanning
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+    
+    - name: Dependency Review
+      if: github.event_name == 'pull_request'
+      continue-on-error: true  # Allow workflow to continue if Advanced Security is not enabled
+      uses: actions/dependency-review-action@v4
+      with:
+        base-ref: ${{ github.event.pull_request.base.sha || github.ref }}
+        head-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    
+    - name: Nancy vulnerability scan
+      continue-on-error: true  # Allow workflow to continue if OSS Index auth fails
+      run: |
+        go install github.com/sonatype-nexus-community/nancy@latest
+        go list -json -deps | nancy sleuth --quiet || exit_code=$?
+        if [ "${exit_code:-0}" -ne 0 ]; then
+          echo "⚠️ Vulnerabilities found in dependencies"
+          go list -json -deps | nancy sleuth
+          exit 1
+        fi
+        echo "✅ No known vulnerabilities in dependencies"
+    
+    - name: Go vulnerability check
+      run: |
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        govulncheck ./... || exit_code=$?
+        if [ "${exit_code:-0}" -ne 0 ]; then
+          echo "⚠️ Vulnerabilities detected"
+          exit 1
+        fi
+        echo "✅ No vulnerabilities detected by govulncheck"
+    
+    - name: License check
+      run: |
+        go install github.com/google/go-licenses@latest
+        # Note: go-licenses has issues with Go 1.21+ standard library packages
+        # We check only our direct dependencies, ignoring std lib false positives
+        go-licenses check ./... --ignore github.com/DocumentDrivenDX/ddx 2>&1 | 
+          grep -v "does not have module info" | 
+          grep -v "contains non-Go code" | 
+          grep -v "loading direct and transitive dependency packages" || true
+        
+        # Check if there are any real license issues (not std lib warnings)
+        if go-licenses check ./... --ignore github.com/DocumentDrivenDX/ddx 2>&1 | 
+           grep -v "does not have module info" | 
+           grep -v "contains non-Go code" | 
+           grep -v "loading direct and transitive dependency packages" | 
+           grep -E "(LGPL|GPL|AGPL|CC-BY-NC|proprietary)" ; then
+          echo "⚠️ Potentially incompatible licenses detected"
+          exit 1
+        fi
+        echo "✅ All dependency licenses appear compatible"
+
+  # Static Application Security Testing (SAST)
+  sast:
+    name: Static Analysis Security Testing
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+    
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: go
+        queries: security-and-quality
+    
+    - name: Build for CodeQL
+      working-directory: cli
+      run: go build ./...
+    
+    - name: CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:go"
+    
+    - name: Run gosec security scanner
+      run: |
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
+        gosec -fmt sarif -out gosec-results.sarif ./cli/... || true
+    
+    - name: Upload gosec results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: gosec-results.sarif
+
+  # Aggregate results
+  security-summary:
+    name: Security Summary
+    needs: [secret-scan, dependency-scan, sast]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check results
+      run: |
+        echo "## Security Scan Summary"
+        echo ""
+        
+        # Check each job result
+        if [ "${{ needs.secret-scan.result }}" = "success" ]; then
+          echo "✅ Secret scanning: Passed"
+        else
+          echo "❌ Secret scanning: Failed"
+        fi
+        
+        if [ "${{ needs.dependency-scan.result }}" = "success" ]; then
+          echo "✅ Dependency scanning: Passed"
+        else
+          echo "❌ Dependency scanning: Failed"
+        fi
+        
+        if [ "${{ needs.sast.result }}" = "success" ]; then
+          echo "✅ SAST: Passed"
+        else
+          echo "❌ SAST: Failed"
+        fi
+        
+        # Overall result
+        if [ "${{ needs.secret-scan.result }}" != "success" ] || \
+           [ "${{ needs.dependency-scan.result }}" != "success" ] || \
+           [ "${{ needs.sast.result }}" != "success" ]; then
+          echo ""
+          echo "⚠️ Security checks failed. Please review the results above."
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ All security checks passed!"

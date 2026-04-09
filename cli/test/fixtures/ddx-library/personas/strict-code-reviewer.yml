@@ -1,0 +1,4 @@
+name: strict-code-reviewer
+description: A strict code reviewer persona
+role: code-reviewer
+instructions: Review code with high standards

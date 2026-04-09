@@ -1,0 +1,5 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1775440843, "env": {"SHELL": null, "TERM": null}}
+[0.04527, "o", "\r\n$ ddx bead create \"Add task priorities\" --type task --labels \"helix,phase:build\"\r\ntmp.nVV5FdJNvU-effd0d4e\r\n\r\n⬆️  Update available: v0.3.0 (run 'ddx upgrade' to install)\r\n"]
+[1.046391, "o", "\r\n$ ddx bead dep add tmp.nVV5FdJNvU-effd0d4e\r\n\r\n⬆️  Update available: v0.3.0 (run 'ddx upgrade' to install) tmp.nVV5FdJNvU-07050745\r\n\r\n⬆️  Update available: v0.3.0 (run 'ddx upgrade' to install)\r\n"]
+[1.557085, "o", "Error: bead: not found: tmp.nVV5FdJNvU-effd0d4e\r\n\r\n⬆️  Update available: v0.3.0 (run 'ddx upgrade' to install)\r\n"]
+[1.557323, "o", "Usage:\r\n  ddx bead dep add <id> <dep-id> [flags]\r\n\r\nFlags:\r\n  -h, --help   help for add\r\n\r\nGlobal Flags:\r\n      --config string              config file (default is $HOME/.ddx.yml)\r\n      --library-base-path string   override path for DDx library location\r\n  -v, --verbose                    verbose output\r\n\r\nError: bead: not found: tmp.nVV5FdJNvU-effd0d4e\r\n\r\n⬆️  Update available: v0.3.0 (run 'ddx upgrade' to install)\r\n"]
