@@ -115,18 +115,21 @@ Each skill is a directory containing exactly one `SKILL.md` file.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `name` | string | yes | Skill identifier |
-| `description` | string | yes | One-line summary |
-| `argument-hint` | string | no | Short usage hint for help text |
-| `disable-model-invocation` | bool | no | Prevent auto-invocation when set |
+| `skill.name` | string | yes | Skill identifier |
+| `skill.description` | string | yes | One-line summary |
+| `skill.args` | []mapping | no | Short usage hints for help text or prompts |
 
 ### Skill Rules
 
-- The skill directory name must match the `name` frontmatter value.
+- The skill directory name must match the `skill.name` frontmatter value.
 - `SKILL.md` must parse as YAML frontmatter plus Markdown body.
 - The body is free-form Markdown and may document steps, constraints, and
   cross-references to shared workflow resources.
-- `argument-hint` is advisory only; it does not change execution semantics.
+- `skill.args` is advisory only; it does not change execution semantics.
+
+This contract keeps the existing nested `skill:` schema used by the bundled
+DDx skills as the stable form. Install-time and doctor-time validation must
+accept that shape so built-in skills are valid without any migration step.
 
 The canonical skill body may reference shared HELIX or DDx workflow material,
 but the manifest and frontmatter are the stable contract. Everything else is
@@ -186,8 +189,8 @@ Plugin installation follows one validator-backed path regardless of source.
 - `api_version` is supported
 - declared source and target paths are structurally valid
 - skill directories contain `SKILL.md`
-- skill frontmatter includes `name` and `description`
-- `SKILL.md` names match their directory names
+- skill frontmatter includes `skill.name` and `skill.description`
+- `SKILL.md` names match their directory names via `skill.name`
 - executable targets exist and are executable when required
 - symlink targets stay within the installed plugin root
 
@@ -203,7 +206,7 @@ writing a partial install record.
 - broken symlinks
 - missing `SKILL.md`
 - malformed skill frontmatter
-- mismatched skill names
+- mismatched `skill.name` values
 - declared executable paths that lost the execute bit
 
 Doctor reports structural issues only. It does not mutate the install.

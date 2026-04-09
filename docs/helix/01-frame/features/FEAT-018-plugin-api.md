@@ -82,13 +82,16 @@ Should move to a `package.yaml` in each plugin repo.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | yes | Skill identifier (e.g., `helix-build`) |
-| `description` | string | yes | One-line purpose |
-| `argument-hint` | string | no | Argument placeholder shown in help |
-| `disable-model-invocation` | bool | no | Prevent auto-invocation |
+| `skill.name` | string | yes | Skill identifier (e.g., `ddx-bead`) |
+| `skill.description` | string | yes | One-line purpose |
+| `skill.args` | []mapping | no | Argument hints shown in help or prompt flows |
 
 **Body:** Markdown with sections describing when to use, steps, constraints,
 and cross-references to shared workflow resources.
+
+The bundled DDx skills already use this nested `skill:` mapping, and the
+stable contract must preserve it so install and doctor validation accept the
+shipped skills without migration.
 
 ### 4. Hook Scripts
 
