@@ -46,6 +46,7 @@ type executeBeadGitOps interface {
 	WorktreeRemove(dir, wtPath string) error
 	WorktreeList(dir string) ([]string, error)
 	WorktreePrune(dir string) error
+	Rebase(wtPath, ontoRev string) error
 	FFMerge(dir, rev string) error
 	UpdateRef(dir, ref, sha string) error
 }
@@ -125,6 +126,14 @@ func (r *realExecuteBeadGit) FFMerge(dir, rev string) error {
 	out, err := osexec.Command("git", "-C", dir, "merge", "--ff-only", rev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("ff-merge: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+func (r *realExecuteBeadGit) Rebase(wtPath, ontoRev string) error {
+	out, err := osexec.Command("git", "-C", wtPath, "rebase", ontoRev).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git rebase: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
@@ -369,16 +378,47 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		res.Reason = "--no-merge specified"
 
 	default:
-		if mergeErr := gitOps.FFMerge(workDir, resultRev); mergeErr == nil {
+		// Get current HEAD of the target branch to rebase onto.
+		currentHead, headErr := gitOps.HeadRev(workDir)
+		if headErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read current HEAD: %v\n", headErr)
+			currentHead = baseRev
+		}
+
+		// If the target branch has advanced since our base, rebase the worktree commits.
+		var mergeRev string
+		if currentHead != baseRev {
+			// Rebase worktree commits onto current HEAD.
+			if rebaseErr := gitOps.Rebase(wtPath, currentHead); rebaseErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: rebase failed: %v\n", rebaseErr)
+				// Fall through to preserve under hidden ref.
+			} else {
+				// Get the new HEAD after rebase.
+				if rebasedRev, revErr := gitOps.HeadRev(wtPath); revErr == nil {
+					mergeRev = rebasedRev
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read rebased HEAD: %v\n", revErr)
+				}
+			}
+		}
+		if mergeRev == "" {
+			mergeRev = resultRev
+		}
+
+		if mergeErr := gitOps.FFMerge(workDir, mergeRev); mergeErr == nil {
 			res.Outcome = "merged"
 		} else {
 			ref := fmt.Sprintf("refs/ddx/execute-bead/%s/%s", beadID, attemptID)
-			if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
+			if updateErr := gitOps.UpdateRef(workDir, ref, mergeRev); updateErr != nil {
 				return fmt.Errorf("preserving result ref: %w", updateErr)
 			}
 			res.Outcome = "preserved"
 			res.PreserveRef = ref
-			res.Reason = "ff-merge not possible"
+			if currentHead != baseRev {
+				res.Reason = "rebase or ff-merge failed"
+			} else {
+				res.Reason = "ff-merge not possible"
+			}
 		}
 	}
 

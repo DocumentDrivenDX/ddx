@@ -212,6 +212,11 @@ func (f *CommandFactory) checkForUpdates(cmd *cobra.Command) {
 
 // displayUpdateNotification shows update notification if available
 func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
+	// Skip if disabled via environment variable
+	if os.Getenv("DDX_DISABLE_UPDATE_CHECK") == "1" {
+		return nil
+	}
+
 	f.updateMu.Lock()
 	checker := f.updateChecker
 	done := f.updateDone
@@ -266,13 +271,14 @@ func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
 	}
 
 	// Show update notification with changelog for version command
+	// Always write to stderr so it doesn't corrupt JSON pipelines
 	isVersionCmd := cmd.Use == "version"
 	if isVersionCmd {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		_, _ = fmt.Fprintf(os.Stderr,
 			"\n⬆️  Update available: %s (run 'ddx upgrade' to install)\n\nWhat's new:\n  • Performance improvements\n  • Bug fixes\n  • New features\n",
 			version)
 	} else {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		_, _ = fmt.Fprintf(os.Stderr,
 			"\n⬆️  Update available: %s (run 'ddx upgrade' to install)\n",
 			version)
 	}

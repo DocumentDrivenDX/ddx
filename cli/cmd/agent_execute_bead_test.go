@@ -24,6 +24,7 @@ type fakeExecuteBeadGit struct {
 	wtHeadRevErr error
 	dirty        bool
 	ffMergeErr   error
+	rebaseErr    error
 	updateRefErr error
 
 	stashCalled bool
@@ -94,6 +95,12 @@ func (f *fakeExecuteBeadGit) FFMerge(dir, rev string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.ffMergeErr
+}
+
+func (f *fakeExecuteBeadGit) Rebase(wtPath, ontoRev string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.rebaseErr
 }
 
 func (f *fakeExecuteBeadGit) UpdateRef(dir, ref, sha string) error {
