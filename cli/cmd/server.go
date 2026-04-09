@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/server"
@@ -73,7 +74,10 @@ MCP (POST /mcp):
 			if tsnetHostname != "" {
 				tc.Hostname = tsnetHostname
 			}
-			if tsnetAuthKey != "" {
+			// Prefer TS_AUTHKEY env var; CLI flag is a fallback (secrets on CLI are visible in ps/history)
+			if envKey := os.Getenv("TS_AUTHKEY"); envKey != "" {
+				tc.AuthKey = envKey
+			} else if tsnetAuthKey != "" {
 				tc.AuthKey = tsnetAuthKey
 			}
 			if tc.Enabled {
@@ -94,7 +98,7 @@ MCP (POST /mcp):
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1", "Address to bind to")
 	cmd.Flags().BoolVar(&tsnetEnabled, "tsnet", false, "Enable Tailscale ts-net listener (opt-in, see ADR-006)")
 	cmd.Flags().StringVar(&tsnetHostname, "tsnet-hostname", "", "Tailscale hostname (default: ddx)")
-	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use")
+	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use (SECURITY: visible in ps/history; prefer TS_AUTHKEY env var)")
 
 	return cmd
 }
