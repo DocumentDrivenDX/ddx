@@ -364,6 +364,22 @@ func TestExecuteBeadAgentErrorWithCommitsPreserves(t *testing.T) {
 	assert.True(t, strings.HasPrefix(res.PreserveRef, "refs/ddx/execute-bead/my-bead/"))
 }
 
+// TestExecuteBeadAgentErrorMessageInOutput verifies that when the agent runner
+// returns an error, the error message appears in the JSON output Error field.
+func TestExecuteBeadAgentErrorMessageInOutput(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "aaaa1111", // no commits made
+	}
+	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed with detail"), result: nil}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, 1, res.ExitCode)
+	assert.Equal(t, "agent crashed with detail", res.Error)
+}
+
 // TestExecuteBeadEvidenceFields verifies that runtime evidence fields are
 // populated in the JSON output.
 func TestExecuteBeadEvidenceFields(t *testing.T) {

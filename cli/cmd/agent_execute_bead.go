@@ -29,6 +29,7 @@ type ExecuteBeadResult struct {
 	Tokens      int       `json:"tokens,omitempty"`
 	CostUSD     float64   `json:"cost_usd,omitempty"`
 	ExitCode    int       `json:"exit_code"`
+	Error       string    `json:"error,omitempty"`
 	StartedAt   time.Time `json:"started_at"`
 	FinishedAt  time.Time `json:"finished_at"`
 }
@@ -273,8 +274,10 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			resultHarness = agentResult.Harness
 		}
 	}
+	agentErrMsg := ""
 	if agentErr != nil {
 		exitCode = 1
+		agentErrMsg = agentErr.Error()
 	}
 
 	// Get the HEAD of the worktree after the agent ran.
@@ -319,6 +322,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		Tokens:     tokens,
 		CostUSD:    costUSD,
 		ExitCode:   exitCode,
+		Error:      agentErrMsg,
 		StartedAt:  startedAt,
 		FinishedAt: finishedAt,
 	}
