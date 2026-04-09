@@ -385,6 +385,42 @@ func TestExecuteBeadAgentErrorMessageInOutput(t *testing.T) {
 	assert.Equal(t, "agent crashed with detail", res.Error)
 }
 
+// TestExecuteBeadHeadRevFailure verifies that when HeadRev fails after the agent
+// runs, the outcome is "error" and the reason contains the original error message.
+// This covers the path at agent_execute_bead.go lines 282-309.
+func TestExecuteBeadHeadRevFailure(t *testing.T) {
+	t.Run("json output", func(t *testing.T) {
+		git := &fakeExecuteBeadGit{
+			mainHeadRev:  "aaaa1111",
+			wtHeadRevErr: fmt.Errorf("disk read error"),
+		}
+		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+		f := newExecuteBeadFactory(t, git, runner)
+
+		res := runExecuteBead(t, f, git, "my-bead")
+
+		assert.Equal(t, "error", res.Outcome)
+		assert.Contains(t, res.Reason, "disk read error")
+		assert.Equal(t, 1, res.ExitCode)
+	})
+
+	t.Run("text output", func(t *testing.T) {
+		git := &fakeExecuteBeadGit{
+			mainHeadRev:  "aaaa1111",
+			wtHeadRevErr: fmt.Errorf("disk read error"),
+		}
+		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+		f := newExecuteBeadFactory(t, git, runner)
+
+		root := f.NewRootCommand()
+		out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead")
+		require.Error(t, cmdErr)
+
+		assert.Contains(t, out, "outcome: error")
+		assert.Contains(t, out, "disk read error")
+	})
+}
+
 // TestExecuteBeadCompoundErrorAgentAndHeadRevFailure verifies that when the
 // agent runner returns an error AND HeadRev fails on the worktree, both the
 // Error field (agent message) and the Reason field (rev error) are present in
