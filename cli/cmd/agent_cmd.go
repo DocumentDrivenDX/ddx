@@ -330,6 +330,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 						break
 					}
 				}
+				if resolvedHarness == "" {
+					return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
+				}
 			}
 
 			opts := agent.RunOptions{
