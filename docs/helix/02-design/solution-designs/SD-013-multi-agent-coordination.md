@@ -57,7 +57,10 @@ last writer wins, which is the current behavior.
 A remote supervisor needs write access to steer work without running the CLI
 locally.
 
-**New MCP tools (server-side):**
+**MCP write tools (specified in FEAT-002, implemented by this SD):**
+
+FEAT-002 already specifies the following bead mutation tools (FEAT-002 lines
+87–92). This SD defines their server-side implementation details.
 
 | Tool | Description |
 |------|-------------|
