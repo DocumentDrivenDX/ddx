@@ -1390,7 +1390,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			"tools": s.mcpTools(),
 		}
 	case "tools/call":
-		resp.Result = s.mcpCallTool(req.Params)
+		resp.Result = s.mcpCallTool(req.Params, r)
 	case "notifications/initialized":
 		resp.Result = map[string]any{}
 	default:
@@ -1677,7 +1677,7 @@ func (s *Server) mcpTools() []mcpTool {
 	}
 }
 
-func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
+func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolResult {
 	var call struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
@@ -1758,9 +1758,15 @@ func (s *Server) mcpCallTool(params json.RawMessage) mcpToolResult {
 		definition, _ := call.Arguments["definition"].(string)
 		return s.mcpExecHistory(artifact, definition)
 	case "ddx_exec_dispatch":
+		if !isTrusted(r) {
+			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: dispatch tools require trusted origin"}}, IsError: true}
+		}
 		id, _ := call.Arguments["id"].(string)
 		return s.mcpExecDispatch(id)
 	case "ddx_agent_dispatch":
+		if !isTrusted(r) {
+			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: dispatch tools require trusted origin"}}, IsError: true}
+		}
 		harness, _ := call.Arguments["harness"].(string)
 		prompt, _ := call.Arguments["prompt"].(string)
 		model, _ := call.Arguments["model"].(string)
