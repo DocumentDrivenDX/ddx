@@ -19,7 +19,7 @@ var DefaultModelTiers = map[string]map[ModelTier]string{
 		TierSmart: "claude-opus-4-6",
 		TierFast:  "claude-sonnet-4-6",
 	},
-	"forge": {
+	"agent": {
 		TierSmart: "qwen/qwen3-coder-next",
 		TierFast:  "qwen3.5-27b",
 	},
@@ -51,8 +51,8 @@ type BenchmarkArm struct {
 // DefaultBenchmarkArms returns the standard set of arms for a full comparison.
 func DefaultBenchmarkArms() []BenchmarkArm {
 	return []BenchmarkArm{
-		{Label: "forge-smart", Harness: "forge", Tier: TierSmart},
-		{Label: "forge-fast", Harness: "forge", Tier: TierFast},
+		{Label: "agent-smart", Harness: "agent", Tier: TierSmart},
+		{Label: "agent-fast", Harness: "agent", Tier: TierFast},
 		{Label: "codex-smart", Harness: "codex", Tier: TierSmart},
 		{Label: "codex-fast", Harness: "codex", Tier: TierFast},
 		{Label: "claude-smart", Harness: "claude", Tier: TierSmart},

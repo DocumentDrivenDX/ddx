@@ -11,7 +11,7 @@ import (
 
 // G-01: Grading prompt includes original task, arm outputs, and diffs.
 func TestGradeConstructsPrompt(t *testing.T) {
-	mock := &mockExecutor{output: `{"arms":[{"arm":"forge","score":8,"max_score":10,"pass":true,"rationale":"Good"}]}`}
+	mock := &mockExecutor{output: `{"arms":[{"arm":"agent","score":8,"max_score":10,"pass":true,"rationale":"Good"}]}`}
 	r := newTestRunner(mock)
 
 	record := &ComparisonRecord{
@@ -19,7 +19,7 @@ func TestGradeConstructsPrompt(t *testing.T) {
 		Timestamp: time.Now(),
 		Prompt:    "implement feature X",
 		Arms: []ComparisonArm{
-			{Harness: "forge", Output: "forge output", Diff: "diff --git a/file.go"},
+			{Harness: "agent", Output: "forge output", Diff: "diff --git a/file.go"},
 			{Harness: "claude", Output: "claude output", Diff: "diff --git b/file.go"},
 		},
 	}
@@ -37,7 +37,7 @@ func TestGradeConstructsPrompt(t *testing.T) {
 
 // G-02: Virtual harness returns JSON grade → parsed into per-arm scores.
 func TestGradeParsesResponse(t *testing.T) {
-	gradeJSON := `{"arms":[{"arm":"forge","score":9,"max_score":10,"pass":true,"rationale":"Excellent"},{"arm":"claude","score":7,"max_score":10,"pass":true,"rationale":"Good but verbose"}]}`
+	gradeJSON := `{"arms":[{"arm":"agent","score":9,"max_score":10,"pass":true,"rationale":"Excellent"},{"arm":"claude","score":7,"max_score":10,"pass":true,"rationale":"Good but verbose"}]}`
 	mock := &mockExecutor{output: gradeJSON}
 	r := newTestRunner(mock)
 
@@ -45,7 +45,7 @@ func TestGradeParsesResponse(t *testing.T) {
 		ID:     "cmp-test",
 		Prompt: "test task",
 		Arms: []ComparisonArm{
-			{Harness: "forge", Output: "ok"},
+			{Harness: "agent", Output: "ok"},
 			{Harness: "claude", Output: "ok"},
 		},
 	}
@@ -53,7 +53,7 @@ func TestGradeParsesResponse(t *testing.T) {
 	grades, err := r.Grade(record, GradeOptions{Grader: "codex"})
 	require.NoError(t, err)
 	require.Len(t, grades, 2)
-	assert.Equal(t, "forge", grades[0].Arm)
+	assert.Equal(t, "agent", grades[0].Arm)
 	assert.Equal(t, 9, grades[0].Score)
 	assert.True(t, grades[0].Pass)
 	assert.Equal(t, "claude", grades[1].Arm)
@@ -62,14 +62,14 @@ func TestGradeParsesResponse(t *testing.T) {
 
 // G-03: Grades are attached to the comparison record.
 func TestGradeAttachesToRecord(t *testing.T) {
-	gradeJSON := `{"arms":[{"arm":"forge","score":8,"max_score":10,"pass":true,"rationale":"Good"}]}`
+	gradeJSON := `{"arms":[{"arm":"agent","score":8,"max_score":10,"pass":true,"rationale":"Good"}]}`
 	mock := &mockExecutor{output: gradeJSON}
 	r := newTestRunner(mock)
 
 	record := &ComparisonRecord{
 		ID:     "cmp-test",
 		Prompt: "test",
-		Arms:   []ComparisonArm{{Harness: "forge", Output: "ok"}},
+		Arms:   []ComparisonArm{{Harness: "agent", Output: "ok"}},
 	}
 
 	grades, err := r.Grade(record, GradeOptions{Grader: "codex"})
@@ -82,14 +82,14 @@ func TestGradeAttachesToRecord(t *testing.T) {
 
 // G-04: Custom rubric replaces the default grading template.
 func TestGradeCustomRubric(t *testing.T) {
-	gradeJSON := `{"arms":[{"arm":"forge","score":5,"max_score":10,"pass":false,"rationale":"Failed custom criteria"}]}`
+	gradeJSON := `{"arms":[{"arm":"agent","score":5,"max_score":10,"pass":false,"rationale":"Failed custom criteria"}]}`
 	mock := &mockExecutor{output: gradeJSON}
 	r := newTestRunner(mock)
 
 	record := &ComparisonRecord{
 		ID:     "cmp-test",
 		Prompt: "test",
-		Arms:   []ComparisonArm{{Harness: "forge", Output: "ok"}},
+		Arms:   []ComparisonArm{{Harness: "agent", Output: "ok"}},
 	}
 
 	customRubric := "Grade ONLY on security. Ignore functionality."
@@ -108,7 +108,7 @@ func TestGradeMalformedResponse(t *testing.T) {
 	record := &ComparisonRecord{
 		ID:     "cmp-test",
 		Prompt: "test",
-		Arms:   []ComparisonArm{{Harness: "forge", Output: "ok"}},
+		Arms:   []ComparisonArm{{Harness: "agent", Output: "ok"}},
 	}
 
 	_, err := r.Grade(record, GradeOptions{Grader: "codex"})
@@ -124,7 +124,7 @@ func TestGradeGraderFailure(t *testing.T) {
 	record := &ComparisonRecord{
 		ID:     "cmp-test",
 		Prompt: "test",
-		Arms:   []ComparisonArm{{Harness: "forge", Output: "ok"}},
+		Arms:   []ComparisonArm{{Harness: "agent", Output: "ok"}},
 	}
 
 	_, err := r.Grade(record, GradeOptions{Grader: "codex"})
@@ -134,7 +134,7 @@ func TestGradeGraderFailure(t *testing.T) {
 // Verify grade JSON round-trips correctly.
 func TestGradeJSONRoundTrip(t *testing.T) {
 	grade := ComparisonGrade{
-		Arm:       "forge",
+		Arm:       "agent",
 		Score:     8,
 		MaxScore:  10,
 		Pass:      true,

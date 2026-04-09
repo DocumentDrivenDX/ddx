@@ -16,7 +16,7 @@ func TestAgentRoutingResolvesProfileAcrossHarnessSurfaces(t *testing.T) {
 
 	states := map[string]HarnessState{
 		"codex": healthyState(),
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 	}
 
 	plans := r.BuildCandidatePlans(RouteRequest{Profile: "cheap"}, states)
@@ -29,13 +29,13 @@ func TestAgentRoutingResolvesProfileAcrossHarnessSurfaces(t *testing.T) {
 		case "codex":
 			assert.Equal(t, "profile:cheap", p.RequestedRef)
 			assert.NotEmpty(t, p.ConcreteModel, "codex should have a concrete model for cheap profile")
-		case "forge":
+		case "agent":
 			assert.Equal(t, "profile:cheap", p.RequestedRef)
-			assert.NotEmpty(t, p.ConcreteModel, "forge should have a concrete model for cheap profile")
+			assert.NotEmpty(t, p.ConcreteModel, "agent should have a concrete model for cheap profile")
 		}
 	}
 
-	// Verify at least codex and forge are viable with profile mappings.
+	// Verify at least codex and agent are viable with profile mappings.
 	viableHarnesses := map[string]bool{}
 	for _, p := range plans {
 		if p.Viable {
@@ -43,7 +43,7 @@ func TestAgentRoutingResolvesProfileAcrossHarnessSurfaces(t *testing.T) {
 		}
 	}
 	assert.True(t, viableHarnesses["codex"], "codex should be viable for cheap profile")
-	assert.True(t, viableHarnesses["forge"], "forge should be viable for cheap profile")
+	assert.True(t, viableHarnesses["agent"], "agent should be viable for cheap profile")
 }
 
 // TestAgentRoutingResolvesQwen3ToEmbeddedOnly verifies that a ModelRef resolving
@@ -52,28 +52,28 @@ func TestAgentRoutingResolvesQwen3ToEmbeddedOnly(t *testing.T) {
 	r := newTestRunnerForRouting()
 
 	states := map[string]HarnessState{
-		"forge":  healthyLocalState(),
+		"agent":  healthyLocalState(),
 		"codex":  healthyState(),
 		"claude": healthyState(),
 	}
 
 	plans := r.BuildCandidatePlans(RouteRequest{ModelRef: "qwen3"}, states)
 
-	// forge (surface=embedded-openai) should be viable; others should be rejected.
-	forgeViable := false
+	// agent (surface=embedded-openai) should be viable; others should be rejected.
+	agentViable := false
 	for _, p := range plans {
 		switch p.Harness {
-		case "forge":
-			assert.True(t, p.Viable, "forge should be viable for qwen3 (embedded-openai surface)")
+		case "agent":
+			assert.True(t, p.Viable, "agent should be viable for qwen3 (embedded-openai surface)")
 			assert.Equal(t, "ref:qwen3", p.RequestedRef)
-			assert.NotEmpty(t, p.ConcreteModel, "forge should have a concrete model for qwen3")
-			forgeViable = true
+			assert.NotEmpty(t, p.ConcreteModel, "agent should have a concrete model for qwen3")
+			agentViable = true
 		case "codex", "claude":
 			assert.False(t, p.Viable, "harness %s should be rejected for embedded-only qwen3", p.Harness)
 			assert.Contains(t, p.RejectReason, "not available on surface")
 		}
 	}
-	assert.True(t, forgeViable, "forge must be in plans and viable for qwen3")
+	assert.True(t, agentViable, "agent must be in plans and viable for qwen3")
 }
 
 // TestAgentRoutingRejectsUnknownModelRef verifies that when a ModelPin is used
@@ -141,13 +141,13 @@ func TestAgentRoutingSurfacesDeprecatedReplacementWarning(t *testing.T) {
 // --- Embedded Boundary Tests (TP-020) ---
 
 // TestAgentRoutingSelectsEmbeddedWithoutInspectingProviderDetails verifies that
-// when forge (embedded) is selected for an embedded-only ref, the plan does not
+// when agent (embedded) is selected for an embedded-only ref, the plan does not
 // contain provider-specific backend pool fields — DDx stops at harness selection.
 func TestAgentRoutingSelectsEmbeddedWithoutInspectingProviderDetails(t *testing.T) {
 	r := newTestRunnerForRouting()
 
 	states := map[string]HarnessState{
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 	}
 
 	plans := r.BuildCandidatePlans(RouteRequest{ModelRef: "qwen3"}, states)
@@ -155,7 +155,7 @@ func TestAgentRoutingSelectsEmbeddedWithoutInspectingProviderDetails(t *testing.
 
 	best, err := SelectBestCandidate(ranked)
 	require.NoError(t, err)
-	assert.Equal(t, "forge", best.Harness)
+	assert.Equal(t, "agent", best.Harness)
 
 	// The plan's ConcreteModel comes from the catalog, not from DDx-owned
 	// backend-pool logic. There are no provider-level fields in CandidatePlan.
@@ -174,23 +174,23 @@ func TestAgentRoutingPassesResolvedIntentToEmbeddedHarness(t *testing.T) {
 	r := newTestRunnerForRouting()
 
 	states := map[string]HarnessState{
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 	}
 
 	plans := r.BuildCandidatePlans(RouteRequest{ModelRef: "qwen3"}, states)
 
-	var forgePlan *CandidatePlan
+	var agentPlan *CandidatePlan
 	for i := range plans {
-		if plans[i].Harness == "forge" {
-			forgePlan = &plans[i]
+		if plans[i].Harness == "agent" {
+			agentPlan = &plans[i]
 			break
 		}
 	}
-	require.NotNil(t, forgePlan)
-	assert.True(t, forgePlan.Viable)
+	require.NotNil(t, agentPlan)
+	assert.True(t, agentPlan.Viable)
 	// DDx records the intent ref, not a provider/backend selection.
-	assert.Equal(t, "ref:qwen3", forgePlan.RequestedRef)
-	assert.Equal(t, "qwen3", forgePlan.CanonicalTarget)
+	assert.Equal(t, "ref:qwen3", agentPlan.RequestedRef)
+	assert.Equal(t, "qwen3", agentPlan.CanonicalTarget)
 }
 
 // TestAgentRoutingDoesNotDuplicateEmbeddedBackendPoolStrategy verifies that
@@ -285,7 +285,7 @@ func TestAgentRunProfileFlagRoutesWithoutHarness(t *testing.T) {
 
 	states := map[string]HarnessState{
 		"codex": healthyState(),
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 	}
 
 	req := RouteRequest{Profile: "cheap"}
@@ -305,7 +305,7 @@ func TestAgentRunModelRefFlagRoutesWithoutHarness(t *testing.T) {
 	r := newTestRunnerForRouting()
 
 	states := map[string]HarnessState{
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 		"codex": healthyState(),
 	}
 
@@ -315,8 +315,8 @@ func TestAgentRunModelRefFlagRoutesWithoutHarness(t *testing.T) {
 
 	best, err := SelectBestCandidate(ranked)
 	require.NoError(t, err, "routing by model ref alone should select a viable harness")
-	// qwen3 is embedded-only → must route to forge.
-	assert.Equal(t, "forge", best.Harness)
+	// qwen3 is embedded-only → must route to agent.
+	assert.Equal(t, "agent", best.Harness)
 }
 
 // TestAgentConfigDefaultProfileUsedWhenNoExplicitSelector verifies that when no
@@ -347,14 +347,14 @@ func TestAgentConfigForcedHarnessBypassesAutomaticSelection(t *testing.T) {
 }
 
 // TestAgentDoctorReportsEmbeddedDefaultBackendRoutability verifies that the
-// embedded harness (forge) is always reachable without binary lookup.
+// embedded harness (agent) is always reachable without binary lookup.
 // This is already covered by TestProbeHarnessStateEmbeddedAlwaysReachable but
 // here we specifically check that doctor can report it as routeable.
 func TestAgentDoctorReportsEmbeddedDefaultBackendRoutability(t *testing.T) {
 	r := newTestRunnerForRouting()
 
-	// Probe forge — must succeed even with no binary lookup.
-	state := r.fastHarnessState("forge", r.Registry.harnesses["forge"])
+	// Probe agent — must succeed even with no binary lookup.
+	state := r.fastHarnessState("agent", r.Registry.harnesses["agent"])
 	assert.True(t, state.Installed, "embedded harness should always report installed")
 	assert.True(t, state.Reachable, "embedded harness should always report reachable")
 	assert.True(t, state.Authenticated, "embedded harness should always report authenticated")

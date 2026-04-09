@@ -48,13 +48,13 @@ func TestRunBenchmarkWithVirtualProvider(t *testing.T) {
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 	r.Executor = &mockExecutor{output: "mock answer"}
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	suite := &BenchmarkSuite{
 		Name:    "test-suite",
 		Version: "0.1",
 		Arms: []BenchmarkArm{
-			{Label: "forge-test", Harness: "forge", Tier: TierSmart},
+			{Label: "agent-test", Harness: "agent", Tier: TierSmart},
 			{Label: "virtual-test", Harness: "virtual"},
 		},
 		Prompts: []BenchmarkPrompt{
@@ -77,10 +77,10 @@ func TestRunBenchmarkWithVirtualProvider(t *testing.T) {
 	assert.Equal(t, 2, result.Summary.TotalPrompts)
 	assert.Len(t, result.Summary.Arms, 2)
 
-	forgeStats := result.Summary.Arms[0]
-	assert.Equal(t, "forge-test", forgeStats.Label)
-	assert.Equal(t, 2, forgeStats.Completed)
-	assert.Equal(t, 0, forgeStats.Failed)
+	agentStats := result.Summary.Arms[0]
+	assert.Equal(t, "agent-test", agentStats.Label)
+	assert.Equal(t, 2, agentStats.Completed)
+	assert.Equal(t, 0, agentStats.Failed)
 }
 
 func TestSummarizeBenchmark(t *testing.T) {

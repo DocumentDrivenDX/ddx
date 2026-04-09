@@ -241,7 +241,7 @@ func (r *Runner) fastHarnessState(name string, harness Harness) HarnessState {
 		PolicyOK:    true,
 		LastChecked: time.Now(),
 	}
-	if harness.IsLocal || name == "virtual" || name == "forge" {
+	if harness.IsLocal || name == "virtual" || name == "agent" {
 		state.Installed = true
 		state.Reachable = true
 		state.Authenticated = true

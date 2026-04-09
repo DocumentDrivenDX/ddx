@@ -14,79 +14,72 @@ import (
 
 // --- Registry and discovery ---
 
-func TestForgeHarnessRegistered(t *testing.T) {
+func TestAgentHarnessRegistered(t *testing.T) {
 	r := NewRegistry()
-	assert.True(t, r.Has("forge"))
-	h, ok := r.Get("forge")
+	assert.True(t, r.Has("agent"))
+	h, ok := r.Get("agent")
 	require.True(t, ok)
-	assert.Equal(t, "forge", h.Name)
+	assert.Equal(t, "agent", h.Name)
 	assert.Equal(t, "arg", h.PromptMode)
 }
 
-func TestForgeAlwaysAvailable(t *testing.T) {
+func TestAgentAlwaysAvailable(t *testing.T) {
 	r := NewRegistry()
 	statuses := r.Discover()
 	for _, s := range statuses {
-		if s.Name == "forge" {
-			assert.True(t, s.Available, "forge should always be available (embedded)")
+		if s.Name == "agent" {
+			assert.True(t, s.Available, "agent should always be available (embedded)")
 			assert.Equal(t, "(embedded)", s.Path)
 			return
 		}
 	}
-	t.Fatal("forge not found in Discover output")
+	t.Fatal("agent not found in Discover output")
 }
 
-func TestForgeNoBinaryLookup(t *testing.T) {
+func TestAgentNoBinaryLookup(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
 	r.LookPath = func(file string) (string, error) {
 		return "", &notFoundError{file}
 	}
-	_, _, err := r.resolveHarness(RunOptions{Harness: "forge"})
-	require.NoError(t, err, "forge should not require binary lookup")
+	_, _, err := r.resolveHarness(RunOptions{Harness: "agent"})
+	require.NoError(t, err, "agent should not require binary lookup")
 }
 
-func TestCapabilitiesForge(t *testing.T) {
+func TestCapabilitiesAgent(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	caps, err := r.Capabilities("forge")
+	caps, err := r.Capabilities("agent")
 	require.NoError(t, err)
-	assert.Equal(t, "forge", caps.Harness)
+	assert.Equal(t, "agent", caps.Harness)
 	assert.True(t, caps.Available)
 }
 
 // --- Provider construction ---
 
-func TestBuildForgeProviderOpenAI(t *testing.T) {
-	cfg := ForgeRunConfig{Provider: "openai-compat", BaseURL: "http://localhost:1234/v1"}
-	p, err := buildForgeProvider(cfg)
+func TestBuildAgentProviderOpenAI(t *testing.T) {
+	cfg := AgentRunConfig{Provider: "openai-compat", BaseURL: "http://localhost:1234/v1"}
+	p, err := buildAgentProvider(cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
 
-func TestBuildForgeProviderAnthropic(t *testing.T) {
-	cfg := ForgeRunConfig{Provider: "anthropic", APIKey: "test-key"}
-	p, err := buildForgeProvider(cfg)
+func TestBuildAgentProviderAnthropic(t *testing.T) {
+	cfg := AgentRunConfig{Provider: "anthropic", APIKey: "test-key"}
+	p, err := buildAgentProvider(cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
 
-func TestBuildForgeProviderUnknown(t *testing.T) {
-	cfg := ForgeRunConfig{Provider: "invalid"}
-	_, err := buildForgeProvider(cfg)
+func TestBuildAgentProviderUnknown(t *testing.T) {
+	cfg := AgentRunConfig{Provider: "invalid"}
+	_, err := buildAgentProvider(cfg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown forge provider")
+	assert.Contains(t, err.Error(), "unknown agent provider")
 }
 
-// --- RunForge with virtual provider (deterministic) ---
+// --- RunAgent with virtual provider (deterministic) ---
 
-func newForgeTestRunner(provider forge.Provider) *Runner {
-	r := NewRunner(Config{SessionLogDir: ""})
-	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
-	return r
-}
-
-// F-01: RunForge dispatches to forge.Run with virtual provider.
-func TestForgeRunVirtualProvider(t *testing.T) {
+// A-01: RunAgent dispatches to forge.Run with virtual provider.
+func TestAgentRunVirtualProvider(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "hello",
@@ -100,11 +93,11 @@ func TestForgeRunVirtualProvider(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
-	result, err := r.Run(RunOptions{Harness: "forge", Prompt: "hello"})
+	result, err := r.Run(RunOptions{Harness: "agent", Prompt: "hello"})
 	require.NoError(t, err)
-	assert.Equal(t, "forge", result.Harness)
+	assert.Equal(t, "agent", result.Harness)
 	assert.Equal(t, "world", result.Output)
 	assert.Equal(t, "test-model", result.Model)
 	assert.Equal(t, 100, result.InputTokens)
@@ -113,9 +106,9 @@ func TestForgeRunVirtualProvider(t *testing.T) {
 	assert.Equal(t, 0, result.ExitCode)
 }
 
-// F-02: Forge tool execution — write a file via tool call.
+// A-02: Agent tool execution — write a file via tool call.
 // Uses the file-based dictionary to control multi-turn responses.
-func TestForgeRunToolExecution(t *testing.T) {
+func TestAgentRunToolExecution(t *testing.T) {
 	wd := t.TempDir()
 	dictDir := filepath.Join(t.TempDir(), "dict")
 	require.NoError(t, os.MkdirAll(dictDir, 0o755))
@@ -140,35 +133,35 @@ func TestForgeRunToolExecution(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
-	result, err := r.RunForge(RunOptions{
-		Harness: "forge",
+	result, err := r.RunAgent(RunOptions{
+		Harness: "agent",
 		Prompt:  "create hello.txt",
 		WorkDir: wd,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
-	assert.Equal(t, "forge", result.Harness)
+	assert.Equal(t, "agent", result.Harness)
 	assert.Contains(t, result.Output, "hello.txt")
 	assert.Equal(t, 150, result.InputTokens)
 	assert.Equal(t, 30, result.OutputTokens)
 	assert.Equal(t, 180, result.Tokens)
 }
 
-// F-04: Timeout cancels the run.
-func TestForgeRunTimeout(t *testing.T) {
-	// Provider that never matches — will cause forge to error with "no matching"
+// A-04: Timeout cancels the run.
+func TestAgentRunTimeout(t *testing.T) {
+	// Provider that never matches — will cause agent to error with "no matching"
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{},
 	})
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 100})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
-	result, err := r.RunForge(RunOptions{
-		Harness: "forge",
+	result, err := r.RunAgent(RunOptions{
+		Harness: "agent",
 		Prompt:  "unmatched prompt",
 	})
 	// Either err is non-nil or result has error status
@@ -179,8 +172,8 @@ func TestForgeRunTimeout(t *testing.T) {
 	}
 }
 
-// F-06: Session logging captures forge runs.
-func TestForgeRunSessionLogging(t *testing.T) {
+// A-06: Session logging captures agent runs.
+func TestAgentRunSessionLogging(t *testing.T) {
 	logDir := t.TempDir()
 
 	provider := virtual.New(virtual.Config{
@@ -196,9 +189,9 @@ func TestForgeRunSessionLogging(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: logDir})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
-	_, err := r.Run(RunOptions{Harness: "forge", Prompt: "log test"})
+	_, err := r.Run(RunOptions{Harness: "agent", Prompt: "log test"})
 	require.NoError(t, err)
 
 	// Verify session log was written
@@ -207,7 +200,7 @@ func TestForgeRunSessionLogging(t *testing.T) {
 
 	var entry SessionEntry
 	require.NoError(t, json.Unmarshal(data[:len(data)-1], &entry))
-	assert.Equal(t, "forge", entry.Harness)
+	assert.Equal(t, "agent", entry.Harness)
 	assert.Equal(t, "log-model", entry.Model)
 	assert.Equal(t, 200, entry.InputTokens)
 	assert.Equal(t, 50, entry.OutputTokens)
@@ -215,8 +208,8 @@ func TestForgeRunSessionLogging(t *testing.T) {
 	assert.Equal(t, "inline", entry.PromptSource)
 }
 
-// F-07: Model resolution priority: opts > config > env.
-func TestForgeRunModelResolution(t *testing.T) {
+// A-07: Model resolution priority: opts > config > env.
+func TestAgentRunModelResolution(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "/./",
@@ -227,12 +220,12 @@ func TestForgeRunModelResolution(t *testing.T) {
 	t.Run("opts model wins", func(t *testing.T) {
 		r := NewRunner(Config{
 			SessionLogDir: t.TempDir(),
-			Models:        map[string]string{"forge": "config-model"},
+			Models:        map[string]string{"agent": "config-model"},
 		})
 		r.LookPath = mockLookPath
-		r.ForgeProvider = provider
+		r.AgentProvider = provider
 
-		result, err := r.Run(RunOptions{Harness: "forge", Prompt: "test", Model: "opts-model"})
+		result, err := r.Run(RunOptions{Harness: "agent", Prompt: "test", Model: "opts-model"})
 		require.NoError(t, err)
 		// The model in Result comes from the provider response, but we verify
 		// the resolution logic ran correctly by checking no error occurred
@@ -242,18 +235,18 @@ func TestForgeRunModelResolution(t *testing.T) {
 	t.Run("config model used when opts empty", func(t *testing.T) {
 		r := NewRunner(Config{
 			SessionLogDir: t.TempDir(),
-			Models:        map[string]string{"forge": "config-model"},
+			Models:        map[string]string{"agent": "config-model"},
 		})
 		r.LookPath = mockLookPath
-		r.ForgeProvider = provider
+		r.AgentProvider = provider
 
-		model := r.resolveModel(RunOptions{}, "forge")
+		model := r.resolveModel(RunOptions{}, "agent")
 		assert.Equal(t, "config-model", model)
 	})
 }
 
-// F-08: Cost mapping — zero for local models.
-func TestForgeRunCostMapping(t *testing.T) {
+// A-08: Cost mapping — zero for local models.
+func TestAgentRunCostMapping(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "cost test",
@@ -267,16 +260,16 @@ func TestForgeRunCostMapping(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
-	result, err := r.Run(RunOptions{Harness: "forge", Prompt: "cost test"})
+	result, err := r.Run(RunOptions{Harness: "agent", Prompt: "cost test"})
 	require.NoError(t, err)
-	// forge.Result.CostUSD is 0 for virtual (no pricing entry) → DDx maps 0 to 0
+	// CostUSD is 0 for virtual (no pricing entry) → DDx maps 0 to 0
 	assert.Equal(t, 0.0, result.CostUSD)
 }
 
-// F-09: Dispatch via Runner.Run routes to RunForge, not subprocess.
-func TestForgeRunDispatchesInProcess(t *testing.T) {
+// A-09: Dispatch via Runner.Run routes to RunAgent, not subprocess.
+func TestAgentRunDispatchesInProcess(t *testing.T) {
 	provider := virtual.New(virtual.Config{
 		InlineResponses: []virtual.InlineResponse{{
 			PromptMatch: "dispatch test",
@@ -291,17 +284,17 @@ func TestForgeRunDispatchesInProcess(t *testing.T) {
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.Executor = mock
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
-	result, err := r.Run(RunOptions{Harness: "forge", Prompt: "dispatch test"})
+	result, err := r.Run(RunOptions{Harness: "agent", Prompt: "dispatch test"})
 	require.NoError(t, err)
 	assert.Equal(t, "in-process", result.Output)
 	// Verify the subprocess executor was NOT called
-	assert.Empty(t, mock.lastBinary, "forge should run in-process, not via executor")
+	assert.Empty(t, mock.lastBinary, "agent should run in-process, not via executor")
 }
 
-// F-10: LLM preset resolution — named preset expands to model + endpoint.
-func TestForgeResolveConfigLLMPreset(t *testing.T) {
+// A-10: LLM preset resolution — named preset expands to model + endpoint.
+func TestAgentResolveConfigLLMPreset(t *testing.T) {
 	endpoints := []string{
 		"http://vidar:1234/v1",
 		"http://grendel:1234/v1",
@@ -318,12 +311,12 @@ func TestForgeResolveConfigLLMPreset(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeConfigLoader = func() *ForgeYAMLConfig {
-		return &ForgeYAMLConfig{Models: presets}
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{Models: presets}
 	}
 
 	t.Run("preset name resolves to model and endpoint", func(t *testing.T) {
-		cfg := r.resolveForgeConfig("qwen-local")
+		cfg := r.resolveAgentConfig("qwen-local")
 		assert.Equal(t, "qwen2.5-coder-32b-instruct", cfg.Model)
 		assert.Contains(t, endpoints, cfg.BaseURL)
 		assert.Equal(t, "openai-compat", cfg.Provider)
@@ -334,7 +327,7 @@ func TestForgeResolveConfigLLMPreset(t *testing.T) {
 		roundRobinCounter = 0
 		seen := map[string]bool{}
 		for i := 0; i < 9; i++ {
-			cfg := r.resolveForgeConfig("qwen-local")
+			cfg := r.resolveAgentConfig("qwen-local")
 			seen[cfg.BaseURL] = true
 		}
 		assert.Len(t, seen, 3, "round-robin should rotate through all 3 endpoints")
@@ -343,14 +336,14 @@ func TestForgeResolveConfigLLMPreset(t *testing.T) {
 	t.Run("first-available always returns first endpoint", func(t *testing.T) {
 		presets["qwen-local"].Strategy = "first-available"
 		for i := 0; i < 5; i++ {
-			cfg := r.resolveForgeConfig("qwen-local")
+			cfg := r.resolveAgentConfig("qwen-local")
 			assert.Equal(t, endpoints[0], cfg.BaseURL)
 		}
 		presets["qwen-local"].Strategy = "round-robin"
 	})
 
 	t.Run("unknown model name treated as raw model", func(t *testing.T) {
-		cfg := r.resolveForgeConfig("some-raw-model")
+		cfg := r.resolveAgentConfig("some-raw-model")
 		assert.Equal(t, "some-raw-model", cfg.Model)
 	})
 }

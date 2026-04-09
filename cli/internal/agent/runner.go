@@ -23,11 +23,11 @@ func containsString(slice []string, s string) bool {
 	return false
 }
 
-// ForgeConfigFunc returns forge config from .ddx/config.yaml. Nil return = no config.
-type ForgeConfigFunc func() *ForgeYAMLConfig
+// AgentConfigFunc returns agent runner config from .ddx/config.yaml. Nil return = no config.
+type AgentConfigFunc func() *AgentYAMLConfig
 
-// ForgeYAMLConfig mirrors config.ForgeConfig without importing the config package.
-type ForgeYAMLConfig struct {
+// AgentYAMLConfig mirrors config.AgentRunnerConfig without importing the config package.
+type AgentYAMLConfig struct {
 	Provider      string
 	BaseURL       string
 	APIKey        string
@@ -53,8 +53,8 @@ type Runner struct {
 	Catalog           *Catalog        // model catalog for routing; defaults to BuiltinCatalog
 	Executor          Executor        // injected; defaults to OSExecutor
 	LookPath          LookPathFunc    // injected; defaults to exec.LookPath
-	ForgeProvider     interface{}     // injected forge.Provider for testing; nil = resolve from config
-	ForgeConfigLoader ForgeConfigFunc // injected; loads forge config from .ddx/config.yaml
+	AgentProvider     interface{}     // injected forge.Provider for testing; nil = resolve from config
+	AgentConfigLoader AgentConfigFunc // injected; loads agent runner config from .ddx/config.yaml
 }
 
 // NewRunner creates a runner with defaults.
@@ -89,9 +89,9 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 		return r.RunVirtual(opts)
 	}
 
-	// Forge harness: run in-process via the forge library.
-	if harnessName == "forge" {
-		return r.RunForge(opts)
+	// Agent harness: run in-process via the embedded agent library.
+	if harnessName == "agent" {
+		return r.RunAgent(opts)
 	}
 
 	prompt, err := r.resolvePrompt(opts)
@@ -212,7 +212,7 @@ func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 		return Harness{}, "", fmt.Errorf("agent: unknown harness: %s", name)
 	}
 	// Embedded harnesses don't need a binary in PATH.
-	if name != "virtual" && name != "forge" {
+	if name != "virtual" && name != "agent" {
 		if _, err := r.LookPath(harness.Binary); err != nil {
 			return Harness{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
 		}
@@ -567,7 +567,7 @@ func ExtractUsage(harnessName string, output string) UsageData {
 // ExtractOutput extracts clean text from raw agent output based on harness format.
 // For codex: scans JSONL for type=item.completed with item.type=agent_message, returns item.text
 // For claude: parses JSON envelope and returns the 'result' field
-// For forge/opencode: returns output as-is (no transformation needed)
+// For agent/opencode: returns output as-is (no transformation needed)
 // For unknown harnesses or malformed input: returns output as-is
 func ExtractOutput(harnessName string, rawOutput string) string {
 	switch harnessName {
@@ -575,8 +575,8 @@ func ExtractOutput(harnessName string, rawOutput string) string {
 		return extractOutputCodex(rawOutput)
 	case "claude":
 		return extractOutputClaude(rawOutput)
-	case "forge", "opencode":
-		// forge and opencode return clean text directly
+	case "agent", "opencode":
+		// agent and opencode return clean text directly
 		return rawOutput
 	case "pi", "gemini":
 		return extractOutputPiGemini(rawOutput)
@@ -739,7 +739,7 @@ func (r *Runner) TestProviderConnectivity(harnessName string, timeout time.Durat
 	status := ProviderStatus{Reachable: false}
 
 	// Skip embedded harnesses - they don't have external providers
-	if harnessName == "virtual" || harnessName == "forge" {
+	if harnessName == "virtual" || harnessName == "agent" {
 		status.Reachable = true
 		status.CreditsOK = true
 		return status
@@ -752,7 +752,7 @@ func (r *Runner) TestProviderConnectivity(harnessName string, timeout time.Durat
 	}
 
 	// Check if binary exists first
-	if harnessName != "virtual" && harnessName != "forge" {
+	if harnessName != "virtual" && harnessName != "agent" {
 		if _, err := r.LookPath(harness.Binary); err != nil {
 			status.Error = "binary not found"
 			return status

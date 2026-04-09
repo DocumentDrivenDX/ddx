@@ -54,7 +54,7 @@ func newTestRunner(exec *mockExecutor) *Runner {
 
 func TestRegistryBuiltinHarnesses(t *testing.T) {
 	r := NewRegistry()
-	for _, name := range []string{"codex", "claude", "gemini", "opencode", "forge", "pi"} {
+	for _, name := range []string{"codex", "claude", "gemini", "opencode", "agent", "pi"} {
 		assert.True(t, r.Has(name), "should have builtin harness: %s", name)
 	}
 	assert.False(t, r.Has("nonexistent"))

@@ -54,11 +54,11 @@ func TestCompareBasic(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions: RunOptions{Prompt: "do something", WorkDir: repo},
-		Harnesses:  []string{"forge", "virtual"},
+		Harnesses:  []string{"agent", "virtual"},
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, record.ID)
@@ -70,7 +70,7 @@ func TestCompareBasic(t *testing.T) {
 	for _, arm := range record.Arms {
 		harnesses[arm.Harness] = true
 	}
-	assert.True(t, harnesses["forge"])
+	assert.True(t, harnesses["agent"])
 	assert.True(t, harnesses["virtual"])
 }
 
@@ -105,14 +105,14 @@ func TestCompareSandboxIsolation(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = forgeProvider
+	r.AgentProvider = forgeProvider
 
 	// Set up inline virtual responses
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"/.*/","response":"virtual done","exit_code":0}]`)
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions: RunOptions{Prompt: "create new_file.txt", WorkDir: repo},
-		Harnesses:  []string{"forge"},
+		Harnesses:  []string{"agent"},
 		Sandbox:    true,
 	})
 	require.NoError(t, err)
@@ -152,11 +152,11 @@ func TestCompareCapturesDiff(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions: RunOptions{Prompt: "add readme", WorkDir: repo},
-		Harnesses:  []string{"forge"},
+		Harnesses:  []string{"agent"},
 		Sandbox:    true,
 	})
 	require.NoError(t, err)
@@ -183,11 +183,11 @@ func TestCompareEmptyDiff(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions: RunOptions{Prompt: "review the code", WorkDir: repo},
-		Harnesses:  []string{"forge"},
+		Harnesses:  []string{"agent"},
 		Sandbox:    true,
 	})
 	require.NoError(t, err)
@@ -211,11 +211,11 @@ func TestCompareCleansUpWorktrees(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions: RunOptions{Prompt: "test", WorkDir: repo},
-		Harnesses:  []string{"forge"},
+		Harnesses:  []string{"agent"},
 		Sandbox:    true,
 	})
 	require.NoError(t, err)
@@ -246,11 +246,11 @@ func TestCompareKeepSandbox(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions:  RunOptions{Prompt: "test", WorkDir: repo},
-		Harnesses:   []string{"forge"},
+		Harnesses:   []string{"agent"},
 		Sandbox:     true,
 		KeepSandbox: true,
 	})
@@ -292,11 +292,11 @@ func TestCompareRecordSchema(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions: RunOptions{Prompt: "schema test", WorkDir: repo},
-		Harnesses:  []string{"forge"},
+		Harnesses:  []string{"agent"},
 	})
 	require.NoError(t, err)
 
@@ -310,7 +310,7 @@ func TestCompareRecordSchema(t *testing.T) {
 	assert.False(t, decoded.Timestamp.IsZero())
 	assert.Equal(t, "schema test", decoded.Prompt)
 	require.Len(t, decoded.Arms, 1)
-	assert.Equal(t, "forge", decoded.Arms[0].Harness)
+	assert.Equal(t, "agent", decoded.Arms[0].Harness)
 	assert.Equal(t, "schema-model", decoded.Arms[0].Model)
 	assert.Equal(t, 200, decoded.Arms[0].InputTokens)
 	assert.Equal(t, 40, decoded.Arms[0].OutputTokens)
@@ -337,27 +337,27 @@ func TestCompareArmFailure(t *testing.T) {
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.Executor = mock
 	r.LookPath = mockLookPath
-	r.ForgeProvider = provider
+	r.AgentProvider = provider
 
 	record, err := r.RunCompare(CompareOptions{
 		RunOptions: RunOptions{Prompt: "partial failure", WorkDir: repo},
-		Harnesses:  []string{"forge", "codex"},
+		Harnesses:  []string{"agent", "codex"},
 	})
 	require.NoError(t, err)
 	assert.Len(t, record.Arms, 2)
 
 	// One should succeed, one should fail
-	var forgeArm, codexArm *ComparisonArm
+	var agentArm, codexArm *ComparisonArm
 	for i := range record.Arms {
 		switch record.Arms[i].Harness {
-		case "forge":
-			forgeArm = &record.Arms[i]
+		case "agent":
+			agentArm = &record.Arms[i]
 		case "codex":
 			codexArm = &record.Arms[i]
 		}
 	}
-	require.NotNil(t, forgeArm)
+	require.NotNil(t, agentArm)
 	require.NotNil(t, codexArm)
-	assert.Equal(t, 0, forgeArm.ExitCode)
+	assert.Equal(t, 0, agentArm.ExitCode)
 	assert.Equal(t, 1, codexArm.ExitCode)
 }

@@ -26,13 +26,13 @@ func TestExtractOutputClaude(t *testing.T) {
 	}
 }
 
-func TestExtractOutputForge(t *testing.T) {
-	raw := "Plain text output from forge"
+func TestExtractOutputAgent(t *testing.T) {
+	raw := "Plain text output from agent"
 
-	got := ExtractOutput("forge", raw)
-	want := "Plain text output from forge"
+	got := ExtractOutput("agent", raw)
+	want := "Plain text output from agent"
 	if got != want {
-		t.Errorf("ExtractOutput(forge) = %q, want %q", got, want)
+		t.Errorf("ExtractOutput(agent) = %q, want %q", got, want)
 	}
 }
 

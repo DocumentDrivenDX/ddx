@@ -65,14 +65,14 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 		Permissions:     cfg.Agent.Permissions,
 	})
 
-	// Wire forge config loader — reads from .ddx/config.yaml on each invocation.
-	r.ForgeConfigLoader = func() *agent.ForgeYAMLConfig {
+	// Wire agent config loader — reads from .ddx/config.yaml on each invocation.
+	r.AgentConfigLoader = func() *agent.AgentYAMLConfig {
 		c, err := config.LoadWithWorkingDir(f.WorkingDir)
-		if err != nil || c.Agent == nil || c.Agent.Forge == nil {
+		if err != nil || c.Agent == nil || c.Agent.AgentRunner == nil {
 			return nil
 		}
-		fc := c.Agent.Forge
-		yaml := &agent.ForgeYAMLConfig{
+		fc := c.Agent.AgentRunner
+		yaml := &agent.AgentYAMLConfig{
 			Provider:      fc.Provider,
 			BaseURL:       fc.BaseURL,
 			APIKey:        fc.APIKey,
@@ -788,7 +788,7 @@ with a different harness or model for comparison.
 
 Examples:
   ddx agent replay ddx-abc123 --harness claude --model claude-opus-4-6
-  ddx agent replay ddx-abc123 --harness forge --at-head
+  ddx agent replay ddx-abc123 --harness agent --at-head
   ddx agent replay ddx-abc123 --sandbox`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -17,8 +17,8 @@ import (
 	"github.com/DocumentDrivenDX/forge/tool"
 )
 
-// ForgeRunConfig holds resolved configuration for one forge invocation.
-type ForgeRunConfig struct {
+// AgentRunConfig holds resolved configuration for one agent invocation.
+type AgentRunConfig struct {
 	Provider      string
 	BaseURL       string
 	APIKey        string
@@ -27,18 +27,18 @@ type ForgeRunConfig struct {
 	MaxIterations int
 }
 
-// roundRobinCounter is shared across all forge runs for endpoint rotation.
+// roundRobinCounter is shared across all agent runs for endpoint rotation.
 var roundRobinCounter uint64
 
-// RunForge executes a prompt using the embedded forge library.
+// RunAgent executes a prompt using the embedded agent library.
 // This runs in-process — no subprocess, no binary lookup.
-func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
+func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	promptText, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	model := r.resolveModel(opts, "forge")
+	model := r.resolveModel(opts, "agent")
 	timeout := r.resolveTimeout(opts)
 
 	// Resolve working directory
@@ -47,22 +47,22 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 		wd, _ = os.Getwd()
 	}
 
-	// Resolve forge configuration (config.yaml → env vars → opts)
-	forgeCfg := r.resolveForgeConfig(model)
+	// Resolve agent configuration (config.yaml → env vars → opts)
+	agentCfg := r.resolveAgentConfig(model)
 
 	// Use injected provider (testing) or build from resolved config.
 	var provider forge.Provider
-	if r.ForgeProvider != nil {
-		provider = r.ForgeProvider.(forge.Provider)
+	if r.AgentProvider != nil {
+		provider = r.AgentProvider.(forge.Provider)
 	} else {
 		var err error
-		provider, err = buildForgeProvider(forgeCfg)
+		provider, err = buildAgentProvider(agentCfg)
 		if err != nil {
-			return nil, fmt.Errorf("agent: forge provider: %w", err)
+			return nil, fmt.Errorf("agent: provider: %w", err)
 		}
 	}
 
-	maxIter := forgeCfg.MaxIterations
+	maxIter := agentCfg.MaxIterations
 	if maxIter == 0 {
 		maxIter = 20
 	}
@@ -75,8 +75,8 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 		&tool.BashTool{WorkDir: wd},
 	}
 
-	// Build system prompt using forge presets.
-	sysPrompt := prompt.NewFromPreset(forgeCfg.Preset).
+	// Build system prompt using presets.
+	sysPrompt := prompt.NewFromPreset(agentCfg.Preset).
 		WithTools(tools).
 		WithContextFiles(prompt.LoadContextFiles(wd)).
 		WithWorkDir(wd).
@@ -87,7 +87,7 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 	if logDir == "" {
 		logDir = DefaultLogDir
 	}
-	sessionID := fmt.Sprintf("forge-%d", time.Now().UnixNano())
+	sessionID := fmt.Sprintf("agent-%d", time.Now().UnixNano())
 	logger := session.NewLogger(logDir, sessionID)
 	defer logger.Close() //nolint:errcheck
 
@@ -106,12 +106,12 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 	defer cancel()
 
 	start := time.Now()
-	forgeResult, err := forge.Run(ctx, req)
+	agentResult, err := forge.Run(ctx, req)
 	elapsed := time.Since(start)
 
-	// Map forge tool calls to DDx ToolCallEntry
+	// Map agent tool calls to DDx ToolCallEntry
 	var toolCalls []ToolCallEntry
-	for _, tc := range forgeResult.ToolCalls {
+	for _, tc := range agentResult.ToolCalls {
 		entry := ToolCallEntry{
 			Tool:     tc.Tool,
 			Input:    string(tc.Input),
@@ -123,27 +123,27 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 	}
 
 	result := &Result{
-		Harness:        "forge",
-		Model:          forgeResult.Model,
-		Output:         forgeResult.Output,
-		InputTokens:    forgeResult.Tokens.Input,
-		OutputTokens:   forgeResult.Tokens.Output,
-		Tokens:         forgeResult.Tokens.Total,
+		Harness:        "agent",
+		Model:          agentResult.Model,
+		Output:         agentResult.Output,
+		InputTokens:    agentResult.Tokens.Input,
+		OutputTokens:   agentResult.Tokens.Output,
+		Tokens:         agentResult.Tokens.Total,
 		DurationMS:     int(elapsed.Milliseconds()),
 		ToolCalls:      toolCalls,
-		ForgeSessionID: forgeResult.SessionID,
+		AgentSessionID: agentResult.SessionID,
 	}
 
-	if forgeResult.CostUSD >= 0 {
-		result.CostUSD = forgeResult.CostUSD
+	if agentResult.CostUSD >= 0 {
+		result.CostUSD = agentResult.CostUSD
 	}
 
 	if err != nil {
 		result.Error = err.Error()
 		result.ExitCode = 1
-	} else if forgeResult.Status != forge.StatusSuccess {
+	} else if agentResult.Status != forge.StatusSuccess {
 		result.ExitCode = 1
-		result.Error = string(forgeResult.Status)
+		result.Error = string(agentResult.Status)
 	}
 
 	// Log session
@@ -159,11 +159,11 @@ func (r *Runner) RunForge(opts RunOptions) (*Result, error) {
 	return result, nil
 }
 
-// resolveForgeConfig builds a ForgeRunConfig from .ddx/config.yaml, env vars, and opts.
+// resolveAgentConfig builds an AgentRunConfig from .ddx/config.yaml, env vars, and opts.
 // Priority: opts > env vars > config > built-in defaults.
-// If model resolves to a named preset in forge.models, the preset's endpoint and model are applied.
-func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
-	cfg := ForgeRunConfig{
+// If model resolves to a named preset in agent.models, the preset's endpoint and model are applied.
+func (r *Runner) resolveAgentConfig(model string) AgentRunConfig {
+	cfg := AgentRunConfig{
 		Provider:      "openai-compat",
 		BaseURL:       "http://localhost:1234/v1",
 		Preset:        "forge",
@@ -172,9 +172,9 @@ func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
 
 	var yamlModels map[string]*LLMPresetYAML
 
-	// Layer 1: .ddx/config.yaml (if ForgeConfigLoader is set)
-	if r.ForgeConfigLoader != nil {
-		if fc := r.ForgeConfigLoader(); fc != nil {
+	// Layer 1: .ddx/config.yaml (if AgentConfigLoader is set)
+	if r.AgentConfigLoader != nil {
+		if fc := r.AgentConfigLoader(); fc != nil {
 			if fc.Provider != "" {
 				cfg.Provider = fc.Provider
 			}
@@ -198,19 +198,19 @@ func (r *Runner) resolveForgeConfig(model string) ForgeRunConfig {
 	}
 
 	// Layer 2: environment variables override config
-	if v := os.Getenv("FORGE_PROVIDER"); v != "" {
+	if v := os.Getenv("AGENT_PROVIDER"); v != "" {
 		cfg.Provider = v
 	}
-	if v := os.Getenv("FORGE_BASE_URL"); v != "" {
+	if v := os.Getenv("AGENT_BASE_URL"); v != "" {
 		cfg.BaseURL = v
 	}
-	if v := os.Getenv("FORGE_API_KEY"); v != "" {
+	if v := os.Getenv("AGENT_API_KEY"); v != "" {
 		cfg.APIKey = v
 	}
-	if v := os.Getenv("FORGE_MODEL"); v != "" {
+	if v := os.Getenv("AGENT_MODEL"); v != "" {
 		cfg.Model = v
 	}
-	if v := os.Getenv("FORGE_PRESET"); v != "" {
+	if v := os.Getenv("AGENT_PRESET"); v != "" {
 		cfg.Preset = v
 	}
 
@@ -257,8 +257,8 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
-// buildForgeProvider creates a forge.Provider from resolved config.
-func buildForgeProvider(cfg ForgeRunConfig) (forge.Provider, error) {
+// buildAgentProvider creates a forge.Provider from resolved config.
+func buildAgentProvider(cfg AgentRunConfig) (forge.Provider, error) {
 	switch cfg.Provider {
 	case "openai-compat", "openai":
 		return oai.New(oai.Config{
@@ -272,9 +272,9 @@ func buildForgeProvider(cfg ForgeRunConfig) (forge.Provider, error) {
 			Model:  cfg.Model,
 		}), nil
 	case "virtual":
-		dictDir := filepath.Join(".forge", "dictionary")
+		dictDir := filepath.Join(".ddx", "agent", "dictionary")
 		return virtual.New(virtual.Config{DictDir: dictDir}), nil
 	default:
-		return nil, fmt.Errorf("unknown forge provider %q (use openai-compat, anthropic, or virtual)", cfg.Provider)
+		return nil, fmt.Errorf("unknown agent provider %q (use openai-compat, anthropic, or virtual)", cfg.Provider)
 	}
 }

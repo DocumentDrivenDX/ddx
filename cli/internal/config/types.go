@@ -45,11 +45,11 @@ type AgentConfig struct {
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
 	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
-	Forge           *ForgeConfig        `yaml:"forge,omitempty" json:"forge,omitempty"`
+	AgentRunner     *AgentRunnerConfig  `yaml:"agent_runner,omitempty" json:"agent_runner,omitempty"`
 }
 
-// ForgeConfig configures the embedded forge agent harness.
-type ForgeConfig struct {
+// AgentRunnerConfig configures the embedded DDx Agent harness.
+type AgentRunnerConfig struct {
 	Provider      string                      `yaml:"provider,omitempty" json:"provider,omitempty"`             // "openai-compat" or "anthropic"
 	BaseURL       string                      `yaml:"base_url,omitempty" json:"base_url,omitempty"`             // provider endpoint
 	APIKey        string                      `yaml:"api_key,omitempty" json:"api_key,omitempty"`               // API key
@@ -62,9 +62,9 @@ type ForgeConfig struct {
 // LLMPresetConfig defines a named LLM configuration with optional multi-endpoint support.
 type LLMPresetConfig struct {
 	Model     string   `yaml:"model" json:"model"`                             // model name passed to the provider
-	Provider  string   `yaml:"provider,omitempty" json:"provider,omitempty"`   // override forge.provider (default: openai-compat)
+	Provider  string   `yaml:"provider,omitempty" json:"provider,omitempty"`   // override agent_runner.provider (default: openai-compat)
 	Endpoints []string `yaml:"endpoints,omitempty" json:"endpoints,omitempty"` // one or more base URLs; single entry = no balancing
-	APIKey    string   `yaml:"api_key,omitempty" json:"api_key,omitempty"`     // override forge.api_key
+	APIKey    string   `yaml:"api_key,omitempty" json:"api_key,omitempty"`     // override agent_runner.api_key
 	Strategy  string   `yaml:"strategy,omitempty" json:"strategy,omitempty"`   // endpoint selection: round-robin (default) | first-available
 }
 

@@ -29,7 +29,7 @@ func healthyLocalState() HarnessState {
 }
 
 // stateFixtures returns a harness-state fixture matrix covering SD-015 test scenarios:
-// - healthy local embedded (forge)
+// - healthy local embedded (agent)
 // - healthy cloud codex
 // - degraded cloud claude
 // - quota-blocked harness (gemini)
@@ -49,7 +49,7 @@ func stateFixtures() map[string]HarnessState {
 	policyRestricted.PolicyOK = false
 
 	return map[string]HarnessState{
-		"forge":    healthyLocalState(),
+		"agent":    healthyLocalState(),
 		"codex":    healthyState(),
 		"claude":   degradedClaude,
 		"gemini":   quotaBlocked,
@@ -73,25 +73,25 @@ func newTestRunnerForRouting() *Runner {
 func TestAgentRoutingRejectsHarnessWithoutSurfaceMapping(t *testing.T) {
 	r := newTestRunnerForRouting()
 
-	// Provide state only for forge — all others are absent from the map.
+	// Provide state only for agent — all others are absent from the map.
 	states := map[string]HarnessState{
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 	}
 
 	plans := r.BuildCandidatePlans(RouteRequest{Profile: "cheap"}, states)
 
-	// forge should be viable
-	forgeFound := false
+	// agent should be viable
+	agentFound := false
 	for _, p := range plans {
-		if p.Harness == "forge" {
-			assert.True(t, p.Viable, "forge should be viable")
-			forgeFound = true
+		if p.Harness == "agent" {
+			assert.True(t, p.Viable, "agent should be viable")
+			agentFound = true
 		} else {
 			assert.False(t, p.Viable, "harness %s not in state map should be not viable", p.Harness)
 			assert.Equal(t, "not installed", p.RejectReason)
 		}
 	}
-	assert.True(t, forgeFound, "forge should be in plans")
+	assert.True(t, agentFound, "agent should be in plans")
 }
 
 // TestAgentRoutingRejectsUnsupportedEffort verifies that harnesses without an
@@ -127,7 +127,7 @@ func TestAgentRoutingRejectsPolicyRestrictedHarness(t *testing.T) {
 
 	states := map[string]HarnessState{
 		"codex": restricted,
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 	}
 
 	plans := r.BuildCandidatePlans(RouteRequest{Profile: "cheap"}, states)
@@ -137,7 +137,7 @@ func TestAgentRoutingRejectsPolicyRestrictedHarness(t *testing.T) {
 		case "codex":
 			assert.False(t, p.Viable)
 			assert.Equal(t, "policy restricted", p.RejectReason)
-		case "forge":
+		case "agent":
 			assert.True(t, p.Viable)
 		}
 	}
@@ -177,7 +177,7 @@ func TestAgentRoutingRejectsUnreachableHarness(t *testing.T) {
 
 	states := map[string]HarnessState{
 		"codex": unreachable,
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 	}
 
 	plans := r.BuildCandidatePlans(RouteRequest{Profile: "cheap"}, states)
@@ -187,7 +187,7 @@ func TestAgentRoutingRejectsUnreachableHarness(t *testing.T) {
 		case "codex":
 			assert.False(t, p.Viable)
 			assert.Equal(t, "not reachable", p.RejectReason)
-		case "forge":
+		case "agent":
 			assert.True(t, p.Viable)
 		}
 	}
@@ -201,7 +201,7 @@ func TestAgentRoutingCheapPrefersLowestCostHealthyCandidate(t *testing.T) {
 	r := newTestRunnerForRouting()
 
 	states := map[string]HarnessState{
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 		"codex": healthyState(),
 	}
 
@@ -209,7 +209,7 @@ func TestAgentRoutingCheapPrefersLowestCostHealthyCandidate(t *testing.T) {
 	ranked := RankCandidates("cheap", plans)
 
 	require.NotEmpty(t, ranked)
-	// The top viable candidate should be local (forge).
+	// The top viable candidate should be local (agent).
 	best, err := SelectBestCandidate(ranked)
 	require.NoError(t, err)
 	assert.Equal(t, "local", best.CostClass, "cheap profile should prefer local harness")
@@ -221,7 +221,7 @@ func TestAgentRoutingFastPrefersFastestViableCandidate(t *testing.T) {
 	r := newTestRunnerForRouting()
 
 	states := map[string]HarnessState{
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 		"codex": healthyState(),
 	}
 
@@ -240,7 +240,7 @@ func TestAgentRoutingSmartPrefersHighestQualityCandidate(t *testing.T) {
 	r := newTestRunnerForRouting()
 
 	states := map[string]HarnessState{
-		"forge": healthyLocalState(),
+		"agent": healthyLocalState(),
 		"codex": healthyState(),
 	}
 
@@ -258,7 +258,7 @@ func TestAgentRoutingSmartPrefersHighestQualityCandidate(t *testing.T) {
 func TestAgentRoutingPrefersLocalWhenOtherwiseEquivalent(t *testing.T) {
 	// Create two plans with equal scores but different cost classes.
 	local := CandidatePlan{
-		Harness:   "forge",
+		Harness:   "agent",
 		CostClass: "local",
 		Viable:    true,
 		Score:     100,
@@ -275,7 +275,7 @@ func TestAgentRoutingPrefersLocalWhenOtherwiseEquivalent(t *testing.T) {
 
 	best, err := SelectBestCandidate(ranked)
 	require.NoError(t, err)
-	assert.Equal(t, "forge", best.Harness, "local harness should win on equal scores")
+	assert.Equal(t, "agent", best.Harness, "local harness should win on equal scores")
 }
 
 // TestAgentRoutingUsesStableTieBreaker verifies that equal-score non-local
@@ -358,7 +358,7 @@ func TestProbeHarnessStateEmbeddedAlwaysReachable(t *testing.T) {
 		return "", assert.AnError
 	}
 
-	state := r.ProbeHarnessState("forge", 5*time.Second)
+	state := r.ProbeHarnessState("agent", 5*time.Second)
 	assert.True(t, state.Installed)
 	assert.True(t, state.Reachable)
 	assert.True(t, state.Authenticated)
@@ -465,8 +465,8 @@ func TestAgentCapabilitiesShowsEffectiveProfileMappings(t *testing.T) {
 func TestAgentCapabilitiesShowsExactPinSupport(t *testing.T) {
 	r := newTestRunnerForRouting()
 
-	// forge supports exact pins.
-	capForge, err := r.Capabilities("forge")
+	// agent supports exact pins.
+	capForge, err := r.Capabilities("agent")
 	require.NoError(t, err)
 	assert.True(t, capForge.ExactPinSupport)
 	assert.True(t, capForge.IsLocal)

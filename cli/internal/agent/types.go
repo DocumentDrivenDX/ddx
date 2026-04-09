@@ -83,8 +83,8 @@ type Result struct {
 	CostUSD         float64         `json:"cost_usd,omitempty"`
 	DurationMS      int             `json:"duration_ms"`
 	Error           string          `json:"error,omitempty"`
-	ToolCalls       []ToolCallEntry `json:"tool_calls,omitempty"`       // populated by forge, nil for subprocess
-	ForgeSessionID  string          `json:"forge_session_id,omitempty"` // forge session ID for event log cross-reference
+	ToolCalls       []ToolCallEntry `json:"tool_calls,omitempty"`       // populated by agent, nil for subprocess
+	AgentSessionID  string          `json:"agent_session_id,omitempty"` // agent session ID for event log cross-reference
 }
 
 // SessionEntry is written to the session log.
@@ -158,7 +158,7 @@ type CompareOptions struct {
 }
 
 // ToolCallEntry records one tool execution during an agent run.
-// Mirrors forge.ToolCallLog without importing the forge package in types.
+// Mirrors the agent library's ToolCallLog without importing it in types.
 type ToolCallEntry struct {
 	Tool     string `json:"tool"`
 	Input    string `json:"input"`
@@ -173,7 +173,7 @@ type ComparisonArm struct {
 	Model        string          `json:"model,omitempty"`
 	Output       string          `json:"output"`
 	Diff         string          `json:"diff,omitempty"`         // git diff of side effects
-	ToolCalls    []ToolCallEntry `json:"tool_calls,omitempty"`   // forge tool call log (nil for subprocess)
+	ToolCalls    []ToolCallEntry `json:"tool_calls,omitempty"`   // agent tool call log (nil for subprocess)
 	PostRunOut   string          `json:"post_run_out,omitempty"` // post-run command output
 	PostRunOK    *bool           `json:"post_run_ok,omitempty"`  // post-run pass/fail
 	Tokens       int             `json:"tokens,omitempty"`

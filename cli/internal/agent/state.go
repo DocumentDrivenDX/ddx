@@ -62,7 +62,7 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 	}
 
 	// Embedded harnesses are always installed, always reachable.
-	if harness.IsLocal || harnessName == "virtual" || harnessName == "forge" {
+	if harness.IsLocal || harnessName == "virtual" || harnessName == "agent" {
 		state.Installed = true
 		state.Reachable = true
 		state.Authenticated = true

@@ -3,7 +3,7 @@ package agent
 import "os/exec"
 
 // PreferenceOrder defines the default harness preference when multiple are available.
-var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "forge", "pi"}
+var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "agent", "pi"}
 
 // builtinHarnesses defines known harnesses and how to invoke them.
 var builtinHarnesses = map[string]Harness{
@@ -84,11 +84,11 @@ var builtinHarnesses = map[string]Harness{
 		IsLocal:         false,
 		ExactPinSupport: true,
 	},
-	"forge": {
-		Name:            "forge",
-		Binary:          "ddx", // embedded — runs in-process via forge.Run(), not as a subprocess
+	"agent": {
+		Name:            "agent",
+		Binary:          "ddx-agent", // embedded — runs in-process via the agent library, not as a subprocess
 		PromptMode:      "arg",
-		DefaultModel:    "", // uses forge config or provider default
+		DefaultModel:    "", // uses agent config or provider default
 		Surface:         "embedded-openai",
 		CostClass:       "local",
 		IsLocal:         true,
@@ -179,7 +179,7 @@ func (r *Registry) Discover() []HarnessStatus {
 			Binary: h.Binary,
 		}
 		// Embedded harnesses are always available — no binary lookup needed.
-		if name == "virtual" || name == "forge" {
+		if name == "virtual" || name == "agent" {
 			status.Available = true
 			status.Path = "(embedded)"
 		} else if path, err := exec.LookPath(h.Binary); err != nil {
