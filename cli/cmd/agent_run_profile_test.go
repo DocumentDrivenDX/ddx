@@ -185,6 +185,34 @@ func TestAgentCapabilitiesEmbeddedAgentJSON(t *testing.T) {
 	assert.Equal(t, "local", caps.CostClass)
 }
 
+// TestAgentRunProfileNoViableHarness verifies that when --profile is given but
+// no harness can satisfy the request, the command returns the routing-failure
+// error containing "no viable harness found for profile".
+//
+// Strategy: pass --effort to eliminate the embedded harnesses (agent, virtual)
+// which are always installed but do not advertise EffortFlag. An empty PATH
+// ensures no external harnesses (codex, claude, etc.) are found either.
+func TestAgentRunProfileNoViableHarness(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	// Remove all external harnesses from PATH; embedded harnesses (agent, virtual)
+	// are always available but do not support --effort.
+	emptyBinDir := t.TempDir()
+	t.Setenv("PATH", emptyBinDir)
+
+	dir := agentTestDir(t)
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+
+	_, err := executeCommand(rootCmd, "agent", "run",
+		"--profile", "smart",
+		"--effort", "high",
+		"--text", "test",
+	)
+	require.Error(t, err, "should fail when no harness can satisfy the profile+effort request")
+	assert.Contains(t, err.Error(), "no viable harness found for profile",
+		"error must identify the routing failure cause")
+}
+
 // TestAgentRunHarnessAgentAccepted verifies that --harness agent is accepted as
 // a valid harness name (the stable embedded DDx agent alias).
 func TestAgentRunHarnessAgentAccepted(t *testing.T) {
