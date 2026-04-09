@@ -12,29 +12,30 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
-func (s *Store) loadDefinitions() ([]Definition, error) {
+// loadDefinitions returns all definitions and the doc graph built during loading.
+// The graph may be nil if graph loading failed (soft error treated as empty).
+func (s *Store) loadDefinitions() ([]Definition, *docgraph.Graph, error) {
 	defs := make(map[string]Definition)
 
 	// Graph-authored definitions take precedence over runtime-managed ones.
-	graphDefs, err := s.loadGraphDefinitions()
-	if err == nil {
-		for _, def := range graphDefs {
-			if def.ID == "" || !def.Active {
-				continue
-			}
-			defs[def.ID] = def
+	// The graph is returned so callers can reuse it without a second build.
+	graph, graphDefs, _ := s.loadGraphDefinitions()
+	for _, def := range graphDefs {
+		if def.ID == "" || !def.Active {
+			continue
 		}
+		defs[def.ID] = def
 	}
 
 	if s.DefinitionCollection != nil {
 		beads, err := s.DefinitionCollection.ReadAll()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, entry := range beads {
 			def, err := definitionFromBead(entry)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if def.ID == "" || !def.Active {
 				continue
@@ -48,7 +49,7 @@ func (s *Store) loadDefinitions() ([]Definition, error) {
 
 	legacy, err := s.readLegacyDefinitions()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, def := range legacy {
 		if def.ID == "" || !def.Active {
@@ -70,15 +71,16 @@ func (s *Store) loadDefinitions() ([]Definition, error) {
 		}
 		return out[i].CreatedAt.After(out[j].CreatedAt)
 	})
-	return out, nil
+	return out, graph, nil
 }
 
 // loadGraphDefinitions builds the doc graph and extracts exec definitions
 // embedded in document frontmatter via the exec: block.
-func (s *Store) loadGraphDefinitions() ([]Definition, error) {
-	graph, err := docgraph.BuildGraph(s.WorkingDir)
+// Returns the built graph so callers can reuse it without a second walk.
+func (s *Store) loadGraphDefinitions() (*docgraph.Graph, []Definition, error) {
+	graph, err := s.buildGraph()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var defs []Definition
 	for _, doc := range graph.Documents {
@@ -102,7 +104,7 @@ func (s *Store) loadGraphDefinitions() ([]Definition, error) {
 		}
 		defs = append(defs, def)
 	}
-	return defs, nil
+	return graph, defs, nil
 }
 
 func (s *Store) readLegacyDefinitions() ([]Definition, error) {

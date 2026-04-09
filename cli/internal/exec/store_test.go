@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -149,6 +150,32 @@ func TestConcurrentRunBundleWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, writers, manifestCount)
+}
+
+func TestRunBuildsDocGraphAtMostOnce(t *testing.T) {
+	wd := t.TempDir()
+	writeExecArtifact(t, wd, "MET-001")
+	writeExecDefinition(t, wd, Definition{
+		ID:          "exec-metric-startup-time@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ExecutorSpec{
+			Kind:    ExecutorKindCommand,
+			Command: []string{"sh", "-c", "printf '14ms\\n'"},
+		},
+		Active:    true,
+		CreatedAt: mustExecTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	var buildCount int
+	store := NewStore(wd)
+	store.graphBuilderFunc = func(dir string) (*docgraph.Graph, error) {
+		buildCount++
+		return docgraph.BuildGraph(dir)
+	}
+
+	_, err := store.Run(context.Background(), "exec-metric-startup-time@1")
+	require.NoError(t, err)
+	assert.LessOrEqual(t, buildCount, 1, "doc graph must be built at most once per Run call")
 }
 
 func mustExecTime(t *testing.T, value string) time.Time {

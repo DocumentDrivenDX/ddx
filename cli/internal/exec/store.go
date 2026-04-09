@@ -39,6 +39,14 @@ type Store struct {
 	RunCollection        *bead.Store
 	AgentRunner          AgentRunner
 	runCounter           uint64
+	graphBuilderFunc     func(string) (*docgraph.Graph, error)
+}
+
+func (s *Store) buildGraph() (*docgraph.Graph, error) {
+	if s.graphBuilderFunc != nil {
+		return s.graphBuilderFunc(s.WorkingDir)
+	}
+	return docgraph.BuildGraph(s.WorkingDir)
 }
 
 func NewStore(workingDir string) *Store {
@@ -72,7 +80,7 @@ func (s *Store) Init() error {
 }
 
 func (s *Store) ListDefinitions(artifactID string) ([]Definition, error) {
-	defs, err := s.loadDefinitions()
+	defs, _, err := s.loadDefinitions()
 	if err != nil {
 		return nil, err
 	}
@@ -88,11 +96,7 @@ func (s *Store) ListDefinitions(artifactID string) ([]Definition, error) {
 	return filtered, nil
 }
 
-func (s *Store) ShowDefinition(definitionID string) (Definition, error) {
-	defs, err := s.loadDefinitions()
-	if err != nil {
-		return Definition{}, err
-	}
+func findDefinitionByID(defs []Definition, definitionID string) (Definition, error) {
 	var (
 		best  Definition
 		found bool
@@ -115,8 +119,20 @@ func (s *Store) ShowDefinition(definitionID string) (Definition, error) {
 	return best, nil
 }
 
+func (s *Store) ShowDefinition(definitionID string) (Definition, error) {
+	defs, _, err := s.loadDefinitions()
+	if err != nil {
+		return Definition{}, err
+	}
+	return findDefinitionByID(defs, definitionID)
+}
+
 func (s *Store) Validate(definitionID string) (*Definition, *docgraph.Document, error) {
-	def, err := s.ShowDefinition(definitionID)
+	defs, graph, err := s.loadDefinitions()
+	if err != nil {
+		return nil, nil, err
+	}
+	def, err := findDefinitionByID(defs, definitionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -132,9 +148,11 @@ func (s *Store) Validate(definitionID string) (*Definition, *docgraph.Document, 
 	if def.Executor.Kind == ExecutorKindCommand && len(def.Executor.Command) == 0 {
 		return nil, nil, fmt.Errorf("exec definition %q has no command", def.ID)
 	}
-	graph, err := docgraph.BuildGraph(s.WorkingDir)
-	if err != nil {
-		return nil, nil, err
+	if graph == nil {
+		graph, err = s.buildGraph()
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	var primary *docgraph.Document
 	for _, artifactID := range def.ArtifactIDs {
