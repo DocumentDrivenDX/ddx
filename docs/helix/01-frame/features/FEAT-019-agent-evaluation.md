@@ -181,6 +181,10 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
     replays against current HEAD instead ("would this model solve the task
     today?"). The default answers "would this model have produced the same
     result then?"
+    For tracker-only backfills, do not point `closing_commit_sha` at a later
+    metadata-only close commit; omit the field so replay falls back to the
+    sessionless/manual baseline instead of pretending the metadata commit was
+    the governed implementation diff.
 25. Replay runs in a sandbox worktree, captures diff, runs `--post-run`
     evaluation, and reports a comparison of the new diff against the
     original commit's diff.

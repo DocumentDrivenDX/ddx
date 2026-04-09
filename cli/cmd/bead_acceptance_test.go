@@ -118,6 +118,34 @@ func TestBeadCommandsClaimFallsBackToCallerIdentity(t *testing.T) {
 	assert.Equal(t, "runtime-agent", bead["owner"])
 }
 
+func TestBeadCommandsUnsetCustomField(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Replay provenance", "--type", "task", "--set", "closing_commit_sha=9653820049db7edebe0374431544b1b8a8dbae88")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, "9653820049db7edebe0374431544b1b8a8dbae88", bead["closing_commit_sha"])
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--unset", "closing_commit_sha")
+	require.NoError(t, err)
+
+	updatedOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var updated map[string]any
+	require.NoError(t, json.Unmarshal([]byte(updatedOut), &updated))
+	_, ok := updated["closing_commit_sha"]
+	assert.False(t, ok)
+}
+
 func TestBeadCommandsEvidenceAppendAndList(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)

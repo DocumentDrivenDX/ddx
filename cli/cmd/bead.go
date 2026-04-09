@@ -370,6 +370,13 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						}
 					}
 				}
+				if unsetFlags, _ := cmd.Flags().GetStringArray("unset"); len(unsetFlags) > 0 {
+					for _, key := range unsetFlags {
+						if b.Extra != nil {
+							delete(b.Extra, key)
+						}
+					}
+				}
 			}); err != nil {
 				return err
 			}
@@ -390,6 +397,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 	cmd.Flags().Bool("claim", false, "Claim: set status=in_progress, assignee=ddx")
 	cmd.Flags().Bool("unclaim", false, "Unclaim: set status=open, clear assignee and claim fields")
 	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
+	cmd.Flags().StringArray("unset", nil, "Unset custom field (key repeatable)")
 
 	return cmd
 }
