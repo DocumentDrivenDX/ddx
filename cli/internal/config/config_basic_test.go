@@ -249,6 +249,24 @@ agent:
 	assert.NoError(t, err, "config with agent.virtual.normalize should pass schema validation")
 }
 
+func TestSchemaValidation_ServerSection(t *testing.T) {
+	t.Parallel()
+	validator, err := NewValidator()
+	require.NoError(t, err)
+
+	content := []byte(`version: "1.0"
+server:
+  addr: ":8080"
+  tsnet:
+    enabled: true
+    hostname: "ddx-server"
+    auth_key: "tskey-auth-xxx"
+    state_dir: "/var/lib/ddx/tsnet"
+`)
+	err = validator.Validate(content)
+	assert.NoError(t, err, "config with server.addr and server.tsnet fields should pass schema validation")
+}
+
 func TestLoadConfig_BeadPrefixField(t *testing.T) {
 	tempDir := t.TempDir()
 
