@@ -146,6 +146,32 @@ func TestBeadCommandsUnsetCustomField(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestBeadCommandsUnsetRejectsProtectedEvidenceFields(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Evidence protection", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "evidence", "add", id, "--kind", "summary", "--summary", "finished", "--body", "details", "--actor", "alice")
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--unset", "events")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot unset protected bead field")
+
+	listOut, err := executeCommand(rootCmd, "bead", "evidence", "list", id, "--json")
+	require.NoError(t, err)
+
+	var events []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(listOut), &events))
+	require.Len(t, events, 1)
+	assert.Equal(t, "summary", events[0]["kind"])
+	assert.Equal(t, "finished", events[0]["summary"])
+}
+
 func TestBeadCommandsEvidenceAppendAndList(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)

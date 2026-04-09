@@ -304,6 +304,14 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				return nil
 			}
 
+			if unsetFlags, _ := cmd.Flags().GetStringArray("unset"); len(unsetFlags) > 0 {
+				for _, key := range unsetFlags {
+					if isProtectedBeadExtraKey(key) {
+						return fmt.Errorf("cannot unset protected bead field: %s", key)
+					}
+				}
+			}
+
 			if err := s.Update(args[0], func(b *bead.Bead) {
 				if v, _ := cmd.Flags().GetString("title"); cmd.Flags().Changed("title") {
 					b.Title = v
@@ -409,6 +417,15 @@ func resolveClaimAssignee() string {
 		}
 	}
 	return "ddx"
+}
+
+func isProtectedBeadExtraKey(key string) bool {
+	switch key {
+	case "events", "session_id", "claimed-at", "claimed-pid", "claimed-machine", "claimed-session", "claimed-worktree":
+		return true
+	default:
+		return false
+	}
 }
 
 func (f *CommandFactory) newBeadEvidenceCommand() *cobra.Command {
