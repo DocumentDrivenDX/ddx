@@ -72,7 +72,7 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 27. MCP tools: `ddx_exec_definitions`, `ddx_exec_show`, `ddx_exec_history`
 
 **Configuration**
-28. Library path, port, optional API key via CLI flags or config file
+28. Library path, port, optional ts-net hostname via CLI flags or config file (see ADR-006)
 29. Default: localhost only, no auth required
 
 ### Non-Functional
@@ -80,7 +80,7 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 - **Performance:** Document reads <200ms, search <500ms, graph build <500ms for 100+ documents
 - **Stateless:** Reads from filesystem on each request. No database.
 - **Single binary:** Embeds web UI (FEAT-008) via `embed.FS`
-- **Security:** Localhost-only by default. Optional API key for non-local access.
+- **Security:** Localhost-only by default. Optional ts-net (Tailscale) listener for non-local access (ADR-006).
 
 **Bead Mutations (FEAT-008 UI interaction)**
 33. `POST /api/beads` — create a bead
@@ -93,10 +93,10 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 
 **Execution Dispatch (UI-initiated, localhost-only)**
 40. `POST /api/exec/run/:id` — dispatch an execution run (delegates to
-    `ddx exec run` internally). Localhost-only, requires API key if
-    non-local.
+    `ddx exec run` internally). Localhost-only or via ts-net (ADR-006) for
+    non-local access.
 41. `POST /api/agent/run` — dispatch an agent invocation with harness,
-    model, effort, and prompt. Localhost-only, requires API key if non-local.
+    model, effort, and prompt. Localhost-only or via ts-net (ADR-006) for non-local access.
 42. MCP tools: `ddx_exec_dispatch`, `ddx_agent_dispatch` (localhost-only)
 
 ## Technology
@@ -131,9 +131,9 @@ in FEAT-012.
 
 ## Out of Scope
 
-- Agent/execution invocation from non-localhost without API key (security
-  boundary — dispatch endpoints are localhost-only by default)
-- User authentication beyond API keys
+- Agent/execution invocation from non-localhost without ts-net (security
+  boundary — dispatch endpoints are localhost-only or ts-net only, per ADR-006)
+- User authentication beyond ts-net identity (no custom auth middleware)
 - Multi-library aggregation
 - Hosting as a cloud service
 - Branch management or merge conflict resolution via API
