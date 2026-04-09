@@ -50,7 +50,7 @@ ddx:
 - **Lockfile**: `bun.lock` committed (not `package-lock.json`).
 - **Runtime**: Frontend is browser-only (React SPA embedded in Go binary via
   `embed.FS`). Bun-native server APIs (`Bun.serve()`) do not apply.
-- **Data layer**: SQLite-WASM (sql.js) for client-side bead queries per ADR-005.
+- **Data layer**: Plain JavaScript arrays with MiniSearch for full-text search per ADR-005 v2.
   TanStack Query manages fetch lifecycle.
 - **Location**: `cli/internal/server/frontend/`
 
