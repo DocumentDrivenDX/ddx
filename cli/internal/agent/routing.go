@@ -96,6 +96,9 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 			}
 			plan.CanonicalTarget = req.ModelPin
 			plan.ConcreteModel = req.ModelPin
+			if dp, deprecated := cat.CheckDeprecatedPin(req.ModelPin, harness.Surface); deprecated {
+				plan.DeprecationWarning = fmt.Sprintf("model %q is deprecated; use %q instead", req.ModelPin, dp.ReplacedBy)
+			}
 		} else if req.ModelRef != "" {
 			concreteModel, ok := cat.Resolve(req.ModelRef, harness.Surface)
 			if !ok {
@@ -135,6 +138,9 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 		plan.RequestedRef = "pin:" + req.ModelPin
 		plan.CanonicalTarget = req.ModelPin
 		plan.ConcreteModel = req.ModelPin
+		if dp, deprecated := cat.CheckDeprecatedPin(req.ModelPin, harness.Surface); deprecated {
+			plan.DeprecationWarning = fmt.Sprintf("model %q is deprecated; use %q instead", req.ModelPin, dp.ReplacedBy)
+		}
 	} else if req.ModelRef != "" {
 		// Logical ref: resolve through catalog for this harness's surface.
 		concreteModel, ok := cat.Resolve(req.ModelRef, harness.Surface)

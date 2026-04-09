@@ -101,6 +101,14 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 
 	model := r.resolveModel(opts, harnessName)
 
+	// Warn on deprecated explicit model pin.
+	if model != "" {
+		cat := r.catalog()
+		if dp, deprecated := cat.CheckDeprecatedPin(model, harness.Surface); deprecated {
+			fmt.Fprintf(os.Stderr, "agent: model %q is deprecated; use %q instead\n", model, dp.ReplacedBy)
+		}
+	}
+
 	// Warn on unknown model
 	if model != "" && len(harness.Models) > 0 && !containsString(harness.Models, model) {
 		fmt.Fprintf(os.Stderr, "agent: model %q is not a known model for harness %q; available models: %s\n",

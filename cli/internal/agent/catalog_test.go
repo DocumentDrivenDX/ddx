@@ -360,3 +360,174 @@ func TestAgentDoctorReportsEmbeddedDefaultBackendRoutability(t *testing.T) {
 	assert.True(t, state.Authenticated, "embedded harness should always report authenticated")
 	assert.True(t, state.QuotaOK, "embedded harness should always report quota OK")
 }
+
+// --- Deprecated Explicit Pin Guardrail Tests (ddx-e6428c08) ---
+
+// TestCheckDeprecatedPinDetectsClaudeFamily verifies that deprecated Claude
+// explicit model version strings are detected and report the canonical replacement.
+func TestCheckDeprecatedPinDetectsClaudeFamily(t *testing.T) {
+	cases := []struct {
+		pin             string
+		surface         string
+		wantDeprecated  bool
+		wantReplacement string
+	}{
+		// Stale claude versions — should be flagged.
+		{"claude-opus-4-5", "claude", true, "claude-opus-4-6"},
+		{"claude-3-5-sonnet-20241022", "claude", true, "claude-sonnet-4-6"},
+		{"claude-3-opus-20240229", "claude", true, "claude-opus-4-6"},
+		{"claude-3-sonnet-20240229", "claude", true, "claude-sonnet-4-6"},
+		// Current canonical models — must not be flagged.
+		{"claude-opus-4-6", "claude", false, ""},
+		{"claude-sonnet-4-6", "claude", false, ""},
+		// Completely unknown pin — must not be flagged.
+		{"claude-unknown-9999", "claude", false, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.pin, func(t *testing.T) {
+			dp, deprecated := BuiltinCatalog.CheckDeprecatedPin(tc.pin, tc.surface)
+			assert.Equal(t, tc.wantDeprecated, deprecated, "deprecated status mismatch for pin %q", tc.pin)
+			if tc.wantDeprecated {
+				assert.Equal(t, tc.wantReplacement, dp.ReplacedBy, "replacement mismatch for pin %q", tc.pin)
+			}
+		})
+	}
+}
+
+// TestCheckDeprecatedPinDetectsCodexFamily verifies that deprecated OpenAI/codex
+// explicit model version strings are detected and report the canonical replacement.
+func TestCheckDeprecatedPinDetectsCodexFamily(t *testing.T) {
+	cases := []struct {
+		pin             string
+		surface         string
+		wantDeprecated  bool
+		wantReplacement string
+	}{
+		// Stale codex versions — should be flagged.
+		{"gpt-4o", "codex", true, "gpt-5.4-mini"},
+		{"gpt-4-turbo", "codex", true, "gpt-5.4"},
+		{"o1-2024-12-17", "codex", true, "gpt-5.4"},
+		// Current canonical models — must not be flagged.
+		{"gpt-5.4", "codex", false, ""},
+		{"gpt-5.4-mini", "codex", false, ""},
+		// Completely unknown pin — must not be flagged.
+		{"gpt-99-super", "codex", false, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.pin, func(t *testing.T) {
+			dp, deprecated := BuiltinCatalog.CheckDeprecatedPin(tc.pin, tc.surface)
+			assert.Equal(t, tc.wantDeprecated, deprecated, "deprecated status mismatch for pin %q", tc.pin)
+			if tc.wantDeprecated {
+				assert.Equal(t, tc.wantReplacement, dp.ReplacedBy, "replacement mismatch for pin %q", tc.pin)
+			}
+		})
+	}
+}
+
+// TestCheckDeprecatedPinSurfaceMismatchNotFlagged verifies that a deprecated pin
+// entry for surface A is not flagged when queried for surface B.
+func TestCheckDeprecatedPinSurfaceMismatchNotFlagged(t *testing.T) {
+	// "claude-opus-4-5" is deprecated on the "claude" surface.
+	// Querying it against the "codex" surface should return not deprecated.
+	_, deprecated := BuiltinCatalog.CheckDeprecatedPin("claude-opus-4-5", "codex")
+	assert.False(t, deprecated, "surface-specific deprecated pin must not match a different surface")
+}
+
+// TestCheckDeprecatedPinEmptySurfaceMatchesAny verifies that a DeprecatedPin
+// with no Surface set matches any surface query.
+func TestCheckDeprecatedPinEmptySurfaceMatchesAny(t *testing.T) {
+	cat := NewCatalogWithPins(nil, []DeprecatedPin{
+		{Pin: "old-model-v1", Surface: "", ReplacedBy: "new-model-v2"},
+	})
+	dp, deprecated := cat.CheckDeprecatedPin("old-model-v1", "codex")
+	assert.True(t, deprecated, "pin with empty surface should match any surface")
+	assert.Equal(t, "new-model-v2", dp.ReplacedBy)
+
+	dp2, deprecated2 := cat.CheckDeprecatedPin("old-model-v1", "claude")
+	assert.True(t, deprecated2, "pin with empty surface should match any surface")
+	assert.Equal(t, "new-model-v2", dp2.ReplacedBy)
+}
+
+// TestCandidatePlanSetsDeprecationWarningForDeprecatedPin verifies that when a
+// RouteRequest uses a deprecated ModelPin, the resulting CandidatePlan for the
+// matching harness surface carries a non-empty DeprecationWarning.
+func TestCandidatePlanSetsDeprecationWarningForDeprecatedPin(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"claude": healthyState(),
+		"codex":  healthyState(),
+	}
+
+	// "claude-opus-4-5" is a deprecated explicit pin for the claude surface.
+	plans := r.BuildCandidatePlans(RouteRequest{ModelPin: "claude-opus-4-5"}, states)
+
+	var claudePlan *CandidatePlan
+	for i := range plans {
+		if plans[i].Harness == "claude" {
+			claudePlan = &plans[i]
+			break
+		}
+	}
+
+	require.NotNil(t, claudePlan, "claude plan should be present")
+	assert.True(t, claudePlan.Viable, "claude should be viable for an exact pin")
+	assert.Equal(t, "claude-opus-4-5", claudePlan.ConcreteModel)
+	assert.NotEmpty(t, claudePlan.DeprecationWarning, "deprecated pin must produce a DeprecationWarning")
+	assert.Contains(t, claudePlan.DeprecationWarning, "claude-opus-4-5")
+	assert.Contains(t, claudePlan.DeprecationWarning, "claude-opus-4-6")
+}
+
+// TestCandidatePlanNoDeprecationWarningForCanonicalPin verifies that current
+// canonical model pins do not produce a DeprecationWarning.
+func TestCandidatePlanNoDeprecationWarningForCanonicalPin(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"claude": healthyState(),
+		"codex":  healthyState(),
+	}
+
+	// "claude-opus-4-6" is the canonical current pin — must not be flagged.
+	plans := r.BuildCandidatePlans(RouteRequest{ModelPin: "claude-opus-4-6"}, states)
+
+	for _, p := range plans {
+		if p.Harness == "claude" {
+			assert.Empty(t, p.DeprecationWarning, "canonical pin must not produce a deprecation warning")
+		}
+	}
+}
+
+// TestCandidatePlanDeprecatedPinWithHarnessOverride verifies that a deprecated
+// pin also surfaces the DeprecationWarning when HarnessOverride is set alongside
+// the ModelPin.
+func TestCandidatePlanDeprecatedPinWithHarnessOverride(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"codex": healthyState(),
+	}
+
+	// "gpt-4o" is deprecated on the codex surface.
+	plans := r.BuildCandidatePlans(RouteRequest{
+		HarnessOverride: "codex",
+		ModelPin:        "gpt-4o",
+	}, states)
+
+	var codexPlan *CandidatePlan
+	for i := range plans {
+		if plans[i].Harness == "codex" {
+			codexPlan = &plans[i]
+			break
+		}
+	}
+
+	require.NotNil(t, codexPlan, "codex plan should be present")
+	assert.True(t, codexPlan.Viable, "codex should be viable for HarnessOverride+ModelPin")
+	assert.Equal(t, "gpt-4o", codexPlan.ConcreteModel)
+	assert.NotEmpty(t, codexPlan.DeprecationWarning, "deprecated pin must produce a DeprecationWarning even with HarnessOverride")
+	assert.Contains(t, codexPlan.DeprecationWarning, "gpt-4o")
+	assert.Contains(t, codexPlan.DeprecationWarning, "gpt-5.4-mini")
+}

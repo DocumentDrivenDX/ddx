@@ -16,12 +16,27 @@ type CatalogEntry struct {
 	ReplacedBy string
 }
 
+// DeprecatedPin records a deprecated explicit model version string.
+// Use this for exact concrete model pins (e.g. "claude-opus-4-5") that are
+// stale — as opposed to logical alias deprecations in CatalogEntry.
+type DeprecatedPin struct {
+	// Pin is the deprecated exact model string (e.g. "claude-opus-4-5").
+	Pin string
+	// ReplacedBy is the canonical replacement: a catalog ref (e.g. "smart")
+	// or a newer exact model string (e.g. "claude-opus-4-6").
+	ReplacedBy string
+	// Surface constrains the deprecation to a specific harness surface.
+	// Empty means the pin is deprecated across all surfaces.
+	Surface string
+}
+
 // Catalog holds the shared DDx model catalog used for harness routing.
 // It maps logical refs to harness-surface-specific concrete model strings.
 // This is the authoritative source for aliases, profiles, canonical targets,
 // and deprecation metadata across harness surfaces.
 type Catalog struct {
-	entries map[string]CatalogEntry
+	entries        map[string]CatalogEntry
+	deprecatedPins map[string]DeprecatedPin // keyed by Pin
 }
 
 // NewCatalog creates a Catalog from a slice of entries.
@@ -31,6 +46,34 @@ func NewCatalog(entries []CatalogEntry) *Catalog {
 		c.entries[e.Ref] = e
 	}
 	return c
+}
+
+// NewCatalogWithPins creates a Catalog from entries and deprecated pin records.
+func NewCatalogWithPins(entries []CatalogEntry, pins []DeprecatedPin) *Catalog {
+	c := NewCatalog(entries)
+	c.deprecatedPins = make(map[string]DeprecatedPin, len(pins))
+	for _, p := range pins {
+		c.deprecatedPins[p.Pin] = p
+	}
+	return c
+}
+
+// CheckDeprecatedPin returns the DeprecatedPin entry for an explicit model
+// string, or ok=false if the pin is not deprecated.
+// If surface is non-empty and the pin entry has a Surface set, the match is
+// narrowed to that surface only.
+func (c *Catalog) CheckDeprecatedPin(pin, surface string) (DeprecatedPin, bool) {
+	if c.deprecatedPins == nil {
+		return DeprecatedPin{}, false
+	}
+	dp, ok := c.deprecatedPins[pin]
+	if !ok {
+		return DeprecatedPin{}, false
+	}
+	if dp.Surface != "" && surface != "" && dp.Surface != surface {
+		return DeprecatedPin{}, false
+	}
+	return dp, true
 }
 
 // Resolve returns the concrete model string for a ref on the given surface.
@@ -82,50 +125,66 @@ func (c *Catalog) NormalizeModelRef(model string) (modelRef, modelPin string) {
 // Rule: entries here supersede DefaultModelTiers for routing decisions.
 // DefaultModelTiers remains as explicit transitional fallback for surfaces
 // or tiers not yet covered by catalog entries.
-var BuiltinCatalog = NewCatalog([]CatalogEntry{
-	// --- Profiles (available across cloud and embedded surfaces) ---
-	{
-		Ref: "cheap",
-		Surfaces: map[string]string{
-			"codex":           "gpt-5.4-mini",
-			"claude":          "claude-sonnet-4-6",
-			"embedded-openai": "qwen3.5-27b",
+var BuiltinCatalog = NewCatalogWithPins(
+	[]CatalogEntry{
+		// --- Profiles (available across cloud and embedded surfaces) ---
+		{
+			Ref: "cheap",
+			Surfaces: map[string]string{
+				"codex":           "gpt-5.4-mini",
+				"claude":          "claude-sonnet-4-6",
+				"embedded-openai": "qwen3.5-27b",
+			},
 		},
-	},
-	{
-		Ref: "fast",
-		Surfaces: map[string]string{
-			"codex":           "gpt-5.4-mini",
-			"claude":          "claude-sonnet-4-6",
-			"embedded-openai": "qwen3.5-27b",
+		{
+			Ref: "fast",
+			Surfaces: map[string]string{
+				"codex":           "gpt-5.4-mini",
+				"claude":          "claude-sonnet-4-6",
+				"embedded-openai": "qwen3.5-27b",
+			},
 		},
-	},
-	{
-		Ref: "smart",
-		Surfaces: map[string]string{
-			"codex":           "gpt-5.4",
-			"claude":          "claude-opus-4-6",
-			"embedded-openai": "qwen/qwen3-coder-next",
+		{
+			Ref: "smart",
+			Surfaces: map[string]string{
+				"codex":           "gpt-5.4",
+				"claude":          "claude-opus-4-6",
+				"embedded-openai": "qwen/qwen3-coder-next",
+			},
 		},
-	},
 
-	// --- Embedded-only refs ---
-	// qwen3 is only available via the embedded OpenAI-compatible surface.
-	// DDx selects the embedded harness; ddx-agent resolves the provider/backend.
-	{
-		Ref: "qwen3",
-		Surfaces: map[string]string{
-			"embedded-openai": "qwen/qwen3-coder-next",
+		// --- Embedded-only refs ---
+		// qwen3 is only available via the embedded OpenAI-compatible surface.
+		// DDx selects the embedded harness; ddx-agent resolves the provider/backend.
+		{
+			Ref: "qwen3",
+			Surfaces: map[string]string{
+				"embedded-openai": "qwen/qwen3-coder-next",
+			},
 		},
-	},
 
-	// --- Deprecated aliases ---
-	{
-		Ref: "codex-mini",
-		Surfaces: map[string]string{
-			"codex": "gpt-5.4-mini",
+		// --- Deprecated aliases ---
+		{
+			Ref: "codex-mini",
+			Surfaces: map[string]string{
+				"codex": "gpt-5.4-mini",
+			},
+			Deprecated: true,
+			ReplacedBy: "cheap",
 		},
-		Deprecated: true,
-		ReplacedBy: "cheap",
 	},
-})
+	[]DeprecatedPin{
+		// --- Deprecated explicit model version pins ---
+		// These are stale exact version strings for the claude (Anthropic) family.
+		// Users passing these as --model pins bypass catalog policy; DDx warns.
+		{Pin: "claude-opus-4-5", Surface: "claude", ReplacedBy: "claude-opus-4-6"},
+		{Pin: "claude-3-5-sonnet-20241022", Surface: "claude", ReplacedBy: "claude-sonnet-4-6"},
+		{Pin: "claude-3-opus-20240229", Surface: "claude", ReplacedBy: "claude-opus-4-6"},
+		{Pin: "claude-3-sonnet-20240229", Surface: "claude", ReplacedBy: "claude-sonnet-4-6"},
+
+		// Deprecated explicit model version pins for the codex (OpenAI) family.
+		{Pin: "gpt-4o", Surface: "codex", ReplacedBy: "gpt-5.4-mini"},
+		{Pin: "gpt-4-turbo", Surface: "codex", ReplacedBy: "gpt-5.4"},
+		{Pin: "o1-2024-12-17", Surface: "codex", ReplacedBy: "gpt-5.4"},
+	},
+)
