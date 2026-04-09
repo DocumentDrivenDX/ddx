@@ -1,11 +1,7 @@
 ---
-skill:
-  name: ddx-bead
-  description: Create and manage DDx beads (work items) with proper metadata, labels, and dependency wiring.
-  args:
-    - name: title
-      description: Short title for the new bead
-      required: false
+name: ddx-bead
+description: Create and manage DDx beads (work items) with proper metadata, labels, and dependency wiring.
+argument-hint: '"Title" [--type task|epic|bug|chore] [options...]'
 ---
 
 # DDx Bead: Create and Manage Work Items

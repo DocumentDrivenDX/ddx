@@ -28,3 +28,12 @@ This repository uses DDx's built-in bead tracker for durable work management.
 - Use `ddx bead show <id>` to inspect one bead.
 - Use `ddx bead list`, `ddx bead ready`, and `ddx bead status` to inspect queue state.
 - Use `ddx bead --help` and `ddx bead create --help` before assuming a flag exists.
+
+## Skill Policy
+
+- Treat `SKILL.md` frontmatter as a strict interface, not freeform metadata.
+- Published DDx skills must use top-level YAML frontmatter fields `name` and `description`.
+- Use `argument-hint` only when the skill accepts a trailing positional or shorthand invocation hint.
+- Do not use nested `skill:` frontmatter for DDx repo skills.
+- Run `ddx skills check [path ...]` for reusable validation across repo skills and plugin skills.
+- Run `make skill-schema` after editing any file under `skills/*/SKILL.md` or `cli/internal/skills/*/SKILL.md`.

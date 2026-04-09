@@ -1,8 +1,7 @@
 ---
-skill:
-  name: ddx-status
-  description: Get a combined health and work-item overview for a DDx project.
-  args: []
+name: ddx-status
+description: Get a combined health and work-item overview for a DDx project.
+argument-hint: "[--short]"
 ---
 
 # DDx Status: Project Health Overview

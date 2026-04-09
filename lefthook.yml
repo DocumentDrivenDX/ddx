@@ -212,6 +212,18 @@ pre-commit:
         fi
       fail_text: "DDx validation failed. Run 'ddx doctor' for details"
 
+    skill-schema:
+      <<: *go_checks
+      name: "Validate skill metadata"
+      run: |
+        if ! git diff --cached --name-only | grep -qE '^(skills/[^/]+/SKILL\.md|cli/internal/skills/[^/]+/SKILL\.md)$'; then
+          exit 0
+        fi
+        make skill-schema
+      skip:
+        - merge
+        - rebase
+
 # ====================
 # CI/CD - Full validation (all files)
 # ====================
@@ -253,6 +265,11 @@ ci:
       <<: *go_checks
       name: "Bead Schema Guard"
       run: 'make bead-schema'
+
+    skill-schema:
+      <<: *go_checks
+      name: "Skill Metadata Guard"
+      run: 'make skill-schema'
 
     # Go formatting check all files
     go-fmt-all:

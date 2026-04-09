@@ -1,8 +1,7 @@
 ---
-skill:
-  name: ddx-run
-  description: Execute a bead with proper agent dispatch, verification, and lifecycle management.
-  args: [bead-id]
+name: ddx-run
+description: Execute a bead with proper agent dispatch, verification, and lifecycle management.
+argument-hint: "[bead-id]"
 ---
 
 # Run: Execute a Bead End-to-End

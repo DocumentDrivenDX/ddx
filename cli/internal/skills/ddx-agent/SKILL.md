@@ -1,11 +1,7 @@
 ---
-skill:
-  name: ddx-agent
-  description: Dispatch AI agents via DDx with the right harness, model, and effort for the task.
-  args:
-    - name: task
-      description: Description of the task to dispatch
-      required: false
+name: ddx-agent
+description: Dispatch AI agents via DDx with the right harness, model, and effort for the task.
+argument-hint: '"task description" [--harness=<name>] [--effort=low|medium|high]'
 ---
 
 # DDx Agent: Dispatch AI Agents

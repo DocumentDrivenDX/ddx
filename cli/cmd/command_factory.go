@@ -502,6 +502,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newDocCommand())
 	rootCmd.AddCommand(f.newCheckpointCommand())
 	rootCmd.AddCommand(f.newServerCommand())
+	rootCmd.AddCommand(f.newSkillsCommand())
 	rootCmd.AddCommand(f.newInstallCommand())
 	rootCmd.AddCommand(f.newInstalledCommand())
 	rootCmd.AddCommand(f.newUninstallCommand())

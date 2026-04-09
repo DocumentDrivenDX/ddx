@@ -1,7 +1,6 @@
 ---
-skill:
-  name: ddx-doctor
-  description: Verify DDx is installed and working, or guide the user to install it.
+name: ddx-doctor
+description: Verify DDx is installed and working, or guide the user to install it.
 ---
 
 # DDx Doctor: Installation Verification

@@ -65,6 +65,9 @@ jobs:
     - name: Validate bead schema
       run: make bead-schema
 
+    - name: Validate skill metadata
+      run: make skill-schema
+
     - name: Run CI validation
       run: lefthook run ci
       env:

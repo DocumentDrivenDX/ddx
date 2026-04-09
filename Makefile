@@ -6,7 +6,7 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 CLI_DIR = cli
 ROOT_BINARY = ddx
 
-.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema bead-schema
+.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-skill-schema bead-schema skill-schema
 
 # Default target - build CLI and copy to root
 all: build
@@ -27,6 +27,9 @@ test: cli-test
 
 # Validate the shared bead schema
 bead-schema: cli-bead-schema
+
+# Validate bundled skill metadata
+skill-schema: cli-skill-schema
 
 # Run linter
 lint: cli-lint
@@ -58,6 +61,10 @@ cli-test:
 cli-bead-schema:
 	@echo "Validating bead schema..."
 	cd $(CLI_DIR) && $(MAKE) bead-schema
+
+cli-skill-schema:
+	@echo "Validating skill metadata..."
+	cd $(CLI_DIR) && $(MAKE) skill-schema
 
 cli-lint:
 	@echo "Running CLI linter..."
@@ -145,6 +152,7 @@ help:
 	@echo "  cli-test     - Run CLI tests"
 	@echo "  cli-lint     - Run CLI linter"
 	@echo "  cli-bead-schema - Validate the shared bead schema"
+	@echo "  cli-skill-schema - Validate bundled skill metadata"
 	@echo "  cli-deps     - Install CLI dependencies"
 	@echo ""
 	@echo "Release:"
@@ -164,6 +172,7 @@ help:
 	@echo "Examples:"
 	@echo "  make build                           # Build CLI"
 	@echo "  make bead-schema                    # Validate bead schema"
+	@echo "  make skill-schema                   # Validate SKILL.md metadata"
 	@echo "  make dev ARGS='mcp list'             # Run with arguments"
 	@echo "  make mcp-install SERVER=filesystem   # Install to local project"
 	@echo "  make mcp-install-global SERVER=github # Install globally"

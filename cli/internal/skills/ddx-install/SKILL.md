@@ -1,11 +1,7 @@
 ---
-skill:
-  name: ddx-install
-  description: Search, install, verify, and uninstall DDx packages.
-  args:
-    - name: package
-      description: Package name or search query
-      required: false
+name: ddx-install
+description: Search, install, verify, and uninstall DDx packages.
+argument-hint: '"package name or query"'
 ---
 
 # DDx Install: Manage Packages

@@ -1,8 +1,7 @@
 ---
-skill:
-  name: ddx-review
-  description: Run a quorum or fresh-eyes code review using multiple agent harnesses via ddx agent run.
-  args: [scope]
+name: ddx-review
+description: Run a quorum or fresh-eyes code review using multiple agent harnesses via ddx agent run.
+argument-hint: "[scope]"
 ---
 
 # Review: Multi-Agent Code Review
