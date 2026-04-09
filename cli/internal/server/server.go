@@ -357,6 +357,10 @@ func (s *Server) handleReadDocument(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	docPath := r.PathValue("path")
 	if docPath == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
@@ -618,6 +622,10 @@ func (s *Server) handleBeadDepTree(w http.ResponseWriter, r *http.Request) {
 // --- Bead Mutation Endpoints ---
 
 func (s *Server) handleCreateBead(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	var req struct {
 		Title       string   `json:"title"`
 		Type        string   `json:"type"`
@@ -656,6 +664,10 @@ func (s *Server) handleCreateBead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
@@ -710,6 +722,10 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleClaimBead(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
@@ -732,6 +748,10 @@ func (s *Server) handleClaimBead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUnclaimBead(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
@@ -747,6 +767,10 @@ func (s *Server) handleUnclaimBead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReopenBead(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
@@ -776,6 +800,10 @@ func (s *Server) handleReopenBead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBeadDeps(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
@@ -931,6 +959,10 @@ func (s *Server) handleDocDependents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
 	id := r.PathValue("id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})

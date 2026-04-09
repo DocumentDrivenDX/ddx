@@ -1025,6 +1025,7 @@ func TestDocWriteEndpoint(t *testing.T) {
 	body := strings.NewReader(`{"content":"# Updated\n\nNew content."}`)
 	req := httptest.NewRequest("PUT", "/api/docs/"+docID, body)
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1565,6 +1566,7 @@ func TestCreateBead(t *testing.T) {
 	body := `{"title":"New task","type":"task","priority":1,"labels":["p0","area:cli"],"description":"A test bead","acceptance":"It works"}`
 	req := httptest.NewRequest("POST", "/api/beads", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1594,6 +1596,7 @@ func TestCreateBeadMissingTitle(t *testing.T) {
 	body := `{"type":"task"}`
 	req := httptest.NewRequest("POST", "/api/beads", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1609,6 +1612,7 @@ func TestUpdateBead(t *testing.T) {
 	body := `{"description":"Updated description"}`
 	req := httptest.NewRequest("PUT", "/api/beads/bx-001", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1635,6 +1639,7 @@ func TestUpdateBeadNotFound(t *testing.T) {
 	body := `{"description":"test"}`
 	req := httptest.NewRequest("PUT", "/api/beads/nonexistent", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1650,6 +1655,7 @@ func TestClaimBead(t *testing.T) {
 	body := `{"assignee":"test-agent"}`
 	req := httptest.NewRequest("POST", "/api/beads/bx-001/claim", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1674,6 +1680,7 @@ func TestUnclaimBead(t *testing.T) {
 	claimBody := `{"assignee":"test-agent"}`
 	req := httptest.NewRequest("POST", "/api/beads/bx-001/claim", strings.NewReader(claimBody))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -1682,6 +1689,7 @@ func TestUnclaimBead(t *testing.T) {
 
 	// Then unclaim
 	req = httptest.NewRequest("POST", "/api/beads/bx-001/unclaim", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1698,6 +1706,7 @@ func TestReopenBead(t *testing.T) {
 	body := `{"reason":"Need more work"}`
 	req := httptest.NewRequest("POST", "/api/beads/bx-002/reopen", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1721,6 +1730,7 @@ func TestBeadDepsAdd(t *testing.T) {
 	body := `{"action":"add","dep_id":"bx-002"}`
 	req := httptest.NewRequest("POST", "/api/beads/bx-001/deps", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2092,6 +2102,74 @@ func TestMCPWriteToolsTrustedAllowed(t *testing.T) {
 			text, _ := content[0].(map[string]any)["text"].(string)
 			if strings.Contains(text, "forbidden") {
 				t.Errorf("expected trusted %s to not be forbidden, got %q", tc.name, text)
+			}
+		})
+	}
+}
+
+func TestRESTWriteEndpointsUntrustedForbidden(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"createBead", "POST", "/api/beads", `{"title":"t"}`},
+		{"updateBead", "PUT", "/api/beads/bx-001", `{"status":"closed"}`},
+		{"claimBead", "POST", "/api/beads/bx-001/claim", `{}`},
+		{"unclaimBead", "POST", "/api/beads/bx-001/unclaim", `{}`},
+		{"reopenBead", "POST", "/api/beads/bx-001/reopen", `{}`},
+		{"beadDeps", "POST", "/api/beads/bx-001/deps", `{"action":"add","dep_id":"bx-002"}`},
+		{"writeDocument", "PUT", "/api/documents/prompts/test.md", `{"content":"hello"}`},
+		{"docWrite", "PUT", "/api/docs/bx-001", `{"content":"hello"}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "192.168.1.100:12345"
+			w := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(w, req)
+			if w.Code != http.StatusForbidden {
+				t.Errorf("expected 403 for untrusted %s, got %d", tc.name, w.Code)
+			}
+		})
+	}
+}
+
+func TestRESTWriteEndpointsTrustedAllowed(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"createBead", "POST", "/api/beads", `{"title":"t"}`},
+		{"updateBead", "PUT", "/api/beads/bx-001", `{"status":"closed"}`},
+		{"claimBead", "POST", "/api/beads/bx-001/claim", `{}`},
+		{"unclaimBead", "POST", "/api/beads/bx-001/unclaim", `{}`},
+		{"reopenBead", "POST", "/api/beads/bx-001/reopen", `{}`},
+		{"beadDeps", "POST", "/api/beads/bx-001/deps", `{"action":"add","dep_id":"bx-002"}`},
+		{"writeDocument", "PUT", "/api/documents/prompts/test.md", `{"content":"hello"}`},
+		{"docWrite", "PUT", "/api/docs/bx-001", `{"content":"hello"}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "127.0.0.1:12345"
+			w := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(w, req)
+			if w.Code == http.StatusForbidden {
+				t.Errorf("expected trusted %s to not be forbidden, got 403", tc.name)
 			}
 		})
 	}
