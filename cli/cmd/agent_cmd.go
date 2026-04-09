@@ -25,10 +25,21 @@ func (f *CommandFactory) newAgentCommand() *cobra.Command {
 Supports multiple harnesses (codex, claude, gemini, etc.) with output capture,
 token tracking, session logging, and multi-agent quorum.
 
+The embedded DDx agent harness is named 'agent' and is always available without
+installing external binaries. Use --harness agent or --profile cheap to route to it.
+
+Profile routing (--profile cheap|fast|smart) selects the best available harness
+and model automatically. Workflow tools should prefer --profile over --harness to
+stay decoupled from harness installation details.
+
 Examples:
+  ddx agent run --profile cheap --prompt task.md
+  ddx agent run --profile smart --prompt task.md
+  ddx agent run --harness agent --prompt task.md
   ddx agent run --harness codex --prompt task.md
   ddx agent run --quorum majority --harnesses codex,claude --prompt task.md
   ddx agent list
+  ddx agent capabilities agent
   ddx agent capabilities codex
   ddx agent doctor
   ddx agent log`,
@@ -109,6 +120,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			promptText, _ := cmd.Flags().GetString("text")
 			harness, _ := cmd.Flags().GetString("harness")
 			model, _ := cmd.Flags().GetString("model")
+			profile, _ := cmd.Flags().GetString("profile")
 			effort, _ := cmd.Flags().GetString("effort")
 			timeoutStr, _ := cmd.Flags().GetString("timeout")
 			quorum, _ := cmd.Flags().GetString("quorum")
@@ -287,13 +299,45 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				return nil
 			}
 
-			// Single harness mode
+			// Single harness mode.
+			// When no explicit --harness is given but --profile (or --model) is set,
+			// route through NormalizeRouteRequest → BuildCandidatePlans → RankCandidates
+			// to select the best available harness for the request. This allows workflow
+			// tools to pass stage intent (cheap/fast/smart) without choosing a harness.
+			resolvedHarness := harness
+			resolvedModel := model
+			if harness == "" && (profile != "" || model != "") {
+				flags := agent.RouteFlags{
+					Profile:     profile,
+					Model:       model,
+					Effort:      effort,
+					Permissions: permissions,
+					// Harness intentionally empty — routing selects across all candidates.
+				}
+				// Don't constrain routing to the config-default harness when profile/model
+				// drives selection; clear Harness so all registered harnesses are evaluated.
+				routingCfg := r.Config
+				routingCfg.Harness = ""
+				req := agent.NormalizeRouteRequest(flags, routingCfg, r.Catalog)
+				plans := r.BuildCandidatePlans(req, nil)
+				ranked := agent.RankCandidates(req.Profile, plans)
+				for _, plan := range ranked {
+					if plan.Viable {
+						resolvedHarness = plan.Harness
+						if model == "" && plan.ConcreteModel != "" {
+							resolvedModel = plan.ConcreteModel
+						}
+						break
+					}
+				}
+			}
+
 			opts := agent.RunOptions{
-				Harness:      harness,
+				Harness:      resolvedHarness,
 				Prompt:       prompt,
 				PromptFile:   promptFile,
 				PromptSource: promptSource,
-				Model:        model,
+				Model:        resolvedModel,
 				Effort:       effort,
 				Timeout:      timeout,
 				WorkDir:      workDir,
@@ -356,8 +400,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 
 	cmd.Flags().String("prompt", "", "Path to prompt file")
 	cmd.Flags().String("text", "", "Inline prompt text")
-	cmd.Flags().String("harness", "", "Harness name (default from config)")
+	cmd.Flags().String("harness", "", "Harness name (default from config); use 'agent' for the embedded DDx agent")
 	cmd.Flags().String("model", "", "Model override")
+	cmd.Flags().String("profile", "", "Routing intent: cheap, fast, smart (selects harness and model automatically)")
 	cmd.Flags().String("effort", "", "Reasoning effort level")
 	cmd.Flags().String("timeout", "", "Timeout duration (e.g. 30s, 5m)")
 	cmd.Flags().String("quorum", "", "Quorum strategy: any, majority, unanimous")
