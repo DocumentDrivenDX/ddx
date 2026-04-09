@@ -6,20 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// Helper function to create a fresh root command for tests
-// DEPRECATED: Use NewTestRootCommand(t) instead for proper test isolation
-func getConfigTestRootCommand(workingDir string) *cobra.Command {
-	if workingDir == "" {
-		workingDir = "/tmp"
-	}
-	factory := NewCommandFactory(workingDir)
-	return factory.NewRootCommand()
-}
 
 // TestAcceptance_US007_ConfigureDDxSettings tests US-007: Configure DDX Settings
 func TestAcceptance_US007_ConfigureDDxSettings(t *testing.T) {
@@ -187,8 +176,6 @@ persona_bindings:
 	t.Run("environment_variable_override", func(t *testing.T) {
 		// AC: Given multiple config sources exist, when settings are loaded, then environment variables override config files
 
-		//	// tempDir := t.TempDir() // REMOVED: Using CommandFactory injection // REMOVED: Using CommandFactory injection
-
 		config := `version: "2.0"
 persona_bindings:
   author: "Config User"
@@ -199,7 +186,7 @@ persona_bindings:
 		// Set environment variable
 		t.Setenv("DDX_AUTHOR", "Env User")
 
-		rootCmd := getConfigTestRootCommand(env.Dir)
+		rootCmd := NewCommandFactory(env.Dir).NewRootCommand()
 		output, err := executeCommand(rootCmd, "config", "get", "variables.author")
 
 		// This test documents expected behavior - may need implementation
@@ -215,14 +202,12 @@ persona_bindings:
 	t.Run("configuration_value_validation", func(t *testing.T) {
 		// AC: Given I set a configuration value, when it's saved, then the value is validated against acceptable options
 
-		//	// tempDir := t.TempDir() // REMOVED: Using CommandFactory injection // REMOVED: Using CommandFactory injection
-
 		// Create basic config
 		config := `version: "2.0"`
 		env := NewTestEnvironment(t)
 		env.CreateConfig(config)
 
-		rootCmd := getConfigTestRootCommand(env.Dir)
+		rootCmd := NewCommandFactory(env.Dir).NewRootCommand()
 
 		// Try to set an invalid value for a type-checked field
 		output, err := executeCommand(rootCmd, "config", "set", "library.repository.url", "invalid-url-format")
@@ -233,7 +218,7 @@ persona_bindings:
 			assert.Contains(t, strings.ToLower(output), "invalid", "Should explain validation error")
 		} else {
 			// Test validates that some validation occurs
-			testCmd := getConfigTestRootCommand(env.Dir)
+			testCmd := NewCommandFactory(env.Dir).NewRootCommand()
 			validateOutput, validateErr := executeCommand(testCmd, "config", "--validate")
 			if validateErr != nil {
 				assert.Error(t, validateErr, "Validate command should catch issues")
@@ -248,8 +233,6 @@ persona_bindings:
 	t.Run("export_import_configurations", func(t *testing.T) {
 		// AC: Given I need to share configs, when I run export/import commands, then configurations can be transferred between systems
 
-		// sourceDir := t.TempDir() // REMOVED: Using CommandFactory injection
-
 		// Create source config
 		sourceConfig := `version: "2.0"
 author: "Export User"
@@ -263,21 +246,19 @@ library:
 		env := NewTestEnvironment(t)
 		env.CreateConfig(sourceConfig)
 
-		rootCmd := getConfigTestRootCommand(env.Dir)
+		rootCmd := NewCommandFactory(env.Dir).NewRootCommand()
 
 		// Try to export config
 		exportOutput, exportErr := executeCommand(rootCmd, "config", "export")
 
 		if exportErr == nil && len(exportOutput) > 0 {
 			// Export is working, test import
-			// targetDir := t.TempDir() // REMOVED: Using CommandFactory injection
-
-			importCmd := getConfigTestRootCommand(env.Dir)
+			importCmd := NewCommandFactory(env.Dir).NewRootCommand()
 			_, importErr := executeCommand(importCmd, "config", "import", exportOutput)
 
 			if importErr == nil {
 				// Verify import worked
-				checkCmd := getConfigTestRootCommand(env.Dir)
+				checkCmd := NewCommandFactory(env.Dir).NewRootCommand()
 				checkOutput, checkErr := executeCommand(checkCmd, "config", "get", "author")
 				require.NoError(t, checkErr)
 				assert.Contains(t, checkOutput, "Export User", "Import should restore exported values")
@@ -297,7 +278,7 @@ library:
 		config := `version: "2.0"`
 		env.CreateConfig(config)
 
-		rootCmd := getConfigTestRootCommand(env.Dir)
+		rootCmd := NewCommandFactory(env.Dir).NewRootCommand()
 		output, err := executeCommand(rootCmd, "config", "--show-files")
 
 		if err == nil {
@@ -338,8 +319,6 @@ persona_bindings:
 	t.Run("configuration_error_handling", func(t *testing.T) {
 		// Test various error scenarios
 
-		//	// tempDir := t.TempDir() // REMOVED: Using CommandFactory injection // REMOVED: Using CommandFactory injection
-
 		// Create invalid YAML
 		invalidYaml := `version: "2.0"
 author: "Test
@@ -350,7 +329,7 @@ author: "Test
 		require.NoError(t, os.MkdirAll(filepath.Join(env.Dir, ".ddx"), 0755))
 		require.NoError(t, os.WriteFile(env.ConfigPath, []byte(invalidYaml), 0644))
 
-		rootCmd := getConfigTestRootCommand(env.Dir)
+		rootCmd := NewCommandFactory(env.Dir).NewRootCommand()
 		output, err := executeCommand(rootCmd, "config", "export")
 
 		// Should handle invalid YAML gracefully
@@ -360,7 +339,7 @@ author: "Test
 		}
 
 		// Test getting non-existent key
-		testCmd := getConfigTestRootCommand(env.Dir)
+		testCmd := NewCommandFactory(env.Dir).NewRootCommand()
 		nonExistentOutput, nonExistentErr := executeCommand(testCmd, "config", "get", "non.existent.key")
 
 		// Should handle gracefully (may return empty or error)
