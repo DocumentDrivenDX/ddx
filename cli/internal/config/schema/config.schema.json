@@ -328,6 +328,35 @@
             }
           },
           "additionalProperties": false
+        },
+        "virtual": {
+          "type": "object",
+          "description": "Configuration for the virtual agent harness",
+          "properties": {
+            "normalize": {
+              "type": "array",
+              "description": "Regex/replacement pairs applied to prompts before hashing",
+              "items": {
+                "type": "object",
+                "required": [
+                  "pattern",
+                  "replace"
+                ],
+                "properties": {
+                  "pattern": {
+                    "type": "string",
+                    "description": "Regular expression to match"
+                  },
+                  "replace": {
+                    "type": "string",
+                    "description": "Replacement string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
