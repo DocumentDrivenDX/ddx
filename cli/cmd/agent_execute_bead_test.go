@@ -19,7 +19,9 @@ type fakeExecuteBeadGit struct {
 	// mainHeadRev is returned by HeadRev/ResolveRev for the main working dir.
 	mainHeadRev string
 	// wtHeadRev is returned by HeadRev for worktree paths (after agent run).
-	wtHeadRev    string
+	wtHeadRev string
+	// wtHeadRevErr, if set, is returned by HeadRev for worktree paths.
+	wtHeadRevErr error
 	dirty        bool
 	ffMergeErr   error
 	updateRefErr error
@@ -35,6 +37,9 @@ func (f *fakeExecuteBeadGit) HeadRev(dir string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if strings.Contains(dir, executeBeadWtPrefix) {
+		if f.wtHeadRevErr != nil {
+			return "", f.wtHeadRevErr
+		}
 		return f.wtHeadRev, nil
 	}
 	return f.mainHeadRev, nil
@@ -378,6 +383,29 @@ func TestExecuteBeadAgentErrorMessageInOutput(t *testing.T) {
 
 	assert.Equal(t, 1, res.ExitCode)
 	assert.Equal(t, "agent crashed with detail", res.Error)
+}
+
+// TestExecuteBeadCompoundErrorAgentAndHeadRevFailure verifies that when the
+// agent runner returns an error AND HeadRev fails on the worktree, both the
+// Error field (agent message) and the Reason field (rev error) are present in
+// the JSON output. This covers the path at agent_execute_bead.go that
+// previously dropped the agent error message when revErr was non-nil.
+func TestExecuteBeadCompoundErrorAgentAndHeadRevFailure(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev:  "aaaa1111",
+		wtHeadRevErr: fmt.Errorf("worktree HEAD unreadable"),
+	}
+	runner := &fakeAgentRunner{err: fmt.Errorf("agent exploded"), result: nil}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, 1, res.ExitCode)
+	assert.Equal(t, "error", res.Outcome)
+	assert.Equal(t, "agent exploded", res.Error,
+		"agent error message must be preserved even when HeadRev also fails")
+	assert.Contains(t, res.Reason, "worktree HEAD unreadable",
+		"Reason must reflect the HeadRev failure")
 }
 
 // TestExecuteBeadEvidenceFields verifies that runtime evidence fields are

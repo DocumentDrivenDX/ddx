@@ -294,6 +294,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			Tokens:     tokens,
 			CostUSD:    costUSD,
 			ExitCode:   1,
+			Error:      agentErrMsg,
 			StartedAt:  startedAt,
 			FinishedAt: finishedAt,
 			Outcome:    "error",
