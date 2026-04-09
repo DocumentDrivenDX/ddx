@@ -61,6 +61,9 @@ specifications. The PRD stays at the user- and capability-level:
 - FEAT-018 defines plugin API documentation and stability: document existing
   extension surfaces (package.yaml, plugin directory layout, SKILL.md, hooks,
   bead conventions), add schema versioning, commit to backward compatibility
+- FEAT-019 defines agent evaluation and prompt comparison: dispatch the same
+  prompt to multiple harnesses, capture structured outputs, and surface
+  side-by-side comparisons for human review
 
 ## Problem
 
