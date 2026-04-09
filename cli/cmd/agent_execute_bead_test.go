@@ -306,6 +306,64 @@ func TestExecuteBeadOrphanRecovery(t *testing.T) {
 		"orphan worktree should be removed before the new run")
 }
 
+// TestExecuteBeadAgentErrorNoCommits verifies that when the agent runner returns
+// an error but makes no commits, exitCode=1 and outcome="no-changes".
+func TestExecuteBeadAgentErrorNoCommits(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "aaaa1111", // no commits made
+	}
+	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed"), result: nil}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, 1, res.ExitCode)
+	assert.Equal(t, "no-changes", res.Outcome)
+	assert.Equal(t, "aaaa1111", res.BaseRev)
+	assert.Empty(t, res.PreserveRef)
+}
+
+// TestExecuteBeadAgentErrorWithCommitsMerges verifies that when the agent runner
+// returns an error but commits exist and ff-merge succeeds, exitCode=1 and
+// outcome="merged".
+func TestExecuteBeadAgentErrorWithCommitsMerges(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "bbbb2222", // agent made commits
+		ffMergeErr:  nil,        // merge succeeds
+	}
+	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed"), result: nil}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, 1, res.ExitCode)
+	assert.Equal(t, "merged", res.Outcome)
+	assert.Equal(t, "bbbb2222", res.ResultRev)
+}
+
+// TestExecuteBeadAgentErrorWithCommitsPreserves verifies that when the agent
+// runner returns an error, commits exist but ff-merge fails, exitCode=1 and
+// outcome="preserved" with a non-empty preserve ref.
+func TestExecuteBeadAgentErrorWithCommitsPreserves(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "bbbb2222",
+		ffMergeErr:  fmt.Errorf("not possible to fast-forward"),
+	}
+	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed"), result: nil}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, 1, res.ExitCode)
+	assert.Equal(t, "preserved", res.Outcome)
+	assert.Equal(t, "bbbb2222", res.ResultRev)
+	assert.NotEmpty(t, res.PreserveRef)
+	assert.True(t, strings.HasPrefix(res.PreserveRef, "refs/ddx/execute-bead/my-bead/"))
+}
+
 // TestExecuteBeadEvidenceFields verifies that runtime evidence fields are
 // populated in the JSON output.
 func TestExecuteBeadEvidenceFields(t *testing.T) {
