@@ -331,8 +331,6 @@ func TestRepositoryConfigurationCommands_Contract(t *testing.T) {
 		env := NewTestEnvironment(t)
 		env.CreateDefaultConfig()
 
-		rootCmd := NewCommandFactory(env.Dir).NewRootCommand()
-
 		testCases := []struct {
 			key   string
 			value string
@@ -351,6 +349,7 @@ func TestRepositoryConfigurationCommands_Contract(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.key, func(t *testing.T) {
+				rootCmd := NewCommandFactory(env.Dir).NewRootCommand()
 				_, err := executeCommand(rootCmd, "config", "set", tc.key, tc.value)
 				if err != nil {
 					// Some fields may not be implemented yet - verify error is reasonable
