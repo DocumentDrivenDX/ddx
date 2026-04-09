@@ -9,7 +9,8 @@ ddx:
 
 ## Overview
 
-DDx should route ordinary agent requests by intent, not by harness name.
+DDx should route ordinary agent requests by intent and normalized routing
+signals, not by harness name alone.
 Users primarily express:
 
 - a profile such as `cheap`, `fast`, or `smart`
@@ -98,9 +99,11 @@ Each plan records:
 - `Installed`
 - `Reachable`
 - `Authenticated`
-- `QuotaOK`
+- `QuotaState`
+- `SignalFreshness`
 - `CostClass`
 - `EstimatedCostUSD`
+- `PerformanceMetrics`
 - `RejectReason`
 - `Score`
 
@@ -126,12 +129,50 @@ Each harness also has runtime state:
 - installed
 - reachable
 - authenticated
-- quota or credits OK
+- quota or headroom state: `ok`, `blocked`, or `unknown`
 - policy-restricted
 - healthy / degraded / unavailable
 - last checked timestamp
+- signal source and freshness
 
 This state should be cached with TTLs rather than fully reprobed on every run.
+
+## Routing Signal Model
+
+DDx routes using a normalized model composed from multiple signal families:
+
+- **Capability** — whether the harness can satisfy the requested profile,
+  model, effort, and permission mode
+- **Availability** — installed, reachable, authenticated, policy-allowed
+- **Quota/headroom** — current provider limit state when a trustworthy source is
+  available; otherwise `unknown`
+- **Cost** — provider-reported cost where available, otherwise DDx-owned cost
+  estimate or coarse cost class
+- **Performance** — minimal DDx-observed metrics such as recent latency and
+  recent success/failure
+- **Freshness** — when each dynamic signal was last observed
+
+Signal ownership is intentionally split:
+
+- **Provider-native sources** own transcripts, rich session history, and
+  current quota/headroom when available
+- **DDx** owns only the normalized view and the minimal observed metrics needed
+  to compare harnesses at dispatch time
+- **Embedded `ddx-agent`** owns its runtime telemetry; DDx consumes references
+  and derived metrics rather than re-implementing runtime logging
+
+### Source Precedence
+
+- **Codex current quota/headroom** should come from native Codex session JSONL
+  when persistence is enabled. PTY `/status` automation is not the default
+  design.
+- **Claude historical usage** should come from `~/.claude/stats-cache.json`.
+- **Claude current quota/headroom** should use a stable non-PTY source if one
+  exists. PTY automation is an explicit fallback of last resort and, if used,
+  should update an async snapshot cache rather than block routing on inline
+  terminal scraping.
+- **Performance metrics** should come from DDx-observed runs, including async
+  snapshot history when DDx must actively sample a live quota source.
 
 ## Candidate Rejection Rules
 
@@ -142,7 +183,8 @@ A candidate must be rejected when any of these are true:
 - the harness does not support the requested permission mode
 - the harness is not installed
 - the harness is installed but not reachable
-- the harness lacks required auth or quota
+- the harness lacks required auth
+- the harness is explicitly quota-blocked
 - the harness is disabled by config or policy
 - the harness cannot accept an exact raw pin when the request bypasses the catalog
 
@@ -155,12 +197,14 @@ Valid candidates are ranked by:
 
 1. exactness of model/profile match
 2. health and confidence of current state
+3. freshness and quality of current routing signals
 3. intent:
    - `cheap` prefers lowest-cost viable candidate
    - `fast` prefers fastest viable candidate within acceptable cost bounds
    - `smart` prefers highest-quality viable candidate
-4. local over cloud when otherwise equivalent
-5. stable tie-breaker order
+4. DDx-observed performance and reliability
+5. local over cloud when otherwise equivalent
+6. stable tie-breaker order
 
 ## Embedded Runtime Boundary
 
@@ -215,8 +259,9 @@ agent:
 - installed
 - reachable
 - authenticated
-- quota/credits status
+- quota/headroom state
 - degraded vs healthy
+- source and freshness for dynamic signals
 - whether the embedded harness has at least one viable backend for default
   routing
 
@@ -226,6 +271,8 @@ agent:
   only.
 - Cross-harness routing belongs in DDx.
 - Provider/backend selection belongs in embedded `ddx-agent`.
+- DDx must not suppress native persistence for external harnesses by default,
+  because native provider stores are part of the routing signal surface.
 - Exact-model asks such as `qwen3` must be handled without special cases once
   the shared catalog projections are in place.
 
@@ -235,5 +282,7 @@ agent:
   rejected candidates?
 - How much coarse pricing metadata should DDx own locally versus delegating to
   `ddx-agent` or harness-specific adapters?
+- What stable non-PTY current-quota source, if any, can DDx use for Claude
+  Code?
 - Should `embedded` remain an alias only, or also be the canonical persisted
   harness name in DDx logs?

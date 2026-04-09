@@ -13,7 +13,7 @@ ddx:
 
 ## Overview
 
-The DDx agent service is the unified interface for dispatching work to AI coding agents (codex, claude, gemini, opencode, cursor, etc.). It handles harness discovery, prompt delivery, output capture, token tracking, session logging, and multi-agent quorum. Workflow tools and check runners call `ddx agent` instead of implementing their own harness abstraction.
+The DDx agent service is the unified interface for dispatching work to AI coding agents (codex, claude, gemini, opencode, cursor, etc.). It handles harness discovery, prompt delivery, output capture, routing-signal normalization, minimal DDx invocation activity capture, and multi-agent quorum. Workflow tools and check runners call `ddx agent` instead of implementing their own harness abstraction.
 
 For ordinary users, the primary UX is intent-first rather than harness-first:
 DDx should normally route from `--profile`, `--model`, `--effort`, and
@@ -23,8 +23,8 @@ advanced use.
 
 Within the broader DDx execution model (FEAT-010), `ddx agent` is the
 dedicated `agent` executor kind. It remains the canonical surface for direct
-agent dispatch and the authoritative source of raw prompt/response logs for
-agent-backed execution runs.
+agent dispatch and the authoritative source of DDx-side routing evidence,
+invocation correlation, and runtime metadata for agent-backed execution runs.
 
 ## Agent Library Integration Boundary
 
@@ -36,7 +36,7 @@ DDx embeds the agent library and calls its run function. The boundary:
 - Provider abstraction (OpenAI-compatible, Anthropic, virtual)
 - Tool execution (read, write, edit, bash)
 - Prompt construction (presets, context file loading, guidelines)
-- Session event logging (JSONL per session) and replay
+- Session event logging, OTEL/runtime telemetry emission, and replay
 - Cost estimation via built-in pricing table
 
 **DDx owns** (do not push into the agent library):
@@ -47,7 +47,8 @@ DDx embeds the agent library and calls its run function. The boundary:
   canonical targets, and deprecations
 - Comparison dispatch, grading, replay from bead
 - Bead linkage and execution evidence
-- Aggregate usage tracking (`ddx agent usage`)
+- Normalized routing-signal views across harnesses
+- Minimal DDx-observed performance metrics for routing
 - Configuration in `.ddx/config.yaml` (maps to agent runner config)
 
 **Integration rules:**
@@ -58,8 +59,11 @@ DDx embeds the agent library and calls its run function. The boundary:
   `prompt.NewFromPreset()` and passes through
 - DDx does not manage agent tools — it constructs the standard tool
   set and passes `WorkDir`
-- Agent library session events log to the DDx session log dir so
-  `ddx agent log` has a unified view
+- DDx must not suppress native session persistence for external harnesses by
+  default. Native provider logs remain the primary transcript/quota source for
+  codex, claude, and other subprocess harnesses.
+- For the embedded harness, DDx consumes the runtime's session/telemetry output
+  and records only the correlation and metadata needed for DDx workflows.
 - Forge's `Result.ToolCalls` are preserved in comparison arms for
   richer evaluation (subprocess harnesses don't have this)
 
@@ -77,25 +81,31 @@ specified in `docs/helix/02-design/solution-designs/SD-015-agent-routing-and-cat
 **Pain points:**
 - Duplicated harness code across two projects
 - Inconsistent agent invocation behavior
-- No shared session logging or token tracking
+- No shared routing-signal model across harnesses
+- External harness persistence is currently treated as something DDx can
+  suppress or replace, which blocks access to native quota/usage signals
 - Quorum logic only available in dun, not accessible to HELIX
 - New harnesses must be added in multiple places
 
-**Desired outcome:** A single `ddx agent` command that any tool can call to invoke an agent, with consistent output capture, token tracking, session logging, and quorum support.
+**Desired outcome:** A single `ddx agent` command that any tool can call to
+invoke an agent, with consistent output capture, informed harness selection,
+provider-aware availability checks, minimal DDx activity capture, and quorum
+support.
 
 ## Requirements
 
 ### Functional
 
 1. **Harness registry** — built-in support for codex, claude, gemini, opencode, embedded agent/ddx-agent, pi, cursor. Extensible via config. Codex, claude, and opencode are at full subprocess parity. The embedded harness is the in-process agent runtime (see below).
-2. **Harness discovery and state** — detect which harnesses are available on the system and model their routing-relevant state: installed, reachable, authenticated, quota/credits OK, policy-restricted, and healthy/degraded. Embedded harnesses are always installed, but may still be unroutable if their provider/backend configuration cannot satisfy the request. DDx may cache these checks with explicit freshness/TTL rules.
+2. **Harness discovery and state** — detect which harnesses are available on the system and model their routing-relevant state: installed, reachable, authenticated, quota/headroom state (`ok`, `blocked`, or `unknown`), policy-restricted, healthy/degraded, and signal freshness. Embedded harnesses are always installed, but may still be unroutable if their provider/backend configuration cannot satisfy the request. DDx may cache these checks with explicit freshness/TTL rules.
 3. **Intent-first agent invocation** — `ddx agent run --profile=<cheap|fast|smart>` or `ddx agent run --model <ref-or-exact>` sends a prompt through the DDx routing planner, which selects the best viable harness for the request and captures the output.
 3a. **Explicit harness override** — `ddx agent run --harness=<name>` bypasses automatic harness selection and forces one harness. This remains the correct path for debugging, replay, and comparisons.
 3b. **Embedded DDx Agent** — `ddx agent run --harness=agent` runs the [DDx Agent](https://github.com/DocumentDrivenDX/agent) loop in-process via the agent library. No subprocess, no binary lookup. The agent library provides a tool-calling LLM loop with read/write/edit/bash tools, supporting any OpenAI-compatible endpoint (LM Studio, Ollama, OpenAI) or Anthropic. Local models run at zero cost. Configuration via the embedded runtime config and its provider/backend settings.
 4. **Prompt delivery** — accept prompt from stdin, file, or inline argument. Support prompt envelope format.
 5. **Output capture** — capture agent stdout/stderr, parse structured responses, track token usage where available.
-6. **Session logging** — log each agent invocation (prompt, response, tokens, duration, harness) to a session log directory.
-7. **Token tracking** — extract and record token counts from agent responses where the harness supports it.
+6. **Invocation activity capture** — record each DDx agent invocation with routing metadata, elapsed time, harness/model identity, correlation fields, and native session or trace references when available. DDx must not disable or replace native persistence for external harnesses by default.
+7. **Signal normalization** — extract and normalize per-invocation usage, provider-native quota/usage signals where available, and DDx-observed routing metrics into a shared routing model.
+7a. **Minimal DDx routing metrics** — maintain only the DDx-owned metrics needed for routing decisions (for example recent success/failure, snapshot history, quota availability history, estimated subscription burn, and latency), without duplicating provider transcripts or native session stores.
 8. **Quorum dispatch** — `ddx agent run --quorum=majority --harnesses=codex,claude` runs multiple agents and requires consensus.
 9. **Quorum strategies** — any (first success), majority, unanimous, numeric threshold.
 10. **Automation levels** — manual, plan, auto, yolo — control how much autonomy the agent gets.
@@ -126,8 +136,11 @@ specified in `docs/helix/02-design/solution-designs/SD-015-agent-routing-and-cat
 **Acceptance Criteria:**
 - Given multiple harnesses are installed, when a workflow tool calls
   `ddx agent run --profile=cheap`, then DDx selects the cheapest viable
-  healthy harness according to the routing policy and sends the prompt
-- Given the invocation completes, then a session log entry is created with prompt, response, tokens, and duration
+  healthy harness according to the routing policy, current provider signals,
+  and request constraints, and sends the prompt
+- Given the invocation completes, then a DDx invocation activity record is
+  created with runtime facts and native session or trace references when
+  available
 - Given the agent times out, then `ddx agent run` returns a clear timeout error
 
 ### US-061: Check Runner Uses Agent for Agent-Type Checks
@@ -172,15 +185,20 @@ specified in `docs/helix/02-design/solution-designs/SD-015-agent-routing-and-cat
 - Given no harness can satisfy the requested model ref, then DDx returns a
   clear routing error instead of guessing
 
-### US-063: Developer Reviews Agent Session Logs
+### US-063: Developer Reviews Agent Invocation Activity
 **As a** developer debugging an agent interaction
-**I want** to review the session log for a recent agent invocation
-**So that** I can see what prompt was sent and what the agent returned
+**I want** to review DDx invocation metadata and any available native session
+references for a recent agent invocation
+**So that** I can inspect what ran without DDx duplicating provider logs
 
 **Acceptance Criteria:**
-- Given agent invocations have occurred, when I run `ddx agent log`, then I see recent sessions with timestamps, harness, tokens, duration, and correlation metadata
-- Given I specify a session ID, then I see the full prompt, response, stderr, and exit code for that session
-- Given the session was recorded before full-body capture existed, then the entry still loads and shows the available metadata without breaking
+- Given agent invocations have occurred, when I run `ddx agent log`, then I
+  see recent DDx invocation records with timestamps, harness, model, tokens
+  when known, duration, and correlation metadata
+- Given I specify a session ID, then I see the recorded DDx metadata plus any
+  native session, trace, or transcript references available for that run
+- Given the invocation was recorded before native-reference support existed,
+  then the entry still loads and shows the available metadata without breaking
 
 ### US-065: Developer Runs Agent Against a Bead
 **As** a developer or workflow tool
@@ -197,25 +215,30 @@ specified in `docs/helix/02-design/solution-designs/SD-015-agent-routing-and-cat
 - Given all required executions pass and ratchets are satisfied (step 9), when the merge decision is made (step 10) and `--no-merge` is not set, then DDx lands the result by fast-forward.
 - Given execute-bead completes, when the run record is inspected, then it contains built-in runtime metrics as specified in FEAT-014 US-145, captured automatically for the iteration.
 
-### Session Capture
+### Invocation Activity and Native Session Ownership
 
-Agent session evidence is stored locally under `session_log_dir` (default
-`.ddx/agent-logs`) as a dedicated bead-backed collection plus attachment
-files. Each session record captures the invocation metadata plus references to
-the prompt and response bodies needed for inspection.
+DDx stores invocation activity locally under `session_log_dir` (default
+`.ddx/agent-logs`) as a lightweight metadata collection. For external
+harnesses, native provider logs remain authoritative for transcripts, detailed
+session history, and quota signals. DDx records only the metadata and
+references needed for routing, provenance, and inspection.
 
-Minimum session fields:
+Minimum invocation activity fields:
 
 - `id`
 - `timestamp`
 - `harness`
 - `model`
-- `tokens`
+- `tokens` or token subfields when known
 - `duration_ms`
 - `exit_code`
 - `error`
 - `correlation`
-- references to stored prompt, response, and log bodies
+- `native_session_id` or equivalent native reference when available
+- `native_log_ref` or path when available
+- `trace_id` / `span_id` when available from embedded runtime telemetry
+- optional references to stored prompt, response, and log bodies only when DDx
+  is the owner of that data
 
 The `correlation` block is workflow-agnostic and may carry keys such as
 `bead_id`, `doc_id`, `workflow`, `request_id`, or `parent_session_id` when
@@ -223,22 +246,23 @@ workflow tools provide them.
 
 Storage and retention are policy-driven:
 
-- The authoritative session metadata record may live in a dedicated
-  bead-schema collection, while prompt, response, stdout, stderr, or other
-  large bodies live in named attachment files.
-- By default, local session logs retain the full captured bodies for
-  inspection.
+- The authoritative DDx invocation metadata record may live in a dedicated
+  bead-schema collection, while optional prompt, response, stdout, stderr, or
+  other large bodies live in named attachment files only when DDx owns them.
+- By default, external harnesses retain their own full session bodies in their
+  native stores; DDx does not suppress or replace those logs.
 - Optional redaction rules may mask sensitive substrings before persistence.
 - Existing metadata-only JSONL session logs remain readable and must not fail
   session listing or inspection.
 
 Inspection UX:
 
-- `ddx agent log` lists recent sessions using the stored metadata.
-- `ddx agent log <session-id>` shows the full stored bodies and correlation
-  context for one session.
-- API and MCP session-detail surfaces mirror the same session identity and
-  attachment-backed detail model.
+- `ddx agent log` lists recent invocations using the stored DDx metadata.
+- `ddx agent log <session-id>` shows the DDx metadata plus any native session,
+  trace, or transcript references for one invocation.
+- API and MCP session-detail surfaces mirror the same identity and reference
+  model. They may expose full bodies only when DDx or the embedded runtime owns
+  that data.
 
 ## Bead Execution Workflow
 
@@ -256,7 +280,9 @@ provenance system.
 4. Create an isolated execution worktree from the resolved base.
 5. Run the agent against the bead using the standard `ddx agent` harness, model,
    and reasoning controls.
-6. Capture full session evidence: transcript, tool calls, and runtime metadata.
+6. Capture invocation evidence: runtime metadata, native session identifiers,
+   tool-call references where available, and transcript references when DDx or
+   the embedded runtime owns them.
 7. Resolve applicable execution documents from the document graph inside the
    execution worktree (see FEAT-007). **Execution documents are resolved from
    the base revision before the agent runs.** If the agent modifies execution
@@ -315,9 +341,10 @@ Field notes:
 - `ratchet_summary`: `"ok"`, `"warn"`, or `"blocked"`
 - `outcome`: `"landed"` or `"preserved"`
 
-Full conversation transcript, tool call detail, and session evidence are stored
-in DDx runtime storage (session logs and exec-run attachments), not in git
-history.
+Full conversation transcripts and detailed session evidence remain in
+provider-native stores or embedded-runtime telemetry stores. DDx keeps routing
+facts, runtime metadata, and references rather than duplicating those bodies in
+git history.
 
 ## Comparison Dispatch
 
@@ -395,9 +422,9 @@ The HELIX bash harness (`scripts/helix`) has proven patterns worth preserving in
 - Output management (capturing stdout/stderr cleanly)
 - Token tracking (parsing usage from agent responses)
 - Cross-model review (alternating agents for quality)
-- Session logging format and directory structure
+- Routing-signal extraction and activity capture patterns
 - Timeout and error handling
-- Full-body prompt/response capture with backward-compatible session replay
+- Backward-compatible metadata replay
 
 ### Porting from Dun
 
@@ -423,8 +450,8 @@ ddx agent execute-bead <bead-id> --no-merge         # preserve iteration without
 ddx agent list                                       # available harnesses
 ddx agent capabilities codex                         # inspect harness capabilities
 ddx agent doctor                                     # harness health
-ddx agent log                                        # recent sessions
-ddx agent log <session-id>                           # full session detail
+ddx agent log                                        # recent DDx invocation activity
+ddx agent log <session-id>                           # metadata + native refs for one invocation
 ```
 
 ### Configuration
@@ -441,7 +468,7 @@ agent:
     codex: [low, medium, high]
   timeout_ms: 300000                # 5 minute default
   automation: auto                  # manual|plan|auto|yolo
-  session_log_dir: .ddx/agent-logs  # session log location
+  session_log_dir: .ddx/agent-logs  # DDx invocation activity location
 ```
 
 ## Migration Strategy
@@ -452,7 +479,7 @@ HELIX and dun have working agent dispatch today. The transition to `ddx agent` m
 
 **Phase 2 — HELIX and dun add `ddx agent` as an alternative path.** Both tools detect whether `ddx agent` is available. If yes, use it. If no, fall back to their existing harness code. Controlled via env var (`DDX_AGENT=1`) or config.
 
-**Phase 3 — Prove parity.** Run both paths in parallel on real work. Verify output capture, token tracking, and session logging match expectations.
+**Phase 3 — Prove parity.** Run both paths in parallel on real work. Verify output capture, token tracking, native-session correlation, and routing signals match expectations.
 
 **Phase 4 — Remove old harness code.** Once `ddx agent` is proven, HELIX removes its bash harness functions and dun removes `harnesses.go`, `agent.go`, and `quorum.go`.
 
@@ -507,33 +534,33 @@ logs a one-time notice explaining the available modes.
 
 ## Provider Usage Data Sources
 
-Each harness exposes different levels of usage data. DDx captures what is
-available and uses it for usage tracking (FEAT-014) and self-throttling.
+Each harness exposes different levels of usage data. DDx consumes what is
+available and uses it for usage reporting, routing, and future throttling
+policy (FEAT-014).
 
 | Source | codex | claude | opencode | agent (embedded) |
 |--------|-------|--------|----------|-----------------|
 | **Per-invocation tokens** | `turn.completed` JSONL: `input_tokens`, `cached_input_tokens`, `output_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | JSON envelope: `usage.input_tokens`, `output_tokens` (if present) | Direct from agent result tokens — `Input`, `Output`, `Total` |
 | **Per-invocation cost** | Not reported | `total_cost_usd` in JSON envelope | `total_cost_usd` (if present) | Agent result `CostUSD` — built-in pricing table; $0 for local models, -1 for unknown |
 | **Per-invocation model info** | Not reported | `modelUsage` block: per-model token breakdown, `contextWindow`, `maxOutputTokens` | Not reported | Agent result `Model` — provider-reported model name |
-| **Historical stats file** | None known | `~/.claude/stats-cache.json`: daily activity, daily tokens by model, cumulative model usage | None known | `.ddx/agent-logs/sessions.jsonl` — structured event logs per session |
-| **Account limits** | TUI `/status` only (PTY scraping; fragile) | Not exposed programmatically | Not exposed | N/A — local models have no rate limits |
+| **Historical usage** | Native session JSONL / local state when persistence is enabled | `~/.claude/stats-cache.json`: daily activity, daily tokens by model, cumulative model usage | None known | Embedded runtime telemetry / session events |
+| **Current quota/headroom** | Native session JSONL `token_count.rate_limits` when persistence is enabled | No stable non-PTY source confirmed yet; investigate statusline/SDK/hook payloads before PTY fallback | Not exposed | Provider/backend specific telemetry when available |
 | **Budget passthrough** | None | `--max-budget-usd` flag (per-session cap) | None | `MaxIterations` in agent request |
 
 ### Key implications for self-throttling (see FEAT-014)
 
-- **Claude** is the richest: real cost per invocation, historical stats file,
-  and a built-in budget cap flag. DDx can read `stats-cache.json` for
-  account-wide activity and pass `--max-budget-usd` for API-key users.
-- **Codex** provides token counts but no cost or account limits. The only
-  source for rate-limit headroom is the TUI `/status` command, which requires
-  PTY scraping (as demonstrated by steipete/CodexBar). DDx should track its
-  own session-log-based usage as the primary signal.
+- **Claude** has real cost per invocation and a historical stats file. Current
+  quota/headroom should use a stable non-PTY source if one exists; PTY-based
+  extraction is a fallback of last resort, not the default design.
+- **Codex** exposes current rate-limit headroom in its native session JSONL
+  when persistence is enabled. DDx should prefer that native source over PTY
+  `/status` scraping.
 - **opencode** has JSON output support but token/cost reporting in the
   envelope is not yet confirmed in all versions. DDx parses opportunistically.
-- **Agent (embedded)** is the richest for DDx because it's embedded: typed result
-  struct with exact tokens, cost, model, session ID, and tool call logs —
-  no parsing needed. Local models (via LM Studio/Ollama) report $0 cost.
-  Session event logs in `.ddx/agent-logs/` provide full replay capability.
+- **Agent (embedded)** is the richest for DDx because it is embedded: typed
+  result struct with exact tokens, cost, model, session ID, and runtime
+  telemetry. DDx should consume the correlation and metrics it needs without
+  duplicating the runtime's owned logs.
 
 ## Out of Scope
 

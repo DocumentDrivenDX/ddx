@@ -14,16 +14,16 @@ ddx:
 
 ## Overview
 
-The DDx server (`ddx-server`) serves a web UI for browsing documents, beads, the document dependency graph, and agent session logs. The UI is a TypeScript SPA built with Vite, embedded into the Go binary via `embed.FS`, and served alongside the MCP and HTTP API endpoints from a single process.
+The DDx server (`ddx-server`) serves a web UI for browsing documents, beads, the document dependency graph, and DDx agent invocation activity. The UI is a TypeScript SPA built with Vite, embedded into the Go binary via `embed.FS`, and served alongside the MCP and HTTP API endpoints from a single process.
 
 ## Problem Statement
 
-**Current situation:** DDx documents, beads, and the doc graph are only accessible via CLI commands or MCP tool calls. There's no visual way to browse the document library, see the dependency graph, check bead status, or review agent session logs.
+**Current situation:** DDx documents, beads, and the doc graph are only accessible via CLI commands or MCP tool calls. There's no visual way to browse the document library, see the dependency graph, check bead status, or review agent activity and execution evidence.
 
 **Pain points:**
 - CLI output for `ddx doc graph` is text-only — dependency graphs need visual rendering
 - Bead status and dependency trees are hard to grok in terminal output
-- Agent session logs have no browsable interface
+- DDx agent activity has no browsable interface
 - New team members can't quickly understand what documents exist or how they relate
 
 **Desired outcome:** A web dashboard served from the same `ddx-server` binary that already handles MCP and HTTP API. Developers open a browser, see their document library, dependency graph, bead board, and agent activity — all from one URL.
@@ -39,7 +39,7 @@ ddx-server binary
 └── /mcp/        → MCP endpoints (Streamable HTTP transport)
 ```
 
-All three surfaces share the same underlying services (document library, bead store, doc graph, agent logs). The web UI calls the HTTP API.
+All three surfaces share the same underlying services (document library, bead store, doc graph, agent activity). The web UI calls the HTTP API.
 
 ### Build Pipeline
 
@@ -166,14 +166,15 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 4. **Agent log monitor**
    - Live-updating list of agent invocations (newest first)
    - Columns: timestamp, harness, model, tokens, duration, exit code
-   - Click to expand: full prompt text and agent response
+   - Click to expand: DDx metadata, native session/trace references, and any
+     DDx-owned detail available for that invocation
    - Filter by harness, time range, exit code
-   - Token usage summary (total tokens by harness, by day)
+   - Token usage summary (provider-native or DDx-observed, depending on source)
    - Auto-refresh on configurable interval (or WebSocket push in v2)
 
 5. **Status dashboard**
    - Summary cards: document count by type, bead counts by status, stale document count, recent agent activity
-   - Quick links to ready beads, stale documents, recent agent sessions
+   - Quick links to ready beads, stale documents, recent agent activity
    - Project health indicators (library populated, config valid, beads active)
 
 6. **Persona viewer**
@@ -239,7 +240,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 
 ### US-082c: Developer Views Bead Execution Evidence
 **As a** developer evaluating whether a bead is truly done
-**I want** to drill into the execution beads and agent sessions associated
+**I want** to drill into the execution beads and agent activity associated
   with a work item
 **So that** I can verify tests passed and the implementation matches acceptance
 
@@ -247,7 +248,8 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 - Given a bead has execution runs, when I open its detail, then I see a list
   of runs with status, harness, duration, and timestamp
 - Given I click a run, then I see structured results and raw log output
-- Given a bead has agent sessions, then I see prompt/response summaries
+- Given a bead has linked agent activity, then I see runtime summaries and any
+  available native session references
 
 ### US-082d: Supervisor Reviews Bead Against Governing Artifact
 **As a** supervisor evaluating completed work
@@ -326,14 +328,19 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 
 ### US-086: Developer Monitors Agent Activity in Real Time
 **As a** developer running agents against my project
-**I want** to see agent invocations as they happen with full prompt/response details
-**So that** I can diagnose issues and track token usage
+**I want** to see agent invocations as they happen with routing metadata and
+available session references
+**So that** I can diagnose issues and track token usage without DDx duplicating
+provider logs
 
 **Acceptance Criteria:**
-- Given agents have been invoked, when I open the agent log view, then I see recent sessions sorted by time
-- Given I click a session, then I see the full prompt that was sent and the agent's response
-- Given I filter by harness, then only sessions for that harness are shown
-- Given I look at the summary, then I see total tokens consumed by harness and by day
+- Given agents have been invoked, when I open the agent log view, then I see
+  recent invocations sorted by time
+- Given I click an invocation, then I see DDx runtime metadata plus native
+  session or trace references and any available DDx-owned detail
+- Given I filter by harness, then only invocations for that harness are shown
+- Given I look at the summary, then I see total tokens consumed by harness and
+  by day where a signal source exists
 
 ## Implementation Notes
 
@@ -405,7 +412,7 @@ ddx/
 - FEAT-002 (DDx server HTTP/MCP API) — the web UI consumes the same API
 - FEAT-004 (Beads) — for bead board
 - FEAT-007 (Doc graph) — for dependency graph visualization
-- FEAT-006 (Agent service) — for session log viewer
+- FEAT-006 (Agent service) — for agent activity and invocation detail
 - Vite, TypeScript, React, TanStack Query, D3.js or Cytoscape.js
 - Go embed.FS, Chi or net/http, mcp-go
 

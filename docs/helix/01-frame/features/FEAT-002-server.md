@@ -17,7 +17,7 @@ ddx:
 
 ## Overview
 
-`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, execution definitions and run history, the document dependency graph, agent session logs, and (via FEAT-008) an embedded web UI — all from a single binary.
+`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, execution definitions and run history, the document dependency graph, DDx agent invocation activity plus embedded-agent telemetry references, and (via FEAT-008) an embedded web UI — all from a single binary.
 
 ## Architecture
 
@@ -58,9 +58,10 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 17. `GET /api/docs/:id/dependents` — downstream dependents
 18. MCP tools: `ddx_doc_graph`, `ddx_doc_stale`, `ddx_doc_show`, `ddx_doc_deps`
 
-**Agent Session Logs (FEAT-006)**
-19. `GET /api/agent/sessions` — list recent agent sessions
-20. `GET /api/agent/sessions/:id` — full session detail (prompt, response, tokens)
+**Agent Activity (FEAT-006)**
+19. `GET /api/agent/sessions` — list recent DDx agent invocations
+20. `GET /api/agent/sessions/:id` — invocation detail, including native
+    session/trace references and any DDx-owned transcript data
 21. MCP tool: `ddx_agent_sessions`
 
 **Executions (FEAT-010)**
@@ -113,7 +114,8 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 - FEAT-004 (Beads) — bead endpoints read from bead store
 - FEAT-010 (Executions) — execution endpoints read definitions and immutable run history
 - FEAT-007 (Doc Graph) — graph/stale endpoints use doc graph engine
-- FEAT-006 (Agent Service) — session log endpoints read agent logs
+- FEAT-006 (Agent Service) — agent activity endpoints read DDx invocation
+  metadata and embedded telemetry references
 - FEAT-008 (Web UI) — embedded SPA served at `/`
 - mcp-go SDK for MCP transport
 
