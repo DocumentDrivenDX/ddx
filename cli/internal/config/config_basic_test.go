@@ -149,14 +149,6 @@ func TestSaveLocal_Basic(t *testing.T) {
 	assert.Equal(t, "value1", loadedConfig.PersonaBindings["key1"])
 }
 
-// TestReplaceVariables tests the ReplaceVariables method
-func TestReplaceVariables_Basic(t *testing.T) {
-	t.Parallel()
-	// NOTE: ReplaceVariables method doesn't exist in new config - removing test
-	// This functionality may be handled differently in the new system
-	t.Skip("ReplaceVariables method not implemented in new config system")
-}
-
 // TestLoadConfig_InvalidYAML tests handling of invalid YAML
 func TestLoadConfig_InvalidYAML_Basic(t *testing.T) {
 	tempDir := t.TempDir()
