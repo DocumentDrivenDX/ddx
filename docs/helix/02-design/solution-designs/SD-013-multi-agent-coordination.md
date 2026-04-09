@@ -6,6 +6,7 @@ ddx:
     - FEAT-002
     - FEAT-004
     - FEAT-006
+    - SD-004
 ---
 # Solution Design: Multi-Agent Coordination
 
