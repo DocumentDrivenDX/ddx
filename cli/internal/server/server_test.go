@@ -1736,6 +1736,7 @@ func TestMCPBeadCreate(t *testing.T) {
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_create","arguments":{"title":"MCP bead","type":"task"}}}`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1769,6 +1770,7 @@ func TestMCPBeadClaim(t *testing.T) {
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_claim","arguments":{"id":"bx-001","assignee":"agent"}}}`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1974,6 +1976,124 @@ func TestMCPAgentDispatchTrustedAllowed(t *testing.T) {
 	text, _ := content[0].(map[string]any)["text"].(string)
 	if strings.Contains(text, "forbidden") {
 		t.Errorf("expected trusted dispatch to not be forbidden, got %q", text)
+	}
+}
+
+func TestMCPWriteToolsUntrustedForbidden(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	writeTools := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "ddx_bead_create",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_create","arguments":{"title":"test","type":"task"}}}`,
+		},
+		{
+			name: "ddx_bead_update",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_update","arguments":{"id":"hx-1234","status":"closed"}}}`,
+		},
+		{
+			name: "ddx_bead_claim",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_claim","arguments":{"id":"hx-1234"}}}`,
+		},
+		{
+			name: "ddx_doc_write",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_doc_write","arguments":{"id":"prompts/test.md","content":"hello"}}}`,
+		},
+	}
+
+	for _, tc := range writeTools {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/mcp", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "10.0.0.1:9999"
+			w := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
+			}
+			var resp jsonRPCResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			result, ok := resp.Result.(map[string]any)
+			if !ok {
+				t.Fatal("expected result map")
+			}
+			isError, _ := result["isError"].(bool)
+			if !isError {
+				t.Fatalf("expected isError=true for untrusted %s", tc.name)
+			}
+			content, _ := result["content"].([]any)
+			if len(content) == 0 {
+				t.Fatal("expected error content")
+			}
+			text, _ := content[0].(map[string]any)["text"].(string)
+			if !strings.Contains(text, "forbidden") {
+				t.Errorf("expected forbidden message, got %q", text)
+			}
+		})
+	}
+}
+
+func TestMCPWriteToolsTrustedAllowed(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	writeTools := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "ddx_bead_create",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_create","arguments":{"title":"test","type":"task"}}}`,
+		},
+		{
+			name: "ddx_bead_update",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_update","arguments":{"id":"hx-1234","status":"closed"}}}`,
+		},
+		{
+			name: "ddx_bead_claim",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_claim","arguments":{"id":"hx-1234"}}}`,
+		},
+		{
+			name: "ddx_doc_write",
+			body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_doc_write","arguments":{"id":"prompts/test.md","content":"hello"}}}`,
+		},
+	}
+
+	for _, tc := range writeTools {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/mcp", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "127.0.0.1:12345"
+			w := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
+			}
+			var resp jsonRPCResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			result, ok := resp.Result.(map[string]any)
+			if !ok {
+				t.Fatal("expected result map")
+			}
+			content, _ := result["content"].([]any)
+			if len(content) == 0 {
+				t.Fatal("expected content in response")
+			}
+			text, _ := content[0].(map[string]any)["text"].(string)
+			if strings.Contains(text, "forbidden") {
+				t.Errorf("expected trusted %s to not be forbidden, got %q", tc.name, text)
+			}
+		})
 	}
 }
 

@@ -1726,6 +1726,9 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentSessions(harness)
 	case "ddx_bead_create":
+		if !isTrusted(r) {
+			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+		}
 		title, _ := call.Arguments["title"].(string)
 		issueType, _ := call.Arguments["type"].(string)
 		labelsStr, _ := call.Arguments["labels"].(string)
@@ -1737,6 +1740,9 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		}
 		return s.mcpBeadCreate(title, issueType, priority, labelsStr, description, acceptance)
 	case "ddx_bead_update":
+		if !isTrusted(r) {
+			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+		}
 		id, _ := call.Arguments["id"].(string)
 		status, _ := call.Arguments["status"].(string)
 		labelsStr, _ := call.Arguments["labels"].(string)
@@ -1744,6 +1750,9 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		acceptance, _ := call.Arguments["acceptance"].(string)
 		return s.mcpBeadUpdate(id, status, labelsStr, description, acceptance)
 	case "ddx_bead_claim":
+		if !isTrusted(r) {
+			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+		}
 		id, _ := call.Arguments["id"].(string)
 		assignee, _ := call.Arguments["assignee"].(string)
 		return s.mcpBeadClaim(id, assignee)
@@ -1776,6 +1785,9 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		since, _ := call.Arguments["since"].(string)
 		return s.mcpDocChanged(since)
 	case "ddx_doc_write":
+		if !isTrusted(r) {
+			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+		}
 		id, _ := call.Arguments["id"].(string)
 		content, _ := call.Arguments["content"].(string)
 		return s.mcpDocWrite(id, content)
