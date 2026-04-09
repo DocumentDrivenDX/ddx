@@ -37,6 +37,8 @@ our rework rate this week."
 **Desired outcome:** A `ddx metrics` surface that computes and reports process
 measures from existing DDx data without requiring new data collection.
 
+The canonical solution design is [`SD-016`](../../02-design/solution-designs/SD-016-process-metrics.md).
+
 ## Boundary with FEAT-010
 
 | Concern | FEAT-010 (Operational) | FEAT-016 (Process) |
