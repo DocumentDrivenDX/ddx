@@ -943,6 +943,22 @@ func TestIntegration_PiEcho(t *testing.T) {
 	if _, err := DefaultLookPath("pi"); err != nil {
 		t.Skip("pi not available")
 	}
+	// Skip if no API key is configured for pi (avoids hanging until timeout).
+	piKeys := []string{
+		"ANTHROPIC_API_KEY", "ANTHROPIC_OAUTH_TOKEN",
+		"OPENAI_API_KEY", "GEMINI_API_KEY",
+		"GROQ_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY",
+	}
+	hasKey := false
+	for _, k := range piKeys {
+		if os.Getenv(k) != "" {
+			hasKey = true
+			break
+		}
+	}
+	if !hasKey {
+		t.Skip("pi API credentials not configured")
+	}
 	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 60000})
 	result, err := r.Run(RunOptions{
 		Harness: "pi",
