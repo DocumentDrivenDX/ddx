@@ -57,6 +57,7 @@ Examples:
 	cmd.AddCommand(f.newAgentBenchmarkCommand())
 	cmd.AddCommand(f.newAgentUsageCommand())
 	cmd.AddCommand(f.newAgentReplayCommand())
+	cmd.AddCommand(f.newAgentExecuteBeadCommand())
 
 	return cmd
 }
