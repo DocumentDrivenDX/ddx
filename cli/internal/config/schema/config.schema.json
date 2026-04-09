@@ -331,6 +331,44 @@
         }
       },
       "additionalProperties": false
+    },
+    "server": {
+      "type": "object",
+      "description": "Server configuration for ddx-server",
+      "properties": {
+        "addr": {
+          "type": "string",
+          "description": "Listen address for the server",
+          "examples": [
+            ":8080",
+            "127.0.0.1:8080"
+          ]
+        },
+        "tsnet": {
+          "type": "object",
+          "description": "Tailscale ts-net listener configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable Tailscale ts-net listener"
+            },
+            "hostname": {
+              "type": "string",
+              "description": "Tailscale hostname for the server"
+            },
+            "auth_key": {
+              "type": "string",
+              "description": "Tailscale auth key"
+            },
+            "state_dir": {
+              "type": "string",
+              "description": "Directory for Tailscale state storage"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
