@@ -3,8 +3,8 @@
   "description": "Tests model ability to read code, understand architecture, and produce correct multi-file implementations. Designed to find the boundary between local and cloud model capabilities.",
   "version": "1.0.0",
   "arms": [
-    {"label": "forge-smart", "harness": "forge", "tier": "smart"},
-    {"label": "forge-fast",  "harness": "forge", "tier": "fast"},
+    {"label": "agent-smart", "harness": "agent", "tier": "smart"},
+    {"label": "agent-fast",  "harness": "agent", "tier": "fast"},
     {"label": "codex-smart", "harness": "codex", "tier": "smart"},
     {"label": "codex-fast",  "harness": "codex", "tier": "fast"},
     {"label": "claude-smart","harness": "claude", "tier": "smart"},
