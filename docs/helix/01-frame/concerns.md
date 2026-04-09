@@ -23,8 +23,10 @@ ddx:
 | `all` | Every bead |
 | `cli` | Core DDx binary, commands, internal packages |
 | `api` | Server HTTP/MCP endpoints |
+| `agent` | DDx agent runtime, execution, routing, and migration work |
 | `ui` | Web UI frontend (React SPA) |
 | `site` | website/, microsite content and deployment |
+| `docs` | Governing docs, plans, reviews, and alignment reports |
 | `infra` | CI, Docker, release infrastructure |
 
 ## Project Overrides

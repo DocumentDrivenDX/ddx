@@ -41,6 +41,7 @@ type executeBeadGitOps interface {
 	ResolveRev(dir, rev string) (string, error)
 	IsDirty(dir string) (bool, error)
 	Stash(dir string) error
+	StashPop(dir string) error
 	WorktreeAdd(dir, wtPath, rev string) error
 	WorktreeRemove(dir, wtPath string) error
 	WorktreeList(dir string) ([]string, error)
@@ -76,6 +77,14 @@ func (r *realExecuteBeadGit) Stash(dir string) error {
 	out, err := osexec.Command("git", "-C", dir, "stash").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git stash: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+func (r *realExecuteBeadGit) StashPop(dir string) error {
+	out, err := osexec.Command("git", "-C", dir, "stash", "pop").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git stash pop: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
@@ -213,6 +222,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	}
 
 	// Checkpoint dirty worktree without discarding changes.
+	stashed := false
 	dirty, err := gitOps.IsDirty(workDir)
 	if err != nil {
 		return fmt.Errorf("checking worktree state: %w", err)
@@ -221,6 +231,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		if stashErr := gitOps.Stash(workDir); stashErr != nil {
 			return fmt.Errorf("checkpointing dirty worktree: %w", stashErr)
 		}
+		stashed = true
 		fmt.Fprintln(cmd.ErrOrStderr(), "note: dirty worktree stashed before execution")
 	}
 
@@ -229,7 +240,15 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	if addErr := gitOps.WorktreeAdd(workDir, wtPath, baseRev); addErr != nil {
 		return fmt.Errorf("creating isolated worktree: %w", addErr)
 	}
-	defer func() { _ = gitOps.WorktreeRemove(workDir, wtPath) }()
+	defer func() {
+		_ = gitOps.WorktreeRemove(workDir, wtPath)
+		if stashed {
+			if popErr := gitOps.StashPop(workDir); popErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to restore stashed changes: %v\n", popErr)
+				fmt.Fprintf(cmd.ErrOrStderr(), "hint: manually run 'git stash pop' to restore your changes\n")
+			}
+		}
+	}()
 
 	// Select agent runner; prefer AgentRunnerOverride for testability.
 	var runner beadAgentRunner

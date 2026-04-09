@@ -64,6 +64,10 @@ func (f *fakeExecuteBeadGit) Stash(dir string) error {
 	return nil
 }
 
+func (f *fakeExecuteBeadGit) StashPop(dir string) error {
+	return nil
+}
+
 func (f *fakeExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
