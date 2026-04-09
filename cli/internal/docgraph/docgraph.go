@@ -38,6 +38,7 @@ type Document struct {
 	ParkingLot bool
 	Prompt     string
 	Dependents []string
+	ExecDef    *DocExecDef
 
 	contentHash string
 
@@ -316,6 +317,7 @@ func ParseDocument(path string) (*Document, error) {
 		Review:        review,
 		ParkingLot:    frontmatter.Doc.ParkingLot,
 		Prompt:        frontmatter.Doc.Prompt,
+		ExecDef:       frontmatter.Doc.Exec,
 		body:          body,
 		bodyLinkTexts: extractBodyLinks(body),
 	}
