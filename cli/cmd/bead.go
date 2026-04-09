@@ -509,21 +509,29 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 		Short: "Close a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			s := f.beadStore()
 			sessionID, _ := cmd.Flags().GetString("session")
 			commitSHA, _ := cmd.Flags().GetString("commit")
 
-			if err := f.beadStore().CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
+			if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
 				return err
 			}
+
 			landedSHA := f.beadAutoCommit("close " + args[0])
 			if commitSHA == "" && landedSHA != "" {
-				if err := f.beadStore().Update(args[0], func(b *bead.Bead) {
+				// The landed commit SHA is only known after the close row lands.
+				// Stamp it in a follow-up tracker update, then auto-commit that
+				// metadata so the worktree ends clean.
+				if err := s.Update(args[0], func(b *bead.Bead) {
 					if b.Extra == nil {
 						b.Extra = make(map[string]any)
 					}
 					b.Extra["closing_commit_sha"] = landedSHA
 				}); err != nil {
 					return err
+				}
+				if followupSHA := f.beadAutoCommit("close " + args[0]); followupSHA == "" {
+					return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
 				}
 			}
 			return nil

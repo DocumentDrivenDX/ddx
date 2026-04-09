@@ -221,6 +221,8 @@ git:
 
 	stateFile := filepath.Join(env.Dir, "fake-git-state")
 	countFile := filepath.Join(env.Dir, "fake-git-count")
+	closeCommitSHA := "3333333333333333333333333333333333333333"
+	provenanceCommitSHA := "4444444444444444444444444444444444444444"
 	require.NoError(t, os.WriteFile(stateFile, []byte("1111111111111111111111111111111111111111"), 0o644))
 	require.NoError(t, os.WriteFile(countFile, []byte("0"), 0o644))
 
@@ -233,6 +235,7 @@ state_file="$DDX_FAKE_GIT_STATE"
 count_file="$DDX_FAKE_GIT_COUNT"
 head_one="$DDX_FAKE_GIT_SHA_1"
 head_two="$DDX_FAKE_GIT_SHA_2"
+head_three="$DDX_FAKE_GIT_SHA_3"
 
 case "$1" in
   rev-parse)
@@ -254,9 +257,14 @@ case "$1" in
     printf '%s' "$count" > "$count_file"
     if [ "$count" -eq 1 ]; then
       printf '%s' "$head_one" > "$state_file"
-    else
+    elif [ "$count" -eq 2 ]; then
       printf '%s' "$head_two" > "$state_file"
+    elif [ "$count" -eq 3 ]; then
+      printf '%s' "$head_three" > "$state_file"
     fi
+    exit 0
+    ;;
+  status)
     exit 0
     ;;
   *)
@@ -268,9 +276,10 @@ esac
 	t.Setenv("DDX_FAKE_GIT_STATE", stateFile)
 	t.Setenv("DDX_FAKE_GIT_COUNT", countFile)
 	t.Setenv("DDX_FAKE_GIT_SHA_1", "2222222222222222222222222222222222222222")
-	t.Setenv("DDX_FAKE_GIT_SHA_2", "3333333333333333333333333333333333333333")
+	t.Setenv("DDX_FAKE_GIT_SHA_2", closeCommitSHA)
+	t.Setenv("DDX_FAKE_GIT_SHA_3", provenanceCommitSHA)
 
-	factory := NewCommandFactory(env.Dir)
+	factory := newBeadTestRoot(t, env.Dir)
 	rootCmd := factory.NewRootCommand()
 
 	createOut, err := executeCommand(rootCmd, "bead", "create", "Close provenance", "--type", "task")
@@ -287,23 +296,115 @@ esac
 	headAfterClose := gitHead(t, env.Dir)
 	require.NotEmpty(t, headAfterClose)
 	assert.NotEqual(t, headBeforeClose, headAfterClose)
+	assert.Equal(t, "3", mustReadFile(t, countFile))
 
 	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
 	require.NoError(t, err)
 
 	var bead map[string]any
 	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
-	assert.Equal(t, headAfterClose, bead["closing_commit_sha"])
+	assert.Equal(t, closeCommitSHA, bead["closing_commit_sha"])
+	assert.Equal(t, provenanceCommitSHA, headAfterClose)
+
+	statusCmd := exec.Command("git", "status", "--short")
+	statusCmd.Dir = env.Dir
+	statusOut, err := statusCmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(string(statusOut)))
 }
 
-func gitHead(t *testing.T, dir string) string {
+func TestBeadCommandsCloseLeavesCleanGitStatus(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Close provenance", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	statusOut := gitStatusShort(t, env.Dir)
+	assert.Empty(t, statusOut)
+
+	headContent := gitShowFile(t, env.Dir, "HEAD", ".ddx/beads.jsonl")
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(headContent)), &bead))
+	assert.Equal(t, "closed", bead["status"])
+	assert.NotEmpty(t, bead["closing_commit_sha"])
+
+	parentSHA := gitHead(t, env.Dir, "HEAD^")
+	assert.Equal(t, parentSHA, bead["closing_commit_sha"])
+}
+
+func gitHead(t *testing.T, dir string, ref ...string) string {
 	t.Helper()
 
-	cmd := exec.Command("git", "rev-parse", "HEAD")
+	target := "HEAD"
+	if len(ref) > 0 && ref[0] != "" {
+		target = ref[0]
+	}
+	cmd := exec.Command("git", "rev-parse", target)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(out))
+}
+
+func gitStatusShort(t *testing.T, dir string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", "status", "--short")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git status should succeed: %s", string(out))
+	return strings.TrimSpace(string(out))
+}
+
+func gitShowFile(t *testing.T, dir, ref, path string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", "show", ref+":"+path)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git show should succeed: %s", string(out))
+	return string(out)
+}
+
+func mustReadFile(t *testing.T, path string) string {
+	t.Helper()
+
+	out, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out))
+}
+
+func gitAddAndCommit(t *testing.T, dir, message string, paths ...string) {
+	t.Helper()
+
+	addArgs := append([]string{"add"}, paths...)
+	addCmd := exec.Command("git", addArgs...)
+	addCmd.Dir = dir
+	require.NoError(t, addCmd.Run())
+
+	commitCmd := exec.Command("git", "commit", "-m", message)
+	commitCmd.Dir = dir
+	require.NoError(t, commitCmd.Run())
 }
 
 func TestBeadCommandsDependencyViews(t *testing.T) {

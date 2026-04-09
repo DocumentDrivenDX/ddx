@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -40,8 +41,13 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 		return "", nil
 	}
 
+	repoDir := filepath.Dir(filePath)
+	if repoDir == "" {
+		repoDir = "."
+	}
+
 	// Check we are inside a git repo (silently skip if not).
-	if !IsRepository(".") {
+	if !IsRepository(repoDir) {
 		return "", nil
 	}
 
@@ -57,17 +63,20 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 
 	// Stage the file.
 	addCmd := exec.CommandContext(ctx, "git", "add", filePath)
+	addCmd.Dir = repoDir
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git add failed: %w\n%s", err, string(out))
 	}
 
 	// Commit with --no-verify because these are mechanical commits.
 	commitCmd := exec.CommandContext(ctx, "git", "commit", "--no-verify", "-m", message)
+	commitCmd.Dir = repoDir
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git commit failed: %w\n%s", err, string(out))
 	}
 
 	shaCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	shaCmd.Dir = repoDir
 	shaOut, err := shaCmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse failed: %w", err)
