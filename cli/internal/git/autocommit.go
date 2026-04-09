@@ -62,7 +62,10 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 	defer cancel()
 
 	// Stage the file.
-	addCmd := exec.CommandContext(ctx, "git", "add", filePath)
+	// Stage only the file name after switching into the file's parent
+	// directory. This keeps relative callers working when filePath itself is
+	// a nested relative path such as cli/cmd/doc.go.
+	addCmd := exec.CommandContext(ctx, "git", "add", filepath.Base(filePath))
 	addCmd.Dir = repoDir
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git add failed: %w\n%s", err, string(out))
