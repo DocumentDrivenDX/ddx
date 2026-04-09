@@ -13,20 +13,9 @@ import (
 // TestDefaultConfig validates the default configuration values
 func TestDefaultConfig_Basic(t *testing.T) {
 	t.Parallel()
-	// Test the raw DefaultConfig, not a loaded one
-	config := &Config{
-		Version: "2.0",
-		Library: &LibraryConfig{
-			Path: ".ddx/plugins/ddx",
-			Repository: &RepositoryConfig{
-				URL:    "https://github.com/DocumentDrivenDX/ddx-library",
-				Branch: "main",
-			},
-		},
-		PersonaBindings: make(map[string]string),
-	}
+	config := DefaultNewConfig()
 
-	assert.Equal(t, "2.0", config.Version)
+	assert.Equal(t, "1.0", config.Version)
 	assert.Equal(t, ".ddx/plugins/ddx", config.Library.Path)
 	assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", config.Library.Repository.URL)
 	assert.Equal(t, "main", config.Library.Repository.Branch)
