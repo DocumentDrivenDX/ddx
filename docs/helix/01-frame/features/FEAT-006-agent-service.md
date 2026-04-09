@@ -63,11 +63,9 @@ DDx embeds the agent library and calls its run function. The boundary:
 - Forge's `Result.ToolCalls` are preserved in comparison arms for
   richer evaluation (subprocess harnesses don't have this)
 
-Detailed routing evolution, including intent-first UX, live harness-state
-evaluation, and the DDx-vs-embedded boundary, is tracked in
-`docs/helix/02-design/plan-2026-04-08-agent-routing-and-catalog-resolution.md`.
-That plan must be threaded back into FEAT-006 and supporting artifacts before
-implementation work starts.
+The full routing contract — normalized request model, candidate planning,
+ranking rules, rejection criteria, and the DDx-vs-embedded boundary — is
+specified in `docs/helix/02-design/solution-designs/SD-015-agent-routing-and-catalog-resolution.md`.
 
 ## Problem Statement
 
