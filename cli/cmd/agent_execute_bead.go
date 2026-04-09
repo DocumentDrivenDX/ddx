@@ -280,7 +280,32 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	// Get the HEAD of the worktree after the agent ran.
 	resultRev, revErr := gitOps.HeadRev(wtPath)
 	if revErr != nil {
-		resultRev = baseRev
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read worktree HEAD: %v\n", revErr)
+		res := ExecuteBeadResult{
+			BeadID:     beadID,
+			BaseRev:    baseRev,
+			Harness:    resultHarness,
+			Model:      resultModel,
+			SessionID:  sessionID,
+			DurationMS: int(finishedAt.Sub(startedAt).Milliseconds()),
+			Tokens:     tokens,
+			CostUSD:    costUSD,
+			ExitCode:   1,
+			StartedAt:  startedAt,
+			FinishedAt: finishedAt,
+			Outcome:    "error",
+			Reason:     fmt.Sprintf("failed to read worktree HEAD: %v", revErr),
+		}
+		if asJSON {
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+			return enc.Encode(res)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "bead:    %s\n", res.BeadID)
+		fmt.Fprintf(cmd.OutOrStdout(), "base:    %s\n", res.BaseRev)
+		fmt.Fprintf(cmd.OutOrStdout(), "outcome: %s\n", res.Outcome)
+		fmt.Fprintf(cmd.OutOrStdout(), "reason:  %s\n", res.Reason)
+		return fmt.Errorf("failed to read worktree HEAD: %w", revErr)
 	}
 
 	res := ExecuteBeadResult{
