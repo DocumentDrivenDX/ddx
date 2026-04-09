@@ -8,7 +8,7 @@
 
 ## Context
 
-Our prompt engineering experiment (see [HELIX PR results](../helix/tests/PROMPT-ENGINEERING-RESULTS.md)) revealed that **explicit prompts with strict conventions** produce significantly better output than vague prompts:
+Our prompt engineering experiment (see [HELIX PR results](../../tests/PROMPT-ENGINEERING-RESULTS.md)) revealed that **explicit prompts with strict conventions** produce significantly better output than vague prompts:
 
 | Metric | Baseline (Vague) | V2 (Explicit) | Improvement |
 |--------|------------------|---------------|-------------|
@@ -194,7 +194,7 @@ forge:
 
 ## References
 
-- [HELIX Prompt Engineering Results](../helix/tests/PROMPT-ENGINEERING-RESULTS.md)
-- [DDx Metric System](../cli/internal/metric)
-- [DDx Agent Compare](../cli/internal/agent/compare.go)
-- [Agent Runner Integration](../cli/internal/agent/agent_runner.go)
+- [HELIX Prompt Engineering Results](../../tests/PROMPT-ENGINEERING-RESULTS.md)
+- [DDx Metric System](../../../../cli/internal/metric)
+- [DDx Agent Compare](../../../../cli/internal/agent/compare.go)
+- [Agent Runner Integration](../../../../cli/internal/agent/agent_runner.go)
