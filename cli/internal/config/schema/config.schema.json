@@ -164,6 +164,14 @@
             "docs",
             "chore"
           ]
+        },
+        "checkpoint_prefix": {
+          "type": "string",
+          "description": "Prefix for checkpoint commit messages",
+          "examples": [
+            "checkpoint",
+            "wip"
+          ]
         }
       },
       "additionalProperties": false
