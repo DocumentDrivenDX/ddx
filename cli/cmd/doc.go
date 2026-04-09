@@ -173,7 +173,7 @@ func (f *CommandFactory) newDocStampCommand() *cobra.Command {
 					path = doc.Path
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "stamped %s\n", path)
-				if acErr := internalgit.AutoCommit(path, id, "stamp reviewed", acCfg); acErr != nil {
+				if _, acErr := internalgit.AutoCommit(path, id, "stamp reviewed", acCfg); acErr != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: auto-commit failed for %s: %v\n", path, acErr)
 				}
 			}

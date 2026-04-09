@@ -19,11 +19,13 @@ type AutoCommitConfig struct {
 }
 
 // AutoCommit stages and commits a file with a structured message.
-// Returns nil if auto_commit is "never" (or unset) or if not in a git repo.
-func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCommitConfig) error {
+// Returns the landed commit SHA when a commit is created.
+// Returns an empty SHA and nil if auto_commit is "never" (or unset) or if
+// not in a git repo.
+func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCommitConfig) (string, error) {
 	// Default to "never"
 	if cfg.AutoCommit == "" || cfg.AutoCommit == "never" {
-		return nil
+		return "", nil
 	}
 
 	if cfg.AutoCommit == "prompt" {
@@ -31,16 +33,16 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		if strings.TrimSpace(strings.ToLower(answer)) != "y" {
-			return nil
+			return "", nil
 		}
 		// Fall through to commit logic.
 	} else if cfg.AutoCommit != "always" {
-		return nil
+		return "", nil
 	}
 
 	// Check we are inside a git repo (silently skip if not).
 	if !IsRepository(".") {
-		return nil
+		return "", nil
 	}
 
 	prefix := cfg.CommitPrefix
@@ -56,14 +58,20 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 	// Stage the file.
 	addCmd := exec.CommandContext(ctx, "git", "add", filePath)
 	if out, err := addCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git add failed: %w\n%s", err, string(out))
+		return "", fmt.Errorf("git add failed: %w\n%s", err, string(out))
 	}
 
 	// Commit with --no-verify because these are mechanical commits.
 	commitCmd := exec.CommandContext(ctx, "git", "commit", "--no-verify", "-m", message)
 	if out, err := commitCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git commit failed: %w\n%s", err, string(out))
+		return "", fmt.Errorf("git commit failed: %w\n%s", err, string(out))
 	}
 
-	return nil
+	shaCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse failed: %w", err)
+	}
+
+	return strings.TrimSpace(string(shaOut)), nil
 }

@@ -57,20 +57,22 @@ Examples:
 // beadAutoCommit commits .ddx/beads.jsonl if git.auto_commit is "always".
 // The operation string describes what happened (e.g. "create ddx-abc123").
 // Errors are silently ignored — auto-commit is best-effort.
-func (f *CommandFactory) beadAutoCommit(operation string) {
+// When a commit lands, the resulting SHA is returned.
+func (f *CommandFactory) beadAutoCommit(operation string) string {
 	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
 	if err != nil {
-		return
+		return ""
 	}
 	if cfg.Git == nil {
-		return
+		return ""
 	}
 	acCfg := gitpkg.AutoCommitConfig{
 		AutoCommit:   cfg.Git.AutoCommit,
 		CommitPrefix: cfg.Git.CommitPrefix,
 	}
 	beadsFile := filepath.Join(f.WorkingDir, ".ddx", "beads.jsonl")
-	_ = gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
+	sha, _ := gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
+	return sha
 }
 
 func (f *CommandFactory) beadStore() *bead.Store {
@@ -513,7 +515,17 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			if err := f.beadStore().CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
 				return err
 			}
-			f.beadAutoCommit("close " + args[0])
+			landedSHA := f.beadAutoCommit("close " + args[0])
+			if commitSHA == "" && landedSHA != "" {
+				if err := f.beadStore().Update(args[0], func(b *bead.Bead) {
+					if b.Extra == nil {
+						b.Extra = make(map[string]any)
+					}
+					b.Extra["closing_commit_sha"] = landedSHA
+				}); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}

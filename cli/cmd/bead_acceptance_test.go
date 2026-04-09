@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -202,6 +204,106 @@ func TestBeadCommandsEvidenceAppendAndList(t *testing.T) {
 	rawEvents, ok := bead["events"].([]any)
 	require.True(t, ok)
 	require.Len(t, rawEvents, 1)
+}
+
+func TestBeadCommandsCloseRecordsLandedCommit(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+
+	stateFile := filepath.Join(env.Dir, "fake-git-state")
+	countFile := filepath.Join(env.Dir, "fake-git-count")
+	require.NoError(t, os.WriteFile(stateFile, []byte("1111111111111111111111111111111111111111"), 0o644))
+	require.NoError(t, os.WriteFile(countFile, []byte("0"), 0o644))
+
+	binDir := filepath.Join(env.Dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	fakeGit := filepath.Join(binDir, "git")
+	require.NoError(t, os.WriteFile(fakeGit, []byte(`#!/bin/sh
+set -eu
+state_file="$DDX_FAKE_GIT_STATE"
+count_file="$DDX_FAKE_GIT_COUNT"
+head_one="$DDX_FAKE_GIT_SHA_1"
+head_two="$DDX_FAKE_GIT_SHA_2"
+
+case "$1" in
+  rev-parse)
+    if [ "${2:-}" = "--git-dir" ]; then
+      exit 0
+    fi
+    if [ "${2:-}" = "HEAD" ]; then
+      cat "$state_file"
+      exit 0
+    fi
+    exit 0
+    ;;
+  add)
+    exit 0
+    ;;
+  commit)
+    count="$(cat "$count_file")"
+    count=$((count + 1))
+    printf '%s' "$count" > "$count_file"
+    if [ "$count" -eq 1 ]; then
+      printf '%s' "$head_one" > "$state_file"
+    else
+      printf '%s' "$head_two" > "$state_file"
+    fi
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("DDX_FAKE_GIT_STATE", stateFile)
+	t.Setenv("DDX_FAKE_GIT_COUNT", countFile)
+	t.Setenv("DDX_FAKE_GIT_SHA_1", "2222222222222222222222222222222222222222")
+	t.Setenv("DDX_FAKE_GIT_SHA_2", "3333333333333333333333333333333333333333")
+
+	factory := NewCommandFactory(env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Close provenance", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	headBeforeClose := gitHead(t, env.Dir)
+	require.NotEmpty(t, headBeforeClose)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	headAfterClose := gitHead(t, env.Dir)
+	require.NotEmpty(t, headAfterClose)
+	assert.NotEqual(t, headBeforeClose, headAfterClose)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, headAfterClose, bead["closing_commit_sha"])
+}
+
+func gitHead(t *testing.T, dir string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out))
 }
 
 func TestBeadCommandsDependencyViews(t *testing.T) {

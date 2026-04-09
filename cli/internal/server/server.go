@@ -1006,7 +1006,7 @@ func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
 		acCfg.CommitPrefix = cfg.Git.CommitPrefix
 	}
 	if acCfg.AutoCommit == "always" {
-		if acErr := internalgit.AutoCommit(fullPath, id, "write document", acCfg); acErr == nil {
+		if _, acErr := internalgit.AutoCommit(fullPath, id, "write document", acCfg); acErr == nil {
 			committed = true
 		}
 	}
@@ -2326,7 +2326,7 @@ func (s *Server) mcpDocWrite(id, content string) mcpToolResult {
 		acCfg.CommitPrefix = cfg.Git.CommitPrefix
 	}
 	if acCfg.AutoCommit == "always" {
-		if acErr := internalgit.AutoCommit(fullPath, id, "write document", acCfg); acErr == nil {
+		if _, acErr := internalgit.AutoCommit(fullPath, id, "write document", acCfg); acErr == nil {
 			committed = true
 		}
 	}

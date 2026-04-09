@@ -546,7 +546,7 @@ func (s *Store) Close(id string) error {
 
 // CloseWithEvidence sets a bead's status to closed and records agent session evidence.
 // sessionID is the agent session that completed the work.
-// commitSHA is the closing commit (auto-detected from git if empty).
+// commitSHA is the exact closing commit SHA when it is known.
 func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string) error {
 	return s.Update(id, func(b *Bead) {
 		b.Status = StatusClosed
@@ -558,11 +558,6 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 		}
 		if commitSHA != "" {
 			b.Extra["closing_commit_sha"] = commitSHA
-		} else {
-			// Auto-detect current commit
-			if sha := s.detectCurrentCommit(); sha != "" {
-				b.Extra["closing_commit_sha"] = sha
-			}
 		}
 	})
 }
