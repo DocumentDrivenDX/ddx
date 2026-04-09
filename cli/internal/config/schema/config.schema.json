@@ -53,16 +53,6 @@
                 "stable",
                 "v2"
               ]
-            },
-            "subtree": {
-              "type": "string",
-              "description": "Path within repository to sync (what gets synced to library path)",
-              "default": "library",
-              "examples": [
-                "library",
-                "assets",
-                "content"
-              ]
             }
           },
           "additionalProperties": false
@@ -351,8 +341,7 @@
         "path": "./library",
         "repository": {
           "url": "https://github.com/easel/ddx",
-          "branch": "main",
-          "subtree": "library"
+          "branch": "main"
         }
       }
     },
@@ -362,8 +351,7 @@
         "path": "./library",
         "repository": {
           "url": "https://github.com/company/ddx-enterprise",
-          "branch": "stable",
-          "subtree": "assets"
+          "branch": "stable"
         }
       },
       "persona_bindings": {
