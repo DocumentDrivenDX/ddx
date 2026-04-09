@@ -188,12 +188,14 @@ Minimum fields:
 
 `cost_state` is one of:
 
-- `known` - the session row reported `cost_usd`
+- `known` - the session row reported a real `cost_usd` value
 - `estimated` - DDx derived cost from token counts and model pricing
 - `unknown` - no trustworthy cost value exists
 
 Known-zero values are valid. A local harness can report `0` with
 `cost_state=known`; that is not the same as unknown.
+The sentinel value `cost_usd=-1` means unknown cost and must be mapped to
+`cost_state=unknown`, not `known`.
 
 ### ProcessMetricRollup
 
@@ -224,9 +226,12 @@ within the requested window.
 
 Cost precedence:
 
-1. Use `session.cost_usd` when provided.
+1. Use `session.cost_usd` when provided and not equal to the `-1` sentinel.
 2. Else estimate from known token counts and model pricing from FEAT-014.
 3. Else mark the cost unknown.
+
+Direct cost aggregation excludes `cost_usd=-1` rows so unknown-cost sessions do
+not contribute negative values to lifecycle totals.
 
 If a bead has no correlated sessions, lifecycle cost is unknown, not zero.
 
