@@ -37,6 +37,39 @@ func TestAgentAlwaysAvailable(t *testing.T) {
 	t.Fatal("agent not found in Discover output")
 }
 
+func TestRegistryDiscoverUsesRunnerLookPath(t *testing.T) {
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = func(file string) (string, error) {
+		if file == "claude" {
+			return "/custom/bin/claude", nil
+		}
+		return "", &notFoundError{name: file}
+	}
+
+	statuses := r.Registry.Discover()
+	var claude, codex *HarnessStatus
+	for i := range statuses {
+		switch statuses[i].Name {
+		case "claude":
+			claude = &statuses[i]
+		case "codex":
+			codex = &statuses[i]
+		}
+	}
+
+	require.NotNil(t, claude)
+	assert.True(t, claude.Available)
+	assert.Equal(t, "/custom/bin/claude", claude.Path)
+
+	require.NotNil(t, codex)
+	assert.False(t, codex.Available)
+	assert.Equal(t, "binary not found", codex.Error)
+
+	_, _, err := r.resolveHarness(RunOptions{Harness: "codex"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not available")
+}
+
 func TestAgentNoBinaryLookup(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
 	r.LookPath = func(file string) (string, error) {

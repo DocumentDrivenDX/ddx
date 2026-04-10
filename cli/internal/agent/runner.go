@@ -68,13 +68,20 @@ func NewRunner(cfg Config) *Runner {
 	if cfg.SessionLogDir == "" {
 		cfg.SessionLogDir = DefaultLogDir
 	}
-	return &Runner{
+	r := &Runner{
 		Registry: NewRegistry(),
 		Config:   cfg,
 		Catalog:  BuiltinCatalog,
 		Executor: &OSExecutor{},
 		LookPath: DefaultLookPath,
 	}
+	r.Registry.LookPath = func(file string) (string, error) {
+		if r.LookPath != nil {
+			return r.LookPath(file)
+		}
+		return DefaultLookPath(file)
+	}
+	return r
 }
 
 // Run invokes a single agent harness and returns the result.

@@ -1,7 +1,5 @@
 package agent
 
-import "os/exec"
-
 // PreferenceOrder defines the default harness preference when multiple are available.
 var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "agent", "pi"}
 
@@ -120,12 +118,16 @@ var builtinHarnesses = map[string]Harness{
 
 // Registry manages known harnesses.
 type Registry struct {
+	LookPath  LookPathFunc
 	harnesses map[string]Harness
 }
 
 // NewRegistry creates a registry with builtin harnesses.
 func NewRegistry() *Registry {
-	r := &Registry{harnesses: make(map[string]Harness)}
+	r := &Registry{
+		LookPath:  DefaultLookPath,
+		harnesses: make(map[string]Harness),
+	}
 	for k, v := range builtinHarnesses {
 		r.harnesses[k] = v
 	}
@@ -172,6 +174,10 @@ func (r *Registry) Names() []string {
 // Discover checks which harnesses are available on the system.
 func (r *Registry) Discover() []HarnessStatus {
 	var statuses []HarnessStatus
+	lookPath := r.LookPath
+	if lookPath == nil {
+		lookPath = DefaultLookPath
+	}
 	for _, name := range r.Names() {
 		h := r.harnesses[name]
 		status := HarnessStatus{
@@ -182,7 +188,7 @@ func (r *Registry) Discover() []HarnessStatus {
 		if name == "virtual" || name == "agent" {
 			status.Available = true
 			status.Path = "(embedded)"
-		} else if path, err := exec.LookPath(h.Binary); err != nil {
+		} else if path, err := lookPath(h.Binary); err != nil {
 			status.Available = false
 			status.Error = "binary not found"
 		} else {
