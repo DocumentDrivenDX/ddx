@@ -168,11 +168,19 @@ Binary releases and the microsite must be tied to tagged versions so that a
    `HUGO_PARAMS_version` or a data file written pre-build).
 3. **install.sh** — update to default to the latest tagged release via the
    GitHub releases API (`/releases/latest`). Currently hardcoded or
-   branch-based.
+   branch-based. Prerelease dogfood builds must remain opt-in via
+   `DDX_VERSION=vX.Y.Z-rcN`; they must not be selected by the default
+   install/update path unless deliberately promoted as the latest release.
 4. **Release checklist** — document in the repo (e.g., `docs/releasing.md`)
    the steps: tag, push, verify CI green, verify GH release artifacts, verify
    site deployed with correct version, verify `curl | bash` install fetches
    the new version.
+
+Version precedence for install/update must be explicit and tested:
+- `vX.Y.Z-alphaN < vX.Y.Z-betaN < vX.Y.Z-rcN < vX.Y.Z`
+- Numeric suffixes within the same prerelease channel compare numerically
+  (`rc2 < rc10`)
+- Any hyphenated prerelease suffix is older than the matching stable release
 
 The key constraint is reproducibility: given only a tag, all release artifacts
 (binaries, site, install script behavior) must be deterministic.

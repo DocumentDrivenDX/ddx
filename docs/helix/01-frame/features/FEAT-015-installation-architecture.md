@@ -148,8 +148,11 @@ Desired behavior:
 
 7. **Binary Update (`ddx upgrade`)**
    - Checks GitHub for new ddx release (async, 24h cache via `~/.cache/ddx/last-update-check.json`)
+   - Uses GitHub `releases/latest`, so prereleases do not trigger normal update detection unless intentionally promoted as the latest release
+   - Version comparison must treat any hyphenated prerelease suffix as older than the matching stable release, with channel ordering `alpha < beta < rc < stable` and numeric ordering within the same channel (`rc2 < rc10`)
    - Downloads and replaces binary
    - After upgrade, next command in project shows staleness hint (correct: new binary > old `ddx_version`)
+   - Dogfood installs of prereleases remain possible via explicit version selection, e.g. `DDX_VERSION=v0.3.0-rc1 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash`
 
 8. **Plugin Update (`ddx update <plugin>`)**
    - Checks plugin's GitHub releases for newer version

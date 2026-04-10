@@ -77,52 +77,181 @@ func NeedsUpgrade(current, latest string) (bool, error) {
 		return false, nil
 	}
 
-	// Parse semantic versions
-	currentParts, err := ParseVersion(current)
+	// Parse semantic versions including prerelease precedence.
+	currentVersion, err := parseDetailedVersion(current)
 	if err != nil {
 		return false, err
 	}
 
-	latestParts, err := ParseVersion(latest)
+	latestVersion, err := parseDetailedVersion(latest)
 	if err != nil {
 		return false, err
 	}
 
-	// Compare major.minor.patch
-	for i := 0; i < 3; i++ {
-		if latestParts[i] > currentParts[i] {
-			return true, nil
-		}
-		if latestParts[i] < currentParts[i] {
-			return false, nil
-		}
-	}
-
-	// Versions are equal
-	return false, nil
+	return compareDetailedVersions(currentVersion, latestVersion) < 0, nil
 }
 
 // ParseVersion parses a semantic version string into [major, minor, patch]
 func ParseVersion(version string) ([3]int, error) {
 	var parts [3]int
 
-	// Remove any suffixes like -dev, -beta, etc.
-	version = regexp.MustCompile(`[+-].*`).ReplaceAllString(version, "")
+	detailed, err := parseDetailedVersion(version)
+	if err != nil {
+		return parts, err
+	}
+	return detailed.Core, nil
+}
 
-	// Split by dots
-	components := strings.Split(version, ".")
+type parsedVersion struct {
+	Core       [3]int
+	PreRelease []versionIdentifier
+}
+
+type versionIdentifier struct {
+	Kind  string
+	Text  string
+	Value int
+}
+
+func parseDetailedVersion(version string) (parsedVersion, error) {
+	var parsed parsedVersion
+
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	version = strings.SplitN(version, "+", 2)[0]
+
+	mainVersion := version
+	prerelease := ""
+	if idx := strings.Index(mainVersion, "-"); idx >= 0 {
+		prerelease = mainVersion[idx+1:]
+		mainVersion = mainVersion[:idx]
+	}
+
+	components := strings.Split(mainVersion, ".")
 	if len(components) < 1 || len(components) > 3 {
-		return parts, fmt.Errorf("invalid version format: %s", version)
+		return parsed, fmt.Errorf("invalid version format: %s", version)
 	}
 
 	// Parse each component
 	for i := 0; i < len(components) && i < 3; i++ {
 		num, err := strconv.Atoi(components[i])
 		if err != nil {
-			return parts, fmt.Errorf("invalid version number: %s", components[i])
+			return parsed, fmt.Errorf("invalid version number: %s", components[i])
 		}
-		parts[i] = num
+		parsed.Core[i] = num
 	}
 
-	return parts, nil
+	parsed.PreRelease = parsePrerelease(prerelease)
+	return parsed, nil
+}
+
+func parsePrerelease(prerelease string) []versionIdentifier {
+	if prerelease == "" {
+		return nil
+	}
+
+	rawSegments := strings.FieldsFunc(strings.ToLower(prerelease), func(r rune) bool {
+		return r == '.' || r == '-'
+	})
+	if len(rawSegments) == 0 {
+		return nil
+	}
+
+	tokens := make([]versionIdentifier, 0, len(rawSegments))
+	re := regexp.MustCompile(`^([a-z]+)(\d+)$`)
+	for _, segment := range rawSegments {
+		if segment == "" {
+			continue
+		}
+		if n, err := strconv.Atoi(segment); err == nil {
+			tokens = append(tokens, versionIdentifier{Kind: "num", Value: n})
+			continue
+		}
+		if matches := re.FindStringSubmatch(segment); matches != nil {
+			tokens = append(tokens, versionIdentifier{Kind: "str", Text: matches[1]})
+			n, _ := strconv.Atoi(matches[2])
+			tokens = append(tokens, versionIdentifier{Kind: "num", Value: n})
+			continue
+		}
+		tokens = append(tokens, versionIdentifier{Kind: "str", Text: segment})
+	}
+	return tokens
+}
+
+func compareDetailedVersions(current, latest parsedVersion) int {
+	for i := 0; i < 3; i++ {
+		if current.Core[i] < latest.Core[i] {
+			return -1
+		}
+		if current.Core[i] > latest.Core[i] {
+			return 1
+		}
+	}
+
+	switch {
+	case len(current.PreRelease) == 0 && len(latest.PreRelease) == 0:
+		return 0
+	case len(current.PreRelease) == 0:
+		return 1
+	case len(latest.PreRelease) == 0:
+		return -1
+	}
+
+	for i := 0; i < len(current.PreRelease) && i < len(latest.PreRelease); i++ {
+		if cmp := compareVersionIdentifier(current.PreRelease[i], latest.PreRelease[i]); cmp != 0 {
+			return cmp
+		}
+	}
+
+	switch {
+	case len(current.PreRelease) < len(latest.PreRelease):
+		return -1
+	case len(current.PreRelease) > len(latest.PreRelease):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func compareVersionIdentifier(current, latest versionIdentifier) int {
+	if current.Kind == "num" && latest.Kind == "num" {
+		switch {
+		case current.Value < latest.Value:
+			return -1
+		case current.Value > latest.Value:
+			return 1
+		default:
+			return 0
+		}
+	}
+	if current.Kind == "num" {
+		return -1
+	}
+	if latest.Kind == "num" {
+		return 1
+	}
+
+	currentRank := prereleaseRank(current.Text)
+	latestRank := prereleaseRank(latest.Text)
+	if currentRank != latestRank {
+		switch {
+		case currentRank < latestRank:
+			return -1
+		case currentRank > latestRank:
+			return 1
+		}
+	}
+	return strings.Compare(current.Text, latest.Text)
+}
+
+func prereleaseRank(id string) int {
+	switch strings.ToLower(id) {
+	case "alpha":
+		return 10
+	case "beta":
+		return 20
+	case "rc":
+		return 30
+	default:
+		return 100
+	}
 }
