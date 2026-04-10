@@ -314,7 +314,7 @@ git:
 	assert.Empty(t, strings.TrimSpace(string(statusOut)))
 }
 
-func TestBeadCommandsCloseOmitsReviewBeadClosingCommitSha(t *testing.T) {
+func TestBeadCommandsCloseOmitsMetadataOnlyReviewBeadClosingCommitSha(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"
 library:
@@ -336,10 +336,7 @@ git:
 	id := strings.TrimSpace(createOut)
 	require.NotEmpty(t, id)
 
-	headBeforeClose := gitHead(t, env.Dir, "HEAD")
-	shortHead := gitShortHead(t, env.Dir)
-
-	_, err = executeCommand(rootCmd, "bead", "close", id, "--commit", shortHead)
+	_, err = executeCommand(rootCmd, "bead", "close", id)
 	require.NoError(t, err)
 
 	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
@@ -351,7 +348,84 @@ git:
 	assert.False(t, ok)
 
 	assert.Empty(t, gitStatusShort(t, env.Dir))
-	assert.NotEmpty(t, headBeforeClose)
+}
+
+func TestBeadCommandsCloseRecordsClosingCommitForReviewBeadWithExplicitCommit(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Review issue", "--type", "task", "--labels", "helix,kind:planning,action:review")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	fullSHA := gitHead(t, env.Dir, "HEAD")
+	shortHead := gitShortHead(t, env.Dir)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id, "--commit", shortHead)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, fullSHA, bead["closing_commit_sha"])
+	assert.Empty(t, gitStatusShort(t, env.Dir))
+}
+
+func TestBeadCommandsCloseRecordsClosingCommitForReviewBeadWithMixedClose(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Review issue", "--type", "task", "--labels", "helix,kind:planning,action:review")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	stagePath := filepath.Join(env.Dir, "review-note.txt")
+	require.NoError(t, os.WriteFile(stagePath, []byte("review close with implementation work\n"), 0o644))
+	stageCmd := exec.Command("git", "add", "review-note.txt")
+	stageCmd.Dir = env.Dir
+	require.NoError(t, stageCmd.Run())
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.NotEmpty(t, bead["closing_commit_sha"])
+	assert.Equal(t, gitHead(t, env.Dir, "HEAD^"), bead["closing_commit_sha"])
+	assert.Empty(t, gitStatusShort(t, env.Dir))
 }
 
 func TestBeadCommandsPreserveUnrelatedClosingCommitShaAcrossMutations(t *testing.T) {

@@ -172,19 +172,6 @@ func (f *CommandFactory) beadStore() *bead.Store {
 	return bead.NewStore(dir)
 }
 
-func isMetadataOnlyReviewBead(b *bead.Bead) bool {
-	if b == nil {
-		return false
-	}
-	for _, label := range b.Labels {
-		switch label {
-		case "action:review", "kind:review", "phase:review":
-			return true
-		}
-	}
-	return false
-}
-
 func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
@@ -634,16 +621,6 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			sessionID, _ := cmd.Flags().GetString("session")
 			commitSHA, _ := cmd.Flags().GetString("commit")
 
-			beadBeforeClose, err := s.Get(args[0])
-			if err != nil {
-				return err
-			}
-
-			recordClosingProvenance := !isMetadataOnlyReviewBead(beadBeforeClose)
-			if !recordClosingProvenance {
-				commitSHA = ""
-			}
-
 			if commitSHA != "" {
 				normalizedCommitSHA, err := f.resolveCommitSHA(commitSHA)
 				if err != nil {
@@ -657,7 +634,7 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			}
 
 			landedSHA := f.beadAutoCommit("close " + args[0])
-			if recordClosingProvenance && commitSHA == "" && landedSHA != "" && !f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
+			if commitSHA == "" && landedSHA != "" && !f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
 				// Only stamp closing provenance when the close commit includes
 				// real implementation work. Pure tracker backfills should not
 				// advertise a replay boundary that points at metadata-only
