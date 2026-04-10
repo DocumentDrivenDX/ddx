@@ -44,17 +44,6 @@ agent:
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0o644))
 
-	legacySession := agent.SessionEntry{
-		ID:           "as-legacy",
-		Timestamp:    time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC),
-		Harness:      "codex",
-		Model:        "gpt-5.4",
-		InputTokens:  120,
-		OutputTokens: 12,
-		CostUSD:      1.25,
-		Duration:     1000,
-		ExitCode:     0,
-	}
 	mirroredSession := agent.SessionEntry{
 		ID:              "as-current",
 		Timestamp:       time.Date(2026, 4, 9, 10, 0, 1, 0, time.UTC),
@@ -67,6 +56,17 @@ agent:
 		CostUSD:         2.50,
 		Duration:        2000,
 		ExitCode:        0,
+	}
+	legacySession := agent.SessionEntry{
+		ID:           "as-legacy",
+		Timestamp:    time.Date(2026, 4, 9, 10, 5, 0, 0, time.UTC),
+		Harness:      "claude",
+		Model:        "claude-sonnet-4-6",
+		InputTokens:  120,
+		OutputTokens: 12,
+		CostUSD:      1.25,
+		Duration:     1000,
+		ExitCode:     0,
 	}
 	routingOutcome := agent.RoutingOutcome{
 		Harness:         "claude",
@@ -83,28 +83,23 @@ agent:
 		TraceID:         "trace-current",
 	}
 
-	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), legacySession, mirroredSession)
+	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), mirroredSession, legacySession)
 	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), routingOutcome)
 
 	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 1)
 
 	byHarness := map[string]usageRow{}
 	for _, row := range rows {
 		byHarness[row.Harness] = row
 	}
 
-	require.Contains(t, byHarness, "codex")
 	require.Contains(t, byHarness, "claude")
 
-	assert.Equal(t, 1, byHarness["codex"].Sessions)
-	assert.Equal(t, 120, byHarness["codex"].InputTokens)
-	assert.Equal(t, 12, byHarness["codex"].OutputTokens)
-	assert.InDelta(t, 1.25, byHarness["codex"].CostUSD, 0.0001)
-
-	assert.Equal(t, 1, byHarness["claude"].Sessions)
-	assert.Equal(t, 200, byHarness["claude"].InputTokens)
-	assert.Equal(t, 20, byHarness["claude"].OutputTokens)
-	assert.InDelta(t, 2.50, byHarness["claude"].CostUSD, 0.0001)
+	assert.Equal(t, 2, byHarness["claude"].Sessions)
+	assert.Equal(t, 320, byHarness["claude"].InputTokens)
+	assert.Equal(t, 32, byHarness["claude"].OutputTokens)
+	assert.InDelta(t, 3.75, byHarness["claude"].CostUSD, 0.0001)
+	assert.InDelta(t, 1500.0, byHarness["claude"].AvgDurationMS, 0.0001)
 }

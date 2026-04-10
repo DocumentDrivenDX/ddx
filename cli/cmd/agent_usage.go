@@ -108,7 +108,7 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 			}
 			if len(rows) == 0 {
 				logFile := filepath.Join(r.Config.SessionLogDir, "sessions.jsonl")
-				rows, err = aggregateUsage(logFile, harness, sinceTime, nil, nil)
+				rows, err = aggregateUsage(logFile, harness, sinceTime, nil)
 			}
 			if err != nil {
 				return err
@@ -156,8 +156,8 @@ func parseSince(s string) (time.Time, error) {
 }
 
 // aggregateUsage reads sessions.jsonl and returns per-harness aggregates.
-func aggregateUsage(logFile, harnessFilter string, since time.Time, cutoffByHarness map[string]time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
-	byHarness, order, err := aggregateUsageAggs(logFile, harnessFilter, since, cutoffByHarness, mirrored)
+func aggregateUsage(logFile, harnessFilter string, since time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
+	byHarness, order, err := aggregateUsageAggs(logFile, harnessFilter, since, mirrored)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func aggregateUsage(logFile, harnessFilter string, since time.Time, cutoffByHarn
 
 // aggregateUsageAggs is the compatibility-aware session aggregator used by
 // both the primary routing-store path and the legacy fallback path.
-func aggregateUsageAggs(logFile, harnessFilter string, since time.Time, cutoffByHarness map[string]time.Time, mirrored map[string]struct{}) (map[string]*usageAgg, []string, error) {
+func aggregateUsageAggs(logFile, harnessFilter string, since time.Time, mirrored map[string]struct{}) (map[string]*usageAgg, []string, error) {
 	f, err := os.Open(logFile)
 	if os.IsNotExist(err) {
 		return map[string]*usageAgg{}, nil, nil
@@ -203,11 +203,6 @@ func aggregateUsageAggs(logFile, harnessFilter string, since time.Time, cutoffBy
 				if _, ok := mirrored[key]; ok {
 					continue
 				}
-			}
-		}
-		if cutoffByHarness != nil {
-			if cutoff, ok := cutoffByHarness[entry.Harness]; ok && !cutoff.IsZero() && !entry.Timestamp.Before(cutoff) {
-				continue
 			}
 		}
 		if harnessFilter != "" && entry.Harness != harnessFilter {
@@ -246,15 +241,11 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 	byHarness := map[string]*usageAgg{}
 	order := []string{}
 	mirrored := map[string]struct{}{}
-	cutoffByHarness := map[string]time.Time{}
 	registry := agent.NewRegistry()
 
 	for _, outcome := range outcomes {
 		if key := usageMirrorKey(outcome.NativeSessionID, outcome.TraceID, outcome.SpanID); key != "" {
 			mirrored[key] = struct{}{}
-		}
-		if cutoff, ok := cutoffByHarness[outcome.Harness]; !ok || outcome.ObservedAt.Before(cutoff) {
-			cutoffByHarness[outcome.Harness] = outcome.ObservedAt
 		}
 		if outcome.ObservedAt.Before(since) {
 			continue
@@ -276,7 +267,7 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 		return nil, nil
 	}
 
-	sessionAggs, sessionOrder, err := aggregateUsageAggs(filepath.Join(logDir, "sessions.jsonl"), harnessFilter, since, cutoffByHarness, mirrored)
+	sessionAggs, sessionOrder, err := aggregateUsageAggs(filepath.Join(logDir, "sessions.jsonl"), harnessFilter, since, mirrored)
 	if err != nil {
 		return nil, err
 	}
