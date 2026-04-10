@@ -90,12 +90,36 @@ func (f *CommandFactory) resolveCommitSHA(commitSHA string) (string, error) {
 		repoDir = "."
 	}
 
+	if isFullCommitSHA(commitSHA) && !gitpkg.IsRepository(repoDir) {
+		return commitSHA, nil
+	}
+
 	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "rev-parse", "--verify", commitSHA+"^{commit}")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse %s: %w", commitSHA, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func isFullCommitSHA(commitSHA string) bool {
+	if len(commitSHA) != 40 {
+		return false
+	}
+	for i := 0; i < len(commitSHA); i++ {
+		c := commitSHA[i]
+		if c >= '0' && c <= '9' {
+			continue
+		}
+		if c >= 'a' && c <= 'f' {
+			continue
+		}
+		if c >= 'A' && c <= 'F' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (f *CommandFactory) resolveClosingCommitSHA(commitSHA string) (string, error) {

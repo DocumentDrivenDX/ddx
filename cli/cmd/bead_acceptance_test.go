@@ -350,6 +350,30 @@ git:
 	assert.Equal(t, fullSHA, bead["closing_commit_sha"])
 }
 
+func TestBeadCommandsClosePreservesFullCommitSHAWithoutGitRepo(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Manual provenance", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	const fullSHA = "1234567890abcdef1234567890abcdef12345678"
+
+	_, err = executeCommand(rootCmd, "bead", "close", id, "--commit", fullSHA)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, "closed", bead["status"])
+	assert.Equal(t, fullSHA, bead["closing_commit_sha"])
+}
+
 func TestBeadCommandsCloseRecordsClosingCommitForTrackedDdxWork(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"
