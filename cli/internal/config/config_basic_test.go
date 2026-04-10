@@ -266,6 +266,12 @@ func TestAgentRunnerPresetMetadataMatchesRuntimePresets(t *testing.T) {
 		assert.Contains(t, desc, name)
 	}
 
+	enumValues := make([]string, 0)
+	for _, raw := range preset["enum"].([]any) {
+		enumValues = append(enumValues, raw.(string))
+	}
+	assert.Equal(t, prompt.PresetNames(), enumValues)
+
 	examples := make([]string, 0)
 	for _, raw := range preset["examples"].([]any) {
 		examples = append(examples, raw.(string))
@@ -276,6 +282,33 @@ func TestAgentRunnerPresetMetadataMatchesRuntimePresets(t *testing.T) {
 	for _, example := range examples {
 		assert.Truef(t, slices.Contains(prompt.PresetNames(), example), "example %q must be one of the runtime presets (%s)", example, strings.Join(prompt.PresetNames(), ", "))
 	}
+}
+
+func TestLoadConfig_RejectsUnsupportedAgentRunnerPreset(t *testing.T) {
+	tempDir := t.TempDir()
+
+	content := `version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+agent:
+  agent_runner:
+    preset: forge
+`
+
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0o644))
+
+	cfg, err := LoadWithWorkingDir(tempDir)
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "configuration validation failed")
+	assert.Contains(t, err.Error(), "preset")
+	assert.Contains(t, err.Error(), "value must be one of")
 }
 
 func TestLoadConfig_BeadPrefixField(t *testing.T) {

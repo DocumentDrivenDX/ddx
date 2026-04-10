@@ -277,6 +277,14 @@
               "type": "string",
               "default": "agent",
               "description": "Prompt preset (agent/benchmark/minimal/claude/codex/cursor)",
+              "enum": [
+                "agent",
+                "benchmark",
+                "minimal",
+                "claude",
+                "codex",
+                "cursor"
+              ],
               "examples": [
                 "agent",
                 "minimal"
