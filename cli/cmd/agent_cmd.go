@@ -631,6 +631,9 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 							line += fmt.Sprintf("  quota: %d%% of %s", quota.PercentUsed, quota.LimitWindow)
 						}
 					}
+					if !st.LastChecked.IsZero() {
+						line += fmt.Sprintf("  checked: %s", st.LastChecked.UTC().Format(time.RFC3339))
+					}
 					if st.Error != "" {
 						line += "  error: " + st.Error
 					}

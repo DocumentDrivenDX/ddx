@@ -97,6 +97,7 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 			if quota.PercentUsed >= 95 {
 				state.QuotaOK = false
 			}
+			r.recordQuotaSnapshot(harnessName, harness, quota, "async-probe")
 		}
 		return state
 	}

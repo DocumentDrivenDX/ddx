@@ -235,11 +235,22 @@ func TestAgentRunSessionLogging(t *testing.T) {
 	var entry SessionEntry
 	require.NoError(t, json.Unmarshal(data[:len(data)-1], &entry))
 	assert.Equal(t, "agent", entry.Harness)
+	assert.NotEmpty(t, entry.Surface)
+	assert.NotEmpty(t, entry.CanonicalTarget)
 	assert.Equal(t, "log-model", entry.Model)
 	assert.Equal(t, 200, entry.InputTokens)
 	assert.Equal(t, 50, entry.OutputTokens)
 	assert.Equal(t, "log test", entry.Prompt)
 	assert.Equal(t, "inline", entry.PromptSource)
+
+	outcomes, err := NewRoutingMetricsStore(logDir).ReadOutcomes()
+	require.NoError(t, err)
+	require.Len(t, outcomes, 1)
+	assert.Equal(t, "agent", outcomes[0].Harness)
+	assert.True(t, outcomes[0].Success)
+	assert.Equal(t, 200, outcomes[0].InputTokens)
+	assert.Equal(t, 50, outcomes[0].OutputTokens)
+	assert.NotEmpty(t, outcomes[0].CanonicalTarget)
 }
 
 // A-07: Model resolution priority: opts > config > env.

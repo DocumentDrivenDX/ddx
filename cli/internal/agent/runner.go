@@ -167,6 +167,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 		}
 	}
 	r.logSession(result, len(prompt), prompt, promptSource, opts.Correlation)
+	r.recordRoutingOutcome(result, elapsed, opts)
 	return result, nil
 }
 
@@ -707,25 +708,48 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 	}
 
 	id := genSessionID()
+	var surface string
+	canonicalTarget := result.Model
+	if harness, ok := r.Registry.Get(result.Harness); ok {
+		surface = harness.Surface
+		if canonicalTarget == "" {
+			canonicalTarget = harness.DefaultModel
+		}
+	}
+	if canonicalTarget == "" {
+		canonicalTarget = result.Harness
+	}
 	entry := SessionEntry{
-		ID:           id,
-		Timestamp:    time.Now().UTC(),
-		Harness:      result.Harness,
-		Model:        result.Model,
-		PromptLen:    promptLen,
-		Prompt:       prompt,
-		PromptSource: promptSource,
-		Response:     result.Output,
-		Correlation:  correlation,
-		Stderr:       result.Stderr,
-		Tokens:       result.Tokens,
-		InputTokens:  result.InputTokens,
-		OutputTokens: result.OutputTokens,
-		TotalTokens:  result.InputTokens + result.OutputTokens,
-		CostUSD:      result.CostUSD,
-		Duration:     result.DurationMS,
-		ExitCode:     result.ExitCode,
-		Error:        result.Error,
+		ID:              id,
+		Timestamp:       time.Now().UTC(),
+		Harness:         result.Harness,
+		Surface:         surface,
+		CanonicalTarget: canonicalTarget,
+		Model:           result.Model,
+		PromptLen:       promptLen,
+		Prompt:          prompt,
+		PromptSource:    promptSource,
+		Response:        result.Output,
+		Correlation:     correlation,
+		NativeSessionID: result.AgentSessionID,
+		Stderr:          result.Stderr,
+		Tokens:          result.Tokens,
+		InputTokens:     result.InputTokens,
+		OutputTokens:    result.OutputTokens,
+		TotalTokens:     result.InputTokens + result.OutputTokens,
+		CostUSD:         result.CostUSD,
+		Duration:        result.DurationMS,
+		ExitCode:        result.ExitCode,
+		Error:           result.Error,
+	}
+
+	if entry.NativeSessionID == "" && correlation != nil {
+		entry.NativeSessionID = correlation["native_session_id"]
+	}
+	if correlation != nil {
+		entry.NativeLogRef = correlation["native_log_ref"]
+		entry.TraceID = correlation["trace_id"]
+		entry.SpanID = correlation["span_id"]
 	}
 
 	data, err := json.Marshal(entry)

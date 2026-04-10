@@ -41,9 +41,14 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 			}
 
 			r := f.agentRunner()
-			logFile := filepath.Join(r.Config.SessionLogDir, "sessions.jsonl")
-
-			rows, err := aggregateUsage(logFile, harness, sinceTime)
+			rows, err := aggregateUsageFromRoutingMetrics(r.Config.SessionLogDir, harness, sinceTime)
+			if err != nil {
+				return err
+			}
+			if len(rows) == 0 {
+				logFile := filepath.Join(r.Config.SessionLogDir, "sessions.jsonl")
+				rows, err = aggregateUsage(logFile, harness, sinceTime)
+			}
 			if err != nil {
 				return err
 			}
@@ -151,6 +156,75 @@ func aggregateUsage(logFile, harnessFilter string, since time.Time) ([]usageRow,
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+
+	rows := make([]usageRow, 0, len(order))
+	for _, h := range order {
+		a := byHarness[h]
+		var avgDur float64
+		if a.sessions > 0 {
+			avgDur = float64(a.totalDurMS) / float64(a.sessions)
+		}
+		rows = append(rows, usageRow{
+			Harness:       h,
+			Sessions:      a.sessions,
+			InputTokens:   a.inputTokens,
+			OutputTokens:  a.outputTokens,
+			CostUSD:       a.costUSD,
+			AvgDurationMS: avgDur,
+		})
+	}
+	return rows, nil
+}
+
+// aggregateUsageFromRoutingMetrics prefers the minimal routing-outcome store
+// and falls back to legacy session rows when no routing records exist.
+func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.Time) ([]usageRow, error) {
+	store := agent.NewRoutingMetricsStore(logDir)
+	outcomes, err := store.ReadOutcomes()
+	if err != nil {
+		return nil, err
+	}
+	if len(outcomes) == 0 {
+		return nil, nil
+	}
+
+	type agg struct {
+		sessions     int
+		inputTokens  int
+		outputTokens int
+		costUSD      float64
+		totalDurMS   int
+	}
+	byHarness := map[string]*agg{}
+	order := []string{}
+	registry := agent.NewRegistry()
+
+	for _, outcome := range outcomes {
+		if outcome.ObservedAt.Before(since) {
+			continue
+		}
+		if harnessFilter != "" && outcome.Harness != harnessFilter {
+			continue
+		}
+
+		a, exists := byHarness[outcome.Harness]
+		if !exists {
+			a = &agg{}
+			byHarness[outcome.Harness] = a
+			order = append(order, outcome.Harness)
+		}
+		a.sessions++
+		a.inputTokens += outcome.InputTokens
+		a.outputTokens += outcome.OutputTokens
+		a.totalDurMS += outcome.LatencyMS
+		if outcome.CostUSD > 0 {
+			a.costUSD += outcome.CostUSD
+		} else if harness, ok := registry.Get(outcome.Harness); ok && !harness.IsLocal && outcome.Model != "" {
+			if est := agent.EstimateCost(outcome.Model, outcome.InputTokens, outcome.OutputTokens); est >= 0 {
+				a.costUSD += est
+			}
+		}
 	}
 
 	rows := make([]usageRow, 0, len(order))

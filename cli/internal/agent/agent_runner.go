@@ -156,6 +156,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		}
 	}
 	r.logSession(result, len(promptText), promptText, promptSource, opts.Correlation)
+	r.recordRoutingOutcome(result, elapsed, opts)
 	return result, nil
 }
 

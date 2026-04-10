@@ -452,6 +452,8 @@ func TestSessionEntryLegacyRowCompatibility(t *testing.T) {
 	assert.Equal(t, 100, entry.PromptLen)
 	assert.Empty(t, entry.Prompt)
 	assert.Empty(t, entry.Response)
+	assert.Empty(t, entry.NativeSessionID)
+	assert.Empty(t, entry.TraceID)
 }
 
 // TC-004: old-format JSON (tokens only) parses without error; new fields default to zero.
@@ -468,23 +470,35 @@ func TestSessionEntryTC004_OldFormatNewFieldsZero(t *testing.T) {
 // TC-005: new fields round-trip through JSON correctly.
 func TestSessionEntryTC005_NewFieldsRoundTrip(t *testing.T) {
 	original := SessionEntry{
-		ID:           "as-0003",
-		Harness:      "claude",
-		Tokens:       900,
-		InputTokens:  300,
-		OutputTokens: 600,
-		CostUSD:      0.0045,
-		Duration:     1500,
+		ID:              "as-0003",
+		Harness:         "claude",
+		Surface:         "claude",
+		CanonicalTarget: "claude-sonnet-4-6",
+		Tokens:          900,
+		InputTokens:     300,
+		OutputTokens:    600,
+		CostUSD:         0.0045,
+		Duration:        1500,
+		NativeSessionID: "native-123",
+		NativeLogRef:    "/tmp/native.jsonl",
+		TraceID:         "trace-123",
+		SpanID:          "span-123",
 	}
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
 
 	var decoded SessionEntry
 	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, original.Surface, decoded.Surface)
+	assert.Equal(t, original.CanonicalTarget, decoded.CanonicalTarget)
 	assert.Equal(t, original.Tokens, decoded.Tokens)
 	assert.Equal(t, original.InputTokens, decoded.InputTokens)
 	assert.Equal(t, original.OutputTokens, decoded.OutputTokens)
 	assert.InDelta(t, original.CostUSD, decoded.CostUSD, 1e-9)
+	assert.Equal(t, original.NativeSessionID, decoded.NativeSessionID)
+	assert.Equal(t, original.NativeLogRef, decoded.NativeLogRef)
+	assert.Equal(t, original.TraceID, decoded.TraceID)
+	assert.Equal(t, original.SpanID, decoded.SpanID)
 }
 
 // --- Quorum ---

@@ -89,26 +89,32 @@ type Result struct {
 
 // SessionEntry is written to the session log.
 type SessionEntry struct {
-	ID           string            `json:"id"`
-	Timestamp    time.Time         `json:"timestamp"`
-	Harness      string            `json:"harness"`
-	Model        string            `json:"model,omitempty"`
-	PromptLen    int               `json:"prompt_len"`
-	Prompt       string            `json:"prompt,omitempty"`
-	PromptSource string            `json:"prompt_source,omitempty"`
-	Response     string            `json:"response,omitempty"`
-	Correlation  map[string]string `json:"correlation,omitempty"`
-	Stderr       string            `json:"stderr,omitempty"`
-	Tokens       int               `json:"tokens,omitempty"`
-	InputTokens  int               `json:"input_tokens,omitempty"`
-	OutputTokens int               `json:"output_tokens,omitempty"`
-	CostUSD      float64           `json:"cost_usd,omitempty"`
-	Duration     int               `json:"duration_ms"`
-	ExitCode     int               `json:"exit_code"`
-	Error        string            `json:"error,omitempty"`
-	TotalTokens  int               `json:"total_tokens,omitempty"` // input + output; populated on every run
-	BaseRev      string            `json:"base_rev,omitempty"`     // git SHA the execution started from (execute-bead only)
-	ResultRev    string            `json:"result_rev,omitempty"`   // git SHA of landed/preserved iteration (execute-bead only)
+	ID              string            `json:"id"`
+	Timestamp       time.Time         `json:"timestamp"`
+	Harness         string            `json:"harness"`
+	Surface         string            `json:"surface,omitempty"`
+	CanonicalTarget string            `json:"canonical_target,omitempty"`
+	Model           string            `json:"model,omitempty"`
+	PromptLen       int               `json:"prompt_len"`
+	Prompt          string            `json:"prompt,omitempty"`
+	PromptSource    string            `json:"prompt_source,omitempty"`
+	Response        string            `json:"response,omitempty"`
+	Correlation     map[string]string `json:"correlation,omitempty"`
+	NativeSessionID string            `json:"native_session_id,omitempty"`
+	NativeLogRef    string            `json:"native_log_ref,omitempty"`
+	TraceID         string            `json:"trace_id,omitempty"`
+	SpanID          string            `json:"span_id,omitempty"`
+	Stderr          string            `json:"stderr,omitempty"`
+	Tokens          int               `json:"tokens,omitempty"`
+	InputTokens     int               `json:"input_tokens,omitempty"`
+	OutputTokens    int               `json:"output_tokens,omitempty"`
+	CostUSD         float64           `json:"cost_usd,omitempty"`
+	Duration        int               `json:"duration_ms"`
+	ExitCode        int               `json:"exit_code"`
+	Error           string            `json:"error,omitempty"`
+	TotalTokens     int               `json:"total_tokens,omitempty"` // input + output; populated on every run
+	BaseRev         string            `json:"base_rev,omitempty"`     // git SHA the execution started from (execute-bead only)
+	ResultRev       string            `json:"result_rev,omitempty"`   // git SHA of landed/preserved iteration (execute-bead only)
 }
 
 // ProviderStatus tracks provider connectivity and credit status.
@@ -221,6 +227,50 @@ type QuotaInfo struct {
 	PercentUsed int    `json:"percent_used"`
 	LimitWindow string `json:"limit_window,omitempty"` // e.g. "5h", "7 day"
 	ResetDate   string `json:"reset_date,omitempty"`   // e.g. "April 12"
+}
+
+// RoutingOutcome is one bounded sample of DDx-observed routing performance.
+type RoutingOutcome struct {
+	Harness         string    `json:"harness"`
+	Surface         string    `json:"surface,omitempty"`
+	CanonicalTarget string    `json:"canonical_target,omitempty"`
+	Model           string    `json:"model,omitempty"`
+	ObservedAt      time.Time `json:"observed_at"`
+	Success         bool      `json:"success"`
+	LatencyMS       int       `json:"latency_ms"`
+	InputTokens     int       `json:"input_tokens,omitempty"`
+	OutputTokens    int       `json:"output_tokens,omitempty"`
+	CostUSD         float64   `json:"cost_usd,omitempty"`
+	NativeSessionID string    `json:"native_session_id,omitempty"`
+	NativeLogRef    string    `json:"native_log_ref,omitempty"`
+	TraceID         string    `json:"trace_id,omitempty"`
+	SpanID          string    `json:"span_id,omitempty"`
+}
+
+// QuotaSnapshot captures one quota/headroom sample for routing.
+type QuotaSnapshot struct {
+	Harness         string    `json:"harness"`
+	Surface         string    `json:"surface,omitempty"`
+	CanonicalTarget string    `json:"canonical_target,omitempty"`
+	Source          string    `json:"source,omitempty"`
+	ObservedAt      time.Time `json:"observed_at"`
+	QuotaState      string    `json:"quota_state"`
+	UsedPercent     int       `json:"used_percent,omitempty"`
+	WindowMinutes   int       `json:"window_minutes,omitempty"`
+	ResetsAt        string    `json:"resets_at,omitempty"`
+	SampleKind      string    `json:"sample_kind"`
+}
+
+// BurnSummary is a derived relative subscription-pressure estimate.
+type BurnSummary struct {
+	Harness         string    `json:"harness"`
+	Surface         string    `json:"surface,omitempty"`
+	CanonicalTarget string    `json:"canonical_target,omitempty"`
+	ObservedAt      time.Time `json:"observed_at"`
+	BurnIndex       float64   `json:"burn_index"`
+	Trend           string    `json:"trend,omitempty"`
+	Confidence      float64   `json:"confidence,omitempty"`
+	Basis           string    `json:"basis,omitempty"`
 }
 
 // RouteRequest is the normalized routing ask built from CLI flags and config.
