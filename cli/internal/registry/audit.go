@@ -35,8 +35,17 @@ func AuditInstalledEntry(entry InstalledEntry, fallback *Package) []ValidationIs
 		manifest = &Package{}
 	}
 
-	issues = append(issues, auditPluginRoot(root, manifest)...)
+	issues = append(issues, ValidatePackageStructure(root, manifest)...)
 	return issues
+}
+
+// ValidatePackageStructure checks the skill, symlink, and executable layout
+// for a package root before install or after install-state recovery.
+func ValidatePackageStructure(root string, pkg *Package) []ValidationIssue {
+	if pkg == nil {
+		return []ValidationIssue{{Path: filepath.Join(root, "package.yaml"), Message: "missing package definition"}}
+	}
+	return auditPluginRoot(root, pkg)
 }
 
 func loadPackageDefinitionForAudit(root string, fallback *Package) (*Package, bool, []ValidationIssue) {

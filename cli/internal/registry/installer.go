@@ -40,7 +40,7 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		pkg = manifestPkg
 	} else if !os.IsNotExist(manifestErr) {
 		if len(manifestIssues) > 0 {
-			return entry, fmt.Errorf("validating package manifest: %s", joinValidationIssues(manifestIssues))
+			return entry, fmt.Errorf("validating package manifest: %s", JoinValidationIssues(manifestIssues))
 		}
 		return entry, fmt.Errorf("loading package manifest: %w", manifestErr)
 	}
@@ -50,6 +50,10 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 			Source: ".",
 			Target: defaultPackageRootTarget(pkg.Name),
 		}
+	}
+
+	if issues := ValidatePackageStructure(extractedDir, pkg); len(issues) > 0 {
+		return entry, fmt.Errorf("validating package structure: %s", JoinValidationIssues(issues))
 	}
 
 	// Process Root mapping first - copy the entire plugin to central location.

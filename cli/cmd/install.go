@@ -241,6 +241,10 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		}
 	}
 
+	if issues := registry.ValidatePackageStructure(absPath, pkg); len(issues) > 0 {
+		return fmt.Errorf("validating package structure: %s", registry.JoinValidationIssues(issues))
+	}
+
 	// Create the declared plugin root.
 	pluginDir := registry.ExpandHome(pkg.Install.Root.Target)
 	if err := os.MkdirAll(filepath.Dir(pluginDir), 0755); err != nil {

@@ -54,7 +54,7 @@ func LoadPackageManifest(root string) (*Package, []ValidationIssue, error) {
 
 	pkg, issues := validatePackageManifest(manifestPath, raw)
 	if len(issues) > 0 {
-		return nil, issues, fmt.Errorf("%s: %s", manifestPath, joinValidationIssues(issues))
+		return nil, issues, fmt.Errorf("%s: %s", manifestPath, JoinValidationIssues(issues))
 	}
 	return pkg, nil, nil
 }
@@ -129,7 +129,9 @@ func parseAPIVersion(raw any) (string, string) {
 	return value, ""
 }
 
-func joinValidationIssues(issues []ValidationIssue) string {
+// JoinValidationIssues renders a slice of validation issues into a single
+// semicolon-separated error string.
+func JoinValidationIssues(issues []ValidationIssue) string {
 	msgs := make([]string, 0, len(issues))
 	for _, issue := range issues {
 		msgs = append(msgs, issue.Error())
