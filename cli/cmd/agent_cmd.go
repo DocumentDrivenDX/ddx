@@ -39,6 +39,7 @@ stay decoupled from harness installation details.
 Examples:
   ddx agent run --profile cheap --prompt task.md
   ddx agent run --profile smart --prompt task.md
+  ddx agent run --profile smart --model gpt-5.4   # explicit override; avoid by default
   ddx agent run --harness agent --prompt task.md
   ddx agent run --harness codex --prompt task.md
   ddx agent run --quorum majority --harnesses codex,claude --prompt task.md
@@ -410,9 +411,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("prompt", "", "Path to prompt file")
 	cmd.Flags().String("text", "", "Inline prompt text")
 	cmd.Flags().String("harness", "", "Harness name (default from config); use 'agent' for the embedded DDx agent")
-	cmd.Flags().String("model", "", "Model override")
-	cmd.Flags().String("profile", "", "Routing intent: cheap, fast, smart (selects harness and model automatically)")
-	cmd.Flags().String("effort", "", "Reasoning effort level")
+	cmd.Flags().String("model", "", "Model override; normally omit when using --profile")
+	cmd.Flags().String("profile", "", "Routing intent: cheap, fast, smart (selects harness, model, and defaults automatically)")
+	cmd.Flags().String("effort", "", "Reasoning effort override; normally omit when using --profile")
 	cmd.Flags().String("timeout", "", "Timeout duration (e.g. 30s, 5m)")
 	cmd.Flags().String("quorum", "", "Quorum strategy: any, majority, unanimous")
 	cmd.Flags().String("harnesses", "", "Comma-separated harnesses for quorum")

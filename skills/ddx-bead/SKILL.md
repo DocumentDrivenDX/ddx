@@ -124,6 +124,15 @@ ddx bead show <id>         # Full detail on one bead
 ddx bead status            # Summary counts by state
 ```
 
+## Execution Guidance
+
+When using DDx agent primitives against bead work:
+- Prefer `ddx agent execute-loop` for normal queue-driven execution.
+- Use `ddx agent execute-bead <id>` for a specific manual single-bead run.
+- For direct `ddx agent run` usage, prefer `--profile smart` or another profile.
+- Treat `--model` and `--effort` as explicit overrides; do not add them on top
+  of `--profile` unless you are intentionally testing or pinning behavior.
+
 ## References
 
 - Full flag list: `ddx bead --help`, `ddx bead create --help`

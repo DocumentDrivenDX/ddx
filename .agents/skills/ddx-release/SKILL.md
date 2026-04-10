@@ -1,7 +1,6 @@
 ---
-skill:
-  name: ddx-release
-  description: Prepare and publish a DDx release with full validation pipeline.
+name: ddx-release
+description: Prepare and publish a DDx release with full validation pipeline.
 ---
 
 # DDx Release

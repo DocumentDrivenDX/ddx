@@ -61,8 +61,12 @@ Assemble a prompt that includes:
 - The acceptance criteria (verbatim)
 - Instructions to commit with the bead ID in the message
 
+Prefer profile-based routing by default. Only pin `--harness`, `--model`, or
+`--effort` when you are intentionally overriding routing for a controlled test
+or provider-specific bug.
+
 ```bash
-ddx agent run --harness claude --effort high \
+ddx agent run --profile smart \
   --text "Implement bead <id>: <title>
 
 Governing spec: <spec-id>

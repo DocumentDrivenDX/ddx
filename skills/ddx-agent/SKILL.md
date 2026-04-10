@@ -1,7 +1,7 @@
 ---
 name: ddx-agent
-description: Dispatch AI agents via DDx with the right harness, model, and effort for the task.
-argument-hint: '"task description" [--harness=<name>] [--effort=low|medium|high]'
+description: Dispatch AI agents via DDx with profile-first routing and explicit overrides only when needed.
+argument-hint: '"task description" [--profile=cheap|fast|smart] [--harness=<name>]'
 ---
 
 # DDx Agent: Dispatch AI Agents
@@ -13,7 +13,7 @@ you through selecting the right harness and assembling the dispatch command.
 ## When to Use
 
 - Running an AI agent against a prompt or task
-- Selecting the right model and effort level for a task
+- Selecting the right routing profile for a task
 - Dispatching multiple agents for consensus on a decision
 - Checking which harnesses and models are available
 
@@ -37,24 +37,36 @@ ddx agent capabilities <harness>
 Shows available models and effort levels for the harness. Use this to understand
 the cost/quality tradeoff options before dispatching.
 
-### 3. Select Model and Effort
+### 3. Select a Routing Profile
 
-Match effort to task complexity:
+Use profiles as the default policy surface:
 
-| Task Type | Effort | Rationale |
-|-----------|--------|-----------|
-| Simple lookup, formatting | `low` | Fast, cheap; no deep reasoning needed |
-| Typical implementation task | `medium` | Balanced; handles most work |
-| Architecture, complex reasoning | `high` | Full context window, extended thinking |
+| Task Type | Profile | Rationale |
+|-----------|---------|-----------|
+| Simple lookup, formatting | `cheap` | Prefer low-cost/default local routing |
+| Typical implementation task | `smart` | Balanced default for most real work |
+| Latency-sensitive iteration | `fast` | Prefer quicker turnaround |
+
+Only add `--model` or `--effort` when you are intentionally overriding profile
+resolution for a specific regression, provider test, or controlled comparison.
 
 ### 4. Dispatch the Agent
 
-Single harness:
+Default routed run:
+
+```bash
+ddx agent run \
+  --profile=smart \
+  --prompt <path/to/prompt.md>
+```
+
+Pinned harness/model only when the task specifically requires it:
 
 ```bash
 ddx agent run \
   --harness=<name> \
-  --effort=medium \
+  --model=<exact-model> \
+  --effort=high \
   --prompt <path/to/prompt.md>
 ```
 
@@ -64,7 +76,6 @@ Multi-agent consensus (majority vote across harnesses):
 ddx agent run \
   --quorum=majority \
   --harnesses=harness-a,harness-b,harness-c \
-  --effort=medium \
   --prompt <path/to/prompt.md>
 ```
 
@@ -78,8 +89,11 @@ Shows history of agent sessions including harness used, effort, and outcome.
 
 ## Config Overrides
 
-Harness defaults are set in `.ddx/config.yaml`. You can override per-invocation
-with flags, or adjust defaults by editing the config:
+Harness defaults are set in `.ddx/config.yaml`. Use `--profile` for normal
+dispatch. Add `--harness`, `--model`, or `--effort` only when you explicitly
+want to override the profile/config decision for one run.
+
+You can also adjust defaults by editing the config:
 
 ```yaml
 agent:
