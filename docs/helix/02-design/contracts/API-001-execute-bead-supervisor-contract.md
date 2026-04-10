@@ -64,22 +64,37 @@ drained, the operator stops it, or a fatal project error occurs.
    or `ddx server` project binding.
 2. Resolve the effective base revision and the governing execution contract
    snapshot that will govern this iteration.
-3. Read the ready bead set for that project and choose the best candidate using
-   the generic execution-ready validator against that resolved base snapshot.
-4. Claim the chosen bead atomically.
-5. Run `ddx agent execute-bead` against the bead from the project root and
-   capture its reported result state.
-6. Classify the outcome reported by `execute-bead`:
+3. Read the ready bead set for that project and order candidates by the
+   supervisor's queue policy for that project context.
+4. Run the generic execution-ready validator against the ordered candidate set
+   to filter structural ineligible beads against the resolved base snapshot.
+5. Claim the first validated bead atomically.
+6. Run `ddx agent execute-bead` against the bead from the project root and
+   capture its documented result schema.
+7. Classify the outcome reported by `execute-bead` from the documented
+   supervisor-visible `status` field:
    - structural validation failure before launch
    - execution failure
    - post-run check failure
    - land conflict after a successful attempt
    - success
-7. Continue scanning the same project queue.
+8. Continue scanning the same project queue.
 
 The loop must never infer readiness from HELIX-specific hidden policy. It uses
-the shared validator output and the explicit contract snapshot as its source of
-truth.
+the explicit queue ordering policy, the shared validator output, and the
+documented result schema as its source of truth.
+
+## Execute-Bead Result Schema
+
+The supervisor consumes only the documented result envelope emitted by
+`ddx agent execute-bead`:
+
+- `status`: one of `structural_validation_failed`, `execution_failed`,
+  `post_run_check_failed`, `land_conflict`, or `success`
+- `detail`: optional operator-facing text for logging and diagnostics
+
+The supervisor must not infer state from free-form reason strings. It uses the
+`status` field for control flow and may surface `detail` for observability.
 
 ## Validation And Retry Semantics
 
@@ -89,10 +104,10 @@ Structural validation happens before any irreversible execution step.
   unclaims the bead, and leaves it open for later correction.
 - If execution starts and later fails, `execute-bead` preserves the iteration
   under a hidden ref using the documented naming scheme, and the supervisor
-  records that result state.
+  records that result `status`.
 - If post-run required checks fail, `execute-bead` preserves the iteration
-  under a hidden ref, attaches the failure reason to the result record, and
-  the supervisor records that result state.
+  under a hidden ref, sets the documented failure `status`, and the supervisor
+  records that result `status`.
 - If a rebase or fast-forward land fails after a successful run, `execute-bead`
   preserves the iteration and the preserved iteration remains the canonical
   evidence for that attempt.
@@ -157,7 +172,7 @@ At minimum, the loop should expose:
 - current bead ID
 - current state machine step
 - last success timestamp
-- last failure reason
+- last failure `status`
 - current worktree path
 - current preserve ref, if any
 
