@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -11,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,6 +99,21 @@ func (f *fakeExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.addedWTs = append(f.addedWTs, wtPath)
+	if err := os.MkdirAll(wtPath, 0o755); err != nil {
+		return err
+	}
+	beadFile := filepath.Join(dir, ".ddx", "beads.jsonl")
+	if _, err := os.Stat(beadFile); err == nil {
+		if err := copyTestFile(beadFile, filepath.Join(wtPath, ".ddx", "beads.jsonl")); err != nil {
+			return err
+		}
+	}
+	docsDir := filepath.Join(dir, "docs")
+	if _, err := os.Stat(docsDir); err == nil {
+		if err := copyTree(docsDir, filepath.Join(wtPath, "docs")); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -102,6 +121,9 @@ func (f *fakeExecuteBeadGit) WorktreeRemove(dir, wtPath string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.removedWTs = append(f.removedWTs, wtPath)
+	if err := os.RemoveAll(wtPath); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -149,9 +171,11 @@ func (f *fakeExecuteBeadGit) UpdateRef(dir, ref, sha string) error {
 type fakeAgentRunner struct {
 	result *agent.Result
 	err    error
+	last   agent.RunOptions
 }
 
 func (r *fakeAgentRunner) Run(opts agent.RunOptions) (*agent.Result, error) {
+	r.last = opts
 	return r.result, r.err
 }
 
@@ -159,6 +183,7 @@ func (r *fakeAgentRunner) Run(opts agent.RunOptions) (*agent.Result, error) {
 func newExecuteBeadFactory(t *testing.T, git *fakeExecuteBeadGit, runner *fakeAgentRunner) *CommandFactory {
 	t.Helper()
 	f := NewCommandFactory(t.TempDir())
+	seedDefaultExecuteBeads(t, f.WorkingDir)
 	f.AgentRunnerOverride = runner
 	f.executeBeadGitOverride = git
 	return f
@@ -197,6 +222,97 @@ func parseExecuteBeadJSON(t *testing.T, out string) ExecuteBeadResult {
 	dec := json.NewDecoder(bytes.NewBufferString(jsonPart))
 	require.NoError(t, dec.Decode(&res), "output should be valid JSON: %s", jsonPart)
 	return res
+}
+
+func seedExecuteBead(t *testing.T, workDir string, b *bead.Bead) {
+	t.Helper()
+	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
+	require.NoError(t, store.Init())
+	if _, err := store.Get(b.ID); err == nil {
+		return
+	}
+	require.NoError(t, store.Create(b))
+}
+
+func seedDefaultExecuteBeads(t *testing.T, workDir string) {
+	t.Helper()
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead",
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		IssueType: bead.DefaultType,
+	})
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "shared-bead",
+		Title:     "Shared execute-bead",
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		IssueType: bead.DefaultType,
+	})
+}
+
+func copyTree(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.Create(target)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(out, in); err != nil {
+			out.Close()
+			return err
+		}
+		if err := out.Close(); err != nil {
+			return err
+		}
+		return os.Chmod(target, info.Mode())
+	})
+}
+
+func copyTestFile(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return os.Chmod(dst, info.Mode())
 }
 
 // TestExecuteBeadMerge verifies that when fast-forward merge succeeds the outcome is "merged".
@@ -303,6 +419,7 @@ func TestExecuteBeadRebaseFailurePreserves(t *testing.T) {
 	require.Contains(t, git.refs, res.PreserveRef)
 	assert.Equal(t, "bbbb2222", git.refs[res.PreserveRef])
 	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
+	require.FileExists(t, filepath.Join(f.WorkingDir, filepath.FromSlash(res.ResultFile)))
 }
 
 // TestExecuteBeadNoMerge verifies that --no-merge bypasses fast-forward and
@@ -373,6 +490,109 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	assert.Empty(t, res.PreserveRef)
 }
 
+func TestExecuteBeadSynthesizesPromptAndArtifacts(t *testing.T) {
+	workDir := t.TempDir()
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:          "my-bead",
+		Title:       "Improve execute-bead prompt synthesis",
+		Status:      bead.StatusOpen,
+		Priority:    0,
+		IssueType:   bead.DefaultType,
+		Description: "Replace the bare fallback prompt with deterministic bead context.",
+		Acceptance:  "Prompt contains bead context and governing references.",
+		Labels:      []string{"area:agent", "phase:build"},
+		Extra:       map[string]any{"spec-id": "FEAT-006"},
+	})
+	specPath := filepath.Join(workDir, "docs", "feature.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
+	require.NoError(t, os.WriteFile(specPath, []byte(`---
+ddx:
+  id: FEAT-006
+---
+# Agent Service
+`), 0o644))
+
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "bbbb2222",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	f := NewCommandFactory(workDir)
+	seedDefaultExecuteBeads(t, workDir)
+	f.AgentRunnerOverride = runner
+	f.executeBeadGitOverride = git
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	require.NotEmpty(t, runner.last.PromptFile)
+	require.FileExists(t, runner.last.PromptFile)
+	promptRaw, err := os.ReadFile(runner.last.PromptFile)
+	require.NoError(t, err)
+	promptText := string(promptRaw)
+	assert.Contains(t, promptText, "Improve execute-bead prompt synthesis")
+	assert.Contains(t, promptText, "Replace the bare fallback prompt")
+	assert.Contains(t, promptText, "Prompt contains bead context and governing references.")
+	assert.Contains(t, promptText, "docs/feature.md")
+	assert.NotContains(t, promptText, "Work on bead my-bead.")
+
+	require.NotEmpty(t, res.ExecutionDir)
+	require.NotEmpty(t, res.PromptFile)
+	require.NotEmpty(t, res.ManifestFile)
+	require.NotEmpty(t, res.ResultFile)
+	assert.True(t, strings.HasSuffix(res.PromptFile, "prompt.md"))
+	assert.True(t, strings.HasSuffix(res.ManifestFile, "manifest.json"))
+	assert.True(t, strings.HasSuffix(res.ResultFile, "result.json"))
+}
+
+func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
+	workDir := t.TempDir()
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:         "my-bead",
+		Title:      "Record execution artifacts",
+		Status:     bead.StatusOpen,
+		Priority:   0,
+		IssueType:  bead.DefaultType,
+		Acceptance: "Artifacts are written for later inspection.",
+	})
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "bbbb2222",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{
+		ExitCode: 0,
+		Harness:  "mock",
+		Model:    "gpt-test",
+		Tokens:   17,
+	}}
+	f := NewCommandFactory(workDir)
+	seedDefaultExecuteBeads(t, workDir)
+	f.AgentRunnerOverride = runner
+	f.executeBeadGitOverride = git
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	require.Len(t, git.addedWTs, 1)
+	manifestPath := filepath.Join(workDir, filepath.FromSlash(res.ManifestFile))
+	resultPath := filepath.Join(workDir, filepath.FromSlash(res.ResultFile))
+	require.FileExists(t, manifestPath)
+	require.FileExists(t, resultPath)
+
+	manifestRaw, err := os.ReadFile(manifestPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(manifestRaw), `"bead_id": "my-bead"`)
+	assert.Contains(t, string(manifestRaw), `"prompt": "synthesized"`)
+	assert.Contains(t, string(manifestRaw), `"worktree": ".ddx/`)
+
+	resultRaw, err := os.ReadFile(resultPath)
+	require.NoError(t, err)
+	var recorded ExecuteBeadResult
+	require.NoError(t, json.Unmarshal(resultRaw, &recorded))
+	assert.Equal(t, res.BeadID, recorded.BeadID)
+	assert.Equal(t, res.Status, recorded.Status)
+	assert.Equal(t, res.ResultFile, recorded.ResultFile)
+	assert.NoDirExists(t, git.addedWTs[0])
+}
+
 // TestExecuteBeadDirtyWorktreeCheckpoint verifies that a dirty worktree is
 // stashed (checkpointed) before execution begins.
 func TestExecuteBeadDirtyWorktreeCheckpoint(t *testing.T) {
@@ -416,6 +636,7 @@ func TestExecuteBeadOrphanRecovery(t *testing.T) {
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 	f := NewCommandFactory(workDir)
+	seedDefaultExecuteBeads(t, workDir)
 	f.AgentRunnerOverride = runner
 	f.executeBeadGitOverride = git
 
