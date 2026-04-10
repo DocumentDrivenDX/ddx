@@ -13,7 +13,7 @@ ddx:
 
 ## Decision
 
-Use **Bun** as the JavaScript/TypeScript runtime, **Vite** as the dev server and bundler, **Biome** for linting and formatting, and **Vitest** + **Playwright** for testing.
+Use **Bun** as the JavaScript/TypeScript runtime, **Vite** as the dev server and bundler, and **Playwright** for frontend E2E testing. Biome and Vitest are deferred until the frontend stack is ready for a formal migration.
 
 ### 1. Runtime: Bun
 
@@ -95,41 +95,9 @@ Key choices:
 - `"verbatimModuleSyntax": true` — enforces explicit `type` imports
 - `"moduleResolution": "bundler"` — aligns with Vite's resolution
 
-### 5. Linting and Formatting: Biome
+### 5. Linting and Formatting: Deferred
 
-Use **Biome** (not ESLint/Prettier) — single tool for both linting and formatting, 100x faster, lower config surface.
-
-```json
-// biome.json
-{
-  "$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
-  "organizeImports": { "enabled": true },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "correctness": {
-        "noUnusedImports": "error",
-        "noUnusedVariables": "error"
-      },
-      "suspicious": {
-        "noExplicitAny": "error"
-      },
-      "style": {
-        "useConst": "error",
-        "noNonNullAssertion": "warn"
-      }
-    }
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "tab",
-    "lineWidth": 100
-  }
-}
-```
-
-CI: `bunx biome check .` (lint + format in one command, exit non-zero on violations).
+Biome is the intended future formatter/linter for the frontend stack, but it is not adopted yet. Keep the current project conventions until a dedicated migration issue updates this ADR and lands the toolchain.
 
 ### 6. Dependency Management
 
@@ -140,36 +108,13 @@ CI: `bunx biome check .` (lint + format in one command, exit non-zero on violati
 
 ### 7. Testing
 
-**Three layers:**
+**Current layer:**
 
 | Layer | Tool | What It Tests |
 |-------|------|--------------|
-| Unit + Integration | **Vitest** | Components, hooks, utilities, API client logic |
-| Component | **Testing Library** (`@testing-library/react`) | User-facing component behavior |
 | E2E | **Playwright** | Full browser flows against running server |
 
-**Vitest** (not `bun test`) for the web frontend because of better DOM environment integration (jsdom/happy-dom), Vite-native config sharing, and richer plugin ecosystem.
-
-```ts
-// vitest.config.ts
-import { defineConfig } from 'vitest/config'
-export default defineConfig({
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'lcov'],
-      thresholds: {
-        statements: 70,
-        branches: 60,
-        functions: 70,
-        lines: 70,
-      }
-    }
-  }
-})
-```
+Unit, integration, and component test coverage via Vitest and Testing Library is deferred until the frontend stack grows into a formal migration issue.
 
 **Playwright** for E2E:
 ```ts
@@ -188,8 +133,6 @@ export default defineConfig({
 
 Run tests:
 ```bash
-bun run vitest              # unit + component tests
-bun run vitest --coverage   # with coverage
 bunx playwright test        # E2E
 ```
 
@@ -303,7 +246,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: bun run vitest --coverage
       - run: bunx playwright install --with-deps
       - run: bunx playwright test
 
@@ -320,8 +262,8 @@ jobs:
 ## Consequences
 
 - Single runtime (Bun) for all frontend tooling — simpler CI, faster installs
-- Biome replaces ESLint + Prettier — one tool, faster, less config
-- Three-layer testing (Vitest + Testing Library + Playwright) covers all verification needs
+- Linting and unit/component testing migrations remain deferred until a dedicated frontend tooling update
+- Playwright provides the current browser-flow verification surface
 - `tsc --noEmit` remains mandatory in CI despite Bun's type stripping
 - Frontend embeds into Go binary — single binary deployment maintained
 - Vite dev server with Bun gives fast DX; production builds embed cleanly
@@ -329,7 +271,7 @@ jobs:
 ## Alternatives Considered
 
 - **Node.js runtime:** Mature but slower. Bun's speed advantages compound in CI and development.
-- **ESLint + Prettier:** More configurable but two tools, slower, more config. Biome covers our needs.
-- **`bun test` for frontend:** Less mature DOM environment support. Vitest is better for React component testing.
+- **ESLint + Prettier:** More configurable, but the current project conventions stay in place until the deferred migration is revisited.
+- **`bun test` for frontend:** Less mature DOM environment support than a future Vitest-based setup, so it remains out of scope for now.
 - **SolidJS:** Smaller bundle, faster runtime. Chose React for ecosystem breadth. Can revisit if bundle size is a problem.
 - **Svelte:** Excellent DX but smaller ecosystem. Not ideal when we need rich graph visualization libraries.
