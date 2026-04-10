@@ -295,7 +295,7 @@ library:
     branch: "main"
 agent:
   agent_runner:
-    preset: forge
+    preset: invalid-preset
 `
 
 	ddxDir := filepath.Join(tempDir, ".ddx")

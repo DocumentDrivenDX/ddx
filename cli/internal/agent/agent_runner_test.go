@@ -414,12 +414,12 @@ func TestAgentResolveConfigRejectsUnsupportedPresetFromConfig(t *testing.T) {
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 	r.AgentConfigLoader = func() *AgentYAMLConfig {
-		return &AgentYAMLConfig{Preset: "forge"}
+		return &AgentYAMLConfig{Preset: "invalid-preset"}
 	}
 
 	_, err := r.resolveAgentConfig("")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "forge")
+	assert.Contains(t, err.Error(), "invalid-preset")
 	assert.Contains(t, err.Error(), "supported presets")
 }
 
@@ -429,11 +429,11 @@ func TestAgentResolveConfigRejectsUnsupportedPresetFromEnv(t *testing.T) {
 	r.AgentConfigLoader = func() *AgentYAMLConfig {
 		return &AgentYAMLConfig{Preset: "agent"}
 	}
-	t.Setenv("AGENT_PRESET", "forge")
+	t.Setenv("AGENT_PRESET", "invalid-preset")
 
 	_, err := r.resolveAgentConfig("")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "forge")
+	assert.Contains(t, err.Error(), "invalid-preset")
 	assert.Contains(t, err.Error(), "supported presets")
 }
 
