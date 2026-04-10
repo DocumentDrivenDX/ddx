@@ -82,16 +82,17 @@ Should move to a `package.yaml` in each plugin repo.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `skill.name` | string | yes | Skill identifier (e.g., `ddx-bead`) |
-| `skill.description` | string | yes | One-line purpose |
-| `skill.args` | []mapping | no | Argument hints shown in help or prompt flows |
+| `name` | string | yes | Skill identifier (e.g., `ddx-bead`) |
+| `description` | string | yes | One-line purpose |
+| `argument-hint` | string | no | Optional shorthand usage hint for help or prompt flows |
 
 **Body:** Markdown with sections describing when to use, steps, constraints,
 and cross-references to shared workflow resources.
 
-The bundled DDx skills already use this nested `skill:` mapping, and the
+The bundled DDx skills already use this top-level frontmatter shape, and the
 stable contract must preserve it so install and doctor validation accept the
-shipped skills without migration.
+shipped skills without migration. `argument-hint` is advisory only; it does not
+change skill execution semantics.
 
 ### 4. Hook Scripts
 
