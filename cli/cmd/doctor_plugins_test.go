@@ -41,6 +41,47 @@ func TestDoctorPluginsFlagReportsMissingManifest(t *testing.T) {
 	assert.Contains(t, output, "missing package.yaml")
 }
 
+func TestDoctorPluginsFlagSkipsResourceEntries(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
+
+	resourceFile := filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas", "example.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(resourceFile), 0o755))
+	require.NoError(t, os.WriteFile(resourceFile, []byte("# Example resource\n"), 0o644))
+
+	state := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{
+				Name:    "sample-plugin",
+				Version: "1.0.0",
+				Type:    registry.PackageTypePlugin,
+				Source:  pluginRoot,
+				Files:   []string{pluginRoot},
+			},
+			{
+				Name:    "persona/example",
+				Version: "latest",
+				Type:    registry.PackageTypeResource,
+				Source:  "https://github.com/DocumentDrivenDX/ddx-library",
+				Files:   []string{resourceFile},
+			},
+		},
+	}
+	require.NoError(t, registry.SaveState(state))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "missing package.yaml")
+	assert.NotContains(t, output, filepath.Join(resourceFile, "package.yaml"))
+	assert.NotContains(t, output, "not a directory")
+}
+
 func executeWithStdoutCapture(t *testing.T, root *cobra.Command, args ...string) (string, error) {
 	t.Helper()
 

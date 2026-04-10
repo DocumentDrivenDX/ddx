@@ -451,6 +451,15 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 
 	for _, entry := range state.Installed {
 		fallback, _ := reg.Find(entry.Name)
+		entryType := entry.Type
+		if entryType == "" && fallback != nil {
+			entryType = fallback.Type
+		}
+		switch entryType {
+		case registry.PackageTypePlugin, registry.PackageTypeWorkflow:
+		default:
+			continue
+		}
 		for _, issue := range registry.AuditInstalledEntry(entry, fallback) {
 			diag := DiagnosticIssue{
 				Type:        "plugin_validation",
