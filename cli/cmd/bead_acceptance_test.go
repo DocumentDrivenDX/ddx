@@ -444,6 +444,55 @@ git:
 	assert.False(t, ok)
 }
 
+func TestBeadCommandsCloseOmitsMetadataOnlyReviewFindingClosingCommitSha(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	sourceOut, err := executeCommand(rootCmd, "bead", "create", "Tracker issue", "--type", "task", "--labels", "helix,kind:planning,action:review")
+	require.NoError(t, err)
+	sourceID := strings.TrimSpace(sourceOut)
+	require.NotEmpty(t, sourceID)
+
+	_, err = executeCommand(rootCmd, "bead", "close", sourceID)
+	require.NoError(t, err)
+
+	trackerOnlySHA := gitHead(t, env.Dir, "HEAD")
+	require.NotEmpty(t, trackerOnlySHA)
+
+	findingOut, err := executeCommand(rootCmd, "bead", "create", "Tracker-only review finding", "--type", "task", "--labels", "helix,phase:build,review-finding")
+	require.NoError(t, err)
+	findingID := strings.TrimSpace(findingOut)
+	require.NotEmpty(t, findingID)
+
+	_, err = executeCommand(rootCmd, "bead", "update", findingID, "--set", "closing_commit_sha="+trackerOnlySHA)
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "close", findingID)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", findingID, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, "closed", bead["status"])
+	_, ok := bead["closing_commit_sha"]
+	assert.False(t, ok)
+}
+
 func TestBeadCommandsCloseRecordsClosingCommitForReviewBeadWithExplicitCommit(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"

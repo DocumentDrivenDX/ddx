@@ -170,7 +170,7 @@ func isReviewCloseBead(b *bead.Bead) bool {
 	}
 	for _, label := range b.Labels {
 		switch label {
-		case "action:review", "kind:review", "phase:review":
+		case "action:review", "kind:review", "phase:review", "review-finding":
 			return true
 		}
 	}
