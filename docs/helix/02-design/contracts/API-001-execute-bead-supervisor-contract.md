@@ -56,11 +56,11 @@ drained, the operator stops it, or a fatal project error occurs.
 
 1. Resolve one project context from the current repository, explicit selector,
    or `ddx server` project binding.
-2. Read the ready bead set for that project and choose the best candidate using
-   the generic execution-ready validator.
-3. Claim the chosen bead atomically.
-4. Resolve the base revision and the governing execution contract snapshot from
-   that revision.
+2. Resolve the effective base revision and the governing execution contract
+   snapshot that will govern this iteration.
+3. Read the ready bead set for that project and choose the best candidate using
+   the generic execution-ready validator against that resolved base snapshot.
+4. Claim the chosen bead atomically.
 5. Create an isolated execution worktree from the resolved base.
 6. Run `ddx agent execute-bead` against the bead in that worktree.
 7. Run all required post-run checks, including any required executions and

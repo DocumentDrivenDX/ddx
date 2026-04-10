@@ -278,13 +278,14 @@ one project context at a time.
 
 ### Workflow steps
 
-1. Resolve the bead and its governing artifacts from the DDx document graph.
-   Use the shared DDx execution validator to confirm the bead is structurally
-   execution-ready before launch; HELIX-specific policy does not participate in
-   readiness validation.
-2. Resolve the git base revision: `--from <rev>` if provided, otherwise `HEAD`.
-3. If the caller's worktree is dirty, create a checkpoint commit first and use
+1. Resolve the git base revision: `--from <rev>` if provided, otherwise `HEAD`.
+2. If the caller's worktree is dirty, create a checkpoint commit first and use
    that checkpoint as the actual base.
+3. Resolve the bead and its governing artifacts from the DDx document graph.
+   Use the shared DDx execution validator against the resolved base revision
+   and governing execution-contract snapshot to confirm the bead is
+   structurally execution-ready before launch; HELIX-specific policy does not
+   participate in readiness validation.
 4. Create an isolated execution worktree from the resolved base.
 5. Run the agent against the bead using the standard `ddx agent` harness, model,
    and reasoning controls.
