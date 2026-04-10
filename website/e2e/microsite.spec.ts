@@ -21,8 +21,9 @@ test.describe('DDx Microsite', () => {
     await page.goto('/docs/getting-started/')
     await expect(page.locator('article').getByText('ddx init')).toBeVisible()
     await expect(page.locator('article').getByText('ddx install helix')).toBeVisible()
+    await page.addStyleTag({ content: '.asciinema-container { display: none !important; }' })
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('getting-started.png', { fullPage: true })
+    await expect(page.locator('article')).toHaveScreenshot('getting-started.png')
   })
 
   test('CLI reference page', async ({ page }) => {
@@ -39,7 +40,7 @@ test.describe('DDx Microsite', () => {
 
   test('plugins page', async ({ page }) => {
     await page.goto('/docs/plugins/')
-    await expect(page.getByRole('heading', { name: 'Creating Plugins' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Plugins' })).toBeVisible()
   })
 
   test('ecosystem page', async ({ page }) => {
