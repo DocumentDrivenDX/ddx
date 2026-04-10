@@ -33,6 +33,11 @@ type usageAgg struct {
 	totalDurMS   int
 }
 
+type usageSessionRecord struct {
+	entry agent.SessionEntry
+	key   string
+}
+
 func (a *usageAgg) addSession(entry agent.SessionEntry) {
 	a.sessions++
 	a.inputTokens += entry.InputTokens
@@ -276,24 +281,46 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 		return nil, nil
 	}
 
-	sessionAggs, sessionOrder, err := aggregateUsageAggs(filepath.Join(logDir, "sessions.jsonl"), harnessFilter, since, cutoffByHarness, mirrored)
+	sessionRecords, err := readUsageSessionRecords(filepath.Join(logDir, "sessions.jsonl"), harnessFilter, since)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, h := range sessionOrder {
-		row := sessionAggs[h]
-		a, exists := byHarness[h]
-		if !exists {
-			byHarness[h] = row
-			order = append(order, h)
+	lastIndexByHarness := map[string]int{}
+	for i, record := range sessionRecords {
+		lastIndexByHarness[record.entry.Harness] = i
+	}
+
+	skipCurrentRun := map[int]struct{}{}
+	for harness, idx := range lastIndexByHarness {
+		if _, ok := byHarness[harness]; !ok {
 			continue
 		}
-		a.sessions += row.sessions
-		a.inputTokens += row.inputTokens
-		a.outputTokens += row.outputTokens
-		a.costUSD += row.costUSD
-		a.totalDurMS += row.totalDurMS
+		if sessionRecords[idx].key == "" {
+			skipCurrentRun[idx] = struct{}{}
+		}
+	}
+
+	for i, record := range sessionRecords {
+		if _, ok := skipCurrentRun[i]; ok {
+			continue
+		}
+		if record.key != "" {
+			if _, ok := mirrored[record.key]; ok {
+				continue
+			}
+		}
+		if cutoff, ok := cutoffByHarness[record.entry.Harness]; ok && !cutoff.IsZero() && !record.entry.Timestamp.Before(cutoff) {
+			continue
+		}
+
+		a, exists := byHarness[record.entry.Harness]
+		if !exists {
+			a = &usageAgg{}
+			byHarness[record.entry.Harness] = a
+			order = append(order, record.entry.Harness)
+		}
+		a.addSession(record.entry)
 	}
 
 	rows := make([]usageRow, 0, len(order))
@@ -314,6 +341,45 @@ func usageMirrorKey(nativeSessionID, traceID, spanID string) string {
 	default:
 		return ""
 	}
+}
+
+func readUsageSessionRecords(logFile, harnessFilter string, since time.Time) ([]usageSessionRecord, error) {
+	f, err := os.Open(logFile)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	records := []usageSessionRecord{}
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max line
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry agent.SessionEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		if entry.Timestamp.Before(since) {
+			continue
+		}
+		if harnessFilter != "" && entry.Harness != harnessFilter {
+			continue
+		}
+		records = append(records, usageSessionRecord{
+			entry: entry,
+			key:   usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID),
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
 }
 
 // formatComma formats an integer with comma separators.

@@ -646,12 +646,18 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if commitSHA == "" && isReviewCloseBead(target) && target.Extra != nil {
-				if existing, ok := target.Extra["closing_commit_sha"].(string); ok && existing != "" {
-					// Only clear provenance that already points at a metadata-only
-					// tracker backfill. Valid implementation boundaries need to survive
-					// metadata-only review closes so replay keeps the real landing commit.
-					if f.commitIsMetadataOnlyTrackerBackfill(existing) {
+			if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
+				return err
+			}
+
+			landedSHA := f.beadAutoCommit("close " + args[0])
+			if commitSHA == "" && landedSHA != "" {
+				if f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
+					if isReviewCloseBead(target) {
+						// Tracker-only review-finding closes must not retain any prior
+						// replay boundary. The close commit itself is the metadata-only
+						// backfill, so clear stale closing provenance instead of
+						// preserving an unrelated implementation SHA.
 						if err := s.Update(args[0], func(b *bead.Bead) {
 							if b.Extra == nil {
 								return
@@ -660,30 +666,26 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 						}); err != nil {
 							return err
 						}
+						if followupSHA := f.beadAutoCommit("close " + args[0]); followupSHA == "" {
+							return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
+						}
 					}
-				}
-			}
-
-			if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
-				return err
-			}
-
-			landedSHA := f.beadAutoCommit("close " + args[0])
-			if commitSHA == "" && landedSHA != "" && !f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
-				// Only stamp closing provenance when the close commit includes
-				// real implementation work. Pure tracker backfills should not
-				// advertise a replay boundary that points at metadata-only
-				// provenance.
-				if err := s.Update(args[0], func(b *bead.Bead) {
-					if b.Extra == nil {
-						b.Extra = make(map[string]any)
+				} else {
+					// Only stamp closing provenance when the close commit includes
+					// real implementation work. Pure tracker backfills should not
+					// advertise a replay boundary that points at metadata-only
+					// provenance.
+					if err := s.Update(args[0], func(b *bead.Bead) {
+						if b.Extra == nil {
+							b.Extra = make(map[string]any)
+						}
+						b.Extra["closing_commit_sha"] = landedSHA
+					}); err != nil {
+						return err
 					}
-					b.Extra["closing_commit_sha"] = landedSHA
-				}); err != nil {
-					return err
-				}
-				if followupSHA := f.beadAutoCommit("close " + args[0]); followupSHA == "" {
-					return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
+					if followupSHA := f.beadAutoCommit("close " + args[0]); followupSHA == "" {
+						return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
+					}
 				}
 			}
 			return nil

@@ -460,6 +460,7 @@ git:
 
 	factory := newBeadTestRoot(t, env.Dir)
 	rootCmd := factory.NewRootCommand()
+	seedSHA := gitHead(t, env.Dir, "HEAD")
 
 	sourceOut, err := executeCommand(rootCmd, "bead", "create", "Tracker issue", "--type", "task", "--labels", "helix,kind:planning,action:review")
 	require.NoError(t, err)
@@ -469,15 +470,12 @@ git:
 	_, err = executeCommand(rootCmd, "bead", "close", sourceID)
 	require.NoError(t, err)
 
-	trackerOnlySHA := gitHead(t, env.Dir, "HEAD")
-	require.NotEmpty(t, trackerOnlySHA)
-
 	findingOut, err := executeCommand(rootCmd, "bead", "create", "Tracker-only review finding", "--type", "task", "--labels", "helix,phase:build,review-finding")
 	require.NoError(t, err)
 	findingID := strings.TrimSpace(findingOut)
 	require.NotEmpty(t, findingID)
 
-	_, err = executeCommand(rootCmd, "bead", "update", findingID, "--set", "closing_commit_sha="+trackerOnlySHA)
+	_, err = executeCommand(rootCmd, "bead", "update", findingID, "--set", "closing_commit_sha="+seedSHA)
 	require.NoError(t, err)
 
 	_, err = executeCommand(rootCmd, "bead", "close", findingID)
@@ -491,6 +489,7 @@ git:
 	assert.Equal(t, "closed", bead["status"])
 	_, ok := bead["closing_commit_sha"]
 	assert.False(t, ok)
+	assert.NotEmpty(t, seedSHA)
 }
 
 func TestBeadCommandsCloseRecordsClosingCommitForReviewBeadWithExplicitCommit(t *testing.T) {

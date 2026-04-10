@@ -228,7 +228,8 @@ providers without direct billing APIs.
 - Outcome samples are fresh for one routing TTL after observation; older
   samples remain inspectable but are demoted behind fresher data.
 - Keep a rolling window of the most recent 50 outcome samples or 7 days of
-  samples per harness surface, whichever is smaller.
+  samples per resolved `canonical_target` or exact model-pin equivalent,
+  whichever is smaller.
 - Keep quota snapshots for 30 days or one billing window, whichever is
   smaller, and compact older snapshots into the burn summary rather than
   retaining them as raw routing inputs.

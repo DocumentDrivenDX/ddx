@@ -144,6 +144,9 @@ export default defineConfig({
 })
 ```
 
+Before running the E2E suite, build the embedded server binary so `webServer`
+can launch `${cliRoot}/build/ddx server --port 18080`.
+
 Run tests:
 ```bash
 bun run test:e2e        # E2E
@@ -224,7 +227,8 @@ CMD ["/ddx-server"]
 
 ### 12. CI/CD Integration
 
-Biome is deferred for this frontend stack, so the current CI example covers type checking, tests, and builds only.
+Biome is deferred for this frontend stack, so the current CI example covers
+type checking, the embedded-server Playwright path, and builds only.
 
 ```yaml
 name: Frontend CI
@@ -244,6 +248,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - run: cd cli && make build
       - run: bunx playwright install --with-deps
       - run: bun run test:e2e
 

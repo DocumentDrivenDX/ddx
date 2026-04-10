@@ -83,7 +83,7 @@ agent:
 		TraceID:         "trace-current",
 	}
 
-	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), mirroredSession, legacySession)
+	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), legacySession, mirroredSession)
 	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), routingOutcome)
 
 	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
@@ -104,7 +104,7 @@ agent:
 	assert.InDelta(t, 1500.0, byHarness["claude"].AvgDurationMS, 0.0001)
 }
 
-func TestAgentUsageSkipsUnkeyedCurrentSessionsAfterRoutingCutoff(t *testing.T) {
+func TestAgentUsageSkipsUnkeyedCurrentSessionsWrittenBeforeRoutingOutcome(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := t.TempDir()
@@ -123,21 +123,20 @@ agent:
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0o644))
 
-	outcome := agent.RoutingOutcome{
-		Harness:         "codex",
-		Surface:         "codex",
-		CanonicalTarget: "gpt-5.4",
-		Model:           "gpt-5.4",
-		ObservedAt:      time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC),
-		Success:         true,
-		LatencyMS:       2000,
-		InputTokens:     200,
-		OutputTokens:    20,
-		CostUSD:         2.50,
+	legacySession := agent.SessionEntry{
+		ID:           "as-legacy",
+		Timestamp:    time.Date(2026, 4, 9, 9, 55, 0, 0, time.UTC),
+		Harness:      "codex",
+		Model:        "gpt-5.4",
+		InputTokens:  120,
+		OutputTokens: 12,
+		CostUSD:      1.25,
+		Duration:     1000,
+		ExitCode:     0,
 	}
-	session := agent.SessionEntry{
+	currentSession := agent.SessionEntry{
 		ID:           "as-current",
-		Timestamp:    time.Date(2026, 4, 9, 10, 0, 1, 0, time.UTC),
+		Timestamp:    time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC),
 		Harness:      "codex",
 		Model:        "gpt-5.4",
 		InputTokens:  200,
@@ -146,9 +145,21 @@ agent:
 		Duration:     2000,
 		ExitCode:     0,
 	}
+	outcome := agent.RoutingOutcome{
+		Harness:         "codex",
+		Surface:         "codex",
+		CanonicalTarget: "gpt-5.4",
+		Model:           "gpt-5.4",
+		ObservedAt:      time.Date(2026, 4, 9, 10, 0, 1, 0, time.UTC),
+		Success:         true,
+		LatencyMS:       2000,
+		InputTokens:     200,
+		OutputTokens:    20,
+		CostUSD:         2.50,
+	}
 
+	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), legacySession, currentSession)
 	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), outcome)
-	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), session)
 
 	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
@@ -156,9 +167,9 @@ agent:
 
 	row := rows[0]
 	assert.Equal(t, "codex", row.Harness)
-	assert.Equal(t, 1, row.Sessions)
-	assert.Equal(t, 200, row.InputTokens)
-	assert.Equal(t, 20, row.OutputTokens)
-	assert.InDelta(t, 2.50, row.CostUSD, 0.0001)
-	assert.InDelta(t, 2000.0, row.AvgDurationMS, 0.0001)
+	assert.Equal(t, 2, row.Sessions)
+	assert.Equal(t, 320, row.InputTokens)
+	assert.Equal(t, 32, row.OutputTokens)
+	assert.InDelta(t, 3.75, row.CostUSD, 0.0001)
+	assert.InDelta(t, 1500.0, row.AvgDurationMS, 0.0001)
 }
