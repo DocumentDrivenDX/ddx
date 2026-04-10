@@ -1,6 +1,6 @@
 module github.com/DocumentDrivenDX/ddx
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/fatih/color v1.18.0
@@ -84,7 +84,7 @@ require (
 )
 
 require (
-	github.com/DocumentDrivenDX/agent v0.1.1
+	github.com/DocumentDrivenDX/agent v0.2.0
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
