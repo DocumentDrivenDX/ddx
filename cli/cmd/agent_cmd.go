@@ -1060,8 +1060,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	asJSON, _ := cmd.Flags().GetBool("json")
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-	execFactory := *f
-	execFactory.WorkingDir = projectRoot
+	execFactory := f.withWorkingDir(projectRoot)
 
 	worker := &agent.ExecuteBeadWorker{
 		Store: store,

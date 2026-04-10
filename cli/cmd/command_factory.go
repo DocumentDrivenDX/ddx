@@ -68,6 +68,22 @@ func NewCommandFactoryWithViper(workingDir string, v *viper.Viper) *CommandFacto
 	}
 }
 
+// withWorkingDir returns a sibling factory that shares configuration/runtime
+// dependencies but does not copy lock-bearing state by value.
+func (f *CommandFactory) withWorkingDir(workingDir string) *CommandFactory {
+	return &CommandFactory{
+		Version:                f.Version,
+		Commit:                 f.Commit,
+		Date:                   f.Date,
+		WorkingDir:             workingDir,
+		AgentRunnerOverride:    f.AgentRunnerOverride,
+		executeBeadGitOverride: f.executeBeadGitOverride,
+		viperInstance:          f.viperInstance,
+		updateChecker:          f.updateChecker,
+		updateDone:             f.updateDone,
+	}
+}
+
 // NewRootCommand creates a fresh root command with all subcommands
 func (f *CommandFactory) NewRootCommand() *cobra.Command {
 	// Local flag variables scoped to this command instance
