@@ -133,7 +133,7 @@ export default defineConfig({
 
 Run tests:
 ```bash
-bunx playwright test        # E2E
+bun run test:e2e        # E2E
 ```
 
 ### 8. Type Checking
@@ -141,7 +141,7 @@ bunx playwright test        # E2E
 Bun strips types but doesn't check them. Run `tsc` separately:
 
 ```bash
-bun run typecheck   # package.json: "typecheck": "tsc --noEmit"
+bunx tsc --noEmit
 ```
 
 **In CI**, type checking runs as a separate job — failures block merge:
@@ -152,27 +152,18 @@ typecheck:
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - run: bun install --frozen-lockfile
-    - run: bun run typecheck
+    - run: bunx tsc --noEmit
 ```
 
 ### 9. Bundle Analysis and Performance
 
-**Bundle size enforcement** with `size-limit`:
-```json
-// package.json
-"size-limit": [
-  { "path": "dist/assets/*.js", "limit": "200 kB" }
-]
-```
+**Bundle size enforcement** is deferred until the frontend adopts a dedicated budget tool.
 
 **Web Vitals** measurement:
 - `web-vitals` package reports LCP, INP, CLS to the server or analytics
 - Core Web Vitals thresholds: LCP < 2.5s, INP < 200ms, CLS < 0.1
 
-**Lighthouse CI** for automated performance audits:
-```yaml
-- run: bunx @lhci/cli autorun
-```
+**Lighthouse CI** for automated performance audits is deferred until a tracked performance budget workflow lands.
 
 ### 10. Observability and Error Tracking
 
@@ -220,25 +211,19 @@ CMD ["/ddx-server"]
 
 ### 12. CI/CD Integration
 
+Biome is deferred for this frontend stack, so the current CI example covers type checking, tests, and builds only.
+
 ```yaml
 name: Frontend CI
 on: [push, pull_request]
 jobs:
-  lint-format:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bunx biome check .
-
   typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: bun run typecheck
+      - run: bunx tsc --noEmit
 
   test:
     runs-on: ubuntu-latest
@@ -247,7 +232,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps
-      - run: bunx playwright test
+      - run: bun run test:e2e
 
   build:
     runs-on: ubuntu-latest
@@ -256,7 +241,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bunx size-limit
 ```
 
 ## Consequences
