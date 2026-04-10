@@ -185,24 +185,24 @@ The frontend is embedded into the Go binary via `embed.FS`. No separate deployme
 **Build pipeline:**
 ```makefile
 build:
-    cd frontend && bun install --frozen-lockfile && bun run build
-    cd server && go build -o ddx-server .
+    cd cli/internal/server/frontend && bun install --frozen-lockfile && bun run build
+    cd cli/internal/server && go build -o ddx-server .
 ```
 
 **Docker** (when needed):
 ```dockerfile
 FROM oven/bun:1 AS frontend
-WORKDIR /app/frontend
-COPY frontend/package.json frontend/bun.lock ./
+WORKDIR /app/cli/internal/server/frontend
+COPY cli/internal/server/frontend/package.json cli/internal/server/frontend/bun.lock ./
 RUN bun install --frozen-lockfile
-COPY frontend/ .
+COPY cli/internal/server/frontend/ .
 RUN bun run build
 
 FROM golang:1.26 AS backend
 WORKDIR /app
-COPY --from=frontend /app/frontend/dist server/frontend/dist
 COPY . .
-RUN cd server && go build -o /ddx-server .
+COPY --from=frontend /app/cli/internal/server/frontend/dist cli/internal/server/frontend/dist
+RUN cd cli/internal/server && go build -o /ddx-server .
 
 FROM gcr.io/distroless/base
 COPY --from=backend /ddx-server /
