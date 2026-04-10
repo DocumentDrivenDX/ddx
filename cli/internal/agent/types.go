@@ -211,15 +211,17 @@ type ComparisonRecord struct {
 
 // HarnessState captures the runtime routing-relevant state of a harness.
 type HarnessState struct {
-	Installed     bool       `json:"installed"`
-	Reachable     bool       `json:"reachable"`
-	Authenticated bool       `json:"authenticated"`
-	QuotaOK       bool       `json:"quota_ok"`
-	Degraded      bool       `json:"degraded"`
-	PolicyOK      bool       `json:"policy_ok"`
-	LastChecked   time.Time  `json:"last_checked,omitempty"`
-	Error         string     `json:"error,omitempty"`
-	Quota         *QuotaInfo `json:"quota,omitempty"`
+	Installed     bool                   `json:"installed"`
+	Reachable     bool                   `json:"reachable"`
+	Authenticated bool                   `json:"authenticated"`
+	QuotaOK       bool                   `json:"quota_ok"`
+	QuotaState    string                 `json:"quota_state,omitempty"` // ok, blocked, unknown
+	Degraded      bool                   `json:"degraded"`
+	PolicyOK      bool                   `json:"policy_ok"`
+	LastChecked   time.Time              `json:"last_checked,omitempty"`
+	Error         string                 `json:"error,omitempty"`
+	Quota         *QuotaInfo             `json:"quota,omitempty"`
+	RoutingSignal *RoutingSignalSnapshot `json:"routing_signal,omitempty"`
 }
 
 // QuotaInfo holds parsed quota data from CLI introspection.
@@ -227,6 +229,15 @@ type QuotaInfo struct {
 	PercentUsed int    `json:"percent_used"`
 	LimitWindow string `json:"limit_window,omitempty"` // e.g. "5h", "7 day"
 	ResetDate   string `json:"reset_date,omitempty"`   // e.g. "April 12"
+}
+
+// RoutingSignalSnapshot captures provider-native routing signal metadata and
+// the provider-native usage/quota state attached to a harness state probe.
+type RoutingSignalSnapshot struct {
+	Provider        string               `json:"provider"`
+	Source          SignalSourceMetadata `json:"source"`
+	CurrentQuota    QuotaSignal          `json:"current_quota,omitempty"`
+	HistoricalUsage UsageSignal          `json:"historical_usage,omitempty"`
 }
 
 // RoutingOutcome is one bounded sample of DDx-observed routing performance.

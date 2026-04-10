@@ -17,12 +17,22 @@ import (
 
 // usageRow holds aggregated stats for a single harness.
 type usageRow struct {
-	Harness       string  `json:"harness"`
-	Sessions      int     `json:"sessions"`
-	InputTokens   int     `json:"input_tokens"`
-	OutputTokens  int     `json:"output_tokens"`
-	CostUSD       float64 `json:"cost_usd"`
-	AvgDurationMS float64 `json:"avg_duration_ms"`
+	Harness                string  `json:"harness"`
+	Sessions               int     `json:"sessions"`
+	InputTokens            int     `json:"input_tokens"`
+	OutputTokens           int     `json:"output_tokens"`
+	CostUSD                float64 `json:"cost_usd"`
+	AvgDurationMS          float64 `json:"avg_duration_ms"`
+	QuotaState             string  `json:"quota_state,omitempty"`
+	SignalProvider         string  `json:"signal_provider,omitempty"`
+	SignalKind             string  `json:"signal_kind,omitempty"`
+	SignalFreshness        string  `json:"signal_freshness,omitempty"`
+	SignalBasis            string  `json:"signal_basis,omitempty"`
+	NativeInputTokens      int     `json:"native_input_tokens,omitempty"`
+	NativeOutputTokens     int     `json:"native_output_tokens,omitempty"`
+	NativeTotalTokens      int     `json:"native_total_tokens,omitempty"`
+	NativeSessionCount     int     `json:"native_session_count,omitempty"`
+	NativeQuotaUsedPercent int     `json:"native_quota_used_percent,omitempty"`
 }
 
 type usageAgg struct {
@@ -107,17 +117,22 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 			}
 
 			r := f.agentRunner()
-			rows, err := aggregateUsageFromRoutingMetrics(r.Config.SessionLogDir, harness, sinceTime)
+			logDir := r.Config.SessionLogDir
+			if logDir != "" && !filepath.IsAbs(logDir) {
+				logDir = filepath.Join(f.WorkingDir, logDir)
+			}
+			rows, err := aggregateUsageFromRoutingMetrics(logDir, harness, sinceTime)
 			if err != nil {
 				return err
 			}
 			if len(rows) == 0 {
-				logFile := filepath.Join(r.Config.SessionLogDir, "sessions.jsonl")
+				logFile := filepath.Join(logDir, "sessions.jsonl")
 				rows, err = aggregateUsage(logFile, harness, sinceTime, nil)
 			}
 			if err != nil {
 				return err
 			}
+			rows = enrichUsageRowsWithRoutingSignals(r, rows)
 
 			switch format {
 			case "json":
@@ -330,6 +345,30 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 	return rows, nil
 }
 
+func enrichUsageRowsWithRoutingSignals(r *agent.Runner, rows []usageRow) []usageRow {
+	if r == nil {
+		return rows
+	}
+	for i := range rows {
+		state := r.ProbeHarnessState(rows[i].Harness, 2*time.Second)
+		rows[i].QuotaState = state.QuotaState
+		if state.RoutingSignal == nil {
+			continue
+		}
+		signal := state.RoutingSignal
+		rows[i].SignalProvider = signal.Provider
+		rows[i].SignalKind = signal.Source.Kind
+		rows[i].SignalFreshness = signal.Source.Freshness
+		rows[i].SignalBasis = signal.Source.Basis
+		rows[i].NativeInputTokens = signal.HistoricalUsage.InputTokens
+		rows[i].NativeOutputTokens = signal.HistoricalUsage.OutputTokens
+		rows[i].NativeTotalTokens = signal.HistoricalUsage.TotalTokens
+		rows[i].NativeSessionCount = signal.HistoricalUsage.SessionCount
+		rows[i].NativeQuotaUsedPercent = signal.CurrentQuota.UsedPercent
+	}
+	return rows
+}
+
 func usageMirrorKey(nativeSessionID, traceID, spanID string) string {
 	switch {
 	case nativeSessionID != "":
@@ -402,8 +441,8 @@ func formatComma(n int) string {
 
 func renderUsageTable(cmd *cobra.Command, rows []usageRow) error {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%-12s  %8s  %13s  %14s  %10s  %12s\n",
-		"HARNESS", "SESSIONS", "INPUT TOKENS", "OUTPUT TOKENS", "EST. COST", "AVG DURATION")
+	fmt.Fprintf(out, "%-12s  %8s  %13s  %14s  %10s  %12s  %-8s  %-18s  %-10s\n",
+		"HARNESS", "SESSIONS", "INPUT TOKENS", "OUTPUT TOKENS", "EST. COST", "AVG DURATION", "QUOTA", "SOURCE", "FRESHNESS")
 
 	var totalSessions int
 	var totalInput, totalOutput int
@@ -411,13 +450,23 @@ func renderUsageTable(cmd *cobra.Command, rows []usageRow) error {
 	var totalDurMS float64
 
 	for _, r := range rows {
-		fmt.Fprintf(out, "%-12s  %8d  %13s  %14s  %10s  %11.1fs\n",
+		source := r.SignalProvider
+		if r.SignalKind != "" {
+			if source != "" {
+				source += "/"
+			}
+			source += r.SignalKind
+		}
+		fmt.Fprintf(out, "%-12s  %8d  %13s  %14s  %10s  %11.1fs  %-8s  %-18s  %-10s\n",
 			r.Harness,
 			r.Sessions,
 			formatComma(r.InputTokens),
 			formatComma(r.OutputTokens),
 			fmt.Sprintf("$%.2f", r.CostUSD),
 			r.AvgDurationMS/1000.0,
+			r.QuotaState,
+			source,
+			r.SignalFreshness,
 		)
 		totalSessions += r.Sessions
 		totalInput += r.InputTokens
@@ -449,7 +498,7 @@ func renderUsageJSON(cmd *cobra.Command, rows []usageRow) error {
 
 func renderUsageCSV(cmd *cobra.Command, rows []usageRow) error {
 	w := csv.NewWriter(cmd.OutOrStdout())
-	_ = w.Write([]string{"harness", "sessions", "input_tokens", "output_tokens", "cost_usd", "avg_duration_ms"})
+	_ = w.Write([]string{"harness", "sessions", "input_tokens", "output_tokens", "cost_usd", "avg_duration_ms", "quota_state", "signal_provider", "signal_kind", "signal_freshness", "native_input_tokens", "native_output_tokens", "native_total_tokens", "native_session_count", "native_quota_used_percent"})
 	for _, r := range rows {
 		_ = w.Write([]string{
 			r.Harness,
@@ -458,6 +507,15 @@ func renderUsageCSV(cmd *cobra.Command, rows []usageRow) error {
 			strconv.Itoa(r.OutputTokens),
 			fmt.Sprintf("%.4f", r.CostUSD),
 			fmt.Sprintf("%.1f", r.AvgDurationMS),
+			r.QuotaState,
+			r.SignalProvider,
+			r.SignalKind,
+			r.SignalFreshness,
+			strconv.Itoa(r.NativeInputTokens),
+			strconv.Itoa(r.NativeOutputTokens),
+			strconv.Itoa(r.NativeTotalTokens),
+			strconv.Itoa(r.NativeSessionCount),
+			strconv.Itoa(r.NativeQuotaUsedPercent),
 		})
 	}
 	w.Flush()

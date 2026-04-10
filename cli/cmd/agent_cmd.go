@@ -325,7 +325,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				routingCfg := r.Config
 				routingCfg.Harness = ""
 				req := agent.NormalizeRouteRequest(flags, routingCfg, r.Catalog)
-				plans := r.BuildCandidatePlans(req, nil)
+				plans := r.ProbeAndBuildCandidatePlans(req, timeout)
 				ranked := agent.RankCandidates(req.Profile, plans)
 				for _, plan := range ranked {
 					if plan.Viable {
@@ -621,19 +621,39 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 						indicator = "not reachable"
 					} else if !st.Authenticated {
 						indicator = "not authenticated"
-					} else if !st.QuotaOK {
+					} else if st.QuotaState == "blocked" || (!st.QuotaOK && st.QuotaState != "unknown") {
 						indicator = "quota exceeded"
 					} else if st.Degraded {
 						indicator = "degraded"
+					} else if st.QuotaState == "unknown" {
+						indicator = "quota unknown"
 					}
-					line := fmt.Sprintf("%-12s  installed=%-5v  reachable=%-5v  auth=%-5v  quota=%-5v  [%s]",
-						e.Name, st.Installed, st.Reachable, st.Authenticated, st.QuotaOK, indicator)
+					quotaState := st.QuotaState
+					if quotaState == "" {
+						if st.QuotaOK {
+							quotaState = "ok"
+						} else {
+							quotaState = "blocked"
+						}
+					}
+					line := fmt.Sprintf("%-12s  installed=%-5v  reachable=%-5v  auth=%-5v  quota=%-8s  [%s]",
+						e.Name, st.Installed, st.Reachable, st.Authenticated, quotaState, indicator)
 					if st.Quota != nil {
 						quota := st.Quota
 						if quota.ResetDate != "" {
 							line += fmt.Sprintf("  quota: %d%% of %s (resets %s)", quota.PercentUsed, quota.LimitWindow, quota.ResetDate)
 						} else {
 							line += fmt.Sprintf("  quota: %d%% of %s", quota.PercentUsed, quota.LimitWindow)
+						}
+					}
+					if st.RoutingSignal != nil {
+						signal := st.RoutingSignal
+						line += fmt.Sprintf("  source: %s/%s", signal.Source.Provider, signal.Source.Kind)
+						if signal.Source.Freshness != "" {
+							line += fmt.Sprintf("  freshness: %s", signal.Source.Freshness)
+						}
+						if signal.HistoricalUsage.TotalTokens > 0 {
+							line += fmt.Sprintf("  native-usage: %d tokens", signal.HistoricalUsage.TotalTokens)
 						}
 					}
 					if !st.LastChecked.IsZero() {

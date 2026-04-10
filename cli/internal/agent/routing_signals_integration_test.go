@@ -1,0 +1,91 @@
+package agent
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestProbeHarnessStateUsesCodexNativeRoutingSignal(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codex-session.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(
+		`{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":10}}`+"\n"+
+			`{"type":"session.updated","token_count":{"rate_limits":{"primary":{"used_percent":97,"window_minutes":300,"resets_at":"April 12"}}}}`+"\n",
+	), 0o644))
+	t.Setenv(codexNativeSessionEnv, path)
+
+	state := r.ProbeHarnessState("codex", 2*time.Second)
+	require.NotNil(t, state.RoutingSignal)
+
+	assert.Equal(t, "blocked", state.QuotaState)
+	assert.False(t, state.QuotaOK)
+	assert.Equal(t, 97, state.Quota.PercentUsed)
+	assert.Equal(t, "codex", state.RoutingSignal.Provider)
+	assert.Equal(t, codexNativeSessionSourceKind, state.RoutingSignal.Source.Kind)
+	assert.Equal(t, "fresh", state.RoutingSignal.Source.Freshness)
+	assert.Equal(t, 135, state.RoutingSignal.HistoricalUsage.TotalTokens)
+}
+
+func TestProbeHarnessStateUsesClaudeStatsCacheAndLeavesQuotaUnknown(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	statsDir := filepath.Join(home, ".claude")
+	require.NoError(t, os.MkdirAll(statsDir, 0o755))
+	path := filepath.Join(statsDir, "stats-cache.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+		"dailyActivity": [
+			{"date":"2026-04-09","sessions":2,"usage":{"input_tokens":100,"cached_input_tokens":5,"output_tokens":20}}
+		],
+		"modelUsage": {
+			"claude-sonnet-4-6": {"inputTokens":500,"outputTokens":70,"cachedInputTokens":12,"sessionCount":3}
+		}
+	}`), 0o644))
+	t.Setenv("HOME", home)
+	t.Setenv(claudeStatsCacheEnv, path)
+
+	state := r.ProbeHarnessState("claude", 2*time.Second)
+	require.NotNil(t, state.RoutingSignal)
+
+	assert.Equal(t, "unknown", state.QuotaState)
+	assert.True(t, state.QuotaOK)
+	assert.Equal(t, "claude", state.RoutingSignal.Provider)
+	assert.Equal(t, claudeStatsCacheSourceKind, state.RoutingSignal.Source.Kind)
+	assert.Equal(t, "cached", state.RoutingSignal.Source.Freshness)
+	assert.Equal(t, 582, state.RoutingSignal.HistoricalUsage.TotalTokens)
+}
+
+func TestProbeAndBuildCandidatePlansUsesNativeQuotaSignal(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codex-session.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(
+		`{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":5}}`+"\n"+
+			`{"type":"session.updated","token_count":{"rate_limits":{"primary":{"used_percent":97,"window_minutes":300,"resets_at":"April 12"}}}}`+"\n",
+	), 0o644))
+	t.Setenv(codexNativeSessionEnv, path)
+
+	plans := r.ProbeAndBuildCandidatePlans(RouteRequest{Profile: "cheap"}, 2*time.Second)
+
+	var codexPlan *CandidatePlan
+	for i := range plans {
+		if plans[i].Harness == "codex" {
+			codexPlan = &plans[i]
+			break
+		}
+	}
+	require.NotNil(t, codexPlan)
+	assert.False(t, codexPlan.Viable)
+	assert.Equal(t, "quota exceeded", codexPlan.RejectReason)
+	assert.Equal(t, "blocked", codexPlan.State.QuotaState)
+	assert.NotNil(t, codexPlan.State.RoutingSignal)
+}

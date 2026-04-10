@@ -78,6 +78,31 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 	}
 	state.Installed = true
 
+	// Load provider-native routing signals where the repo/docs define a stable source.
+	if harnessName == "codex" || harnessName == "claude" {
+		signal := r.LoadRoutingSignalSnapshot(harnessName, state.LastChecked)
+		state.RoutingSignal = &signal
+		if signal.CurrentQuota.State != "" {
+			state.QuotaState = signal.CurrentQuota.State
+			if signal.CurrentQuota.State == "blocked" {
+				state.QuotaOK = false
+			}
+		}
+		if signal.CurrentQuota.State == "blocked" {
+			state.QuotaOK = false
+		}
+		if state.Quota == nil && signal.CurrentQuota.State != "unknown" {
+			state.Quota = &QuotaInfo{
+				PercentUsed: signal.CurrentQuota.UsedPercent,
+				LimitWindow: fmt.Sprintf("%d min", signal.CurrentQuota.WindowMinutes),
+				ResetDate:   signal.CurrentQuota.ResetsAt,
+			}
+		}
+		if signal.CurrentQuota.State == "unknown" && harnessName == "claude" {
+			state.QuotaOK = true
+		}
+	}
+
 	// If there's a quota command, drive it to get quota data.
 	if harness.QuotaCommand != "" {
 		quota, probeErr := r.probeQuota(harnessName, harness, timeout)
@@ -97,7 +122,13 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 			if quota.PercentUsed >= 95 {
 				state.QuotaOK = false
 			}
+			if state.QuotaState == "" {
+				state.QuotaState = quotaStateFromUsedPercent(quota.PercentUsed)
+			}
 			r.recordQuotaSnapshot(harnessName, harness, quota, "async-probe")
+		}
+		if state.QuotaState == "" {
+			state.QuotaState = "ok"
 		}
 		return state
 	}
@@ -105,7 +136,12 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 	// No quota command: mark reachable based on binary presence only.
 	state.Reachable = true
 	state.Authenticated = true
-	state.QuotaOK = true
+	if state.QuotaState == "" {
+		state.QuotaState = "unknown"
+	}
+	if state.QuotaState != "blocked" {
+		state.QuotaOK = true
+	}
 	return state
 }
 

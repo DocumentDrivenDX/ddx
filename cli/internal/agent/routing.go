@@ -282,7 +282,7 @@ func rejectIfNotViable(plan CandidatePlan, req RouteRequest) string {
 	if !s.Authenticated {
 		return "not authenticated"
 	}
-	if !s.QuotaOK {
+	if s.QuotaState == "blocked" || (s.QuotaState == "" && !s.QuotaOK) {
 		return "quota exceeded"
 	}
 	if s.Degraded {
@@ -381,6 +381,17 @@ func scoreCandidate(profile string, plan CandidatePlan) float64 {
 	// Penalize near-limit quota (>= 80% used).
 	if plan.State.Quota != nil && plan.State.Quota.PercentUsed >= 80 {
 		base -= float64(plan.State.Quota.PercentUsed-80) * 2
+	}
+	if plan.State.QuotaState == "unknown" {
+		base -= 3
+	}
+	if plan.State.RoutingSignal != nil {
+		switch plan.State.RoutingSignal.Source.Freshness {
+		case "cached":
+			base -= 1
+		case "stale":
+			base -= 4
+		}
 	}
 
 	return base
