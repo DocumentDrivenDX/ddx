@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -73,6 +75,37 @@ func (f *CommandFactory) beadAutoCommit(operation string) string {
 	beadsFile := filepath.Join(f.WorkingDir, ".ddx", "beads.jsonl")
 	sha, _ := gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
 	return sha
+}
+
+// commitTouchesNonTrackerFiles reports whether the given commit changed any
+// file outside .ddx/. Tracker-only backfills should not be stamped as replay
+// provenance because FEAT-019 treats closing_commit_sha as a replay boundary.
+func (f *CommandFactory) commitTouchesNonTrackerFiles(commitSHA string) bool {
+	if commitSHA == "" {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "show", "--pretty=format:", "--name-only", commitSHA)
+	cmd.Dir = f.WorkingDir
+	out, err := cmd.Output()
+	if err != nil {
+		return true
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		path := strings.TrimSpace(line)
+		if path == "" {
+			continue
+		}
+		if !strings.HasPrefix(path, ".ddx/") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (f *CommandFactory) beadStore() *bead.Store {
@@ -518,10 +551,10 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			}
 
 			landedSHA := f.beadAutoCommit("close " + args[0])
-			if commitSHA == "" && landedSHA != "" {
-				// The landed commit SHA is only known after the close row lands.
-				// Stamp it in a follow-up tracker update, then auto-commit that
-				// metadata so the worktree ends clean.
+			if commitSHA == "" && landedSHA != "" && f.commitTouchesNonTrackerFiles(landedSHA) {
+				// Only stamp closing provenance when the close commit includes
+				// non-tracker work. Pure tracker backfills should not advertise a
+				// replay boundary that points at metadata-only provenance.
 				if err := s.Update(args[0], func(b *bead.Bead) {
 					if b.Extra == nil {
 						b.Extra = make(map[string]any)

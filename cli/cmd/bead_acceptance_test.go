@@ -206,7 +206,7 @@ func TestBeadCommandsEvidenceAppendAndList(t *testing.T) {
 	require.Len(t, rawEvents, 1)
 }
 
-func TestBeadCommandsCloseRecordsLandedCommit(t *testing.T) {
+func TestBeadCommandsCloseOmitsTrackerOnlyClosingCommitSha(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"
 library:
@@ -218,66 +218,7 @@ git:
   auto_commit: always
   commit_prefix: beads
 `)
-
-	stateFile := filepath.Join(env.Dir, "fake-git-state")
-	countFile := filepath.Join(env.Dir, "fake-git-count")
-	closeCommitSHA := "3333333333333333333333333333333333333333"
-	provenanceCommitSHA := "4444444444444444444444444444444444444444"
-	require.NoError(t, os.WriteFile(stateFile, []byte("1111111111111111111111111111111111111111"), 0o644))
-	require.NoError(t, os.WriteFile(countFile, []byte("0"), 0o644))
-
-	binDir := filepath.Join(env.Dir, "bin")
-	require.NoError(t, os.MkdirAll(binDir, 0o755))
-	fakeGit := filepath.Join(binDir, "git")
-	require.NoError(t, os.WriteFile(fakeGit, []byte(`#!/bin/sh
-set -eu
-state_file="$DDX_FAKE_GIT_STATE"
-count_file="$DDX_FAKE_GIT_COUNT"
-head_one="$DDX_FAKE_GIT_SHA_1"
-head_two="$DDX_FAKE_GIT_SHA_2"
-head_three="$DDX_FAKE_GIT_SHA_3"
-
-case "$1" in
-  rev-parse)
-    if [ "${2:-}" = "--git-dir" ]; then
-      exit 0
-    fi
-    if [ "${2:-}" = "HEAD" ]; then
-      cat "$state_file"
-      exit 0
-    fi
-    exit 0
-    ;;
-  add)
-    exit 0
-    ;;
-  commit)
-    count="$(cat "$count_file")"
-    count=$((count + 1))
-    printf '%s' "$count" > "$count_file"
-    if [ "$count" -eq 1 ]; then
-      printf '%s' "$head_one" > "$state_file"
-    elif [ "$count" -eq 2 ]; then
-      printf '%s' "$head_two" > "$state_file"
-    elif [ "$count" -eq 3 ]; then
-      printf '%s' "$head_three" > "$state_file"
-    fi
-    exit 0
-    ;;
-  status)
-    exit 0
-    ;;
-  *)
-    exit 0
-    ;;
-esac
-`), 0o755))
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("DDX_FAKE_GIT_STATE", stateFile)
-	t.Setenv("DDX_FAKE_GIT_COUNT", countFile)
-	t.Setenv("DDX_FAKE_GIT_SHA_1", "2222222222222222222222222222222222222222")
-	t.Setenv("DDX_FAKE_GIT_SHA_2", closeCommitSHA)
-	t.Setenv("DDX_FAKE_GIT_SHA_3", provenanceCommitSHA)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
 
 	factory := newBeadTestRoot(t, env.Dir)
 	rootCmd := factory.NewRootCommand()
@@ -287,24 +228,16 @@ esac
 	id := strings.TrimSpace(createOut)
 	require.NotEmpty(t, id)
 
-	headBeforeClose := gitHead(t, env.Dir)
-	require.NotEmpty(t, headBeforeClose)
-
 	_, err = executeCommand(rootCmd, "bead", "close", id)
 	require.NoError(t, err)
-
-	headAfterClose := gitHead(t, env.Dir)
-	require.NotEmpty(t, headAfterClose)
-	assert.NotEqual(t, headBeforeClose, headAfterClose)
-	assert.Equal(t, "3", mustReadFile(t, countFile))
 
 	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
 	require.NoError(t, err)
 
 	var bead map[string]any
 	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
-	assert.Equal(t, closeCommitSHA, bead["closing_commit_sha"])
-	assert.Equal(t, provenanceCommitSHA, headAfterClose)
+	_, ok := bead["closing_commit_sha"]
+	assert.False(t, ok)
 
 	statusCmd := exec.Command("git", "status", "--short")
 	statusCmd.Dir = env.Dir
@@ -313,7 +246,7 @@ esac
 	assert.Empty(t, strings.TrimSpace(string(statusOut)))
 }
 
-func TestBeadCommandsCloseLeavesCleanGitStatus(t *testing.T) {
+func TestBeadCommandsCloseRecordsClosingCommitForMixedClose(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"
 library:
@@ -335,6 +268,12 @@ git:
 	require.NoError(t, err)
 	id := strings.TrimSpace(createOut)
 	require.NotEmpty(t, id)
+
+	stagePath := filepath.Join(env.Dir, "mixed-close.txt")
+	require.NoError(t, os.WriteFile(stagePath, []byte("mixed close\n"), 0o644))
+	stageCmd := exec.Command("git", "add", "mixed-close.txt")
+	stageCmd.Dir = env.Dir
+	require.NoError(t, stageCmd.Run())
 
 	_, err = executeCommand(rootCmd, "bead", "close", id)
 	require.NoError(t, err)
