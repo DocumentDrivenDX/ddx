@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 )
 
 // setupTestDir creates a temp directory with a library and bead store.
@@ -53,6 +56,35 @@ library:
 	beadBlocked := `{"id":"bx-003","title":"Blocked bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-003","depends_on_id":"bx-001","type":"blocks"}]}`
 	beadsContent := beadOpen + "\n" + beadClosed + "\n" + beadBlocked + "\n"
 	if err := os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beadsContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	return dir
+}
+
+func setupProcessMetricsTestDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	ddxDir := filepath.Join(dir, ".ddx")
+	if err := os.MkdirAll(filepath.Join(dir, agent.DefaultLogDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	beads := []string{
+		`{"id":"bx-001","title":"Feature one","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T03:30:00Z","labels":["helix"],"spec-id":"FEAT-001","session_id":"as-001","events":[{"kind":"status","summary":"closed","created_at":"2026-01-01T01:00:00Z","source":"test"},{"kind":"status","summary":"open","created_at":"2026-01-01T02:00:00Z","source":"test"},{"kind":"status","summary":"closed","created_at":"2026-01-01T03:00:00Z","source":"test"}]}`,
+		`{"id":"bx-002","title":"Feature two","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-02T00:00:00Z","updated_at":"2026-01-02T01:30:00Z","spec-id":"FEAT-001","session_id":"as-002","events":[{"kind":"status","summary":"closed","created_at":"2026-01-02T01:30:00Z","source":"test"}]}`,
+	}
+	if err := os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beads[0]+"\n"+beads[1]+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sessions := []string{
+		`{"id":"as-001","timestamp":"2026-01-01T00:30:00Z","harness":"codex","model":"gpt-5.4","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":2.5,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-001"}}`,
+		`{"id":"as-002","timestamp":"2026-01-02T00:45:00Z","harness":"claude","model":"claude-sonnet-4-6","prompt_len":120,"input_tokens":1000,"output_tokens":1000,"total_tokens":2000,"duration_ms":2000,"exit_code":0,"correlation":{"bead_id":"bx-002"}}`,
+		`{"id":"as-003","timestamp":"2026-01-03T00:00:00Z","harness":"codex","prompt_len":50,"input_tokens":10,"output_tokens":20,"total_tokens":30,"duration_ms":150,"exit_code":0}`,
+	}
+	if err := os.WriteFile(filepath.Join(dir, agent.DefaultLogDir, "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"+sessions[2]+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -210,6 +242,108 @@ func TestSearchMissingQuery(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
 	}
+}
+
+func TestProcessMetricsEndpoints(t *testing.T) {
+	dir := setupProcessMetricsTestDir(t)
+	srv := New(":0", dir)
+
+	t.Run("summary", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/metrics/summary", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var summary processmetrics.AggregateSummary
+		if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if summary.Beads.Total != 2 || summary.Beads.Closed != 2 || summary.Beads.Reopened != 1 {
+			t.Fatalf("unexpected summary counts: %+v", summary.Beads)
+		}
+		if summary.Sessions.Total != 3 || summary.Sessions.Correlated != 2 || summary.Sessions.Uncorrelated != 1 {
+			t.Fatalf("unexpected session summary: %+v", summary.Sessions)
+		}
+	})
+
+	t.Run("cost", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/metrics/cost?feature=FEAT-001", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var report processmetrics.CostReport
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if report.Scope != "feature" || report.FeatureID != "FEAT-001" {
+			t.Fatalf("unexpected report scope: %+v", report)
+		}
+		if len(report.Beads) != 2 || len(report.Features) != 1 {
+			t.Fatalf("unexpected cost rows: %+v", report)
+		}
+		if report.Beads[0].BeadID != "bx-001" || report.Beads[1].BeadID != "bx-002" {
+			t.Fatalf("unexpected bead ordering: %+v", report.Beads)
+		}
+	})
+
+	t.Run("cycle-time", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/metrics/cycle-time", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var report processmetrics.CycleTimeReport
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if report.Summary.KnownCount != 2 || len(report.Beads) != 2 {
+			t.Fatalf("unexpected cycle-time summary: %+v", report.Summary)
+		}
+		if report.Beads[0].BeadID != "bx-001" || report.Beads[1].BeadID != "bx-002" {
+			t.Fatalf("unexpected cycle-time ordering: %+v", report.Beads)
+		}
+	})
+
+	t.Run("rework", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/metrics/rework", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var report processmetrics.ReworkReport
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if report.Summary.KnownClosed != 2 || report.Summary.KnownReopened != 1 || report.Summary.RevisionCount != 1 {
+			t.Fatalf("unexpected rework summary: %+v", report.Summary)
+		}
+		if len(report.Beads) != 2 {
+			t.Fatalf("unexpected rework rows: %+v", report.Beads)
+		}
+	})
+
+	t.Run("bad query", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/metrics/cost?bead=bx-001&feature=FEAT-001", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
 }
 
 func TestListBeads(t *testing.T) {

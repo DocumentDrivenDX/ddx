@@ -22,6 +22,7 @@ import (
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
+	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 	"tailscale.com/tsnet"
 )
 
@@ -200,6 +201,12 @@ func (s *Server) routes() {
 	// Agent sessions
 	s.mux.HandleFunc("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
 	s.mux.HandleFunc("GET /api/agent/sessions", s.handleAgentSessions)
+
+	// Process metrics
+	s.mux.HandleFunc("GET /api/metrics/summary", s.handleMetricsSummary)
+	s.mux.HandleFunc("GET /api/metrics/cost", s.handleMetricsCost)
+	s.mux.HandleFunc("GET /api/metrics/cycle-time", s.handleMetricsCycleTime)
+	s.mux.HandleFunc("GET /api/metrics/rework", s.handleMetricsRework)
 
 	// MCP
 	s.mux.HandleFunc("POST /mcp", s.handleMCP)
@@ -1351,6 +1358,82 @@ func (s *Server) loadSessions() ([]agent.SessionEntry, error) {
 		sessions = append(sessions, entry)
 	}
 	return sessions, scanner.Err()
+}
+
+// --- Process Metrics Endpoints ---
+
+func (s *Server) handleMetricsSummary(w http.ResponseWriter, r *http.Request) {
+	query, err := s.metricsQueryFromRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	report, err := processmetrics.New(s.WorkingDir).Summary(query)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (s *Server) handleMetricsCost(w http.ResponseWriter, r *http.Request) {
+	query, err := s.metricsQueryFromRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	query.BeadID = strings.TrimSpace(r.URL.Query().Get("bead"))
+	query.FeatureID = strings.TrimSpace(r.URL.Query().Get("feature"))
+	if query.BeadID != "" && query.FeatureID != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "use either bead or feature, not both"})
+		return
+	}
+	report, err := processmetrics.New(s.WorkingDir).Cost(query)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (s *Server) handleMetricsCycleTime(w http.ResponseWriter, r *http.Request) {
+	query, err := s.metricsQueryFromRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	report, err := processmetrics.New(s.WorkingDir).CycleTime(query)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (s *Server) handleMetricsRework(w http.ResponseWriter, r *http.Request) {
+	query, err := s.metricsQueryFromRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	report, err := processmetrics.New(s.WorkingDir).Rework(query)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (s *Server) metricsQueryFromRequest(r *http.Request) (processmetrics.Query, error) {
+	rawSince := strings.TrimSpace(r.URL.Query().Get("since"))
+	since, err := processmetrics.ParseSince(rawSince)
+	if err != nil {
+		return processmetrics.Query{}, err
+	}
+	return processmetrics.Query{
+		Since:    since,
+		HasSince: rawSince != "",
+	}, nil
 }
 
 // --- MCP Endpoint (JSON-RPC 2.0 over Streamable HTTP) ---

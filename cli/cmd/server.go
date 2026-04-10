@@ -55,6 +55,10 @@ HTTP API:
   GET /api/docs/:id/dependents Downstream dependents
   GET /api/agent/sessions      List agent sessions (?harness=&since=)
   GET /api/agent/sessions/:id  Session detail
+  GET /api/metrics/summary     Process metrics summary (?since=)
+  GET /api/metrics/cost        Process metrics cost (?bead=&feature=&since=)
+  GET /api/metrics/cycle-time  Process metrics cycle time (?since=)
+  GET /api/metrics/rework      Process metrics rework (?since=)
 
 MCP (POST /mcp):
   ddx_list_documents           List library documents
