@@ -62,43 +62,49 @@ Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility ali
 
 ### Functional
 
+Unless otherwise noted, the canonical resource routes below are project-scoped
+at `/api/projects/:project/...`, and project-aware MCP tools resolve against an
+explicit or selected project context. Legacy unscoped `/api/...` and `/mcp/...`
+forms remain only as singleton compatibility aliases when the server can
+resolve exactly one project context.
+
 **Document Library**
-1. `GET /api/documents` — list documents by category
-2. `GET /api/documents/:path` — read document content
-3. `GET /api/search?q=<query>` — full-text search across document contents
-4. `GET /api/personas/:role` — resolve persona for role from project config
-5. MCP tools: `ddx_list_documents`, `ddx_read_document`, `ddx_search`, `ddx_resolve_persona`
+1. `GET /api/projects/:project/documents` — list documents by category
+2. `GET /api/projects/:project/documents/:path` — read document content
+3. `GET /api/projects/:project/search?q=<query>` — full-text search across document contents
+4. `GET /api/projects/:project/personas/:role` — resolve persona for role from project config
+5. MCP tools: `ddx_list_documents`, `ddx_read_document`, `ddx_search`, `ddx_resolve_persona` (project selector required unless singleton compatibility mode applies)
 
 **Bead Tracker (FEAT-004)**
-6. `GET /api/beads` — list beads with optional status/label filters
-7. `GET /api/beads/:id` — show one bead with all fields
-8. `GET /api/beads/ready` — list ready beads (no unclosed deps)
-9. `GET /api/beads/blocked` — list blocked beads
-10. `GET /api/beads/status` — summary counts
-11. `GET /api/beads/dep/tree/:id` — dependency tree for a bead
-12. MCP tools: `ddx_list_beads`, `ddx_show_bead`, `ddx_bead_ready`, `ddx_bead_status`
+6. `GET /api/projects/:project/beads` — list beads with optional status/label filters
+7. `GET /api/projects/:project/beads/:id` — show one bead with all fields
+8. `GET /api/projects/:project/beads/ready` — list ready beads (no unclosed deps)
+9. `GET /api/projects/:project/beads/blocked` — list blocked beads
+10. `GET /api/projects/:project/beads/status` — summary counts
+11. `GET /api/projects/:project/beads/dep/tree/:id` — dependency tree for a bead
+12. MCP tools: `ddx_list_beads`, `ddx_show_bead`, `ddx_bead_ready`, `ddx_bead_status` (project selector required unless singleton compatibility mode applies)
 
 **Document Graph (FEAT-007)**
-13. `GET /api/docs/graph` — full dependency graph as JSON
-14. `GET /api/docs/stale` — list stale documents
-15. `GET /api/docs/:id` — document metadata and staleness status
-16. `GET /api/docs/:id/deps` — upstream dependencies
-17. `GET /api/docs/:id/dependents` — downstream dependents
-18. MCP tools: `ddx_doc_graph`, `ddx_doc_stale`, `ddx_doc_show`, `ddx_doc_deps`
+13. `GET /api/projects/:project/docs/graph` — full dependency graph as JSON
+14. `GET /api/projects/:project/docs/stale` — list stale documents
+15. `GET /api/projects/:project/docs/:id` — document metadata and staleness status
+16. `GET /api/projects/:project/docs/:id/deps` — upstream dependencies
+17. `GET /api/projects/:project/docs/:id/dependents` — downstream dependents
+18. MCP tools: `ddx_doc_graph`, `ddx_doc_stale`, `ddx_doc_show`, `ddx_doc_deps` (project selector required unless singleton compatibility mode applies)
 
 **Agent Activity (FEAT-006)**
-19. `GET /api/agent/sessions` — list recent DDx agent invocations
-20. `GET /api/agent/sessions/:id` — invocation detail, including native
+19. `GET /api/projects/:project/agent/sessions` — list recent DDx agent invocations
+20. `GET /api/projects/:project/agent/sessions/:id` — invocation detail, including native
     session/trace references and any DDx-owned transcript data
-21. MCP tool: `ddx_agent_sessions`
+21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
 **Executions (FEAT-010)**
-22. `GET /api/exec/definitions` — list execution definitions with optional artifact filter
-23. `GET /api/exec/definitions/:id` — show one execution definition
-24. `GET /api/exec/runs` — list execution runs with optional artifact/definition/status filters
-25. `GET /api/exec/runs/:id` — show one execution run with structured result metadata
-26. `GET /api/exec/runs/:id/log` — show raw captured logs for one execution run
-27. MCP tools: `ddx_exec_definitions`, `ddx_exec_show`, `ddx_exec_history`
+22. `GET /api/projects/:project/exec/definitions` — list execution definitions with optional artifact filter
+23. `GET /api/projects/:project/exec/definitions/:id` — show one execution definition
+24. `GET /api/projects/:project/exec/runs` — list execution runs with optional artifact/definition/status filters
+25. `GET /api/projects/:project/exec/runs/:id` — show one execution run with structured result metadata
+26. `GET /api/projects/:project/exec/runs/:id/log` — show raw captured logs for one execution run
+27. MCP tools: `ddx_exec_definitions`, `ddx_exec_show`, `ddx_exec_history` (project selector required unless singleton compatibility mode applies)
 
 **Configuration**
 28. Library path, project registry, port, optional ts-net hostname via CLI flags or config file (see ADR-006 and SD-019)
@@ -112,21 +118,21 @@ Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility ali
 - **Security:** Localhost-only by default. Optional ts-net (Tailscale) listener for non-local access (ADR-006).
 
 **Bead Mutations (FEAT-008 UI interaction)**
-33. `POST /api/beads` — create a bead
-34. `PUT /api/beads/:id` — update bead fields (status, labels, description, etc.)
-35. `POST /api/beads/:id/claim` — claim a bead for the current session
-36. `POST /api/beads/:id/unclaim` — release a claim
-37. `POST /api/beads/:id/reopen` — re-open a closed bead with a reason
-38. `POST /api/beads/:id/deps` — add/remove dependencies
-39. MCP tools: `ddx_bead_create`, `ddx_bead_update`, `ddx_bead_claim`
+33. `POST /api/projects/:project/beads` — create a bead
+34. `PUT /api/projects/:project/beads/:id` — update bead fields (status, labels, description, etc.)
+35. `POST /api/projects/:project/beads/:id/claim` — claim a bead for the current session
+36. `POST /api/projects/:project/beads/:id/unclaim` — release a claim
+37. `POST /api/projects/:project/beads/:id/reopen` — re-open a closed bead with a reason
+38. `POST /api/projects/:project/beads/:id/deps` — add/remove dependencies
+39. MCP tools: `ddx_bead_create`, `ddx_bead_update`, `ddx_bead_claim` (project selector required unless singleton compatibility mode applies)
 
 **Execution Dispatch (UI-initiated, localhost-only)**
-40. `POST /api/exec/run/:id` — dispatch an execution run (delegates to
+40. `POST /api/projects/:project/exec/run/:id` — dispatch an execution run (delegates to
     `ddx exec run` internally). Localhost-only or via ts-net (ADR-006) for
     non-local access.
-41. `POST /api/agent/run` — dispatch an agent invocation with harness,
+41. `POST /api/projects/:project/agent/run` — dispatch an agent invocation with harness,
     model, effort, and prompt. Localhost-only or via ts-net (ADR-006) for non-local access.
-42. MCP tools: `ddx_exec_dispatch`, `ddx_agent_dispatch` (localhost-only)
+42. MCP tools: `ddx_exec_dispatch`, `ddx_agent_dispatch` (project selector required unless singleton compatibility mode applies; localhost-only)
 
 ## Technology
 

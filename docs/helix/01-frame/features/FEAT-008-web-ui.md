@@ -104,7 +104,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 3. **Bead views (local-first, client-side data)**
 
    The beads UI runs entirely in the browser. On load, the client fetches the
-   full bead set from `GET /api/beads` (JSONL is small — hundreds of beads,
+   full bead set from `GET /api/projects/:project/beads` (JSONL is small — hundreds of beads,
    not millions). All search, filter, sort, and graph traversal happens
    client-side using an in-browser data layer (see ADR-005).
 
