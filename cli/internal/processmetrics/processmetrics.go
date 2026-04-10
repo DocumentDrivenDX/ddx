@@ -1084,10 +1084,14 @@ func sessionCostState(sess agent.SessionEntry) State {
 	if sess.CostUSD > 0 {
 		return stateKnown
 	}
-	if sess.Model != "" {
-		if est := agent.EstimateCost(sess.Model, sess.InputTokens, sess.OutputTokens); est >= 0 {
-			return stateEstimated
+	if sess.CostUSD == -1 {
+		return stateUnknown
+	}
+	if est, ok := sessionEstimatedCost(sess); ok {
+		if est == 0 {
+			return stateKnown
 		}
+		return stateEstimated
 	}
 	return stateUnknown
 }
@@ -1096,14 +1100,24 @@ func sessionDerivedCost(sess agent.SessionEntry) *float64 {
 	if sess.CostUSD > 0 {
 		return float64Ptr(sess.CostUSD)
 	}
-	if sess.Model == "" {
+	if sess.CostUSD == -1 {
 		return nil
+	}
+	if est, ok := sessionEstimatedCost(sess); ok {
+		return float64Ptr(est)
+	}
+	return nil
+}
+
+func sessionEstimatedCost(sess agent.SessionEntry) (float64, bool) {
+	if sess.Model == "" {
+		return 0, false
 	}
 	est := agent.EstimateCost(sess.Model, sess.InputTokens, sess.OutputTokens)
 	if est < 0 {
-		return nil
+		return 0, false
 	}
-	return float64Ptr(est)
+	return est, true
 }
 
 func extraString(b bead.Bead, keys ...string) string {

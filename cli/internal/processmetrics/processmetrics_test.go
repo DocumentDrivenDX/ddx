@@ -32,6 +32,28 @@ func writeMetricsFixture(t *testing.T) string {
 	return dir
 }
 
+func writeZeroCostFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
+
+	beads := []string{
+		`{"id":"bx-010","title":"Zero-cost feature","status":"closed","priority":1,"issue_type":"task","created_at":"2026-02-01T00:00:00Z","updated_at":"2026-02-01T01:00:00Z","spec-id":"FEAT-010","session_id":"as-010","events":[{"kind":"status","summary":"closed","created_at":"2026-02-01T01:00:00Z","source":"test"}]}`,
+		`{"id":"bx-011","title":"Unknown-cost feature","status":"closed","priority":1,"issue_type":"task","created_at":"2026-02-02T00:00:00Z","updated_at":"2026-02-02T01:00:00Z","spec-id":"FEAT-011","session_id":"as-011","events":[{"kind":"status","summary":"closed","created_at":"2026-02-02T01:00:00Z","source":"test"}]}`,
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beads[0]+"\n"+beads[1]+"\n"), 0o644))
+
+	sessions := []string{
+		`{"id":"as-010","timestamp":"2026-02-01T00:30:00Z","harness":"codex","model":"qwen/qwen3-coder-30b","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":0,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-010"}}`,
+		`{"id":"as-011","timestamp":"2026-02-02T00:30:00Z","harness":"codex","model":"qwen/qwen3-coder-30b","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":-1,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-011"}}`,
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"), 0o644))
+
+	return dir
+}
+
 func TestServiceDerivesCostLifecycleAndRework(t *testing.T) {
 	dir := writeMetricsFixture(t)
 	svc := New(dir)
@@ -82,6 +104,46 @@ func TestServiceDerivesCostLifecycleAndRework(t *testing.T) {
 	require.InDelta(t, 2.518, summary.Cost.KnownCostUSD+summary.Cost.EstimatedCostUSD, 1e-9)
 	require.Equal(t, 2, summary.CycleTime.KnownCount)
 	require.Equal(t, 2, summary.Rework.KnownClosed)
+}
+
+func TestServiceMarksZeroCostKnownAndSentinelUnknown(t *testing.T) {
+	dir := writeZeroCostFixture(t)
+	svc := New(dir)
+
+	cost, err := svc.Cost(Query{})
+	require.NoError(t, err)
+	require.Len(t, cost.Beads, 2)
+	require.Len(t, cost.Features, 2)
+	require.Equal(t, "all", cost.Scope)
+
+	zero := cost.Beads[0]
+	require.Equal(t, "bx-010", zero.BeadID)
+	require.Equal(t, State(stateKnown), zero.CostState)
+	require.NotNil(t, zero.CostUSD)
+	require.InDelta(t, 0, *zero.CostUSD, 1e-9)
+	require.Zero(t, zero.UnknownSessions)
+
+	unknown := cost.Beads[1]
+	require.Equal(t, "bx-011", unknown.BeadID)
+	require.Equal(t, State(stateUnknown), unknown.CostState)
+	require.Nil(t, unknown.CostUSD)
+	require.Equal(t, 1, unknown.UnknownSessions)
+
+	summary, err := svc.Summary(Query{})
+	require.NoError(t, err)
+	require.Equal(t, 2, summary.Sessions.Total)
+	require.Equal(t, 2, summary.Sessions.Correlated)
+	require.Equal(t, 0, summary.Sessions.Uncorrelated)
+	require.Equal(t, 1, summary.Sessions.KnownCost)
+	require.Equal(t, 0, summary.Sessions.EstimatedCost)
+	require.Equal(t, 1, summary.Sessions.UnknownCost)
+	require.InDelta(t, 0, summary.Sessions.CostUSD, 1e-9)
+	require.Equal(t, 1, summary.Beads.KnownCost)
+	require.Equal(t, 0, summary.Beads.EstimatedCost)
+	require.Equal(t, 1, summary.Beads.UnknownCost)
+	require.InDelta(t, 0, summary.Cost.KnownCostUSD, 1e-9)
+	require.InDelta(t, 0, summary.Cost.EstimatedCostUSD, 1e-9)
+	require.Equal(t, 1, summary.Cost.UnknownBeads)
 }
 
 func TestParseSince(t *testing.T) {
