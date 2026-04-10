@@ -268,9 +268,6 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 		return AggregateSummary{}, err
 	}
 
-	var summary AggregateSummary
-	summary.Beads.Total = len(beads)
-
 	costReport, err := s.Cost(query)
 	if err != nil {
 		return AggregateSummary{}, err
@@ -284,7 +281,11 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 		return AggregateSummary{}, err
 	}
 
-	for _, b := range beads {
+	var summary AggregateSummary
+	visibleBeads, visibleBeadIDs := beadsVisibleInSummaryWindow(beads, query)
+	summary.Beads.Total = len(visibleBeads)
+
+	for _, b := range visibleBeads {
 		switch b.Status {
 		case bead.StatusOpen:
 			summary.Beads.Open++
@@ -294,15 +295,47 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 			summary.Beads.Closed++
 		}
 	}
+	var cycleKnownTotalMS int64
 	for _, row := range cycleReport.Beads {
+		if query.HasSince {
+			if _, ok := visibleBeadIDs[row.BeadID]; !ok {
+				continue
+			}
+		}
 		if row.CycleState == stateKnown {
 			summary.Beads.KnownCycleTime++
+			summary.CycleTime.KnownCount++
+			if row.CycleTimeMS != nil {
+				cycleKnownTotalMS += *row.CycleTimeMS
+				if summary.CycleTime.MinMS == nil || *row.CycleTimeMS < *summary.CycleTime.MinMS {
+					summary.CycleTime.MinMS = int64Ptr(*row.CycleTimeMS)
+				}
+				if summary.CycleTime.MaxMS == nil || *row.CycleTimeMS > *summary.CycleTime.MaxMS {
+					summary.CycleTime.MaxMS = int64Ptr(*row.CycleTimeMS)
+				}
+			}
 		} else {
 			summary.Beads.UnknownCycleTime++
+			summary.CycleTime.UnknownCount++
 		}
 	}
+	if summary.CycleTime.KnownCount > 0 {
+		avg := cycleKnownTotalMS / int64(summary.CycleTime.KnownCount)
+		summary.CycleTime.AverageMS = &avg
+	}
 
+	costBeadCount := 0
+	featureIDs := make(map[string]struct{})
 	for _, row := range costReport.Beads {
+		if query.HasSince {
+			if _, ok := visibleBeadIDs[row.BeadID]; !ok && len(row.SessionIDs) == 0 {
+				continue
+			}
+		}
+		costBeadCount++
+		if row.SpecID != "" {
+			featureIDs[row.SpecID] = struct{}{}
+		}
 		switch row.CostState {
 		case stateKnown:
 			summary.Beads.KnownCost++
@@ -313,7 +346,32 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 		}
 	}
 
+	summary.Cost.Beads = costBeadCount
+	summary.Cost.Features = len(featureIDs)
+	for _, row := range costReport.Beads {
+		if query.HasSince {
+			if _, ok := visibleBeadIDs[row.BeadID]; !ok && len(row.SessionIDs) == 0 {
+				continue
+			}
+		}
+		switch row.CostState {
+		case stateKnown:
+			if row.CostUSD != nil {
+				summary.Cost.KnownCostUSD += *row.CostUSD
+			}
+		case stateEstimated:
+			if row.CostUSD != nil {
+				summary.Cost.EstimatedCostUSD += *row.CostUSD
+			}
+		default:
+			summary.Cost.UnknownBeads++
+		}
+	}
+
 	for _, sess := range sessions {
+		if query.HasSince && sess.Timestamp.Before(query.Since) {
+			continue
+		}
 		summary.Sessions.Total++
 		summary.Sessions.InputTokens += sessionInputTokens(sess)
 		summary.Sessions.OutputTokens += sessionOutputTokens(sess)
@@ -336,24 +394,28 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 		}
 	}
 
-	summary.Cost.Beads = len(costReport.Beads)
-	summary.Cost.Features = len(costReport.Features)
-	summary.Cost.KnownCostUSD = costReport.Summary.KnownCostUSD
-	summary.Cost.EstimatedCostUSD = costReport.Summary.EstimatedCostUSD
-	summary.Cost.UnknownBeads = costReport.Summary.UnknownBeads
-
-	summary.CycleTime.KnownCount = cycleReport.Summary.KnownCount
-	summary.CycleTime.UnknownCount = cycleReport.Summary.UnknownCount
-	summary.CycleTime.AverageMS = cycleReport.Summary.AverageMS
-	summary.CycleTime.MinMS = cycleReport.Summary.MinMS
-	summary.CycleTime.MaxMS = cycleReport.Summary.MaxMS
-
-	summary.Rework.KnownClosed = reworkReport.Summary.KnownClosed
-	summary.Rework.KnownReopened = reworkReport.Summary.KnownReopened
-	summary.Rework.UnknownCount = reworkReport.Summary.UnknownCount
-	summary.Rework.ReopenRate = reworkReport.Summary.ReopenRate
-	summary.Rework.RevisionCount = reworkReport.Summary.RevisionCount
-	summary.Beads.Reopened = reworkReport.Summary.KnownReopened
+	for _, row := range reworkReport.Beads {
+		if query.HasSince {
+			if _, ok := visibleBeadIDs[row.BeadID]; !ok {
+				continue
+			}
+		}
+		if row.ReworkState != stateKnown {
+			summary.Rework.UnknownCount++
+			continue
+		}
+		summary.Rework.KnownClosed++
+		if row.Reopened {
+			summary.Rework.KnownReopened++
+			summary.Beads.Reopened++
+		}
+		if row.RevisionCount != nil {
+			summary.Rework.RevisionCount += *row.RevisionCount
+		}
+	}
+	if summary.Rework.KnownClosed > 0 {
+		summary.Rework.ReopenRate = float64(summary.Rework.KnownReopened) / float64(summary.Rework.KnownClosed)
+	}
 	return summary, nil
 }
 
@@ -547,6 +609,27 @@ func windowForQuery(query Query) Window {
 		Since: &since,
 		Label: since.Format(time.RFC3339),
 	}
+}
+
+func beadsVisibleInSummaryWindow(beads []bead.Bead, query Query) ([]bead.Bead, map[string]struct{}) {
+	if !query.HasSince || query.Since.IsZero() {
+		visibleIDs := make(map[string]struct{}, len(beads))
+		for _, b := range beads {
+			visibleIDs[b.ID] = struct{}{}
+		}
+		return beads, visibleIDs
+	}
+
+	visible := make([]bead.Bead, 0, len(beads))
+	visibleIDs := make(map[string]struct{}, len(beads))
+	for _, b := range beads {
+		if b.UpdatedAt.Before(query.Since) {
+			continue
+		}
+		visible = append(visible, b)
+		visibleIDs[b.ID] = struct{}{}
+	}
+	return visible, visibleIDs
 }
 
 func (s *Service) beadStore() *bead.Store {

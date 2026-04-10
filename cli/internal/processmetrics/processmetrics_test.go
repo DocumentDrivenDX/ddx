@@ -54,6 +54,28 @@ func writeZeroCostFixture(t *testing.T) string {
 	return dir
 }
 
+func writeWindowedMetricsFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
+
+	beads := []string{
+		`{"id":"bx-201","title":"Pre-cutoff feature","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T03:30:00Z","labels":["helix"],"spec-id":"FEAT-201","session_id":"as-201","events":[{"kind":"status","summary":"closed","created_at":"2026-01-01T01:00:00Z","source":"test"}]}`,
+		`{"id":"bx-202","title":"Post-cutoff feature","status":"closed","priority":1,"issue_type":"task","created_at":"2026-03-01T00:00:00Z","updated_at":"2026-03-01T01:30:00Z","spec-id":"FEAT-202","session_id":"as-202","events":[{"kind":"status","summary":"closed","created_at":"2026-03-01T01:30:00Z","source":"test"}]}`,
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beads[0]+"\n"+beads[1]+"\n"), 0o644))
+
+	sessions := []string{
+		`{"id":"as-201","timestamp":"2026-01-01T00:30:00Z","harness":"codex","model":"gpt-5.4","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":2.5,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-201"}}`,
+		`{"id":"as-202","timestamp":"2026-03-01T00:45:00Z","harness":"claude","model":"claude-sonnet-4-6","prompt_len":120,"input_tokens":1000,"output_tokens":1000,"total_tokens":2000,"cost_usd":1.0,"duration_ms":2000,"exit_code":0,"correlation":{"bead_id":"bx-202"}}`,
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"), 0o644))
+
+	return dir
+}
+
 func TestServiceDerivesCostLifecycleAndRework(t *testing.T) {
 	dir := writeMetricsFixture(t)
 	svc := New(dir)
@@ -144,6 +166,60 @@ func TestServiceMarksZeroCostKnownAndSentinelUnknown(t *testing.T) {
 	require.InDelta(t, 0, summary.Cost.KnownCostUSD, 1e-9)
 	require.InDelta(t, 0, summary.Cost.EstimatedCostUSD, 1e-9)
 	require.Equal(t, 1, summary.Cost.UnknownBeads)
+}
+
+func TestServiceSummaryHonorsSinceWindow(t *testing.T) {
+	dir := writeWindowedMetricsFixture(t)
+	svc := New(dir)
+
+	since, err := ParseSince("2026-02-01")
+	require.NoError(t, err)
+
+	summary, err := svc.Summary(Query{Since: since, HasSince: true})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, summary.Beads.Total)
+	require.Equal(t, 0, summary.Beads.Open)
+	require.Equal(t, 0, summary.Beads.InProgress)
+	require.Equal(t, 1, summary.Beads.Closed)
+	require.Equal(t, 0, summary.Beads.Reopened)
+	require.Equal(t, 1, summary.Beads.KnownCycleTime)
+	require.Equal(t, 0, summary.Beads.UnknownCycleTime)
+	require.Equal(t, 1, summary.Beads.KnownCost)
+	require.Equal(t, 0, summary.Beads.EstimatedCost)
+	require.Equal(t, 0, summary.Beads.UnknownCost)
+
+	require.Equal(t, 1, summary.Sessions.Total)
+	require.Equal(t, 1, summary.Sessions.Correlated)
+	require.Equal(t, 0, summary.Sessions.Uncorrelated)
+	require.Equal(t, 1000, summary.Sessions.InputTokens)
+	require.Equal(t, 1000, summary.Sessions.OutputTokens)
+	require.Equal(t, 2000, summary.Sessions.TotalTokens)
+	require.Equal(t, 1, summary.Sessions.KnownCost)
+	require.Equal(t, 0, summary.Sessions.EstimatedCost)
+	require.Equal(t, 0, summary.Sessions.UnknownCost)
+	require.InDelta(t, 1.0, summary.Sessions.CostUSD, 1e-9)
+
+	require.Equal(t, 1, summary.Cost.Beads)
+	require.Equal(t, 1, summary.Cost.Features)
+	require.InDelta(t, 1.0, summary.Cost.KnownCostUSD, 1e-9)
+	require.InDelta(t, 0.0, summary.Cost.EstimatedCostUSD, 1e-9)
+	require.Equal(t, 0, summary.Cost.UnknownBeads)
+
+	require.Equal(t, 1, summary.CycleTime.KnownCount)
+	require.Equal(t, 0, summary.CycleTime.UnknownCount)
+	require.NotNil(t, summary.CycleTime.AverageMS)
+	require.NotNil(t, summary.CycleTime.MinMS)
+	require.NotNil(t, summary.CycleTime.MaxMS)
+	require.Equal(t, int64(5400000), *summary.CycleTime.AverageMS)
+	require.Equal(t, int64(5400000), *summary.CycleTime.MinMS)
+	require.Equal(t, int64(5400000), *summary.CycleTime.MaxMS)
+
+	require.Equal(t, 1, summary.Rework.KnownClosed)
+	require.Equal(t, 0, summary.Rework.KnownReopened)
+	require.Equal(t, 0, summary.Rework.UnknownCount)
+	require.InDelta(t, 0.0, summary.Rework.ReopenRate, 1e-9)
+	require.Equal(t, 0, summary.Rework.RevisionCount)
 }
 
 func TestParseSince(t *testing.T) {
