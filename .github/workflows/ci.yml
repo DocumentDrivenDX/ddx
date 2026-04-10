@@ -158,13 +158,17 @@ jobs:
       with:
         bun-version: latest
 
-    - name: Build CLI binary
-      working-directory: cli
-      run: make build
-
     - name: Install frontend dependencies
       working-directory: cli/internal/server/frontend
       run: bun install --frozen-lockfile
+
+    - name: Build frontend bundle
+      working-directory: cli/internal/server/frontend
+      run: bun run build
+
+    - name: Build CLI binary
+      working-directory: cli
+      run: make build
 
     - name: Install Playwright browsers
       working-directory: cli/internal/server/frontend
