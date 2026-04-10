@@ -204,8 +204,45 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		return fmt.Errorf("local path does not exist: %s", absPath)
 	}
 
-	// Create .ddx/plugins/ directory.
-	pluginDir := filepath.Join(".ddx", "plugins", name)
+	// Load package.yaml when present so local installs honor the manifest
+	// contract, but keep the built-in registry as a compatibility fallback.
+	reg := registry.BuiltinRegistry()
+	fallbackPkg, _ := reg.Find(name)
+
+	pkg, manifestIssues, manifestErr := registry.LoadPackageManifest(absPath)
+	switch {
+	case manifestErr == nil:
+		if strings.TrimSpace(pkg.Name) != "" && pkg.Name != name {
+			return fmt.Errorf("local package name %q does not match package.yaml name %q", name, pkg.Name)
+		}
+	case os.IsNotExist(manifestErr):
+		if fallbackPkg != nil {
+			pkg = fallbackPkg
+		} else {
+			pkg = &registry.Package{
+				Name:        name,
+				Version:     "local",
+				Description: "local plugin package",
+				Type:        registry.PackageTypePlugin,
+				Source:      absPath,
+			}
+		}
+	default:
+		if len(manifestIssues) > 0 {
+			return fmt.Errorf("validating package manifest: %w", manifestErr)
+		}
+		return fmt.Errorf("loading package manifest: %w", manifestErr)
+	}
+
+	if pkg.Install.Root == nil {
+		pkg.Install.Root = &registry.InstallMapping{
+			Source: ".",
+			Target: fmt.Sprintf(".ddx/plugins/%s", pkg.Name),
+		}
+	}
+
+	// Create the declared plugin root.
+	pluginDir := registry.ExpandHome(pkg.Install.Root.Target)
 	if err := os.MkdirAll(filepath.Dir(pluginDir), 0755); err != nil {
 		return fmt.Errorf("creating plugins dir: %w", err)
 	}
@@ -230,53 +267,47 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 
 	fmt.Fprintf(out, "Linked %s -> %s\n", pluginDir, absPath)
 
-	// Look up the package in registry for skill mappings, or use defaults.
-	reg := registry.BuiltinRegistry()
-	pkg, _ := reg.Find(name)
-
 	entry := registry.InstalledEntry{
-		Name:    name,
-		Version: "local",
-		Type:    registry.PackageTypeWorkflow,
+		Name:    pkg.Name,
+		Version: pkg.Version,
+		Type:    pkg.Type,
 		Source:  absPath,
 	}
-	entry.Files = append(entry.Files, pluginDir)
+	entry.Files = append(entry.Files, pkg.Install.Root.Target)
 
 	// Discover and symlink skills using the same logic as registry install.
-	if pkg != nil {
-		for i := range pkg.Install.Skills {
-			skill := &pkg.Install.Skills[i]
-			files, err := registry.SymlinkSkillsFromRoot(absPath, skill)
+	for i := range pkg.Install.Skills {
+		skill := &pkg.Install.Skills[i]
+		files, err := registry.SymlinkSkillsFromRoot(absPath, skill)
+		if err != nil {
+			fmt.Fprintf(out, "Warning: skill symlink error: %v\n", err)
+			continue
+		}
+		entry.Files = append(entry.Files, files...)
+	}
+
+	// Copy CLI script if defined (skip if target is a developer symlink).
+	if pkg.Install.Scripts != nil {
+		dst := registry.ExpandHome(pkg.Install.Scripts.Target)
+		if li, lErr := os.Lstat(dst); lErr == nil && li.Mode()&os.ModeSymlink != 0 {
+			target, _ := os.Readlink(dst)
+			fmt.Fprintf(out, "notice: %s is a symlink → %s (developer mode, skipping copy)\n", dst, target)
+			entry.Files = append(entry.Files, dst)
+		} else {
+			copied, err := registry.CopyScriptFromRoot(absPath, pkg.Install.Scripts)
 			if err != nil {
-				fmt.Fprintf(out, "Warning: skill symlink error: %v\n", err)
-				continue
-			}
-			entry.Files = append(entry.Files, files...)
-		}
-
-		// Copy CLI script if defined (skip if target is a developer symlink).
-		if pkg.Install.Scripts != nil {
-			dst := registry.ExpandHome(pkg.Install.Scripts.Target)
-			if li, lErr := os.Lstat(dst); lErr == nil && li.Mode()&os.ModeSymlink != 0 {
-				target, _ := os.Readlink(dst)
-				fmt.Fprintf(out, "notice: %s is a symlink → %s (developer mode, skipping copy)\n", dst, target)
-				entry.Files = append(entry.Files, dst)
+				fmt.Fprintf(out, "Warning: script copy error: %v\n", err)
 			} else {
-				copied, err := registry.CopyScriptFromRoot(absPath, pkg.Install.Scripts)
-				if err != nil {
-					fmt.Fprintf(out, "Warning: script copy error: %v\n", err)
-				} else {
-					entry.Files = append(entry.Files, copied)
-				}
+				entry.Files = append(entry.Files, copied)
 			}
 		}
+	}
 
-		// Set execute bits.
-		for _, rel := range pkg.Install.Executable {
-			p := filepath.Join(absPath, filepath.FromSlash(rel))
-			if info, err := os.Stat(p); err == nil && !info.IsDir() {
-				_ = os.Chmod(p, info.Mode()|0111)
-			}
+	// Set execute bits.
+	for _, rel := range pkg.Install.Executable {
+		p := filepath.Join(absPath, filepath.FromSlash(rel))
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			_ = os.Chmod(p, info.Mode()|0111)
 		}
 	}
 
@@ -291,8 +322,8 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		return fmt.Errorf("saving state: %w", err)
 	}
 
-	fmt.Fprintf(out, "Installed %s (local) — %d file(s)\n", name, len(entry.Files))
-	commitPluginChanges(name, "local")
+	fmt.Fprintf(out, "Installed %s (local) — %d file(s)\n", entry.Name, len(entry.Files))
+	commitPluginChanges(entry.Name, entry.Version)
 	return nil
 }
 

@@ -36,6 +36,22 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		return entry, fmt.Errorf("downloading %s: %w", tarballURL, err)
 	}
 
+	if manifestPkg, manifestIssues, manifestErr := LoadPackageManifest(extractedDir); manifestErr == nil {
+		pkg = manifestPkg
+	} else if !os.IsNotExist(manifestErr) {
+		if len(manifestIssues) > 0 {
+			return entry, fmt.Errorf("validating package manifest: %s", joinValidationIssues(manifestIssues))
+		}
+		return entry, fmt.Errorf("loading package manifest: %w", manifestErr)
+	}
+
+	if pkg.Install.Root == nil {
+		pkg.Install.Root = &InstallMapping{
+			Source: ".",
+			Target: defaultPackageRootTarget(pkg.Name),
+		}
+	}
+
 	// Process Root mapping first - copy the entire plugin to central location.
 	var installedRoot string
 	if pkg.Install.Root != nil {

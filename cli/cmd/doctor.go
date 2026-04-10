@@ -31,6 +31,7 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 
 	var issues []DiagnosticIssue
 	allGood := true
+	auditPlugins, _ := cmd.Flags().GetBool("plugins")
 
 	// Check 1: DDX Binary Executable
 	fmt.Print("✓ Checking DDX Binary... ")
@@ -196,6 +197,14 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Check 10: Installed Package Launchers
 	checkInstalledLaunchers(verbose)
+
+	if auditPlugins {
+		pluginIssues := checkInstalledPlugins(verbose)
+		if len(pluginIssues) > 0 {
+			allGood = false
+			issues = append(issues, pluginIssues...)
+		}
+	}
 
 	fmt.Println()
 	if allGood && len(issues) == 0 {
@@ -428,6 +437,40 @@ func checkInstalledLaunchers(verbose bool) {
 			fmt.Printf("⚠️  not executable (run: chmod +x %s)\n", dst)
 		}
 	}
+}
+
+// checkInstalledPlugins audits installed plugin roots and manifests.
+func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
+	state, err := registry.LoadState()
+	if err != nil || len(state.Installed) == 0 {
+		return nil
+	}
+
+	reg := registry.BuiltinRegistry()
+	var issues []DiagnosticIssue
+
+	for _, entry := range state.Installed {
+		fallback, _ := reg.Find(entry.Name)
+		for _, issue := range registry.AuditInstalledEntry(entry, fallback) {
+			diag := DiagnosticIssue{
+				Type:        "plugin_validation",
+				Description: issue.Error(),
+				Remediation: []string{
+					"Check package.yaml, skill directories, and installed symlinks for the path shown above",
+					"Reinstall the package after fixing the source tree or manifest",
+				},
+				SystemInfo: map[string]string{
+					"plugin": entry.Name,
+				},
+			}
+			if verbose {
+				diag.SystemInfo["source"] = entry.Source
+			}
+			issues = append(issues, diag)
+		}
+	}
+
+	return issues
 }
 
 // checkMetaPromptSync checks if the meta-prompt in CLAUDE.md is in sync with library

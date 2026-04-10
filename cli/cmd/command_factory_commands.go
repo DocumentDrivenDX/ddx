@@ -92,6 +92,7 @@ The doctor helps identify and resolve:
 	}
 
 	cmd.Flags().BoolP("verbose", "v", false, "Show detailed diagnostic output")
+	cmd.Flags().Bool("plugins", false, "Audit installed plugins for manifest and skill issues")
 
 	return cmd
 }

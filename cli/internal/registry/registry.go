@@ -44,6 +44,7 @@ type Package struct {
 	Description string         `yaml:"description"`
 	Type        PackageType    `yaml:"type"`
 	Source      string         `yaml:"source"`
+	APIVersion  string         `yaml:"api_version,omitempty"`
 	Install     PackageInstall `yaml:"install"`
 	Keywords    []string       `yaml:"keywords,omitempty"`
 }
