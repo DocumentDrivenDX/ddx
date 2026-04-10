@@ -139,3 +139,39 @@ jobs:
         name: e2e-test-output
         path: e2e-test-output.txt
         retention-days: 7
+
+  frontend-e2e:
+    name: Frontend Playwright E2E
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: cli/internal/server/frontend/package-lock.json
+
+    - name: Build CLI binary
+      working-directory: cli
+      run: make build
+
+    - name: Install frontend dependencies
+      working-directory: cli/internal/server/frontend
+      run: npm ci
+
+    - name: Install Playwright browsers
+      working-directory: cli/internal/server/frontend
+      run: npx playwright install --with-deps chromium
+
+    - name: Run frontend Playwright E2E tests
+      working-directory: cli/internal/server/frontend
+      run: npm run test:e2e
