@@ -385,24 +385,47 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			currentHead = baseRev
 		}
 
-		// If the target branch has advanced since our base, rebase the worktree commits.
-		var mergeRev string
+		// If the target branch has advanced since our base, rebase the worktree commits
+		// before attempting a fast-forward land.
+		mergeRev := resultRev
+		rebased := false
 		if currentHead != baseRev {
-			// Rebase worktree commits onto current HEAD.
 			if rebaseErr := gitOps.Rebase(wtPath, currentHead); rebaseErr != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: rebase failed: %v\n", rebaseErr)
-				// Fall through to preserve under hidden ref.
+				ref := fmt.Sprintf("refs/ddx/execute-bead/%s/%s", beadID, attemptID)
+				if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
+					return fmt.Errorf("preserving result ref: %w", updateErr)
+				}
+				res.Outcome = "preserved"
+				res.PreserveRef = ref
+				res.Reason = "rebase failed"
+				if asJSON {
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(res)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "bead:    %s\n", res.BeadID)
+				fmt.Fprintf(cmd.OutOrStdout(), "base:    %s\n", res.BaseRev)
+				if res.ResultRev != "" && res.ResultRev != res.BaseRev {
+					fmt.Fprintf(cmd.OutOrStdout(), "result:  %s\n", res.ResultRev)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "outcome: %s\n", res.Outcome)
+				if res.Reason != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "reason:  %s\n", res.Reason)
+				}
+				if res.PreserveRef != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "ref:     %s\n", res.PreserveRef)
+				}
+				return nil
 			} else {
-				// Get the new HEAD after rebase.
 				if rebasedRev, revErr := gitOps.HeadRev(wtPath); revErr == nil {
 					mergeRev = rebasedRev
+					res.ResultRev = rebasedRev
+					rebased = true
 				} else {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read rebased HEAD: %v\n", revErr)
 				}
 			}
-		}
-		if mergeRev == "" {
-			mergeRev = resultRev
 		}
 
 		if mergeErr := gitOps.FFMerge(workDir, mergeRev); mergeErr == nil {
@@ -414,8 +437,8 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			}
 			res.Outcome = "preserved"
 			res.PreserveRef = ref
-			if currentHead != baseRev {
-				res.Reason = "rebase or ff-merge failed"
+			if rebased {
+				res.Reason = "ff-merge failed after rebase"
 			} else {
 				res.Reason = "ff-merge not possible"
 			}

@@ -18,20 +18,30 @@ type fakeExecuteBeadGit struct {
 
 	// mainHeadRev is returned by HeadRev/ResolveRev for the main working dir.
 	mainHeadRev string
+	// headRevSeq, when set, is returned in order for successive main-dir HeadRev calls.
+	headRevSeq []string
+	headRevIdx int
 	// wtHeadRev is returned by HeadRev for worktree paths (after agent run).
 	wtHeadRev string
 	// wtHeadRevErr, if set, is returned by HeadRev for worktree paths.
 	wtHeadRevErr error
-	dirty        bool
-	ffMergeErr   error
-	rebaseErr    error
-	updateRefErr error
+	// rebaseResultRev, if set, replaces wtHeadRev after a successful rebase.
+	rebaseResultRev string
+	dirty           bool
+	ffMergeErr      error
+	rebaseErr       error
+	updateRefErr    error
 
 	stashCalled bool
 	addedWTs    []string
 	removedWTs  []string
 	refs        map[string]string // ref -> sha recorded by UpdateRef
 	worktrees   []string          // paths returned by WorktreeList
+
+	rebaseCalls   int
+	rebaseOntoRev string
+	ffMergeCalls  int
+	ffMergeRev    string
 }
 
 func (f *fakeExecuteBeadGit) HeadRev(dir string) (string, error) {
@@ -42,6 +52,15 @@ func (f *fakeExecuteBeadGit) HeadRev(dir string) (string, error) {
 			return "", f.wtHeadRevErr
 		}
 		return f.wtHeadRev, nil
+	}
+	if len(f.headRevSeq) > 0 {
+		idx := f.headRevIdx
+		if idx >= len(f.headRevSeq) {
+			idx = len(f.headRevSeq) - 1
+		}
+		rev := f.headRevSeq[idx]
+		f.headRevIdx++
+		return rev, nil
 	}
 	return f.mainHeadRev, nil
 }
@@ -94,12 +113,19 @@ func (f *fakeExecuteBeadGit) WorktreePrune(dir string) error { return nil }
 func (f *fakeExecuteBeadGit) FFMerge(dir, rev string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.ffMergeCalls++
+	f.ffMergeRev = rev
 	return f.ffMergeErr
 }
 
 func (f *fakeExecuteBeadGit) Rebase(wtPath, ontoRev string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.rebaseCalls++
+	f.rebaseOntoRev = ontoRev
+	if f.rebaseErr == nil && f.rebaseResultRev != "" {
+		f.wtHeadRev = f.rebaseResultRev
+	}
 	return f.rebaseErr
 }
 
@@ -177,6 +203,8 @@ func TestExecuteBeadMerge(t *testing.T) {
 	assert.Contains(t, git.addedWTs[0], executeBeadWtPrefix+"my-bead-")
 	require.Len(t, git.removedWTs, 1)
 	assert.Equal(t, git.addedWTs[0], git.removedWTs[0])
+	assert.Equal(t, 0, git.rebaseCalls)
+	assert.Equal(t, "bbbb2222", git.ffMergeRev)
 }
 
 // TestExecuteBeadPreserveOnFFFailure verifies that when fast-forward merge fails
@@ -203,6 +231,54 @@ func TestExecuteBeadPreserveOnFFFailure(t *testing.T) {
 	// Hidden ref should be recorded in the mock.
 	require.Contains(t, git.refs, res.PreserveRef)
 	assert.Equal(t, "cccc3333", git.refs[res.PreserveRef])
+	assert.Equal(t, 0, git.rebaseCalls)
+	assert.Equal(t, "cccc3333", git.ffMergeRev)
+}
+
+// TestExecuteBeadRebasesBeforeMerge verifies that when the target branch
+// advances during execution, execute-bead rebases the worktree commit before
+// attempting the fast-forward land.
+func TestExecuteBeadRebasesBeforeMerge(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		headRevSeq:      []string{"aaaa1111", "cccc3333"},
+		wtHeadRev:       "bbbb2222",
+		rebaseResultRev: "dddd4444",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, "merged", res.Outcome)
+	assert.Equal(t, "aaaa1111", res.BaseRev)
+	assert.Equal(t, "dddd4444", res.ResultRev)
+	assert.Equal(t, 1, git.rebaseCalls)
+	assert.Equal(t, "cccc3333", git.rebaseOntoRev)
+	assert.Equal(t, 1, git.ffMergeCalls)
+	assert.Equal(t, "dddd4444", git.ffMergeRev)
+}
+
+// TestExecuteBeadRebaseFailurePreserves verifies that a rebase conflict
+// preserves the iteration without attempting the ff-only land.
+func TestExecuteBeadRebaseFailurePreserves(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		headRevSeq: []string{"aaaa1111", "cccc3333"},
+		wtHeadRev:  "bbbb2222",
+		rebaseErr:  fmt.Errorf("conflict"),
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, "preserved", res.Outcome)
+	assert.Equal(t, "rebase failed", res.Reason)
+	assert.Equal(t, "bbbb2222", res.ResultRev)
+	assert.Equal(t, 1, git.rebaseCalls)
+	assert.Equal(t, "cccc3333", git.rebaseOntoRev)
+	assert.Equal(t, 0, git.ffMergeCalls)
+	require.Contains(t, git.refs, res.PreserveRef)
+	assert.Equal(t, "bbbb2222", git.refs[res.PreserveRef])
 }
 
 // TestExecuteBeadNoMerge verifies that --no-merge bypasses fast-forward and
