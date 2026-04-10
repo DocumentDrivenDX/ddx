@@ -276,6 +276,7 @@ Workflows need to store fields DDx doesn't know about (e.g., HELIX stores `spec-
 
 - `ddx bead create --set key=value` — set arbitrary field on create
 - `ddx bead update <id> --set key=value` — set arbitrary field on update
+- `ddx bead update <id> --set closing_commit_sha=<sha>` — repair closing provenance on a closed bead without editing storage directly
 - `ddx bead list --where key=value` — filter by custom field
 - Unknown fields are preserved on all read/write operations
 - Custom fields appear in JSON output and import/export

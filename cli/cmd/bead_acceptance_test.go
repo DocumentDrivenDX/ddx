@@ -148,6 +148,31 @@ func TestBeadCommandsUnsetCustomField(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestBeadCommandsCanRepairClosingCommitShaOnClosedBead(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Replay provenance", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	repairSHA := "9653820049db7edebe0374431544b1b8a8dbae88"
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--set", "closing_commit_sha="+repairSHA)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, "closed", bead["status"])
+	assert.Equal(t, repairSHA, bead["closing_commit_sha"])
+}
+
 func TestBeadCommandsUnsetRejectsProtectedEvidenceFields(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
