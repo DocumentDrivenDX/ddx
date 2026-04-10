@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
@@ -455,8 +456,12 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 		if entryType == "" && fallback != nil {
 			entryType = fallback.Type
 		}
+		if entryType == "" && !looksLikePluginInstall(entry) {
+			continue
+		}
 		switch entryType {
 		case registry.PackageTypePlugin, registry.PackageTypeWorkflow:
+		case "":
 		default:
 			continue
 		}
@@ -480,6 +485,39 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 	}
 
 	return issues
+}
+
+func looksLikePluginInstall(entry registry.InstalledEntry) bool {
+	candidates := make([]string, 0, 2+len(entry.Files))
+	if root := installedEntryRootCandidate(entry); root != "" {
+		candidates = append(candidates, root)
+	}
+	candidates = append(candidates, entry.Files...)
+
+	for _, candidate := range candidates {
+		path := registry.ExpandHome(strings.TrimSpace(candidate))
+		if path == "" {
+			continue
+		}
+
+		info, err := os.Lstat(path)
+		if err != nil {
+			continue
+		}
+
+		if info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func installedEntryRootCandidate(entry registry.InstalledEntry) string {
+	if len(entry.Files) > 0 && strings.TrimSpace(entry.Files[0]) != "" {
+		return entry.Files[0]
+	}
+	return strings.TrimSpace(entry.Source)
 }
 
 // checkMetaPromptSync checks if the meta-prompt in CLAUDE.md is in sync with library

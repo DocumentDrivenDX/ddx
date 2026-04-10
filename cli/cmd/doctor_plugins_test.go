@@ -41,6 +41,32 @@ func TestDoctorPluginsFlagReportsMissingManifest(t *testing.T) {
 	assert.Contains(t, output, "missing package.yaml")
 }
 
+func TestDoctorPluginsFlagAuditsLegacyUntypedPluginEntries(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "legacy-plugin")
+	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
+
+	state := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{
+				Name:    "legacy-plugin",
+				Version: "1.0.0",
+				Source:  pluginRoot,
+				Files:   []string{pluginRoot},
+			},
+		},
+	}
+	require.NoError(t, registry.SaveState(state))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
+	require.NoError(t, err)
+	assert.Contains(t, output, "missing package.yaml")
+}
+
 func TestDoctorPluginsFlagSkipsResourceEntries(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
