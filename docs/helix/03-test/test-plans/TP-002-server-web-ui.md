@@ -154,6 +154,11 @@ roots so request routing and the UI project picker can be exercised in one run.
 
 ### TC-010: Project Registry and Scoped Routing
 
+The MCP registry and project-scoped routing checks in this section remain
+planned future coverage and are not yet implemented in
+`cli/internal/server/server_test.go` alongside the existing HTTP API and MCP
+endpoint coverage.
+
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
 | TC-010.1 | Registry loads | `GET /api/projects` lists each configured project root with a default marker | Planned |
