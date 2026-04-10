@@ -25,13 +25,24 @@ export default function Graph() {
   useEffect(() => {
     if (!graph.data || !svgRef.current) return
 
+    const width = svgRef.current.clientWidth
+    const height = svgRef.current.clientHeight
+    const centerX = width / 2
+    const centerY = height / 2
+    const radius = Math.max(80, Math.min(width, height) * 0.3)
+    const graphNodes = graph.data as GraphNode[]
     const staleIds = new Set((stale.data ?? []).map((s: StaleEntry) => s.id))
-    const nodes: D3Node[] = (graph.data as GraphNode[]).map((n) => ({
+    const nodes: D3Node[] = graphNodes.map((n, index) => {
+      const angle = (2 * Math.PI * index) / Math.max(graphNodes.length, 1)
+      return {
       id: n.id,
       path: n.path,
       title: n.title,
       stale: staleIds.has(n.id),
-    }))
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle),
+    }
+    })
 
     const nodeIds = new Set(nodes.map((n) => n.id))
     const links: D3Link[] = []
@@ -45,9 +56,6 @@ export default function Graph() {
 
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
-
-    const width = svgRef.current.clientWidth
-    const height = svgRef.current.clientHeight
 
     const g = svg.append('g')
 
@@ -108,7 +116,7 @@ export default function Graph() {
       .attr('dy', 4)
       .attr('fill', '#374151')
 
-    sim.on('tick', () => {
+    const updatePositions = () => {
       link
         .attr('x1', (d: any) => d.source.x)
         .attr('y1', (d: any) => d.source.y)
@@ -116,7 +124,13 @@ export default function Graph() {
         .attr('y2', (d: any) => d.target.y)
       node.attr('cx', (d) => d.x!).attr('cy', (d) => d.y!)
       label.attr('x', (d) => d.x!).attr('y', (d) => d.y!)
-    })
+    }
+
+    sim.stop()
+    for (let i = 0; i < 200; i++) {
+      sim.tick()
+    }
+    updatePositions()
 
     return () => { sim.stop() }
   }, [graph.data, stale.data])

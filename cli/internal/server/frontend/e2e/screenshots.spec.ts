@@ -11,7 +11,10 @@ test.describe('DDx Server UI Screenshots', () => {
     await page.waitForSelector('h1')
     // Wait for API data to load
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('dashboard.png', { fullPage: true })
+    await expect(page).toHaveScreenshot('dashboard.png', {
+      fullPage: true,
+      mask: [page.locator('text=/^Started:/')],
+    })
   })
 
   test('beads kanban board', async ({ page }) => {
