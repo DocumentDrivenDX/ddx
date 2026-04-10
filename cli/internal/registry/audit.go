@@ -21,10 +21,10 @@ func AuditInstalledEntry(entry InstalledEntry, fallback *Package) []ValidationIs
 
 	issues = append(issues, auditRecordedFiles(entry)...)
 
-	manifest, manifestPresent, manifestIssues := loadPackageDefinitionForAudit(root, fallback)
+	manifest, manifestMissing, manifestIssues := loadPackageDefinitionForAudit(root, fallback)
 	issues = append(issues, manifestIssues...)
 
-	if !manifestPresent {
+	if manifestMissing {
 		issues = append(issues, ValidationIssue{
 			Path:    filepath.Join(root, "package.yaml"),
 			Message: "missing package.yaml",
@@ -42,11 +42,11 @@ func AuditInstalledEntry(entry InstalledEntry, fallback *Package) []ValidationIs
 func loadPackageDefinitionForAudit(root string, fallback *Package) (*Package, bool, []ValidationIssue) {
 	manifest, manifestIssues, err := LoadPackageManifest(root)
 	if err == nil {
-		return manifest, true, nil
+		return manifest, false, nil
 	}
 
 	if os.IsNotExist(err) {
-		return fallback, false, nil
+		return fallback, true, nil
 	}
 
 	issues := append([]ValidationIssue(nil), manifestIssues...)
