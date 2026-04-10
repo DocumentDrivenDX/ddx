@@ -241,8 +241,8 @@ Migration must preserve the current single-project local use case.
 ### Failure Recovery
 
 - if one project fails to initialize, the server can still serve the others
-- if the registry is invalid, startup should fail fast before serving partial
-  context
+- if the registry shape is invalid, such as when duplicate project ids are
+  configured, startup should fail fast before serving partial context
 - if a project is removed from the registry, its cache and runtime state are
   left isolated rather than merged into another project
 
@@ -255,4 +255,3 @@ This design should be covered by tests that verify:
 - singleton fallback preserves today's `ddx server` invocation
 - a broken project stays isolated from healthy sibling projects
 - UI routing lands on the correct project-specific route
-

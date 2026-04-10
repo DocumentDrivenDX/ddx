@@ -160,7 +160,11 @@ roots so request routing and the UI project picker can be exercised in one run.
 | TC-010.2 | Scoped API requests | `GET /api/projects/:project/beads` and sibling routes resolve the selected project context | Planned |
 | TC-010.3 | UI project picker | The web UI shows a project picker when more than one project is registered | Planned |
 | TC-010.4 | Singleton fallback | A single-project server still serves the legacy unscoped routes and dashboard | Planned |
-| TC-010.5 | Isolation | A broken project entry reports degraded status without blocking a healthy sibling project | Planned |
+| TC-010.5 | Isolation | A malformed or missing project root reports degraded status without blocking healthy sibling projects | Planned |
+| TC-010.6 | Registry shape | Duplicate project ids fail registry loading before serving partial context | Planned |
+| TC-010.7 | MCP registry listing | `ddx_list_projects` lists the registered projects and marks the default project | Planned |
+| TC-010.8 | MCP project lookup | `ddx_show_project` resolves the selected project context and returns the matching project metadata | Planned |
+| TC-010.9 | MCP scoped tool call | A project-aware MCP tool call runs against the selected project and returns that project's data | Planned |
 
 ## Out of Scope
 

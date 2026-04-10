@@ -220,7 +220,8 @@ Developer Laptop
 - **Graph/ tracker drift**: surface stale reasons with enough context to repair upstream docs first.
 - **Registry mismatch**: fail install/search operations with explicit source and expected hash information.
 - **Config schema mismatch**: reject unknown keys in known sections and suggest supported keys.
-- **Project registry mismatch**: fail the affected project entry, keep sibling project contexts available, and report the invalid root or duplicate id.
+- **Project registry entry mismatch**: fail the affected project entry, keep sibling project contexts available, and report the invalid or missing root.
+- **Project registry shape error**: duplicate project ids are a startup/configuration error and fail fast before serving partial context.
 
 ## Migration Path
 
