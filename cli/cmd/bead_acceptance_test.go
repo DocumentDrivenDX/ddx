@@ -246,6 +246,42 @@ git:
 	assert.Empty(t, strings.TrimSpace(string(statusOut)))
 }
 
+func TestBeadCommandsCloseNormalizesProvidedCommitSHA(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Normalize commit", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	fullSHA := gitHead(t, env.Dir, "HEAD")
+	shortSHA := gitShortHead(t, env.Dir)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id, "--commit", shortSHA)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, fullSHA, bead["closing_commit_sha"])
+}
+
 func TestBeadCommandsCloseRecordsClosingCommitForTrackedDdxWork(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"
@@ -346,6 +382,16 @@ func gitHead(t *testing.T, dir string, ref ...string) string {
 		target = ref[0]
 	}
 	cmd := exec.Command("git", "rev-parse", target)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out))
+}
+
+func gitShortHead(t *testing.T, dir string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	require.NoError(t, err)

@@ -77,6 +77,27 @@ func (f *CommandFactory) beadAutoCommit(operation string) string {
 	return sha
 }
 
+func (f *CommandFactory) resolveCommitSHA(commitSHA string) (string, error) {
+	if commitSHA == "" {
+		return "", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repoDir := f.WorkingDir
+	if repoDir == "" {
+		repoDir = "."
+	}
+
+	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "rev-parse", "--verify", commitSHA+"^{commit}")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse %s: %w", commitSHA, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // commitIsMetadataOnlyTrackerBackfill reports whether the given commit changed
 // only bead tracker state. Closing provenance is suppressed only for pure
 // tracker backfills that touch .ddx/beads.jsonl and nothing else.
@@ -545,6 +566,14 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			s := f.beadStore()
 			sessionID, _ := cmd.Flags().GetString("session")
 			commitSHA, _ := cmd.Flags().GetString("commit")
+
+			if commitSHA != "" {
+				normalizedCommitSHA, err := f.resolveCommitSHA(commitSHA)
+				if err != nil {
+					return err
+				}
+				commitSHA = normalizedCommitSHA
+			}
 
 			if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
 				return err
