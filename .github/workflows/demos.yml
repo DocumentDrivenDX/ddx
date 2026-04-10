@@ -14,6 +14,8 @@ jobs:
   demos:
     name: Record and Render Demos
     runs-on: ubuntu-latest
+    env:
+      AGG_VERSION: 1.7.0
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +36,7 @@ jobs:
 
       - name: Install agg
         run: |
-          curl -fsSL https://github.com/asciinema/agg/releases/latest/download/agg-x86_64-unknown-linux-gnu \
+          curl -fsSL https://github.com/asciinema/agg/releases/download/v${AGG_VERSION}/agg-x86_64-unknown-linux-gnu \
             -o /usr/local/bin/agg
           chmod +x /usr/local/bin/agg
 

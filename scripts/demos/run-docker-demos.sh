@@ -71,8 +71,9 @@ docker run --rm \
     ddx-demos \
     hugo --gc --minify
 
-# Clean up temp home
-rm -rf "$DEMO_HOME"
+# Clean up temp home. Hugo/Go module caches can leave read-only files behind.
+chmod -R u+rwX "$DEMO_HOME" 2>/dev/null || true
+rm -rf "$DEMO_HOME" || true
 
 echo ""
 echo "Demo recordings regenerated. Files in website/static/demos/"
