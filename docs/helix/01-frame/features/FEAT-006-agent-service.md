@@ -105,7 +105,7 @@ support.
 5. **Output capture** — capture agent stdout/stderr, parse structured responses, track token usage where available.
 6. **Invocation activity capture** — record each DDx agent invocation with routing metadata, elapsed time, harness/model identity, correlation fields, and native session or trace references when available. DDx must not disable or replace native persistence for external harnesses by default.
 7. **Signal normalization** — extract and normalize per-invocation usage, provider-native quota/usage signals where available, and DDx-observed routing metrics into a shared routing model.
-7a. **Minimal DDx routing metrics** — maintain only the DDx-owned metrics needed for routing decisions (for example recent success/failure, snapshot history, quota availability history, estimated subscription burn, and latency), without duplicating provider transcripts or native session stores.
+7a. **Minimal DDx routing metrics** — maintain only the DDx-owned metrics needed for routing decisions (for example recent success/failure, snapshot history, quota availability history, estimated subscription burn, and latency), keyed by the resolved canonical target or concrete model so different models on the same surface stay separate, without duplicating provider transcripts or native session stores.
 8. **Quorum dispatch** — `ddx agent run --quorum=majority --harnesses=codex,claude` runs multiple agents and requires consensus.
 9. **Quorum strategies** — any (first success), majority, unanimous, numeric threshold.
 10. **Automation levels** — manual, plan, auto, yolo — control how much autonomy the agent gets.

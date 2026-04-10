@@ -133,10 +133,12 @@ Interpretation:
     - DDx-observed performance metrics
     - freshness / confidence
 13. **Minimal DDx-owned metrics** — DDx stores only compact outcome samples,
-    async quota snapshots, and derived burn summaries. Outcome samples may
-    record recent success/failure, latency, and last observed token/cost
-    values when available; DDx does not store provider transcripts or native
-    session bodies as routing inputs.
+    async quota snapshots, and derived burn summaries. Those records are
+    attributed to the resolved canonical target or exact model pin so
+    different models on the same surface do not share one routing signal.
+    Outcome samples may record recent success/failure, latency, and last
+    observed token/cost values when available; DDx does not store provider
+    transcripts or native session bodies as routing inputs.
 14. **Snapshot history for live quota sources** — when DDx depends on an
     actively probed quota source, it checkpoints time-stamped quota snapshots
     asynchronously and relates them to native usage accumulation to build a

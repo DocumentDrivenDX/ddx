@@ -87,6 +87,11 @@ embedded harness.
 
 DDx evaluates one `CandidatePlan` per harness.
 
+`CanonicalTarget` is the stable attribution key for downstream routing
+metrics. When a request resolves only to an exact concrete model pin, DDx
+records that concrete model in the same attribution key space so observations
+for different resolved models stay separate.
+
 Each plan records:
 
 - `Harness`
@@ -174,6 +179,7 @@ and latency.
 
 - `harness`
 - `surface`
+- `canonical_target`
 - `observed_at`
 - `success`
 - `latency_ms`
@@ -190,6 +196,7 @@ and subscription pressure.
 
 - `harness`
 - `surface`
+- `canonical_target`
 - `source`
 - `observed_at`
 - `quota_state`
@@ -203,11 +210,12 @@ and subscription pressure.
 
 #### `BurnSummary`
 
-One derived record per harness/surface pair, used to compare providers without
-direct billing APIs.
+One derived record per harness/surface/canonical-target group, used to compare
+providers without direct billing APIs.
 
 - `harness`
 - `surface`
+- `canonical_target`
 - `observed_at`
 - `burn_index` as a relative, unitless score
 - `trend`
