@@ -350,6 +350,52 @@ git:
 	assert.Empty(t, gitStatusShort(t, env.Dir))
 }
 
+func TestBeadCommandsCloseClearsMetadataOnlyReviewBeadClosingCommitShaWithoutLandingCommit(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: never
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Review issue", "--type", "task", "--labels", "helix,kind:planning,action:review")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	seedSHA := gitHead(t, env.Dir, "HEAD")
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--set", "closing_commit_sha="+seedSHA)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var before map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &before))
+	assert.Equal(t, seedSHA, before["closing_commit_sha"])
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	showOut, err = executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	_, ok := bead["closing_commit_sha"]
+	assert.False(t, ok)
+	assert.Equal(t, "closed", bead["status"])
+}
+
 func TestBeadCommandsCloseRecordsClosingCommitForReviewBeadWithExplicitCommit(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"

@@ -164,6 +164,19 @@ func (f *CommandFactory) commitIsMetadataOnlyTrackerBackfill(commitSHA string) b
 	return true
 }
 
+func isReviewCloseBead(b *bead.Bead) bool {
+	if b == nil {
+		return false
+	}
+	for _, label := range b.Labels {
+		switch label {
+		case "action:review", "kind:review", "phase:review":
+			return true
+		}
+	}
+	return false
+}
+
 func (f *CommandFactory) beadStore() *bead.Store {
 	dir := os.Getenv("DDX_BEAD_DIR")
 	if dir == "" && f.WorkingDir != "" {
@@ -627,6 +640,26 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 					return err
 				}
 				commitSHA = normalizedCommitSHA
+			}
+
+			target, err := s.Get(args[0])
+			if err != nil {
+				return err
+			}
+			if commitSHA == "" && isReviewCloseBead(target) && target.Extra != nil {
+				if _, ok := target.Extra["closing_commit_sha"]; ok {
+					// Review beads can carry stale provenance from earlier tracker
+					// repairs. Clear it before the close is committed so a metadata-only
+					// close does not preserve an unrelated replay boundary.
+					if err := s.Update(args[0], func(b *bead.Bead) {
+						if b.Extra == nil {
+							return
+						}
+						delete(b.Extra, "closing_commit_sha")
+					}); err != nil {
+						return err
+					}
+				}
 			}
 
 			if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
