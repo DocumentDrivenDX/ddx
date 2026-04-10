@@ -390,6 +390,46 @@ git:
 	assert.Equal(t, fullSHA, bead["closing_commit_sha"])
 }
 
+func TestBeadCommandsCanUnsetClosingCommitShaOnClosedBead(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Unset provenance", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--unset", "closing_commit_sha")
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+	assert.Equal(t, "closed", bead["status"])
+	_, ok := bead["closing_commit_sha"]
+	assert.False(t, ok)
+
+	assert.Empty(t, gitStatusShort(t, env.Dir))
+}
+
 func TestBeadCommandsClosePreservesFullCommitSHAWithoutGitRepo(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
