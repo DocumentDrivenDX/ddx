@@ -25,6 +25,67 @@ type usageRow struct {
 	AvgDurationMS float64 `json:"avg_duration_ms"`
 }
 
+type usageAgg struct {
+	sessions     int
+	inputTokens  int
+	outputTokens int
+	costUSD      float64
+	totalDurMS   int
+}
+
+func (a *usageAgg) addSession(entry agent.SessionEntry) {
+	a.sessions++
+	a.inputTokens += entry.InputTokens
+	a.outputTokens += entry.OutputTokens
+	a.totalDurMS += entry.Duration
+
+	// Use recorded cost if available, else estimate from pricing table.
+	if entry.CostUSD > 0 {
+		a.costUSD += entry.CostUSD
+		return
+	}
+	if entry.Model == "" {
+		return
+	}
+	if est := agent.EstimateCost(entry.Model, entry.InputTokens, entry.OutputTokens); est >= 0 {
+		a.costUSD += est
+	}
+}
+
+func (a *usageAgg) addOutcome(outcome agent.RoutingOutcome, registry *agent.Registry) {
+	a.sessions++
+	a.inputTokens += outcome.InputTokens
+	a.outputTokens += outcome.OutputTokens
+	a.totalDurMS += outcome.LatencyMS
+	if outcome.CostUSD > 0 {
+		a.costUSD += outcome.CostUSD
+		return
+	}
+	if registry == nil {
+		return
+	}
+	if harness, ok := registry.Get(outcome.Harness); ok && !harness.IsLocal && outcome.Model != "" {
+		if est := agent.EstimateCost(outcome.Model, outcome.InputTokens, outcome.OutputTokens); est >= 0 {
+			a.costUSD += est
+		}
+	}
+}
+
+func (a *usageAgg) toRow(harness string) usageRow {
+	var avgDur float64
+	if a.sessions > 0 {
+		avgDur = float64(a.totalDurMS) / float64(a.sessions)
+	}
+	return usageRow{
+		Harness:       harness,
+		Sessions:      a.sessions,
+		InputTokens:   a.inputTokens,
+		OutputTokens:  a.outputTokens,
+		CostUSD:       a.costUSD,
+		AvgDurationMS: avgDur,
+	}
+}
+
 func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "usage",
@@ -47,7 +108,7 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 			}
 			if len(rows) == 0 {
 				logFile := filepath.Join(r.Config.SessionLogDir, "sessions.jsonl")
-				rows, err = aggregateUsage(logFile, harness, sinceTime)
+				rows, err = aggregateUsage(logFile, harness, sinceTime, time.Time{}, nil)
 			}
 			if err != nil {
 				return err
@@ -95,24 +156,32 @@ func parseSince(s string) (time.Time, error) {
 }
 
 // aggregateUsage reads sessions.jsonl and returns per-harness aggregates.
-func aggregateUsage(logFile, harnessFilter string, since time.Time) ([]usageRow, error) {
-	f, err := os.Open(logFile)
-	if os.IsNotExist(err) {
-		return []usageRow{}, nil
-	}
+func aggregateUsage(logFile, harnessFilter string, since time.Time, before time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
+	byHarness, order, err := aggregateUsageAggs(logFile, harnessFilter, since, before, mirrored)
 	if err != nil {
 		return nil, err
 	}
+
+	rows := make([]usageRow, 0, len(order))
+	for _, h := range order {
+		rows = append(rows, byHarness[h].toRow(h))
+	}
+	return rows, nil
+}
+
+// aggregateUsageAggs is the compatibility-aware session aggregator used by
+// both the primary routing-store path and the legacy fallback path.
+func aggregateUsageAggs(logFile, harnessFilter string, since time.Time, before time.Time, mirrored map[string]struct{}) (map[string]*usageAgg, []string, error) {
+	f, err := os.Open(logFile)
+	if os.IsNotExist(err) {
+		return map[string]*usageAgg{}, nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
 	defer f.Close()
 
-	type agg struct {
-		sessions     int
-		inputTokens  int
-		outputTokens int
-		costUSD      float64
-		totalDurMS   int
-	}
-	byHarness := map[string]*agg{}
+	byHarness := map[string]*usageAgg{}
 	order := []string{}
 
 	scanner := bufio.NewScanner(f)
@@ -129,56 +198,39 @@ func aggregateUsage(logFile, harnessFilter string, since time.Time) ([]usageRow,
 		if entry.Timestamp.Before(since) {
 			continue
 		}
+		if mirrored != nil {
+			if key := usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID); key != "" {
+				if _, ok := mirrored[key]; ok {
+					continue
+				}
+			}
+		}
+		if !before.IsZero() && !entry.Timestamp.Before(before) {
+			continue
+		}
 		if harnessFilter != "" && entry.Harness != harnessFilter {
 			continue
 		}
 
 		a, exists := byHarness[entry.Harness]
 		if !exists {
-			a = &agg{}
+			a = &usageAgg{}
 			byHarness[entry.Harness] = a
 			order = append(order, entry.Harness)
 		}
-		a.sessions++
-		a.inputTokens += entry.InputTokens
-		a.outputTokens += entry.OutputTokens
-		a.totalDurMS += entry.Duration
-
-		// Use recorded cost if available, else estimate from pricing table.
-		if entry.CostUSD > 0 {
-			a.costUSD += entry.CostUSD
-		} else if entry.Model != "" {
-			est := agent.EstimateCost(entry.Model, entry.InputTokens, entry.OutputTokens)
-			if est >= 0 {
-				a.costUSD += est
-			}
-		}
+		a.addSession(entry)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	rows := make([]usageRow, 0, len(order))
-	for _, h := range order {
-		a := byHarness[h]
-		var avgDur float64
-		if a.sessions > 0 {
-			avgDur = float64(a.totalDurMS) / float64(a.sessions)
-		}
-		rows = append(rows, usageRow{
-			Harness:       h,
-			Sessions:      a.sessions,
-			InputTokens:   a.inputTokens,
-			OutputTokens:  a.outputTokens,
-			CostUSD:       a.costUSD,
-			AvgDurationMS: avgDur,
-		})
-	}
-	return rows, nil
+	return byHarness, order, nil
 }
 
 // aggregateUsageFromRoutingMetrics prefers the minimal routing-outcome store
-// and falls back to legacy session rows when no routing records exist.
+// and supplements it with legacy session rows that predate the first mirrored
+// routing sample so mixed stores remain backward compatible without double
+// counting current runs.
 func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.Time) ([]usageRow, error) {
 	store := agent.NewRoutingMetricsStore(logDir)
 	outcomes, err := store.ReadOutcomes()
@@ -189,18 +241,19 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 		return nil, nil
 	}
 
-	type agg struct {
-		sessions     int
-		inputTokens  int
-		outputTokens int
-		costUSD      float64
-		totalDurMS   int
-	}
-	byHarness := map[string]*agg{}
+	byHarness := map[string]*usageAgg{}
 	order := []string{}
+	mirrored := map[string]struct{}{}
+	migrationCutoff := time.Time{}
 	registry := agent.NewRegistry()
 
 	for _, outcome := range outcomes {
+		if key := usageMirrorKey(outcome.NativeSessionID, outcome.TraceID, outcome.SpanID); key != "" {
+			mirrored[key] = struct{}{}
+		}
+		if migrationCutoff.IsZero() || outcome.ObservedAt.Before(migrationCutoff) {
+			migrationCutoff = outcome.ObservedAt
+		}
 		if outcome.ObservedAt.Before(since) {
 			continue
 		}
@@ -210,40 +263,55 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 
 		a, exists := byHarness[outcome.Harness]
 		if !exists {
-			a = &agg{}
+			a = &usageAgg{}
 			byHarness[outcome.Harness] = a
 			order = append(order, outcome.Harness)
 		}
-		a.sessions++
-		a.inputTokens += outcome.InputTokens
-		a.outputTokens += outcome.OutputTokens
-		a.totalDurMS += outcome.LatencyMS
-		if outcome.CostUSD > 0 {
-			a.costUSD += outcome.CostUSD
-		} else if harness, ok := registry.Get(outcome.Harness); ok && !harness.IsLocal && outcome.Model != "" {
-			if est := agent.EstimateCost(outcome.Model, outcome.InputTokens, outcome.OutputTokens); est >= 0 {
-				a.costUSD += est
-			}
+		a.addOutcome(outcome, registry)
+	}
+
+	if len(order) == 0 {
+		return nil, nil
+	}
+
+	sessionAggs, sessionOrder, err := aggregateUsageAggs(filepath.Join(logDir, "sessions.jsonl"), harnessFilter, since, migrationCutoff, mirrored)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, h := range sessionOrder {
+		row := sessionAggs[h]
+		a, exists := byHarness[h]
+		if !exists {
+			byHarness[h] = row
+			order = append(order, h)
+			continue
 		}
+		a.sessions += row.sessions
+		a.inputTokens += row.inputTokens
+		a.outputTokens += row.outputTokens
+		a.costUSD += row.costUSD
+		a.totalDurMS += row.totalDurMS
 	}
 
 	rows := make([]usageRow, 0, len(order))
 	for _, h := range order {
-		a := byHarness[h]
-		var avgDur float64
-		if a.sessions > 0 {
-			avgDur = float64(a.totalDurMS) / float64(a.sessions)
-		}
-		rows = append(rows, usageRow{
-			Harness:       h,
-			Sessions:      a.sessions,
-			InputTokens:   a.inputTokens,
-			OutputTokens:  a.outputTokens,
-			CostUSD:       a.costUSD,
-			AvgDurationMS: avgDur,
-		})
+		rows = append(rows, byHarness[h].toRow(h))
 	}
 	return rows, nil
+}
+
+func usageMirrorKey(nativeSessionID, traceID, spanID string) string {
+	switch {
+	case nativeSessionID != "":
+		return "native:" + nativeSessionID
+	case traceID != "":
+		return "trace:" + traceID
+	case spanID != "":
+		return "span:" + spanID
+	default:
+		return ""
+	}
 }
 
 // formatComma formats an integer with comma separators.
