@@ -59,6 +59,24 @@ func LoadPackageManifest(root string) (*Package, []ValidationIssue, error) {
 	return pkg, nil, nil
 }
 
+// LoadPackageManifestWithFallback reads package.yaml and falls back to the
+// provided package when the manifest is missing.
+func LoadPackageManifestWithFallback(root string, fallback *Package) (*Package, bool, []ValidationIssue, error) {
+	pkg, issues, err := LoadPackageManifest(root)
+	if err == nil {
+		return pkg, false, nil, nil
+	}
+
+	if os.IsNotExist(err) {
+		return fallback, true, nil, err
+	}
+
+	if fallback != nil {
+		return fallback, false, issues, err
+	}
+	return nil, false, issues, err
+}
+
 func validatePackageManifest(path string, raw packageManifestRaw) (*Package, []ValidationIssue) {
 	var issues []ValidationIssue
 

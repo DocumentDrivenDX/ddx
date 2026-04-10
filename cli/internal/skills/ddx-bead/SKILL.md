@@ -10,6 +10,14 @@ Beads are the DDx work item primitive. Every piece of traceable work — tasks,
 epics, bugs, chores — lives as a bead. This skill guides you through creating
 beads with the metadata needed for execution and traceability.
 
+## Tracker Policy
+
+- Use `ddx bead` subcommands for all bead maintenance: create, update, close,
+  list, show, status, ready, blocked, dep, import, export, init, and evidence.
+- Do not edit `.ddx/beads.jsonl` directly.
+- Do not invent bead IDs or prefixes such as `hx-*` or `ddx-*`; use IDs from
+  the CLI.
+
 ## When to Use
 
 - Creating new work items of any type
@@ -25,7 +33,6 @@ beads with the metadata needed for execution and traceability.
 | Title | positional | All | Short, imperative description of the work |
 | Type | `--type` | All | `task`, `epic`, `bug`, or `chore` |
 | Labels | `--labels` | All | `helix` required; add phase and kind labels (see below) |
-| Spec ID | `--spec-id` | Tasks, Epics | ID of the nearest governing artifact |
 | Acceptance | `--acceptance` | Tasks, Epics | Deterministic criteria verifiable by command or condition |
 
 ## Label Conventions
@@ -56,7 +63,8 @@ nearest governing artifact:
 ## Steps
 
 1. **Identify governing artifact.** What spec, design, or feature document
-   authorizes this work? Set `--spec-id` to its ID (e.g., `SD-004`, `FEAT-006`).
+   authorizes this work? Record the reference in the bead description or a
+   custom field if needed.
 
 2. **Write deterministic acceptance criteria.** AC must be verifiable — a
    command that passes, a file that exists, a behavior that can be observed.
@@ -77,11 +85,9 @@ nearest governing artifact:
 ddx bead create "Implement X" \
   --type task \
   --labels helix,phase:build,kind:implementation,area:bead \
-  --spec-id SD-004 \
-  --description "Implement Y component per SD-004 Section 2. Governing: SD-004." \
+  --description "Implement Y component per SD-004 Section 2." \
   --acceptance "go test ./internal/bead/... passes; bead persists across restart" \
-  --parent ddx-epic-id \
-  --deps ddx-dep-id
+  --parent ddx-epic-id
 ```
 
 ## Update Workflow
@@ -91,6 +97,7 @@ To update fields on an existing bead:
 ```bash
 ddx bead update <id> --labels helix,phase:iterate,kind:implementation
 ddx bead update <id> --acceptance "updated acceptance criteria"
+ddx bead update <id> --status closed
 ddx bead close <id>
 ```
 
@@ -110,7 +117,7 @@ ddx bead dep tree <id>
 ## Query and Filter
 
 ```bash
-ddx bead list              # All beads
+ddx bead list --status open
 ddx bead ready             # Beads with no unmet dependencies
 ddx bead blocked           # Beads blocked by dependencies
 ddx bead show <id>         # Full detail on one bead

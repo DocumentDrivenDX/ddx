@@ -71,6 +71,20 @@ func TestRegistryGet(t *testing.T) {
 	assert.Equal(t, "-C", h.WorkDirFlag)
 }
 
+func TestRegistryDefaultBaseArgs(t *testing.T) {
+	r := NewRegistry()
+
+	codex, ok := r.Get("codex")
+	require.True(t, ok)
+	assert.Equal(t, []string{"exec", "--json"}, codex.BaseArgs)
+	assert.NotContains(t, codex.BaseArgs, "--ephemeral")
+
+	claude, ok := r.Get("claude")
+	require.True(t, ok)
+	assert.Equal(t, []string{"--print", "-p", "--output-format", "json"}, claude.BaseArgs)
+	assert.NotContains(t, claude.BaseArgs, "--no-session-persistence")
+}
+
 func TestRegistryNamesPreferenceOrder(t *testing.T) {
 	r := NewRegistry()
 	names := r.Names()
@@ -87,11 +101,8 @@ func TestBuildArgsCodexBasic(t *testing.T) {
 	r := NewRegistry()
 	h, _ := r.Get("codex")
 	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
-	// Default (safe): no bypass flags
-	assert.Equal(t, []string{
-		"exec", "--ephemeral", "--json",
-		"do stuff",
-	}, args)
+	// Default (safe): no bypass flags, structured JSON remains enabled.
+	assert.Equal(t, []string{"exec", "--json", "do stuff"}, args)
 	for _, arg := range args {
 		assert.NotEqual(t, "--dangerously-bypass-approvals-and-sandbox", arg,
 			"safe mode should not include bypass flag")
@@ -120,11 +131,8 @@ func TestBuildArgsClaudeBasic(t *testing.T) {
 	r := NewRegistry()
 	h, _ := r.Get("claude")
 	args := BuildArgs(h, RunOptions{Prompt: "review code"}, "")
-	// Should have base args + prompt
-	assert.Contains(t, args, "--no-session-persistence")
-	assert.Contains(t, args, "--print")
-	assert.Contains(t, args, "-p")
-	assert.Equal(t, "review code", args[len(args)-1])
+	// Should have base args + prompt, with structured JSON output preserved.
+	assert.Equal(t, []string{"--print", "-p", "--output-format", "json", "review code"}, args)
 }
 
 func TestBuildArgsClaudeWithModel(t *testing.T) {

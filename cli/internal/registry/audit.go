@@ -49,23 +49,15 @@ func ValidatePackageStructure(root string, pkg *Package) []ValidationIssue {
 }
 
 func loadPackageDefinitionForAudit(root string, fallback *Package) (*Package, bool, []ValidationIssue) {
-	manifest, manifestIssues, err := LoadPackageManifest(root)
-	if err == nil {
-		return manifest, false, nil
+	manifest, manifestMissing, issues, err := LoadPackageManifestWithFallback(root, fallback)
+	if err == nil || os.IsNotExist(err) {
+		return manifest, manifestMissing, nil
 	}
 
-	if os.IsNotExist(err) {
-		return fallback, true, nil
-	}
-
-	issues := append([]ValidationIssue(nil), manifestIssues...)
 	if len(issues) == 0 {
 		issues = append(issues, ValidationIssue{Path: filepath.Join(root, "package.yaml"), Message: err.Error()})
 	}
-	if fallback != nil {
-		return fallback, false, issues
-	}
-	return nil, false, issues
+	return manifest, false, issues
 }
 
 func auditPluginRoot(root string, pkg *Package) []ValidationIssue {
@@ -95,8 +87,17 @@ func auditPluginRoot(root string, pkg *Package) []ValidationIssue {
 
 func auditRecordedFiles(entry InstalledEntry) []ValidationIssue {
 	var issues []ValidationIssue
-	for _, recorded := range entry.Files {
+	seen := map[string]bool{}
+	recordedPaths := append([]string(nil), entry.Files...)
+	if root := installedRootPath(entry); root != "" {
+		recordedPaths = append(recordedPaths, root)
+	}
+	for _, recorded := range recordedPaths {
 		path := ExpandHome(recorded)
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
 		info, err := os.Lstat(path)
 		if err != nil {
 			if os.IsNotExist(err) {

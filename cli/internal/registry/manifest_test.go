@@ -66,3 +66,21 @@ api_version: 2
 	require.NotEmpty(t, issues)
 	assert.True(t, strings.Contains(err.Error(), "unsupported `api_version`"))
 }
+
+func TestLoadPackageManifestWithFallbackUsesFallbackWhenManifestMissing(t *testing.T) {
+	dir := t.TempDir()
+	fallback := &Package{
+		Name:        "sample-plugin",
+		Version:     "1.2.3",
+		Description: "Sample plugin",
+		Type:        PackageTypePlugin,
+		Source:      "https://example.com/sample-plugin",
+	}
+
+	pkg, missing, issues, err := LoadPackageManifestWithFallback(dir, fallback)
+	require.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+	assert.True(t, missing)
+	require.Empty(t, issues)
+	assert.Same(t, fallback, pkg)
+}

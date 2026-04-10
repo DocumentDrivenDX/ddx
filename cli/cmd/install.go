@@ -224,29 +224,38 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 	reg := registry.BuiltinRegistry()
 	fallbackPkg, _ := reg.Find(name)
 
-	pkg, manifestIssues, manifestErr := registry.LoadPackageManifest(absPath)
+	pkg, manifestMissing, manifestIssues, manifestErr := registry.LoadPackageManifestWithFallback(absPath, fallbackPkg)
 	switch {
 	case manifestErr == nil:
 		if strings.TrimSpace(pkg.Name) != "" && pkg.Name != name {
 			return fmt.Errorf("local package name %q does not match package.yaml name %q", name, pkg.Name)
 		}
-	case os.IsNotExist(manifestErr):
-		if fallbackPkg != nil {
-			pkg = fallbackPkg
-		} else {
-			pkg = &registry.Package{
-				Name:        name,
-				Version:     "local",
-				Description: "local plugin package",
-				Type:        registry.PackageTypePlugin,
-				Source:      absPath,
-			}
-		}
 	default:
-		if len(manifestIssues) > 0 {
+		if os.IsNotExist(manifestErr) && manifestMissing {
+			if pkg == nil {
+				pkg = &registry.Package{
+					Name:        name,
+					Version:     "local",
+					Description: "local plugin package",
+					Type:        registry.PackageTypePlugin,
+					Source:      absPath,
+				}
+			}
+		} else if len(manifestIssues) > 0 {
 			return fmt.Errorf("validating package manifest: %w", manifestErr)
+		} else {
+			return fmt.Errorf("loading package manifest: %w", manifestErr)
 		}
-		return fmt.Errorf("loading package manifest: %w", manifestErr)
+	}
+
+	if pkg == nil {
+		pkg = &registry.Package{
+			Name:        name,
+			Version:     "local",
+			Description: "local plugin package",
+			Type:        registry.PackageTypePlugin,
+			Source:      absPath,
+		}
 	}
 
 	if pkg.Install.Root == nil {

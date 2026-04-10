@@ -36,9 +36,11 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		return entry, fmt.Errorf("downloading %s: %w", tarballURL, err)
 	}
 
-	if manifestPkg, manifestIssues, manifestErr := LoadPackageManifest(extractedDir); manifestErr == nil {
-		pkg = manifestPkg
-	} else if !os.IsNotExist(manifestErr) {
+	if manifestPkg, manifestMissing, manifestIssues, manifestErr := LoadPackageManifestWithFallback(extractedDir, pkg); manifestErr == nil || (os.IsNotExist(manifestErr) && manifestMissing) {
+		if manifestPkg != nil {
+			pkg = manifestPkg
+		}
+	} else {
 		if len(manifestIssues) > 0 {
 			return entry, fmt.Errorf("validating package manifest: %s", JoinValidationIssues(manifestIssues))
 		}

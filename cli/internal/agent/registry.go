@@ -8,7 +8,7 @@ var builtinHarnesses = map[string]Harness{
 	"codex": {
 		Name:     "codex",
 		Binary:   "codex",
-		BaseArgs: []string{"exec", "--ephemeral", "--json"},
+		BaseArgs: []string{"exec", "--json"},
 		PermissionArgs: map[string][]string{
 			"safe":         {},
 			"supervised":   {},
@@ -30,7 +30,7 @@ var builtinHarnesses = map[string]Harness{
 	"claude": {
 		Name:     "claude",
 		Binary:   "claude",
-		BaseArgs: []string{"--no-session-persistence", "--print", "-p", "--output-format", "json"},
+		BaseArgs: []string{"--print", "-p", "--output-format", "json"},
 		PermissionArgs: map[string][]string{
 			"safe":         {},
 			"supervised":   {"--permission-mode", "default"},
