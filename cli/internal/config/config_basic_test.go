@@ -1,10 +1,14 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/agent/prompt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -244,6 +248,34 @@ server:
 `)
 	err = validator.Validate(content)
 	assert.NoError(t, err, "config with server.addr and server.tsnet fields should pass schema validation")
+}
+
+func TestAgentRunnerPresetMetadataMatchesRuntimePresets(t *testing.T) {
+	t.Parallel()
+
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal(schemaJSON, &schema))
+
+	agentProps := schema["properties"].(map[string]any)["agent"].(map[string]any)["properties"].(map[string]any)
+	runnerProps := agentProps["agent_runner"].(map[string]any)["properties"].(map[string]any)
+	preset := runnerProps["preset"].(map[string]any)
+
+	desc := preset["description"].(string)
+	require.NotContains(t, desc, "forge")
+	for _, name := range prompt.PresetNames() {
+		assert.Contains(t, desc, name)
+	}
+
+	examples := make([]string, 0)
+	for _, raw := range preset["examples"].([]any) {
+		examples = append(examples, raw.(string))
+	}
+	require.NotContains(t, examples, "forge")
+	assert.Equal(t, "agent", preset["default"])
+
+	for _, example := range examples {
+		assert.Truef(t, slices.Contains(prompt.PresetNames(), example), "example %q must be one of the runtime presets (%s)", example, strings.Join(prompt.PresetNames(), ", "))
+	}
 }
 
 func TestLoadConfig_BeadPrefixField(t *testing.T) {

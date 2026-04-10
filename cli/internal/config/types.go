@@ -54,7 +54,7 @@ type AgentRunnerConfig struct {
 	BaseURL       string                      `yaml:"base_url,omitempty" json:"base_url,omitempty"`             // provider endpoint
 	APIKey        string                      `yaml:"api_key,omitempty" json:"api_key,omitempty"`               // API key
 	Model         string                      `yaml:"model,omitempty" json:"model,omitempty"`                   // default model
-	Preset        string                      `yaml:"preset,omitempty" json:"preset,omitempty"`                 // prompt preset (forge/codex/claude/cursor/minimal)
+	Preset        string                      `yaml:"preset,omitempty" json:"preset,omitempty"`                 // prompt preset (agent/benchmark/minimal/claude/codex/cursor)
 	MaxIterations int                         `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // max tool-call rounds
 	Models        map[string]*LLMPresetConfig `yaml:"models,omitempty" json:"models,omitempty"`                 // named LLM presets
 }

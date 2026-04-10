@@ -275,9 +275,10 @@
             },
             "preset": {
               "type": "string",
-              "description": "Prompt preset (forge/codex/claude/cursor/minimal)",
+              "default": "agent",
+              "description": "Prompt preset (agent/benchmark/minimal/claude/codex/cursor)",
               "examples": [
-                "forge",
+                "agent",
                 "minimal"
               ]
             },
