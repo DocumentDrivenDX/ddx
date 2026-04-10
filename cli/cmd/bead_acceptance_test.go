@@ -148,9 +148,21 @@ func TestBeadCommandsUnsetCustomField(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestBeadCommandsCanRepairClosingCommitShaOnClosedBead(t *testing.T) {
-	workingDir := t.TempDir()
-	factory := newBeadTestRoot(t, workingDir)
+func TestBeadCommandsCanNormalizeClosingCommitShaOnClosedBead(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
 	rootCmd := factory.NewRootCommand()
 
 	createOut, err := executeCommand(rootCmd, "bead", "create", "Replay provenance", "--type", "task")
@@ -160,8 +172,10 @@ func TestBeadCommandsCanRepairClosingCommitShaOnClosedBead(t *testing.T) {
 	_, err = executeCommand(rootCmd, "bead", "close", id)
 	require.NoError(t, err)
 
-	repairSHA := "9653820049db7edebe0374431544b1b8a8dbae88"
-	_, err = executeCommand(rootCmd, "bead", "update", id, "--set", "closing_commit_sha="+repairSHA)
+	fullSHA := gitHead(t, env.Dir, "HEAD")
+	shortSHA := gitShortHead(t, env.Dir)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--set", "closing_commit_sha="+shortSHA)
 	require.NoError(t, err)
 
 	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
@@ -170,7 +184,36 @@ func TestBeadCommandsCanRepairClosingCommitShaOnClosedBead(t *testing.T) {
 	var bead map[string]any
 	require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
 	assert.Equal(t, "closed", bead["status"])
-	assert.Equal(t, repairSHA, bead["closing_commit_sha"])
+	assert.Equal(t, fullSHA, bead["closing_commit_sha"])
+}
+
+func TestBeadCommandsRejectInvalidClosingCommitShaRepair(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Replay provenance", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--set", "closing_commit_sha=not-a-sha")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid closing_commit_sha")
 }
 
 func TestBeadCommandsUnsetRejectsProtectedEvidenceFields(t *testing.T) {

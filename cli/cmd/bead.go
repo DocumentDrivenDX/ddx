@@ -98,6 +98,17 @@ func (f *CommandFactory) resolveCommitSHA(commitSHA string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+func (f *CommandFactory) resolveClosingCommitSHA(commitSHA string) (string, error) {
+	normalizedCommitSHA, err := f.resolveCommitSHA(commitSHA)
+	if err != nil {
+		return "", fmt.Errorf("invalid closing_commit_sha %q: %w", commitSHA, err)
+	}
+	if normalizedCommitSHA == "" {
+		return "", fmt.Errorf("invalid closing_commit_sha %q: empty value", commitSHA)
+	}
+	return normalizedCommitSHA, nil
+}
+
 // commitIsMetadataOnlyTrackerBackfill reports whether the given commit changed
 // only bead tracker state. Closing provenance is suppressed only for pure
 // tracker backfills that touch .ddx/beads.jsonl and nothing else.
@@ -368,6 +379,25 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				}
 			}
 
+			var setFlags []string
+			if rawSetFlags, _ := cmd.Flags().GetStringArray("set"); len(rawSetFlags) > 0 {
+				setFlags = make([]string, 0, len(rawSetFlags))
+				for _, kv := range rawSetFlags {
+					k, v, ok := strings.Cut(kv, "=")
+					if !ok {
+						return fmt.Errorf("--set requires key=value format, got: %s", kv)
+					}
+					if k == "closing_commit_sha" {
+						normalizedCommitSHA, err := f.resolveClosingCommitSHA(v)
+						if err != nil {
+							return err
+						}
+						v = normalizedCommitSHA
+					}
+					setFlags = append(setFlags, k+"="+v)
+				}
+			}
+
 			if err := s.Update(args[0], func(b *bead.Bead) {
 				if v, _ := cmd.Flags().GetString("title"); cmd.Flags().Changed("title") {
 					b.Title = v
@@ -400,7 +430,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if v, _ := cmd.Flags().GetString("notes"); cmd.Flags().Changed("notes") {
 					b.Notes = v
 				}
-				if setFlags, _ := cmd.Flags().GetStringArray("set"); len(setFlags) > 0 {
+				if len(setFlags) > 0 {
 					if b.Extra == nil {
 						b.Extra = make(map[string]any)
 					}
