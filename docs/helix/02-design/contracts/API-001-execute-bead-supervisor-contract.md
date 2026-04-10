@@ -24,7 +24,7 @@ The supervisor contract covers:
 - one project context at a time
 - bead claim and selection flow
 - structural execution validation
-- isolated worktree execution
+- delegated execute-bead execution
 - observation of execute-bead result states
 - operator controls and loop observability
 
@@ -46,8 +46,10 @@ HELIX owns the workflow policy:
 
 `ddx agent execute-bead` remains the single owner of required execution
 document resolution, required post-run checks, merge-eligibility evaluation,
-and land/preserve mechanics. The supervisor only orchestrates queue selection
-and records the result states emitted by that command.
+and land/preserve mechanics, including creation and cleanup of its isolated
+worktree. The supervisor only orchestrates queue selection, invokes that
+command from the project root, and records the result states emitted by that
+command.
 
 The first release does not require multi-project discovery, cross-project
 scheduling, or multi-host coordination. A worker instance binds to exactly one
@@ -65,17 +67,15 @@ drained, the operator stops it, or a fatal project error occurs.
 3. Read the ready bead set for that project and choose the best candidate using
    the generic execution-ready validator against that resolved base snapshot.
 4. Claim the chosen bead atomically.
-5. Create an isolated execution worktree from the resolved base.
-6. Run `ddx agent execute-bead` against the bead in that worktree and capture
-   its reported result state.
-7. Classify the outcome reported by `execute-bead`:
+5. Run `ddx agent execute-bead` against the bead from the project root and
+   capture its reported result state.
+6. Classify the outcome reported by `execute-bead`:
    - structural validation failure before launch
    - execution failure
    - post-run check failure
    - land conflict after a successful attempt
    - success
-8. Remove the execution worktree.
-9. Continue scanning the same project queue.
+7. Continue scanning the same project queue.
 
 The loop must never infer readiness from HELIX-specific hidden policy. It uses
 the shared validator output and the explicit contract snapshot as its source of
@@ -131,7 +131,6 @@ The shipped supervisor needs only a small operator surface:
 - project selector or single-project default binding
 - one-shot mode for a single claim-and-run cycle
 - continuous loop mode with a poll interval
-- worktree root or worktree naming root
 - target branch selection
 - explicit stop / shutdown handling
 
@@ -166,6 +165,8 @@ At minimum, the loop should expose:
 
 - The contract stays single-project scoped for the first release.
 - The loop consumes DDx execution validation instead of HELIX-hidden policy.
+- The supervisor does not create or remove the execution worktree; that
+  lifecycle remains inside `execute-bead`.
 - Non-landed attempts are preserved by `execute-bead`, not rewritten by the
   supervisor.
 - Successful attempts land by rebase plus fast-forward inside `execute-bead`
