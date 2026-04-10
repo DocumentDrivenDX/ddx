@@ -164,13 +164,18 @@ Signal ownership is intentionally split:
 ### Source Precedence
 
 - **Codex current quota/headroom** should come from native Codex session JSONL
-  when persistence is enabled. PTY `/status` automation is not the default
-  design.
+  when persistence is enabled. If the log is missing or unreadable, treat the
+  value as `unknown` rather than fabricating a headroom state. PTY `/status`
+  automation is not the default design.
 - **Claude historical usage** should come from `~/.claude/stats-cache.json`.
+  That cache is the stable source for account-wide usage history, but not for
+  current quota/headroom.
 - **Claude current quota/headroom** should use a stable non-PTY source if one
   exists. PTY automation is an explicit fallback of last resort and, if used,
   should update an async snapshot cache rather than block routing on inline
   terminal scraping.
+- **embedded `ddx-agent` telemetry** should contribute DDx-observed
+  performance, reliability, and provenance metrics, not provider quota state.
 - **Performance metrics** should come from DDx-observed runs, including async
   snapshot history when DDx must actively sample a live quota source.
 

@@ -62,14 +62,20 @@ activity and performance metadata needed for routing and provenance.
 | opencode | JSON envelope: `input_tokens`, `output_tokens` (if present) | `total_cost_usd` (if present) | Working |
 | gemini | Untested; no live auth available | Unknown | Blocked |
 
-### Provider-Native Signal Sources (re-reviewed)
+### Signal-Source Matrix (re-reviewed)
 
-| Source | claude | codex | opencode |
-|--------|--------|-------|----------|
-| Historical usage | `~/.claude/stats-cache.json` — daily activity, daily tokens by model, cumulative model usage, session counts, hour-of-day distribution | Native session JSONL / local state when persistence is enabled | None known |
-| Current quota/headroom | No stable non-PTY source confirmed yet | Native session JSONL `token_count.rate_limits` when persistence is enabled | Not exposed |
-| Budget passthrough | `--max-budget-usd` per-session cap | None | None |
-| Per-invocation model metadata | `modelUsage` block: per-model `contextWindow`, `maxOutputTokens`, `costUSD` | None | None |
+| Source family | Current quota/headroom | Historical usage | Freshness | Scope | Stable enough for preflight routing? | Notes |
+|--------------|------------------------|------------------|-----------|-------|-------------------------------------|-------|
+| Codex native session JSONL / local state | Yes, when persistence is enabled and `token_count.rate_limits` is present | Yes, recent usage totals from session JSONL and local state | Near-real-time once Codex writes the session log; stale if the file is missing or unreadable | Machine-local, authenticated Codex session/account state | Yes, preferred live source for Codex routing when readable | Treat missing persistence or unreadable logs as `unknown`; do not rely on inline PTY scraping in the routing path |
+| Claude `~/.claude/stats-cache.json` | No stable non-PTY source confirmed yet; surface as `unknown` | Yes, account-wide daily activity, daily tokens by model, cumulative model usage, session counts, and hour-of-day distribution | Cached and delayed; freshness depends on the last stats-cache write | Machine-local cache with account-wide historical usage | Yes for historical usage, no for current quota | Use this source for history and load balancing only; current quota remains `unknown` until a stable live source is confirmed |
+| Claude runtime / statusline / SDK / hook artifacts | None confirmed | None confirmed | N/A unless a trustworthy source is discovered | N/A until validated | No, not yet | Investigate these before any PTY fallback; if live probing becomes necessary, feed an async snapshot cache rather than routing-time terminal scraping |
+| embedded `ddx-agent` telemetry | Not a provider quota source | Yes, DDx-owned invocation activity, runtime metrics, and session references | Per invocation or per write | Local workspace / install / session | Yes for DDx-observed performance and provenance; no for provider quota routing | Consume references and derived metrics only; do not duplicate provider transcript storage or provider quota state |
+
+Interpretation:
+
+- `unknown` means no trustworthy live source exists, the source is stale, or the data is unreadable.
+- Unknown quota/headroom stays viable for routing with reduced confidence; it is not fabricated into `ok` or `blocked`.
+- If a current quota source requires active probing, the probe must populate an async snapshot history and never block routing on synchronous PTY scraping.
 
 ### Research Priorities
 
