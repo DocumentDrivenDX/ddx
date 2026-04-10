@@ -54,6 +54,16 @@ func TestInProgressNotReady(t *testing.T) {
 	assert.Len(t, ready, 0) // in_progress should not be in ready queue
 }
 
+func TestClaimRejectsNonOpenBead(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{Title: "Closed", Status: StatusClosed}
+	require.NoError(t, s.Create(b))
+
+	err := s.Claim(b.ID, "agent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot claim")
+}
+
 // ── Import cycle detection ──────────────────────────────────────
 
 func TestImportRejectsCircularDeps(t *testing.T) {

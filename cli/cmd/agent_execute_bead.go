@@ -21,6 +21,8 @@ type ExecuteBeadResult struct {
 	BaseRev     string    `json:"base_rev"`
 	ResultRev   string    `json:"result_rev,omitempty"`
 	Outcome     string    `json:"outcome"` // merged | preserved | no-changes
+	Status      string    `json:"status,omitempty"`
+	Detail      string    `json:"detail,omitempty"`
 	PreserveRef string    `json:"preserve_ref,omitempty"`
 	Reason      string    `json:"reason,omitempty"`
 	Harness     string    `json:"harness,omitempty"`
@@ -327,6 +329,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		exitCode = 1
 		agentErrMsg = agentErr.Error()
 	}
+	executionFailed := exitCode != 0
 
 	// Get the HEAD of the worktree after the agent ran.
 	resultRev, revErr := gitOps.HeadRev(wtPath)
@@ -348,15 +351,8 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			Outcome:    "error",
 			Reason:     fmt.Sprintf("failed to read worktree HEAD: %v", revErr),
 		}
-		if asJSON {
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(res)
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "bead:    %s\n", res.BeadID)
-		fmt.Fprintf(cmd.OutOrStdout(), "base:    %s\n", res.BaseRev)
-		fmt.Fprintf(cmd.OutOrStdout(), "outcome: %s\n", res.Outcome)
-		fmt.Fprintf(cmd.OutOrStdout(), "reason:  %s\n", res.Reason)
+		populateExecuteBeadStatus(&res)
+		_ = writeExecuteBeadResult(cmd, res, asJSON)
 		return fmt.Errorf("failed to read worktree HEAD: %w", revErr)
 	}
 
@@ -381,6 +377,15 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	case resultRev == baseRev:
 		res.Outcome = "no-changes"
 		res.Reason = "agent made no commits"
+
+	case executionFailed:
+		ref := executeBeadPreserveRef(beadID, baseRev)
+		if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
+			return fmt.Errorf("preserving result ref: %w", updateErr)
+		}
+		res.Outcome = "preserved"
+		res.PreserveRef = ref
+		res.Reason = "agent execution failed"
 
 	case noMerge:
 		ref := executeBeadPreserveRef(beadID, baseRev)
@@ -413,24 +418,8 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 				res.Outcome = "preserved"
 				res.PreserveRef = ref
 				res.Reason = "rebase failed"
-				if asJSON {
-					enc := json.NewEncoder(cmd.OutOrStdout())
-					enc.SetIndent("", "  ")
-					return enc.Encode(res)
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "bead:    %s\n", res.BeadID)
-				fmt.Fprintf(cmd.OutOrStdout(), "base:    %s\n", res.BaseRev)
-				if res.ResultRev != "" && res.ResultRev != res.BaseRev {
-					fmt.Fprintf(cmd.OutOrStdout(), "result:  %s\n", res.ResultRev)
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "outcome: %s\n", res.Outcome)
-				if res.Reason != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "reason:  %s\n", res.Reason)
-				}
-				if res.PreserveRef != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "ref:     %s\n", res.PreserveRef)
-				}
-				return nil
+				populateExecuteBeadStatus(&res)
+				return writeExecuteBeadResult(cmd, res, asJSON)
 			} else {
 				if rebasedRev, revErr := gitOps.HeadRev(wtPath); revErr == nil {
 					mergeRev = rebasedRev
@@ -458,26 +447,9 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			}
 		}
 	}
+	populateExecuteBeadStatus(&res)
 
-	if asJSON {
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(res)
-	}
-
-	fmt.Fprintf(cmd.OutOrStdout(), "bead:    %s\n", res.BeadID)
-	fmt.Fprintf(cmd.OutOrStdout(), "base:    %s\n", res.BaseRev)
-	if res.ResultRev != "" && res.ResultRev != res.BaseRev {
-		fmt.Fprintf(cmd.OutOrStdout(), "result:  %s\n", res.ResultRev)
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "outcome: %s\n", res.Outcome)
-	if res.Reason != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "reason:  %s\n", res.Reason)
-	}
-	if res.PreserveRef != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "ref:     %s\n", res.PreserveRef)
-	}
-	return nil
+	return writeExecuteBeadResult(cmd, res, asJSON)
 }
 
 // executeBeadResolveBase resolves the --from flag to a full git SHA.
@@ -511,4 +483,32 @@ func (f *CommandFactory) executeBeadRecoverOrphans(gitOps executeBeadGitOps, wor
 		}
 	}
 	_ = gitOps.WorktreePrune(workDir)
+}
+
+func populateExecuteBeadStatus(res *ExecuteBeadResult) {
+	res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+	res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
+}
+
+func writeExecuteBeadResult(cmd *cobra.Command, res ExecuteBeadResult, asJSON bool) error {
+	if asJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(res)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "bead:    %s\n", res.BeadID)
+	fmt.Fprintf(cmd.OutOrStdout(), "base:    %s\n", res.BaseRev)
+	if res.ResultRev != "" && res.ResultRev != res.BaseRev {
+		fmt.Fprintf(cmd.OutOrStdout(), "result:  %s\n", res.ResultRev)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "outcome: %s\n", res.Outcome)
+	fmt.Fprintf(cmd.OutOrStdout(), "status:  %s\n", res.Status)
+	if res.Detail != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "detail:  %s\n", res.Detail)
+	}
+	if res.PreserveRef != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "ref:     %s\n", res.PreserveRef)
+	}
+	return nil
 }

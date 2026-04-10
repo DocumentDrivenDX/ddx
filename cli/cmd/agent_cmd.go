@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +14,9 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -58,6 +62,7 @@ Examples:
 	cmd.AddCommand(f.newAgentUsageCommand())
 	cmd.AddCommand(f.newAgentReplayCommand())
 	cmd.AddCommand(f.newAgentExecuteBeadCommand())
+	cmd.AddCommand(f.newAgentExecuteLoopCommand())
 
 	return cmd
 }
@@ -994,6 +999,150 @@ Examples:
 	cmd.Flags().Bool("sandbox", false, "Run in an isolated git worktree")
 
 	return cmd
+}
+
+type executeLoopCommandOptions struct {
+	FromRev string
+	Harness string
+	Model   string
+	Effort  string
+}
+
+func (f *CommandFactory) newAgentExecuteLoopCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "execute-loop",
+		Short: "Drain the single-project execution-ready bead queue",
+		Long: `Scans the current project's execution-ready bead queue, claims the next
+ready bead, runs ddx agent execute-bead from the project root, records the
+structured result, and continues until no unattempted ready work remains.`,
+		Args: cobra.NoArgs,
+		RunE: f.runAgentExecuteLoop,
+	}
+	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
+	cmd.Flags().String("harness", "", "Agent harness to use")
+	cmd.Flags().String("model", "", "Model override")
+	cmd.Flags().String("effort", "", "Effort level")
+	cmd.Flags().Bool("once", false, "Process at most one ready bead")
+	cmd.Flags().Duration("poll-interval", 0, "Poll interval for continuous scanning; zero drains current ready work and exits")
+	cmd.Flags().Bool("json", false, "Output loop result as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) error {
+	projectRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+	fromRev, _ := cmd.Flags().GetString("from")
+	harness, _ := cmd.Flags().GetString("harness")
+	model, _ := cmd.Flags().GetString("model")
+	effort, _ := cmd.Flags().GetString("effort")
+	once, _ := cmd.Flags().GetBool("once")
+	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
+	asJSON, _ := cmd.Flags().GetBool("json")
+
+	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	execFactory := *f
+	execFactory.WorkingDir = projectRoot
+
+	worker := &agent.ExecuteBeadWorker{
+		Store: store,
+		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			res, err := execFactory.invokeExecuteBeadFromLoop(ctx, beadID, executeLoopCommandOptions{
+				FromRev: fromRev,
+				Harness: harness,
+				Model:   model,
+				Effort:  effort,
+			})
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
+			return agent.ExecuteBeadReport{
+				BeadID:      res.BeadID,
+				Status:      res.Status,
+				Detail:      res.Detail,
+				SessionID:   res.SessionID,
+				BaseRev:     res.BaseRev,
+				ResultRev:   res.ResultRev,
+				PreserveRef: res.PreserveRef,
+			}, nil
+		}),
+	}
+
+	result, err := worker.Run(cmd.Context(), agent.ExecuteBeadLoopOptions{
+		Assignee:     resolveClaimAssignee(),
+		Once:         once,
+		PollInterval: pollInterval,
+	})
+	if err != nil {
+		return err
+	}
+
+	if asJSON {
+		payload := struct {
+			ProjectRoot string `json:"project_root"`
+			*agent.ExecuteBeadLoopResult
+		}{
+			ProjectRoot:           projectRoot,
+			ExecuteBeadLoopResult: result,
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
+	}
+
+	if result.NoReadyWork {
+		fmt.Fprintf(cmd.OutOrStdout(), "project: %s\n", projectRoot)
+		fmt.Fprintln(cmd.OutOrStdout(), "No execution-ready beads.")
+		return nil
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "project: %s\n", projectRoot)
+	for _, attempt := range result.Results {
+		fmt.Fprintf(cmd.OutOrStdout(), "%s  %s", attempt.BeadID, attempt.Status)
+		if attempt.Detail != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s", attempt.Detail)
+		}
+		fmt.Fprintln(cmd.OutOrStdout())
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "attempts: %d  successes: %d  failures: %d\n", result.Attempts, result.Successes, result.Failures)
+	return nil
+}
+
+func (f *CommandFactory) invokeExecuteBeadFromLoop(ctx context.Context, beadID string, opts executeLoopCommandOptions) (ExecuteBeadResult, error) {
+	cmd := f.newAgentExecuteBeadCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetContext(ctx)
+
+	args := []string{beadID, "--json"}
+	if opts.FromRev != "" {
+		args = append(args, "--from", opts.FromRev)
+	}
+	if opts.Harness != "" {
+		args = append(args, "--harness", opts.Harness)
+	}
+	if opts.Model != "" {
+		args = append(args, "--model", opts.Model)
+	}
+	if opts.Effort != "" {
+		args = append(args, "--effort", opts.Effort)
+	}
+	cmd.SetArgs(args)
+
+	if err := cmd.Execute(); err != nil {
+		return ExecuteBeadResult{}, err
+	}
+
+	raw := output.String()
+	jsonStart := strings.Index(raw, "{")
+	if jsonStart == -1 {
+		return ExecuteBeadResult{}, fmt.Errorf("execute-bead returned no JSON result")
+	}
+
+	var res ExecuteBeadResult
+	if err := json.Unmarshal([]byte(raw[jsonStart:]), &res); err != nil {
+		return ExecuteBeadResult{}, fmt.Errorf("parse execute-bead result: %w", err)
+	}
+	return res, nil
 }
 
 // resolveWorktree creates a git worktree at .worktrees/<name> if it does not

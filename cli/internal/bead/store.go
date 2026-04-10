@@ -403,23 +403,44 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
 		machine = envID
 	}
-	return s.Update(id, func(b *Bead) {
-		if b.Extra == nil {
-			b.Extra = make(map[string]any)
+	return s.WithLock(func() error {
+		beads, _, err := s.readAllRaw()
+		if err != nil {
+			return err
 		}
-		b.Status = StatusInProgress
-		b.Owner = assignee
-		b.Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
-		b.Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
-		if machine != "" {
-			b.Extra["claimed-machine"] = machine
+		for i := range beads {
+			if beads[i].ID != id {
+				continue
+			}
+			if beads[i].Status != StatusOpen {
+				return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
+			}
+			if beads[i].Extra == nil {
+				beads[i].Extra = make(map[string]any)
+			}
+			beads[i].Status = StatusInProgress
+			beads[i].Owner = assignee
+			beads[i].UpdatedAt = time.Now().UTC()
+			beads[i].Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
+			beads[i].Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
+			if machine != "" {
+				beads[i].Extra["claimed-machine"] = machine
+			}
+			if session != "" {
+				beads[i].Extra["claimed-session"] = session
+			}
+			if worktree != "" {
+				beads[i].Extra["claimed-worktree"] = worktree
+			}
+			if err := s.validateBead(&beads[i]); err != nil {
+				return err
+			}
+			if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
+				return err
+			}
+			return s.WriteAll(beads)
 		}
-		if session != "" {
-			b.Extra["claimed-session"] = session
-		}
-		if worktree != "" {
-			b.Extra["claimed-worktree"] = worktree
-		}
+		return fmt.Errorf("bead: not found: %s", id)
 	})
 }
 

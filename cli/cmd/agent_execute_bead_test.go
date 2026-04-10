@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -183,12 +184,18 @@ func runExecuteBead(t *testing.T, f *CommandFactory, git *fakeExecuteBeadGit, be
 	args := append([]string{"agent", "execute-bead", beadID, "--json"}, extraArgs...)
 	out, err := executeCommand(root, args...)
 	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	return parseExecuteBeadJSON(t, out)
+}
+
+func parseExecuteBeadJSON(t *testing.T, out string) ExecuteBeadResult {
+	t.Helper()
 	// Strip any non-JSON prefix lines (e.g. stderr notes written to the shared buffer).
 	jsonStart := strings.Index(out, "{")
 	require.NotEqual(t, -1, jsonStart, "output should contain JSON: %s", out)
 	jsonPart := out[jsonStart:]
 	var res ExecuteBeadResult
-	require.NoError(t, json.Unmarshal([]byte(jsonPart), &res), "output should be valid JSON: %s", jsonPart)
+	dec := json.NewDecoder(bytes.NewBufferString(jsonPart))
+	require.NoError(t, dec.Decode(&res), "output should be valid JSON: %s", jsonPart)
 	return res
 }
 
@@ -205,6 +212,7 @@ func TestExecuteBeadMerge(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, "merged", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
 	assert.Empty(t, res.PreserveRef)
@@ -234,6 +242,7 @@ func TestExecuteBeadPreserveOnFFFailure(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, "preserved", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusLandConflict, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "cccc3333", res.ResultRev)
 	assert.NotEmpty(t, res.PreserveRef)
@@ -262,6 +271,7 @@ func TestExecuteBeadRebasesBeforeMerge(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, "merged", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "dddd4444", res.ResultRev)
 	assert.Equal(t, 1, git.rebaseCalls)
@@ -284,6 +294,7 @@ func TestExecuteBeadRebaseFailurePreserves(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, "preserved", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusLandConflict, res.Status)
 	assert.Equal(t, "rebase failed", res.Reason)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
 	assert.Equal(t, 1, git.rebaseCalls)
@@ -308,6 +319,7 @@ func TestExecuteBeadNoMerge(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead", "--no-merge")
 
 	assert.Equal(t, "preserved", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
 	assert.Equal(t, "--no-merge specified", res.Reason)
 	assert.NotEmpty(t, res.PreserveRef)
 	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
@@ -356,6 +368,7 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, "no-changes", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Empty(t, res.PreserveRef)
 }
@@ -429,14 +442,15 @@ func TestExecuteBeadAgentErrorNoCommits(t *testing.T) {
 
 	assert.Equal(t, 1, res.ExitCode)
 	assert.Equal(t, "no-changes", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Empty(t, res.PreserveRef)
 }
 
-// TestExecuteBeadAgentErrorWithCommitsMerges verifies that when the agent runner
-// returns an error but commits exist and ff-merge succeeds, exitCode=1 and
-// outcome="merged".
-func TestExecuteBeadAgentErrorWithCommitsMerges(t *testing.T) {
+// TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand verifies that a
+// non-zero agent result preserves the iteration instead of touching the target
+// branch, even if a fast-forward land would have succeeded.
+func TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "bbbb2222", // agent made commits
@@ -448,8 +462,11 @@ func TestExecuteBeadAgentErrorWithCommitsMerges(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, 1, res.ExitCode)
-	assert.Equal(t, "merged", res.Outcome)
+	assert.Equal(t, "preserved", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
+	assert.NotEmpty(t, res.PreserveRef)
+	assert.Equal(t, 0, git.ffMergeCalls)
 }
 
 // TestExecuteBeadAgentErrorWithCommitsPreserves verifies that when the agent
@@ -468,6 +485,7 @@ func TestExecuteBeadAgentErrorWithCommitsPreserves(t *testing.T) {
 
 	assert.Equal(t, 1, res.ExitCode)
 	assert.Equal(t, "preserved", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
 	assert.NotEmpty(t, res.PreserveRef)
 	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
@@ -501,9 +519,13 @@ func TestExecuteBeadHeadRevFailure(t *testing.T) {
 		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 		f := newExecuteBeadFactory(t, git, runner)
 
-		res := runExecuteBead(t, f, git, "my-bead")
+		root := f.NewRootCommand()
+		out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead", "--json")
+		require.Error(t, cmdErr)
+		res := parseExecuteBeadJSON(t, out)
 
 		assert.Equal(t, "error", res.Outcome)
+		assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
 		assert.Contains(t, res.Reason, "disk read error")
 		assert.Equal(t, 1, res.ExitCode)
 	})
@@ -538,10 +560,14 @@ func TestExecuteBeadCompoundErrorAgentAndHeadRevFailure(t *testing.T) {
 	runner := &fakeAgentRunner{err: fmt.Errorf("agent exploded"), result: nil}
 	f := newExecuteBeadFactory(t, git, runner)
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	root := f.NewRootCommand()
+	out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead", "--json")
+	require.Error(t, cmdErr)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, 1, res.ExitCode)
 	assert.Equal(t, "error", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
 	assert.Equal(t, "agent exploded", res.Error,
 		"agent error message must be preserved even when HeadRev also fails")
 	assert.Contains(t, res.Reason, "worktree HEAD unreadable",
@@ -603,4 +629,42 @@ func TestExecuteBeadEvidenceFields(t *testing.T) {
 	assert.False(t, res.FinishedAt.IsZero())
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
+}
+
+func TestExecuteBeadStatusMapping(t *testing.T) {
+	cases := []struct {
+		name     string
+		result   ExecuteBeadResult
+		expected string
+	}{
+		{
+			name:     "merged success",
+			result:   ExecuteBeadResult{Outcome: "merged", ExitCode: 0},
+			expected: agent.ExecuteBeadStatusSuccess,
+		},
+		{
+			name:     "no changes success",
+			result:   ExecuteBeadResult{Outcome: "no-changes", ExitCode: 0},
+			expected: agent.ExecuteBeadStatusSuccess,
+		},
+		{
+			name:     "execution failure dominates preserved outcome",
+			result:   ExecuteBeadResult{Outcome: "preserved", ExitCode: 1, Reason: "agent execution failed"},
+			expected: agent.ExecuteBeadStatusExecutionFailed,
+		},
+		{
+			name:     "land conflict",
+			result:   ExecuteBeadResult{Outcome: "preserved", ExitCode: 0, Reason: "ff-merge not possible"},
+			expected: agent.ExecuteBeadStatusLandConflict,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := tc.result
+			populateExecuteBeadStatus(&res)
+			assert.Equal(t, tc.expected, res.Status)
+			assert.NotEmpty(t, res.Detail)
+		})
+	}
 }
