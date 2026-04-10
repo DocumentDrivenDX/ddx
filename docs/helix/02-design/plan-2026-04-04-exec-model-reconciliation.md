@@ -1,3 +1,10 @@
+---
+ddx:
+  id: PLAN-2026-04-04-EXEC-MODEL-RECONCILIATION
+  depends_on:
+    - FEAT-004
+    - FEAT-010
+---
 # Design Plan: DDx Execution Model Reconciliation
 
 **Date**: 2026-04-04

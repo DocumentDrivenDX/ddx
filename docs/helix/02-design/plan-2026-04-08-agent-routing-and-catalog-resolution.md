@@ -1,3 +1,10 @@
+---
+ddx:
+  id: PLAN-2026-04-08-AGENT-ROUTING-AND-CATALOG-RESOLUTION
+  depends_on:
+    - FEAT-001
+    - FEAT-006
+---
 # Design Plan: DDx Agent Routing and Catalog Resolution
 
 **Date**: 2026-04-08
