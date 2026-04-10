@@ -282,7 +282,7 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 	}
 
 	var summary AggregateSummary
-	visibleBeads, visibleBeadIDs := beadsVisibleInSummaryWindow(beads, query)
+	visibleBeads, visibleBeadIDs := beadsVisibleInSummaryWindow(beads, query, costReport, cycleReport, reworkReport)
 	summary.Beads.Total = len(visibleBeads)
 
 	for _, b := range visibleBeads {
@@ -611,7 +611,7 @@ func windowForQuery(query Query) Window {
 	}
 }
 
-func beadsVisibleInSummaryWindow(beads []bead.Bead, query Query) ([]bead.Bead, map[string]struct{}) {
+func beadsVisibleInSummaryWindow(beads []bead.Bead, query Query, costReport CostReport, cycleReport CycleTimeReport, reworkReport ReworkReport) ([]bead.Bead, map[string]struct{}) {
 	if !query.HasSince || query.Since.IsZero() {
 		visibleIDs := make(map[string]struct{}, len(beads))
 		for _, b := range beads {
@@ -620,14 +620,29 @@ func beadsVisibleInSummaryWindow(beads []bead.Bead, query Query) ([]bead.Bead, m
 		return beads, visibleIDs
 	}
 
-	visible := make([]bead.Bead, 0, len(beads))
 	visibleIDs := make(map[string]struct{}, len(beads))
+	for _, row := range costReport.Beads {
+		if len(row.SessionIDs) > 0 {
+			visibleIDs[row.BeadID] = struct{}{}
+		}
+	}
+	for _, row := range cycleReport.Beads {
+		if row.FirstClosedAt != nil {
+			visibleIDs[row.BeadID] = struct{}{}
+		}
+	}
+	for _, row := range reworkReport.Beads {
+		if row.FirstClosedAt != nil {
+			visibleIDs[row.BeadID] = struct{}{}
+		}
+	}
+
+	visible := make([]bead.Bead, 0, len(beads))
 	for _, b := range beads {
-		if b.UpdatedAt.Before(query.Since) {
+		if _, ok := visibleIDs[b.ID]; !ok {
 			continue
 		}
 		visible = append(visible, b)
-		visibleIDs[b.ID] = struct{}{}
 	}
 	return visible, visibleIDs
 }

@@ -133,9 +133,9 @@ ddx metric compare artifact-completeness \
 - [ ] Integrate with `ddx agent compare`
 - [ ] Add version metadata to metrics
 
-### Phase 4: Forge Configuration for External Models
+### Phase 4: DDx Agent Configuration for External Models
 - [ ] Document bragi configuration for qwen3.5-27b
-- [ ] Add forge provider examples to config docs
+- [ ] Add DDx Agent provider examples to config docs
 - [ ] Create `ddx agent doctor` checks for external models
 
 ## API Design
@@ -168,10 +168,11 @@ prompts:
     enabled: true
     threshold: 80
 
-forge:
-  provider: "openai-compat"
-  base_url: "http://bragi:8080/v1"  # For qwen3.5-27b
-  model: "qwen3.5-27b"
+agent:
+  agent_runner:
+    provider: "openai-compat"
+    base_url: "http://bragi:8080/v1"  # For qwen3.5-27b
+    model: "qwen3.5-27b"
 ```
 
 ## Consequences

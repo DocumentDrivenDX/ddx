@@ -2,7 +2,7 @@
 
 Project root: /Users/erik/Projects/ddx
 Tracker: /Users/erik/Projects/ddx/.ddx/beads.jsonl
-Issue counts: ready=10, open=14, in-progress=2, closed=8
+Issue counts: ready=28, open=34, in-progress=0, closed=302
 
 ## Key Rules
 

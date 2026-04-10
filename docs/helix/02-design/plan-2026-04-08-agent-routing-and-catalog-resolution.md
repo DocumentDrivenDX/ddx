@@ -17,7 +17,7 @@ DDx currently exposes agent dispatch primarily through harness selection:
 
 - `ddx agent run --harness codex`
 - `ddx agent run --harness claude`
-- `ddx agent run --harness forge`
+- `ddx agent run --harness agent`
 
 That works for explicit comparisons and debugging, but it is the wrong default
 user model. The real user asks are closer to:

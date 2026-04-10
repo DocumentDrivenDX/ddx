@@ -9,21 +9,21 @@ ddx:
 
 ## Test Layers
 
-### Layer 1 — Forge Executor (unit, in-process)
+### Layer 1 — DDx Agent Executor (unit, in-process)
 
-These tests use forge's virtual provider for deterministic replay. No
+These tests use DDx Agent's virtual provider for deterministic replay. No
 subprocess, no git, no network. All run in `internal/agent/`.
 
 | ID | Test | What It Proves |
 |----|------|----------------|
-| F-01 | `TestForgeRunVirtualProvider` | RunForge dispatches to forge.Run with virtual provider, returns typed Result with tokens/cost/model |
-| F-02 | `TestForgeRunToolExecution` | Forge tools (read/write/edit/bash) execute in WorkDir and tool calls appear in session log |
-| F-03 | `TestForgeRunIterationLimit` | MaxIterations caps the loop; Result.Status = iteration_limit, ExitCode = 1 |
-| F-04 | `TestForgeRunTimeout` | Context timeout cancels the run; Result maps to timeout error |
-| F-05 | `TestForgeRunProviderError` | Provider returns error → Result.Error populated, ExitCode = 1 |
-| F-06 | `TestForgeRunSessionLogging` | Session entry written to sessions.jsonl with correct harness, tokens, cost |
-| F-07 | `TestForgeRunModelResolution` | Model from opts > config > env > provider default, in that priority |
-| F-08 | `TestForgeRunCostMapping` | CostUSD = 0 for local models, -1 mapped to 0 in Result (unknown model) |
+| F-01 | `TestAgentRunVirtualProvider` | RunAgent dispatches to the embedded agent library with virtual provider, returns typed Result with tokens/cost/model |
+| F-02 | `TestAgentRunToolExecution` | DDx Agent tools (read/write/edit/bash) execute in WorkDir and tool calls appear in session log |
+| F-03 | `TestAgentRunIterationLimit` | MaxIterations caps the loop; Result.Status = iteration_limit, ExitCode = 1 |
+| F-04 | `TestAgentRunTimeout` | Context timeout cancels the run; Result maps to timeout error |
+| F-05 | `TestAgentRunProviderError` | Provider returns error → Result.Error populated, ExitCode = 1 |
+| F-06 | `TestAgentRunSessionLogging` | Session entry written to sessions.jsonl with correct harness, tokens, cost |
+| F-07 | `TestAgentRunModelResolution` | Model from opts > config > env > provider default, in that priority |
+| F-08 | `TestAgentRunCostMapping` | CostUSD = 0 for local models, -1 mapped to 0 in Result (unknown model) |
 
 **Test fixture:** The virtual provider can be configured with inline
 responses that include tool calls, allowing deterministic multi-turn
@@ -33,9 +33,9 @@ tests without any LLM:
 virtual.New(virtual.Config{
     InlineResponses: []virtual.InlineResponse{{
         PromptMatch: "create hello.txt",
-        Response: forge.Response{
+        Response: agentlib.Response{
             Content: "",
-            ToolCalls: []forge.ToolCall{{
+            ToolCalls: []agentlib.ToolCall{{
                 Name: "write", Arguments: `{"path":"hello.txt","content":"hello"}`,
             }},
         },
@@ -43,7 +43,7 @@ virtual.New(virtual.Config{
 })
 ```
 
-This exercises the full forge loop (prompt → tool call → tool result →
+This exercises the full DDx Agent loop (prompt → tool call → tool result →
 next LLM turn → final response) without network or cost.
 
 ### Layer 2 — Comparison Dispatch (needs temp git repos)
@@ -55,7 +55,7 @@ lifecycle, and verify side-effect capture. Moderate speed (git operations).
 |----|------|----------------|
 | C-01 | `TestCompareCreatesWorktrees` | --compare creates one worktree per harness arm under `.worktrees/compare-<id>-<harness>/` |
 | C-02 | `TestCompareArmsIsolated` | File written by arm A does not appear in arm B's worktree |
-| C-03 | `TestCompareCapturesDiff` | After forge writes a file, the effect diff contains the expected unified diff |
+| C-03 | `TestCompareCapturesDiff` | After DDx Agent writes a file, the effect diff contains the expected unified diff |
 | C-04 | `TestCompareEmptyDiff` | Arm that produces no file changes records empty diff string |
 | C-05 | `TestCompareCleansUpWorktrees` | After comparison, worktrees are removed (default behavior) |
 | C-06 | `TestCompareKeepSandbox` | --keep-sandbox preserves worktrees; they exist after the run |
@@ -81,13 +81,13 @@ func setupTestRepo(t *testing.T) string {
 }
 ```
 
-All comparison tests use the virtual provider (forge side) and
+All comparison tests use the virtual provider (DDx Agent side) and
 mockExecutor (subprocess side) — no real LLM calls.
 
 ### Layer 3 — Grading (virtual harness, canned grades)
 
 Grading sends a comparison record to a harness and parses the structured
-response. Tests use the DDx virtual harness (not forge virtual provider)
+response. Tests use the DDx virtual harness (not DDx Agent virtual provider)
 with inline responses.
 
 | ID | Test | What It Proves |
@@ -104,7 +104,7 @@ with inline responses.
 ```go
 t.Setenv("DDX_VIRTUAL_RESPONSES", `[{
     "prompt_match": "Grade the following",
-    "response": "{\"arms\":[{\"arm\":\"forge\",\"score\":8,\"max_score\":10,\"pass\":true,\"rationale\":\"Correct\"}]}"
+    "response": "{\"arms\":[{\"arm\":\"agent\",\"score\":8,\"max_score\":10,\"pass\":true,\"rationale\":\"Correct\"}]}"
 }]`)
 ```
 
@@ -115,12 +115,12 @@ but are not required for CI.
 
 | ID | Test | What It Proves |
 |----|------|----------------|
-| I-01 | `TestIntegration_ForgeLocalModel` | forge → LM Studio (localhost:1234) → real model response with tokens |
-| I-02 | `TestIntegration_CompareForgeVsClaude` | Full comparison: forge arm + claude arm, both produce diffs, comparison record complete |
+| I-01 | `TestIntegration_AgentLocalModel` | DDx Agent → LM Studio (localhost:1234) → real model response with tokens |
+| I-02 | `TestIntegration_CompareAgentVsClaude` | Full comparison: agent arm + claude arm, both produce diffs, comparison record complete |
 | I-03 | `TestIntegration_GradeWithClaude` | Grade a comparison using real claude; structured grade returned |
 
 ```go
-func TestIntegration_ForgeLocalModel(t *testing.T) {
+func TestIntegration_AgentLocalModel(t *testing.T) {
     // Skip if LM Studio not reachable
     if _, err := net.DialTimeout("tcp", "localhost:1234", 2*time.Second); err != nil {
         t.Skip("LM Studio not available on localhost:1234")
@@ -131,10 +131,10 @@ func TestIntegration_ForgeLocalModel(t *testing.T) {
 
 ## Side-Effect Capture: What to Test
 
-The key insight is that **forge gives us two levels of side-effect data**
+The key insight is that **DDx Agent gives us two levels of side-effect data**
 while subprocess harnesses give us only one:
 
-| Signal | forge | subprocess (codex/claude/opencode) |
+| Signal | DDx Agent | subprocess (codex/claude/opencode) |
 |--------|-------|-----------------------------------|
 | Git diff (after) | ✓ | ✓ |
 | Tool call log (during) | ✓ (typed ToolCallLog[]) | ✗ |
@@ -142,8 +142,8 @@ while subprocess harnesses give us only one:
 | Files read | ✓ (in tool call log) | ✗ |
 
 Tests should verify:
-- **Diff capture** works for both forge and subprocess arms (C-03, C-04)
-- **Tool call log** is populated for forge arms only (F-02)
+- **Diff capture** works for both DDx Agent and subprocess arms (C-03, C-04)
+- **Tool call log** is populated for DDx Agent arms only (F-02)
 - **Missing tool log** for subprocess arms is nil, not empty (C-08)
 
 ## Sandboxing Edge Cases
@@ -166,7 +166,7 @@ that produce predictable side effects with the virtual/mock providers:
 prompt: "Create a file called result.txt containing 'hello world'"
 ```
 
-For forge (virtual provider): configure response with a write tool call.
+For DDx Agent (virtual provider): configure response with a write tool call.
 For subprocess (mockExecutor): configure output string, manually seed the
 file in the worktree to simulate the effect.
 
@@ -183,7 +183,7 @@ Tests in layers 2-3 depend on code that doesn't exist yet:
 - Diff capture utility: `captureWorktreeDiff(worktreePath string) (string, error)`
 
 Layer 1 tests (F-01 through F-08) can be written now against the
-existing `RunForge` method. Layers 2-3 should be written alongside
+existing `RunAgent` method. Layers 2-3 should be written alongside
 the implementation.
 
 ## Running the Tests
@@ -192,12 +192,12 @@ the implementation.
 # Unit tests only (fast, no external deps)
 cd cli && go test ./internal/agent/ -run "^Test[^I]" -count=1
 
-# Include forge virtual provider tests
-cd cli && go test ./internal/agent/ -run "TestForge" -v
+# Include DDx Agent virtual provider tests
+cd cli && go test ./internal/agent/ -run "TestAgentRun" -v
 
 # Integration tests (needs LM Studio on localhost:1234)
-cd cli && go test ./internal/agent/ -run "TestIntegration_Forge" -v -timeout 120s
+cd cli && go test ./internal/agent/ -run "TestIntegration_Agent" -v -timeout 120s
 
 # Integration tests (needs LM Studio on vidar:1234)
-FORGE_BASE_URL=http://vidar:1234/v1 go test ./internal/agent/ -run "TestIntegration_Forge" -v
+AGENT_BASE_URL=http://vidar:1234/v1 go test ./internal/agent/ -run "TestIntegration_Agent" -v
 ```

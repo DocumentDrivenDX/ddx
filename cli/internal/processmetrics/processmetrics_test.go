@@ -76,6 +76,26 @@ func writeWindowedMetricsFixture(t *testing.T) string {
 	return dir
 }
 
+func writeLateUpdateNoFactsFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
+
+	beads := []string{
+		`{"id":"bx-301","title":"Late update feature","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-03-05T00:00:00Z","labels":["helix"],"spec-id":"FEAT-301","session_id":"as-301","events":[{"kind":"status","summary":"closed","created_at":"2026-01-01T01:00:00Z","source":"test"}]}`,
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beads[0]+"\n"), 0o644))
+
+	sessions := []string{
+		`{"id":"as-301","timestamp":"2026-01-01T00:30:00Z","harness":"codex","model":"gpt-5.4","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":2.5,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-301"}}`,
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"), 0o644))
+
+	return dir
+}
+
 func TestServiceDerivesCostLifecycleAndRework(t *testing.T) {
 	dir := writeMetricsFixture(t)
 	svc := New(dir)
@@ -219,6 +239,39 @@ func TestServiceSummaryHonorsSinceWindow(t *testing.T) {
 	require.Equal(t, 0, summary.Rework.KnownReopened)
 	require.Equal(t, 0, summary.Rework.UnknownCount)
 	require.InDelta(t, 0.0, summary.Rework.ReopenRate, 1e-9)
+	require.Equal(t, 0, summary.Rework.RevisionCount)
+}
+
+func TestServiceSummaryExcludesLateUpdatedBeadsWithoutWindowFacts(t *testing.T) {
+	dir := writeLateUpdateNoFactsFixture(t)
+	svc := New(dir)
+
+	since, err := ParseSince("2026-02-01")
+	require.NoError(t, err)
+
+	summary, err := svc.Summary(Query{Since: since, HasSince: true})
+	require.NoError(t, err)
+
+	require.Equal(t, 0, summary.Beads.Total)
+	require.Equal(t, 0, summary.Beads.Open)
+	require.Equal(t, 0, summary.Beads.InProgress)
+	require.Equal(t, 0, summary.Beads.Closed)
+	require.Equal(t, 0, summary.Beads.Reopened)
+	require.Equal(t, 0, summary.Beads.KnownCycleTime)
+	require.Equal(t, 0, summary.Beads.UnknownCycleTime)
+	require.Equal(t, 0, summary.Beads.KnownCost)
+	require.Equal(t, 0, summary.Beads.EstimatedCost)
+	require.Equal(t, 0, summary.Beads.UnknownCost)
+
+	require.Equal(t, 0, summary.Sessions.Total)
+	require.Equal(t, 0, summary.Cost.Beads)
+	require.Equal(t, 0, summary.Cost.Features)
+	require.Equal(t, 0, summary.Cost.UnknownBeads)
+	require.Equal(t, 0, summary.CycleTime.KnownCount)
+	require.Equal(t, 0, summary.CycleTime.UnknownCount)
+	require.Equal(t, 0, summary.Rework.KnownClosed)
+	require.Equal(t, 0, summary.Rework.KnownReopened)
+	require.Equal(t, 0, summary.Rework.UnknownCount)
 	require.Equal(t, 0, summary.Rework.RevisionCount)
 }
 

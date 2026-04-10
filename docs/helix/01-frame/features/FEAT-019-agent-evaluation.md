@@ -8,7 +8,7 @@ ddx:
     - FEAT-012
     - FEAT-014
 ---
-# Feature: Agent Evaluation and Prompt Comparison
+# Feature: DDx Agent Evaluation and Prompt Comparison
 
 **ID:** FEAT-019
 **Status:** In Progress
@@ -68,13 +68,13 @@ that calls DDx comparison primitives — it is not a DDx execution mode.
 **Current situation:**
 - `ddx agent run` can dispatch to any harness and capture output/tokens/cost.
 - Quorum mode runs multiple harnesses and checks consensus (pass/fail).
-- Forge gives DDx full control of the agent loop with tool call logging.
+- DDx Agent gives DDx full control of the agent loop with tool call logging.
 - Beads define work. Commits capture verified results. But there is no
   structured way to compare harness outputs for the same prompt, replay a
   bead with a different model, or grade the quality of results.
 
 **Pain points:**
-- When evaluating whether a local model (via forge) can replace a cloud
+- When evaluating whether a local model (via DDx Agent) can replace a cloud
   model for a task class, there's no structured way to compare.
 - Side-effecting agent runs (file writes, shell commands) can't be safely
   compared without isolation — running two agents in the same worktree
@@ -93,13 +93,13 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 ### Functional
 
 **Sandboxed comparison dispatch**
-1. `ddx agent run --compare --harnesses=forge,claude --prompt task.md` runs
+1. `ddx agent run --compare --harnesses=agent,claude --prompt task.md` runs
    each harness arm in an isolated environment and records a comparison.
 2. Each arm runs in a temporary git worktree created from the current HEAD.
    Existing `resolveWorktree` infrastructure is reused.
 3. After each arm completes, capture `git diff HEAD` in the worktree as the
    "effect diff" — the concrete artifact of what the agent changed.
-4. For forge arms, also capture the full `ToolCallLog` (every read, write,
+4. For DDx Agent arms, also capture the full `ToolCallLog` (every read, write,
    edit, bash call with inputs and outputs).
 5. For subprocess arms (codex, claude, opencode), capture stdout/stderr and
    the effect diff. Tool call detail is not available.
@@ -111,7 +111,7 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 **Side-effect capture**
 8. The effect diff is captured as a unified diff string and stored in the
    comparison record alongside the text output.
-9. For forge, the tool call log provides a complete audit trail: which files
+9. For DDx Agent, the tool call log provides a complete audit trail: which files
    were read, what edits were made, what commands were run, what output they
    produced. This is richer than the diff alone.
 10. Optionally run a test suite in each worktree after the agent completes
@@ -130,7 +130,7 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 14. The grader returns a structured evaluation per arm:
     ```json
     {
-      "arm": "forge",
+      "arm": "agent",
       "score": 7,
       "max_score": 10,
       "pass": true,
@@ -197,7 +197,7 @@ concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
   (git worktree add is <1s for typical repos).
 - **Storage:** Comparison records include diffs and outputs which can be
   large. Use the same attachment-backed storage as session logs (FEAT-006).
-- **Determinism:** For forge with the virtual provider, comparison runs
+- **Determinism:** For DDx Agent with the virtual provider, comparison runs
   are fully deterministic — enables CI-based prompt regression testing.
 
 ## Design Principles
@@ -218,7 +218,7 @@ DDx does **not** provide:
 
 Workflow tools compose these primitives. For example, a workflow plugin might
 define: "Before promoting a bead, run the implementation prompt through
-forge+claude, require grade ≥8/10 on both arms." A check runner might define:
+agent+claude, require grade ≥8/10 on both arms." A check runner might define:
 "regression-test this prompt against the recorded baseline."
 
 ### Sandboxing strategy
@@ -230,7 +230,7 @@ Git worktrees are the natural sandbox for code-generating agents:
 - Cheap to clean up (`git worktree remove`)
 - Diff capture is trivial (`git diff HEAD`)
 
-For forge specifically, the tool sandbox is already built into the
+For DDx Agent specifically, the tool sandbox is already built into the
 `WorkDir` parameter — setting it to the worktree path is sufficient.
 For subprocess harnesses, `WorkDirFlag` (codex: `-C`, opencode: `--dir`)
 achieves the same.
@@ -242,23 +242,23 @@ No container or VM sandboxing is needed for comparison runs because:
 - Network isolation is out of scope (agents need API access)
 
 If stronger isolation is needed (e.g., untrusted model output running
-shell commands), that's a future concern addressed by forge's tool
+shell commands), that's a future concern addressed by DDx Agent's tool
 permission layer or external sandbox tooling.
 
 ## CLI Interface
 
 ```bash
 # Compare two harnesses on the same prompt
-ddx agent run --compare --harnesses=forge,claude --prompt task.md
+ddx agent run --compare --harnesses=agent,claude --prompt task.md
 
 # Compare with per-arm model selection
 ddx agent run --compare \
-  --arm forge:qwen3.5-27b:forge-fast \
-  --arm claude:claude-opus-4-6:claude-smart \
+  --arm agent:qwen3.5-27b:fast \
+  --arm claude:claude-opus-4-6:smart \
   --prompt task.md --sandbox
 
 # Compare with post-run test
-ddx agent run --compare --harnesses=forge,claude --prompt task.md \
+ddx agent run --compare --harnesses=agent,claude --prompt task.md \
   --post-run "cd cli && make test"
 
 # Grade a comparison using claude as grader
@@ -274,10 +274,10 @@ ddx agent compare --list
 ddx agent compare --show cmp-abc123 --format json
 
 # Replay a closed bead with a different model
-ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness forge
+ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness agent
 
 # Replay with post-run verification
-ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness forge \
+ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness agent \
   --post-run "cd cli && make test"
 
 # Run a benchmark suite
@@ -300,11 +300,11 @@ agent:
 
 ### US-190: Developer Compares Local vs Cloud Model
 **As a** developer evaluating whether a local model can handle a task class
-**I want** to run the same prompt through forge (local) and claude (cloud)
+**I want** to run the same prompt through DDx Agent (local) and claude (cloud)
 **So that** I can see concrete differences in output quality and cost
 
 **Acceptance Criteria:**
-- Given I run `ddx agent run --compare --harnesses=forge,claude --prompt task.md`,
+- Given I run `ddx agent run --compare --harnesses=agent,claude --prompt task.md`,
   then both harnesses receive the same prompt text
 - Given both arms complete, then I see a comparison summary with per-arm
   output, tokens, cost, and duration
@@ -330,8 +330,8 @@ agent:
 **So that** prompt changes that degrade quality are caught before merge
 
 **Acceptance Criteria:**
-- Given a comparison with `--harnesses=forge` and the virtual provider
-  baseline, when the forge output diverges significantly, then the
+- Given a comparison with `--harnesses=agent` and the virtual provider
+  baseline, when the DDx Agent output diverges significantly, then the
   comparison record reflects the difference
 - Given `--format json` output, then CI can parse the comparison and
   fail the pipeline on grade regression
@@ -357,7 +357,7 @@ working tree
 
 **Acceptance Criteria:**
 - Given a closed bead with a linked session, when I run
-  `ddx agent replay <bead-id> --model qwen3.5-27b --harness forge`,
+  `ddx agent replay <bead-id> --model qwen3.5-27b --harness agent`,
   then the original prompt is reconstructed from the session and dispatched
 - Given the replay completes in a sandbox worktree checked out at the
   parent of `closing_commit_sha`, then I see the diff compared against
@@ -394,7 +394,7 @@ working tree
   support, session logging, comparison dispatch
 - FEAT-014 (Token Awareness) — token/cost tracking per arm
 - FEAT-012 (Git Awareness) — git worktree operations
-- Forge library — embedded agent with tool call logging
+- DDx Agent library — embedded agent with tool call logging
 
 ## Out of Scope
 
