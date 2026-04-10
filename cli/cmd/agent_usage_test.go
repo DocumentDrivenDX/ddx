@@ -59,7 +59,7 @@ agent:
 	}
 	legacySession := agent.SessionEntry{
 		ID:           "as-legacy",
-		Timestamp:    time.Date(2026, 4, 9, 10, 5, 0, 0, time.UTC),
+		Timestamp:    time.Date(2026, 4, 9, 9, 55, 0, 0, time.UTC),
 		Harness:      "claude",
 		Model:        "claude-sonnet-4-6",
 		InputTokens:  120,
@@ -102,4 +102,63 @@ agent:
 	assert.Equal(t, 32, byHarness["claude"].OutputTokens)
 	assert.InDelta(t, 3.75, byHarness["claude"].CostUSD, 0.0001)
 	assert.InDelta(t, 1500.0, byHarness["claude"].AvgDurationMS, 0.0001)
+}
+
+func TestAgentUsageSkipsUnkeyedCurrentSessionsAfterRoutingCutoff(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	logDir := filepath.Join(ddxDir, "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+
+	config := `version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+agent:
+  session_log_dir: ".ddx/agent-logs"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0o644))
+
+	outcome := agent.RoutingOutcome{
+		Harness:         "codex",
+		Surface:         "codex",
+		CanonicalTarget: "gpt-5.4",
+		Model:           "gpt-5.4",
+		ObservedAt:      time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC),
+		Success:         true,
+		LatencyMS:       2000,
+		InputTokens:     200,
+		OutputTokens:    20,
+		CostUSD:         2.50,
+	}
+	session := agent.SessionEntry{
+		ID:           "as-current",
+		Timestamp:    time.Date(2026, 4, 9, 10, 0, 1, 0, time.UTC),
+		Harness:      "codex",
+		Model:        "gpt-5.4",
+		InputTokens:  200,
+		OutputTokens: 20,
+		CostUSD:      2.50,
+		Duration:     2000,
+		ExitCode:     0,
+	}
+
+	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), outcome)
+	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), session)
+
+	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+
+	row := rows[0]
+	assert.Equal(t, "codex", row.Harness)
+	assert.Equal(t, 1, row.Sessions)
+	assert.Equal(t, 200, row.InputTokens)
+	assert.Equal(t, 20, row.OutputTokens)
+	assert.InDelta(t, 2.50, row.CostUSD, 0.0001)
+	assert.InDelta(t, 2000.0, row.AvgDurationMS, 0.0001)
 }
