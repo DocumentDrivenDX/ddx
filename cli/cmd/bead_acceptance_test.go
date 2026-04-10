@@ -354,6 +354,70 @@ git:
 	assert.NotEmpty(t, headBeforeClose)
 }
 
+func TestBeadCommandsPreserveUnrelatedClosingCommitShaAcrossMutations(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	seedSHA := gitHead(t, env.Dir, "HEAD")
+
+	preservedOut, err := executeCommand(rootCmd, "bead", "create", "Preserved provenance", "--type", "task")
+	require.NoError(t, err)
+	preservedID := strings.TrimSpace(preservedOut)
+	require.NotEmpty(t, preservedID)
+
+	_, err = executeCommand(rootCmd, "bead", "close", preservedID)
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "update", preservedID, "--set", "closing_commit_sha="+seedSHA)
+	require.NoError(t, err)
+
+	verifyPreserved := func(t *testing.T) {
+		t.Helper()
+		showOut, err := executeCommand(rootCmd, "bead", "show", preservedID, "--json")
+		require.NoError(t, err)
+
+		var bead map[string]any
+		require.NoError(t, json.Unmarshal([]byte(showOut), &bead))
+		assert.Equal(t, "closed", bead["status"])
+		assert.Equal(t, seedSHA, bead["closing_commit_sha"])
+	}
+
+	verifyPreserved(t)
+
+	updatedOut, err := executeCommand(rootCmd, "bead", "create", "Update target", "--type", "task")
+	require.NoError(t, err)
+	updatedID := strings.TrimSpace(updatedOut)
+	require.NotEmpty(t, updatedID)
+
+	_, err = executeCommand(rootCmd, "bead", "update", updatedID, "--status", "in_progress")
+	require.NoError(t, err)
+
+	verifyPreserved(t)
+
+	closedOut, err := executeCommand(rootCmd, "bead", "create", "Close target", "--type", "task")
+	require.NoError(t, err)
+	closedID := strings.TrimSpace(closedOut)
+	require.NotEmpty(t, closedID)
+
+	_, err = executeCommand(rootCmd, "bead", "close", closedID)
+	require.NoError(t, err)
+
+	verifyPreserved(t)
+}
+
 func TestBeadCommandsCloseNormalizesProvidedCommitSHA(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"
