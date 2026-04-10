@@ -46,7 +46,7 @@ agent:
 
 	legacySession := agent.SessionEntry{
 		ID:           "as-legacy",
-		Timestamp:    time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC),
+		Timestamp:    time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC),
 		Harness:      "codex",
 		Model:        "gpt-5.4",
 		InputTokens:  120,
