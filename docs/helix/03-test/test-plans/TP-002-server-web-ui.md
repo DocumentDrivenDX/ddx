@@ -157,7 +157,11 @@ roots so request routing and the UI project picker can be exercised in one run.
 The MCP registry and project-scoped routing checks in this section remain
 planned future coverage and are not yet implemented in
 `cli/internal/server/server_test.go` alongside the existing HTTP API and MCP
-endpoint coverage.
+endpoint coverage. The planned MCP coverage here should exercise project
+listing via `ddx_list_projects`, project lookup via `ddx_show_project`, and at
+least one project-aware MCP tool call using an explicit project selection.
+These cases are owned by the Go server tests in
+`cli/internal/server/server_test.go`.
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
