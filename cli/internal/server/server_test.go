@@ -639,8 +639,8 @@ func TestAgentSessions(t *testing.T) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	session1 := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"tokens":500,"duration_ms":2000,"exit_code":0}`
-	session2 := `{"id":"as-0002","timestamp":"2026-01-01T11:00:00Z","harness":"claude","model":"sonnet","prompt_len":200,"tokens":800,"duration_ms":3000,"exit_code":0}`
+	session1 := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","surface":"codex","canonical_target":"gpt-4","model":"gpt-4","prompt_len":100,"prompt_source":"stdin","native_session_id":"native-001","native_log_ref":"log-001","trace_id":"trace-001","span_id":"span-001","tokens":500,"input_tokens":350,"output_tokens":150,"total_tokens":500,"duration_ms":2000,"exit_code":0}`
+	session2 := `{"id":"as-0002","timestamp":"2026-01-01T11:00:00Z","harness":"claude","surface":"claude","canonical_target":"sonnet","model":"sonnet","prompt_len":200,"prompt_source":"file","native_session_id":"native-002","native_log_ref":"log-002","trace_id":"trace-002","span_id":"span-002","tokens":800,"input_tokens":450,"output_tokens":350,"total_tokens":800,"duration_ms":3000,"exit_code":0}`
 	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session1+"\n"+session2+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -655,10 +655,7 @@ func TestAgentSessions(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var sessions []struct {
-		ID      string `json:"id"`
-		Harness string `json:"harness"`
-	}
+	var sessions []map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &sessions); err != nil {
 		t.Fatal(err)
 	}
@@ -666,8 +663,17 @@ func TestAgentSessions(t *testing.T) {
 		t.Fatalf("expected 2 sessions, got %d", len(sessions))
 	}
 	// Most recent first
-	if sessions[0].ID != "as-0002" {
-		t.Errorf("expected most recent first (as-0002), got %s", sessions[0].ID)
+	if sessions[0]["id"] != "as-0002" {
+		t.Errorf("expected most recent first (as-0002), got %v", sessions[0]["id"])
+	}
+	if _, ok := sessions[0]["prompt"]; ok {
+		t.Errorf("did not expect prompt in session list payload: %v", sessions[0])
+	}
+	if _, ok := sessions[0]["response"]; ok {
+		t.Errorf("did not expect response in session list payload: %v", sessions[0])
+	}
+	if sessions[0]["native_session_id"] != "native-002" || sessions[0]["trace_id"] != "trace-002" {
+		t.Errorf("expected native refs in session list payload, got %v", sessions[0])
 	}
 }
 
@@ -716,7 +722,7 @@ func TestAgentSessionDetail(t *testing.T) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	session := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"prompt":"inspect me","response":"done","correlation":{"bead_id":"hx-123"},"tokens":500,"duration_ms":2000,"exit_code":0}`
+	session := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","surface":"codex","canonical_target":"gpt-4","model":"gpt-4","prompt_len":100,"prompt_source":"stdin","prompt":"inspect me","response":"done","correlation":{"bead_id":"hx-123"},"native_session_id":"native-123","native_log_ref":"log-123","trace_id":"trace-123","span_id":"span-123","tokens":500,"duration_ms":2000,"exit_code":0}`
 	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -732,12 +738,18 @@ func TestAgentSessionDetail(t *testing.T) {
 	}
 
 	var sess struct {
-		ID          string            `json:"id"`
-		Harness     string            `json:"harness"`
-		Tokens      int               `json:"tokens"`
-		Prompt      string            `json:"prompt"`
-		Response    string            `json:"response"`
-		Correlation map[string]string `json:"correlation"`
+		ID                string            `json:"id"`
+		Harness           string            `json:"harness"`
+		Tokens            int               `json:"tokens"`
+		PromptAvailable   bool              `json:"prompt_available"`
+		ResponseAvailable bool              `json:"response_available"`
+		Prompt            string            `json:"prompt"`
+		Response          string            `json:"response"`
+		Correlation       map[string]string `json:"correlation"`
+		NativeSessionID   string            `json:"native_session_id"`
+		NativeLogRef      string            `json:"native_log_ref"`
+		TraceID           string            `json:"trace_id"`
+		SpanID            string            `json:"span_id"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &sess); err != nil {
 		t.Fatal(err)
@@ -748,11 +760,57 @@ func TestAgentSessionDetail(t *testing.T) {
 	if sess.Tokens != 500 {
 		t.Errorf("expected tokens=500, got %d", sess.Tokens)
 	}
+	if !sess.PromptAvailable || !sess.ResponseAvailable {
+		t.Fatalf("expected prompt/response availability flags to be true, got %+v", sess)
+	}
 	if sess.Prompt != "inspect me" || sess.Response != "done" {
 		t.Errorf("expected prompt/response to be returned, got %q / %q", sess.Prompt, sess.Response)
 	}
 	if sess.Correlation["bead_id"] != "hx-123" {
 		t.Errorf("expected bead correlation, got %v", sess.Correlation)
+	}
+	if sess.NativeSessionID != "native-123" || sess.NativeLogRef != "log-123" || sess.TraceID != "trace-123" || sess.SpanID != "span-123" {
+		t.Errorf("expected native refs in detail payload, got %+v", sess)
+	}
+}
+
+func TestAgentSessionDetailUnavailableContent(t *testing.T) {
+	dir := setupTestDir(t)
+
+	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	session := `{"id":"as-0002","timestamp":"2026-01-01T10:05:00Z","harness":"claude","surface":"claude","canonical_target":"sonnet","model":"sonnet","prompt_len":0,"native_session_id":"native-456","trace_id":"trace-456","span_id":"span-456","duration_ms":1500,"exit_code":0}`
+	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/agent/sessions/as-0002", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if got := payload["prompt_available"]; got != false {
+		t.Fatalf("expected prompt_available=false, got %v", got)
+	}
+	if got := payload["response_available"]; got != false {
+		t.Fatalf("expected response_available=false, got %v", got)
+	}
+	if _, ok := payload["prompt"]; ok {
+		t.Fatalf("did not expect prompt field in unavailable detail payload: %v", payload)
+	}
+	if _, ok := payload["response"]; ok {
+		t.Fatalf("did not expect response field in unavailable detail payload: %v", payload)
 	}
 }
 

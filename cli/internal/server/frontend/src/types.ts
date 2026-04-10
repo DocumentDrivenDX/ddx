@@ -55,19 +55,36 @@ export interface StaleEntry {
   reasons: string[]
 }
 
-export interface SessionEntry {
+export interface AgentSessionSummary {
   id: string
   timestamp: string
   harness: string
+  surface?: string
+  canonical_target?: string
   model?: string
   prompt_len: number
-  prompt?: string
   prompt_source?: string
-  response?: string
+  correlation?: Record<string, string>
+  native_session_id?: string
+  native_log_ref?: string
+  trace_id?: string
+  span_id?: string
   stderr?: string
   tokens?: number
+  input_tokens?: number
+  output_tokens?: number
+  cost_usd?: number
   duration_ms: number
   exit_code: number
   error?: string
-  correlation?: Record<string, string>
+  total_tokens?: number
+  base_rev?: string
+  result_rev?: string
+}
+
+export interface AgentSessionDetail extends AgentSessionSummary {
+  prompt_available: boolean
+  response_available: boolean
+  prompt?: string
+  response?: string
 }

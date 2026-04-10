@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { api } from '../api'
 import { useFetch } from '../hooks/useFetch'
-import type { SessionEntry } from '../types'
+import type { AgentSessionDetail, AgentSessionSummary } from '../types'
 
-function TokenSummary({ sessions }: { sessions: SessionEntry[] }) {
+function TokenSummary({ sessions }: { sessions: AgentSessionSummary[] }) {
   const summary = useMemo(() => {
     const byHarness: Record<string, { tokens: number; count: number; duration: number }> = {}
     for (const s of sessions) {
@@ -42,6 +42,32 @@ function TokenSummary({ sessions }: { sessions: SessionEntry[] }) {
   )
 }
 
+function compactRef(value?: string) {
+  if (!value) return '-'
+  if (value.length <= 18) return value
+  return `${value.slice(0, 8)}…${value.slice(-6)}`
+}
+
+function NativeRefs({ session }: { session: AgentSessionSummary }) {
+  const refs = [
+    session.native_session_id ? `session ${compactRef(session.native_session_id)}` : null,
+    session.trace_id ? `trace ${compactRef(session.trace_id)}` : null,
+    session.span_id ? `span ${compactRef(session.span_id)}` : null,
+  ].filter(Boolean) as string[]
+
+  if (refs.length === 0) return <span className="text-gray-400">-</span>
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {refs.map((ref) => (
+        <span key={ref} className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
+          {ref}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function Agent() {
   const [harnessFilter, setHarnessFilter] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -50,7 +76,7 @@ export default function Agent() {
     [harnessFilter]
   )
 
-  const harnesses = [...new Set((sessions.data ?? []).map((s: SessionEntry) => s.harness))]
+  const harnesses = [...new Set((sessions.data ?? []).map((s: AgentSessionSummary) => s.harness))]
 
   return (
     <div className="h-full flex flex-col">
@@ -66,7 +92,7 @@ export default function Agent() {
         </select>
       </div>
 
-      {!sessions.loading && sessions.data && <TokenSummary sessions={sessions.data as SessionEntry[]} />}
+      {!sessions.loading && sessions.data && <TokenSummary sessions={sessions.data as AgentSessionSummary[]} />}
 
       {sessions.loading && <div className="text-gray-400 text-sm">Loading...</div>}
       {sessions.error && <div className="text-red-500 text-sm">Error: {sessions.error}</div>}
@@ -79,13 +105,15 @@ export default function Agent() {
               <th className="text-left px-3 py-2 font-medium text-gray-500">ID</th>
               <th className="text-left px-3 py-2 font-medium text-gray-500">Harness</th>
               <th className="text-left px-3 py-2 font-medium text-gray-500">Model</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-500">Prompt Source</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-500">Native Refs</th>
               <th className="text-right px-3 py-2 font-medium text-gray-500">Tokens</th>
               <th className="text-right px-3 py-2 font-medium text-gray-500">Duration</th>
               <th className="text-center px-3 py-2 font-medium text-gray-500">Exit</th>
             </tr>
           </thead>
           <tbody>
-            {(sessions.data ?? []).map((s: SessionEntry) => (
+            {(sessions.data ?? []).map((s: AgentSessionSummary) => (
               <tr
                 key={s.id}
                 onClick={() => setSelectedId(s.id === selectedId ? null : s.id)}
@@ -97,6 +125,8 @@ export default function Agent() {
                 <td className="px-3 py-2 font-mono text-xs">{s.id}</td>
                 <td className="px-3 py-2">{s.harness}</td>
                 <td className="px-3 py-2 text-gray-500">{s.model || '-'}</td>
+                <td className="px-3 py-2 text-gray-500">{s.prompt_source || '-'}</td>
+                <td className="px-3 py-2"><NativeRefs session={s} /></td>
                 <td className="px-3 py-2 text-right">{s.tokens ?? '-'}</td>
                 <td className="px-3 py-2 text-right">{(s.duration_ms / 1000).toFixed(1)}s</td>
                 <td className="px-3 py-2 text-center">
@@ -110,9 +140,9 @@ export default function Agent() {
             ))}
           </tbody>
         </table>
-        {!sessions.loading && (sessions.data ?? []).length === 0 && (
-          <div className="text-gray-400 text-center mt-8">No agent sessions recorded.</div>
-        )}
+      {!sessions.loading && (sessions.data ?? []).length === 0 && (
+        <div className="text-gray-400 text-center mt-8">No agent sessions recorded.</div>
+      )}
       </div>
 
       {selectedId && <SessionDetail id={selectedId} />}
@@ -126,17 +156,25 @@ function SessionDetail({ id }: { id: string }) {
   if (detail.loading) return <div className="mt-4 text-gray-400 text-sm">Loading detail...</div>
   if (detail.error) return <div className="mt-4 text-red-500 text-sm">Error: {detail.error}</div>
 
-  const s = detail.data as SessionEntry
+  const s = detail.data as AgentSessionDetail
   return (
     <div className="mt-4 bg-white rounded-lg border border-gray-200 shadow p-4 text-sm">
       <h3 className="font-bold mb-2">Session {s.id}</h3>
+      <p className="mb-3 text-xs text-gray-500">
+        Native session metadata is shown here; prompt and response only appear when the server marks them available.
+      </p>
       <div className="grid grid-cols-2 gap-2 text-gray-600">
         <div>Harness: <b>{s.harness}</b></div>
         <div>Model: <b>{s.model || '-'}</b></div>
+        <div>Prompt Source: <b>{s.prompt_source || '-'}</b></div>
         <div>Tokens: <b>{s.tokens ?? 0}</b></div>
         <div>Duration: <b>{(s.duration_ms / 1000).toFixed(1)}s</b></div>
         <div>Prompt Length: <b>{s.prompt_len}</b></div>
         <div>Exit Code: <b>{s.exit_code}</b></div>
+        <div>Native Session: <b className="font-mono">{s.native_session_id || '-'}</b></div>
+        <div>Native Log Ref: <b className="font-mono">{s.native_log_ref || '-'}</b></div>
+        <div>Trace ID: <b className="font-mono">{s.trace_id || '-'}</b></div>
+        <div>Span ID: <b className="font-mono">{s.span_id || '-'}</b></div>
       </div>
       {s.correlation && Object.keys(s.correlation).length > 0 && (
         <div className="mt-3 text-gray-600">
@@ -144,13 +182,25 @@ function SessionDetail({ id }: { id: string }) {
           <pre className="bg-gray-50 rounded p-2 overflow-x-auto">{JSON.stringify(s.correlation, null, 2)}</pre>
         </div>
       )}
-      {s.prompt && (
+      {!s.prompt_available && (
+        <div className="mt-3 text-gray-500">
+          <div className="font-medium mb-1">Prompt</div>
+          <div className="rounded bg-gray-50 p-2">Prompt is not available in this session record.</div>
+        </div>
+      )}
+      {s.prompt_available && s.prompt && (
         <div className="mt-3">
           <div className="font-medium mb-1">Prompt</div>
           <pre className="bg-gray-50 rounded p-2 overflow-x-auto whitespace-pre-wrap">{s.prompt}</pre>
         </div>
       )}
-      {s.response && (
+      {!s.response_available && (
+        <div className="mt-3 text-gray-500">
+          <div className="font-medium mb-1">Response</div>
+          <div className="rounded bg-gray-50 p-2">Response is not available in this session record.</div>
+        </div>
+      )}
+      {s.response_available && s.response && (
         <div className="mt-3">
           <div className="font-medium mb-1">Response</div>
           <pre className="bg-gray-50 rounded p-2 overflow-x-auto whitespace-pre-wrap">{s.response}</pre>

@@ -1,3 +1,5 @@
+import type { AgentSessionDetail, AgentSessionSummary } from './types'
+
 const BASE = '/api'
 
 async function fetchJSON<T>(path: string): Promise<T> {
@@ -75,8 +77,8 @@ export const api = {
   docStale: () => fetchJSON<any[]>('/docs/stale'),
   docShow: (id: string) => fetchJSON<any>(`/docs/${id}`),
   agentSessions: (harness?: string) =>
-    fetchJSON<any[]>(`/agent/sessions${harness ? `?harness=${harness}` : ''}`),
-  agentSessionDetail: (id: string) => fetchJSON<any>(`/agent/sessions/${id}`),
+    fetchJSON<AgentSessionSummary[]>(`/agent/sessions${harness ? `?harness=${harness}` : ''}`),
+  agentSessionDetail: (id: string) => fetchJSON<AgentSessionDetail>(`/agent/sessions/${id}`),
   personas: () => fetchJSON<any[]>('/personas'),
   personaDetail: (role: string) => fetchJSON<any>(`/personas/${role}`),
   health: () => fetchJSON<any>('/health'),

@@ -292,6 +292,8 @@ test.describe('TC-005: Agent', () => {
     await page.waitForTimeout(1000)
     // Page should render without crashing
     await expect(page.locator('body')).toBeVisible()
+    await expect(page.locator('text=Native Refs')).toBeVisible()
+    await expect(page.locator('text=Prompt Source')).toBeVisible()
   })
 })
 

@@ -1271,6 +1271,41 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 
 // --- Agent Session Endpoints ---
 
+type agentSessionSummary struct {
+	ID              string            `json:"id"`
+	Timestamp       time.Time         `json:"timestamp"`
+	Harness         string            `json:"harness"`
+	Surface         string            `json:"surface,omitempty"`
+	CanonicalTarget string            `json:"canonical_target,omitempty"`
+	Model           string            `json:"model,omitempty"`
+	PromptLen       int               `json:"prompt_len"`
+	PromptSource    string            `json:"prompt_source,omitempty"`
+	Correlation     map[string]string `json:"correlation,omitempty"`
+	NativeSessionID string            `json:"native_session_id,omitempty"`
+	NativeLogRef    string            `json:"native_log_ref,omitempty"`
+	TraceID         string            `json:"trace_id,omitempty"`
+	SpanID          string            `json:"span_id,omitempty"`
+	Stderr          string            `json:"stderr,omitempty"`
+	Tokens          int               `json:"tokens,omitempty"`
+	InputTokens     int               `json:"input_tokens,omitempty"`
+	OutputTokens    int               `json:"output_tokens,omitempty"`
+	CostUSD         float64           `json:"cost_usd,omitempty"`
+	DurationMS      int               `json:"duration_ms"`
+	ExitCode        int               `json:"exit_code"`
+	Error           string            `json:"error,omitempty"`
+	TotalTokens     int               `json:"total_tokens,omitempty"`
+	BaseRev         string            `json:"base_rev,omitempty"`
+	ResultRev       string            `json:"result_rev,omitempty"`
+}
+
+type agentSessionDetail struct {
+	agentSessionSummary
+	PromptAvailable   bool   `json:"prompt_available"`
+	ResponseAvailable bool   `json:"response_available"`
+	Prompt            string `json:"prompt,omitempty"`
+	Response          string `json:"response,omitempty"`
+}
+
 func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
 	sessions, err := s.loadSessions()
 	if err != nil {
@@ -1311,7 +1346,12 @@ func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
 		return sessions[i].Timestamp.After(sessions[j].Timestamp)
 	})
 
-	writeJSON(w, http.StatusOK, sessions)
+	summaries := make([]agentSessionSummary, 0, len(sessions))
+	for _, sess := range sessions {
+		summaries = append(summaries, summarizeAgentSession(sess))
+	}
+
+	writeJSON(w, http.StatusOK, summaries)
 }
 
 func (s *Server) handleAgentSessionDetail(w http.ResponseWriter, r *http.Request) {
@@ -1329,7 +1369,7 @@ func (s *Server) handleAgentSessionDetail(w http.ResponseWriter, r *http.Request
 
 	for _, sess := range sessions {
 		if sess.ID == id {
-			writeJSON(w, http.StatusOK, sess)
+			writeJSON(w, http.StatusOK, detailAgentSession(sess))
 			return
 		}
 	}
@@ -1358,6 +1398,50 @@ func (s *Server) loadSessions() ([]agent.SessionEntry, error) {
 		sessions = append(sessions, entry)
 	}
 	return sessions, scanner.Err()
+}
+
+func summarizeAgentSession(sess agent.SessionEntry) agentSessionSummary {
+	return agentSessionSummary{
+		ID:              sess.ID,
+		Timestamp:       sess.Timestamp,
+		Harness:         sess.Harness,
+		Surface:         sess.Surface,
+		CanonicalTarget: sess.CanonicalTarget,
+		Model:           sess.Model,
+		PromptLen:       sess.PromptLen,
+		PromptSource:    sess.PromptSource,
+		Correlation:     sess.Correlation,
+		NativeSessionID: sess.NativeSessionID,
+		NativeLogRef:    sess.NativeLogRef,
+		TraceID:         sess.TraceID,
+		SpanID:          sess.SpanID,
+		Stderr:          sess.Stderr,
+		Tokens:          sess.Tokens,
+		InputTokens:     sess.InputTokens,
+		OutputTokens:    sess.OutputTokens,
+		CostUSD:         sess.CostUSD,
+		DurationMS:      sess.Duration,
+		ExitCode:        sess.ExitCode,
+		Error:           sess.Error,
+		TotalTokens:     sess.TotalTokens,
+		BaseRev:         sess.BaseRev,
+		ResultRev:       sess.ResultRev,
+	}
+}
+
+func detailAgentSession(sess agent.SessionEntry) agentSessionDetail {
+	detail := agentSessionDetail{
+		agentSessionSummary: summarizeAgentSession(sess),
+		PromptAvailable:     sess.Prompt != "",
+		ResponseAvailable:   sess.Response != "",
+	}
+	if detail.PromptAvailable {
+		detail.Prompt = sess.Prompt
+	}
+	if detail.ResponseAvailable {
+		detail.Response = sess.Response
+	}
+	return detail
 }
 
 // --- Process Metrics Endpoints ---
