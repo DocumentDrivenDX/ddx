@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -48,7 +49,10 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	}
 
 	// Resolve agent configuration (config.yaml → env vars → opts)
-	agentCfg := r.resolveAgentConfig(model)
+	agentCfg, err := r.resolveAgentConfig(model)
+	if err != nil {
+		return nil, err
+	}
 
 	// Use injected provider (testing) or build from resolved config.
 	var provider agentlib.Provider
@@ -163,7 +167,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 // resolveAgentConfig builds an AgentRunConfig from .ddx/config.yaml, env vars, and opts.
 // Priority: opts > env vars > config > built-in defaults.
 // If model resolves to a named preset in agent.models, the preset's endpoint and model are applied.
-func (r *Runner) resolveAgentConfig(model string) AgentRunConfig {
+func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 	cfg := AgentRunConfig{
 		Provider:      "openai-compat",
 		BaseURL:       "http://localhost:1234/v1",
@@ -220,6 +224,10 @@ func (r *Runner) resolveAgentConfig(model string) AgentRunConfig {
 		cfg.Model = model
 	}
 
+	if !containsString(prompt.PresetNames(), cfg.Preset) {
+		return AgentRunConfig{}, fmt.Errorf("agent: unsupported preset %q; supported presets: %s", cfg.Preset, strings.Join(prompt.PresetNames(), ", "))
+	}
+
 	// Layer 4: if cfg.Model names a preset, resolve it to endpoint + model.
 	if preset, ok := yamlModels[cfg.Model]; ok {
 		cfg.Model = preset.Model
@@ -234,7 +242,7 @@ func (r *Runner) resolveAgentConfig(model string) AgentRunConfig {
 		}
 	}
 
-	return cfg
+	return cfg, nil
 }
 
 // selectEndpoint picks one endpoint from the list using the specified strategy.

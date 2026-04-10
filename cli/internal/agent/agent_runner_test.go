@@ -361,7 +361,8 @@ func TestAgentResolveConfigLLMPreset(t *testing.T) {
 	}
 
 	t.Run("preset name resolves to model and endpoint", func(t *testing.T) {
-		cfg := r.resolveAgentConfig("qwen-local")
+		cfg, err := r.resolveAgentConfig("qwen-local")
+		require.NoError(t, err)
 		assert.Equal(t, "qwen2.5-coder-32b-instruct", cfg.Model)
 		assert.Contains(t, endpoints, cfg.BaseURL)
 		assert.Equal(t, "openai-compat", cfg.Provider)
@@ -372,7 +373,8 @@ func TestAgentResolveConfigLLMPreset(t *testing.T) {
 		roundRobinCounter = 0
 		seen := map[string]bool{}
 		for i := 0; i < 9; i++ {
-			cfg := r.resolveAgentConfig("qwen-local")
+			cfg, err := r.resolveAgentConfig("qwen-local")
+			require.NoError(t, err)
 			seen[cfg.BaseURL] = true
 		}
 		assert.Len(t, seen, 3, "round-robin should rotate through all 3 endpoints")
@@ -381,14 +383,16 @@ func TestAgentResolveConfigLLMPreset(t *testing.T) {
 	t.Run("first-available always returns first endpoint", func(t *testing.T) {
 		presets["qwen-local"].Strategy = "first-available"
 		for i := 0; i < 5; i++ {
-			cfg := r.resolveAgentConfig("qwen-local")
+			cfg, err := r.resolveAgentConfig("qwen-local")
+			require.NoError(t, err)
 			assert.Equal(t, endpoints[0], cfg.BaseURL)
 		}
 		presets["qwen-local"].Strategy = "round-robin"
 	})
 
 	t.Run("unknown model name treated as raw model", func(t *testing.T) {
-		cfg := r.resolveAgentConfig("some-raw-model")
+		cfg, err := r.resolveAgentConfig("some-raw-model")
+		require.NoError(t, err)
 		assert.Equal(t, "some-raw-model", cfg.Model)
 	})
 }
@@ -400,9 +404,37 @@ func TestAgentResolveConfigDefaultPresetIsSupported(t *testing.T) {
 		return &AgentYAMLConfig{}
 	}
 
-	cfg := r.resolveAgentConfig("")
+	cfg, err := r.resolveAgentConfig("")
+	require.NoError(t, err)
 	assert.Contains(t, prompt.PresetNames(), cfg.Preset)
 	assert.Equal(t, "agent", cfg.Preset)
+}
+
+func TestAgentResolveConfigRejectsUnsupportedPresetFromConfig(t *testing.T) {
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{Preset: "forge"}
+	}
+
+	_, err := r.resolveAgentConfig("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forge")
+	assert.Contains(t, err.Error(), "supported presets")
+}
+
+func TestAgentResolveConfigRejectsUnsupportedPresetFromEnv(t *testing.T) {
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{Preset: "agent"}
+	}
+	t.Setenv("AGENT_PRESET", "forge")
+
+	_, err := r.resolveAgentConfig("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forge")
+	assert.Contains(t, err.Error(), "supported presets")
 }
 
 // --- Helpers ---
