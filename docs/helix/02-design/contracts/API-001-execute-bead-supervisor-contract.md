@@ -25,8 +25,7 @@ The supervisor contract covers:
 - bead claim and selection flow
 - structural execution validation
 - isolated worktree execution
-- post-run required-execution and validity checks
-- preserve-on-failure vs land-on-success semantics
+- observation of execute-bead result states
 - operator controls and loop observability
 
 ## Boundary
@@ -45,6 +44,11 @@ HELIX owns the workflow policy:
 - retry policy after a failure
 - what operator-facing automation wraps the loop
 
+`ddx agent execute-bead` remains the single owner of required execution
+document resolution, required post-run checks, merge-eligibility evaluation,
+and land/preserve mechanics. The supervisor only orchestrates queue selection
+and records the result states emitted by that command.
+
 The first release does not require multi-project discovery, cross-project
 scheduling, or multi-host coordination. A worker instance binds to exactly one
 project context for the duration of a loop.
@@ -62,17 +66,16 @@ drained, the operator stops it, or a fatal project error occurs.
    the generic execution-ready validator against that resolved base snapshot.
 4. Claim the chosen bead atomically.
 5. Create an isolated execution worktree from the resolved base.
-6. Run `ddx agent execute-bead` against the bead in that worktree.
-7. Run all required post-run checks, including any required executions and
-   validity checks attached to the governing execution contract.
-8. Classify the outcome:
+6. Run `ddx agent execute-bead` against the bead in that worktree and capture
+   its reported result state.
+7. Classify the outcome reported by `execute-bead`:
    - structural validation failure before launch
    - execution failure
    - post-run check failure
    - land conflict after a successful attempt
    - success
-9. Remove the execution worktree.
-10. Continue scanning the same project queue.
+8. Remove the execution worktree.
+9. Continue scanning the same project queue.
 
 The loop must never infer readiness from HELIX-specific hidden policy. It uses
 the shared validator output and the explicit contract snapshot as its source of
@@ -84,12 +87,15 @@ Structural validation happens before any irreversible execution step.
 
 - If a bead fails structural validation, the supervisor records the blocker,
   unclaims the bead, and leaves it open for later correction.
-- If execution starts and later fails, the iteration is preserved under a
-  hidden ref using the documented execute-bead naming scheme.
-- If post-run required checks fail, the iteration is also preserved under a
-  hidden ref and the failure reason is attached to the result record.
-- If a rebase or fast-forward land fails after a successful run, the preserved
-  iteration remains the canonical evidence for that attempt.
+- If execution starts and later fails, `execute-bead` preserves the iteration
+  under a hidden ref using the documented naming scheme, and the supervisor
+  records that result state.
+- If post-run required checks fail, `execute-bead` preserves the iteration
+  under a hidden ref, attaches the failure reason to the result record, and
+  the supervisor records that result state.
+- If a rebase or fast-forward land fails after a successful run, `execute-bead`
+  preserves the iteration and the preserved iteration remains the canonical
+  evidence for that attempt.
 
 Retry surface:
 
@@ -111,6 +117,9 @@ fast-forward.
 - reset the worker worktree to the updated branch tip after a successful land
 - preserve the iteration under a hidden ref when the result cannot be landed or
   `--no-merge` semantics apply
+
+These mechanics are owned by `ddx agent execute-bead`; the supervisor observes
+the resulting landed or preserved state rather than performing them itself.
 
 The preserved ref is the durable evidence for any non-landed attempt. It keeps
 the exact iteration commit, associated metadata, and inspection trail intact.
@@ -157,8 +166,9 @@ At minimum, the loop should expose:
 
 - The contract stays single-project scoped for the first release.
 - The loop consumes DDx execution validation instead of HELIX-hidden policy.
-- Non-landed attempts are preserved, not rewritten.
-- Successful attempts land by rebase plus fast-forward and then reset the
-  worker worktree to the new tip.
+- Non-landed attempts are preserved by `execute-bead`, not rewritten by the
+  supervisor.
+- Successful attempts land by rebase plus fast-forward inside `execute-bead`
+  and then reset the worker worktree to the new tip.
 - The contract remains valid when later `ddx server` work uses project-scoped
   worker pools.
