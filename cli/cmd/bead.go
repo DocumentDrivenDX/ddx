@@ -77,10 +77,10 @@ func (f *CommandFactory) beadAutoCommit(operation string) string {
 	return sha
 }
 
-// commitTouchesNonTrackerFiles reports whether the given commit changed any
-// file outside .ddx/. Tracker-only backfills should not be stamped as replay
-// provenance because FEAT-019 treats closing_commit_sha as a replay boundary.
-func (f *CommandFactory) commitTouchesNonTrackerFiles(commitSHA string) bool {
+// commitIsMetadataOnlyTrackerBackfill reports whether the given commit changed
+// only bead tracker state. Closing provenance is suppressed only for pure
+// tracker backfills that touch .ddx/beads.jsonl and nothing else.
+func (f *CommandFactory) commitIsMetadataOnlyTrackerBackfill(commitSHA string) bool {
 	if commitSHA == "" {
 		return false
 	}
@@ -100,12 +100,12 @@ func (f *CommandFactory) commitTouchesNonTrackerFiles(commitSHA string) bool {
 		if path == "" {
 			continue
 		}
-		if !strings.HasPrefix(path, ".ddx/") {
-			return true
+		if path != ".ddx/beads.jsonl" {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 func (f *CommandFactory) beadStore() *bead.Store {
@@ -551,10 +551,11 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			}
 
 			landedSHA := f.beadAutoCommit("close " + args[0])
-			if commitSHA == "" && landedSHA != "" && f.commitTouchesNonTrackerFiles(landedSHA) {
+			if commitSHA == "" && landedSHA != "" && !f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
 				// Only stamp closing provenance when the close commit includes
-				// non-tracker work. Pure tracker backfills should not advertise a
-				// replay boundary that points at metadata-only provenance.
+				// real implementation work. Pure tracker backfills should not
+				// advertise a replay boundary that points at metadata-only
+				// provenance.
 				if err := s.Update(args[0], func(b *bead.Bead) {
 					if b.Extra == nil {
 						b.Extra = make(map[string]any)

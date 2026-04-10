@@ -246,6 +246,53 @@ git:
 	assert.Empty(t, strings.TrimSpace(string(statusOut)))
 }
 
+func TestBeadCommandsCloseRecordsClosingCommitForTrackedDdxWork(t *testing.T) {
+	env := NewTestEnvironment(t)
+	env.CreateConfig(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
+`)
+
+	notesPath := filepath.Join(env.Dir, ".ddx", "notes.txt")
+	require.NoError(t, os.MkdirAll(filepath.Dir(notesPath), 0o755))
+	require.NoError(t, os.WriteFile(notesPath, []byte("tracked ddx notes\n"), 0o644))
+	gitAddAndCommit(t, env.Dir, "track ddx config and notes", ".ddx/config.yaml", ".ddx/notes.txt")
+
+	factory := newBeadTestRoot(t, env.Dir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Close provenance", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+	require.NotEmpty(t, id)
+
+	require.NoError(t, os.WriteFile(notesPath, []byte("tracked ddx notes updated\n"), 0o644))
+	stageCmd := exec.Command("git", "add", ".ddx/notes.txt")
+	stageCmd.Dir = env.Dir
+	require.NoError(t, stageCmd.Run())
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	statusOut := gitStatusShort(t, env.Dir)
+	assert.Empty(t, statusOut)
+
+	headContent := gitShowFile(t, env.Dir, "HEAD", ".ddx/beads.jsonl")
+	var bead map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(headContent)), &bead))
+	assert.Equal(t, "closed", bead["status"])
+	assert.NotEmpty(t, bead["closing_commit_sha"])
+
+	parentSHA := gitHead(t, env.Dir, "HEAD^")
+	assert.Equal(t, parentSHA, bead["closing_commit_sha"])
+}
+
 func TestBeadCommandsCloseRecordsClosingCommitForMixedClose(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(`version: "1.0"
