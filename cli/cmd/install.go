@@ -225,12 +225,11 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 	fallbackPkg, _ := reg.Find(name)
 
 	pkg, manifestMissing, manifestIssues, manifestErr := registry.LoadPackageManifestWithFallback(absPath, fallbackPkg)
-	switch {
-	case manifestErr == nil:
+	if manifestErr == nil {
 		if strings.TrimSpace(pkg.Name) != "" && pkg.Name != name {
 			return fmt.Errorf("local package name %q does not match package.yaml name %q", name, pkg.Name)
 		}
-	default:
+	} else {
 		if os.IsNotExist(manifestErr) && manifestMissing {
 			if pkg == nil {
 				pkg = &registry.Package{
