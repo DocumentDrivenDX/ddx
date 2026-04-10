@@ -191,6 +191,21 @@ func commitPluginChanges(name, version string) {
 	_ = gitCommit.Run()
 }
 
+func prepareSymlinkTarget(target string, force bool) error {
+	if info, err := os.Lstat(target); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || force {
+			if err := os.RemoveAll(target); err != nil {
+				return fmt.Errorf("removing existing %s: %w", target, err)
+			}
+			return nil
+		}
+		return fmt.Errorf("%s already exists (use --force to replace)", target)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking existing %s: %w", target, err)
+	}
+	return nil
+}
+
 // installLocal installs a plugin from a local directory. It creates the
 // declared plugin root symlink, then discovers and symlinks skills the same
 // way a registry install does.
@@ -245,22 +260,28 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		return fmt.Errorf("validating package structure: %s", registry.JoinValidationIssues(issues))
 	}
 
-	// Create the declared plugin root.
 	pluginDir := registry.ExpandHome(pkg.Install.Root.Target)
+	var projectPluginDir string
+	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		projectPluginDir = filepath.Join(".ddx", "plugins", pkg.Name)
+	}
+
+	if err := prepareSymlinkTarget(pluginDir, force); err != nil {
+		return err
+	}
+	if projectPluginDir != "" {
+		if err := prepareSymlinkTarget(projectPluginDir, force); err != nil {
+			return err
+		}
+	}
+
+	// Create the declared plugin root.
 	if err := os.MkdirAll(filepath.Dir(pluginDir), 0755); err != nil {
 		return fmt.Errorf("creating plugins dir: %w", err)
 	}
-
-	// Remove existing plugin (symlink or directory).
-	if info, err := os.Lstat(pluginDir); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 || force {
-			if err := os.RemoveAll(pluginDir); err != nil {
-				return fmt.Errorf("removing existing %s: %w", pluginDir, err)
-			}
-		} else {
-			if !force {
-				return fmt.Errorf("%s already exists (use --force to replace)", pluginDir)
-			}
+	if projectPluginDir != "" {
+		if err := os.MkdirAll(filepath.Dir(projectPluginDir), 0755); err != nil {
+			return fmt.Errorf("creating project plugin dir: %w", err)
 		}
 	}
 
@@ -279,14 +300,7 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 	}
 	entry.Files = append(entry.Files, pkg.Install.Root.Target)
 
-	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
-		projectPluginDir := filepath.Join(".ddx", "plugins", pkg.Name)
-		if err := os.MkdirAll(filepath.Dir(projectPluginDir), 0755); err != nil {
-			return fmt.Errorf("creating project plugin dir: %w", err)
-		}
-		if err := os.RemoveAll(projectPluginDir); err != nil {
-			return fmt.Errorf("removing existing project plugin dir: %w", err)
-		}
+	if projectPluginDir != "" {
 		if err := os.Symlink(pluginDir, projectPluginDir); err != nil {
 			return fmt.Errorf("creating project symlink %s -> %s: %w", projectPluginDir, pluginDir, err)
 		}
