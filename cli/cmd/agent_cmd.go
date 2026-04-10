@@ -1160,7 +1160,8 @@ func (f *CommandFactory) invokeExecuteBeadFromLoop(ctx context.Context, beadID s
 	}
 
 	var res ExecuteBeadResult
-	if err := json.Unmarshal([]byte(raw[jsonStart:]), &res); err != nil {
+	dec := json.NewDecoder(strings.NewReader(raw[jsonStart:]))
+	if err := dec.Decode(&res); err != nil {
 		return ExecuteBeadResult{}, fmt.Errorf("parse execute-bead result: %w", err)
 	}
 	return res, nil

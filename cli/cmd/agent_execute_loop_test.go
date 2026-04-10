@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,4 +33,22 @@ func TestAgentExecuteLoopUsesProjectRootForNoWorkScan(t *testing.T) {
 	assert.Equal(t, env.Dir, res.ProjectRoot)
 	assert.True(t, res.NoReadyWork)
 	assert.Equal(t, 0, res.Attempts)
+}
+
+func TestInvokeExecuteBeadFromLoopParsesJSONAmidWarnings(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "aaaa1111",
+		dirty:       true,
+		stashPopErr: fmt.Errorf("stash pop exploded"),
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res, err := f.invokeExecuteBeadFromLoop(context.Background(), "my-bead", executeLoopCommandOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "my-bead", res.BeadID)
+	assert.Equal(t, "no-changes", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
+	assert.Equal(t, "aaaa1111", res.BaseRev)
 }

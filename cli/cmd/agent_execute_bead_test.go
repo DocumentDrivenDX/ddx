@@ -38,6 +38,7 @@ type fakeExecuteBeadGit struct {
 	ffMergeErr      error
 	rebaseErr       error
 	updateRefErr    error
+	stashPopErr     error
 
 	stashCalled bool
 	addedWTs    []string
@@ -92,7 +93,9 @@ func (f *fakeExecuteBeadGit) Stash(dir string) error {
 }
 
 func (f *fakeExecuteBeadGit) StashPop(dir string) error {
-	return nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stashPopErr
 }
 
 func (f *fakeExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
