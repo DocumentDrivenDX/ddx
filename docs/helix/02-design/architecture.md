@@ -35,7 +35,7 @@ All data is file-backed with optional local cache and generated artifacts.
 ## Design Goals
 
 - Keep runtime behavior deterministic and testable from filesystem fixtures.
-- Minimize coordination overhead: one repo with one binary for CLI/server.
+- Minimize coordination overhead: one binary on one machine with project-scoped adapters and registry-backed server routing.
 - Preserve feature boundaries from the existing spec set (docs, agents, beads, registry, server, web).
 - Make governance explicit through `.ddx/config.yaml`, docs frontmatter, and tracker records.
 
@@ -163,15 +163,16 @@ family.
 
 ## Service Plane
 
-`ddx server` is a one-process, three-surface host:
+`ddx server` is a one-process, three-surface, multi-project host:
 
 - `/` serves embedded frontend assets (FEAT-008 runtime target).
 - `/api/` exposes JSON REST endpoints backed by the same internal services as CLI.
 - `/mcp/` exposes Streamable HTTP JSON-RPC tools for the same domain operations.
+- `server.projects` or an implicit singleton cwd project determines which project context each request resolves against.
 
 Server policy:
 - JSON contracts are centralized so CLI and server share response/field expectations.
-- Request handling is stateless and filesystem-backed.
+- Request handling is stateless per project context and filesystem-backed.
 - Mutating actions are blocked by default unless explicitly intended by design.
 
 ## Deployment Topology
@@ -179,19 +180,23 @@ Server policy:
 Default deployment is single-host, local-first:
 
 - Local users run the binary directly.
-- `ddx` and `ddx server` operate on the repository being served.
+- `ddx` and `ddx server` operate on the repository or registry of repositories being served.
 - No central database is required for v1.
-- Shared state lives in repository-local `.ddx/` paths and local cache directories.
+- Shared state lives in project-local `.ddx/` paths and local cache directories.
+- One server process can serve multiple project roots on the same host, but a request is always resolved against exactly one project context.
 
 ```text
 Developer Laptop
-└─ repo/
-   ├─ .ddx/
-   ├─ docs/
-   └─ ~/.cache/ddx/
-      └─ library/
-         ├─ ddx-library/
-         └─ cache manifests
+├─ repo-a/
+│  ├─ .ddx/
+│  └─ docs/
+├─ repo-b/
+│  ├─ .ddx/
+│  └─ docs/
+└─ ~/.cache/ddx/
+   └─ server/
+      ├─ repo-a/
+      └─ repo-b/
 ```
 
 ## Data Governance and Integrity
@@ -201,6 +206,7 @@ Developer Laptop
 - Registry operations record source, commit/tree references, and file hashes in
   `.ddx/lock.yaml`.
 - Agent sessions, when enabled, remain append-only logs for auditability.
+- Server registry state is derived from config plus explicit project roots and never inferred from sibling project caches.
 
 ## Security and Operability Boundaries
 
@@ -214,9 +220,11 @@ Developer Laptop
 - **Graph/ tracker drift**: surface stale reasons with enough context to repair upstream docs first.
 - **Registry mismatch**: fail install/search operations with explicit source and expected hash information.
 - **Config schema mismatch**: reject unknown keys in known sections and suggest supported keys.
+- **Project registry mismatch**: fail the affected project entry, keep sibling project contexts available, and report the invalid root or duplicate id.
 
 ## Migration Path
 
 - Current behavior uses existing CLI-first implementation and existing command surfaces.
+- The first multi-project server step adds project-scoped routing on top of the current singleton model without changing repository-local data formats.
 - The architecture incrementally supports moving from docgraph implementation parity to full FEAT-002 and FEAT-008 delivery without rewriting service internals.
 - FEAT-007 migration tooling (`ddx doc migrate`) can operate against historical docs to convert `dun:` metadata toward `ddx:` without changing runtime semantics.

@@ -17,18 +17,46 @@ ddx:
 
 ## Overview
 
-`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, execution definitions and run history, the document dependency graph, DDx agent invocation activity plus embedded-agent telemetry references, and (via FEAT-008) an embedded web UI — all from a single binary.
+`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, execution definitions and run history, the document dependency graph, DDx agent invocation activity plus embedded-agent telemetry references, and (via FEAT-008) an embedded web UI — all from a single binary. In the multi-project topology, one binary can serve several project roots on one machine with explicit project scoping.
 
 ## Architecture
 
 ```
 ddx-server binary
+├── /projects  → Project registry / project picker
 ├── /            → Web UI (embedded SPA, FEAT-008)
 ├── /api/        → HTTP REST API (JSON)
 └── /mcp/        → MCP tool endpoints (Streamable HTTP transport)
 ```
 
 All three surfaces share the same underlying services. The web UI calls the HTTP API. MCP tools call the same service layer.
+
+### Project Registry and Routing
+
+`ddx-server` resolves every request against an explicit project context
+before dispatching to feature-specific adapters.
+
+**Registry contract**
+
+- `server.projects` declares the local project roots served by one server process
+- each entry carries a stable `id`, an absolute `root`, an optional display `name`, and an optional `default` marker
+- if no registry is configured, the server synthesizes a singleton project from the current working directory so today's `ddx server` invocation still works
+
+**Canonical project-scoped surfaces**
+
+- `GET /api/projects` - list configured project roots and health
+- `GET /api/projects/:project` - show one project context
+- `ddx_list_projects` - enumerate projects over MCP
+- `ddx_show_project` - show one project context over MCP
+
+**Selection rules**
+
+1. explicit project in the request path
+2. explicit project supplied by the caller
+3. configured default project
+4. implicit singleton project when only one project exists
+
+Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility aliases when the server can resolve exactly one project context. They are not the canonical multi-project contract.
 
 ## Requirements
 
@@ -73,7 +101,7 @@ All three surfaces share the same underlying services. The web UI calls the HTTP
 27. MCP tools: `ddx_exec_definitions`, `ddx_exec_show`, `ddx_exec_history`
 
 **Configuration**
-28. Library path, port, optional ts-net hostname via CLI flags or config file (see ADR-006)
+28. Library path, project registry, port, optional ts-net hostname via CLI flags or config file (see ADR-006 and SD-019)
 29. Default: localhost only, no auth required
 
 ### Non-Functional

@@ -15,7 +15,8 @@ ddx:
 
 End-to-end testing of the DDx server HTTP API, MCP tools, and embedded web
 UI. Tests run against a live `ddx server` instance with real project data
-(documents, beads, personas, execution definitions).
+(documents, beads, personas, execution definitions) from one or more project
+roots.
 
 ## Test Infrastructure
 
@@ -25,6 +26,7 @@ UI. Tests run against a live `ddx server` instance with real project data
 | E2E functional tests | Playwright | `cli/internal/server/frontend/e2e/app.spec.ts` |
 | Visual regression | Playwright screenshots | `cli/internal/server/frontend/e2e/screenshots.spec.ts` |
 | Demo recording | Playwright video | `cli/internal/server/frontend/e2e/demo-recording.spec.ts` |
+| Multi-project coverage | Playwright | `cli/internal/server/frontend/e2e/projects.spec.ts` |
 | Config (functional) | Playwright | `cli/internal/server/frontend/playwright.config.ts` |
 | Config (demo) | Playwright | `cli/internal/server/frontend/playwright.demo.config.ts` |
 
@@ -45,6 +47,8 @@ bun run demo:record
 ```
 
 The Playwright configs auto-start `ddx server --port 18080` via `webServer`.
+Multi-project fixtures use a server config that registers multiple project
+roots so request routing and the UI project picker can be exercised in one run.
 
 ## Test Cases
 
@@ -147,6 +151,16 @@ The Playwright configs auto-start `ddx server --port 18080` via `webServer`.
 | TC-009.5 | Persona interaction | Demo selects a persona and views content | Implemented |
 | TC-009.6 | Video quality | 1280x720, readable text, smooth pacing | Implemented |
 | TC-009.7 | Video file produced | `demo-output/` contains a `.webm` video file | Implemented |
+
+### TC-010: Project Registry and Scoped Routing
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-010.1 | Registry loads | `GET /api/projects` lists each configured project root with a default marker | Planned |
+| TC-010.2 | Scoped API requests | `GET /api/projects/:project/beads` and sibling routes resolve the selected project context | Planned |
+| TC-010.3 | UI project picker | The web UI shows a project picker when more than one project is registered | Planned |
+| TC-010.4 | Singleton fallback | A single-project server still serves the legacy unscoped routes and dashboard | Planned |
+| TC-010.5 | Isolation | A broken project entry reports degraded status without blocking a healthy sibling project | Planned |
 
 ## Out of Scope
 

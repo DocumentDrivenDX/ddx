@@ -14,7 +14,7 @@ ddx:
 
 ## Overview
 
-The DDx server (`ddx-server`) serves a web UI for browsing documents, beads, the document dependency graph, and DDx agent invocation activity. The UI is a TypeScript SPA built with Vite, embedded into the Go binary via `embed.FS`, and served alongside the MCP and HTTP API endpoints from a single process.
+The DDx server (`ddx-server`) serves a web UI for browsing documents, beads, the document dependency graph, and DDx agent invocation activity. The UI is a TypeScript SPA built with Vite, embedded into the Go binary via `embed.FS`, and served alongside the MCP and HTTP API endpoints from a single process. In the multi-project topology, the same UI can also enumerate project roots and bind its navigation to one selected project context.
 
 ## Problem Statement
 
@@ -40,6 +40,14 @@ ddx-server binary
 ```
 
 All three surfaces share the same underlying services (document library, bead store, doc graph, agent activity). The web UI calls the HTTP API.
+
+### Project Context
+
+When more than one project is registered, the UI adds a project picker and
+renders all main routes under a project-scoped path such as
+`/projects/:project/...`. The root `/` redirects to the default project when
+one exists, otherwise it shows the picker. All API calls issued by the UI are
+bound to the selected project context.
 
 ### Build Pipeline
 
