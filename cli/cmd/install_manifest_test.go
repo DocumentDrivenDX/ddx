@@ -73,6 +73,55 @@ install:
 	assert.True(t, os.IsNotExist(statErr), "installed.yaml should not be written on validation failure")
 }
 
+func TestInstallLocalCreatesProjectPluginSymlinkForGlobalRoot(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	localPlugin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
+version: 1.0.0
+description: Sample plugin
+type: plugin
+source: https://example.com/sample-plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: ~/.ddx/plugins/sample-plugin
+  skills:
+    - source: skills/
+      target: .agents/skills/
+`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, "skills", "sample-skill"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "skills", "sample-skill", "SKILL.md"), []byte(`---
+name: sample-skill
+description: Sample skill
+---
+
+Sample skill body.
+`), 0o644))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
+	require.NoError(t, err, output)
+
+	globalPluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	projectPluginDir := filepath.Join(workDir, ".ddx", "plugins", "sample-plugin")
+
+	globalInfo, err := os.Lstat(globalPluginDir)
+	require.NoError(t, err)
+	assert.True(t, globalInfo.Mode()&os.ModeSymlink != 0, "global plugin root should be a symlink")
+
+	projectInfo, err := os.Lstat(projectPluginDir)
+	require.NoError(t, err)
+	assert.True(t, projectInfo.Mode()&os.ModeSymlink != 0, "project plugin path should be a symlink")
+
+	linkTarget, err := os.Readlink(projectPluginDir)
+	require.NoError(t, err)
+	assert.Equal(t, globalPluginDir, linkTarget, "project plugin symlink should resolve to the global plugin root")
+}
+
 func TestInstallPackageRejectsMissingSkillMetadata(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()

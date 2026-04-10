@@ -191,9 +191,9 @@ func commitPluginChanges(name, version string) {
 	_ = gitCommit.Run()
 }
 
-// installLocal installs a plugin from a local directory. It creates a symlink
-// from .ddx/plugins/<name> to the local path, then discovers and symlinks
-// skills the same way a registry install does.
+// installLocal installs a plugin from a local directory. It creates the
+// declared plugin root symlink, then discovers and symlinks skills the same
+// way a registry install does.
 func (f *CommandFactory) installLocal(name, localPath string, force bool, out io.Writer) error {
 	// Resolve to absolute path.
 	absPath, err := filepath.Abs(localPath)
@@ -278,6 +278,20 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		Source:  absPath,
 	}
 	entry.Files = append(entry.Files, pkg.Install.Root.Target)
+
+	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		projectPluginDir := filepath.Join(".ddx", "plugins", pkg.Name)
+		if err := os.MkdirAll(filepath.Dir(projectPluginDir), 0755); err != nil {
+			return fmt.Errorf("creating project plugin dir: %w", err)
+		}
+		if err := os.RemoveAll(projectPluginDir); err != nil {
+			return fmt.Errorf("removing existing project plugin dir: %w", err)
+		}
+		if err := os.Symlink(pluginDir, projectPluginDir); err != nil {
+			return fmt.Errorf("creating project symlink %s -> %s: %w", projectPluginDir, pluginDir, err)
+		}
+		entry.Files = append(entry.Files, projectPluginDir)
+	}
 
 	// Discover and symlink skills using the same logic as registry install.
 	for i := range pkg.Install.Skills {
