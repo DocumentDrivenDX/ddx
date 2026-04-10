@@ -5,15 +5,22 @@ ddx:
     - helix.prd
     - FEAT-001
     - FEAT-002
+    - FEAT-003
+    - FEAT-004
     - FEAT-005
     - FEAT-006
-    - FEAT-010
     - FEAT-007
     - FEAT-008
     - FEAT-009
+    - FEAT-010
     - FEAT-011
     - FEAT-012
     - FEAT-013
+    - FEAT-014
+    - FEAT-015
+    - FEAT-016
+    - FEAT-018
+    - FEAT-019
 ---
 # DDx Architecture
 
