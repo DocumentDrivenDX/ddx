@@ -263,7 +263,7 @@ type SourceRef struct {
 }
 
 func (s *Service) Summary(query Query) (AggregateSummary, error) {
-	beads, sessions, _, err := s.loadInputs()
+	beads, sessions, _, sessionCostPresent, err := s.loadInputs()
 	if err != nil {
 		return AggregateSummary{}, err
 	}
@@ -381,7 +381,7 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 		} else {
 			summary.Sessions.Uncorrelated++
 		}
-		switch sessionCostState(sess) {
+		switch sessionCostState(sess, sessionCostPresent[sess.ID]) {
 		case stateKnown:
 			summary.Sessions.KnownCost++
 		case stateEstimated:
@@ -389,7 +389,7 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 		default:
 			summary.Sessions.UnknownCost++
 		}
-		if cost := sessionDerivedCost(sess); cost != nil {
+		if cost := sessionDerivedCost(sess, sessionCostPresent[sess.ID]); cost != nil {
 			summary.Sessions.CostUSD += *cost
 		}
 	}
@@ -421,7 +421,7 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 
 // Cost computes bead and feature cost attribution.
 func (s *Service) Cost(query Query) (CostReport, error) {
-	beads, sessions, sessionByID, err := s.loadInputs()
+	beads, sessions, sessionByID, sessionCostPresent, err := s.loadInputs()
 	if err != nil {
 		return CostReport{}, err
 	}
@@ -430,7 +430,7 @@ func (s *Service) Cost(query Query) (CostReport, error) {
 	selected := selectBeads(beads, query.BeadID, query.FeatureID)
 	rows := make([]BeadCostRow, 0, len(selected))
 	for _, b := range selected {
-		row := buildBeadCostRow(b, sessions, sessionByID, query)
+		row := buildBeadCostRow(b, sessions, sessionByID, sessionCostPresent, query)
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -469,7 +469,7 @@ func (s *Service) Cost(query Query) (CostReport, error) {
 
 // CycleTime computes lifecycle timing facts.
 func (s *Service) CycleTime(query Query) (CycleTimeReport, error) {
-	beads, sessions, sessionByID, err := s.loadInputs()
+	beads, sessions, sessionByID, _, err := s.loadInputs()
 	if err != nil {
 		return CycleTimeReport{}, err
 	}
@@ -534,7 +534,7 @@ func (s *Service) CycleTime(query Query) (CycleTimeReport, error) {
 
 // Rework computes reopen and revision facts.
 func (s *Service) Rework(query Query) (ReworkReport, error) {
-	beads, sessions, sessionByID, err := s.loadInputs()
+	beads, sessions, sessionByID, _, err := s.loadInputs()
 	if err != nil {
 		return ReworkReport{}, err
 	}
@@ -641,24 +641,57 @@ func (s *Service) beadStore() *bead.Store {
 	return s.store
 }
 
-func (s *Service) loadInputs() ([]bead.Bead, []agent.SessionEntry, map[string]agent.SessionEntry, error) {
+func (s *Service) loadInputs() ([]bead.Bead, []agent.SessionEntry, map[string]agent.SessionEntry, map[string]bool, error) {
 	beads, err := s.beadStore().ReadAll()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	sessions, err := readSessions(filepath.Join(s.WorkingDir, agent.DefaultLogDir, "sessions.jsonl"))
+	sessions, sessionCostPresent, err := readSessions(filepath.Join(s.WorkingDir, agent.DefaultLogDir, "sessions.jsonl"))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	sessionByID := make(map[string]agent.SessionEntry, len(sessions))
 	for _, sess := range sessions {
 		sessionByID[sess.ID] = sess
 	}
-	return beads, sessions, sessionByID, nil
+	return beads, sessions, sessionByID, sessionCostPresent, nil
 }
 
-func readSessions(path string) ([]agent.SessionEntry, error) {
-	return readJSONLRecords[agent.SessionEntry](path)
+type sessionLoadRecord struct {
+	Entry          agent.SessionEntry
+	CostUSDPresent bool
+}
+
+func (r *sessionLoadRecord) UnmarshalJSON(data []byte) error {
+	type sessionAlias agent.SessionEntry
+
+	var entry sessionAlias
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return err
+	}
+	r.Entry = agent.SessionEntry(entry)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	_, r.CostUSDPresent = raw["cost_usd"]
+	return nil
+}
+
+func readSessions(path string) ([]agent.SessionEntry, map[string]bool, error) {
+	records, err := readJSONLRecords[sessionLoadRecord](path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sessions := make([]agent.SessionEntry, 0, len(records))
+	costPresent := make(map[string]bool, len(records))
+	for _, rec := range records {
+		sessions = append(sessions, rec.Entry)
+		costPresent[rec.Entry.ID] = rec.CostUSDPresent
+	}
+	return sessions, costPresent, nil
 }
 
 func readJSONLRecords[T any](path string) ([]T, error) {
@@ -712,7 +745,7 @@ func selectBeads(beads []bead.Bead, beadID, featureID string) []bead.Bead {
 	return out
 }
 
-func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID map[string]agent.SessionEntry, query Query) BeadCostRow {
+func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID map[string]agent.SessionEntry, sessionCostPresent map[string]bool, query Query) BeadCostRow {
 	matches := matchedSessionsForBead(b, sessions, sessionByID)
 	if query.HasSince {
 		filtered := matches[:0]
@@ -737,14 +770,15 @@ func buildBeadCostRow(b bead.Bead, sessions []agent.SessionEntry, sessionByID ma
 	var costTotal float64
 	var knownCount, estimatedCount, unknownCount int
 	for _, sess := range matches {
+		explicitCost := sessionCostPresent[sess.ID]
 		row.SessionIDs = append(row.SessionIDs, sess.ID)
 		row.InputTokens += sessionInputTokens(sess)
 		row.OutputTokens += sessionOutputTokens(sess)
 		row.TotalTokens += sessionTotalTokens(sess)
 
-		if cost := sessionDerivedCost(sess); cost != nil {
+		if cost := sessionDerivedCost(sess, explicitCost); cost != nil {
 			costTotal += *cost
-			if sessionCostState(sess) == stateKnown {
+			if sessionCostState(sess, explicitCost) == stateKnown {
 				knownCount++
 			} else {
 				estimatedCount++
@@ -1163,7 +1197,13 @@ func sessionTotalTokens(sess agent.SessionEntry) int {
 	return sess.InputTokens + sess.OutputTokens
 }
 
-func sessionCostState(sess agent.SessionEntry) State {
+func sessionCostState(sess agent.SessionEntry, explicitCost bool) State {
+	if explicitCost {
+		if sess.CostUSD < 0 {
+			return stateUnknown
+		}
+		return stateKnown
+	}
 	if sess.CostUSD > 0 {
 		return stateKnown
 	}
@@ -1179,7 +1219,13 @@ func sessionCostState(sess agent.SessionEntry) State {
 	return stateUnknown
 }
 
-func sessionDerivedCost(sess agent.SessionEntry) *float64 {
+func sessionDerivedCost(sess agent.SessionEntry, explicitCost bool) *float64 {
+	if explicitCost {
+		if sess.CostUSD < 0 {
+			return nil
+		}
+		return float64Ptr(sess.CostUSD)
+	}
 	if sess.CostUSD > 0 {
 		return float64Ptr(sess.CostUSD)
 	}

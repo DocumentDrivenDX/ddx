@@ -46,7 +46,7 @@ func writeZeroCostFixture(t *testing.T) string {
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beads[0]+"\n"+beads[1]+"\n"), 0o644))
 
 	sessions := []string{
-		`{"id":"as-010","timestamp":"2026-02-01T00:30:00Z","harness":"codex","model":"qwen/qwen3-coder-30b","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":0,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-010"}}`,
+		`{"id":"as-010","timestamp":"2026-02-01T00:30:00Z","harness":"codex","model":"gpt-5.4","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":0,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-010"}}`,
 		`{"id":"as-011","timestamp":"2026-02-02T00:30:00Z","harness":"codex","model":"qwen/qwen3-coder-30b","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":-1,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-011"}}`,
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"), 0o644))
