@@ -17,6 +17,13 @@ beads with the metadata needed for execution and traceability.
 - Do not edit `.ddx/beads.jsonl` directly.
 - Do not invent bead IDs or prefixes such as `hx-*` or `ddx-*`; use IDs from
   the CLI.
+- Treat tracker mutations as durable work, not disposable local state.
+- After `ddx bead create`, `update`, `dep add/remove`, or `close`, commit the
+  resulting tracker change by default.
+- If the bead edit is the only repo change, make a tracker-only commit
+  immediately. If related implementation/docs changes are already in progress,
+  fold the tracker change into that same commit instead of leaving `.ddx/beads.jsonl`
+  dirty.
 
 ## When to Use
 
@@ -100,6 +107,9 @@ ddx bead update <id> --acceptance "updated acceptance criteria"
 ddx bead update <id> --status closed
 ddx bead close <id>
 ```
+
+After these commands, check the tracker diff and commit it unless you are
+intentionally folding it into the current task's implementation commit.
 
 ## Dependency Management
 

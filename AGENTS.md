@@ -10,6 +10,11 @@ This repository uses DDx's built-in bead tracker for durable work management.
 - Manage dependencies only with `ddx bead dep add` and `ddx bead dep remove`.
 - Close work only with `ddx bead close`.
 - Use `ddx bead import` and `ddx bead export` for bulk migration or interchange.
+- Commit tracker mutations by default after bead commands.
+- If the tracker change stands alone, make a tracker-only commit promptly.
+- If it belongs to related implementation/docs work already being prepared for
+  commit, fold the tracker change into that same commit instead of leaving
+  `.ddx/beads.jsonl` dirty.
 
 ## Prohibited Actions
 
