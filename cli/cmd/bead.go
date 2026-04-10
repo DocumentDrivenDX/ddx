@@ -647,17 +647,19 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 				return err
 			}
 			if commitSHA == "" && isReviewCloseBead(target) && target.Extra != nil {
-				if _, ok := target.Extra["closing_commit_sha"]; ok {
-					// Review beads can carry stale provenance from earlier tracker
-					// repairs. Clear it before the close is committed so a metadata-only
-					// close does not preserve an unrelated replay boundary.
-					if err := s.Update(args[0], func(b *bead.Bead) {
-						if b.Extra == nil {
-							return
+				if existing, ok := target.Extra["closing_commit_sha"].(string); ok && existing != "" {
+					// Only clear provenance that already points at a metadata-only
+					// tracker backfill. Valid implementation boundaries need to survive
+					// metadata-only review closes so replay keeps the real landing commit.
+					if f.commitIsMetadataOnlyTrackerBackfill(existing) {
+						if err := s.Update(args[0], func(b *bead.Bead) {
+							if b.Extra == nil {
+								return
+							}
+							delete(b.Extra, "closing_commit_sha")
+						}); err != nil {
+							return err
 						}
-						delete(b.Extra, "closing_commit_sha")
-					}); err != nil {
-						return err
 					}
 				}
 			}
