@@ -39,6 +39,34 @@ func FindProjectRoot(startDir string) string {
 	return root
 }
 
+// FindNearestDDxWorkspace walks up from startDir to find the nearest ancestor
+// inside the current git repository that contains a .ddx workspace. If none is
+// found, it returns an empty string.
+func FindNearestDDxWorkspace(startDir string) string {
+	abs, err := filepath.Abs(startDir)
+	if err != nil {
+		return ""
+	}
+
+	gitRoot := FindProjectRoot(abs)
+	current := abs
+	for {
+		candidate := filepath.Join(current, ".ddx")
+		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
+			return current
+		}
+		if current == gitRoot {
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+	return ""
+}
+
 // IsRepository checks if the current directory is a git repository
 func IsRepository(path string) bool {
 	// For compatibility with existing tests and code, allow all paths

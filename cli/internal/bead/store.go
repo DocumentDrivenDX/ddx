@@ -133,6 +133,7 @@ func (s *Store) ReadAll() ([]Bead, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bead: read %s: %w", s.File, err)
 	}
+	beads = foldLatestBeads(beads)
 	for _, warning := range warnings {
 		fmt.Fprintln(os.Stderr, warning)
 	}
@@ -199,6 +200,7 @@ func (s *Store) repairJSONL() (bool, error) {
 		if err != nil {
 			return err
 		}
+		beads = foldLatestBeads(beads)
 		if len(warnings) == 0 || len(beads) == 0 {
 			return nil
 		}
@@ -217,6 +219,44 @@ func (s *Store) repairJSONL() (bool, error) {
 		return nil
 	})
 	return repaired, err
+}
+
+func foldLatestBeads(beads []Bead) []Bead {
+	if len(beads) == 0 {
+		return nil
+	}
+
+	latest := make(map[string]Bead, len(beads))
+	lastSeen := make(map[string]int, len(beads))
+	for i, b := range beads {
+		latest[b.ID] = b
+		lastSeen[b.ID] = i
+	}
+
+	ids := make([]string, 0, len(latest))
+	for id := range latest {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		if lastSeen[ids[i]] != lastSeen[ids[j]] {
+			return lastSeen[ids[i]] < lastSeen[ids[j]]
+		}
+		return ids[i] < ids[j]
+	})
+
+	out := make([]Bead, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, latest[id])
+	}
+	return out
+}
+
+func (s *Store) readAllLatestRaw() ([]Bead, []string, error) {
+	beads, warnings, err := s.readAllRaw()
+	if err != nil {
+		return nil, nil, err
+	}
+	return foldLatestBeads(beads), warnings, nil
 }
 
 func writeAtomicFile(path string, data []byte) error {
@@ -317,7 +357,7 @@ func (s *Store) Create(b *Bead) error {
 	}
 
 	return s.WithLock(func() error {
-		beads, _, err := s.readAllRaw()
+		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
 			return err
 		}
@@ -362,7 +402,7 @@ func (s *Store) Get(id string) (*Bead, error) {
 // Update modifies a bead by ID. The mutate function receives a pointer to modify.
 func (s *Store) Update(id string, mutate func(*Bead)) error {
 	return s.WithLock(func() error {
-		beads, _, err := s.readAllRaw()
+		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
 			return err
 		}
@@ -404,7 +444,7 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 		machine = envID
 	}
 	return s.WithLock(func() error {
-		beads, _, err := s.readAllRaw()
+		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
 			return err
 		}
@@ -712,10 +752,7 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 		ready = append(ready, b)
 	}
 
-	// Sort by priority (0 = highest first)
-	sort.Slice(ready, func(i, j int) bool {
-		return ready[i].Priority < ready[j].Priority
-	})
+	sortBeadsForQueue(ready)
 
 	return ready, nil
 }
@@ -743,7 +780,20 @@ func (s *Store) Blocked() ([]Bead, error) {
 			}
 		}
 	}
+	sortBeadsForQueue(blocked)
 	return blocked, nil
+}
+
+func sortBeadsForQueue(beads []Bead) {
+	sort.SliceStable(beads, func(i, j int) bool {
+		if beads[i].Priority != beads[j].Priority {
+			return beads[i].Priority < beads[j].Priority
+		}
+		if !beads[i].CreatedAt.Equal(beads[j].CreatedAt) {
+			return beads[i].CreatedAt.Before(beads[j].CreatedAt)
+		}
+		return beads[i].ID < beads[j].ID
+	})
 }
 
 // Status returns aggregate counts.
@@ -776,7 +826,7 @@ func (s *Store) Status() (*StatusCounts, error) {
 // DepAdd adds a dependency: id depends on depID.
 func (s *Store) DepAdd(id, depID string) error {
 	return s.WithLock(func() error {
-		beads, _, err := s.readAllRaw()
+		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
 			return err
 		}

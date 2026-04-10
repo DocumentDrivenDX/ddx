@@ -61,7 +61,12 @@ Examples:
 // Errors are silently ignored — auto-commit is best-effort.
 // When a commit lands, the resulting SHA is returned.
 func (f *CommandFactory) beadAutoCommit(operation string) string {
-	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
+	workspaceRoot := f.beadWorkspaceRoot()
+	if workspaceRoot == "" {
+		workspaceRoot = f.WorkingDir
+	}
+
+	cfg, err := config.LoadWithWorkingDir(workspaceRoot)
 	if err != nil {
 		return ""
 	}
@@ -72,7 +77,7 @@ func (f *CommandFactory) beadAutoCommit(operation string) string {
 		AutoCommit:   cfg.Git.AutoCommit,
 		CommitPrefix: cfg.Git.CommitPrefix,
 	}
-	beadsFile := filepath.Join(f.WorkingDir, ".ddx", "beads.jsonl")
+	beadsFile := filepath.Join(workspaceRoot, ".ddx", "beads.jsonl")
 	sha, _ := gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
 	return sha
 }
@@ -177,12 +182,29 @@ func isReviewCloseBead(b *bead.Bead) bool {
 	return false
 }
 
-func (f *CommandFactory) beadStore() *bead.Store {
+func (f *CommandFactory) beadWorkspaceRoot() string {
 	dir := os.Getenv("DDX_BEAD_DIR")
-	if dir == "" && f.WorkingDir != "" {
-		dir = filepath.Join(f.WorkingDir, ".ddx")
+	if dir != "" {
+		if filepath.Base(dir) == ".ddx" {
+			return filepath.Dir(dir)
+		}
+		return dir
 	}
-	return bead.NewStore(dir)
+	if f.WorkingDir == "" {
+		return ""
+	}
+	if workspaceRoot := gitpkg.FindNearestDDxWorkspace(f.WorkingDir); workspaceRoot != "" {
+		return workspaceRoot
+	}
+	return f.WorkingDir
+}
+
+func (f *CommandFactory) beadStore() *bead.Store {
+	workspaceRoot := f.beadWorkspaceRoot()
+	if workspaceRoot == "" {
+		return bead.NewStore("")
+	}
+	return bead.NewStore(filepath.Join(workspaceRoot, ".ddx"))
 }
 
 func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
