@@ -271,9 +271,17 @@ canonical agent-driven bead execution workflow. It is an agent workflow mode
 layered on top of the existing harness/session machinery — not a separate
 provenance system.
 
+The single-project supervision contract for this workflow is documented in
+`docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md`.
+It keeps readiness validation, queue scanning, and worker lifecycle scoped to
+one project context at a time.
+
 ### Workflow steps
 
 1. Resolve the bead and its governing artifacts from the DDx document graph.
+   Use the shared DDx execution validator to confirm the bead is structurally
+   execution-ready before launch; HELIX-specific policy does not participate in
+   readiness validation.
 2. Resolve the git base revision: `--from <rev>` if provided, otherwise `HEAD`.
 3. If the caller's worktree is dirty, create a checkpoint commit first and use
    that checkpoint as the actual base.
@@ -295,7 +303,7 @@ provenance system.
    - For `kind: agent` executions, success means exit code 0 (structured result schema validation is optional and governed by the definition).
    - When a `required: true` execution also has a ratchet threshold, landing is blocked if EITHER condition fails (OR semantics) — non-success status OR ratchet regression blocks the merge.
 10. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
-    semantics.
+    semantics, then reset the worker worktree to the updated branch tip.
 11. Otherwise, preserve the iteration result under a hidden ref and do not merge
     (see SD-012 for the hidden-ref naming scheme).
 12. Always remove the temporary worktree after preserving enough evidence for

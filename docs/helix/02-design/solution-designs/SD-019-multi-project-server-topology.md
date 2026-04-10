@@ -195,6 +195,10 @@ project can be repaired without taking down the others.
 The server is allowed to supervise worktree-backed activity across multiple
 projects, but the worktree and worker pools remain project-scoped.
 
+The first shipped execute-bead supervisor remains a single-project worker.
+Multi-project scheduling is a later-stage server topology concern and does not
+change the contract for one worker operating on one project context at a time.
+
 ### Worktree Model
 
 - Each project owns its own worktree base directory

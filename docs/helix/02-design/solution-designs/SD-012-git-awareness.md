@@ -160,6 +160,9 @@ this workflow only:
 | `git update-ref refs/ddx/...` | Preserve a non-landed iteration under a hidden ref |
 | `git worktree remove` | Clean up after the workflow (always runs) |
 
+After a successful land, the worker worktree is reset to the updated branch
+tip before the next supervisor cycle begins.
+
 **No-orphan-worktree invariant:** DDx must remove the execution worktree after
 the workflow completes, whether the iteration lands or is only preserved. A
 crash during cleanup may leave a worktree, but DDx startup or the next
