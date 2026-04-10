@@ -166,7 +166,7 @@ func (r *Runner) resolveAgentConfig(model string) AgentRunConfig {
 	cfg := AgentRunConfig{
 		Provider:      "openai-compat",
 		BaseURL:       "http://localhost:1234/v1",
-		Preset:        "forge",
+		Preset:        "agent",
 		MaxIterations: 20,
 	}
 

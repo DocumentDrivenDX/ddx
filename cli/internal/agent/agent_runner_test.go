@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/agent/prompt"
 	"github.com/DocumentDrivenDX/agent/provider/virtual"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -346,6 +347,18 @@ func TestAgentResolveConfigLLMPreset(t *testing.T) {
 		cfg := r.resolveAgentConfig("some-raw-model")
 		assert.Equal(t, "some-raw-model", cfg.Model)
 	})
+}
+
+func TestAgentResolveConfigDefaultPresetIsSupported(t *testing.T) {
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{}
+	}
+
+	cfg := r.resolveAgentConfig("")
+	assert.Contains(t, prompt.PresetNames(), cfg.Preset)
+	assert.Equal(t, "agent", cfg.Preset)
 }
 
 // --- Helpers ---

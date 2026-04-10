@@ -10,7 +10,7 @@ update_check:
 agent:
     agent_runner:
         provider: openai-compat
-        preset: forge
+        preset: agent
         max_iterations: 30
         models:
             qwen-local:
