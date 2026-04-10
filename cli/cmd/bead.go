@@ -148,7 +148,7 @@ func (f *CommandFactory) commitIsMetadataOnlyTrackerBackfill(commitSHA string) b
 	cmd.Dir = f.WorkingDir
 	out, err := cmd.Output()
 	if err != nil {
-		return true
+		return false
 	}
 
 	for _, line := range strings.Split(string(out), "\n") {
