@@ -132,10 +132,11 @@ Interpretation:
     - cost estimate or cost class
     - DDx-observed performance metrics
     - freshness / confidence
-13. **Minimal DDx-owned metrics** — DDx stores only the metrics needed for
-    routing and provenance, such as recent success/failure, latency, last
-    observed token/cost values where available, and quota snapshot history
-    needed to estimate subscription burn.
+13. **Minimal DDx-owned metrics** — DDx stores only compact outcome samples,
+    async quota snapshots, and derived burn summaries. Outcome samples may
+    record recent success/failure, latency, and last observed token/cost
+    values when available; DDx does not store provider transcripts or native
+    session bodies as routing inputs.
 14. **Snapshot history for live quota sources** — when DDx depends on an
     actively probed quota source, it checkpoints time-stamped quota snapshots
     asynchronously and relates them to native usage accumulation to build a
@@ -275,7 +276,8 @@ manual instrumentation
 
 ### Phase 1 — Signal-source spikes
 - Inventory provider-native signal sources and freshness semantics
-- Define the minimal DDx-owned routing metrics schema
+- Define the minimal DDx-owned routing metrics schema and retention rules in
+  SD-015
 - Resolve whether Claude has a stable non-PTY current-quota source
 
 ### Phase 2 — Preserve native persistence and add adapters

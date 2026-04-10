@@ -161,6 +161,86 @@ Signal ownership is intentionally split:
 - **Embedded `ddx-agent`** owns its runtime telemetry; DDx consumes references
   and derived metrics rather than re-implementing runtime logging
 
+### Minimal DDx-Owned Routing Metrics
+
+DDx keeps only compact routing facts needed to rank harnesses. It does not
+store provider transcripts, provider session stores, or embedded-runtime log
+bodies as part of routing state.
+
+#### `RoutingOutcome`
+
+One bounded sample per DDx-observed invocation, used to summarize reliability
+and latency.
+
+- `harness`
+- `surface`
+- `observed_at`
+- `success`
+- `latency_ms`
+- `input_tokens` when available
+- `output_tokens` when available
+- `cost_usd` when available
+- `native_session_id`, `native_log_ref`, `trace_id`, or `span_id` when the
+  source provides a reference instead of a body
+
+#### `QuotaSnapshot`
+
+One bounded sample per live-probe or cached quota read, used to model headroom
+and subscription pressure.
+
+- `harness`
+- `surface`
+- `source`
+- `observed_at`
+- `quota_state`
+- `used_percent` when available
+- `window_minutes` when available
+- `resets_at` when available
+- `sample_kind`
+  - `native-log`
+  - `async-probe`
+  - `cache`
+
+#### `BurnSummary`
+
+One derived record per harness/surface pair, used to compare providers without
+direct billing APIs.
+
+- `harness`
+- `surface`
+- `observed_at`
+- `burn_index` as a relative, unitless score
+- `trend`
+- `confidence`
+- `basis` describing which snapshot deltas and token/cost observations fed the
+  score
+
+#### Freshness And Retention
+
+- Outcome samples are fresh for one routing TTL after observation; older
+  samples remain inspectable but are demoted behind fresher data.
+- Keep a rolling window of the most recent 50 outcome samples or 7 days of
+  samples per harness surface, whichever is smaller.
+- Keep quota snapshots for 30 days or one billing window, whichever is
+  smaller, and compact older snapshots into the burn summary rather than
+  retaining them as raw routing inputs.
+- Snapshot freshness is source-specific: provider-native logs are fresh until
+  the next known provider write, async probes are fresh until their source TTL,
+  and cached values are only as fresh as their cache timestamp.
+- Burn calculations restart after a quota reset and use only post-reset
+  snapshots for the next accumulation interval.
+
+#### Boundary And Exclusions
+
+- DDx never stores provider prompt/response bodies or full native session
+  transcripts in routing metrics.
+- DDx never re-implements embedded `ddx-agent` session logs or OTEL storage.
+- When embedded telemetry is available, DDx stores only references and
+  derived facts such as `session_id`, `trace_id`, `span_id`, and the routing
+  outcome samples above.
+- Routing logic consumes those references and derived metrics; it does not
+  need the underlying transcript or log payloads to rank harnesses.
+
 ### Source Precedence
 
 - **Codex current quota/headroom** should come from native Codex session JSONL
