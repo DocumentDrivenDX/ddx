@@ -9,6 +9,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+      - 'cli/internal/server/frontend/**'
       - '.github/workflows/security.yml'
   pull_request:
     branches: [ main ]
@@ -16,6 +17,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+      - 'cli/internal/server/frontend/**'
   workflow_dispatch:  # Manual trigger
 
 permissions:
@@ -74,6 +76,11 @@ jobs:
       with:
         go-version-file: 'cli/go.mod'
         cache-dependency-path: cli/go.sum
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
     
     - name: Dependency Review
       if: github.event_name == 'pull_request'
@@ -104,6 +111,10 @@ jobs:
           exit 1
         fi
         echo "✅ No vulnerabilities detected by govulncheck"
+
+    - name: Bun audit
+      working-directory: cli/internal/server/frontend
+      run: bun audit
     
     - name: License check
       run: |

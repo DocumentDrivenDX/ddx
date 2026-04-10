@@ -153,12 +153,10 @@ jobs:
         go-version-file: 'cli/go.mod'
         cache-dependency-path: cli/go.sum
 
-    - name: Set up Node
-      uses: actions/setup-node@v4
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
       with:
-        node-version: '22'
-        cache: npm
-        cache-dependency-path: cli/internal/server/frontend/package-lock.json
+        bun-version: latest
 
     - name: Build CLI binary
       working-directory: cli
@@ -166,12 +164,12 @@ jobs:
 
     - name: Install frontend dependencies
       working-directory: cli/internal/server/frontend
-      run: npm ci
+      run: bun install --frozen-lockfile
 
     - name: Install Playwright browsers
       working-directory: cli/internal/server/frontend
-      run: npx playwright install --with-deps chromium
+      run: bunx playwright install --with-deps chromium
 
     - name: Run frontend Playwright E2E tests
       working-directory: cli/internal/server/frontend
-      run: npm run test:e2e
+      run: bun run test:e2e
