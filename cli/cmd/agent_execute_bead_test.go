@@ -3,9 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/stretchr/testify/assert"
@@ -161,6 +163,17 @@ func newExecuteBeadFactory(t *testing.T, git *fakeExecuteBeadGit, runner *fakeAg
 	return f
 }
 
+func assertPreserveRef(t *testing.T, ref, beadID, baseRev string) {
+	t.Helper()
+	shortSHA := baseRev
+	if len(shortSHA) > 12 {
+		shortSHA = shortSHA[:12]
+	}
+	pattern := fmt.Sprintf(`^refs/ddx/iterations/%s/\d{8}T\d{6}Z-%s$`,
+		regexp.QuoteMeta(beadID), regexp.QuoteMeta(shortSHA))
+	require.Regexp(t, pattern, ref)
+}
+
 // runExecuteBead invokes the execute-bead command through the cobra tree and returns
 // the parsed JSON result. It extracts the JSON object from the combined output,
 // skipping any leading note/warning lines written to stderr.
@@ -224,8 +237,7 @@ func TestExecuteBeadPreserveOnFFFailure(t *testing.T) {
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "cccc3333", res.ResultRev)
 	assert.NotEmpty(t, res.PreserveRef)
-	assert.True(t, strings.HasPrefix(res.PreserveRef, "refs/ddx/execute-bead/my-bead/"),
-		"preserve ref should be under refs/ddx/execute-bead/my-bead/, got: %s", res.PreserveRef)
+	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
 	assert.Equal(t, "ff-merge not possible", res.Reason)
 
 	// Hidden ref should be recorded in the mock.
@@ -279,6 +291,7 @@ func TestExecuteBeadRebaseFailurePreserves(t *testing.T) {
 	assert.Equal(t, 0, git.ffMergeCalls)
 	require.Contains(t, git.refs, res.PreserveRef)
 	assert.Equal(t, "bbbb2222", git.refs[res.PreserveRef])
+	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
 }
 
 // TestExecuteBeadNoMerge verifies that --no-merge bypasses fast-forward and
@@ -297,7 +310,7 @@ func TestExecuteBeadNoMerge(t *testing.T) {
 	assert.Equal(t, "preserved", res.Outcome)
 	assert.Equal(t, "--no-merge specified", res.Reason)
 	assert.NotEmpty(t, res.PreserveRef)
-	assert.True(t, strings.HasPrefix(res.PreserveRef, "refs/ddx/execute-bead/my-bead/"))
+	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
 
 	// FFMerge should not have been called; refs should still be recorded.
 	require.Contains(t, git.refs, res.PreserveRef)
@@ -306,7 +319,11 @@ func TestExecuteBeadNoMerge(t *testing.T) {
 // TestExecuteBeadHiddenRefUniqueness verifies that two runs on the same bead-id
 // produce distinct preserve refs (concurrent hidden-ref uniqueness).
 func TestExecuteBeadHiddenRefUniqueness(t *testing.T) {
-	makeRun := func() ExecuteBeadResult {
+	makeRun := func(ts time.Time) ExecuteBeadResult {
+		oldNow := executeBeadNow
+		executeBeadNow = func() time.Time { return ts }
+		defer func() { executeBeadNow = oldNow }()
+
 		git := &fakeExecuteBeadGit{
 			mainHeadRev: "aaaa1111",
 			wtHeadRev:   "eeee5555",
@@ -317,13 +334,13 @@ func TestExecuteBeadHiddenRefUniqueness(t *testing.T) {
 		return runExecuteBead(t, f, git, "shared-bead")
 	}
 
-	res1 := makeRun()
-	res2 := makeRun()
+	res1 := makeRun(time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC))
+	res2 := makeRun(time.Date(2026, 4, 10, 0, 0, 1, 0, time.UTC))
 
 	assert.NotEqual(t, res1.PreserveRef, res2.PreserveRef,
 		"concurrent runs must produce distinct preserve refs")
-	assert.True(t, strings.HasPrefix(res1.PreserveRef, "refs/ddx/execute-bead/shared-bead/"))
-	assert.True(t, strings.HasPrefix(res2.PreserveRef, "refs/ddx/execute-bead/shared-bead/"))
+	assertPreserveRef(t, res1.PreserveRef, "shared-bead", "aaaa1111")
+	assertPreserveRef(t, res2.PreserveRef, "shared-bead", "aaaa1111")
 }
 
 // TestExecuteBeadNoChanges verifies that when the agent makes no commits the
@@ -453,7 +470,7 @@ func TestExecuteBeadAgentErrorWithCommitsPreserves(t *testing.T) {
 	assert.Equal(t, "preserved", res.Outcome)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
 	assert.NotEmpty(t, res.PreserveRef)
-	assert.True(t, strings.HasPrefix(res.PreserveRef, "refs/ddx/execute-bead/my-bead/"))
+	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
 }
 
 // TestExecuteBeadAgentErrorMessageInOutput verifies that when the agent runner

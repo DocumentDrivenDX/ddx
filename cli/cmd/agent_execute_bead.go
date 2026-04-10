@@ -152,11 +152,25 @@ const executeBeadWtDir = ".ddx"
 // executeBeadWtPrefix is the filename prefix for managed execute-bead worktrees.
 const executeBeadWtPrefix = ".execute-bead-wt-"
 
+// executeBeadNow returns the current time for execute-bead ref naming.
+// Tests override this for deterministic hidden-ref assertions.
+var executeBeadNow = time.Now
+
 // executeBeadAttemptID generates a unique attempt identifier with timestamp and random suffix.
 func executeBeadAttemptID() string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return time.Now().UTC().Format("20060102T150405") + "-" + hex.EncodeToString(b)
+}
+
+// executeBeadPreserveRef builds the documented hidden ref for a preserved iteration.
+func executeBeadPreserveRef(beadID, baseRev string) string {
+	shortSHA := baseRev
+	if len(shortSHA) > 12 {
+		shortSHA = shortSHA[:12]
+	}
+	timestamp := executeBeadNow().UTC().Format("20060102T150405Z")
+	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, timestamp, shortSHA)
 }
 
 // executeBeadSessionID generates a short session ID for the agent log.
@@ -172,7 +186,7 @@ func (f *CommandFactory) newAgentExecuteBeadCommand() *cobra.Command {
 		Short: "Run an agent on a bead in an isolated worktree, then merge or preserve the result",
 		Long: `execute-bead creates an isolated git worktree at a chosen base revision,
 runs an agent within it, then either lands the result via fast-forward merge
-or preserves it under a hidden ref (refs/ddx/execute-bead/<bead-id>/<attempt>).
+or preserves it under a hidden ref (refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>).
 
 Dirty worktrees are checkpointed via git stash before execution so no local
 changes are discarded. Orphan worktrees from previous crashed runs are
@@ -181,7 +195,7 @@ recovered automatically.`,
 		RunE: f.runAgentExecuteBead,
 	}
 	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
-	cmd.Flags().Bool("no-merge", false, "Skip merge; preserve result under a hidden ref instead")
+	cmd.Flags().Bool("no-merge", false, "Skip merge; preserve result under refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha> instead")
 	cmd.Flags().String("harness", "", "Agent harness to use")
 	cmd.Flags().String("model", "", "Model override")
 	cmd.Flags().String("effort", "", "Effort level")
@@ -369,7 +383,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		res.Reason = "agent made no commits"
 
 	case noMerge:
-		ref := fmt.Sprintf("refs/ddx/execute-bead/%s/%s", beadID, attemptID)
+		ref := executeBeadPreserveRef(beadID, baseRev)
 		if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
 			return fmt.Errorf("preserving result ref: %w", updateErr)
 		}
@@ -392,7 +406,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		if currentHead != baseRev {
 			if rebaseErr := gitOps.Rebase(wtPath, currentHead); rebaseErr != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: rebase failed: %v\n", rebaseErr)
-				ref := fmt.Sprintf("refs/ddx/execute-bead/%s/%s", beadID, attemptID)
+				ref := executeBeadPreserveRef(beadID, baseRev)
 				if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
 					return fmt.Errorf("preserving result ref: %w", updateErr)
 				}
@@ -431,7 +445,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		if mergeErr := gitOps.FFMerge(workDir, mergeRev); mergeErr == nil {
 			res.Outcome = "merged"
 		} else {
-			ref := fmt.Sprintf("refs/ddx/execute-bead/%s/%s", beadID, attemptID)
+			ref := executeBeadPreserveRef(beadID, baseRev)
 			if updateErr := gitOps.UpdateRef(workDir, ref, mergeRev); updateErr != nil {
 				return fmt.Errorf("preserving result ref: %w", updateErr)
 			}
