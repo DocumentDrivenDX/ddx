@@ -55,6 +55,8 @@ type WorkerExecutionResult struct {
 	BeadID     string `json:"bead_id,omitempty"`
 	AttemptID  string `json:"attempt_id,omitempty"`
 	WorkerID   string `json:"worker_id,omitempty"`
+	Harness    string `json:"harness,omitempty"`
+	Model      string `json:"model,omitempty"`
 	Status     string `json:"status,omitempty"`
 	Detail     string `json:"detail,omitempty"`
 	SessionID  string `json:"session_id,omitempty"`
@@ -410,6 +412,12 @@ func (m *WorkerManager) enrichFromExecuteLoopOutput(dir string, record *WorkerRe
 		record.CurrentBead = last.BeadID
 		record.CurrentAttempt = last.AttemptID
 		record.LastResult = &last
+		if record.Harness == "" && last.Harness != "" {
+			record.Harness = last.Harness
+		}
+		if record.Model == "" && last.Model != "" {
+			record.Model = last.Model
+		}
 		if last.Status != "" {
 			record.Status = last.Status
 		}
