@@ -400,9 +400,14 @@ func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 		start = len(lines) - 50
 	}
 
+	return formatSessionLogLines(lines[start:])
+}
+
+// formatSessionLogLines formats ddx-agent JSONL log entries into readable progress.
+func formatSessionLogLines(lines []string) string {
 	var sb strings.Builder
 	sb.WriteString("--- session log (latest entries) ---\n")
-	for _, line := range lines[start:] {
+	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -418,18 +423,64 @@ func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 			fmt.Fprintf(&sb, "▶ session started (model: %s)\n", model)
 		case "llm.request":
 			data, _ := entry["data"].(map[string]any)
-			msgCount, _ := data["message_count"].(float64)
-			fmt.Fprintf(&sb, "  → llm request (%.0f messages)\n", msgCount)
+			attemptIdx, _ := data["attempt_index"].(float64)
+			fmt.Fprintf(&sb, "  → llm request (attempt %.0f)\n", attemptIdx)
 		case "llm.response":
 			data, _ := entry["data"].(map[string]any)
-			tokens, _ := data["total_tokens"].(float64)
-			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens)\n", tokens)
+			model, _ := data["model"].(string)
+			latency, _ := data["latency_ms"].(float64)
+			// Tokens: data.attempt.cost.raw.total_tokens
+			var tokens float64
+			if attempt, ok := data["attempt"].(map[string]any); ok {
+				if cost, ok := attempt["cost"].(map[string]any); ok {
+					if raw, ok := cost["raw"].(map[string]any); ok {
+						tokens, _ = raw["total_tokens"].(float64)
+					}
+				}
+			}
+			// Tool calls from response
+			toolCalls, _ := data["tool_calls"].([]any)
+			finishReason, _ := data["finish_reason"].(string)
+			suffix := ""
+			if len(toolCalls) > 0 {
+				var names []string
+				for _, tc := range toolCalls {
+					if tcm, ok := tc.(map[string]any); ok {
+						n, _ := tcm["name"].(string)
+						if n != "" {
+							names = append(names, n)
+						}
+					}
+				}
+				suffix = fmt.Sprintf(" → %s", strings.Join(names, ", "))
+			} else if finishReason != "" {
+				suffix = fmt.Sprintf(" (%s)", finishReason)
+			}
+			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens, %.1fs) %s%s\n", tokens, latency/1000, model, suffix)
 		case "llm.delta":
 			// Skip deltas — too verbose for summary
 		case "tool.call":
 			data, _ := entry["data"].(map[string]any)
-			name, _ := data["name"].(string)
-			fmt.Fprintf(&sb, "  🔧 tool: %s\n", name)
+			name, _ := data["tool"].(string)
+			inp, _ := data["input"].(map[string]any)
+			dur, _ := data["duration_ms"].(float64)
+			argHint := ""
+			if len(inp) > 0 {
+				for _, v := range inp {
+					argHint = truncateStr(fmt.Sprintf("%v", v), 60)
+					break
+				}
+			}
+			errMsg, _ := data["error"].(string)
+			errSuffix := ""
+			if errMsg != "" {
+				errSuffix = fmt.Sprintf(" ❌ %s", truncateStr(errMsg, 40))
+			}
+			durSuffix := ""
+			if dur > 0 {
+				durSuffix = fmt.Sprintf(" (%.1fs)", dur/1000)
+			}
+			fmt.Fprintf(&sb, "  🔧 %s %s%s%s\n", name, argHint, durSuffix, errSuffix)
 		case "compaction.start":
 			fmt.Fprintf(&sb, "  ⚡ compacting context...\n")
 		case "compaction.end":
@@ -482,4 +533,11 @@ func randomSuffix(n int) string {
 		return fmt.Sprintf("%x", time.Now().UnixNano())[:n]
 	}
 	return hex.EncodeToString(buf)[:n]
+}
+
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-1] + "…"
 }
