@@ -76,6 +76,25 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 
 Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, and `replaces` without DDx needing to understand them.
 
+### Queue Semantics For Epics
+
+Epics remain first-class beads, but they are not consumed by the same
+queue-drain contract as ordinary executable task/bug/chore beads.
+
+- A normal execution-ready queue is **single-ticket-first**. Ready non-epic
+  beads are ordered ahead of ready epic beads at the same priority.
+- Open epics are not launched by the ordinary `ddx agent execute-loop`
+  single-ticket worker by default. They are consumed by an epic-scoped worker
+  mode that owns an epic branch and worktree.
+- Child beads of an epic remain individually executable units and may be
+  closed one-by-one as they land on the epic branch.
+- Epic queue entries remain visible in the tracker and UI, but their
+  execution semantics are governed by the epic worker contract rather than the
+  single-ticket loop contract.
+
+This split preserves the simple `W2 = bead(W1)` contract for ordinary beads
+while allowing a separate sequential execution mode for epic branches.
+
 ## Storage
 
 DDx beads abstracts over multiple storage backends. Consumers (HELIX, dun, other workflows) **must only interact via `ddx bead` commands or the server API** — never read/write the storage file directly.

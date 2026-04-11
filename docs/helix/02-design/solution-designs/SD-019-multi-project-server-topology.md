@@ -198,6 +198,8 @@ projects, but the worktree and worker pools remain project-scoped.
 The first shipped execute-bead supervisor remains a single-project worker.
 Multi-project scheduling is a later-stage server topology concern and does not
 change the contract for one worker operating on one project context at a time.
+Epic execution introduces a second worker type: an epic-scoped worker that owns
+one persistent epic branch and worktree for that project.
 
 ### Worktree Model
 
@@ -205,6 +207,11 @@ change the contract for one worker operating on one project context at a time.
 - A worktree name is only unique within one project context
 - A worker may only operate on one project context at a time
 - Worktree cleanup and preservation rules apply per project, not globally
+- Single-ticket workers use temporary execution worktrees
+- Epic workers use one long-lived worktree per active epic and keep that
+  worktree until the epic is merged, reset, or abandoned
+- Epic worktrees are tied to epic branch names such as `ddx/epics/<epic-id>`
+  and are not reused across different epics
 
 ### Worker Pools
 
@@ -214,6 +221,25 @@ change the contract for one worker operating on one project context at a time.
   still has headroom
 - Queue polling and claim handling remain tied to the project that owns the
   bead or execution item
+- Single-ticket workers are prioritized ahead of epic workers when both are
+  competing for the same project capacity
+- Different epics may run in parallel in different worktrees when project and
+  global worker limits allow it
+- One epic worker executes child beads sequentially inside its epic worktree;
+  it does not run multiple child beads from the same epic concurrently
+
+### Epic Landing Contract
+
+Epic execution preserves the history of child tickets on the epic branch and
+lands that branch with a regular merge commit rather than a fast-forward.
+
+- Child ticket completions are committed sequentially on the epic branch
+- The branch itself is named after the epic and is the durable integration
+  surface for that epic's work
+- Epic merge gates run on the merge candidate, not just on individual child
+  commits
+- The final integration to the target branch uses a regular merge commit so the
+  full epic branch history remains visible in git history
 
 This topology is intentionally compatible with a later server-managed
 `execute-bead` supervisor, but it does not itself define the full execution

@@ -276,6 +276,11 @@ The single-project supervision contract for this workflow is documented in
 It keeps readiness validation, queue scanning, and worker lifecycle scoped to
 one project context at a time.
 
+This workflow is the canonical **single-ticket** execution primitive. It is
+not the final contract for epic execution. Epics use a separate epic-scoped
+worker mode because their branch/worktree lifecycle and merge policy are
+different.
+
 ### Workflow steps
 
 1. Resolve the git base revision: `--from <rev>` if provided, otherwise `HEAD`.
@@ -309,6 +314,37 @@ one project context at a time.
     (see SD-012 for the hidden-ref naming scheme).
 12. Always remove the temporary worktree after preserving enough evidence for
     replay and introspection.
+
+### Epic Execution Workflow
+
+Epics are worked differently from single tickets.
+
+- The ordinary `ddx agent execute-loop` worker prioritizes ready non-epic
+  beads ahead of epics and does not launch open epics by default.
+- An epic is consumed by an **epic-scoped worker** that owns one long-lived
+  worktree and one branch for that epic.
+- The epic branch is named after the epic, using the DDx-managed branch naming
+  convention for epics such as `ddx/epics/<epic-id>`.
+- The worker selects ready child beads within that epic and executes them
+  sequentially in the same epic worktree.
+- Each child bead lands as its own commit on the epic branch and may be
+  closed individually when its acceptance and required gates pass in the epic
+  branch context.
+- Multiple epics may be worked in parallel, but each epic gets its own
+  worktree/branch and worker.
+- When the epic itself is ready to land, DDx runs the epic's merge gates on
+  the merge candidate and integrates the epic branch to the target branch with
+  a regular merge commit so the child commit history remains intact.
+
+This means DDx owns two execution modes:
+
+- single-ticket mode: isolated temporary worktree, linear rebase + fast-forward
+- epic mode: persistent epic worktree, sequential child execution, regular
+  merge commit for the epic branch
+
+The epic worker reuses the same execution evidence, gate evaluation, and
+result-recording model where possible, but it does not collapse the epic into a
+series of independent fast-forward landings on the target branch.
 
 ### Always-on runtime metrics
 

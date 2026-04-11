@@ -238,6 +238,18 @@ only within the execute-bead workflow:
     execute-bead path pattern before proceeding
 28. Hidden refs are local and not pushed by DDx; preserved iterations can be
     enumerated with `git for-each-ref 'refs/ddx/iterations/<bead-id>/*'`
+29. Epic-scoped execution may create one persistent managed worktree and one
+    branch named after the epic, such as `ddx/epics/<epic-id>`, and reuse that
+    worktree across sequential child-bead executions for that epic
+30. Child-bead commits on an epic branch are ordinary commits on that branch;
+    they are not fast-forward landed directly to the target branch
+31. The completed epic branch lands to the target branch with a regular merge
+    commit so the child-bead commit history remains intact
+32. Epic merge-gate executions run against the merge candidate before the merge
+    commit is finalized
+33. Epic worktrees are long-lived only for the lifetime of an active epic
+    worker; once the epic is merged, abandoned, or reset, DDx must remove the
+    managed epic worktree and leave no orphaned epic worktree behind
 
 All other DDx git operations remain conservative: DDx does not force-push,
 rebase outside execute-bead, delete branches, or amend commits outside this
@@ -247,7 +259,9 @@ managed flow.
 
 - **Safety:** Never force-push, rebase, or delete branches — except within the
   execute-bead managed flow (see requirements 22–28). Outside execute-bead, DDx
-  only creates commits, tags, and reads history.
+  only creates commits, tags, and reads history. Epic execution adds one
+  further managed exception: a regular merge commit is permitted only when DDx
+  lands a completed epic branch under the epic worker contract.
 - **Performance:** History queries should use `--follow` for renamed files.
   Commit operations <500ms.
 - **Compatibility:** Works with any git repo. No special git configuration

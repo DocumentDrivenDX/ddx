@@ -133,6 +133,8 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    - Filtered view showing only beads with all dependencies satisfied
    - Sorted by priority, then by creation date
    - One-click claim (calls `ddx bead claim` API)
+   - Single-ticket ready work is shown ahead of epics; open epics appear in a
+     separate epic lane rather than the ordinary execute-loop queue
 
    **Bead detail actions:**
 
@@ -184,8 +186,18 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    - Summary cards: document count by type, bead counts by status, stale document count, recent agent activity
    - Quick links to ready beads, stale documents, recent agent activity
    - Project health indicators (library populated, config valid, beads active)
+   - Worker list includes single-ticket workers and epic workers separately,
+     showing the active bead/epic, worktree, branch, and current phase
 
-6. **Persona viewer**
+6. **Epic execution view**
+   - Lists open epics separately from single-ticket ready work
+   - Shows epic branch name, epic worktree path, active child bead, and merge
+     gate status
+   - Shows sequential child-bead history on the epic branch
+   - Allows the user to inspect the final epic merge candidate and merge-gate
+     results before the merge commit is created
+
+7. **Persona viewer**
    - Browse personas with descriptions and tags
    - See which roles each persona is bound to in project config
    - View full persona content rendered as markdown

@@ -22,6 +22,7 @@ rather than any HELIX-specific hidden policy.
 The supervisor contract covers:
 
 - one project context at a time
+- one ordinary executable bead at a time
 - bead claim and selection flow
 - structural execution validation
 - delegated execute-bead execution
@@ -43,6 +44,10 @@ HELIX owns the workflow policy:
 - when the loop should run
 - retry policy after a failure
 - what operator-facing automation wraps the loop
+
+The first shipped supervisor is intentionally **not** the epic worker. Epic
+execution uses a separate worker mode because it needs a persistent branch,
+worktree, and merge-commit landing contract.
 
 `ddx agent execute-bead` remains the single owner of required execution
 document resolution, required post-run checks, merge-eligibility evaluation,
@@ -66,6 +71,9 @@ drained, the operator stops it, or a fatal project error occurs.
    snapshot that will govern this iteration.
 3. Read the ready bead set for that project and order candidates by the
    supervisor's queue policy for that project context.
+   - Ready non-epic beads are ordered ahead of ready epics at the same
+     priority.
+   - Open epics are excluded from this worker's launch set by default.
 4. Run the generic execution-ready validator against the ordered candidate set
    to filter structural ineligible beads against the resolved base snapshot.
 5. Claim the first validated bead atomically.
@@ -83,6 +91,21 @@ drained, the operator stops it, or a fatal project error occurs.
 The loop must never infer readiness from HELIX-specific hidden policy. It uses
 the explicit queue ordering policy, the shared validator output, and the
 documented result schema as its source of truth.
+
+## Epic Boundary
+
+Epics are first-class tracker items, but they are not consumed by the ordinary
+single-ticket supervisor.
+
+- The single-ticket supervisor drains executable child beads and other
+  non-epic work.
+- A separate epic-scoped worker owns one persistent epic branch and worktree.
+- That worker executes child beads sequentially inside the epic worktree,
+  commits each child result on the epic branch, and merges the completed epic
+  to the target branch with a regular merge commit.
+
+This contract therefore remains the single-ticket worker contract even after
+epic execution is introduced elsewhere in the system.
 
 ## Execute-Bead Result Schema
 
