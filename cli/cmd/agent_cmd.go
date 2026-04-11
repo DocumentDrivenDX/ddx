@@ -1244,7 +1244,7 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	if err != nil {
 		return fmt.Errorf("submit to server %s: %w\n  Hint: start the server with 'ddx server'", serverBase, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusServiceUnavailable {
 		return fmt.Errorf("server is running but no project is loaded for this directory\n  Hint: start the server from the project root")
