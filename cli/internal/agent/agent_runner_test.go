@@ -11,6 +11,7 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/agent/compaction"
 	"github.com/DocumentDrivenDX/agent/prompt"
 	"github.com/DocumentDrivenDX/agent/provider/virtual"
 	"github.com/stretchr/testify/assert"
@@ -252,6 +253,14 @@ func TestAgentRunActivityExtendsTimeout(t *testing.T) {
 	assert.GreaterOrEqual(t, elapsed, 120*time.Millisecond)
 }
 
+func TestEmbeddedCompactionConfigUsesSaneThresholds(t *testing.T) {
+	cfg := embeddedCompactionConfig("qwen/qwen3-coder-next")
+	assert.Equal(t, 32000, cfg.ContextWindow)
+	assert.Equal(t, 4000, cfg.ReserveTokens)
+	assert.Equal(t, 8000, cfg.KeepRecentTokens)
+	assert.True(t, compaction.ShouldCompact(30000, cfg.ContextWindow, cfg.EffectivePercent, cfg.ReserveTokens))
+}
+
 // A-06: Session logging captures agent runs.
 func TestAgentRunSessionLogging(t *testing.T) {
 	logDir := t.TempDir()
@@ -483,6 +492,130 @@ func TestAgentResolveConfigRejectsUnsupportedPresetFromEnv(t *testing.T) {
 	assert.Contains(t, err.Error(), "supported presets")
 }
 
+func TestResolveEmbeddedAgentProviderUsesNativeAgentConfig(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-test
+    model: anthropic/claude-haiku-4-5
+    headers:
+      HTTP-Referer: https://example.com
+default: openrouter
+max_iterations: 30
+preset: agent
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "openai-compat", resolved.Config.Provider)
+	assert.Equal(t, "https://openrouter.ai/api/v1", resolved.Config.BaseURL)
+	assert.Equal(t, "anthropic/claude-haiku-4-5", resolved.Config.Model)
+	assert.Equal(t, 30, resolved.Config.MaxIterations)
+	assert.Equal(t, "agent", resolved.Config.Preset)
+	assert.NotNil(t, resolved.Provider)
+}
+
+func TestResolveEmbeddedAgentProviderSupportsDefaultProviderAlias(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  bragi:
+    type: openai-compat
+    base_url: http://bragi:1234/v1
+    api_key: sk-test
+    model: qwen3.5-27b
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-test
+    model: minimax/minimax-m2.7
+default_provider: openrouter
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "https://openrouter.ai/api/v1", resolved.Config.BaseURL)
+	assert.Equal(t, "minimax/minimax-m2.7", resolved.Config.Model)
+}
+
+func TestResolveEmbeddedAgentProviderAppliesNativeModelOverride(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-test
+    model: anthropic/claude-haiku-4-5
+default: openrouter
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "minimax/minimax-m2.7")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "minimax/minimax-m2.7", resolved.Config.Model)
+}
+
+func TestResolveEmbeddedAgentProviderFallsBackToLegacyPresetAlias(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-test
+    model: anthropic/claude-haiku-4-5
+default: openrouter
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{
+			Provider:      "openai-compat",
+			Preset:        "agent",
+			MaxIterations: 11,
+			Models: map[string]*LLMPresetYAML{
+				"qwen-local": {
+					Model:     "qwen3.5-27b",
+					Provider:  "openai-compat",
+					Endpoints: []string{"http://legacy:1234/v1"},
+					Strategy:  "first-available",
+				},
+			},
+		}
+	}
+
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "qwen-local")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "http://legacy:1234/v1", resolved.Config.BaseURL)
+	assert.Equal(t, "qwen3.5-27b", resolved.Config.Model)
+	assert.Equal(t, 11, resolved.Config.MaxIterations)
+}
+
 // --- Helpers ---
 
 type notFoundError struct {
@@ -491,6 +624,13 @@ type notFoundError struct {
 
 func (e *notFoundError) Error() string {
 	return e.name + ": not found"
+}
+
+func isolateNativeAgentHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 }
 
 type sleepProvider struct {

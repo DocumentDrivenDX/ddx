@@ -11,12 +11,15 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/agent/compaction"
+	agentconfig "github.com/DocumentDrivenDX/agent/config"
 	"github.com/DocumentDrivenDX/agent/prompt"
 	"github.com/DocumentDrivenDX/agent/provider/anthropic"
 	oai "github.com/DocumentDrivenDX/agent/provider/openai"
 	"github.com/DocumentDrivenDX/agent/provider/virtual"
 	"github.com/DocumentDrivenDX/agent/session"
 	"github.com/DocumentDrivenDX/agent/tool"
+	"gopkg.in/yaml.v3"
 )
 
 // AgentRunConfig holds resolved configuration for one agent invocation.
@@ -50,21 +53,22 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	}
 
 	// Resolve agent configuration (config.yaml → env vars → opts)
-	agentCfg, err := r.resolveAgentConfig(model)
-	if err != nil {
-		return nil, err
-	}
-
 	// Use injected provider (testing) or build from resolved config.
+	var agentCfg AgentRunConfig
 	var provider agentlib.Provider
 	if r.AgentProvider != nil {
+		agentCfg, err = r.resolveAgentConfig(model)
+		if err != nil {
+			return nil, err
+		}
 		provider = r.AgentProvider.(agentlib.Provider)
 	} else {
-		var err error
-		provider, err = buildAgentProvider(agentCfg)
+		resolved, err := r.resolveEmbeddedAgentProvider(wd, model)
 		if err != nil {
-			return nil, fmt.Errorf("agent: provider: %w", err)
+			return nil, err
 		}
+		agentCfg = resolved.Config
+		provider = resolved.Provider
 	}
 
 	maxIter := agentCfg.MaxIterations
@@ -104,6 +108,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		MaxIterations: maxIter,
 		WorkDir:       wd,
 		Metadata:      opts.Correlation,
+		Compactor:     compaction.NewCompactor(embeddedCompactionConfig(agentCfg.Model)),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -214,6 +219,23 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	return result, nil
 }
 
+type embeddedAgentProviderResolution struct {
+	Config   AgentRunConfig
+	Provider agentlib.Provider
+}
+
+func embeddedCompactionConfig(model string) compaction.Config {
+	cfg := compaction.DefaultConfig()
+	// DDx does not yet have reliable per-model context-window metadata for
+	// embedded providers. Use a conservative default that actually fires under
+	// long-running multi-turn planning/doc loops instead of inheriting the
+	// upstream 8k/8k defaults, which never trigger compaction.
+	cfg.ContextWindow = 32_000
+	cfg.ReserveTokens = 4_000
+	cfg.KeepRecentTokens = 8_000
+	return cfg
+}
+
 // resolveAgentConfig builds an AgentRunConfig from .ddx/config.yaml, env vars, and opts.
 // Priority: opts > env vars > config > built-in defaults.
 // If model resolves to a named preset in agent.models, the preset's endpoint and model are applied.
@@ -293,6 +315,123 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
+	if resolved, err := r.resolveNativeAgentProvider(workDir, model); err != nil {
+		return nil, err
+	} else if resolved != nil {
+		return resolved, nil
+	}
+
+	cfg, err := r.resolveAgentConfig(model)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := buildAgentProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("agent: provider: %w", err)
+	}
+	return &embeddedAgentProviderResolution{Config: cfg, Provider: provider}, nil
+}
+
+func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
+	if model != "" && r.legacyPresetExists(model) {
+		return nil, nil
+	}
+
+	cfg, err := agentconfig.Load(workDir)
+	if err != nil {
+		return nil, fmt.Errorf("agent: native config: %w", err)
+	}
+	if cfg == nil || len(cfg.ProviderNames()) == 0 {
+		return nil, nil
+	}
+	applyNativeDefaultProviderCompatibility(cfg, workDir)
+
+	overrides := agentconfig.ProviderOverrides{}
+	if model != "" {
+		overrides.Model = model
+	}
+	providerName := cfg.DefaultName()
+	provider, pc, _, err := cfg.BuildProviderWithOverrides(providerName, overrides)
+	if err != nil {
+		return nil, fmt.Errorf("agent: native config provider %q: %w", providerName, err)
+	}
+
+	runCfg := AgentRunConfig{
+		Provider:      pc.Type,
+		BaseURL:       pc.BaseURL,
+		APIKey:        pc.APIKey,
+		Model:         pc.Model,
+		Preset:        cfg.Preset,
+		MaxIterations: cfg.MaxIterations,
+	}
+	if runCfg.Preset == "" {
+		runCfg.Preset = "agent"
+	}
+	if runCfg.MaxIterations == 0 {
+		runCfg.MaxIterations = 20
+	}
+	if !containsString(prompt.PresetNames(), runCfg.Preset) {
+		return nil, fmt.Errorf("agent: unsupported preset %q; supported presets: %s", runCfg.Preset, strings.Join(prompt.PresetNames(), ", "))
+	}
+
+	return &embeddedAgentProviderResolution{
+		Config:   runCfg,
+		Provider: provider,
+	}, nil
+}
+
+func (r *Runner) legacyPresetExists(model string) bool {
+	if model == "" || r.AgentConfigLoader == nil {
+		return false
+	}
+	if fc := r.AgentConfigLoader(); fc != nil && fc.Models != nil {
+		_, ok := fc.Models[model]
+		return ok
+	}
+	return false
+}
+
+func applyNativeDefaultProviderCompatibility(cfg *agentconfig.Config, workDir string) {
+	if cfg == nil || cfg.Default != "" || len(cfg.Providers) == 0 {
+		return
+	}
+	if alias := nativeDefaultProviderAlias(workDir); alias != "" {
+		if _, ok := cfg.Providers[alias]; ok {
+			cfg.Default = alias
+		}
+	}
+}
+
+func nativeDefaultProviderAlias(workDir string) string {
+	paths := []string{}
+	if home, err := os.UserHomeDir(); err == nil {
+		paths = append(paths, filepath.Join(home, ".config", "agent", "config.yaml"))
+	}
+	paths = append(paths, filepath.Join(workDir, ".agent", "config.yaml"))
+
+	alias := ""
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		expanded := os.Expand(string(data), func(key string) string {
+			return os.Getenv(key)
+		})
+		var parsed struct {
+			DefaultProvider string `yaml:"default_provider"`
+		}
+		if err := yaml.Unmarshal([]byte(expanded), &parsed); err != nil {
+			continue
+		}
+		if parsed.DefaultProvider != "" {
+			alias = parsed.DefaultProvider
+		}
+	}
+	return alias
 }
 
 // selectEndpoint picks one endpoint from the list using the specified strategy.
