@@ -73,7 +73,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 
 	maxIter := agentCfg.MaxIterations
 	if maxIter == 0 {
-		maxIter = 20
+		maxIter = 100
 	}
 
 	// Build tools
@@ -245,7 +245,7 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 		Provider:      "openai-compat",
 		BaseURL:       "http://localhost:1234/v1",
 		Preset:        "agent",
-		MaxIterations: 20,
+		MaxIterations: 100,
 	}
 
 	var yamlModels map[string]*LLMPresetYAML
@@ -396,7 +396,7 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 		runCfg.Preset = "agent"
 	}
 	if runCfg.MaxIterations == 0 {
-		runCfg.MaxIterations = 20
+		runCfg.MaxIterations = 100
 	}
 	if !containsString(prompt.PresetNames(), runCfg.Preset) {
 		return nil, fmt.Errorf("agent: unsupported preset %q; supported presets: %s", runCfg.Preset, strings.Join(prompt.PresetNames(), ", "))
@@ -490,7 +490,7 @@ func (r *Runner) resolveOpenRouterProvider(model string) (*embeddedAgentProvider
 		APIKey:        os.Getenv("OPENROUTER_API_KEY"),
 		Model:         model,
 		Preset:        "agent",
-		MaxIterations: 20,
+		MaxIterations: 100,
 	}
 
 	// Try to load API key from ~/.config/agent/config.yaml if not in env

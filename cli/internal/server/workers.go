@@ -466,9 +466,18 @@ func formatSessionLogLines(lines []string) string {
 			dur, _ := data["duration_ms"].(float64)
 			argHint := ""
 			if len(inp) > 0 {
-				for _, v := range inp {
-					argHint = truncateStr(fmt.Sprintf("%v", v), 60)
-					break
+				// Prefer path/command/query keys for display
+				for _, key := range []string{"path", "command", "query", "file"} {
+					if v, ok := inp[key]; ok {
+						argHint = truncateStr(fmt.Sprintf("%v", v), 60)
+						break
+					}
+				}
+				if argHint == "" {
+					for _, v := range inp {
+						argHint = truncateStr(fmt.Sprintf("%v", v), 60)
+						break
+					}
 				}
 			}
 			errMsg, _ := data["error"].(string)
