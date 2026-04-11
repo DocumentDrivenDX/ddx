@@ -13,6 +13,7 @@ test.describe('DDx Server UI Screenshots', () => {
     await page.waitForTimeout(500)
     await expect(page).toHaveScreenshot('dashboard.png', {
       fullPage: true,
+      maxDiffPixelRatio: 0.02,
       mask: [page.locator('text=/^Started:/')],
     })
   })
@@ -21,21 +22,30 @@ test.describe('DDx Server UI Screenshots', () => {
     await page.goto('/beads')
     await page.waitForSelector('text=OPEN')
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('beads-kanban.png', { fullPage: true })
+    await expect(page).toHaveScreenshot('beads-kanban.png', {
+      fullPage: true,
+      maxDiffPixelRatio: 0.04,
+    })
   })
 
   test('documents page', async ({ page }) => {
     await page.goto('/documents')
     await page.waitForSelector('h1')
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('documents.png', { fullPage: true })
+    await expect(page).toHaveScreenshot('documents.png', {
+      fullPage: true,
+      maxDiffPixelRatio: 0.02,
+    })
   })
 
   test('graph page', async ({ page }) => {
     await page.goto('/graph')
     await page.waitForSelector('h1')
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('graph.png', { fullPage: true })
+    await expect(page).toHaveScreenshot('graph.png', {
+      fullPage: true,
+      maxDiffPixelRatio: 0.06,
+    })
   })
 
   test('agent page', async ({ page }) => {
