@@ -417,6 +417,7 @@ cli/internal/agent/.ddx/
 .ddx/hooks/
 .ddx/run-state.json
 .ddx/exec-runs.d/
+.ddx/.execute-bead-wt-*/
 .ddx/*.lock/
 .ddx/workers/
 .ddx/tsnet/

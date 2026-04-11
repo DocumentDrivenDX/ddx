@@ -16,6 +16,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var initGitignoreRules = []string{
+	".ddx/.execute-bead-wt-*/",
+}
+
 // InitOptions contains all configuration options for project initialization
 type InitOptions struct {
 	Force               bool   // Force initialization even if config exists
@@ -193,6 +197,10 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	}
 	result.ConfigCreated = true
 
+	if err := ensureProjectGitignoreRules(workingDir, initGitignoreRules); err != nil {
+		return nil, NewExitError(1, fmt.Sprintf("Failed to update .gitignore: %v", err))
+	}
+
 	// Create library directory structure (offline-safe — plugin install may fail).
 	libraryPath := filepath.Join(workingDir, localConfig.Library.Path)
 	for _, sub := range []string{"prompts", "personas", "patterns", "templates", "configs"} {
@@ -257,7 +265,7 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		generateAgentsMD(workingDir)
 
 		// Commit config and versions files
-		gitAdd := exec.Command("git", "add", ".ddx/config.yaml", ".ddx/versions.yaml", "AGENTS.md")
+		gitAdd := exec.Command("git", "add", ".ddx/config.yaml", ".ddx/versions.yaml", "AGENTS.md", ".gitignore")
 		gitAdd.Dir = workingDir
 		if err := gitAdd.Run(); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to stage config file: %v", err))
@@ -596,6 +604,51 @@ func validateConfiguration(cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+func ensureProjectGitignoreRules(workingDir string, rules []string) error {
+	if len(rules) == 0 {
+		return nil
+	}
+	path := filepath.Join(workingDir, ".gitignore")
+	var content string
+	if raw, err := os.ReadFile(path); err == nil {
+		content = string(raw)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	trimmed := strings.TrimRight(content, "\n")
+	var missing []string
+	for _, rule := range rules {
+		rule = strings.TrimSpace(rule)
+		if rule == "" || containsExactLine(trimmed, rule) {
+			continue
+		}
+		missing = append(missing, rule)
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	updated := trimmed
+	if updated != "" {
+		updated += "\n"
+	}
+	updated += "# DDx runtime scratch\n"
+	for _, rule := range missing {
+		updated += rule + "\n"
+	}
+	return os.WriteFile(path, []byte(updated), 0o644)
+}
+
+func containsExactLine(content, target string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // validateGitRepo is the pure business logic for git repository validation

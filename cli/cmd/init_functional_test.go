@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -35,6 +37,30 @@ func TestInitProject_FunctionalDesign(t *testing.T) {
 	}
 	if result == nil {
 		t.Error("Expected result struct, got nil")
+	}
+}
+
+func TestInitProject_ManagesScratchGitignoreRules(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+
+	result, err := initProject(te.Dir, InitOptions{NoGit: true})
+	if err != nil {
+		t.Fatalf("expected initProject success, got %v", err)
+	}
+	if result == nil || !result.ConfigCreated {
+		t.Fatalf("expected config to be created")
+	}
+
+	raw, err := os.ReadFile(filepath.Join(te.Dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected .gitignore to be written, got %v", err)
+	}
+	content := string(raw)
+	if !containsExactLine(content, ".ddx/.execute-bead-wt-*/") {
+		t.Fatalf("expected execute-bead scratch worktree ignore rule in .gitignore, got:\n%s", content)
+	}
+	if containsExactLine(content, ".ddx/executions/") {
+		t.Fatalf("did not expect tracked execution evidence to be ignored, got:\n%s", content)
 	}
 }
 
