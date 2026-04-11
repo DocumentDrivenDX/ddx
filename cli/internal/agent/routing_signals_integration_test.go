@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -61,6 +62,50 @@ func TestProbeHarnessStateUsesClaudeStatsCacheAndLeavesQuotaUnknown(t *testing.T
 	assert.Equal(t, claudeStatsCacheSourceKind, state.RoutingSignal.Source.Kind)
 	assert.Equal(t, "cached", state.RoutingSignal.Source.Freshness)
 	assert.Equal(t, 582, state.RoutingSignal.HistoricalUsage.TotalTokens)
+}
+
+func TestProbeHarnessStateUsesRecentClaudeQuotaFailureOverlay(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	statsDir := filepath.Join(home, ".claude")
+	require.NoError(t, os.MkdirAll(statsDir, 0o755))
+	statsPath := filepath.Join(statsDir, "stats-cache.json")
+	require.NoError(t, os.WriteFile(statsPath, []byte(`{
+		"dailyActivity": [
+			{"date":"2026-04-09","sessions":2,"usage":{"input_tokens":100,"cached_input_tokens":5,"output_tokens":20}}
+		]
+	}`), 0o644))
+	t.Setenv("HOME", home)
+	t.Setenv(claudeStatsCacheEnv, statsPath)
+
+	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	r.Config.SessionLogDir = logDir
+
+	entry := SessionEntry{
+		ID:        "as-test-quota",
+		Timestamp: time.Now().UTC(),
+		Harness:   "claude",
+		Response:  `You've hit your limit · resets 12am (America/New_York)`,
+		ExitCode:  1,
+		Error:     "agent execution failed",
+	}
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), append(data, '\n'), 0o644))
+
+	state := r.ProbeHarnessState("claude", 2*time.Second)
+	require.NotNil(t, state.RoutingSignal)
+
+	assert.Equal(t, "blocked", state.QuotaState)
+	assert.False(t, state.QuotaOK)
+	assert.Equal(t, "claude", state.RoutingSignal.Provider)
+	assert.Equal(t, sessionLogSourceKind, state.RoutingSignal.Source.Kind)
+	assert.Equal(t, "recent session failure", state.RoutingSignal.Source.Basis)
+	assert.NotEmpty(t, state.RoutingSignal.CurrentQuota.ResetsAt)
+	assert.Equal(t, 125, state.RoutingSignal.HistoricalUsage.TotalTokens)
 }
 
 func TestProbeAndBuildCandidatePlansUsesNativeQuotaSignal(t *testing.T) {
