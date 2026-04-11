@@ -343,6 +343,10 @@ func executeBeadCheckpointRef(beadID, attemptID string) string {
 	return fmt.Sprintf("refs/ddx/checkpoints/%s/%s", beadID, attemptID)
 }
 
+func executeBeadResultRef(beadID, attemptID string) string {
+	return fmt.Sprintf("refs/ddx/execute-bead-results/%s/%s", beadID, attemptID)
+}
+
 // executeBeadSessionID generates a short session ID for the agent log.
 func executeBeadSessionID() string {
 	b := make([]byte, 4)
@@ -539,6 +543,18 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		_ = writeExecuteBeadArtifactJSON(artifacts.ResultAbs, res)
 		_ = writeExecuteBeadResult(cmd, res, asJSON)
 		return fmt.Errorf("failed to read worktree HEAD: %w", revErr)
+	}
+	worktreeDirty, dirtyErr := gitOps.IsDirty(wtPath)
+	if dirtyErr != nil {
+		return fmt.Errorf("checking execution worktree state: %w", dirtyErr)
+	}
+	if worktreeDirty && resultRev == baseRev {
+		resultRef := executeBeadResultRef(beadID, attemptID)
+		syntheticRev, checkpointErr := gitOps.CheckpointCommit(wtPath, resultRef, fmt.Sprintf("ddx execute-bead result %s %s", beadID, attemptID))
+		if checkpointErr != nil {
+			return fmt.Errorf("capturing execute-bead worktree changes: %w", checkpointErr)
+		}
+		resultRev = syntheticRev
 	}
 
 	res := ExecuteBeadResult{
@@ -838,7 +854,10 @@ func executeBeadPromptContent(workDir string, b *bead.Bead, refs []executeBeadGo
 	sb.WriteString("3. Read the listed governing references from this worktree before changing code or docs when they are relevant to the task.\n")
 	sb.WriteString("4. If the bead is missing critical context or the governing references conflict, stop and report the gap explicitly instead of improvising hidden policy.\n")
 	sb.WriteString("5. Keep the execution bundle files under `.ddx/executions/` intact; DDx uses them as execution evidence.\n")
-	sb.WriteString("6. Complete the requested implementation and any local checks the bead contract requires. DDx will classify the final outcome.\n")
+	sb.WriteString("6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.\n")
+	sb.WriteString("7. DDx owns landing and preservation. Agent-created commits are optional; coherent tracked edits in the worktree still count as produced work.\n")
+	sb.WriteString("8. If you choose to create commits, keep them coherent and limited to this bead. If you leave tracked edits without commits, DDx will still evaluate them.\n")
+	sb.WriteString("9. If the work is already satisfied with no tracked changes needed, stop cleanly and let DDx record a no-change attempt instead of inventing a commit.\n")
 
 	return []byte(sb.String()), "synthesized", nil
 }

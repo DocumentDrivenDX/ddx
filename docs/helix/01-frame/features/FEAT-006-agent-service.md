@@ -284,8 +284,11 @@ different.
 ### Workflow steps
 
 1. Resolve the git base revision: `--from <rev>` if provided, otherwise `HEAD`.
-2. If the caller's worktree is dirty, create a checkpoint commit first and use
-   that checkpoint as the actual base.
+2. If tracked root state differs from `HEAD`, create a checkpoint commit first
+   and use that checkpoint as the actual base. `execute-bead` requires a
+   reproducible git base revision, not a pristine root checkout. Ignored or
+   disposable runtime scratch must not block launch or contaminate the
+   checkpoint snapshot.
 3. Resolve the bead and its governing artifacts from the DDx document graph.
    Use the shared DDx execution validator against the resolved base revision
    and governing execution-contract snapshot to confirm the bead is
@@ -308,11 +311,15 @@ different.
    - For `kind: command` executions, success means exit code 0.
    - For `kind: agent` executions, success means exit code 0 (structured result schema validation is optional and governed by the definition).
    - When a `required: true` execution also has a ratchet threshold, landing is blocked if EITHER condition fails (OR semantics) — non-success status OR ratchet regression blocks the merge.
-10. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
+10. If the agent produced tracked worktree edits without creating commits,
+    synthesize a DDx-owned result commit before merge/preserve evaluation so
+    the work is not discarded merely because the harness left file edits
+    uncommitted.
+11. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
     semantics, then reset the worker worktree to the updated branch tip.
-11. Otherwise, preserve the iteration result under a hidden ref and do not merge
+12. Otherwise, preserve the iteration result under a hidden ref and do not merge
     (see SD-012 for the hidden-ref naming scheme).
-12. Always remove the temporary worktree after preserving enough evidence for
+13. Always remove the temporary worktree after preserving enough evidence for
     replay and introspection.
 
 ### Execute-Bead Evidence Bundle
@@ -350,6 +357,20 @@ Default policy:
 This split is intentional: the generic execution store remains append-only
 runtime history, while execute-bead bundles are tracked git artifacts tied to a
 specific implementation attempt.
+
+### Output And Commit Contract
+
+`execute-bead` evaluates the resulting tracked worktree state, not only
+agent-authored commits.
+
+- DDx owns landing and preservation.
+- Agent-created commits are optional, not required.
+- A run that leaves coherent tracked edits in the managed worktree still counts
+  as produced work.
+- A run is only `no_changes` when the managed worktree ends clean and there are
+  no new tracked changes to preserve or land.
+- If DDx needs a commit object for preserve/merge mechanics and the agent left
+  only tracked edits, DDx synthesizes the result commit itself.
 
 ### Epic Execution Workflow
 

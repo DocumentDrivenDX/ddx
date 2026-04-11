@@ -56,6 +56,10 @@ worktree. The supervisor only orchestrates queue selection, invokes that
 command from the project root, and records the result states emitted by that
 command.
 
+The command requires a reproducible git base revision, not a pristine root
+checkout. Tracked root changes may be checkpointed into an immutable base
+commit before launch; ignored runtime scratch must not block the attempt.
+
 The first release does not require multi-project discovery, cross-project
 scheduling, or multi-host coordination. A worker instance binds to exactly one
 project context for the duration of a loop.
@@ -124,6 +128,12 @@ The supervisor consumes only the documented result envelope emitted by
 
 The supervisor must not infer state from free-form reason strings. It uses the
 `status` field for control flow and may surface `detail` for observability.
+
+`execute-bead` result classification is based on the managed worktree outcome,
+not solely on agent-authored commits. If the agent leaves tracked file edits
+without creating commits, `execute-bead` synthesizes the result commit and
+then evaluates land/preserve semantics. Only a truly clean managed worktree may
+be reported as `no_changes`.
 
 ## Validation And Retry Semantics
 

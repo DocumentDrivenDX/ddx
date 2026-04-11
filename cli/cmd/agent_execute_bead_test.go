@@ -31,6 +31,8 @@ type fakeExecuteBeadGit struct {
 	headRevIdx int
 	// wtHeadRev is returned by HeadRev for worktree paths (after agent run).
 	wtHeadRev string
+	// wtDirty is returned by IsDirty for worktree paths.
+	wtDirty bool
 	// wtHeadRevErr, if set, is returned by HeadRev for worktree paths.
 	wtHeadRevErr error
 	// rebaseResultRev, if set, replaces wtHeadRev after a successful rebase.
@@ -41,6 +43,7 @@ type fakeExecuteBeadGit struct {
 	updateRefErr    error
 
 	checkpointCalled bool
+	checkpointCalls  int
 	checkpointRef    string
 	checkpointRev    string
 	addedWTs         []string
@@ -85,6 +88,9 @@ func (f *fakeExecuteBeadGit) ResolveRev(dir, rev string) (string, error) {
 func (f *fakeExecuteBeadGit) IsDirty(dir string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if strings.Contains(dir, executeBeadWtPrefix) {
+		return f.wtDirty, nil
+	}
 	return f.dirty, nil
 }
 
@@ -92,6 +98,7 @@ func (f *fakeExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.checkpointCalled = true
+	f.checkpointCalls++
 	f.checkpointRef = ref
 	if f.checkpointRev != "" {
 		return f.checkpointRev, nil
@@ -483,6 +490,7 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "aaaa1111", // same as base — no commits made
+		wtDirty:     false,
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 	f := newExecuteBeadFactory(t, git, runner)
@@ -493,6 +501,27 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Empty(t, res.PreserveRef)
+}
+
+func TestExecuteBeadDirtyWorktreeWithoutCommitsMerges(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev:   "aaaa1111",
+		wtHeadRev:     "aaaa1111", // no agent-created commit
+		wtDirty:       true,       // but tracked edits exist
+		checkpointRev: "bbbb2222",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, "merged", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
+	assert.Equal(t, "bbbb2222", res.ResultRev)
+	assert.Equal(t, 1, git.ffMergeCalls)
+	assert.Equal(t, "bbbb2222", git.ffMergeRev)
+	assert.Equal(t, 1, git.checkpointCalls)
+	assert.Equal(t, executeBeadResultRef("my-bead", res.AttemptID), git.checkpointRef)
 }
 
 func TestExecuteBeadSynthesizesPromptAndArtifacts(t *testing.T) {
