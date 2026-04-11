@@ -12,6 +12,8 @@ import (
 
 type ExecuteBeadReport struct {
 	BeadID      string `json:"bead_id"`
+	AttemptID   string `json:"attempt_id,omitempty"`
+	WorkerID    string `json:"worker_id,omitempty"`
 	Status      string `json:"status"`
 	Detail      string `json:"detail,omitempty"`
 	SessionID   string `json:"session_id,omitempty"`

@@ -574,6 +574,7 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	f.AgentRunnerOverride = runner
 	f.executeBeadGitOverride = git
 
+	t.Setenv("DDX_WORKER_ID", "worker-test")
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	require.Len(t, git.addedWTs, 1)
@@ -585,6 +586,7 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	manifestRaw, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(manifestRaw), `"bead_id": "my-bead"`)
+	assert.Contains(t, string(manifestRaw), `"worker_id": "worker-test"`)
 	assert.Contains(t, string(manifestRaw), `"prompt": "synthesized"`)
 	assert.Contains(t, string(manifestRaw), `"worktree": ".ddx/`)
 
@@ -593,6 +595,8 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	var recorded ExecuteBeadResult
 	require.NoError(t, json.Unmarshal(resultRaw, &recorded))
 	assert.Equal(t, res.BeadID, recorded.BeadID)
+	assert.Equal(t, "worker-test", recorded.WorkerID)
+	assert.Equal(t, res.AttemptID, recorded.AttemptID)
 	assert.Equal(t, res.Status, recorded.Status)
 	assert.Equal(t, res.ResultFile, recorded.ResultFile)
 	assert.NoDirExists(t, git.addedWTs[0])

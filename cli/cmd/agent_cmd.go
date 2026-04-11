@@ -1076,6 +1076,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			}
 			return agent.ExecuteBeadReport{
 				BeadID:      res.BeadID,
+				AttemptID:   res.AttemptID,
+				WorkerID:    res.WorkerID,
 				Status:      res.Status,
 				Detail:      res.Detail,
 				SessionID:   res.SessionID,

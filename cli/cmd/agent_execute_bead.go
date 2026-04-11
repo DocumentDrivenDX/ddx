@@ -21,6 +21,8 @@ import (
 // ExecuteBeadResult captures the complete outcome of an execute-bead run.
 type ExecuteBeadResult struct {
 	BeadID       string    `json:"bead_id"`
+	AttemptID    string    `json:"attempt_id,omitempty"`
+	WorkerID     string    `json:"worker_id,omitempty"`
 	BaseRev      string    `json:"base_rev"`
 	ResultRev    string    `json:"result_rev,omitempty"`
 	Outcome      string    `json:"outcome"` // merged | preserved | no-changes
@@ -57,6 +59,7 @@ type executeBeadArtifacts struct {
 
 type executeBeadManifest struct {
 	AttemptID string                    `json:"attempt_id"`
+	WorkerID  string                    `json:"worker_id,omitempty"`
 	BeadID    string                    `json:"bead_id"`
 	BaseRev   string                    `json:"base_rev"`
 	CreatedAt time.Time                 `json:"created_at"`
@@ -357,6 +360,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 
 	workDir := f.WorkingDir
 	attemptID := executeBeadAttemptID()
+	workerID := os.Getenv("DDX_WORKER_ID")
 
 	// Resolve base revision (default to HEAD).
 	baseRev, err := f.executeBeadResolveBase(gitOps, workDir, fromRev)
@@ -462,6 +466,8 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read worktree HEAD: %v\n", revErr)
 		res := ExecuteBeadResult{
 			BeadID:       beadID,
+			AttemptID:    attemptID,
+			WorkerID:     workerID,
 			BaseRev:      baseRev,
 			Harness:      resultHarness,
 			Model:        resultModel,
@@ -488,6 +494,8 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 
 	res := ExecuteBeadResult{
 		BeadID:       beadID,
+		AttemptID:    attemptID,
+		WorkerID:     workerID,
 		BaseRev:      baseRev,
 		ResultRev:    resultRev,
 		Harness:      resultHarness,
@@ -620,6 +628,7 @@ func (f *CommandFactory) prepareExecuteBeadArtifacts(wtPath, beadID, attemptID, 
 
 	manifest := executeBeadManifest{
 		AttemptID: attemptID,
+		WorkerID:  os.Getenv("DDX_WORKER_ID"),
 		BeadID:    beadID,
 		BaseRev:   baseRev,
 		CreatedAt: time.Now().UTC(),

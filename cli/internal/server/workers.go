@@ -23,34 +23,38 @@ type ExecuteLoopWorkerSpec struct {
 }
 
 type WorkerRecord struct {
-	ID           string                 `json:"id"`
-	Kind         string                 `json:"kind"`
-	State        string                 `json:"state"`
-	Status       string                 `json:"status,omitempty"`
-	ProjectRoot  string                 `json:"project_root"`
-	Harness      string                 `json:"harness,omitempty"`
-	Model        string                 `json:"model,omitempty"`
-	Effort       string                 `json:"effort,omitempty"`
-	Once         bool                   `json:"once,omitempty"`
-	PollInterval string                 `json:"poll_interval,omitempty"`
-	PID          int                    `json:"pid,omitempty"`
-	StartedAt    time.Time              `json:"started_at,omitempty"`
-	FinishedAt   time.Time              `json:"finished_at,omitempty"`
-	ExitCode     *int                   `json:"exit_code,omitempty"`
-	Error        string                 `json:"error,omitempty"`
-	StdoutPath   string                 `json:"stdout_path,omitempty"`
-	StderrPath   string                 `json:"stderr_path,omitempty"`
-	Command      []string               `json:"command,omitempty"`
-	Attempts     int                    `json:"attempts,omitempty"`
-	Successes    int                    `json:"successes,omitempty"`
-	Failures     int                    `json:"failures,omitempty"`
-	CurrentBead  string                 `json:"current_bead,omitempty"`
-	LastError    string                 `json:"last_error,omitempty"`
-	LastResult   *WorkerExecutionResult `json:"last_result,omitempty"`
+	ID             string                 `json:"id"`
+	Kind           string                 `json:"kind"`
+	State          string                 `json:"state"`
+	Status         string                 `json:"status,omitempty"`
+	ProjectRoot    string                 `json:"project_root"`
+	Harness        string                 `json:"harness,omitempty"`
+	Model          string                 `json:"model,omitempty"`
+	Effort         string                 `json:"effort,omitempty"`
+	Once           bool                   `json:"once,omitempty"`
+	PollInterval   string                 `json:"poll_interval,omitempty"`
+	PID            int                    `json:"pid,omitempty"`
+	StartedAt      time.Time              `json:"started_at,omitempty"`
+	FinishedAt     time.Time              `json:"finished_at,omitempty"`
+	ExitCode       *int                   `json:"exit_code,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+	StdoutPath     string                 `json:"stdout_path,omitempty"`
+	StderrPath     string                 `json:"stderr_path,omitempty"`
+	SpecPath       string                 `json:"spec_path,omitempty"`
+	Command        []string               `json:"command,omitempty"`
+	Attempts       int                    `json:"attempts,omitempty"`
+	Successes      int                    `json:"successes,omitempty"`
+	Failures       int                    `json:"failures,omitempty"`
+	CurrentBead    string                 `json:"current_bead,omitempty"`
+	CurrentAttempt string                 `json:"current_attempt,omitempty"`
+	LastError      string                 `json:"last_error,omitempty"`
+	LastResult     *WorkerExecutionResult `json:"last_result,omitempty"`
 }
 
 type WorkerExecutionResult struct {
 	BeadID     string `json:"bead_id,omitempty"`
+	AttemptID  string `json:"attempt_id,omitempty"`
+	WorkerID   string `json:"worker_id,omitempty"`
 	Status     string `json:"status,omitempty"`
 	Detail     string `json:"detail,omitempty"`
 	SessionID  string `json:"session_id,omitempty"`
@@ -65,6 +69,13 @@ type executeLoopSummary struct {
 	Failures          int                     `json:"failures"`
 	LastFailureStatus string                  `json:"last_failure_status,omitempty"`
 	Results           []WorkerExecutionResult `json:"results"`
+}
+
+type workerExecuteBeadManifest struct {
+	AttemptID string `json:"attempt_id"`
+	WorkerID  string `json:"worker_id,omitempty"`
+	BeadID    string `json:"bead_id"`
+	BaseRev   string `json:"base_rev,omitempty"`
 }
 
 type workerHandle struct {
@@ -112,6 +123,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	stdoutPath := filepath.Join(dir, "stdout.log")
 	stderrPath := filepath.Join(dir, "stderr.log")
+	specPath := filepath.Join(dir, "spec.json")
 	stdoutFile, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return WorkerRecord{}, err
@@ -125,6 +137,22 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	cmd.Stdout = stdoutFile
 	cmd.Stderr = stderrFile
+	baseEnv := cmd.Env
+	if len(baseEnv) == 0 {
+		baseEnv = os.Environ()
+	}
+	cmd.Env = append(baseEnv,
+		"DDX_WORKER_ID="+id,
+		"DDX_WORKER_KIND=execute-loop",
+	)
+
+	specData, err := json.MarshalIndent(spec, "", "  ")
+	if err != nil {
+		return WorkerRecord{}, err
+	}
+	if err := os.WriteFile(specPath, append(specData, '\n'), 0o644); err != nil {
+		return WorkerRecord{}, err
+	}
 
 	record := WorkerRecord{
 		ID:           id,
@@ -139,6 +167,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		PollInterval: spec.PollInterval.String(),
 		StdoutPath:   relToProject(m.projectRoot, stdoutPath),
 		StderrPath:   relToProject(m.projectRoot, stderrPath),
+		SpecPath:     relToProject(m.projectRoot, specPath),
 		Command:      commandVector(cmd),
 		StartedAt:    time.Now().UTC(),
 	}
@@ -311,8 +340,48 @@ func (m *WorkerManager) readRecord(dir string) (WorkerRecord, error) {
 	if record.Status == "" {
 		record.Status = record.State
 	}
+	m.enrichFromLiveArtifacts(&record)
 	m.enrichFromExecuteLoopOutput(dir, &record)
 	return record, nil
+}
+
+func (m *WorkerManager) enrichFromLiveArtifacts(record *WorkerRecord) {
+	if record == nil || record.ID == "" {
+		return
+	}
+	execRoot := filepath.Join(m.projectRoot, ".ddx", "executions")
+	entries, err := os.ReadDir(execRoot)
+	if err != nil {
+		return
+	}
+	var newest time.Time
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		manifestPath := filepath.Join(execRoot, entry.Name(), "manifest.json")
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			continue
+		}
+		var manifest workerExecuteBeadManifest
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			continue
+		}
+		if manifest.WorkerID != record.ID {
+			continue
+		}
+		info, err := os.Stat(manifestPath)
+		if err != nil {
+			continue
+		}
+		if !info.ModTime().After(newest) {
+			continue
+		}
+		newest = info.ModTime()
+		record.CurrentBead = manifest.BeadID
+		record.CurrentAttempt = manifest.AttemptID
+	}
 }
 
 func (m *WorkerManager) enrichFromExecuteLoopOutput(dir string, record *WorkerRecord) {
@@ -339,6 +408,7 @@ func (m *WorkerManager) enrichFromExecuteLoopOutput(dir string, record *WorkerRe
 	if len(summary.Results) > 0 {
 		last := summary.Results[len(summary.Results)-1]
 		record.CurrentBead = last.BeadID
+		record.CurrentAttempt = last.AttemptID
 		record.LastResult = &last
 		if last.Status != "" {
 			record.Status = last.Status

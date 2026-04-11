@@ -30,6 +30,9 @@ func TestWorkerManagerStartListShowLogs(t *testing.T) {
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Harness: "codex", Once: true})
 	require.NoError(t, err)
 	require.NotEmpty(t, record.ID)
+	require.NotEmpty(t, record.SpecPath)
+	_, err = os.Stat(filepath.Join(root, record.SpecPath))
+	require.NoError(t, err)
 
 	final := waitForWorkerExit(t, m, record.ID)
 	assert.Equal(t, "exited", final.State)
@@ -76,6 +79,8 @@ func TestWorkerManagerEnrichesExecuteLoopSummary(t *testing.T) {
   "results": [
     {
       "bead_id": "ddx-1234abcd",
+      "attempt_id": "20260411T000000-abcd1234",
+      "worker_id": "worker-test",
       "status": "execution_failed",
       "detail": "cancelled",
       "session_id": "eb-123",
@@ -94,10 +99,48 @@ func TestWorkerManagerEnrichesExecuteLoopSummary(t *testing.T) {
 	assert.Equal(t, 1, shown.Attempts)
 	assert.Equal(t, 1, shown.Failures)
 	assert.Equal(t, "ddx-1234abcd", shown.CurrentBead)
+	assert.Equal(t, "20260411T000000-abcd1234", shown.CurrentAttempt)
 	require.NotNil(t, shown.LastResult)
 	assert.Equal(t, "ddx-1234abcd", shown.LastResult.BeadID)
+	assert.Equal(t, "20260411T000000-abcd1234", shown.LastResult.AttemptID)
 	assert.Equal(t, "execution_failed", shown.LastResult.Status)
 	assert.Equal(t, "cancelled", shown.LastError)
+}
+
+func TestWorkerManagerEnrichesRunningWorkerFromLiveArtifacts(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+	dir := filepath.Join(root, ".ddx", "workers", "worker-test")
+	execDir := filepath.Join(root, ".ddx", "executions", "20260411T000000-abcd1234")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.MkdirAll(execDir, 0o755))
+
+	record := WorkerRecord{
+		ID:          "worker-test",
+		Kind:        "execute-loop",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StdoutPath:  relToProject(root, filepath.Join(dir, "stdout.log")),
+		StderrPath:  relToProject(root, filepath.Join(dir, "stderr.log")),
+		SpecPath:    relToProject(root, filepath.Join(dir, "spec.json")),
+	}
+	require.NoError(t, m.writeRecord(dir, record))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stdout.log"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stderr.log"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(execDir, "manifest.json"), []byte(`{
+  "attempt_id": "20260411T000000-abcd1234",
+  "worker_id": "worker-test",
+  "bead_id": "ddx-livebead",
+  "base_rev": "abc123"
+}
+`), 0o644))
+
+	shown, err := m.Show("worker-test")
+	require.NoError(t, err)
+	assert.Equal(t, "ddx-livebead", shown.CurrentBead)
+	assert.Equal(t, "20260411T000000-abcd1234", shown.CurrentAttempt)
+	assert.Equal(t, "running", shown.Status)
 }
 
 func TestWorkerManagerStop(t *testing.T) {
