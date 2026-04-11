@@ -113,5 +113,10 @@ MCP (POST /mcp):
 	cmd.Flags().StringVar(&tsnetHostname, "tsnet-hostname", "", "Tailscale hostname (default: ddx)")
 	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use (SECURITY: visible in ps/history; prefer TS_AUTHKEY env var)")
 
+	// Service management
+	cmd.AddCommand(f.newServerInstallServiceCommand())
+	cmd.AddCommand(f.newServerServiceStatusCommand())
+	cmd.AddCommand(f.newServerUninstallServiceCommand())
+
 	return cmd
 }
