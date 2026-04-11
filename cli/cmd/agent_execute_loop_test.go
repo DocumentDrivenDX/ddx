@@ -21,7 +21,7 @@ func TestAgentExecuteLoopUsesProjectRootForNoWorkScan(t *testing.T) {
 	factory := NewCommandFactory(subdir)
 	root := factory.NewRootCommand()
 
-	out, err := executeCommand(root, "agent", "execute-loop", "--json")
+	out, err := executeCommand(root, "agent", "execute-loop", "--local", "--json")
 	require.NoError(t, err)
 
 	var res struct {

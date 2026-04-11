@@ -326,16 +326,18 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 }
 
 func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
-	// If the model looks like an OpenRouter model (vendor/name format), skip
-	// native config and legacy preset resolution — route to OpenRouter directly.
-	if isOpenRouterModel(model) {
-		return r.resolveOpenRouterProvider(model)
-	}
-
+	// Try native agent config first (handles OpenRouter routing when
+	// vendor/model names match the "openrouter" provider in the config).
 	if resolved, err := r.resolveNativeAgentProvider(workDir, model); err != nil {
 		return nil, err
 	} else if resolved != nil {
 		return resolved, nil
+	}
+
+	// If native config didn't resolve and the model looks like an OpenRouter
+	// model (vendor/name format), route to OpenRouter directly.
+	if isOpenRouterModel(model) {
+		return r.resolveOpenRouterProvider(model)
 	}
 
 	cfg, err := r.resolveAgentConfig(model)
