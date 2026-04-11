@@ -673,21 +673,33 @@ func executeBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverni
 
 func executeBeadResolveGoverningRefs(root string, b *bead.Bead) []executeBeadGoverningRef {
 	specID, _ := b.Extra["spec-id"].(string)
-	if strings.TrimSpace(specID) == "" {
+	specID = strings.TrimSpace(specID)
+	if specID == "" {
 		return nil
 	}
 	graph, err := docgraph.BuildGraphWithConfig(root)
-	if err != nil || graph == nil {
+	if err == nil && graph != nil {
+		if doc, ok := graph.Documents[specID]; ok && doc != nil {
+			return []executeBeadGoverningRef{{
+				ID:    doc.ID,
+				Path:  filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(doc.Path, root), string(filepath.Separator))),
+				Title: doc.Title,
+			}}
+		}
+	}
+
+	candidate := filepath.Clean(filepath.Join(root, filepath.FromSlash(specID)))
+	relCandidate, relErr := filepath.Rel(root, candidate)
+	if relErr != nil || strings.HasPrefix(relCandidate, ".."+string(filepath.Separator)) || relCandidate == ".." {
 		return nil
 	}
-	doc, ok := graph.Documents[specID]
-	if !ok || doc == nil {
+	info, statErr := os.Stat(candidate)
+	if statErr != nil || info.IsDir() {
 		return nil
 	}
 	return []executeBeadGoverningRef{{
-		ID:    doc.ID,
-		Path:  filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(doc.Path, root), string(filepath.Separator))),
-		Title: doc.Title,
+		ID:   specID,
+		Path: filepath.ToSlash(relCandidate),
 	}}
 }
 

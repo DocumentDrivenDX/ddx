@@ -549,6 +549,21 @@ ddx:
 	assert.True(t, strings.HasSuffix(res.ResultFile, "result.json"))
 }
 
+func TestExecuteBeadResolvesPathStyleSpecID(t *testing.T) {
+	workDir := t.TempDir()
+	specPath := filepath.Join(workDir, "workflows", "README.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
+	require.NoError(t, os.WriteFile(specPath, []byte("# Workflow\n"), 0o644))
+	refs := executeBeadResolveGoverningRefs(workDir, &bead.Bead{
+		ID:    "path-bead",
+		Title: "Resolve path style spec ids",
+		Extra: map[string]any{"spec-id": "workflows/README.md"},
+	})
+	require.Len(t, refs, 1)
+	assert.Equal(t, "workflows/README.md", refs[0].ID)
+	assert.Equal(t, "workflows/README.md", refs[0].Path)
+}
+
 func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	workDir := t.TempDir()
 	seedExecuteBead(t, workDir, &bead.Bead{
