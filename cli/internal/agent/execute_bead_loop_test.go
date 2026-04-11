@@ -188,6 +188,7 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	callCount := 0
+	now := time.Now().UTC().Truncate(time.Second)
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
@@ -210,7 +211,7 @@ func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing
 			}, nil
 		}),
 		Now: func() time.Time {
-			return time.Date(2026, 4, 11, 1, 15, 0, 0, time.UTC)
+			return now
 		},
 	}
 
