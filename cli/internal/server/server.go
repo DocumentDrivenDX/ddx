@@ -33,6 +33,7 @@ type Server struct {
 	TsnetConfig *config.TsnetConfig
 	mux         *http.ServeMux
 	startTime   time.Time
+	workers     *WorkerManager
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -42,6 +43,7 @@ func New(addr, workingDir string) *Server {
 		WorkingDir: workingDir,
 		mux:        http.NewServeMux(),
 		startTime:  time.Now().UTC(),
+		workers:    NewWorkerManager(workingDir),
 	}
 	s.routes()
 	return s
@@ -190,6 +192,11 @@ func (s *Server) routes() {
 	// Execution dispatch (localhost-only)
 	s.mux.HandleFunc("POST /api/exec/run/{id}", s.handleExecDispatch)
 	s.mux.HandleFunc("POST /api/agent/run", s.handleAgentDispatch)
+	s.mux.HandleFunc("GET /api/agent/workers", s.handleAgentWorkers)
+	s.mux.HandleFunc("POST /api/agent/workers/execute-loop", s.handleStartExecuteLoopWorker)
+	s.mux.HandleFunc("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
+	s.mux.HandleFunc("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
+	s.mux.HandleFunc("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
 
 	// Executions
 	s.mux.HandleFunc("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
@@ -1267,6 +1274,99 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
+	workers, err := s.workers.List()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, workers)
+}
+
+func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+	var req struct {
+		Harness      string `json:"harness"`
+		Model        string `json:"model"`
+		Effort       string `json:"effort"`
+		Once         bool   `json:"once"`
+		PollInterval string `json:"poll_interval"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	var pollInterval time.Duration
+	if strings.TrimSpace(req.PollInterval) != "" {
+		d, err := time.ParseDuration(req.PollInterval)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid poll_interval"})
+			return
+		}
+		pollInterval = d
+	}
+	record, err := s.workers.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Harness:      req.Harness,
+		Model:        req.Model,
+		Effort:       req.Effort,
+		Once:         req.Once,
+		PollInterval: pollInterval,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, record)
+}
+
+func (s *Server) handleAgentWorkerShow(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	record, err := s.workers.Show(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, record)
+}
+
+func (s *Server) handleStopAgentWorker(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	if err := s.workers.Stop(id); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "stopping"})
+}
+
+func (s *Server) handleAgentWorkerLog(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	stdout, stderr, err := s.workers.Logs(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"stdout": stdout, "stderr": stderr})
 }
 
 // --- Agent Session Endpoints ---
