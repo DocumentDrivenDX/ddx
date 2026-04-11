@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -102,12 +103,50 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		Tools:         tools,
 		MaxIterations: maxIter,
 		WorkDir:       wd,
-		Callback:      logger.Callback(),
 		Metadata:      opts.Correlation,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	var timedOut atomic.Bool
+	if timeout > 0 {
+		activity := make(chan struct{}, 1)
+		pulse := func() {
+			select {
+			case activity <- struct{}{}:
+			default:
+			}
+		}
+		callback := logger.Callback()
+		req.Callback = func(event agentlib.Event) {
+			pulse()
+			callback(event)
+		}
+		go func() {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-activity:
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					timer.Reset(timeout)
+				case <-timer.C:
+					timedOut.Store(true)
+					cancel()
+					return
+				}
+			}
+		}()
+	} else {
+		req.Callback = logger.Callback()
+	}
 
 	start := time.Now()
 	agentResult, err := agentlib.Run(ctx, req)
@@ -142,12 +181,23 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		result.CostUSD = agentResult.CostUSD
 	}
 
-	if err != nil {
-		result.Error = err.Error()
+	if timedOut.Load() {
+		result.Error = fmt.Sprintf("timeout after %v", timeout.Round(time.Second))
+		result.ExitCode = 1
+	} else if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			result.Error = fmt.Sprintf("timeout after %v", timeout.Round(time.Second))
+		} else {
+			result.Error = err.Error()
+		}
 		result.ExitCode = 1
 	} else if agentResult.Status != agentlib.StatusSuccess {
+		if agentResult.Status == agentlib.StatusCancelled {
+			result.Error = string(agentlib.StatusCancelled)
+		} else {
+			result.Error = string(agentResult.Status)
+		}
 		result.ExitCode = 1
-		result.Error = string(agentResult.Status)
 	}
 
 	// Log session

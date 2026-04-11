@@ -1,10 +1,14 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/agent/prompt"
@@ -185,10 +189,13 @@ func TestAgentRunToolExecution(t *testing.T) {
 
 // A-04: Timeout cancels the run.
 func TestAgentRunTimeout(t *testing.T) {
-	// Provider that never matches — will cause agent to error with "no matching"
-	provider := virtual.New(virtual.Config{
-		InlineResponses: []virtual.InlineResponse{},
-	})
+	provider := &sleepProvider{
+		delay: 200 * time.Millisecond,
+		response: agentlib.Response{
+			Content: "too late",
+			Model:   "sleepy-model",
+		},
+	}
 
 	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 100})
 	r.LookPath = mockLookPath
@@ -198,12 +205,51 @@ func TestAgentRunTimeout(t *testing.T) {
 		Harness: "agent",
 		Prompt:  "unmatched prompt",
 	})
-	// Either err is non-nil or result has error status
-	if err != nil {
-		assert.NotEmpty(t, err.Error())
-	} else {
-		assert.Equal(t, 1, result.ExitCode)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ExitCode)
+	assert.Equal(t, "timeout after 0s", result.Error)
+	assert.Empty(t, result.Output)
+}
+
+func TestAgentRunActivityExtendsTimeout(t *testing.T) {
+	wd := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "input.txt"), []byte("hello\n"), 0o644))
+
+	provider := &sequenceProvider{
+		delays: []time.Duration{60 * time.Millisecond, 60 * time.Millisecond},
+		responses: []agentlib.Response{
+			{
+				Model: "sequence-model",
+				ToolCalls: []agentlib.ToolCall{{
+					ID:        "call-1",
+					Name:      "read",
+					Arguments: json.RawMessage(`{"path":"input.txt"}`),
+				}},
+			},
+			{
+				Content: "done",
+				Model:   "sequence-model",
+			},
+		},
 	}
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 100})
+	r.LookPath = mockLookPath
+	r.AgentProvider = provider
+
+	start := time.Now()
+	result, err := r.RunAgent(RunOptions{
+		Harness: "agent",
+		Prompt:  "read the file and finish",
+		WorkDir: wd,
+	})
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Equal(t, "done", result.Output)
+	assert.Equal(t, int32(2), provider.calls.Load())
+	assert.GreaterOrEqual(t, elapsed, 120*time.Millisecond)
 }
 
 // A-06: Session logging captures agent runs.
@@ -445,4 +491,40 @@ type notFoundError struct {
 
 func (e *notFoundError) Error() string {
 	return e.name + ": not found"
+}
+
+type sleepProvider struct {
+	delay    time.Duration
+	response agentlib.Response
+}
+
+func (p *sleepProvider) Chat(ctx context.Context, _ []agentlib.Message, _ []agentlib.ToolDef, _ agentlib.Options) (agentlib.Response, error) {
+	select {
+	case <-time.After(p.delay):
+		return p.response, nil
+	case <-ctx.Done():
+		return agentlib.Response{}, ctx.Err()
+	}
+}
+
+type sequenceProvider struct {
+	delays    []time.Duration
+	responses []agentlib.Response
+	calls     atomic.Int32
+}
+
+func (p *sequenceProvider) Chat(ctx context.Context, _ []agentlib.Message, _ []agentlib.ToolDef, _ agentlib.Options) (agentlib.Response, error) {
+	idx := int(p.calls.Add(1) - 1)
+	if idx >= len(p.responses) {
+		return agentlib.Response{}, fmt.Errorf("unexpected call %d", idx)
+	}
+	delay := p.delays[idx]
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return agentlib.Response{}, ctx.Err()
+		}
+	}
+	return p.responses[idx], nil
 }
