@@ -143,21 +143,24 @@ pre-commit:
         if command -v gitleaks >/dev/null 2>&1; then
           gitleaks protect --staged --verbose --redact
         else
-          # Fallback to pattern matching
-          patterns='(api[_-]?key|apikey|secret|token|password|passwd|pwd|auth|credential|private[_-]?key).*=.*["'"'"'][A-Za-z0-9+/]{20,}'
-          if grep -E "$patterns" {staged_files} 2>/dev/null; then
+          # Fallback to staged-added-line pattern matching when gitleaks is absent.
+          # Scanning whole tracker JSONL files causes noisy false positives on prose.
+          added_lines=$(git diff --cached --unified=0 --no-color -- {staged_files} | grep '^+' | grep -v '^+++')
+
+          patterns='((api[_-]?key|apikey|secret|password|passwd|pwd|credential|private[_-]?key|access[_-]?token|auth[_-]?token)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9_./+=-]{20,})|(Authorization:[[:space:]]*Bearer[[:space:]]+[A-Za-z0-9._-]{20,})'
+          if printf '%s\n' "$added_lines" | grep -E "$patterns"; then
             echo "Potential secrets detected"
             exit 1
           fi
 
           # AWS keys
-          if grep -E 'AKIA[0-9A-Z]{16}' {staged_files} 2>/dev/null; then
+          if printf '%s\n' "$added_lines" | grep -E 'AKIA[0-9A-Z]{16}'; then
             echo "AWS key pattern detected"
             exit 1
           fi
 
           # GitHub tokens
-          if grep -E 'ghp_[a-zA-Z0-9]{36}' {staged_files} 2>/dev/null; then
+          if printf '%s\n' "$added_lines" | grep -E 'ghp_[a-zA-Z0-9]{36}'; then
             echo "GitHub token pattern detected"
             exit 1
           fi
