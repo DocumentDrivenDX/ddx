@@ -1024,13 +1024,6 @@ Examples:
 	return cmd
 }
 
-type executeLoopCommandOptions struct {
-	FromRev string
-	Harness string
-	Model   string
-	Effort  string
-}
-
 func (f *CommandFactory) newAgentExecuteLoopCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "execute-loop",
@@ -1089,17 +1082,21 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-	execFactory := f.withWorkingDir(projectRoot)
-
 	worker := &agent.ExecuteBeadWorker{
 		Store: store,
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			res, err := execFactory.invokeExecuteBeadFromLoop(ctx, beadID, executeLoopCommandOptions{
+			runner := f.agentRunner()
+			gitOps := &agent.RealGitOps{}
+
+			res, err := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
 				FromRev: fromRev,
 				Harness: harness,
 				Model:   model,
 				Effort:  effort,
-			})
+			}, gitOps, runner)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
@@ -1166,45 +1163,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	return nil
 }
 
-func (f *CommandFactory) invokeExecuteBeadFromLoop(ctx context.Context, beadID string, opts executeLoopCommandOptions) (ExecuteBeadResult, error) {
-	cmd := f.newAgentExecuteBeadCommand()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetContext(ctx)
-
-	args := []string{beadID, "--json"}
-	if opts.FromRev != "" {
-		args = append(args, "--from", opts.FromRev)
-	}
-	if opts.Harness != "" {
-		args = append(args, "--harness", opts.Harness)
-	}
-	if opts.Model != "" {
-		args = append(args, "--model", opts.Model)
-	}
-	if opts.Effort != "" {
-		args = append(args, "--effort", opts.Effort)
-	}
-	cmd.SetArgs(args)
-
-	if err := cmd.Execute(); err != nil {
-		return ExecuteBeadResult{}, err
-	}
-
-	raw := output.String()
-	jsonStart := strings.Index(raw, "{")
-	if jsonStart == -1 {
-		return ExecuteBeadResult{}, fmt.Errorf("execute-bead returned no JSON result")
-	}
-
-	var res ExecuteBeadResult
-	dec := json.NewDecoder(strings.NewReader(raw[jsonStart:]))
-	if err := dec.Decode(&res); err != nil {
-		return ExecuteBeadResult{}, fmt.Errorf("parse execute-bead result: %w", err)
-	}
-	return res, nil
-}
+// executeLoopWithServer submits an execute-loop job to the running ddx server.
 
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.

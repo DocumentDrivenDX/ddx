@@ -1,230 +1,18 @@
 package cmd
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	osexec "os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/spf13/cobra"
 )
 
-// ExecuteBeadResult captures the complete outcome of an execute-bead run.
-type ExecuteBeadResult struct {
-	BeadID       string    `json:"bead_id"`
-	AttemptID    string    `json:"attempt_id,omitempty"`
-	WorkerID     string    `json:"worker_id,omitempty"`
-	BaseRev      string    `json:"base_rev"`
-	ResultRev    string    `json:"result_rev,omitempty"`
-	Outcome      string    `json:"outcome"` // merged | preserved | no-changes
-	Status       string    `json:"status,omitempty"`
-	Detail       string    `json:"detail,omitempty"`
-	PreserveRef  string    `json:"preserve_ref,omitempty"`
-	Reason       string    `json:"reason,omitempty"`
-	Harness      string    `json:"harness,omitempty"`
-	Provider     string    `json:"provider,omitempty"`
-	Model        string    `json:"model,omitempty"`
-	SessionID    string    `json:"session_id,omitempty"`
-	DurationMS   int       `json:"duration_ms"`
-	Tokens       int       `json:"tokens,omitempty"`
-	CostUSD      float64   `json:"cost_usd,omitempty"`
-	ExitCode     int       `json:"exit_code"`
-	Error        string    `json:"error,omitempty"`
-	ExecutionDir string    `json:"execution_dir,omitempty"`
-	PromptFile   string    `json:"prompt_file,omitempty"`
-	ManifestFile string    `json:"manifest_file,omitempty"`
-	ResultFile   string    `json:"result_file,omitempty"`
-	StartedAt    time.Time `json:"started_at"`
-	FinishedAt   time.Time `json:"finished_at"`
-}
-
-type executeBeadArtifacts struct {
-	DirAbs      string
-	DirRel      string
-	PromptAbs   string
-	PromptRel   string
-	ManifestAbs string
-	ManifestRel string
-	ResultAbs   string
-	ResultRel   string
-}
-
-type executeBeadManifest struct {
-	AttemptID string                    `json:"attempt_id"`
-	WorkerID  string                    `json:"worker_id,omitempty"`
-	BeadID    string                    `json:"bead_id"`
-	BaseRev   string                    `json:"base_rev"`
-	CreatedAt time.Time                 `json:"created_at"`
-	Requested executeBeadRequested      `json:"requested"`
-	Bead      executeBeadManifestBead   `json:"bead"`
-	Governing []executeBeadGoverningRef `json:"governing,omitempty"`
-	Paths     executeBeadArtifactPaths  `json:"paths"`
-}
-
-type executeBeadRequested struct {
-	Harness string `json:"harness,omitempty"`
-	Model   string `json:"model,omitempty"`
-	Effort  string `json:"effort,omitempty"`
-	Prompt  string `json:"prompt,omitempty"`
-}
-
-type executeBeadManifestBead struct {
-	ID          string         `json:"id"`
-	Title       string         `json:"title"`
-	Description string         `json:"description,omitempty"`
-	Acceptance  string         `json:"acceptance,omitempty"`
-	Parent      string         `json:"parent,omitempty"`
-	Labels      []string       `json:"labels,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
-}
-
-type executeBeadGoverningRef struct {
-	ID    string `json:"id"`
-	Path  string `json:"path"`
-	Title string `json:"title,omitempty"`
-}
-
-type executeBeadArtifactPaths struct {
-	Dir      string `json:"dir"`
-	Prompt   string `json:"prompt"`
-	Manifest string `json:"manifest"`
-	Result   string `json:"result"`
-	Worktree string `json:"worktree"`
-}
-
-// executeBeadGitOps abstracts git operations to enable dependency injection in tests.
-type executeBeadGitOps interface {
-	HeadRev(dir string) (string, error)
-	ResolveRev(dir, rev string) (string, error)
-	WorktreeAdd(dir, wtPath, rev string) error
-	WorktreeRemove(dir, wtPath string) error
-	WorktreeList(dir string) ([]string, error)
-	WorktreePrune(dir string) error
-	Merge(dir, rev string) error
-	UpdateRef(dir, ref, sha string) error
-}
-
-// realExecuteBeadGit implements executeBeadGitOps via os/exec git commands.
-type realExecuteBeadGit struct{}
-
-func (r *realExecuteBeadGit) HeadRev(dir string) (string, error) {
-	return r.ResolveRev(dir, "HEAD")
-}
-
-func (r *realExecuteBeadGit) ResolveRev(dir, rev string) (string, error) {
-	out, err := osexec.Command("git", "-C", dir, "rev-parse", rev).Output()
-	if err != nil {
-		return "", fmt.Errorf("git rev-parse %s: %w", rev, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-func (r *realExecuteBeadGit) IsDirty(dir string) (bool, error) {
-	out, err := osexec.Command("git", "-C", dir, "status", "--porcelain").Output()
-	if err != nil {
-		return false, fmt.Errorf("git status: %w", err)
-	}
-	return strings.TrimSpace(string(out)) != "", nil
-}
-
-func (r *realExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
-	out, err := osexec.Command("git", "-C", dir, "worktree", "add", "--detach", wtPath, rev).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git worktree add: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
-func (r *realExecuteBeadGit) WorktreeRemove(dir, wtPath string) error {
-	// best effort; worktree may already be gone
-	_ = osexec.Command("git", "-C", dir, "worktree", "remove", "--force", wtPath).Run()
-	return nil
-}
-
-func (r *realExecuteBeadGit) WorktreeList(dir string) ([]string, error) {
-	out, err := osexec.Command("git", "-C", dir, "worktree", "list", "--porcelain").Output()
-	if err != nil {
-		return nil, fmt.Errorf("git worktree list: %w", err)
-	}
-	var paths []string
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "worktree ") {
-			paths = append(paths, strings.TrimPrefix(line, "worktree "))
-		}
-	}
-	return paths, nil
-}
-
-func (r *realExecuteBeadGit) WorktreePrune(dir string) error {
-	return osexec.Command("git", "-C", dir, "worktree", "prune").Run()
-}
-
-func (r *realExecuteBeadGit) Merge(dir, rev string) error {
-	out, err := osexec.Command("git", "-C", dir, "merge", rev).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
-func (r *realExecuteBeadGit) UpdateRef(dir, ref, sha string) error {
-	out, err := osexec.Command("git", "-C", dir, "update-ref", ref, sha).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
-// executeBeadWtDir is the subdirectory under .ddx used for managed worktrees.
-const executeBeadWtDir = ".ddx"
-
-// executeBeadWtPrefix is the filename prefix for managed execute-bead worktrees.
-const executeBeadWtPrefix = ".execute-bead-wt-"
-
-// executeBeadArtifactDir is the tracked artifact directory for execute-bead attempts.
-const executeBeadArtifactDir = ".ddx/executions"
-
-// executeBeadNow returns the current time for execute-bead ref naming.
-// Tests override this for deterministic hidden-ref assertions.
-var executeBeadNow = time.Now
-
-// executeBeadAttemptID generates a unique attempt identifier with timestamp and random suffix.
-func executeBeadAttemptID() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return time.Now().UTC().Format("20060102T150405") + "-" + hex.EncodeToString(b)
-}
-
-// executeBeadPreserveRef builds the documented hidden ref for a preserved iteration.
-func executeBeadPreserveRef(beadID, baseRev string) string {
-	shortSHA := baseRev
-	if len(shortSHA) > 12 {
-		shortSHA = shortSHA[:12]
-	}
-	timestamp := executeBeadNow().UTC().Format("20060102T150405Z")
-	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, timestamp, shortSHA)
-}
-
-func executeBeadResultRef(beadID, attemptID string) string {
-	return fmt.Sprintf("refs/ddx/execute-bead-results/%s/%s", beadID, attemptID)
-}
-
-// executeBeadSessionID generates a short session ID for the agent log.
-func executeBeadSessionID() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return "eb-" + hex.EncodeToString(b)
-}
+var validBeadID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 func (f *CommandFactory) newAgentExecuteBeadCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -247,21 +35,6 @@ Orphan worktrees from previous crashed runs are recovered automatically.`,
 }
 
 func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) error {
-	gitOps := executeBeadGitOps(&realExecuteBeadGit{})
-	if f.executeBeadGitOverride != nil {
-		gitOps = f.executeBeadGitOverride
-	}
-	return f.runAgentExecuteBeadWith(cmd, args, gitOps)
-}
-
-// beadAgentRunner is a local interface matching ddxexec.AgentRunner and *agent.Runner.
-type beadAgentRunner interface {
-	Run(opts agent.RunOptions) (*agent.Result, error)
-}
-
-var validBeadID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
-
-func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []string, gitOps executeBeadGitOps) error {
 	beadID := args[0]
 	if !validBeadID.MatchString(beadID) {
 		return fmt.Errorf("invalid bead ID %q: must contain only letters, digits, dots, underscores, and hyphens", beadID)
@@ -274,530 +47,42 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	promptFile, _ := cmd.Flags().GetString("prompt")
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	workDir := f.WorkingDir
-	attemptID := executeBeadAttemptID()
-	workerID := os.Getenv("DDX_WORKER_ID")
-
-	// Resolve base revision (default to HEAD).
-	baseRev, err := f.executeBeadResolveBase(gitOps, workDir, fromRev)
-	if err != nil {
-		return err
+	opts := agent.ExecuteBeadOptions{
+		FromRev:    fromRev,
+		NoMerge:    noMerge,
+		Harness:    harness,
+		Model:      model,
+		Effort:     effort,
+		PromptFile: promptFile,
+		WorkerID:   os.Getenv("DDX_WORKER_ID"),
 	}
 
-	wtPath := filepath.Join(workDir, executeBeadWtDir, executeBeadWtPrefix+beadID+"-"+attemptID)
-	// Ensure beads.jsonl is committed before spawning worktree so the snapshot
-	// includes all beads, including newly created ones.
-	if err := executeBeadCommitTracker(workDir, cmd.ErrOrStderr()); err != nil {
-		return err
+	var gitOps agent.GitOps = &agent.RealGitOps{}
+	if f.executeBeadGitOverride != nil {
+		gitOps = f.executeBeadGitOverride
 	}
 
-	rootLock := bead.NewStoreWithCollection(filepath.Join(workDir, ".ddx"), "execute-bead-root")
-	if err := rootLock.WithLock(func() error {
-		// Recover orphan worktrees from previous crashed runs while root git state is locked.
-		f.executeBeadRecoverOrphans(gitOps, workDir, beadID)
-
-		if addErr := gitOps.WorktreeAdd(workDir, wtPath, baseRev); addErr != nil {
-			return fmt.Errorf("creating isolated worktree: %w", addErr)
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	defer func() {
-		_ = gitOps.WorktreeRemove(workDir, wtPath)
-	}()
-
-	artifacts, err := f.prepareExecuteBeadArtifacts(wtPath, beadID, attemptID, baseRev, promptFile, harness, model, effort)
-	if err != nil {
-		// Context load failure: record event with retry-after so execute-loop doesn't loop.
-		// Write a failure result artifact for observability.
-		res := ExecuteBeadResult{
-			BeadID:    beadID,
-			AttemptID: attemptID,
-			WorkerID:  workerID,
-			BaseRev:   baseRev,
-			ExitCode:  1,
-			Error:     err.Error(),
-			Outcome:   "error",
-			Reason:    "context_load_failed",
-		}
-		if abInfo, _ := os.Stat(filepath.Join(workDir, executeBeadArtifactDir, attemptID)); abInfo != nil && abInfo.IsDir() {
-			res.ExecutionDir = filepath.Join(executeBeadArtifactDir, attemptID)
-		}
-		populateExecuteBeadStatus(&res)
-		_ = writeExecuteBeadArtifactJSON(filepath.Join(workDir, executeBeadArtifactDir, attemptID, "result.json"), res)
-		return fmt.Errorf("execute-bead context load: %w", err)
-	}
-	promptFile = artifacts.PromptAbs
-
-	// Select agent runner; prefer AgentRunnerOverride for testability.
-	var runner beadAgentRunner
+	var runner agent.AgentRunner
 	if f.AgentRunnerOverride != nil {
 		runner = f.AgentRunnerOverride
 	} else {
 		runner = f.agentRunner()
 	}
 
-	sessionID := executeBeadSessionID()
-	startedAt := time.Now().UTC()
-
-	agentResult, agentErr := runner.Run(agent.RunOptions{
-		Harness:    harness,
-		Prompt:     "",
-		PromptFile: promptFile,
-		Model:      model,
-		Effort:     effort,
-		WorkDir:    wtPath,
-		Correlation: map[string]string{
-			"bead_id":    beadID,
-			"base_rev":   baseRev,
-			"attempt_id": attemptID,
-			"session_id": sessionID,
-		},
-	})
-	finishedAt := time.Now().UTC()
-
-	exitCode := 0
-	tokens := 0
-	costUSD := 0.0
-	resultModel := model
-	resultHarness := harness
-	resultProvider := ""
-	agentErrMsg := ""
-	if agentResult != nil {
-		exitCode = agentResult.ExitCode
-		tokens = agentResult.Tokens
-		costUSD = agentResult.CostUSD
-		if agentResult.Error != "" {
-			agentErrMsg = agentResult.Error
-		}
-		if agentResult.Model != "" {
-			resultModel = agentResult.Model
-		}
-		if agentResult.Provider != "" {
-			resultProvider = agentResult.Provider
-		}
-		if agentResult.Harness != "" {
-			resultHarness = agentResult.Harness
-		}
+	res, err := agent.ExecuteBead(f.WorkingDir, beadID, opts, gitOps, runner)
+	if err != nil && res == nil {
+		return err
 	}
-	if agentErr != nil {
-		if exitCode == 0 {
-			exitCode = 1
-		}
-		agentErrMsg = agentErr.Error()
-	}
-	executionFailed := exitCode != 0
-
-	// Get the HEAD of the worktree after the agent ran.
-	resultRev, revErr := gitOps.HeadRev(wtPath)
-	if revErr != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read worktree HEAD: %v\n", revErr)
-		res := ExecuteBeadResult{
-			BeadID:       beadID,
-			AttemptID:    attemptID,
-			WorkerID:     workerID,
-			BaseRev:      baseRev,
-			Harness:      resultHarness,
-			Provider:     resultProvider,
-			Model:        resultModel,
-			SessionID:    sessionID,
-			DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
-			Tokens:       tokens,
-			CostUSD:      costUSD,
-			ExitCode:     1,
-			Error:        agentErrMsg,
-			ExecutionDir: artifacts.DirRel,
-			PromptFile:   artifacts.PromptRel,
-			ManifestFile: artifacts.ManifestRel,
-			ResultFile:   artifacts.ResultRel,
-			StartedAt:    startedAt,
-			FinishedAt:   finishedAt,
-			Outcome:      "error",
-			Reason:       fmt.Sprintf("failed to read worktree HEAD: %v", revErr),
-		}
-		populateExecuteBeadStatus(&res)
-		_ = writeExecuteBeadArtifactJSON(artifacts.ResultAbs, res)
+	if err != nil {
+		// Partial result available — display it, then return the error
 		_ = writeExecuteBeadResult(cmd, res, asJSON)
-		return fmt.Errorf("failed to read worktree HEAD: %w", revErr)
-	}
-
-	res := ExecuteBeadResult{
-		BeadID:       beadID,
-		AttemptID:    attemptID,
-		WorkerID:     workerID,
-		BaseRev:      baseRev,
-		ResultRev:    resultRev,
-		Harness:      resultHarness,
-		Provider:     resultProvider,
-		Model:        resultModel,
-		SessionID:    sessionID,
-		DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
-		Tokens:       tokens,
-		CostUSD:      costUSD,
-		ExitCode:     exitCode,
-		Error:        agentErrMsg,
-		ExecutionDir: artifacts.DirRel,
-		PromptFile:   artifacts.PromptRel,
-		ManifestFile: artifacts.ManifestRel,
-		ResultFile:   artifacts.ResultRel,
-		StartedAt:    startedAt,
-		FinishedAt:   finishedAt,
-	}
-
-	// Determine outcome: no-changes, merge, or preserve.
-	switch {
-	case executionFailed && resultRev == baseRev:
-		res.Outcome = "error"
-		if agentErrMsg != "" {
-			res.Reason = agentErrMsg
-		} else {
-			res.Reason = "agent execution failed"
-		}
-
-	case resultRev == baseRev:
-		res.Outcome = "no-changes"
-		res.Reason = "agent made no commits"
-
-	case executionFailed:
-		ref := executeBeadPreserveRef(beadID, baseRev)
-		if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
-			return fmt.Errorf("preserving result ref: %w", updateErr)
-		}
-		res.Outcome = "preserved"
-		res.PreserveRef = ref
-		res.Reason = "agent execution failed"
-
-	case noMerge:
-		ref := executeBeadPreserveRef(beadID, baseRev)
-		if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
-			return fmt.Errorf("preserving result ref: %w", updateErr)
-		}
-		res.Outcome = "preserved"
-		res.PreserveRef = ref
-		res.Reason = "--no-merge specified"
-
-	default:
-		// Merge the worktree result back. Fast-forward if clean, otherwise merge commit.
-		// The baseRev is preserved in the result for exact replay context.
-		if mergeErr := gitOps.Merge(workDir, resultRev); mergeErr == nil {
-			res.Outcome = "merged"
-		} else {
-			ref := executeBeadPreserveRef(beadID, baseRev)
-			if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
-				return fmt.Errorf("preserving result ref: %w", updateErr)
-			}
-			res.Outcome = "preserved"
-			res.PreserveRef = ref
-			res.Reason = "merge failed"
-		}
-	}
-	populateExecuteBeadStatus(&res)
-	if err := writeExecuteBeadArtifactJSON(artifacts.ResultAbs, res); err != nil {
-		return fmt.Errorf("writing execute-bead result artifact: %w", err)
+		return err
 	}
 
 	return writeExecuteBeadResult(cmd, res, asJSON)
 }
 
-func (f *CommandFactory) prepareExecuteBeadArtifacts(wtPath, beadID, attemptID, baseRev, promptOverride, harness, model, effort string) (*executeBeadArtifacts, error) {
-	b, refs, err := executeBeadContext(wtPath, beadID)
-	if err != nil {
-		return nil, err
-	}
-	artifacts, err := executeBeadCreateArtifactBundle(f.WorkingDir, wtPath, attemptID)
-	if err != nil {
-		return nil, err
-	}
-
-	promptContent, promptSource, err := executeBeadPromptContent(f.WorkingDir, b, refs, artifacts, baseRev, promptOverride)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(artifacts.PromptAbs, promptContent, 0o644); err != nil {
-		return nil, fmt.Errorf("writing execute-bead prompt artifact: %w", err)
-	}
-
-	manifest := executeBeadManifest{
-		AttemptID: attemptID,
-		WorkerID:  os.Getenv("DDX_WORKER_ID"),
-		BeadID:    beadID,
-		BaseRev:   baseRev,
-		CreatedAt: time.Now().UTC(),
-		Requested: executeBeadRequested{
-			Harness: harness,
-			Model:   model,
-			Effort:  effort,
-			Prompt:  promptSource,
-		},
-		Bead: executeBeadManifestBead{
-			ID:          b.ID,
-			Title:       b.Title,
-			Description: b.Description,
-			Acceptance:  b.Acceptance,
-			Parent:      b.Parent,
-			Labels:      append([]string{}, b.Labels...),
-			Metadata:    executeBeadMetadata(b),
-		},
-		Governing: refs,
-		Paths: executeBeadArtifactPaths{
-			Dir:      artifacts.DirRel,
-			Prompt:   artifacts.PromptRel,
-			Manifest: artifacts.ManifestRel,
-			Result:   artifacts.ResultRel,
-			Worktree: filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(wtPath, f.WorkingDir), string(filepath.Separator))),
-		},
-	}
-	if err := writeExecuteBeadArtifactJSON(artifacts.ManifestAbs, manifest); err != nil {
-		return nil, fmt.Errorf("writing execute-bead manifest artifact: %w", err)
-	}
-	return artifacts, nil
-}
-
-func executeBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
-	// Beads are loaded from the worktree's snapshot which includes all beads
-	// committed before the worktree was spawned.
-	store := bead.NewStore(filepath.Join(wtPath, ".ddx"))
-	b, err := store.Get(beadID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
-	}
-	return b, executeBeadResolveGoverningRefs(wtPath, b), nil
-}
-
-func executeBeadResolveGoverningRefs(root string, b *bead.Bead) []executeBeadGoverningRef {
-	specID, _ := b.Extra["spec-id"].(string)
-	specID = strings.TrimSpace(specID)
-	if specID == "" {
-		return nil
-	}
-	graph, err := docgraph.BuildGraphWithConfig(root)
-	if err == nil && graph != nil {
-		if doc, ok := graph.Documents[specID]; ok && doc != nil {
-			return []executeBeadGoverningRef{{
-				ID:    doc.ID,
-				Path:  filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(doc.Path, root), string(filepath.Separator))),
-				Title: doc.Title,
-			}}
-		}
-	}
-
-	candidate := filepath.Clean(filepath.Join(root, filepath.FromSlash(specID)))
-	relCandidate, relErr := filepath.Rel(root, candidate)
-	if relErr != nil || strings.HasPrefix(relCandidate, ".."+string(filepath.Separator)) || relCandidate == ".." {
-		return nil
-	}
-	info, statErr := os.Stat(candidate)
-	if statErr != nil || info.IsDir() {
-		return nil
-	}
-	return []executeBeadGoverningRef{{
-		ID:   specID,
-		Path: filepath.ToSlash(relCandidate),
-	}}
-}
-
-func executeBeadCreateArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifacts, error) {
-	dirRel := filepath.ToSlash(filepath.Join(executeBeadArtifactDir, attemptID))
-	dirAbs := filepath.Join(rootDir, executeBeadArtifactDir, attemptID)
-	if err := os.MkdirAll(dirAbs, 0o755); err != nil {
-		return nil, fmt.Errorf("creating execute-bead artifact bundle: %w", err)
-	}
-	return &executeBeadArtifacts{
-		DirAbs:      dirAbs,
-		DirRel:      dirRel,
-		PromptAbs:   filepath.Join(dirAbs, "prompt.md"),
-		PromptRel:   filepath.ToSlash(filepath.Join(dirRel, "prompt.md")),
-		ManifestAbs: filepath.Join(dirAbs, "manifest.json"),
-		ManifestRel: filepath.ToSlash(filepath.Join(dirRel, "manifest.json")),
-		ResultAbs:   filepath.Join(dirAbs, "result.json"),
-		ResultRel:   filepath.ToSlash(filepath.Join(dirRel, "result.json")),
-	}, nil
-}
-
-func executeBeadPromptContent(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride string) ([]byte, string, error) {
-	if strings.TrimSpace(promptOverride) != "" {
-		path := promptOverride
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(workDir, path)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, "", fmt.Errorf("reading prompt override %q: %w", promptOverride, err)
-		}
-		return data, promptOverride, nil
-	}
-
-	var sb strings.Builder
-	sb.WriteString("# Execute Bead\n\n")
-	sb.WriteString("You are running inside DDx's isolated execution worktree for this bead.\n")
-	sb.WriteString("Treat the bead contract below as authoritative, then read the listed governing references from this worktree when they are relevant.\n\n")
-
-	sb.WriteString("## Bead\n")
-	fmt.Fprintf(&sb, "- ID: `%s`\n", b.ID)
-	fmt.Fprintf(&sb, "- Title: %s\n", strings.TrimSpace(b.Title))
-	if b.Parent != "" {
-		fmt.Fprintf(&sb, "- Parent: `%s`\n", b.Parent)
-	}
-	if len(b.Labels) > 0 {
-		fmt.Fprintf(&sb, "- Labels: %s\n", strings.Join(b.Labels, ", "))
-	}
-	if specID, _ := b.Extra["spec-id"].(string); specID != "" {
-		fmt.Fprintf(&sb, "- spec-id: `%s`\n", specID)
-	}
-	fmt.Fprintf(&sb, "- Base revision: `%s`\n", baseRev)
-	fmt.Fprintf(&sb, "- Execution bundle: `%s`\n\n", artifacts.DirRel)
-
-	sb.WriteString("## Description\n")
-	if strings.TrimSpace(b.Description) == "" {
-		sb.WriteString("No description was recorded on the bead.\n")
-	} else {
-		sb.WriteString(strings.TrimSpace(b.Description))
-		sb.WriteString("\n")
-	}
-	sb.WriteString("\n## Acceptance Criteria\n")
-	if strings.TrimSpace(b.Acceptance) == "" {
-		sb.WriteString("No explicit acceptance criteria were recorded on the bead.\n")
-	} else {
-		sb.WriteString(strings.TrimSpace(b.Acceptance))
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString("\n## Governing References\n")
-	if len(refs) == 0 {
-		sb.WriteString("No governing references were resolved from the current execution snapshot.\n")
-	} else {
-		for _, ref := range refs {
-			if ref.Title != "" {
-				fmt.Fprintf(&sb, "- `%s` — `%s` (%s)\n", ref.ID, ref.Path, ref.Title)
-			} else {
-				fmt.Fprintf(&sb, "- `%s` — `%s`\n", ref.ID, ref.Path)
-			}
-		}
-	}
-
-	sb.WriteString("\n## Execution Rules\n")
-	sb.WriteString("1. Work only inside this execution worktree.\n")
-	sb.WriteString("2. Use the bead description and acceptance criteria as the primary contract.\n")
-	sb.WriteString("3. Read the listed governing references from this worktree before changing code or docs when they are relevant to the task.\n")
-	sb.WriteString("4. If the bead is missing critical context or the governing references conflict, stop and report the gap explicitly instead of improvising hidden policy.\n")
-	sb.WriteString("5. Keep the execution bundle files under `.ddx/executions/` intact; DDx uses them as execution evidence.\n")
-	sb.WriteString("6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.\n")
-	sb.WriteString("7. Before finishing, commit your changes with `git add -A && git commit -m '...'`. DDx will merge your commits back to the base branch.\n")
-	sb.WriteString("8. If the work is already satisfied with no tracked changes needed, stop cleanly and let DDx record a no-change attempt.\n")
-
-	return []byte(sb.String()), "synthesized", nil
-}
-
-func executeBeadMetadata(b *bead.Bead) map[string]any {
-	if len(b.Extra) == 0 {
-		return nil
-	}
-	meta := make(map[string]any, len(b.Extra))
-	for k, v := range b.Extra {
-		meta[k] = v
-	}
-	return meta
-}
-
-func writeExecuteBeadArtifactJSON(path string, payload any) error {
-	data, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
-}
-
-// executeBeadResolveBase resolves the --from flag to a full git SHA.
-// If fromRev is empty or "HEAD", resolves the current HEAD.
-func (f *CommandFactory) executeBeadResolveBase(gitOps executeBeadGitOps, workDir, fromRev string) (string, error) {
-	if fromRev == "" || fromRev == "HEAD" {
-		rev, err := gitOps.HeadRev(workDir)
-		if err != nil {
-			return "", fmt.Errorf("resolving HEAD: %w", err)
-		}
-		return rev, nil
-	}
-	rev, err := gitOps.ResolveRev(workDir, fromRev)
-	if err != nil {
-		return "", fmt.Errorf("resolving --from %q: %w", fromRev, err)
-	}
-	return rev, nil
-}
-
-// executeBeadRecoverOrphans removes any abandoned execute-bead worktrees for beadID
-// left by previous crashed runs, then prunes stale git worktree metadata.
-func (f *CommandFactory) executeBeadRecoverOrphans(gitOps executeBeadGitOps, workDir, beadID string) {
-	paths, err := gitOps.WorktreeList(workDir)
-	if err != nil {
-		return
-	}
-	prefix := filepath.Join(workDir, executeBeadWtDir, executeBeadWtPrefix+beadID+"-")
-	for _, p := range paths {
-		if strings.HasPrefix(p, prefix) {
-			_ = gitOps.WorktreeRemove(workDir, p)
-		}
-	}
-	_ = gitOps.WorktreePrune(workDir)
-}
-
-// executeBeadCommitTracker commits beads.jsonl if it has uncommitted changes.
-// This ensures the worktree snapshot includes all beads, including newly created ones.
-func executeBeadCommitTracker(workDir string, w io.Writer) error {
-	trackerFile := filepath.Join(workDir, ".ddx", "beads.jsonl")
-	info, err := os.Stat(trackerFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // no tracker file, nothing to commit
-		}
-		return fmt.Errorf("checking tracker file: %w", err)
-	}
-	if info.IsDir() {
-		return nil
-	}
-
-	// Check if we're in a git repo
-	out, err := osexec.Command("git", "-C", workDir, "rev-parse", "--is-inside-work-tree").Output()
-	if err != nil || strings.TrimSpace(string(out)) != "true" {
-		return nil // not a git repo, skip
-	}
-
-	// Check if beads.jsonl has uncommitted changes
-	out, err = osexec.Command("git", "-C", workDir, "diff", "--", ".ddx/beads.jsonl").Output()
-	if err != nil {
-		return fmt.Errorf("checking tracker diff: %w", err)
-	}
-	if strings.TrimSpace(string(out)) == "" {
-		// Check for untracked
-		out, err = osexec.Command("git", "-C", workDir, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
-		if err != nil {
-			return fmt.Errorf("checking tracker untracked: %w", err)
-		}
-		if strings.TrimSpace(string(out)) == "" {
-			return nil // nothing to commit
-		}
-	}
-
-	// Commit the tracker update
-	msg := fmt.Sprintf("chore: update tracker (execute-bead %s)", time.Now().UTC().Format("20060102T150405"))
-	commitOut, err := osexec.Command("git", "-C", workDir, "add", ".ddx/beads.jsonl").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	commitOut, err = osexec.Command("git", "-C", workDir, "commit", "-m", msg).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	fmt.Fprintf(w, "note: committed tracker updates\n")
-	return nil
-}
-
-func populateExecuteBeadStatus(res *ExecuteBeadResult) {
-	res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-	res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
-}
-
-func writeExecuteBeadResult(cmd *cobra.Command, res ExecuteBeadResult, asJSON bool) error {
+func writeExecuteBeadResult(cmd *cobra.Command, res *agent.ExecuteBeadResult, asJSON bool) error {
 	if asJSON {
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
@@ -818,4 +103,70 @@ func writeExecuteBeadResult(cmd *cobra.Command, res ExecuteBeadResult, asJSON bo
 		fmt.Fprintf(cmd.OutOrStdout(), "ref:     %s\n", res.PreserveRef)
 	}
 	return nil
+}
+
+// ExecuteBeadResultFromReport converts a loop report into the CLI display type.
+// Kept for backward compatibility with execute-loop's old inline path.
+func ExecuteBeadResultFromReport(report agent.ExecuteBeadReport) agent.ExecuteBeadResult {
+	return agent.ExecuteBeadResult{
+		BeadID:      report.BeadID,
+		AttemptID:   report.AttemptID,
+		WorkerID:    report.WorkerID,
+		Harness:     report.Harness,
+		Provider:    report.Provider,
+		Model:       report.Model,
+		Status:      report.Status,
+		Detail:      report.Detail,
+		SessionID:   report.SessionID,
+		BaseRev:     report.BaseRev,
+		ResultRev:   report.ResultRev,
+		PreserveRef: report.PreserveRef,
+		Outcome:     report.Status,
+	}
+}
+
+// Legacy helpers kept for test compatibility
+
+type executeBeadGitOps = agent.GitOps
+
+type realExecuteBeadGit = agent.RealGitOps
+
+// beadAgentRunner is a local interface matching *agent.Runner.
+type beadAgentRunner interface {
+	Run(opts agent.RunOptions) (*agent.Result, error)
+}
+
+// executeBeadAttemptID is kept for test compatibility.
+func executeBeadAttemptID() string {
+	return agent.GenerateAttemptID()
+}
+
+// executeBeadSessionID is kept for test compatibility.
+func executeBeadSessionID() string {
+	return agent.GenerateSessionID()
+}
+
+// executeBeadCommitTracker is kept for test compatibility.
+func executeBeadCommitTracker(workDir string, w fmt.Stringer) error {
+	return agent.CommitTracker(workDir)
+}
+
+// Old type aliases for test compatibility
+type ExecuteBeadResult = agent.ExecuteBeadResult
+
+// These are needed by agent_cmd.go's invokeExecuteBeadFromLoop
+// which we'll also refactor, but keep them compiling for now.
+const (
+	executeBeadWtDir       = agent.ExecuteBeadWtDir
+	executeBeadWtPrefix    = agent.ExecuteBeadWtPrefix
+	executeBeadArtifactDir = agent.ExecuteBeadArtifactDir
+)
+
+// executeBeadNow is kept for test compatibility.
+var executeBeadNow = time.Now
+
+func init() {
+	// Ensure old references still compile
+	_ = strings.TrimSpace
+	_ = time.Now
 }

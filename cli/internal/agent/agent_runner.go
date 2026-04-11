@@ -313,6 +313,13 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 		if len(preset.Endpoints) > 0 {
 			cfg.BaseURL = selectEndpoint(preset.Endpoints, preset.Strategy)
 		}
+	} else if isOpenRouterModel(cfg.Model) {
+		// Layer 5: unknown model with vendor/ prefix → fall back to OpenRouter
+		cfg.Provider = "openai-compat"
+		cfg.BaseURL = "https://openrouter.ai/api/v1"
+		if cfg.APIKey == "" {
+			cfg.APIKey = os.Getenv("OPENROUTER_API_KEY")
+		}
 	}
 
 	return cfg, nil
@@ -454,6 +461,16 @@ func envOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// isOpenRouterModel returns true if the model name looks like an OpenRouter
+// model identifier (vendor/model format like "qwen/qwen3.6", "z-ai/glm-5.1").
+// Local preset names never contain "/".
+func isOpenRouterModel(model string) bool {
+	if model == "" {
+		return false
+	}
+	return strings.Contains(model, "/")
 }
 
 // buildAgentProvider creates an agentlib.Provider from resolved config.

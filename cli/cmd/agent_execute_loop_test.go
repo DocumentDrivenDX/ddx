@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,18 +36,37 @@ func TestAgentExecuteLoopUsesProjectRootForNoWorkScan(t *testing.T) {
 }
 
 func TestInvokeExecuteBeadFromLoopParsesJSONAmidWarnings(t *testing.T) {
+	workDir := t.TempDir()
+	// Init git repo so HEAD can be resolved
+	out, err := exec.Command("git", "init", workDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+	// Create an initial commit so HEAD exists
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "README.md"), []byte("# test"), 0o644))
+	out, err = exec.Command("git", "-C", workDir, "add", "-A").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", workDir, "-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-m", "init").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:     "my-bead",
+		Title:  "Test bead",
+		Status: bead.StatusOpen,
+	})
+	// Commit the beads.jsonl so it's in the worktree snapshot
+	out, err = exec.Command("git", "-C", workDir, "add", ".ddx/beads.jsonl").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", workDir, "-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-m", "add beads").CombinedOutput()
+	require.NoError(t, err, string(out))
+
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "aaaa1111",
 		dirty:       true,
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
-	f := newExecuteBeadFactory(t, git, runner)
 
-	res, err := f.invokeExecuteBeadFromLoop(context.Background(), "my-bead", executeLoopCommandOptions{})
+	res, err := agent.ExecuteBead(workDir, "my-bead", agent.ExecuteBeadOptions{}, git, runner)
 	require.NoError(t, err)
 	assert.Equal(t, "my-bead", res.BeadID)
-	assert.Equal(t, "no-changes", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
 }

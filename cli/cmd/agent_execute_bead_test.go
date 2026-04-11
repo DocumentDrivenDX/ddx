@@ -378,9 +378,9 @@ func TestExecuteBeadNoMerge(t *testing.T) {
 // produce distinct preserve refs (concurrent hidden-ref uniqueness).
 func TestExecuteBeadHiddenRefUniqueness(t *testing.T) {
 	makeRun := func(ts time.Time) ExecuteBeadResult {
-		oldNow := executeBeadNow
-		executeBeadNow = func() time.Time { return ts }
-		defer func() { executeBeadNow = oldNow }()
+		oldNow := agent.NowFunc
+		agent.NowFunc = func() time.Time { return ts }
+		defer func() { agent.NowFunc = oldNow }()
 
 		git := &fakeExecuteBeadGit{
 			mainHeadRev: "aaaa1111",
@@ -498,7 +498,7 @@ func TestExecuteBeadResolvesPathStyleSpecID(t *testing.T) {
 	specPath := filepath.Join(workDir, "workflows", "README.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 	require.NoError(t, os.WriteFile(specPath, []byte("# Workflow\n"), 0o644))
-	refs := executeBeadResolveGoverningRefs(workDir, &bead.Bead{
+	refs := agent.ResolveGoverningRefs(workDir, &bead.Bead{
 		ID:    "path-bead",
 		Title: "Resolve path style spec ids",
 		Extra: map[string]any{"spec-id": "workflows/README.md"},
@@ -858,7 +858,7 @@ func TestExecuteBeadStatusMapping(t *testing.T) {
 		},
 		{
 			name:     "land conflict",
-			result:   ExecuteBeadResult{Outcome: "preserved", ExitCode: 0, Reason: "ff-merge not possible"},
+			result:   ExecuteBeadResult{Outcome: "preserved", ExitCode: 0, Reason: "merge failed"},
 			expected: agent.ExecuteBeadStatusLandConflict,
 		},
 	}
@@ -866,7 +866,8 @@ func TestExecuteBeadStatusMapping(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			res := tc.result
-			populateExecuteBeadStatus(&res)
+			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+			res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 			assert.Equal(t, tc.expected, res.Status)
 			assert.NotEmpty(t, res.Detail)
 		})
