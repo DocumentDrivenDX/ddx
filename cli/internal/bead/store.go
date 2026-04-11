@@ -502,6 +502,21 @@ func (s *Store) Unclaim(id string) error {
 	})
 }
 
+func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
+	return s.Update(id, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["execute-loop-retry-after"] = until.UTC().Format(time.RFC3339)
+		if status != "" {
+			b.Extra["execute-loop-last-status"] = status
+		}
+		if detail != "" {
+			b.Extra["execute-loop-last-detail"] = detail
+		}
+	})
+}
+
 // AppendEvent adds an immutable execution evidence entry to a bead.
 func (s *Store) AppendEvent(id string, event BeadEvent) error {
 	if event.CreatedAt.IsZero() {
@@ -746,6 +761,13 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 			if sup, ok := b.Extra["superseded-by"]; ok {
 				if s, isStr := sup.(string); isStr && s != "" {
 					continue
+				}
+			}
+			if retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]; ok {
+				if retryAfterStr, isStr := retryAfterRaw.(string); isStr && retryAfterStr != "" {
+					if retryAfter, err := time.Parse(time.RFC3339, retryAfterStr); err == nil && retryAfter.After(time.Now().UTC()) {
+						continue
+					}
 				}
 			}
 		}

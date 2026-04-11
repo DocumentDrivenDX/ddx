@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
@@ -180,6 +181,63 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, events[0].Summary)
 	assert.Contains(t, events[0].Body, "agent made no commits")
+}
+
+func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+	callCount := 0
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			callCount++
+			if beadID == first.ID {
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusNoChanges,
+					Detail:    "agent made no commits",
+					BaseRev:   "aaaa1111",
+					ResultRev: "aaaa1111",
+				}, nil
+			}
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "merged cleanly",
+				SessionID: "sess-5",
+				ResultRev: "fadedcab",
+			}, nil
+		}),
+		Now: func() time.Time {
+			return time.Date(2026, 4, 11, 1, 15, 0, 0, time.UTC)
+		},
+	}
+
+	firstRun, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, firstRun)
+	assert.Equal(t, 1, firstRun.Attempts)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, firstRun.LastFailureStatus)
+	require.Len(t, firstRun.Results, 1)
+	assert.NotEmpty(t, firstRun.Results[0].RetryAfter)
+
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, gotFirst.Extra["execute-loop-last-status"])
+	assert.Equal(t, "agent made no commits", gotFirst.Extra["execute-loop-last-detail"])
+	assert.NotEmpty(t, gotFirst.Extra["execute-loop-retry-after"])
+
+	secondRun, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, secondRun)
+	assert.Equal(t, 1, secondRun.Attempts)
+	require.Len(t, secondRun.Results, 1)
+	assert.Equal(t, second.ID, secondRun.Results[0].BeadID)
+
+	gotSecond, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
+	assert.Equal(t, 2, callCount)
 }
 
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {

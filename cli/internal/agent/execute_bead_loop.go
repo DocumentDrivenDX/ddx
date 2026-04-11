@@ -18,6 +18,7 @@ type ExecuteBeadReport struct {
 	BaseRev     string `json:"base_rev,omitempty"`
 	ResultRev   string `json:"result_rev,omitempty"`
 	PreserveRef string `json:"preserve_ref,omitempty"`
+	RetryAfter  string `json:"retry_after,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -36,13 +37,15 @@ type ExecuteBeadLoopStore interface {
 	Unclaim(id string) error
 	CloseWithEvidence(id, sessionID, commitSHA string) error
 	AppendEvent(id string, event bead.BeadEvent) error
+	SetExecutionCooldown(id string, until time.Time, status, detail string) error
 }
 
 type ExecuteBeadLoopOptions struct {
-	Assignee     string
-	Once         bool
-	PollInterval time.Duration
-	Log          io.Writer
+	Assignee           string
+	Once               bool
+	PollInterval       time.Duration
+	NoProgressCooldown time.Duration
+	Log                io.Writer
 }
 
 type ExecuteBeadLoopResult struct {
@@ -79,6 +82,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 	assignee := opts.Assignee
 	if assignee == "" {
 		assignee = "ddx"
+	}
+	noProgressCooldown := opts.NoProgressCooldown
+	if noProgressCooldown <= 0 {
+		noProgressCooldown = 6 * time.Hour
 	}
 
 	result := &ExecuteBeadLoopResult{}
@@ -126,7 +133,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		}
 
 		result.Attempts++
-		result.Results = append(result.Results, report)
 
 		if report.Status == ExecuteBeadStatusSuccess {
 			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
@@ -138,9 +144,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			if err := w.Store.Unclaim(candidate.ID); err != nil {
 				return result, err
 			}
+			if shouldSuppressNoProgress(report) {
+				retryAfter := now().UTC().Add(noProgressCooldown)
+				if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+					return result, err
+				}
+				report.RetryAfter = retryAfter.Format(time.RFC3339)
+			}
 			result.Failures++
 			result.LastFailureStatus = report.Status
 		}
+
+		result.Results = append(result.Results, report)
 
 		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
 			return result, err
@@ -184,6 +199,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	if report.BaseRev != "" {
 		parts = append(parts, fmt.Sprintf("base_rev=%s", report.BaseRev))
 	}
+	if report.RetryAfter != "" {
+		parts = append(parts, fmt.Sprintf("retry_after=%s", report.RetryAfter))
+	}
 
 	return bead.BeadEvent{
 		Kind:      "execute-bead",
@@ -193,6 +211,13 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt,
 	}
+}
+
+func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
+	if report.BaseRev == "" || report.ResultRev == "" {
+		return false
+	}
+	return report.BaseRev == report.ResultRev
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {

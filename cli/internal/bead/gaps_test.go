@@ -80,6 +80,21 @@ func TestReadyExecutionFilters(t *testing.T) {
 	assert.Equal(t, "hx-004", exec[1].ID) // no metadata = eligible by default
 }
 
+func TestReadyExecutionSkipsRetrySuppressedBeads(t *testing.T) {
+	s := newTestStore(t)
+
+	a := &Bead{Title: "Suppressed", Priority: 0}
+	b := &Bead{Title: "Eligible", Priority: 1}
+	require.NoError(t, s.Create(a))
+	require.NoError(t, s.Create(b))
+	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(6*time.Hour), "no_changes", "agent made no commits"))
+
+	exec, err := s.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, exec, 1)
+	assert.Equal(t, b.ID, exec[0].ID)
+}
+
 // ── Validation hooks ──────────────────────────────────────────────
 
 func TestValidationHookBlocks(t *testing.T) {
