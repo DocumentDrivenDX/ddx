@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/DocumentDrivenDX/ddx/internal/systemd"
@@ -40,11 +41,18 @@ func (f *CommandFactory) newServerInstallServiceCommand() *cobra.Command {
 				return fmt.Errorf("cannot determine project root; specify --workdir")
 			}
 
+			// Write environment file alongside the project config
+			envFile := filepath.Join(resolvedWork, ".ddx", "server.env")
+			if err := writeEnvFile(envFile); err != nil {
+				return fmt.Errorf("write env file: %w", err)
+			}
+
 			cfg := systemd.UnitConfig{
 				ExecPath: resolvedExec,
 				WorkDir:  resolvedWork,
 				LogPath:  resolvedWork + "/.ddx/logs/ddx-server.log",
-				Env:      collectEnv(),
+				EnvFile:  envFile,
+				Env:      nil, // using EnvironmentFile instead
 			}
 			return systemd.Install(cfg)
 		},
@@ -80,9 +88,11 @@ func (f *CommandFactory) newServerUninstallServiceCommand() *cobra.Command {
 	}
 }
 
-// collectEnv captures API key env vars the service needs.
-func collectEnv() []string {
-	keep := []string{
+// writeEnvFile creates a .ddx/server.env file with API keys from the current
+// environment. The file is overwritten on each install. Edit it manually to
+// update keys without reinstalling (then systemctl --user restart ddx-server).
+func writeEnvFile(path string) error {
+	keys := []string{
 		"ANTHROPIC_API_KEY",
 		"OPENAI_API_KEY",
 		"OPENROUTER_API_KEY",
@@ -91,12 +101,24 @@ func collectEnv() []string {
 		"DDX_AGENT_MODEL",
 		"DDX_AGENT_EFFORT",
 	}
-	var env []string
-	for _, k := range keep {
+	var lines []string
+	for _, k := range keys {
 		v := os.Getenv(k)
 		if v != "" {
-			env = append(env, k+"="+v)
+			lines = append(lines, k+"="+v)
 		}
 	}
-	return env
+	// Always write the file so it exists even if no keys are set
+	return os.WriteFile(path, []byte(fmt.Sprintf("# DDx server environment (edit and restart)\n%s\n", formatEnvLines(lines))), 0o600)
+}
+
+func formatEnvLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	result := ""
+	for _, l := range lines {
+		result += l + "\n"
+	}
+	return result[:len(result)-1]
 }

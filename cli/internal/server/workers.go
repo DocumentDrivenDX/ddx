@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -331,7 +332,11 @@ func (m *WorkerManager) Logs(id string) (string, string, error) {
 	m.mu.Lock()
 	if handle, ok := m.workers[id]; ok {
 		log := handle.logBuf.String()
+		sessionLog := m.readActiveSessionLog(handle)
 		m.mu.Unlock()
+		if sessionLog != "" {
+			return log + "\n" + sessionLog, "", nil
+		}
 		return log, "", nil
 	}
 	m.mu.Unlock()
@@ -349,6 +354,89 @@ func (m *WorkerManager) Logs(id string) (string, string, error) {
 		return "", "", err
 	}
 	return string(data), "", nil
+}
+
+// readActiveSessionLog reads the latest session log entries for an active worker.
+// The ddx-agent library writes per-iteration entries to .ddx/agent-logs/agent-*.jsonl
+// in real-time, so this gives live visibility into what the model provider is doing.
+func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
+	logDir := filepath.Join(m.projectRoot, ".ddx", "agent-logs")
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		return ""
+	}
+
+	// Find the most recent agent-*.jsonl file that was modified in the last 30 minutes
+	var newest string
+	var newestMod time.Time
+	cutoff := time.Now().Add(-30 * time.Minute)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "agent-") || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(newestMod) && info.ModTime().After(cutoff) {
+			newest = filepath.Join(logDir, entry.Name())
+			newestMod = info.ModTime()
+		}
+	}
+	if newest == "" {
+		return ""
+	}
+
+	// Read the last N lines of the session log and format them as readable progress
+	data, err := os.ReadFile(newest)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	// Show the last 50 entries
+	start := 0
+	if len(lines) > 50 {
+		start = len(lines) - 50
+	}
+
+	var sb strings.Builder
+	sb.WriteString("--- session log (latest entries) ---\n")
+	for _, line := range lines[start:] {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		entryType, _ := entry["type"].(string)
+		switch entryType {
+		case "session.start":
+			model, _ := entry["data"].(map[string]any)["model"].(string)
+			fmt.Fprintf(&sb, "▶ session started (model: %s)\n", model)
+		case "llm.request":
+			data, _ := entry["data"].(map[string]any)
+			msgCount, _ := data["message_count"].(float64)
+			fmt.Fprintf(&sb, "  → llm request (%.0f messages)\n", msgCount)
+		case "llm.response":
+			data, _ := entry["data"].(map[string]any)
+			tokens, _ := data["total_tokens"].(float64)
+			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens)\n", tokens)
+		case "llm.delta":
+			// Skip deltas — too verbose for summary
+		case "tool.call":
+			data, _ := entry["data"].(map[string]any)
+			name, _ := data["name"].(string)
+			fmt.Fprintf(&sb, "  🔧 tool: %s\n", name)
+		case "compaction.start":
+			fmt.Fprintf(&sb, "  ⚡ compacting context...\n")
+		case "compaction.end":
+			fmt.Fprintf(&sb, "  ⚡ compaction done\n")
+		}
+	}
+	return sb.String()
 }
 
 func (m *WorkerManager) writeRecord(dir string, record WorkerRecord) error {

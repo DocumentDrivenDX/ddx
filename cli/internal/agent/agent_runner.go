@@ -326,6 +326,12 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 }
 
 func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
+	// If the model looks like an OpenRouter model (vendor/name format), skip
+	// native config and legacy preset resolution — route to OpenRouter directly.
+	if isOpenRouterModel(model) {
+		return r.resolveOpenRouterProvider(model)
+	}
+
 	if resolved, err := r.resolveNativeAgentProvider(workDir, model); err != nil {
 		return nil, err
 	} else if resolved != nil {
@@ -362,6 +368,15 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 		overrides.Model = model
 	}
 	providerName := cfg.DefaultName()
+
+	// If the model looks like a vendor/model (e.g. "z-ai/glm-5.1", "qwen/qwen3.6"),
+	// prefer the "openrouter" provider if it exists in the config. These models
+	// are only available through OpenRouter; local providers will reject them.
+	if isOpenRouterModel(model) {
+		if _, ok := cfg.GetProvider("openrouter"); ok {
+			providerName = "openrouter"
+		}
+	}
 	provider, pc, _, err := cfg.BuildProviderWithOverrides(providerName, overrides)
 	if err != nil {
 		return nil, fmt.Errorf("agent: native config provider %q: %w", providerName, err)
@@ -461,6 +476,39 @@ func envOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// resolveOpenRouterProvider builds a provider config for OpenRouter.
+// Models with vendor/name format (e.g. "z-ai/glm-5.1", "qwen/qwen3.6") are
+// routed to OpenRouter unless they match a local preset.
+func (r *Runner) resolveOpenRouterProvider(model string) (*embeddedAgentProviderResolution, error) {
+	cfg := AgentRunConfig{
+		Provider:      "openai-compat",
+		BaseURL:       "https://openrouter.ai/api/v1",
+		APIKey:        os.Getenv("OPENROUTER_API_KEY"),
+		Model:         model,
+		Preset:        "agent",
+		MaxIterations: 20,
+	}
+
+	// Allow config to override defaults
+	if r.AgentConfigLoader != nil {
+		if fc := r.AgentConfigLoader(); fc != nil {
+			if fc.MaxIterations > 0 {
+				cfg.MaxIterations = fc.MaxIterations
+			}
+		}
+	}
+
+	if cfg.APIKey == "" {
+		return nil, fmt.Errorf("agent: OPENROUTER_API_KEY not set; required for remote model %q", model)
+	}
+
+	provider, err := buildAgentProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("agent: openrouter provider: %w", err)
+	}
+	return &embeddedAgentProviderResolution{Config: cfg, Provider: provider}, nil
 }
 
 // isOpenRouterModel returns true if the model name looks like an OpenRouter

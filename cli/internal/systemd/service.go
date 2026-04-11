@@ -22,6 +22,7 @@ Restart=on-failure
 RestartSec=5
 StandardOutput=append:{{.LogPath}}
 StandardError=append:{{.LogPath}}
+EnvironmentFile={{.EnvFile}}
 
 {{range .Env}}
 Environment="{{.}}"
@@ -36,6 +37,7 @@ type UnitConfig struct {
 	ExecPath string
 	WorkDir  string
 	LogPath  string
+	EnvFile  string
 	Env      []string
 }
 
