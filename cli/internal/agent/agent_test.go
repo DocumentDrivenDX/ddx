@@ -1078,3 +1078,23 @@ func TestOSExecutor_NormalExit(t *testing.T) {
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Contains(t, result.Stdout, "hello")
 }
+
+func TestOSExecutor_IdleTimeout(t *testing.T) {
+	ex := &OSExecutor{}
+	ctx := withExecutionTimeout(context.Background(), 100*time.Millisecond)
+
+	result, err := ex.ExecuteInDir(ctx, "sh", []string{"-c", `sleep 1`}, "", "")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.False(t, result.EarlyCancel)
+	assert.Equal(t, -1, result.ExitCode)
+}
+
+func TestOSExecutor_OutputExtendsTimeout(t *testing.T) {
+	ex := &OSExecutor{}
+	ctx := withExecutionTimeout(context.Background(), 150*time.Millisecond)
+
+	result, err := ex.ExecuteInDir(ctx, "sh", []string{"-c", `for i in 1 2 3 4; do echo tick; sleep 0.05; done`}, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Contains(t, result.Stdout, "tick")
+}

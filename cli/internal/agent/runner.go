@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -145,8 +146,9 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 
 	// Execute
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	ctx = withExecutionTimeout(ctx, timeout)
 
 	// Use ExecuteInDir when WorkDir is set — this handles harnesses like
 	// claude that have no --cwd flag by setting cmd.Dir on the subprocess.
@@ -356,7 +358,7 @@ func (r *Runner) processResult(harnessName, model string, harness Harness, execR
 		result.Error = fmt.Sprintf("cancelled: auth/rate-limit detected (%s)", execResult.CancelReason)
 		result.ExitCode = -1
 	} else if execErr != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(execErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			result.Error = fmt.Sprintf("timeout after %v", elapsed.Round(time.Second))
 			result.ExitCode = -1
 		} else {

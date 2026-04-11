@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 )
 
 // ExecResult holds the raw output of a command execution.
@@ -25,6 +28,25 @@ type Executor interface {
 	// ExecuteInDir runs the command in the specified directory.
 	// Falls back to Execute if dir is empty.
 	ExecuteInDir(ctx context.Context, binary string, args []string, stdin, dir string) (*ExecResult, error)
+}
+
+type executionTimeoutKey struct{}
+
+func withExecutionTimeout(ctx context.Context, timeout time.Duration) context.Context {
+	if timeout <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, executionTimeoutKey{}, timeout)
+}
+
+func executionTimeoutFromContext(ctx context.Context) time.Duration {
+	if ctx == nil {
+		return 0
+	}
+	if timeout, ok := ctx.Value(executionTimeoutKey{}).(time.Duration); ok {
+		return timeout
+	}
+	return 0
 }
 
 // authCancelPatterns are regexps matched against lowercased stderr lines that indicate
@@ -83,14 +105,15 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd := exec.Command(binary, args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
 
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, err
@@ -104,9 +127,70 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		return nil, err
 	}
 
-	// Stream stderr: collect it and watch for cancel patterns.
-	var stderrBuf bytes.Buffer
-	var cancelReason string
+	var (
+		stdoutBuf    bytes.Buffer
+		stderrBuf    bytes.Buffer
+		cancelReason string
+		timedOut     bool
+		killOnce     sync.Once
+	)
+
+	stopProcess := func() {
+		killOnce.Do(func() {
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+		})
+	}
+
+	activity := make(chan struct{}, 1)
+	pulse := func() {
+		select {
+		case activity <- struct{}{}:
+		default:
+		}
+	}
+
+	idleTimeout := executionTimeoutFromContext(ctx)
+	if idleTimeout > 0 {
+		go func() {
+			timer := time.NewTimer(idleTimeout)
+			defer timer.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					stopProcess()
+					return
+				case <-activity:
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					timer.Reset(idleTimeout)
+				case <-timer.C:
+					timedOut = true
+					stopProcess()
+					return
+				}
+			}
+		}()
+	} else {
+		go func() {
+			<-ctx.Done()
+			stopProcess()
+		}()
+	}
+
+	// Stream stdout to collect it and count any write as progress.
+	stdoutDone := make(chan struct{})
+	go func() {
+		defer close(stdoutDone)
+		_, _ = io.Copy(&activityWriter{Buffer: &stdoutBuf, OnWrite: pulse}, stdoutPipe)
+	}()
+
+	// Stream stderr: collect it, count progress, and watch for cancel patterns.
 	stderrDone := make(chan struct{})
 	go func() {
 		defer close(stderrDone)
@@ -115,22 +199,25 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 			line := scanner.Text()
 			stderrBuf.WriteString(line)
 			stderrBuf.WriteByte('\n')
+			pulse()
 			if cancelReason == "" {
 				if reason := matchesCancelPattern(line); reason != "" {
 					cancelReason = reason
-					cancel() // kill the subprocess immediately
+					cancel()
+					stopProcess()
 				}
 			}
 		}
 		// Drain any remaining bytes not caught by the scanner.
-		_, _ = io.Copy(&stderrBuf, stderrPipe)
+		_, _ = io.Copy(&activityWriter{Buffer: &stderrBuf, OnWrite: pulse}, stderrPipe)
 	}()
 
+	<-stdoutDone
 	<-stderrDone
 	runErr := cmd.Wait()
 
 	result := &ExecResult{
-		Stdout:       stdout.String(),
+		Stdout:       stdoutBuf.String(),
 		Stderr:       stderrBuf.String(),
 		EarlyCancel:  cancelReason != "",
 		CancelReason: cancelReason,
@@ -142,9 +229,13 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 			result.ExitCode = -1
 			return result, nil
 		}
-		if ctx.Err() == context.DeadlineExceeded {
+		if timedOut {
 			result.ExitCode = -1
-			return result, runErr
+			return result, context.DeadlineExceeded
+		}
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			result.ExitCode = -1
+			return result, ctx.Err()
 		}
 		if exitErr, ok := runErr.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
@@ -153,6 +244,18 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		return result, runErr
 	}
 	return result, nil
+}
+
+type activityWriter struct {
+	Buffer  *bytes.Buffer
+	OnWrite func()
+}
+
+func (w *activityWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 && w.OnWrite != nil {
+		w.OnWrite()
+	}
+	return w.Buffer.Write(p)
 }
 
 // LookPathFunc abstracts binary discovery for testability.
