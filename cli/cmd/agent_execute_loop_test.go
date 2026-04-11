@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,7 +39,6 @@ func TestInvokeExecuteBeadFromLoopParsesJSONAmidWarnings(t *testing.T) {
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "aaaa1111",
 		dirty:       true,
-		stashPopErr: fmt.Errorf("stash pop exploded"),
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
 	f := newExecuteBeadFactory(t, git, runner)

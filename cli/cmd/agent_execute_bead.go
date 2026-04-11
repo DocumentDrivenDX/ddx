@@ -102,8 +102,7 @@ type executeBeadGitOps interface {
 	HeadRev(dir string) (string, error)
 	ResolveRev(dir, rev string) (string, error)
 	IsDirty(dir string) (bool, error)
-	Stash(dir string) error
-	StashPop(dir string) error
+	CheckpointCommit(dir, ref, message string) (string, error)
 	WorktreeAdd(dir, wtPath, rev string) error
 	WorktreeRemove(dir, wtPath string) error
 	WorktreeList(dir string) ([]string, error)
@@ -136,20 +135,53 @@ func (r *realExecuteBeadGit) IsDirty(dir string) (bool, error) {
 	return strings.TrimSpace(string(out)) != "", nil
 }
 
-func (r *realExecuteBeadGit) Stash(dir string) error {
-	out, err := osexec.Command("git", "-C", dir, "stash").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git stash: %s: %w", strings.TrimSpace(string(out)), err)
+func (r *realExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string, error) {
+	ddxDir := filepath.Join(dir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		return "", fmt.Errorf("checkpoint mkdir: %w", err)
 	}
-	return nil
-}
+	tmpIndex := filepath.Join(ddxDir, fmt.Sprintf(".execute-bead-index-%d-%d", os.Getpid(), time.Now().UnixNano()))
+	defer os.Remove(tmpIndex)
 
-func (r *realExecuteBeadGit) StashPop(dir string) error {
-	out, err := osexec.Command("git", "-C", dir, "stash", "pop").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git stash pop: %s: %w", strings.TrimSpace(string(out)), err)
+	env := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndex)
+
+	readTree := osexec.Command("git", "-C", dir, "read-tree", "HEAD")
+	readTree.Env = env
+	if out, err := readTree.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-	return nil
+
+	addAll := osexec.Command("git", "-C", dir, "add", "-A")
+	addAll.Env = env
+	if out, err := addAll.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git add -A: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	writeTree := osexec.Command("git", "-C", dir, "write-tree")
+	writeTree.Env = env
+	treeOut, err := writeTree.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git write-tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
+	}
+	tree := strings.TrimSpace(string(treeOut))
+
+	parent, err := r.HeadRev(dir)
+	if err != nil {
+		return "", err
+	}
+
+	commitTree := osexec.Command("git", "-C", dir, "commit-tree", tree, "-p", parent, "-m", message)
+	commitTree.Env = env
+	commitOut, err := commitTree.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git commit-tree: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	commit := strings.TrimSpace(string(commitOut))
+
+	if err := r.UpdateRef(dir, ref, commit); err != nil {
+		return "", err
+	}
+	return commit, nil
 }
 
 func (r *realExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
@@ -238,6 +270,10 @@ func executeBeadPreserveRef(beadID, baseRev string) string {
 	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, timestamp, shortSHA)
 }
 
+func executeBeadCheckpointRef(beadID, attemptID string) string {
+	return fmt.Sprintf("refs/ddx/checkpoints/%s/%s", beadID, attemptID)
+}
+
 // executeBeadSessionID generates a short session ID for the agent log.
 func executeBeadSessionID() string {
 	b := make([]byte, 4)
@@ -253,8 +289,8 @@ func (f *CommandFactory) newAgentExecuteBeadCommand() *cobra.Command {
 runs an agent within it, then either lands the result via fast-forward merge
 or preserves it under a hidden ref (refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>).
 
-Dirty worktrees are checkpointed via git stash before execution so no local
-changes are discarded. Orphan worktrees from previous crashed runs are
+Dirty worktrees are checkpointed into an immutable hidden commit before
+execution so no local changes are discarded. Orphan worktrees from previous crashed runs are
 recovered automatically.`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runAgentExecuteBead,
@@ -300,42 +336,41 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	workDir := f.WorkingDir
 	attemptID := executeBeadAttemptID()
 
-	// Recover orphan worktrees from previous crashed runs.
-	f.executeBeadRecoverOrphans(gitOps, workDir, beadID)
-
 	// Resolve base revision (default to HEAD).
 	baseRev, err := f.executeBeadResolveBase(gitOps, workDir, fromRev)
 	if err != nil {
 		return err
 	}
 
-	// Checkpoint dirty worktree without discarding changes.
-	stashed := false
-	dirty, err := gitOps.IsDirty(workDir)
-	if err != nil {
-		return fmt.Errorf("checking worktree state: %w", err)
-	}
-	if dirty {
-		if stashErr := gitOps.Stash(workDir); stashErr != nil {
-			return fmt.Errorf("checkpointing dirty worktree: %w", stashErr)
-		}
-		stashed = true
-		fmt.Fprintln(cmd.ErrOrStderr(), "note: dirty worktree stashed before execution")
-	}
-
-	// Create isolated managed worktree at base rev.
 	wtPath := filepath.Join(workDir, executeBeadWtDir, executeBeadWtPrefix+beadID+"-"+attemptID)
-	if addErr := gitOps.WorktreeAdd(workDir, wtPath, baseRev); addErr != nil {
-		return fmt.Errorf("creating isolated worktree: %w", addErr)
+	rootLock := bead.NewStoreWithCollection(filepath.Join(workDir, ".ddx"), "execute-bead-root")
+	if err := rootLock.WithLock(func() error {
+		// Recover orphan worktrees from previous crashed runs while root git state is locked.
+		f.executeBeadRecoverOrphans(gitOps, workDir, beadID)
+
+		dirty, err := gitOps.IsDirty(workDir)
+		if err != nil {
+			return fmt.Errorf("checking worktree state: %w", err)
+		}
+		if dirty {
+			checkpointRef := executeBeadCheckpointRef(beadID, attemptID)
+			checkpointRev, checkpointErr := gitOps.CheckpointCommit(workDir, checkpointRef, fmt.Sprintf("ddx execute-bead checkpoint %s %s", beadID, attemptID))
+			if checkpointErr != nil {
+				return fmt.Errorf("checkpointing dirty worktree: %w", checkpointErr)
+			}
+			baseRev = checkpointRev
+			fmt.Fprintf(cmd.ErrOrStderr(), "note: dirty worktree checkpointed at %s\n", checkpointRef)
+		}
+
+		if addErr := gitOps.WorktreeAdd(workDir, wtPath, baseRev); addErr != nil {
+			return fmt.Errorf("creating isolated worktree: %w", addErr)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	defer func() {
 		_ = gitOps.WorktreeRemove(workDir, wtPath)
-		if stashed {
-			if popErr := gitOps.StashPop(workDir); popErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to restore stashed changes: %v\n", popErr)
-				fmt.Fprintf(cmd.ErrOrStderr(), "hint: manually run 'git stash pop' to restore your changes\n")
-			}
-		}
 	}()
 
 	artifacts, err := f.prepareExecuteBeadArtifacts(wtPath, beadID, attemptID, baseRev, promptFile, harness, model, effort)

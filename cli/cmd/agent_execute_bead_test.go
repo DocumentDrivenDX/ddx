@@ -38,13 +38,15 @@ type fakeExecuteBeadGit struct {
 	ffMergeErr      error
 	rebaseErr       error
 	updateRefErr    error
-	stashPopErr     error
 
-	stashCalled bool
-	addedWTs    []string
-	removedWTs  []string
-	refs        map[string]string // ref -> sha recorded by UpdateRef
-	worktrees   []string          // paths returned by WorktreeList
+	checkpointCalled bool
+	checkpointRef    string
+	checkpointRev    string
+	addedWTs         []string
+	addedWTRev       string
+	removedWTs       []string
+	refs             map[string]string // ref -> sha recorded by UpdateRef
+	worktrees        []string          // paths returned by WorktreeList
 
 	rebaseCalls   int
 	rebaseOntoRev string
@@ -85,23 +87,22 @@ func (f *fakeExecuteBeadGit) IsDirty(dir string) (bool, error) {
 	return f.dirty, nil
 }
 
-func (f *fakeExecuteBeadGit) Stash(dir string) error {
+func (f *fakeExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.stashCalled = true
-	return nil
-}
-
-func (f *fakeExecuteBeadGit) StashPop(dir string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.stashPopErr
+	f.checkpointCalled = true
+	f.checkpointRef = ref
+	if f.checkpointRev != "" {
+		return f.checkpointRev, nil
+	}
+	return f.mainHeadRev, nil
 }
 
 func (f *fakeExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.addedWTs = append(f.addedWTs, wtPath)
+	f.addedWTRev = rev
 	if err := os.MkdirAll(wtPath, 0o755); err != nil {
 		return err
 	}
@@ -597,19 +598,22 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 }
 
 // TestExecuteBeadDirtyWorktreeCheckpoint verifies that a dirty worktree is
-// stashed (checkpointed) before execution begins.
+// captured into a checkpoint commit before execution begins.
 func TestExecuteBeadDirtyWorktreeCheckpoint(t *testing.T) {
 	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222",
-		dirty:       true,
+		mainHeadRev:   "aaaa1111",
+		wtHeadRev:     "bbbb2222",
+		dirty:         true,
+		checkpointRev: "cccc3333",
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 	f := newExecuteBeadFactory(t, git, runner)
 
 	runExecuteBead(t, f, git, "my-bead")
 
-	assert.True(t, git.stashCalled, "stash should have been called for dirty worktree")
+	assert.True(t, git.checkpointCalled, "checkpoint commit should be created for dirty worktree")
+	assert.Equal(t, "cccc3333", git.addedWTRev, "worktree should start from the checkpoint commit")
+	assert.Contains(t, git.checkpointRef, "refs/ddx/checkpoints/my-bead/", "checkpoint should be stored under a hidden ref")
 }
 
 // TestExecuteBeadFromRevFlag verifies that --from resolves a custom revision
