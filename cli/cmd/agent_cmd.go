@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1037,10 +1039,10 @@ func (f *CommandFactory) newAgentExecuteLoopCommand() *cobra.Command {
 ready bead, runs ddx agent execute-bead from the project root, records the
 structured result, and continues until no unattempted ready work remains.
 
-Use execute-loop as the normal queue-driven execution surface. It consumes the
-execution-ready bead queue from the current project, delegates each attempt to
-ddx agent execute-bead, and records the resulting loop status back into the
-tracker.`,
+Use execute-loop as the normal queue-driven execution surface. By default it
+submits to the running ddx server as a background worker and returns immediately.
+Use --local to run inline in the current process.
+`,
 		Example: `  # Drain the current execution-ready queue once and exit
   ddx agent execute-loop
 
@@ -1052,7 +1054,10 @@ tracker.`,
 
   # Force a specific harness/model for a debugging pass
   ddx agent execute-loop --once --harness codex
-  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7`,
+  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7
+
+  # Run inline in the current process (not recommended for long runs)
+  ddx agent execute-loop --local --once`,
 		Args: cobra.NoArgs,
 		RunE: f.runAgentExecuteLoop,
 	}
@@ -1063,6 +1068,7 @@ tracker.`,
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Duration("poll-interval", 0, "Poll interval for continuous scanning; zero drains current ready work and exits")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
+	cmd.Flags().Bool("local", false, "Run inline in current process instead of server worker (default: submit to server)")
 	return cmd
 }
 
@@ -1075,6 +1081,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	once, _ := cmd.Flags().GetBool("once")
 	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
 	asJSON, _ := cmd.Flags().GetBool("json")
+	local, _ := cmd.Flags().GetBool("local")
+
+	// If --local, run inline; otherwise submit to running ddx server
+	if !local {
+		return f.executeLoopWithServer(cmd, projectRoot, harness, model, effort, once, pollInterval, asJSON)
+	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 	execFactory := f.withWorkingDir(projectRoot)
@@ -1112,6 +1124,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		Assignee:     resolveClaimAssignee(),
 		Once:         once,
 		PollInterval: pollInterval,
+		Log:          cmd.OutOrStdout(),
 	})
 	if err != nil {
 		return err
@@ -1136,15 +1149,20 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		return nil
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "project: %s\n", projectRoot)
-	for _, attempt := range result.Results {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s  %s", attempt.BeadID, attempt.Status)
-		if attempt.Detail != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "  %s", attempt.Detail)
+	fmt.Fprintf(cmd.OutOrStdout(), "\nproject: %s\n", projectRoot)
+	fmt.Fprintf(cmd.OutOrStdout(), "completed: %d  |  successes: %d  |  failures: %d\n", result.Attempts, result.Successes, result.Failures)
+	if result.Failures > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "\nfailed:\n")
+		for _, attempt := range result.Results {
+			if attempt.Status != "success" {
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s", attempt.BeadID, attempt.Detail)
+				if attempt.PreserveRef != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), " (preserved)")
+				}
+				fmt.Fprintln(cmd.OutOrStdout())
+			}
 		}
-		fmt.Fprintln(cmd.OutOrStdout())
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "attempts: %d  successes: %d  failures: %d\n", result.Attempts, result.Successes, result.Failures)
 	return nil
 }
 
@@ -1186,6 +1204,115 @@ func (f *CommandFactory) invokeExecuteBeadFromLoop(ctx context.Context, beadID s
 		return ExecuteBeadResult{}, fmt.Errorf("parse execute-bead result: %w", err)
 	}
 	return res, nil
+}
+
+// executeLoopWithServer submits an execute-loop job to the running ddx server.
+// The server starts a background worker and returns its ID.
+func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, effort string, once bool, pollInterval time.Duration, asJSON bool) error {
+	serverBase := resolveServerURL(projectRoot)
+
+	workerSpec := map[string]any{
+		"once": once,
+	}
+	if harness != "" {
+		workerSpec["harness"] = harness
+	}
+	if model != "" {
+		workerSpec["model"] = model
+	}
+	if effort != "" {
+		workerSpec["effort"] = effort
+	}
+	if pollInterval > 0 {
+		workerSpec["poll_interval"] = pollInterval.String()
+	}
+
+	specData, err := json.Marshal(workerSpec)
+	if err != nil {
+		return fmt.Errorf("marshal worker spec: %w", err)
+	}
+
+	reqURL := serverBase + "/api/agent/workers/execute-loop"
+	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, reqURL, bytes.NewReader(specData))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("submit to server %s: %w\n  Hint: start the server with 'ddx server'", serverBase, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return fmt.Errorf("server is running but no project is loaded for this directory\n  Hint: start the server from the project root")
+	}
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var workerRecord struct {
+		ID          string `json:"id"`
+		State       string `json:"state"`
+		ProjectRoot string `json:"project_root"`
+		Harness     string `json:"harness,omitempty"`
+		Model       string `json:"model,omitempty"`
+		Once        bool   `json:"once"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&workerRecord); err != nil {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("parse server response: %w: %s", err, string(body))
+	}
+
+	if asJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{
+			"worker_id":    workerRecord.ID,
+			"state":        workerRecord.State,
+			"project_root": workerRecord.ProjectRoot,
+			"harness":      workerRecord.Harness,
+			"model":        workerRecord.Model,
+			"once":         workerRecord.Once,
+		})
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "worker:   %s\n", workerRecord.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "state:    %s\n", workerRecord.State)
+	fmt.Fprintf(cmd.OutOrStdout(), "project:  %s\n", workerRecord.ProjectRoot)
+	if workerRecord.Harness != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "harness:  %s\n", workerRecord.Harness)
+	}
+	if workerRecord.Model != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "model:    %s\n", workerRecord.Model)
+	}
+	if workerRecord.Once {
+		fmt.Fprintln(cmd.OutOrStdout(), "once:     true")
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "")
+	fmt.Fprintf(cmd.OutOrStdout(), "Monitor progress: ddx server workers show %s\n", workerRecord.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "View logs:        ddx server workers log %s\n", workerRecord.ID)
+	return nil
+}
+
+// resolveServerURL determines the base URL for the running DDx server.
+// Typically http://127.0.0.1:8080 for localhost or the tsnet hostname if configured.
+// For now it probes localhost:8080 first, then tries common ports.
+func resolveServerURL(projectRoot string) string {
+	ports := []int{8080, 9090, 3000}
+	for _, port := range ports {
+		candidate := fmt.Sprintf("http://127.0.0.1:%d", port)
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 500*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return candidate
+		}
+	}
+	// Fallback — the caller will get a connection error with a helpful hint.
+	return "http://127.0.0.1:8080"
 }
 
 // resolveWorktree creates a git worktree at .worktrees/<name> if it does not

@@ -167,7 +167,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		}
 
 		if opts.Log != nil {
-			_, _ = fmt.Fprintf(opts.Log, "%s %s\n", report.BeadID, report.Status)
+			resultStr := report.Status
+			if report.ResultRev != "" {
+				shortRev := report.ResultRev
+				if len(shortRev) > 8 {
+					shortRev = shortRev[:8]
+				}
+				resultStr = fmt.Sprintf("%s (%s)", report.Status, shortRev)
+			}
+			if report.Detail != "" && report.Detail != report.Status {
+				resultStr = fmt.Sprintf("%s: %s", resultStr, report.Detail)
+			}
+			_, _ = fmt.Fprintf(opts.Log, "✓ %s → %s\n", candidate.ID, resultStr)
 		}
 
 		if opts.Once {
