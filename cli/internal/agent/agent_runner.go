@@ -491,7 +491,14 @@ func (r *Runner) resolveOpenRouterProvider(model string) (*embeddedAgentProvider
 		MaxIterations: 20,
 	}
 
-	// Allow config to override defaults
+	// Try to load API key from ~/.config/agent/config.yaml if not in env
+	if cfg.APIKey == "" {
+		if key := loadOpenRouterKeyFromAgentConfig(); key != "" {
+			cfg.APIKey = key
+		}
+	}
+
+	// Allow ddx config to override defaults
 	if r.AgentConfigLoader != nil {
 		if fc := r.AgentConfigLoader(); fc != nil {
 			if fc.MaxIterations > 0 {
@@ -509,6 +516,43 @@ func (r *Runner) resolveOpenRouterProvider(model string) (*embeddedAgentProvider
 		return nil, fmt.Errorf("agent: openrouter provider: %w", err)
 	}
 	return &embeddedAgentProviderResolution{Config: cfg, Provider: provider}, nil
+}
+
+// loadOpenRouterKeyFromAgentConfig reads the openrouter API key from
+// ~/.config/agent/config.yaml, which is populated by 'ddx-agent import pi'.
+func loadOpenRouterKeyFromAgentConfig() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(home, ".config", "agent", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	// Simple YAML parse: look for the openrouter provider's api_key field
+	lines := strings.Split(string(data), "\n")
+	inOpenRouter := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "openrouter:" {
+			inOpenRouter = true
+			continue
+		}
+		if inOpenRouter {
+			if strings.HasPrefix(trimmed, "api_key:") {
+				key := strings.TrimSpace(strings.TrimPrefix(trimmed, "api_key:"))
+				// Strip quotes
+				key = strings.Trim(key, "\"'")
+				return key
+			}
+			// If we hit another top-level key, stop looking
+			if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				break
+			}
+		}
+	}
+	return ""
 }
 
 // isOpenRouterModel returns true if the model name looks like an OpenRouter
