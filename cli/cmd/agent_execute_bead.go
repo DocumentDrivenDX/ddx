@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -105,14 +106,11 @@ type executeBeadArtifactPaths struct {
 type executeBeadGitOps interface {
 	HeadRev(dir string) (string, error)
 	ResolveRev(dir, rev string) (string, error)
-	IsDirty(dir string) (bool, error)
-	CheckpointCommit(dir, ref, message string) (string, error)
 	WorktreeAdd(dir, wtPath, rev string) error
 	WorktreeRemove(dir, wtPath string) error
 	WorktreeList(dir string) ([]string, error)
 	WorktreePrune(dir string) error
-	Rebase(wtPath, ontoRev string) error
-	FFMerge(dir, rev string) error
+	Merge(dir, rev string) error
 	UpdateRef(dir, ref, sha string) error
 }
 
@@ -137,120 +135,6 @@ func (r *realExecuteBeadGit) IsDirty(dir string) (bool, error) {
 		return false, fmt.Errorf("git status: %w", err)
 	}
 	return strings.TrimSpace(string(out)) != "", nil
-}
-
-func (r *realExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string, error) {
-	ddxDir := filepath.Join(dir, ".ddx")
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		return "", fmt.Errorf("checkpoint mkdir: %w", err)
-	}
-	tmpIndex := filepath.Join(ddxDir, fmt.Sprintf(".execute-bead-index-%d-%d", os.Getpid(), time.Now().UnixNano()))
-	defer os.Remove(tmpIndex)
-
-	env := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndex)
-
-	readTree := osexec.Command("git", "-C", dir, "read-tree", "HEAD")
-	readTree.Env = env
-	if out, err := readTree.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-
-	addTrackedArgs := append([]string{"-C", dir, "add", "-u", "--", "."}, executeBeadCheckpointExcludedPathspecs()...)
-	addTracked := osexec.Command("git", addTrackedArgs...)
-	addTracked.Env = env
-	if out, err := addTracked.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git add -u: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-
-	listUntracked := osexec.Command("git", "-C", dir, "ls-files", "-o", "--exclude-standard", "-z")
-	untrackedOut, err := listUntracked.Output()
-	if err != nil {
-		return "", fmt.Errorf("git ls-files -o --exclude-standard: %w", err)
-	}
-	var untracked []string
-	for _, entry := range strings.Split(string(untrackedOut), "\x00") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		if executeBeadCheckpointExcluded(entry) {
-			continue
-		}
-		untracked = append(untracked, entry)
-	}
-	if len(untracked) > 0 {
-		args := append([]string{"-C", dir, "add", "--"}, untracked...)
-		addUntracked := osexec.Command("git", args...)
-		addUntracked.Env = env
-		if out, err := addUntracked.CombinedOutput(); err != nil {
-			return "", fmt.Errorf("git add untracked: %s: %w", strings.TrimSpace(string(out)), err)
-		}
-	}
-
-	writeTree := osexec.Command("git", "-C", dir, "write-tree")
-	writeTree.Env = env
-	treeOut, err := writeTree.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git write-tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
-	}
-	tree := strings.TrimSpace(string(treeOut))
-
-	parent, err := r.HeadRev(dir)
-	if err != nil {
-		return "", err
-	}
-
-	commitTree := osexec.Command("git", "-C", dir, "commit-tree", tree, "-p", parent, "-m", message)
-	commitTree.Env = env
-	commitOut, err := commitTree.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git commit-tree: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	commit := strings.TrimSpace(string(commitOut))
-
-	if err := r.UpdateRef(dir, ref, commit); err != nil {
-		return "", err
-	}
-	return commit, nil
-}
-
-func executeBeadCheckpointExcludedPathspecs() []string {
-	return []string{
-		":(exclude).ddx/beads.jsonl",
-		":(exclude).ddx/executions/**",
-		":(exclude).ddx/agent-logs/**",
-		":(exclude).ddx/workers/**",
-		":(exclude).ddx/*.lock/**",
-		":(exclude).ddx/.execute-bead-wt-*/**",
-		":(exclude).ddx/run-state.json",
-	}
-}
-
-func executeBeadCheckpointExcluded(path string) bool {
-	path = filepath.ToSlash(strings.TrimSpace(path))
-	if path == "" {
-		return false
-	}
-	switch {
-	case path == ".ddx/beads.jsonl":
-		return true
-	case path == ".ddx/run-state.json":
-		return true
-	case strings.HasPrefix(path, ".ddx/executions/"):
-		return true
-	case strings.HasPrefix(path, ".ddx/agent-logs/"):
-		return true
-	case strings.HasPrefix(path, ".ddx/workers/"):
-		return true
-	case strings.HasPrefix(path, ".ddx/beads.lock/"):
-		return true
-	case strings.HasPrefix(path, ".ddx/") && strings.Contains(path, ".lock/"):
-		return true
-	case strings.HasPrefix(path, ".ddx/.execute-bead-wt-"):
-		return true
-	default:
-		return false
-	}
 }
 
 func (r *realExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
@@ -285,18 +169,10 @@ func (r *realExecuteBeadGit) WorktreePrune(dir string) error {
 	return osexec.Command("git", "-C", dir, "worktree", "prune").Run()
 }
 
-func (r *realExecuteBeadGit) FFMerge(dir, rev string) error {
-	out, err := osexec.Command("git", "-C", dir, "merge", "--ff-only", rev).CombinedOutput()
+func (r *realExecuteBeadGit) Merge(dir, rev string) error {
+	out, err := osexec.Command("git", "-C", dir, "merge", rev).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ff-merge: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
-func (r *realExecuteBeadGit) Rebase(wtPath, ontoRev string) error {
-	out, err := osexec.Command("git", "-C", wtPath, "rebase", ontoRev).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git rebase: %s: %w", strings.TrimSpace(string(out)), err)
+		return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
@@ -339,10 +215,6 @@ func executeBeadPreserveRef(beadID, baseRev string) string {
 	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, timestamp, shortSHA)
 }
 
-func executeBeadCheckpointRef(beadID, attemptID string) string {
-	return fmt.Sprintf("refs/ddx/checkpoints/%s/%s", beadID, attemptID)
-}
-
 func executeBeadResultRef(beadID, attemptID string) string {
 	return fmt.Sprintf("refs/ddx/execute-bead-results/%s/%s", beadID, attemptID)
 }
@@ -358,13 +230,9 @@ func (f *CommandFactory) newAgentExecuteBeadCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "execute-bead <bead-id>",
 		Short: "Run an agent on a bead in an isolated worktree, then merge or preserve the result",
-		Long: `execute-bead creates an isolated git worktree at a chosen base revision,
-runs an agent within it, then either lands the result via fast-forward merge
-or preserves it under a hidden ref (refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>).
-
-Dirty worktrees are checkpointed into an immutable hidden commit before
-execution so no local changes are discarded. Orphan worktrees from previous crashed runs are
-recovered automatically.`,
+		Long: `execute-bead creates an isolated git worktree from HEAD,
+runs an agent within it, then merges the result back (ff if clean, merge commit if not).
+Orphan worktrees from previous crashed runs are recovered automatically.`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runAgentExecuteBead,
 	}
@@ -417,24 +285,16 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	}
 
 	wtPath := filepath.Join(workDir, executeBeadWtDir, executeBeadWtPrefix+beadID+"-"+attemptID)
+	// Ensure beads.jsonl is committed before spawning worktree so the snapshot
+	// includes all beads, including newly created ones.
+	if err := executeBeadCommitTracker(workDir, cmd.ErrOrStderr()); err != nil {
+		return err
+	}
+
 	rootLock := bead.NewStoreWithCollection(filepath.Join(workDir, ".ddx"), "execute-bead-root")
 	if err := rootLock.WithLock(func() error {
 		// Recover orphan worktrees from previous crashed runs while root git state is locked.
 		f.executeBeadRecoverOrphans(gitOps, workDir, beadID)
-
-		dirty, err := gitOps.IsDirty(workDir)
-		if err != nil {
-			return fmt.Errorf("checking worktree state: %w", err)
-		}
-		if dirty {
-			checkpointRef := executeBeadCheckpointRef(beadID, attemptID)
-			checkpointRev, checkpointErr := gitOps.CheckpointCommit(workDir, checkpointRef, fmt.Sprintf("ddx execute-bead checkpoint %s %s", beadID, attemptID))
-			if checkpointErr != nil {
-				return fmt.Errorf("checkpointing dirty worktree: %w", checkpointErr)
-			}
-			baseRev = checkpointRev
-			fmt.Fprintf(cmd.ErrOrStderr(), "note: dirty worktree checkpointed at %s\n", checkpointRef)
-		}
 
 		if addErr := gitOps.WorktreeAdd(workDir, wtPath, baseRev); addErr != nil {
 			return fmt.Errorf("creating isolated worktree: %w", addErr)
@@ -449,7 +309,24 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 
 	artifacts, err := f.prepareExecuteBeadArtifacts(wtPath, beadID, attemptID, baseRev, promptFile, harness, model, effort)
 	if err != nil {
-		return err
+		// Context load failure: record event with retry-after so execute-loop doesn't loop.
+		// Write a failure result artifact for observability.
+		res := ExecuteBeadResult{
+			BeadID:    beadID,
+			AttemptID: attemptID,
+			WorkerID:  workerID,
+			BaseRev:   baseRev,
+			ExitCode:  1,
+			Error:     err.Error(),
+			Outcome:   "error",
+			Reason:    "context_load_failed",
+		}
+		if abInfo, _ := os.Stat(filepath.Join(workDir, executeBeadArtifactDir, attemptID)); abInfo != nil && abInfo.IsDir() {
+			res.ExecutionDir = filepath.Join(executeBeadArtifactDir, attemptID)
+		}
+		populateExecuteBeadStatus(&res)
+		_ = writeExecuteBeadArtifactJSON(filepath.Join(workDir, executeBeadArtifactDir, attemptID, "result.json"), res)
+		return fmt.Errorf("execute-bead context load: %w", err)
 	}
 	promptFile = artifacts.PromptAbs
 
@@ -544,18 +421,6 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		_ = writeExecuteBeadResult(cmd, res, asJSON)
 		return fmt.Errorf("failed to read worktree HEAD: %w", revErr)
 	}
-	worktreeDirty, dirtyErr := gitOps.IsDirty(wtPath)
-	if dirtyErr != nil {
-		return fmt.Errorf("checking execution worktree state: %w", dirtyErr)
-	}
-	if worktreeDirty && resultRev == baseRev {
-		resultRef := executeBeadResultRef(beadID, attemptID)
-		syntheticRev, checkpointErr := gitOps.CheckpointCommit(wtPath, resultRef, fmt.Sprintf("ddx execute-bead result %s %s", beadID, attemptID))
-		if checkpointErr != nil {
-			return fmt.Errorf("capturing execute-bead worktree changes: %w", checkpointErr)
-		}
-		resultRev = syntheticRev
-	}
 
 	res := ExecuteBeadResult{
 		BeadID:       beadID,
@@ -613,57 +478,18 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		res.Reason = "--no-merge specified"
 
 	default:
-		// Get current HEAD of the target branch to rebase onto.
-		currentHead, headErr := gitOps.HeadRev(workDir)
-		if headErr != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read current HEAD: %v\n", headErr)
-			currentHead = baseRev
-		}
-
-		// If the target branch has advanced since our base, rebase the worktree commits
-		// before attempting a fast-forward land.
-		mergeRev := resultRev
-		rebased := false
-		if currentHead != baseRev {
-			if rebaseErr := gitOps.Rebase(wtPath, currentHead); rebaseErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: rebase failed: %v\n", rebaseErr)
-				ref := executeBeadPreserveRef(beadID, baseRev)
-				if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
-					return fmt.Errorf("preserving result ref: %w", updateErr)
-				}
-				res.Outcome = "preserved"
-				res.PreserveRef = ref
-				res.Reason = "rebase failed"
-				populateExecuteBeadStatus(&res)
-				if err := writeExecuteBeadArtifactJSON(artifacts.ResultAbs, res); err != nil {
-					return fmt.Errorf("writing execute-bead result artifact: %w", err)
-				}
-				return writeExecuteBeadResult(cmd, res, asJSON)
-			} else {
-				if rebasedRev, revErr := gitOps.HeadRev(wtPath); revErr == nil {
-					mergeRev = rebasedRev
-					res.ResultRev = rebasedRev
-					rebased = true
-				} else {
-					fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read rebased HEAD: %v\n", revErr)
-				}
-			}
-		}
-
-		if mergeErr := gitOps.FFMerge(workDir, mergeRev); mergeErr == nil {
+		// Merge the worktree result back. Fast-forward if clean, otherwise merge commit.
+		// The baseRev is preserved in the result for exact replay context.
+		if mergeErr := gitOps.Merge(workDir, resultRev); mergeErr == nil {
 			res.Outcome = "merged"
 		} else {
 			ref := executeBeadPreserveRef(beadID, baseRev)
-			if updateErr := gitOps.UpdateRef(workDir, ref, mergeRev); updateErr != nil {
+			if updateErr := gitOps.UpdateRef(workDir, ref, resultRev); updateErr != nil {
 				return fmt.Errorf("preserving result ref: %w", updateErr)
 			}
 			res.Outcome = "preserved"
 			res.PreserveRef = ref
-			if rebased {
-				res.Reason = "ff-merge failed after rebase"
-			} else {
-				res.Reason = "ff-merge not possible"
-			}
+			res.Reason = "merge failed"
 		}
 	}
 	populateExecuteBeadStatus(&res)
@@ -729,10 +555,12 @@ func (f *CommandFactory) prepareExecuteBeadArtifacts(wtPath, beadID, attemptID, 
 }
 
 func executeBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
+	// Beads are loaded from the worktree's snapshot which includes all beads
+	// committed before the worktree was spawned.
 	store := bead.NewStore(filepath.Join(wtPath, ".ddx"))
 	b, err := store.Get(beadID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("loading bead %s from execution snapshot: %w", beadID, err)
+		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
 	}
 	return b, executeBeadResolveGoverningRefs(wtPath, b), nil
 }
@@ -855,9 +683,8 @@ func executeBeadPromptContent(workDir string, b *bead.Bead, refs []executeBeadGo
 	sb.WriteString("4. If the bead is missing critical context or the governing references conflict, stop and report the gap explicitly instead of improvising hidden policy.\n")
 	sb.WriteString("5. Keep the execution bundle files under `.ddx/executions/` intact; DDx uses them as execution evidence.\n")
 	sb.WriteString("6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.\n")
-	sb.WriteString("7. DDx owns landing and preservation. Agent-created commits are optional; coherent tracked edits in the worktree still count as produced work.\n")
-	sb.WriteString("8. If you choose to create commits, keep them coherent and limited to this bead. If you leave tracked edits without commits, DDx will still evaluate them.\n")
-	sb.WriteString("9. If the work is already satisfied with no tracked changes needed, stop cleanly and let DDx record a no-change attempt instead of inventing a commit.\n")
+	sb.WriteString("7. Before finishing, commit your changes with `git add -A && git commit -m '...'`. DDx will merge your commits back to the base branch.\n")
+	sb.WriteString("8. If the work is already satisfied with no tracked changes needed, stop cleanly and let DDx record a no-change attempt.\n")
 
 	return []byte(sb.String()), "synthesized", nil
 }
@@ -912,6 +739,57 @@ func (f *CommandFactory) executeBeadRecoverOrphans(gitOps executeBeadGitOps, wor
 		}
 	}
 	_ = gitOps.WorktreePrune(workDir)
+}
+
+// executeBeadCommitTracker commits beads.jsonl if it has uncommitted changes.
+// This ensures the worktree snapshot includes all beads, including newly created ones.
+func executeBeadCommitTracker(workDir string, w io.Writer) error {
+	trackerFile := filepath.Join(workDir, ".ddx", "beads.jsonl")
+	info, err := os.Stat(trackerFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no tracker file, nothing to commit
+		}
+		return fmt.Errorf("checking tracker file: %w", err)
+	}
+	if info.IsDir() {
+		return nil
+	}
+
+	// Check if we're in a git repo
+	out, err := osexec.Command("git", "-C", workDir, "rev-parse", "--is-inside-work-tree").Output()
+	if err != nil || strings.TrimSpace(string(out)) != "true" {
+		return nil // not a git repo, skip
+	}
+
+	// Check if beads.jsonl has uncommitted changes
+	out, err = osexec.Command("git", "-C", workDir, "diff", "--", ".ddx/beads.jsonl").Output()
+	if err != nil {
+		return fmt.Errorf("checking tracker diff: %w", err)
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		// Check for untracked
+		out, err = osexec.Command("git", "-C", workDir, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
+		if err != nil {
+			return fmt.Errorf("checking tracker untracked: %w", err)
+		}
+		if strings.TrimSpace(string(out)) == "" {
+			return nil // nothing to commit
+		}
+	}
+
+	// Commit the tracker update
+	msg := fmt.Sprintf("chore: update tracker (execute-bead %s)", time.Now().UTC().Format("20060102T150405"))
+	commitOut, err := osexec.Command("git", "-C", workDir, "add", ".ddx/beads.jsonl").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	commitOut, err = osexec.Command("git", "-C", workDir, "commit", "-m", msg).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	fmt.Fprintf(w, "note: committed tracker updates\n")
+	return nil
 }
 
 func populateExecuteBeadStatus(res *ExecuteBeadResult) {

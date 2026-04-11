@@ -316,6 +316,6 @@ type CandidatePlan struct {
 // Default configuration values.
 const (
 	DefaultHarness   = "codex"
-	DefaultTimeoutMS = 300000 // 5 minutes
+	DefaultTimeoutMS = 7200000 // 2 hours - long enough for any task; supervisor/agent decides termination
 	DefaultLogDir    = ".ddx/agent-logs"
 )

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -35,27 +34,18 @@ type fakeExecuteBeadGit struct {
 	wtDirty bool
 	// wtHeadRevErr, if set, is returned by HeadRev for worktree paths.
 	wtHeadRevErr error
-	// rebaseResultRev, if set, replaces wtHeadRev after a successful rebase.
-	rebaseResultRev string
-	dirty           bool
-	ffMergeErr      error
-	rebaseErr       error
-	updateRefErr    error
+	dirty        bool
+	mergeErr     error
+	updateRefErr error
 
-	checkpointCalled bool
-	checkpointCalls  int
-	checkpointRef    string
-	checkpointRev    string
-	addedWTs         []string
-	addedWTRev       string
-	removedWTs       []string
-	refs             map[string]string // ref -> sha recorded by UpdateRef
-	worktrees        []string          // paths returned by WorktreeList
+	addedWTs   []string
+	addedWTRev string
+	removedWTs []string
+	refs       map[string]string // ref -> sha recorded by UpdateRef
+	worktrees  []string          // paths returned by WorktreeList
 
-	rebaseCalls   int
-	rebaseOntoRev string
-	ffMergeCalls  int
-	ffMergeRev    string
+	mergeCalls int
+	mergeRev   string
 }
 
 func (f *fakeExecuteBeadGit) HeadRev(dir string) (string, error) {
@@ -92,18 +82,6 @@ func (f *fakeExecuteBeadGit) IsDirty(dir string) (bool, error) {
 		return f.wtDirty, nil
 	}
 	return f.dirty, nil
-}
-
-func (f *fakeExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.checkpointCalled = true
-	f.checkpointCalls++
-	f.checkpointRef = ref
-	if f.checkpointRev != "" {
-		return f.checkpointRev, nil
-	}
-	return f.mainHeadRev, nil
 }
 
 func (f *fakeExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
@@ -147,23 +125,12 @@ func (f *fakeExecuteBeadGit) WorktreeList(dir string) ([]string, error) {
 
 func (f *fakeExecuteBeadGit) WorktreePrune(dir string) error { return nil }
 
-func (f *fakeExecuteBeadGit) FFMerge(dir, rev string) error {
+func (f *fakeExecuteBeadGit) Merge(dir, rev string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.ffMergeCalls++
-	f.ffMergeRev = rev
-	return f.ffMergeErr
-}
-
-func (f *fakeExecuteBeadGit) Rebase(wtPath, ontoRev string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.rebaseCalls++
-	f.rebaseOntoRev = ontoRev
-	if f.rebaseErr == nil && f.rebaseResultRev != "" {
-		f.wtHeadRev = f.rebaseResultRev
-	}
-	return f.rebaseErr
+	f.mergeCalls++
+	f.mergeRev = rev
+	return f.mergeErr
 }
 
 func (f *fakeExecuteBeadGit) UpdateRef(dir, ref, sha string) error {
@@ -327,12 +294,12 @@ func copyTestFile(src, dst string) error {
 	return os.Chmod(dst, info.Mode())
 }
 
-// TestExecuteBeadMerge verifies that when fast-forward merge succeeds the outcome is "merged".
+// TestExecuteBeadMerge verifies that when merge succeeds the outcome is "merged".
 func TestExecuteBeadMerge(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "bbbb2222", // agent made a new commit
-		ffMergeErr:  nil,        // merge succeeds
+		mergeErr:    nil,        // merge succeeds
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
 	f := newExecuteBeadFactory(t, git, runner)
@@ -352,17 +319,17 @@ func TestExecuteBeadMerge(t *testing.T) {
 	assert.Contains(t, git.addedWTs[0], executeBeadWtPrefix+"my-bead-")
 	require.Len(t, git.removedWTs, 1)
 	assert.Equal(t, git.addedWTs[0], git.removedWTs[0])
-	assert.Equal(t, 0, git.rebaseCalls)
-	assert.Equal(t, "bbbb2222", git.ffMergeRev)
+	assert.Equal(t, 1, git.mergeCalls)
+	assert.Equal(t, "bbbb2222", git.mergeRev)
 }
 
-// TestExecuteBeadPreserveOnFFFailure verifies that when fast-forward merge fails
+// TestExecuteBeadPreserveOnMergeFailure verifies that when merge fails
 // the result is preserved under a hidden ref.
-func TestExecuteBeadPreserveOnFFFailure(t *testing.T) {
+func TestExecuteBeadPreserveOnMergeFailure(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "cccc3333",
-		ffMergeErr:  fmt.Errorf("not possible to fast-forward"),
+		mergeErr:    fmt.Errorf("merge conflict"),
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 	f := newExecuteBeadFactory(t, git, runner)
@@ -370,77 +337,26 @@ func TestExecuteBeadPreserveOnFFFailure(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, "preserved", res.Outcome)
-	assert.Equal(t, agent.ExecuteBeadStatusLandConflict, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "cccc3333", res.ResultRev)
 	assert.NotEmpty(t, res.PreserveRef)
 	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
-	assert.Equal(t, "ff-merge not possible", res.Reason)
+	assert.Equal(t, "merge failed", res.Reason)
 
 	// Hidden ref should be recorded in the mock.
 	require.Contains(t, git.refs, res.PreserveRef)
 	assert.Equal(t, "cccc3333", git.refs[res.PreserveRef])
-	assert.Equal(t, 0, git.rebaseCalls)
-	assert.Equal(t, "cccc3333", git.ffMergeRev)
+	assert.Equal(t, 1, git.mergeCalls)
+	assert.Equal(t, "cccc3333", git.mergeRev)
 }
 
-// TestExecuteBeadRebasesBeforeMerge verifies that when the target branch
-// advances during execution, execute-bead rebases the worktree commit before
-// attempting the fast-forward land.
-func TestExecuteBeadRebasesBeforeMerge(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		headRevSeq:      []string{"aaaa1111", "cccc3333"},
-		wtHeadRev:       "bbbb2222",
-		rebaseResultRev: "dddd4444",
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
-
-	res := runExecuteBead(t, f, git, "my-bead")
-
-	assert.Equal(t, "merged", res.Outcome)
-	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
-	assert.Equal(t, "dddd4444", res.ResultRev)
-	assert.Equal(t, 1, git.rebaseCalls)
-	assert.Equal(t, "cccc3333", git.rebaseOntoRev)
-	assert.Equal(t, 1, git.ffMergeCalls)
-	assert.Equal(t, "dddd4444", git.ffMergeRev)
-}
-
-// TestExecuteBeadRebaseFailurePreserves verifies that a rebase conflict
-// preserves the iteration without attempting the ff-only land.
-func TestExecuteBeadRebaseFailurePreserves(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		headRevSeq: []string{"aaaa1111", "cccc3333"},
-		wtHeadRev:  "bbbb2222",
-		rebaseErr:  fmt.Errorf("conflict"),
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
-
-	res := runExecuteBead(t, f, git, "my-bead")
-
-	assert.Equal(t, "preserved", res.Outcome)
-	assert.Equal(t, agent.ExecuteBeadStatusLandConflict, res.Status)
-	assert.Equal(t, "rebase failed", res.Reason)
-	assert.Equal(t, "bbbb2222", res.ResultRev)
-	assert.Equal(t, 1, git.rebaseCalls)
-	assert.Equal(t, "cccc3333", git.rebaseOntoRev)
-	assert.Equal(t, 0, git.ffMergeCalls)
-	require.Contains(t, git.refs, res.PreserveRef)
-	assert.Equal(t, "bbbb2222", git.refs[res.PreserveRef])
-	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
-	require.FileExists(t, filepath.Join(f.WorkingDir, filepath.FromSlash(res.ResultFile)))
-}
-
-// TestExecuteBeadNoMerge verifies that --no-merge bypasses fast-forward and
+// TestExecuteBeadNoMerge verifies that --no-merge skips merge and
 // always preserves under a hidden ref.
 func TestExecuteBeadNoMerge(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "dddd4444",
-		ffMergeErr:  nil, // merge would succeed, but --no-merge suppresses it
+		mergeErr:    nil, // merge would succeed, but --no-merge suppresses it
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 	f := newExecuteBeadFactory(t, git, runner)
@@ -452,8 +368,9 @@ func TestExecuteBeadNoMerge(t *testing.T) {
 	assert.Equal(t, "--no-merge specified", res.Reason)
 	assert.NotEmpty(t, res.PreserveRef)
 	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
+	assert.Equal(t, 0, git.mergeCalls) // merge should not be called
 
-	// FFMerge should not have been called; refs should still be recorded.
+	// Hidden ref should be recorded.
 	require.Contains(t, git.refs, res.PreserveRef)
 }
 
@@ -468,7 +385,7 @@ func TestExecuteBeadHiddenRefUniqueness(t *testing.T) {
 		git := &fakeExecuteBeadGit{
 			mainHeadRev: "aaaa1111",
 			wtHeadRev:   "eeee5555",
-			ffMergeErr:  fmt.Errorf("diverged"),
+			mergeErr:    fmt.Errorf("diverged"),
 		}
 		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 		f := newExecuteBeadFactory(t, git, runner)
@@ -503,12 +420,11 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	assert.Empty(t, res.PreserveRef)
 }
 
-func TestExecuteBeadDirtyWorktreeWithoutCommitsMerges(t *testing.T) {
+func TestExecuteBeadMergePreservesContext(t *testing.T) {
 	git := &fakeExecuteBeadGit{
-		mainHeadRev:   "aaaa1111",
-		wtHeadRev:     "aaaa1111", // no agent-created commit
-		wtDirty:       true,       // but tracked edits exist
-		checkpointRev: "bbbb2222",
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "bbbb2222",
+		mergeErr:    nil,
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
 	f := newExecuteBeadFactory(t, git, runner)
@@ -517,11 +433,10 @@ func TestExecuteBeadDirtyWorktreeWithoutCommitsMerges(t *testing.T) {
 
 	assert.Equal(t, "merged", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
+	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
-	assert.Equal(t, 1, git.ffMergeCalls)
-	assert.Equal(t, "bbbb2222", git.ffMergeRev)
-	assert.Equal(t, 1, git.checkpointCalls)
-	assert.Equal(t, executeBeadResultRef("my-bead", res.AttemptID), git.checkpointRef)
+	assert.Equal(t, 1, git.mergeCalls)
+	assert.Equal(t, "bbbb2222", git.mergeRev)
 }
 
 func TestExecuteBeadSynthesizesPromptAndArtifacts(t *testing.T) {
@@ -646,74 +561,6 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	assert.NoDirExists(t, git.addedWTs[0])
 }
 
-// TestExecuteBeadDirtyWorktreeCheckpoint verifies that a dirty worktree is
-// captured into a checkpoint commit before execution begins.
-func TestExecuteBeadDirtyWorktreeCheckpoint(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev:   "aaaa1111",
-		wtHeadRev:     "bbbb2222",
-		dirty:         true,
-		checkpointRev: "cccc3333",
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
-
-	runExecuteBead(t, f, git, "my-bead")
-
-	assert.True(t, git.checkpointCalled, "checkpoint commit should be created for dirty worktree")
-	assert.Equal(t, "cccc3333", git.addedWTRev, "worktree should start from the checkpoint commit")
-	assert.Contains(t, git.checkpointRef, "refs/ddx/checkpoints/my-bead/", "checkpoint should be stored under a hidden ref")
-}
-
-func TestCheckpointCommitIgnoresRuntimeArtifacts(t *testing.T) {
-	repo := t.TempDir()
-	runGit := func(args ...string) string {
-		t.Helper()
-		cmd := osexec.Command("git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
-		return strings.TrimSpace(string(out))
-	}
-
-	runGit("init")
-	runGit("config", "user.name", "DDx Test")
-	runGit("config", "user.email", "ddx@example.com")
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte(".ddx/*.lock/\n.ddx/workers/\n.ddx/.execute-bead-wt-*/\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("base\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "skills"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "skills", "keep.txt"), []byte("tracked\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "config.yaml"), []byte("agent:\n  harness: codex\n"), 0o644))
-	runGit("add", ".")
-	runGit("commit", "-m", "base")
-
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("changed\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "config.yaml"), []byte("agent:\n  harness: agent\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "beads.jsonl"), []byte("{\"id\":\"ddx-temp\"}\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "beads.lock"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "beads.lock", "acquired_at"), []byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "agent-logs"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "agent-logs", "sessions.jsonl"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "executions", "attempt-1"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "executions", "attempt-1", "result.json"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "workers", "worker-1"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "workers", "worker-1", "status.json"), []byte("{}"), 0o644))
-
-	git := &realExecuteBeadGit{}
-	commit, err := git.CheckpointCommit(repo, "refs/ddx/checkpoints/test/attempt", "checkpoint")
-	require.NoError(t, err)
-	require.NotEmpty(t, commit)
-
-	tree := runGit("ls-tree", "-r", "--name-only", commit)
-	assert.Contains(t, tree, "tracked.txt")
-	assert.Contains(t, tree, ".ddx/config.yaml")
-	assert.Contains(t, tree, ".ddx/skills/keep.txt")
-	assert.NotContains(t, tree, ".ddx/beads.jsonl")
-	assert.NotContains(t, tree, ".ddx/beads.lock/acquired_at")
-	assert.NotContains(t, tree, ".ddx/agent-logs/sessions.jsonl")
-	assert.NotContains(t, tree, ".ddx/executions/attempt-1/result.json")
-	assert.NotContains(t, tree, ".ddx/workers/worker-1/status.json")
-}
-
 // TestExecuteBeadFromRevFlag verifies that --from resolves a custom revision
 // and uses it as the base for the worktree.
 func TestExecuteBeadFromRevFlag(t *testing.T) {
@@ -801,12 +648,12 @@ func TestExecuteBeadTimeoutNoCommitsReportsExecutionFailure(t *testing.T) {
 
 // TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand verifies that a
 // non-zero agent result preserves the iteration instead of touching the target
-// branch, even if a fast-forward land would have succeeded.
+// branch, even if a merge would have succeeded.
 func TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "bbbb2222", // agent made commits
-		ffMergeErr:  nil,        // merge succeeds
+		mergeErr:    nil,        // merge succeeds
 	}
 	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed"), result: nil}
 	f := newExecuteBeadFactory(t, git, runner)
@@ -818,17 +665,17 @@ func TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand(t *testing.T) {
 	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
 	assert.Equal(t, "bbbb2222", res.ResultRev)
 	assert.NotEmpty(t, res.PreserveRef)
-	assert.Equal(t, 0, git.ffMergeCalls)
+	assert.Equal(t, 0, git.mergeCalls)
 }
 
 // TestExecuteBeadAgentErrorWithCommitsPreserves verifies that when the agent
-// runner returns an error, commits exist but ff-merge fails, exitCode=1 and
+// runner returns an error, commits exist but merge fails, exitCode=1 and
 // outcome="preserved" with a non-empty preserve ref.
 func TestExecuteBeadAgentErrorWithCommitsPreserves(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "bbbb2222",
-		ffMergeErr:  fmt.Errorf("not possible to fast-forward"),
+		mergeErr:    fmt.Errorf("merge conflict"),
 	}
 	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed"), result: nil}
 	f := newExecuteBeadFactory(t, git, runner)
