@@ -417,6 +417,8 @@ cli/internal/agent/.ddx/
 .ddx/hooks/
 .ddx/run-state.json
 .ddx/exec-runs.d/
+.ddx/*.lock/
+.ddx/workers/
 .ddx/tsnet/
 .ddx/plugins/
 .helix-logs/

@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -257,6 +259,144 @@ func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	require.NotNil(t, result)
 	assert.True(t, result.NoReadyWork)
 	assert.Equal(t, 0, result.Attempts)
+}
+
+func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	only := &bead.Bead{ID: "ddx-race-1", Title: "Only ready bead", Priority: 0}
+	require.NoError(t, store.Create(only))
+
+	var execCalls atomic.Int32
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+		execCalls.Add(1)
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    ExecuteBeadStatusSuccess,
+			Detail:    "merged cleanly",
+			SessionID: "sess-race",
+			ResultRev: "deadbeef",
+		}, nil
+	})
+
+	workerA := &ExecuteBeadWorker{Store: store, Executor: executor}
+	workerB := &ExecuteBeadWorker{Store: store, Executor: executor}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	results := make([]*ExecuteBeadLoopResult, 2)
+	errs := make([]error, 2)
+
+	go func() {
+		defer wg.Done()
+		results[0], errs[0] = workerA.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-a", Once: true})
+	}()
+	go func() {
+		defer wg.Done()
+		results[1], errs[1] = workerB.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-b", Once: true})
+	}()
+
+	<-started
+	close(release)
+	wg.Wait()
+
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	assert.Equal(t, int32(1), execCalls.Load(), "only one worker should execute the bead")
+
+	totalAttempts := 0
+	totalSuccesses := 0
+	for _, result := range results {
+		require.NotNil(t, result)
+		totalAttempts += result.Attempts
+		totalSuccesses += result.Successes
+	}
+	assert.Equal(t, 1, totalAttempts)
+	assert.Equal(t, 1, totalSuccesses)
+
+	got, err := store.Get(only.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	assert.Equal(t, "sess-race", got.Extra["session_id"])
+	assert.Equal(t, "deadbeef", got.Extra["closing_commit_sha"])
+}
+
+func TestExecuteBeadWorkerConcurrentWorkersDistributeDistinctReadyBeads(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+
+	var (
+		mu       sync.Mutex
+		executed []string
+	)
+	barrier := make(chan struct{}, 2)
+	release := make(chan struct{})
+	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+		mu.Lock()
+		executed = append(executed, beadID)
+		mu.Unlock()
+		barrier <- struct{}{}
+		<-release
+		return ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    ExecuteBeadStatusSuccess,
+			Detail:    "merged cleanly",
+			SessionID: "sess-" + beadID,
+			ResultRev: "rev-" + beadID,
+		}, nil
+	})
+
+	workerA := &ExecuteBeadWorker{Store: store, Executor: executor}
+	workerB := &ExecuteBeadWorker{Store: store, Executor: executor}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	results := make([]*ExecuteBeadLoopResult, 2)
+	errs := make([]error, 2)
+
+	go func() {
+		defer wg.Done()
+		results[0], errs[0] = workerA.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-a", Once: true})
+	}()
+	go func() {
+		defer wg.Done()
+		results[1], errs[1] = workerB.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-b", Once: true})
+	}()
+
+	<-barrier
+	<-barrier
+	close(release)
+	wg.Wait()
+
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	assert.ElementsMatch(t, []string{first.ID, second.ID}, executed)
+
+	totalAttempts := 0
+	totalSuccesses := 0
+	for _, result := range results {
+		require.NotNil(t, result)
+		totalAttempts += result.Attempts
+		totalSuccesses += result.Successes
+	}
+	assert.Equal(t, 2, totalAttempts)
+	assert.Equal(t, 2, totalSuccesses)
+
+	firstGot, err := store.Get(first.ID)
+	require.NoError(t, err)
+	secondGot, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, firstGot.Status)
+	assert.Equal(t, bead.StatusClosed, secondGot.Status)
+	assert.Equal(t, "sess-"+first.ID, firstGot.Extra["session_id"])
+	assert.Equal(t, "sess-"+second.ID, secondGot.Extra["session_id"])
 }
 
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -614,6 +615,41 @@ func TestExecuteBeadDirtyWorktreeCheckpoint(t *testing.T) {
 	assert.True(t, git.checkpointCalled, "checkpoint commit should be created for dirty worktree")
 	assert.Equal(t, "cccc3333", git.addedWTRev, "worktree should start from the checkpoint commit")
 	assert.Contains(t, git.checkpointRef, "refs/ddx/checkpoints/my-bead/", "checkpoint should be stored under a hidden ref")
+}
+
+func TestCheckpointCommitIgnoresRuntimeArtifacts(t *testing.T) {
+	repo := t.TempDir()
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := osexec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "DDx Test")
+	runGit("config", "user.email", "ddx@example.com")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte(".ddx/*.lock/\n.ddx/workers/\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("base\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "base")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("changed\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "beads.lock"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "beads.lock", "acquired_at"), []byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "workers", "worker-1"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "workers", "worker-1", "status.json"), []byte("{}"), 0o644))
+
+	git := &realExecuteBeadGit{}
+	commit, err := git.CheckpointCommit(repo, "refs/ddx/checkpoints/test/attempt", "checkpoint")
+	require.NoError(t, err)
+	require.NotEmpty(t, commit)
+
+	tree := runGit("ls-tree", "-r", "--name-only", commit)
+	assert.Contains(t, tree, "tracked.txt")
+	assert.NotContains(t, tree, ".ddx/beads.lock/acquired_at")
+	assert.NotContains(t, tree, ".ddx/workers/worker-1/status.json")
 }
 
 // TestExecuteBeadFromRevFlag verifies that --from resolves a custom revision

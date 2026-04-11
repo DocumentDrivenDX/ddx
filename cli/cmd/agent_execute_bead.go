@@ -151,10 +151,32 @@ func (r *realExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string,
 		return "", fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 
-	addAll := osexec.Command("git", "-C", dir, "add", "-A")
-	addAll.Env = env
-	if out, err := addAll.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git add -A: %s: %w", strings.TrimSpace(string(out)), err)
+	addTracked := osexec.Command("git", "-C", dir, "add", "-u")
+	addTracked.Env = env
+	if out, err := addTracked.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git add -u: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	listUntracked := osexec.Command("git", "-C", dir, "ls-files", "-o", "--exclude-standard", "-z")
+	untrackedOut, err := listUntracked.Output()
+	if err != nil {
+		return "", fmt.Errorf("git ls-files -o --exclude-standard: %w", err)
+	}
+	var untracked []string
+	for _, entry := range strings.Split(string(untrackedOut), "\x00") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		untracked = append(untracked, entry)
+	}
+	if len(untracked) > 0 {
+		args := append([]string{"-C", dir, "add", "--"}, untracked...)
+		addUntracked := osexec.Command("git", args...)
+		addUntracked.Env = env
+		if out, err := addUntracked.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git add untracked: %s: %w", strings.TrimSpace(string(out)), err)
+		}
 	}
 
 	writeTree := osexec.Command("git", "-C", dir, "write-tree")
