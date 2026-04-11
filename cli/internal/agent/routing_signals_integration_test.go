@@ -34,6 +34,32 @@ func TestProbeHarnessStateUsesCodexNativeRoutingSignal(t *testing.T) {
 	assert.Equal(t, 135, state.RoutingSignal.HistoricalUsage.TotalTokens)
 }
 
+func TestProbeHarnessStateAutoDiscoversCodexNativeRoutingSignal(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	sessionDir := filepath.Join(home, ".codex", "sessions", "2026", "04", "11")
+	require.NoError(t, os.MkdirAll(sessionDir, 0o755))
+	path := filepath.Join(sessionDir, "rollout-2026-04-11T05-00-00-test.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(
+		`{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":10}}`+"\n"+
+			`{"type":"session.updated","token_count":{"rate_limits":{"primary":{"used_percent":97,"window_minutes":300,"resets_at":"April 12"}}}}`+"\n",
+	), 0o644))
+	t.Setenv("HOME", home)
+	t.Setenv(codexNativeSessionEnv, "")
+
+	state := r.ProbeHarnessState("codex", 2*time.Second)
+	require.NotNil(t, state.RoutingSignal)
+
+	assert.Equal(t, "blocked", state.QuotaState)
+	assert.False(t, state.QuotaOK)
+	assert.Equal(t, path, state.RoutingSignal.Source.Path)
+	assert.Equal(t, "codex", state.RoutingSignal.Provider)
+	assert.Equal(t, codexNativeSessionSourceKind, state.RoutingSignal.Source.Kind)
+	assert.Equal(t, 135, state.RoutingSignal.HistoricalUsage.TotalTokens)
+}
+
 func TestProbeHarnessStateUsesClaudeStatsCacheAndLeavesQuotaUnknown(t *testing.T) {
 	r := newTestRunnerForRouting()
 

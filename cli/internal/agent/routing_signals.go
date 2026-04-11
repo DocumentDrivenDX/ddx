@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -35,22 +36,25 @@ func (r *Runner) LoadRoutingSignalSnapshot(harnessName string, now time.Time) Ro
 func (r *Runner) loadCodexRoutingSignal(now time.Time) RoutingSignalSnapshot {
 	path := os.Getenv(codexNativeSessionEnv)
 	if path == "" {
+		path = discoverCodexNativeSessionPath()
+	}
+	if path == "" {
 		return RoutingSignalSnapshot{
 			Provider: "codex",
 			Source: SignalSourceMetadata{
 				Provider:  "codex",
 				Kind:      codexNativeSessionSourceKind,
 				Freshness: "unknown",
-				Basis:     "path not configured",
-				Notes:     codexNativeSessionEnv + " is not set",
+				Basis:     "session path unavailable",
+				Notes:     codexNativeSessionEnv + " is not set and no native session file was discovered",
 			},
 			CurrentQuota: QuotaSignal{
 				Source: SignalSourceMetadata{
 					Provider:  "codex",
 					Kind:      codexNativeSessionSourceKind,
 					Freshness: "unknown",
-					Basis:     "path not configured",
-					Notes:     codexNativeSessionEnv + " is not set",
+					Basis:     "session path unavailable",
+					Notes:     codexNativeSessionEnv + " is not set and no native session file was discovered",
 				},
 				State: "unknown",
 			},
@@ -89,6 +93,49 @@ func (r *Runner) loadCodexRoutingSignal(now time.Time) RoutingSignalSnapshot {
 		CurrentQuota:    signals.CurrentQuota,
 		HistoricalUsage: signals.RecentUsage,
 	}
+}
+
+func discoverCodexNativeSessionPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	root := filepath.Join(home, ".codex", "sessions")
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return ""
+	}
+
+	type candidate struct {
+		path    string
+		modTime time.Time
+	}
+	var candidates []candidate
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d == nil || d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, ".jsonl") {
+			return nil
+		}
+		info, statErr := d.Info()
+		if statErr != nil {
+			return nil
+		}
+		candidates = append(candidates, candidate{path: path, modTime: info.ModTime().UTC()})
+		return nil
+	})
+	if len(candidates) == 0 {
+		return ""
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].modTime.Equal(candidates[j].modTime) {
+			return candidates[i].path > candidates[j].path
+		}
+		return candidates[i].modTime.After(candidates[j].modTime)
+	})
+	return candidates[0].path
 }
 
 func (r *Runner) loadClaudeRoutingSignal(now time.Time) RoutingSignalSnapshot {
