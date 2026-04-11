@@ -23,23 +23,48 @@ type ExecuteLoopWorkerSpec struct {
 }
 
 type WorkerRecord struct {
-	ID           string    `json:"id"`
-	Kind         string    `json:"kind"`
-	State        string    `json:"state"`
-	ProjectRoot  string    `json:"project_root"`
-	Harness      string    `json:"harness,omitempty"`
-	Model        string    `json:"model,omitempty"`
-	Effort       string    `json:"effort,omitempty"`
-	Once         bool      `json:"once,omitempty"`
-	PollInterval string    `json:"poll_interval,omitempty"`
-	PID          int       `json:"pid,omitempty"`
-	StartedAt    time.Time `json:"started_at,omitempty"`
-	FinishedAt   time.Time `json:"finished_at,omitempty"`
-	ExitCode     *int      `json:"exit_code,omitempty"`
-	Error        string    `json:"error,omitempty"`
-	StdoutPath   string    `json:"stdout_path,omitempty"`
-	StderrPath   string    `json:"stderr_path,omitempty"`
-	Command      []string  `json:"command,omitempty"`
+	ID           string                 `json:"id"`
+	Kind         string                 `json:"kind"`
+	State        string                 `json:"state"`
+	Status       string                 `json:"status,omitempty"`
+	ProjectRoot  string                 `json:"project_root"`
+	Harness      string                 `json:"harness,omitempty"`
+	Model        string                 `json:"model,omitempty"`
+	Effort       string                 `json:"effort,omitempty"`
+	Once         bool                   `json:"once,omitempty"`
+	PollInterval string                 `json:"poll_interval,omitempty"`
+	PID          int                    `json:"pid,omitempty"`
+	StartedAt    time.Time              `json:"started_at,omitempty"`
+	FinishedAt   time.Time              `json:"finished_at,omitempty"`
+	ExitCode     *int                   `json:"exit_code,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	StdoutPath   string                 `json:"stdout_path,omitempty"`
+	StderrPath   string                 `json:"stderr_path,omitempty"`
+	Command      []string               `json:"command,omitempty"`
+	Attempts     int                    `json:"attempts,omitempty"`
+	Successes    int                    `json:"successes,omitempty"`
+	Failures     int                    `json:"failures,omitempty"`
+	CurrentBead  string                 `json:"current_bead,omitempty"`
+	LastError    string                 `json:"last_error,omitempty"`
+	LastResult   *WorkerExecutionResult `json:"last_result,omitempty"`
+}
+
+type WorkerExecutionResult struct {
+	BeadID     string `json:"bead_id,omitempty"`
+	Status     string `json:"status,omitempty"`
+	Detail     string `json:"detail,omitempty"`
+	SessionID  string `json:"session_id,omitempty"`
+	BaseRev    string `json:"base_rev,omitempty"`
+	ResultRev  string `json:"result_rev,omitempty"`
+	RetryAfter string `json:"retry_after,omitempty"`
+}
+
+type executeLoopSummary struct {
+	Attempts          int                     `json:"attempts"`
+	Successes         int                     `json:"successes"`
+	Failures          int                     `json:"failures"`
+	LastFailureStatus string                  `json:"last_failure_status,omitempty"`
+	Results           []WorkerExecutionResult `json:"results"`
 }
 
 type workerHandle struct {
@@ -105,6 +130,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		ID:           id,
 		Kind:         "execute-loop",
 		State:        "starting",
+		Status:       "starting",
 		ProjectRoot:  m.projectRoot,
 		Harness:      spec.Harness,
 		Model:        spec.Model,
@@ -129,6 +155,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	}
 
 	record.State = "running"
+	record.Status = "running"
 	record.PID = cmd.Process.Pid
 	if err := m.writeRecord(dir, record); err != nil {
 		return WorkerRecord{}, err
@@ -219,17 +246,21 @@ func (m *WorkerManager) waitForExit(id, dir string) {
 	record.FinishedAt = time.Now().UTC()
 	if err == nil {
 		record.State = "exited"
+		record.Status = "exited"
 		code := 0
 		record.ExitCode = &code
 	} else if exitErr, ok := err.(*exec.ExitError); ok {
 		record.State = "exited"
+		record.Status = "exited"
 		code := exitErr.ExitCode()
 		record.ExitCode = &code
 		record.Error = strings.TrimSpace(exitErr.Error())
 	} else {
 		record.State = "failed"
+		record.Status = "failed"
 		record.Error = err.Error()
 	}
+	m.enrichFromExecuteLoopOutput(dir, &record)
 	_ = m.writeRecord(dir, record)
 }
 
@@ -258,6 +289,9 @@ func (m *WorkerManager) defaultBuildExecuteLoop(spec ExecuteLoopWorkerSpec) (*ex
 }
 
 func (m *WorkerManager) writeRecord(dir string, record WorkerRecord) error {
+	if record.Status == "" {
+		record.Status = record.State
+	}
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return err
@@ -274,7 +308,50 @@ func (m *WorkerManager) readRecord(dir string) (WorkerRecord, error) {
 	if err := json.Unmarshal(data, &record); err != nil {
 		return WorkerRecord{}, err
 	}
+	if record.Status == "" {
+		record.Status = record.State
+	}
+	m.enrichFromExecuteLoopOutput(dir, &record)
 	return record, nil
+}
+
+func (m *WorkerManager) enrichFromExecuteLoopOutput(dir string, record *WorkerRecord) {
+	if record == nil {
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "stdout.log"))
+	if err != nil || len(strings.TrimSpace(string(data))) == 0 {
+		if record.LastError == "" {
+			record.LastError = record.Error
+		}
+		return
+	}
+	var summary executeLoopSummary
+	if err := json.Unmarshal(data, &summary); err != nil {
+		if record.LastError == "" {
+			record.LastError = record.Error
+		}
+		return
+	}
+	record.Attempts = summary.Attempts
+	record.Successes = summary.Successes
+	record.Failures = summary.Failures
+	if len(summary.Results) > 0 {
+		last := summary.Results[len(summary.Results)-1]
+		record.CurrentBead = last.BeadID
+		record.LastResult = &last
+		if last.Status != "" {
+			record.Status = last.Status
+		}
+		if last.Detail != "" {
+			record.LastError = last.Detail
+		}
+	} else if summary.LastFailureStatus != "" {
+		record.Status = summary.LastFailureStatus
+	}
+	if record.LastError == "" {
+		record.LastError = record.Error
+	}
 }
 
 func commandVector(cmd *exec.Cmd) []string {

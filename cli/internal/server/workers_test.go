@@ -33,6 +33,7 @@ func TestWorkerManagerStartListShowLogs(t *testing.T) {
 
 	final := waitForWorkerExit(t, m, record.ID)
 	assert.Equal(t, "exited", final.State)
+	assert.Equal(t, "exited", final.Status)
 	require.NotNil(t, final.ExitCode)
 	assert.Equal(t, 0, *final.ExitCode)
 
@@ -49,6 +50,54 @@ func TestWorkerManagerStartListShowLogs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "worker stdout")
 	assert.Contains(t, stderr, "worker stderr")
+}
+
+func TestWorkerManagerEnrichesExecuteLoopSummary(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+	dir := filepath.Join(root, ".ddx", "workers", "worker-test")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	record := WorkerRecord{
+		ID:          "worker-test",
+		Kind:        "execute-loop",
+		State:       "exited",
+		ProjectRoot: root,
+		StdoutPath:  relToProject(root, filepath.Join(dir, "stdout.log")),
+		StderrPath:  relToProject(root, filepath.Join(dir, "stderr.log")),
+	}
+	require.NoError(t, m.writeRecord(dir, record))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stdout.log"), []byte(`{
+  "project_root": "/tmp/project",
+  "attempts": 1,
+  "successes": 0,
+  "failures": 1,
+  "last_failure_status": "execution_failed",
+  "results": [
+    {
+      "bead_id": "ddx-1234abcd",
+      "status": "execution_failed",
+      "detail": "cancelled",
+      "session_id": "eb-123",
+      "base_rev": "abc",
+      "result_rev": "def",
+      "retry_after": "2026-04-11T10:00:00Z"
+    }
+  ]
+}
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stderr.log"), nil, 0o644))
+
+	shown, err := m.Show("worker-test")
+	require.NoError(t, err)
+	assert.Equal(t, "execution_failed", shown.Status)
+	assert.Equal(t, 1, shown.Attempts)
+	assert.Equal(t, 1, shown.Failures)
+	assert.Equal(t, "ddx-1234abcd", shown.CurrentBead)
+	require.NotNil(t, shown.LastResult)
+	assert.Equal(t, "ddx-1234abcd", shown.LastResult.BeadID)
+	assert.Equal(t, "execution_failed", shown.LastResult.Status)
+	assert.Equal(t, "cancelled", shown.LastError)
 }
 
 func TestWorkerManagerStop(t *testing.T) {
