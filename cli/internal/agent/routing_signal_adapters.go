@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,9 +12,10 @@ import (
 )
 
 const (
-	codexNativeSessionSourceKind = "native-session-jsonl"
-	claudeStatsCacheSourceKind   = "stats-cache"
-	claudeUnknownQuotaSourceKind = "docs-only"
+	codexNativeSessionSourceKind  = "native-session-jsonl"
+	claudeStatsCacheSourceKind    = "stats-cache"
+	claudeQuotaSnapshotSourceKind = "quota-snapshot"
+	claudeUnknownQuotaSourceKind  = "docs-only"
 )
 
 // SignalSourceMetadata captures where a provider-native routing signal came from
@@ -62,6 +64,16 @@ type ClaudeNativeSignals struct {
 	HistoricalUsage UsageSignal            `json:"historical_usage"`
 	ByModel         map[string]UsageSignal `json:"by_model,omitempty"`
 	ByDay           map[string]UsageSignal `json:"by_day,omitempty"`
+}
+
+type claudeQuotaSnapshotFile struct {
+	ObservedAt    time.Time `json:"observed_at"`
+	State         string    `json:"state"`
+	UsedPercent   int       `json:"used_percent,omitempty"`
+	WindowMinutes int       `json:"window_minutes,omitempty"`
+	ResetsAt      string    `json:"resets_at,omitempty"`
+	Basis         string    `json:"basis,omitempty"`
+	Notes         string    `json:"notes,omitempty"`
 }
 
 type codexSessionEvent struct {
@@ -282,6 +294,72 @@ func ReadClaudeNativeSignals(path string, now time.Time) (ClaudeNativeSignals, e
 		signals.HistoricalUsage.TotalTokens = signals.HistoricalUsage.InputTokens + signals.HistoricalUsage.CachedInputTokens + signals.HistoricalUsage.OutputTokens
 	}
 	return signals, nil
+}
+
+func ReadClaudeQuotaSnapshot(path string, now time.Time) (QuotaSignal, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return QuotaSignal{}, err
+	}
+
+	var snapshot claudeQuotaSnapshotFile
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return QuotaSignal{}, err
+	}
+	if snapshot.ObservedAt.IsZero() {
+		if stat, statErr := os.Stat(path); statErr == nil {
+			snapshot.ObservedAt = stat.ModTime().UTC()
+		}
+	}
+
+	age := now.UTC().Sub(snapshot.ObservedAt.UTC())
+	if snapshot.ObservedAt.IsZero() || age < 0 {
+		age = 0
+	}
+
+	return QuotaSignal{
+		Source: SignalSourceMetadata{
+			Provider:   "claude",
+			Kind:       claudeQuotaSnapshotSourceKind,
+			Path:       path,
+			ObservedAt: snapshot.ObservedAt.UTC(),
+			Freshness:  freshnessForAge(age),
+			AgeSeconds: int64(age.Seconds()),
+			Basis:      coalesce(snapshot.Basis, "durable async quota snapshot"),
+			Notes:      snapshot.Notes,
+		},
+		State:         coalesce(snapshot.State, "unknown"),
+		UsedPercent:   snapshot.UsedPercent,
+		WindowMinutes: snapshot.WindowMinutes,
+		ResetsAt:      snapshot.ResetsAt,
+	}, nil
+}
+
+func WriteClaudeQuotaSnapshot(path string, signal QuotaSignal) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	payload := claudeQuotaSnapshotFile{
+		ObservedAt:    signal.Source.ObservedAt,
+		State:         signal.State,
+		UsedPercent:   signal.UsedPercent,
+		WindowMinutes: signal.WindowMinutes,
+		ResetsAt:      signal.ResetsAt,
+		Basis:         signal.Source.Basis,
+		Notes:         signal.Source.Notes,
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+func coalesce(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
 
 func parseClaudeUsageCollection(raw any) map[string]UsageSignal {

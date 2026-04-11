@@ -90,6 +90,47 @@ func TestProbeHarnessStateUsesClaudeStatsCacheAndLeavesQuotaUnknown(t *testing.T
 	assert.Equal(t, 582, state.RoutingSignal.HistoricalUsage.TotalTokens)
 }
 
+func TestProbeHarnessStateUsesClaudeQuotaSnapshotWhenAvailable(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	statsDir := filepath.Join(home, ".claude")
+	require.NoError(t, os.MkdirAll(statsDir, 0o755))
+	statsPath := filepath.Join(statsDir, "stats-cache.json")
+	require.NoError(t, os.WriteFile(statsPath, []byte(`{
+		"dailyActivity": [
+			{"date":"2026-04-09","sessions":2,"usage":{"input_tokens":100,"cached_input_tokens":5,"output_tokens":20}}
+		]
+	}`), 0o644))
+	snapshotPath := filepath.Join(home, ".ddx", "provider-state", "claude-quota.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(snapshotPath), 0o755))
+	require.NoError(t, WriteClaudeQuotaSnapshot(snapshotPath, QuotaSignal{
+		Source: SignalSourceMetadata{
+			ObservedAt: time.Now().UTC().Add(-30 * time.Minute),
+			Basis:      "async snapshot",
+			Notes:      "captured in background",
+		},
+		State:         "ok",
+		UsedPercent:   61,
+		WindowMinutes: 300,
+		ResetsAt:      "2026-04-12T04:00:00Z",
+	}))
+
+	t.Setenv("HOME", home)
+	t.Setenv(claudeStatsCacheEnv, statsPath)
+	t.Setenv(claudeQuotaSnapshotEnv, snapshotPath)
+
+	state := r.ProbeHarnessState("claude", 2*time.Second)
+	require.NotNil(t, state.RoutingSignal)
+
+	assert.Equal(t, "ok", state.QuotaState)
+	assert.True(t, state.QuotaOK)
+	assert.Equal(t, claudeQuotaSnapshotSourceKind, state.RoutingSignal.CurrentQuota.Source.Kind)
+	assert.Equal(t, 61, state.RoutingSignal.CurrentQuota.UsedPercent)
+	assert.Equal(t, 125, state.RoutingSignal.HistoricalUsage.TotalTokens)
+}
+
 func TestProbeHarnessStateUsesRecentClaudeQuotaFailureOverlay(t *testing.T) {
 	r := newTestRunnerForRouting()
 
@@ -132,6 +173,12 @@ func TestProbeHarnessStateUsesRecentClaudeQuotaFailureOverlay(t *testing.T) {
 	assert.Equal(t, "recent session failure", state.RoutingSignal.Source.Basis)
 	assert.NotEmpty(t, state.RoutingSignal.CurrentQuota.ResetsAt)
 	assert.Equal(t, 125, state.RoutingSignal.HistoricalUsage.TotalTokens)
+
+	snapshotPath := filepath.Join(home, ".ddx", "provider-state", "claude-quota.json")
+	quota, err := ReadClaudeQuotaSnapshot(snapshotPath, time.Now().UTC())
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", quota.State)
+	assert.Equal(t, sessionLogSourceKind, quota.Source.Kind)
 }
 
 func TestProbeAndBuildCandidatePlansUsesNativeQuotaSignal(t *testing.T) {

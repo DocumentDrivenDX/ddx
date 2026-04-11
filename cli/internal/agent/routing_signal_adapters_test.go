@@ -104,3 +104,30 @@ func TestReadClaudeNativeSignalsUnknownQuotaOnly(t *testing.T) {
 	assert.Equal(t, "unknown", signals.CurrentQuota.Source.Freshness)
 	assert.Equal(t, "current quota/headroom remains unknown", signals.CurrentQuota.Source.Notes)
 }
+
+func TestReadClaudeQuotaSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "claude-quota.json")
+	now := time.Date(2026, 4, 11, 11, 0, 0, 0, time.UTC)
+	observedAt := time.Date(2026, 4, 11, 10, 30, 0, 0, time.UTC)
+	require.NoError(t, WriteClaudeQuotaSnapshot(path, QuotaSignal{
+		Source: SignalSourceMetadata{
+			ObservedAt: observedAt,
+			Basis:      "recent session failure",
+			Notes:      "You've hit your limit",
+		},
+		State:    "blocked",
+		ResetsAt: "2026-04-12T04:00:00Z",
+	}))
+
+	quota, err := ReadClaudeQuotaSnapshot(path, now)
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", quota.State)
+	assert.Equal(t, claudeQuotaSnapshotSourceKind, quota.Source.Kind)
+	assert.Equal(t, path, quota.Source.Path)
+	assert.Equal(t, observedAt, quota.Source.ObservedAt)
+	assert.Equal(t, "recent", quota.Source.Freshness)
+	assert.Equal(t, "recent session failure", quota.Source.Basis)
+	assert.Equal(t, "You've hit your limit", quota.Source.Notes)
+	assert.Equal(t, "2026-04-12T04:00:00Z", quota.ResetsAt)
+}

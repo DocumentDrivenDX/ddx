@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	codexNativeSessionEnv = "DDX_CODEX_NATIVE_SESSION_JSONL"
-	claudeStatsCacheEnv   = "DDX_CLAUDE_STATS_CACHE"
-	sessionLogSourceKind  = "recent-session-log"
+	codexNativeSessionEnv  = "DDX_CODEX_NATIVE_SESSION_JSONL"
+	claudeStatsCacheEnv    = "DDX_CLAUDE_STATS_CACHE"
+	claudeQuotaSnapshotEnv = "DDX_CLAUDE_QUOTA_SNAPSHOT"
+	sessionLogSourceKind   = "recent-session-log"
 )
 
 // LoadRoutingSignalSnapshot returns the provider-native routing signal snapshot
@@ -194,6 +195,12 @@ func (r *Runner) loadClaudeRoutingSignal(now time.Time) RoutingSignalSnapshot {
 		}
 	}
 
+	if snapshotPath := resolveClaudeQuotaSnapshotPath(); snapshotPath != "" {
+		if quota, quotaErr := ReadClaudeQuotaSnapshot(snapshotPath, now); quotaErr == nil {
+			signals.CurrentQuota = quota
+		}
+	}
+
 	return RoutingSignalSnapshot{
 		Provider:        "claude",
 		Source:          signals.HistoricalUsage.Source,
@@ -233,7 +240,21 @@ func (r *Runner) overlayRecentQuotaBlock(harnessName string, snapshot RoutingSig
 		State:    "blocked",
 		ResetsAt: inferResetAt(detail, entry.Timestamp),
 	}
+	if harnessName == "claude" {
+		_ = WriteClaudeQuotaSnapshot(resolveClaudeQuotaSnapshotPath(), snapshot.CurrentQuota)
+	}
 	return snapshot
+}
+
+func resolveClaudeQuotaSnapshotPath() string {
+	if path := strings.TrimSpace(os.Getenv(claudeQuotaSnapshotEnv)); path != "" {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".ddx", "provider-state", "claude-quota.json")
 }
 
 func quotaBlockDetail(entry SessionEntry) string {
