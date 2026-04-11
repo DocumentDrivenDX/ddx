@@ -32,6 +32,8 @@ build:
 build-all: clean deps
 	@echo "Building for all platforms..."
 	@mkdir -p $(BUILD_DIR)
+	@echo "Building current platform..."
+	go build $(LDFLAGS) -o $(BUILD_DIR)/ddx .
 	@for platform in $(PLATFORMS); do \
 		OS=$$(echo $$platform | cut -d'/' -f1); \
 		ARCH=$$(echo $$platform | cut -d'/' -f2); \
