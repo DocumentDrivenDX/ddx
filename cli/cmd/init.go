@@ -18,6 +18,12 @@ import (
 
 var initGitignoreRules = []string{
 	".ddx/.execute-bead-wt-*/",
+	".ddx/*.lock/",
+	".ddx/agent-logs/",
+	".ddx/workers/",
+	".codex/",
+	".agent/logs/",
+	".agent/sessions/",
 }
 
 // InitOptions contains all configuration options for project initialization

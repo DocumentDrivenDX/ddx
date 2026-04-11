@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -56,11 +57,46 @@ func TestInitProject_ManagesScratchGitignoreRules(t *testing.T) {
 		t.Fatalf("expected .gitignore to be written, got %v", err)
 	}
 	content := string(raw)
-	if !containsExactLine(content, ".ddx/.execute-bead-wt-*/") {
-		t.Fatalf("expected execute-bead scratch worktree ignore rule in .gitignore, got:\n%s", content)
+	for _, rule := range initGitignoreRules {
+		if !containsExactLine(content, rule) {
+			t.Fatalf("expected managed ignore rule %q in .gitignore, got:\n%s", rule, content)
+		}
 	}
 	if containsExactLine(content, ".ddx/executions/") {
 		t.Fatalf("did not expect tracked execution evidence to be ignored, got:\n%s", content)
+	}
+	if containsExactLine(content, ".claude/") || containsExactLine(content, ".claude/skills/") {
+		t.Fatalf("did not expect claude skill mirror to be ignored, got:\n%s", content)
+	}
+}
+
+func TestInitProject_GitignoreRulesAreIdempotent(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+
+	_, err := initProject(te.Dir, InitOptions{NoGit: true})
+	if err != nil {
+		t.Fatalf("expected first initProject success, got %v", err)
+	}
+	_, err = initProject(te.Dir, InitOptions{NoGit: true, Force: true})
+	if err != nil {
+		t.Fatalf("expected second initProject success, got %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(te.Dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected .gitignore to be written, got %v", err)
+	}
+	content := string(raw)
+	for _, rule := range initGitignoreRules {
+		count := 0
+		for _, line := range strings.Split(content, "\n") {
+			if strings.TrimSpace(line) == rule {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Fatalf("expected managed ignore rule %q exactly once, got %d copies in:\n%s", rule, count, content)
+		}
 	}
 }
 
