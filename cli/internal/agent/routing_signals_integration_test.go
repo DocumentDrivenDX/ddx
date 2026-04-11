@@ -178,7 +178,7 @@ func TestProbeHarnessStateUsesRecentClaudeQuotaFailureOverlay(t *testing.T) {
 	quota, err := ReadClaudeQuotaSnapshot(snapshotPath, time.Now().UTC())
 	require.NoError(t, err)
 	assert.Equal(t, "blocked", quota.State)
-	assert.Equal(t, sessionLogSourceKind, quota.Source.Kind)
+	assert.Equal(t, claudeQuotaSnapshotSourceKind, quota.Source.Kind)
 }
 
 func TestProbeAndBuildCandidatePlansUsesNativeQuotaSignal(t *testing.T) {
