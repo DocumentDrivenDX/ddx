@@ -1035,7 +1035,24 @@ func (f *CommandFactory) newAgentExecuteLoopCommand() *cobra.Command {
 		Short: "Drain the single-project execution-ready bead queue",
 		Long: `Scans the current project's execution-ready bead queue, claims the next
 ready bead, runs ddx agent execute-bead from the project root, records the
-structured result, and continues until no unattempted ready work remains.`,
+structured result, and continues until no unattempted ready work remains.
+
+Use execute-loop as the normal queue-driven execution surface. It consumes the
+execution-ready bead queue from the current project, delegates each attempt to
+ddx agent execute-bead, and records the resulting loop status back into the
+tracker.`,
+		Example: `  # Drain the current execution-ready queue once and exit
+  ddx agent execute-loop
+
+  # Pick one ready bead, execute it, and stop
+  ddx agent execute-loop --once
+
+  # Run continuously as a bounded queue worker
+  ddx agent execute-loop --poll-interval 30s
+
+  # Force a specific harness/model for a debugging pass
+  ddx agent execute-loop --once --harness codex
+  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7`,
 		Args: cobra.NoArgs,
 		RunE: f.runAgentExecuteLoop,
 	}

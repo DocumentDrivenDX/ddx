@@ -46,6 +46,9 @@ func main() {
 	if err := doc.GenMarkdownTreeCustom(root, outDir, frontMatter, linkHandler); err != nil {
 		log.Fatalf("generating docs: %v", err)
 	}
+	if err := injectExamples(outDir, root); err != nil {
+		log.Fatalf("injecting examples: %v", err)
+	}
 
 	// Write a generated _index.md that lists every top-level command.
 	if err := writeIndex(outDir, root); err != nil {
@@ -102,6 +105,61 @@ func writeIndex(outDir string, root *cobra.Command) error {
 	}
 
 	return os.WriteFile(filepath.Join(outDir, "_index.md"), []byte(sb.String()), 0644)
+}
+
+func injectExamples(outDir string, root *cobra.Command) error {
+	for _, cmd := range visibleCommands(root) {
+		example := strings.TrimSpace(cmd.Example)
+		if example == "" {
+			continue
+		}
+		filename := filepath.Join(outDir, commandDocName(cmd)+".md")
+		raw, err := os.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		content := string(raw)
+		if strings.Contains(content, "\n### Examples\n") {
+			continue
+		}
+		section := "\n### Examples\n\n```\n" + example + "\n```\n"
+		switch {
+		case strings.Contains(content, "\n### Options\n"):
+			content = strings.Replace(content, "\n### Options\n", section+"\n### Options\n", 1)
+		case strings.Contains(content, "\n### SEE ALSO\n"):
+			content = strings.Replace(content, "\n### SEE ALSO\n", section+"\n### SEE ALSO\n", 1)
+		default:
+			content += section
+		}
+		if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func visibleCommands(root *cobra.Command) []*cobra.Command {
+	var out []*cobra.Command
+	var walk func(*cobra.Command)
+	walk = func(c *cobra.Command) {
+		if c == nil {
+			return
+		}
+		for _, sub := range c.Commands() {
+			if sub.Hidden {
+				continue
+			}
+			out = append(out, sub)
+			walk(sub)
+		}
+	}
+	walk(root)
+	return out
+}
+
+func commandDocName(c *cobra.Command) string {
+	parts := strings.Fields(c.CommandPath())
+	return strings.Join(parts, "_")
 }
 
 // defaultOutDir returns the default output directory relative to the location
