@@ -376,10 +376,14 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	costUSD := 0.0
 	resultModel := model
 	resultHarness := harness
+	agentErrMsg := ""
 	if agentResult != nil {
 		exitCode = agentResult.ExitCode
 		tokens = agentResult.Tokens
 		costUSD = agentResult.CostUSD
+		if agentResult.Error != "" {
+			agentErrMsg = agentResult.Error
+		}
 		if agentResult.Model != "" {
 			resultModel = agentResult.Model
 		}
@@ -387,9 +391,10 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			resultHarness = agentResult.Harness
 		}
 	}
-	agentErrMsg := ""
 	if agentErr != nil {
-		exitCode = 1
+		if exitCode == 0 {
+			exitCode = 1
+		}
 		agentErrMsg = agentErr.Error()
 	}
 	executionFailed := exitCode != 0
@@ -446,6 +451,14 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 
 	// Determine outcome: no-changes, merge, or preserve.
 	switch {
+	case executionFailed && resultRev == baseRev:
+		res.Outcome = "error"
+		if agentErrMsg != "" {
+			res.Reason = agentErrMsg
+		} else {
+			res.Reason = "agent execution failed"
+		}
+
 	case resultRev == baseRev:
 		res.Outcome = "no-changes"
 		res.Reason = "agent made no commits"

@@ -653,7 +653,8 @@ func TestExecuteBeadOrphanRecovery(t *testing.T) {
 }
 
 // TestExecuteBeadAgentErrorNoCommits verifies that when the agent runner returns
-// an error but makes no commits, exitCode=1 and outcome="no-changes".
+// an error and makes no commits, the outcome is an execution error rather than
+// a misleading no-change result.
 func TestExecuteBeadAgentErrorNoCommits(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
@@ -665,9 +666,34 @@ func TestExecuteBeadAgentErrorNoCommits(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, 1, res.ExitCode)
-	assert.Equal(t, "no-changes", res.Outcome)
+	assert.Equal(t, "error", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
+	assert.Equal(t, "agent crashed", res.Reason)
+	assert.Equal(t, "agent crashed", res.Error)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
+	assert.Empty(t, res.PreserveRef)
+}
+
+func TestExecuteBeadTimeoutNoCommitsReportsExecutionFailure(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "aaaa1111",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{
+		ExitCode: -1,
+		Error:    "timeout after 5m",
+		Harness:  "codex",
+	}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, -1, res.ExitCode)
+	assert.Equal(t, "error", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
+	assert.Equal(t, "timeout after 5m", res.Reason)
+	assert.Equal(t, "timeout after 5m", res.Error)
+	assert.Equal(t, "aaaa1111", res.ResultRev)
 	assert.Empty(t, res.PreserveRef)
 }
 
@@ -874,6 +900,11 @@ func TestExecuteBeadStatusMapping(t *testing.T) {
 		{
 			name:     "execution failure dominates preserved outcome",
 			result:   ExecuteBeadResult{Outcome: "preserved", ExitCode: 1, Reason: "agent execution failed"},
+			expected: agent.ExecuteBeadStatusExecutionFailed,
+		},
+		{
+			name:     "error outcome stays execution failure",
+			result:   ExecuteBeadResult{Outcome: "error", ExitCode: -1, Reason: "timeout after 5m"},
 			expected: agent.ExecuteBeadStatusExecutionFailed,
 		},
 		{
