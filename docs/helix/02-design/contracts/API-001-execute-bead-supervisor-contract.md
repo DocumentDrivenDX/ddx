@@ -60,6 +60,12 @@ The first release does not require multi-project discovery, cross-project
 scheduling, or multi-host coordination. A worker instance binds to exactly one
 project context for the duration of a loop.
 
+Each attempt also has a tracked execution-evidence bundle under
+`.ddx/executions/<attempt-id>/`. The supervisor may read and surface those
+artifacts, but it does not reinterpret them as generic `exec-runs`
+attachments; the bundle is the canonical tracked evidence for one
+`execute-bead` attempt.
+
 ## Single-Project State Machine
 
 The supervision loop is a bounded state machine that repeats until the queue is
@@ -197,6 +203,7 @@ At minimum, the loop should expose:
 - last success timestamp
 - last failure `status`
 - current worktree path
+- current execution bundle path
 - current preserve ref, if any
 
 ## Acceptance Notes

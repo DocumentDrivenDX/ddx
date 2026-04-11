@@ -28,6 +28,11 @@ Executions are stored repo-locally under `.ddx/`:
 
 No hosted service or database is required.
 
+This guide describes the generic `ddx exec` substrate only. It does not govern
+the tracked `execute-bead` attempt bundles written under
+`.ddx/executions/<attempt-id>/`, which are a separate artifact class used for
+implementation replay and commit provenance.
+
 ## Registering an Execution Definition
 
 An execution definition is a JSON record stored in `.ddx/exec-definitions.jsonl`.

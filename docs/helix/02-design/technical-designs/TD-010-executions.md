@@ -84,6 +84,19 @@ Legacy compatibility:
 - new authoritative writes target the bead-backed collections and attachment
   directories above
 
+This storage model does not own the tracked `execute-bead` attempt bundle under
+`.ddx/executions/<attempt-id>/`.
+
+- `exec-runs` / `exec-runs.d` remain the generic runtime substrate for
+  execution definitions and reusable run history
+- `.ddx/executions/<attempt-id>/` is a tracked git artifact for one
+  `execute-bead` attempt, containing prompt/manifest/result/check provenance
+  for implementation replay and audit
+
+If an `execute-bead` iteration runs graph-authored execution definitions, it
+may reference `exec-runs` records from its bundle, but it must not collapse the
+two storage classes into one path or retention policy.
+
 ## Pre-exec Metric Storage Migration
 
 Prior to the exec substrate (before commit `2647ae4`), the metric store wrote

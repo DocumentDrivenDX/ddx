@@ -315,6 +315,42 @@ different.
 12. Always remove the temporary worktree after preserving enough evidence for
     replay and introspection.
 
+### Execute-Bead Evidence Bundle
+
+`execute-bead` also produces a tracked attempt bundle under:
+
+```text
+.ddx/executions/<attempt-id>/
+```
+
+This bundle is distinct from the generic `exec-runs` substrate described in
+FEAT-010.
+
+- `exec-runs` / `exec-runs.d` remain the generic runtime store for reusable
+  execution definitions and execution runs.
+- `.ddx/executions/<attempt-id>/` is the tracked execute-bead attempt bundle
+  used for replay, commit provenance, and autoresearch.
+
+At minimum, the execute-bead bundle may contain:
+
+- `prompt.md`
+- `manifest.json`
+- `result.json`
+- `checks.json` when required gates or checks ran
+- normalized DDx-owned execution logs or provider/session references
+
+Default policy:
+
+- landed attempts commit their `.ddx/executions/<attempt-id>/` bundle with the
+  landed work or in an adjacent execution-evidence commit
+- preserved attempts keep the same tracked bundle on the preserved ref
+- provider-native transcripts remain external by default unless DDx explicitly
+  owns them
+
+This split is intentional: the generic execution store remains append-only
+runtime history, while execute-bead bundles are tracked git artifacts tied to a
+specific implementation attempt.
+
 ### Epic Execution Workflow
 
 Epics are worked differently from single tickets.
@@ -389,7 +425,9 @@ Field notes:
 Full conversation transcripts and detailed session evidence remain in
 provider-native stores or embedded-runtime telemetry stores. DDx keeps routing
 facts, runtime metadata, and references rather than duplicating those bodies in
-git history.
+git history. The tracked exception is the execute-bead attempt bundle under
+`.ddx/executions/<attempt-id>/`, which stores the normalized prompt, manifest,
+result, checks, and provenance pointers for one implementation attempt.
 
 ## Comparison Dispatch
 

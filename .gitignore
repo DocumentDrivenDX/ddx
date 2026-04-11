@@ -421,6 +421,8 @@ cli/internal/agent/.ddx/
 .ddx/plugins/
 .helix-logs/
 
+# Tracked execute-bead evidence bundles intentionally live under .ddx/executions/
+
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/
 

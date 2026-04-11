@@ -117,6 +117,19 @@ The authoritative run metadata may be stored as a bead-backed record in a
 dedicated execution collection, with named attachment files for large bodies,
 as long as DDx preserves one coherent run identity and inspection model.
 
+This generic execution-run model is not the same as the tracked
+`execute-bead` attempt bundle under `.ddx/executions/<attempt-id>/`.
+
+- `exec-runs` stores reusable execution-run history for `ddx exec`,
+  metrics, checks, and other generic execution surfaces
+- `.ddx/executions/<attempt-id>/` stores one tracked execute-bead attempt
+  bundle with prompt, manifest, result, checks, and provenance pointers
+
+`execute-bead` may consume graph-authored execution definitions and may emit
+references to generic execution runs, but its tracked attempt evidence is a
+separate artifact class because it is intended to be committed with landed or
+preserved implementation work.
+
 ## Requirements
 
 ### Functional
