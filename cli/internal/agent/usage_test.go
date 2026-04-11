@@ -135,8 +135,8 @@ func TestTC006_UsageAggregation(t *testing.T) {
 
 // TC-007: Sessions spanning multiple days; filter with since=today returns only today's.
 func TestTC007_SinceToday(t *testing.T) {
-	now := time.Now().UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	today := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
+	now := today.Add(12 * time.Hour)
 	yesterday := today.Add(-24 * time.Hour)
 
 	entries := []SessionEntry{
