@@ -15,6 +15,7 @@ type ExecuteBeadReport struct {
 	AttemptID   string `json:"attempt_id,omitempty"`
 	WorkerID    string `json:"worker_id,omitempty"`
 	Harness     string `json:"harness,omitempty"`
+	Provider    string `json:"provider,omitempty"`
 	Model       string `json:"model,omitempty"`
 	Status      string `json:"status"`
 	Detail      string `json:"detail,omitempty"`

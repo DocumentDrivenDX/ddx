@@ -29,6 +29,7 @@ type WorkerRecord struct {
 	Status         string                 `json:"status,omitempty"`
 	ProjectRoot    string                 `json:"project_root"`
 	Harness        string                 `json:"harness,omitempty"`
+	Provider       string                 `json:"provider,omitempty"`
 	Model          string                 `json:"model,omitempty"`
 	Effort         string                 `json:"effort,omitempty"`
 	Once           bool                   `json:"once,omitempty"`
@@ -56,6 +57,7 @@ type WorkerExecutionResult struct {
 	AttemptID  string `json:"attempt_id,omitempty"`
 	WorkerID   string `json:"worker_id,omitempty"`
 	Harness    string `json:"harness,omitempty"`
+	Provider   string `json:"provider,omitempty"`
 	Model      string `json:"model,omitempty"`
 	Status     string `json:"status,omitempty"`
 	Detail     string `json:"detail,omitempty"`
@@ -414,6 +416,9 @@ func (m *WorkerManager) enrichFromExecuteLoopOutput(dir string, record *WorkerRe
 		record.LastResult = &last
 		if record.Harness == "" && last.Harness != "" {
 			record.Harness = last.Harness
+		}
+		if record.Provider == "" && last.Provider != "" {
+			record.Provider = last.Provider
 		}
 		if record.Model == "" && last.Model != "" {
 			record.Model = last.Model

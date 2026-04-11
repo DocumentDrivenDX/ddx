@@ -72,6 +72,7 @@ type QuorumOptions struct {
 // Result holds the output of an agent invocation.
 type Result struct {
 	Harness         string          `json:"harness"`
+	Provider        string          `json:"provider,omitempty"`
 	Model           string          `json:"model,omitempty"`
 	ExitCode        int             `json:"exit_code"`
 	Output          string          `json:"output"`

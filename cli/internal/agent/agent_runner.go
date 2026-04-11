@@ -172,6 +172,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 
 	result := &Result{
 		Harness:        "agent",
+		Provider:       agentResult.SelectedProvider,
 		Model:          agentResult.Model,
 		Output:         agentResult.Output,
 		InputTokens:    agentResult.Tokens.Input,

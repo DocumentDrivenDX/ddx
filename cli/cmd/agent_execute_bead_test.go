@@ -649,14 +649,23 @@ func TestCheckpointCommitIgnoresRuntimeArtifacts(t *testing.T) {
 	runGit("init")
 	runGit("config", "user.name", "DDx Test")
 	runGit("config", "user.email", "ddx@example.com")
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte(".ddx/*.lock/\n.ddx/workers/\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte(".ddx/*.lock/\n.ddx/workers/\n.ddx/.execute-bead-wt-*/\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("base\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "skills"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "skills", "keep.txt"), []byte("tracked\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "config.yaml"), []byte("agent:\n  harness: codex\n"), 0o644))
 	runGit("add", ".")
 	runGit("commit", "-m", "base")
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("changed\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "config.yaml"), []byte("agent:\n  harness: agent\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "beads.jsonl"), []byte("{\"id\":\"ddx-temp\"}\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "beads.lock"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "beads.lock", "acquired_at"), []byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "agent-logs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "agent-logs", "sessions.jsonl"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "executions", "attempt-1"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "executions", "attempt-1", "result.json"), []byte("{}\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".ddx", "workers", "worker-1"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, ".ddx", "workers", "worker-1", "status.json"), []byte("{}"), 0o644))
 
@@ -667,7 +676,12 @@ func TestCheckpointCommitIgnoresRuntimeArtifacts(t *testing.T) {
 
 	tree := runGit("ls-tree", "-r", "--name-only", commit)
 	assert.Contains(t, tree, "tracked.txt")
+	assert.Contains(t, tree, ".ddx/config.yaml")
+	assert.Contains(t, tree, ".ddx/skills/keep.txt")
+	assert.NotContains(t, tree, ".ddx/beads.jsonl")
 	assert.NotContains(t, tree, ".ddx/beads.lock/acquired_at")
+	assert.NotContains(t, tree, ".ddx/agent-logs/sessions.jsonl")
+	assert.NotContains(t, tree, ".ddx/executions/attempt-1/result.json")
 	assert.NotContains(t, tree, ".ddx/workers/worker-1/status.json")
 }
 

@@ -1079,6 +1079,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				AttemptID:   res.AttemptID,
 				WorkerID:    res.WorkerID,
 				Harness:     res.Harness,
+				Provider:    res.Provider,
 				Model:       res.Model,
 				Status:      res.Status,
 				Detail:      res.Detail,

@@ -82,6 +82,7 @@ func TestWorkerManagerEnrichesExecuteLoopSummary(t *testing.T) {
       "attempt_id": "20260411T000000-abcd1234",
       "worker_id": "worker-test",
       "harness": "agent",
+      "provider": "openrouter",
       "model": "qwen/qwen3.6-plus",
       "status": "execution_failed",
       "detail": "cancelled",
@@ -103,11 +104,13 @@ func TestWorkerManagerEnrichesExecuteLoopSummary(t *testing.T) {
 	assert.Equal(t, "ddx-1234abcd", shown.CurrentBead)
 	assert.Equal(t, "20260411T000000-abcd1234", shown.CurrentAttempt)
 	assert.Equal(t, "agent", shown.Harness)
+	assert.Equal(t, "openrouter", shown.Provider)
 	assert.Equal(t, "qwen/qwen3.6-plus", shown.Model)
 	require.NotNil(t, shown.LastResult)
 	assert.Equal(t, "ddx-1234abcd", shown.LastResult.BeadID)
 	assert.Equal(t, "20260411T000000-abcd1234", shown.LastResult.AttemptID)
 	assert.Equal(t, "agent", shown.LastResult.Harness)
+	assert.Equal(t, "openrouter", shown.LastResult.Provider)
 	assert.Equal(t, "qwen/qwen3.6-plus", shown.LastResult.Model)
 	assert.Equal(t, "execution_failed", shown.LastResult.Status)
 	assert.Equal(t, "cancelled", shown.LastError)

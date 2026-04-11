@@ -31,6 +31,7 @@ type ExecuteBeadResult struct {
 	PreserveRef  string    `json:"preserve_ref,omitempty"`
 	Reason       string    `json:"reason,omitempty"`
 	Harness      string    `json:"harness,omitempty"`
+	Provider     string    `json:"provider,omitempty"`
 	Model        string    `json:"model,omitempty"`
 	SessionID    string    `json:"session_id,omitempty"`
 	DurationMS   int       `json:"duration_ms"`
@@ -154,7 +155,8 @@ func (r *realExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string,
 		return "", fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 
-	addTracked := osexec.Command("git", "-C", dir, "add", "-u")
+	addTrackedArgs := append([]string{"-C", dir, "add", "-u", "--", "."}, executeBeadCheckpointExcludedPathspecs()...)
+	addTracked := osexec.Command("git", addTrackedArgs...)
 	addTracked.Env = env
 	if out, err := addTracked.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git add -u: %s: %w", strings.TrimSpace(string(out)), err)
@@ -169,6 +171,9 @@ func (r *realExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string,
 	for _, entry := range strings.Split(string(untrackedOut), "\x00") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
+			continue
+		}
+		if executeBeadCheckpointExcluded(entry) {
 			continue
 		}
 		untracked = append(untracked, entry)
@@ -207,6 +212,45 @@ func (r *realExecuteBeadGit) CheckpointCommit(dir, ref, message string) (string,
 		return "", err
 	}
 	return commit, nil
+}
+
+func executeBeadCheckpointExcludedPathspecs() []string {
+	return []string{
+		":(exclude).ddx/beads.jsonl",
+		":(exclude).ddx/executions/**",
+		":(exclude).ddx/agent-logs/**",
+		":(exclude).ddx/workers/**",
+		":(exclude).ddx/*.lock/**",
+		":(exclude).ddx/.execute-bead-wt-*/**",
+		":(exclude).ddx/run-state.json",
+	}
+}
+
+func executeBeadCheckpointExcluded(path string) bool {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "" {
+		return false
+	}
+	switch {
+	case path == ".ddx/beads.jsonl":
+		return true
+	case path == ".ddx/run-state.json":
+		return true
+	case strings.HasPrefix(path, ".ddx/executions/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/agent-logs/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/workers/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/beads.lock/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/") && strings.Contains(path, ".lock/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/.execute-bead-wt-"):
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *realExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
@@ -437,6 +481,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 	costUSD := 0.0
 	resultModel := model
 	resultHarness := harness
+	resultProvider := ""
 	agentErrMsg := ""
 	if agentResult != nil {
 		exitCode = agentResult.ExitCode
@@ -447,6 +492,9 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		}
 		if agentResult.Model != "" {
 			resultModel = agentResult.Model
+		}
+		if agentResult.Provider != "" {
+			resultProvider = agentResult.Provider
 		}
 		if agentResult.Harness != "" {
 			resultHarness = agentResult.Harness
@@ -470,6 +518,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 			WorkerID:     workerID,
 			BaseRev:      baseRev,
 			Harness:      resultHarness,
+			Provider:     resultProvider,
 			Model:        resultModel,
 			SessionID:    sessionID,
 			DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
@@ -499,6 +548,7 @@ func (f *CommandFactory) runAgentExecuteBeadWith(cmd *cobra.Command, args []stri
 		BaseRev:      baseRev,
 		ResultRev:    resultRev,
 		Harness:      resultHarness,
+		Provider:     resultProvider,
 		Model:        resultModel,
 		SessionID:    sessionID,
 		DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
