@@ -27,3 +27,5 @@ agent:
         default_harness: agent
         model_overrides:
             cheap: qwen/qwen3.6
+            fast: kimi/k2.5
+            smart: minimax/minimax-m2.7
