@@ -5,6 +5,7 @@ const (
 	ExecuteBeadStatusExecutionFailed            = "execution_failed"
 	ExecuteBeadStatusPostRunCheckFailed         = "post_run_check_failed"
 	ExecuteBeadStatusLandConflict               = "land_conflict"
+	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusSuccess                    = "success"
 )
 
@@ -17,8 +18,10 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 	}
 
 	switch outcome {
-	case "merged", "no-changes":
+	case "merged":
 		return ExecuteBeadStatusSuccess
+	case "no-changes":
+		return ExecuteBeadStatusNoChanges
 	case "preserved":
 		switch reason {
 		case "rebase failed", "ff-merge not possible", "ff-merge failed after rebase":

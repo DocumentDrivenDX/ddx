@@ -135,6 +135,53 @@ func TestExecuteBeadWorkerLandConflictStaysOpenAndContinues(t *testing.T) {
 	assert.Contains(t, events[0].Body, "preserve_ref=")
 }
 
+func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+	executed := []string{}
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executed = append(executed, beadID)
+			if beadID == first.ID {
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusNoChanges,
+					Detail:    "agent made no commits",
+					BaseRev:   "aaaa1111",
+					ResultRev: "aaaa1111",
+				}, nil
+			}
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "merged cleanly",
+				SessionID: "sess-4",
+				ResultRev: "facefeed",
+			}, nil
+		}),
+	}
+
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker"})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.ElementsMatch(t, []string{first.ID, second.ID}, executed)
+	assert.Equal(t, 2, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, result.LastFailureStatus)
+
+	firstGot, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, firstGot.Status)
+	assert.Empty(t, firstGot.Owner)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, events[0].Summary)
+	assert.Contains(t, events[0].Body, "agent made no commits")
+}
+
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

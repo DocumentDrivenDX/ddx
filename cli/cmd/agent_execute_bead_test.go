@@ -488,7 +488,7 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 
 	assert.Equal(t, "no-changes", res.Outcome)
-	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
+	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Empty(t, res.PreserveRef)
 }
@@ -867,9 +867,9 @@ func TestExecuteBeadStatusMapping(t *testing.T) {
 			expected: agent.ExecuteBeadStatusSuccess,
 		},
 		{
-			name:     "no changes success",
+			name:     "no changes stays non-success",
 			result:   ExecuteBeadResult{Outcome: "no-changes", ExitCode: 0},
-			expected: agent.ExecuteBeadStatusSuccess,
+			expected: agent.ExecuteBeadStatusNoChanges,
 		},
 		{
 			name:     "execution failure dominates preserved outcome",

@@ -49,6 +49,6 @@ func TestInvokeExecuteBeadFromLoopParsesJSONAmidWarnings(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "my-bead", res.BeadID)
 	assert.Equal(t, "no-changes", res.Outcome)
-	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
+	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 }
