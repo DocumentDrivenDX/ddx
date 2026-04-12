@@ -882,50 +882,13 @@ Examples:
 func (f *CommandFactory) newAgentCatalogCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "catalog",
-		Short: "Manage the model catalog (tier assignments and pricing)",
-	}
-
-	// catalog update: refresh pricing from OpenRouter.
-	updateCmd := &cobra.Command{
-		Use:   "update",
-		Short: "Refresh model pricing from OpenRouter and update ~/.ddx/model-catalog.yaml",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path := agent.DefaultModelCatalogPath()
-			if path == "" {
-				return fmt.Errorf("cannot resolve model catalog path")
-			}
-
-			cat, err := agent.LoadModelCatalogYAML(path)
-			if err != nil {
-				return fmt.Errorf("load catalog: %w", err)
-			}
-			if cat == nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "No catalog at %s — creating from built-in defaults.\n", path)
-				cat = agent.DefaultModelCatalogYAML()
-			}
-
-			fmt.Fprintf(cmd.OutOrStdout(), "Fetching pricing from OpenRouter...\n")
-			updated, notFound, err := agent.UpdateCatalogPricing(cat, 15*time.Second)
-			if err != nil {
-				return fmt.Errorf("fetch pricing: %w", err)
-			}
-
-			if err := agent.WriteModelCatalogYAML(path, cat); err != nil {
-				return fmt.Errorf("write catalog: %w", err)
-			}
-
-			fmt.Fprintf(cmd.OutOrStdout(), "Updated %d model(s) → %s\n", updated, path)
-			if len(notFound) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "Not found on OpenRouter (local/subscription-only): %s\n", strings.Join(notFound, ", "))
-			}
-			return nil
-		},
+		Short: "Manage the model catalog (tier assignments)",
 	}
 
 	// catalog show: print current effective catalog.
 	showCmd := &cobra.Command{
 		Use:   "show",
-		Short: "Show the current model catalog (tiers and pricing)",
+		Short: "Show the current model catalog (tier→surface→model assignments)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := agent.DefaultModelCatalogPath()
 			cat, err := agent.LoadModelCatalogYAML(path)
@@ -951,39 +914,23 @@ func (f *CommandFactory) newAgentCatalogCommand() *cobra.Command {
 				}
 			}
 
-			// Models
-			if len(cat.Models) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "\n%-40s %-10s %-8s %-8s %-8s %-10s %-10s\n", "model", "tier", "swe-bench", "in$/M", "out$/M", "cache-r$/M", "cache-w$/M")
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", strings.Repeat("-", 100))
-				for _, m := range cat.Models {
-					swe := "—"
-					if m.SWEBenchVerified > 0 {
-						swe = fmt.Sprintf("%.1f%%", m.SWEBenchVerified)
-					}
-					inCost := "—"
-					if m.CostInputPerM > 0 {
-						inCost = fmt.Sprintf("$%.2f", m.CostInputPerM)
-					}
-					outCost := "—"
-					if m.CostOutputPerM > 0 {
-						outCost = fmt.Sprintf("$%.2f", m.CostOutputPerM)
-					}
-					cacheR := "—"
-					if m.CostCacheReadPerM > 0 {
-						cacheR = fmt.Sprintf("$%.2f", m.CostCacheReadPerM)
-					}
-					cacheW := "—"
-					if m.CostCacheWritePerM > 0 {
-						cacheW = fmt.Sprintf("$%.2f", m.CostCacheWritePerM)
-					}
-					fmt.Fprintf(cmd.OutOrStdout(), "%-40s %-10s %-8s %-8s %-8s %-10s %-10s\n", m.ID, m.Tier, swe, inCost, outCost, cacheR, cacheW)
+			// Blocked models
+			var blocked []string
+			for _, m := range cat.Models {
+				if m.Blocked {
+					blocked = append(blocked, m.ID)
+				}
+			}
+			if len(blocked) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "\nBlocked models (routing never selects these):\n")
+				for _, id := range blocked {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", id)
 				}
 			}
 			return nil
 		},
 	}
 
-	cmd.AddCommand(updateCmd)
 	cmd.AddCommand(showCmd)
 	return cmd
 }
