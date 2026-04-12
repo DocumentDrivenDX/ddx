@@ -81,7 +81,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	// this many consecutive read-only tool calls, cancel execution.
 	// When stall detection is active, allow more iterations — the stall
 	// detector will catch a stuck agent faster than iteration counting.
-	stallThreshold := 12 // ~3 read-only iterations (each iteration has ~4 tool calls)
+	stallThreshold := 30 // enough read-only calls to read many files but not infinite
 	if stallThreshold > 0 && maxIter < 200 {
 		maxIter = 200 // Let stall detection be the primary circuit breaker
 	}
