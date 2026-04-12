@@ -8,6 +8,7 @@ update_check:
     enabled: true
     frequency: 24h
 agent:
+    harness: claude
     agent_runner:
         provider: openai-compat
         preset: agent

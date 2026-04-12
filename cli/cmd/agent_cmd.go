@@ -1169,9 +1169,22 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			runner := f.agentRunner()
 			gitOps := &agent.RealGitOps{}
 
+			// When no harness is pinned, route dynamically so quota-aware
+			// ranking picks the best available harness (e.g. skips codex when
+			// its weekly quota is exhausted).
+			resolvedHarness := harness
+			if resolvedHarness == "" {
+				req := agent.NormalizeRouteRequest(agent.RouteFlags{}, agent.Config{}, runner.Catalog)
+				plans := runner.ProbeAndBuildCandidatePlans(req, 10*time.Second)
+				ranked := agent.RankCandidates("", plans)
+				if best, err := agent.SelectBestCandidate(ranked); err == nil {
+					resolvedHarness = best.Harness
+				}
+			}
+
 			res, err := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
 				FromRev: fromRev,
-				Harness: harness,
+				Harness: resolvedHarness,
 				Model:   model,
 				Effort:  effort,
 			}, gitOps, runner)

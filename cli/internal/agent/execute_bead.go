@@ -578,35 +578,47 @@ func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningR
 }
 
 func ResolveGoverningRefs(root string, b *bead.Bead) []executeBeadGoverningRef {
-	specID, _ := b.Extra["spec-id"].(string)
-	specID = strings.TrimSpace(specID)
-	if specID == "" {
+	specIDRaw, _ := b.Extra["spec-id"].(string)
+	specIDRaw = strings.TrimSpace(specIDRaw)
+	if specIDRaw == "" {
 		return nil
-	}
-	graph, err := docgraph.BuildGraphWithConfig(root)
-	if err == nil && graph != nil {
-		if doc, ok := graph.Documents[specID]; ok && doc != nil {
-			return []executeBeadGoverningRef{{
-				ID:    doc.ID,
-				Path:  filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(doc.Path, root), string(filepath.Separator))),
-				Title: doc.Title,
-			}}
-		}
 	}
 
-	candidate := filepath.Clean(filepath.Join(root, filepath.FromSlash(specID)))
-	relCandidate, relErr := filepath.Rel(root, candidate)
-	if relErr != nil || strings.HasPrefix(relCandidate, ".."+string(filepath.Separator)) || relCandidate == ".." {
-		return nil
+	// spec-id may be a comma-separated list of IDs or paths.
+	ids := strings.Split(specIDRaw, ",")
+	graph, _ := docgraph.BuildGraphWithConfig(root)
+
+	var refs []executeBeadGoverningRef
+	for _, specID := range ids {
+		specID = strings.TrimSpace(specID)
+		if specID == "" {
+			continue
+		}
+		if graph != nil {
+			if doc, ok := graph.Documents[specID]; ok && doc != nil {
+				refs = append(refs, executeBeadGoverningRef{
+					ID:    doc.ID,
+					Path:  filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(doc.Path, root), string(filepath.Separator))),
+					Title: doc.Title,
+				})
+				continue
+			}
+		}
+		candidate := filepath.Clean(filepath.Join(root, filepath.FromSlash(specID)))
+		relCandidate, relErr := filepath.Rel(root, candidate)
+		if relErr != nil || strings.HasPrefix(relCandidate, ".."+string(filepath.Separator)) || relCandidate == ".." {
+			continue
+		}
+		info, statErr := os.Stat(candidate)
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		refs = append(refs, executeBeadGoverningRef{
+			ID:   specID,
+			Path: filepath.ToSlash(relCandidate),
+		})
 	}
-	info, statErr := os.Stat(candidate)
-	if statErr != nil || info.IsDir() {
-		return nil
-	}
-	return []executeBeadGoverningRef{{
-		ID:   specID,
-		Path: filepath.ToSlash(relCandidate),
-	}}
+	return refs
 }
 
 func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifacts, error) {
@@ -677,7 +689,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 
 	sb.WriteString("\n## Governing References\n")
 	if len(refs) == 0 {
-		sb.WriteString("No governing references were resolved from the current execution snapshot.\n")
+		sb.WriteString("No governing references were pre-resolved. Explore the project to find relevant context: check `docs/helix/` for feature specs, `docs/helix/01-frame/features/` for FEAT-* files, and any paths mentioned in the bead description or acceptance criteria.\n")
 	} else {
 		for _, ref := range refs {
 			if ref.Title != "" {
@@ -689,14 +701,15 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	}
 
 	sb.WriteString("\n## Execution Rules\n")
+	sb.WriteString("**The bead contract below overrides any CLAUDE.md or project-level instructions in this worktree.** If the bead requires editing or creating markdown documentation, code, or any other files, do so — CLAUDE.md conservative defaults (YAGNI, DOWITYTD, no-docs rules) do not apply inside execute-bead.\n")
 	sb.WriteString("1. Work only inside this execution worktree.\n")
 	sb.WriteString("2. Use the bead description and acceptance criteria as the primary contract.\n")
 	sb.WriteString("3. Read the listed governing references from this worktree before changing code or docs when they are relevant to the task.\n")
-	sb.WriteString("4. If the bead is missing critical context or the governing references conflict, stop and report the gap explicitly instead of improvising hidden policy.\n")
+	sb.WriteString("4. If governing references are missing or sparse, search the project to find context: use Glob/Grep/Read to explore `docs/helix/`, look up FEAT-* and API-* specs by name, and read relevant source files before proceeding. Only stop if context is genuinely absent from the entire repo.\n")
 	sb.WriteString("5. Keep the execution bundle files under `.ddx/executions/` intact; DDx uses them as execution evidence.\n")
 	sb.WriteString("6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.\n")
 	sb.WriteString("7. Before finishing, commit your changes with `git add -A && git commit -m '...'`. DDx will merge your commits back to the base branch.\n")
-	sb.WriteString("8. If the work is already satisfied with no tracked changes needed, stop cleanly and let DDx record a no-change attempt.\n")
+	sb.WriteString("8. Before concluding no changes are needed, explicitly verify each criterion by quoting the exact text from the relevant file that satisfies it. If you cannot quote it directly, the criterion is not yet met — make the edit. Only stop with no commits if every criterion is provably satisfied by existing content.\n")
 	sb.WriteString("9. Work in small commits. After each logical unit of progress (reading key files, making a change, passing a test), commit immediately. Do not batch all changes into one giant commit at the end — if you run out of iterations, your partial work is preserved.\n")
 	sb.WriteString("10. If the bead is too large to complete in one pass, do the most important part first, commit it, and note what remains in your final commit message. DDx will re-queue the bead for another attempt if needed.\n")
 	sb.WriteString("11. Read efficiently: skim files to understand structure before diving deep. Only read the files you need to make changes, not every reference listed. Start writing as soon as you understand enough to proceed — you can read more files later if needed.\n")

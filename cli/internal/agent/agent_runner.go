@@ -401,7 +401,11 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 
 	overrides := agentconfig.ProviderOverrides{}
 	if model != "" {
-		overrides.Model = model
+		if modelRef, modelPin := BuiltinCatalog.NormalizeModelRef(model); modelRef != "" {
+			overrides.ModelRef = modelRef
+		} else {
+			overrides.Model = modelPin
+		}
 	}
 	providerName := cfg.DefaultName()
 

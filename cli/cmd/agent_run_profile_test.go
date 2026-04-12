@@ -13,9 +13,12 @@ import (
 
 // agentTestDir creates a temp dir with a minimal DDx config (no harness set, so
 // routing picks from all registered candidates).
+// HOME is redirected to a clean temp dir to prevent the global ~/.config/agent/config.yaml
+// from being loaded (which would cause tests to attempt real network connections).
 func agentTestDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	ddxDir := filepath.Join(dir, ".ddx")
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	cfg := `version: "1.0"
@@ -68,7 +71,8 @@ func TestAgentRunProfileFlagRecognized(t *testing.T) {
 
 	// The run will fail (agent provider not configured), but flag parsing must succeed.
 	// A "unknown flag" error means the flag was not registered.
-	_, err := executeCommand(rootCmd, "agent", "run", "--profile", "cheap", "--text", "test")
+	// --timeout 3s prevents exponential-backoff retries from hanging the test.
+	_, err := executeCommand(rootCmd, "agent", "run", "--profile", "cheap", "--text", "test", "--timeout", "3s")
 	if err != nil {
 		assert.NotContains(t, err.Error(), "unknown flag", "--profile must be a registered flag")
 		assert.NotContains(t, err.Error(), "no harness available", "routing should find agent (always available)")
@@ -85,7 +89,7 @@ func TestAgentRunProfileRoutingSelectsViableHarness(t *testing.T) {
 	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 
-	_, err := executeCommand(rootCmd, "agent", "run", "--profile", "cheap", "--text", "test")
+	_, err := executeCommand(rootCmd, "agent", "run", "--profile", "cheap", "--text", "test", "--timeout", "3s")
 	// Expect either success or an agent-provider error (not a routing or flag error).
 	if err != nil {
 		msg := err.Error()
