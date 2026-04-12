@@ -5,5 +5,5 @@ library:
     url: "https://github.com/test/repo"
     branch: "main"
 git:
-  auto_commit: never
+  auto_commit: always
   commit_prefix: beads
