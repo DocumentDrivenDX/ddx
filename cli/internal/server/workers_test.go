@@ -212,7 +212,7 @@ func TestFormatSessionLogLines(t *testing.T) {
 		`{"type":"llm.delta","data":{}}`,
 	}
 
-	result := formatSessionLogLines(lines)
+	result := agent.FormatSessionLogLines(lines)
 
 	assert.Contains(t, result, "session started (model: qwen/qwen3.6-plus)")
 	assert.Contains(t, result, "→ llm request (attempt 1)")

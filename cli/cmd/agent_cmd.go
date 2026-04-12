@@ -1082,6 +1082,11 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+
+	// Start session log tailer so the user sees progress during agent execution
+	tailCtx, tailCancel := context.WithCancel(context.Background())
+	go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
+
 	worker := &agent.ExecuteBeadWorker{
 		Store: store,
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
@@ -1123,6 +1128,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		PollInterval: pollInterval,
 		Log:          cmd.OutOrStdout(),
 	})
+	tailCancel() // stop session log tailer
 	if err != nil {
 		return err
 	}
