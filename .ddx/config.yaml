@@ -1,0 +1,10 @@
+version: "1.0"
+library:
+    path: .ddx/plugins/ddx
+    repository:
+        url: file:///tmp/.test-library.git
+        branch: master
+bead: {}
+update_check:
+    enabled: true
+    frequency: 24h
