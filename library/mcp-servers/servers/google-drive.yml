@@ -1,0 +1,69 @@
+# Google Drive MCP Server Definition
+name: google-drive
+description: "Google Drive integration for file management"
+category: productivity
+author: piotr-agier
+version: 1.0.0
+tags: [google, drive, files, storage, documents, collaboration]
+
+command:
+  executable: npx
+  args: ["-y", "google-drive-mcp"]
+
+environment:
+  - name: GOOGLE_CLIENT_ID
+    description: "Google OAuth 2.0 Client ID"
+    required: true
+    sensitive: false
+
+  - name: GOOGLE_CLIENT_SECRET
+    description: "Google OAuth 2.0 Client Secret"
+    required: true
+    sensitive: true
+
+documentation:
+  setup: |
+    1. Go to https://console.cloud.google.com/
+    2. Create a new project or select existing one
+    3. Enable Google Drive API
+    4. Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"
+    5. Configure OAuth consent screen if not done
+    6. Select "Desktop application" as application type
+    7. Copy the Client ID and Client Secret
+    8. The server will handle OAuth flow on first run
+  permissions:
+    - https://www.googleapis.com/auth/drive
+    - https://www.googleapis.com/auth/drive.file
+    - https://www.googleapis.com/auth/documents
+    - https://www.googleapis.com/auth/spreadsheets
+    - https://www.googleapis.com/auth/presentations
+  examples:
+    - "List files in my Google Drive"
+    - "Search for documents containing 'project'"
+    - "Create a new folder called 'Reports'"
+    - "Read the content of document 'Meeting Notes'"
+    - "Upload a file to Google Drive"
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: recommended
+  network_access: required
+  file_access: read
+  data_handling: "OAuth tokens stored locally with automatic refresh"
+  warnings:
+    - "Review file permissions carefully"
+    - "Only grant access to necessary Drive folders"
+
+verification:
+  test_command: "List my Google Drive files"
+  expected_response: "List of Google Drive files and folders"
+
+links:
+  homepage: https://github.com/piotr-agier/google-drive-mcp
+  documentation: https://github.com/piotr-agier/google-drive-mcp/blob/main/README.md
+  issues: https://github.com/piotr-agier/google-drive-mcp/issues

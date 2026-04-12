@@ -1,0 +1,23 @@
+# Dockerfile for tests that need ddx pre-installed
+# Used for AC-002, AC-003
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -s /bin/bash tester
+
+USER tester
+WORKDIR /home/tester
+
+# Install ddx via install.sh
+RUN curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
+
+# Pre-install helix plugin for testing
+RUN ddx install helix || true

@@ -1,0 +1,57 @@
+# GitHub MCP Server Definition
+name: github
+description: "GitHub integration for repository access and management"
+category: development
+author: modelcontextprotocol
+version: 1.0.0
+tags: [git, repository, collaboration, vcs, pull-requests]
+
+command:
+  executable: npx
+  args: ["-y", "@modelcontextprotocol/server-github"]
+  
+environment:
+  - name: GITHUB_PERSONAL_ACCESS_TOKEN
+    description: "GitHub personal access token with appropriate permissions"
+    required: true
+    sensitive: true
+    validation: "^(ghp_[a-zA-Z0-9]{30,}|github_pat_[a-zA-Z0-9_]{50,})$"
+    
+documentation:
+  setup: |
+    1. Go to https://github.com/settings/tokens
+    2. Click "Generate new token (classic)" or "Fine-grained token"
+    3. Select the following scopes:
+       - repo (full control of private repositories)
+       - read:user (read user profile data)
+    4. Copy the generated token
+  permissions:
+    - repo
+    - read:user
+    - read:org (optional, for organization repositories)
+  examples:
+    - "Show my recent GitHub commits"
+    - "Create a new issue in repository X"
+    - "List open pull requests"
+    - "Search for code in my repositories"
+    
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+  
+security:
+  sandbox: recommended
+  network_access: required
+  file_access: none
+  data_handling: "Token stored encrypted in config file"
+  
+verification:
+  test_command: "Show my GitHub profile"
+  expected_response: "User profile information"
+  
+links:
+  homepage: https://github.com/modelcontextprotocol/servers
+  documentation: https://github.com/modelcontextprotocol/servers/tree/main/src/github
+  issues: https://github.com/modelcontextprotocol/servers/issues

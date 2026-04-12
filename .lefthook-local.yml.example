@@ -1,0 +1,43 @@
+# Local Lefthook configuration overrides
+# Copy this file to .lefthook-local.yml and customize as needed
+# .lefthook-local.yml is gitignored and won't be committed
+
+# Example: Skip specific hooks during development
+# pre-commit:
+#   exclude_tags:
+#     - documentation
+#   commands:
+#     go-test:
+#       skip: true
+#     go-build:
+#       skip: true
+
+# Example: Add custom local checks
+# pre-commit:
+#   commands:
+#     my-custom-check:
+#       run: echo "Running my custom check"
+#       glob: "*.myext"
+
+# Example: Disable colors
+# colors: false
+
+# Example: Skip all hooks
+# skip_all: true
+
+# Common development overrides:
+pre-commit:
+  commands:
+    # Skip slow checks during rapid development
+    # go-test:
+    #   skip: true
+    # go-build:  
+    #   skip: true
+    
+    # Run only on specific file types
+    # secrets:
+    #   glob: "*.{go,js,py}"
+    
+    # Add verbose output
+    # go-lint:
+    #   run: golangci-lint run --verbose --timeout=120s --new-from-rev=HEAD~1

@@ -1,0 +1,28 @@
+{
+  "name": "ddx",
+  "version": "1.0.0",
+  "description": "> A toolkit for AI-assisted development that helps you share templates, prompts, and patterns across projects.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/easel/ddx.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/easel/ddx/issues"
+  },
+  "homepage": "https://github.com/easel/ddx#readme",
+  "devDependencies": {
+    "@modelcontextprotocol/server-filesystem": "^2025.8.21",
+    "@modelcontextprotocol/server-sequential-thinking": "^2025.7.1"
+  }
+}

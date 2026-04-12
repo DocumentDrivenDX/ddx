@@ -1,0 +1,112 @@
+# Filesystem MCP Server Definition
+name: filesystem
+description: "Local filesystem access for reading and managing files"
+category: filesystem
+author: modelcontextprotocol
+version: 1.0.0
+tags: [files, filesystem, storage, local, directories]
+
+command:
+  executable: npx
+  args: ["-y", "@modelcontextprotocol/server-filesystem", "$PWD"]
+  # $PWD will be replaced with the repository root directory
+  # Additional paths can be added as arguments after the package name
+  # Example: [..., "$PWD", "/Users/username/Documents", "/Users/username/Projects"]
+  
+environment:
+  - name: FILESYSTEM_PATHS
+    description: "Comma-separated list of allowed directory paths"
+    required: false
+    sensitive: false
+    example: "/Users/username/Documents,/Users/username/Projects"
+    
+  - name: FILESYSTEM_READONLY
+    description: "Set to 'true' for read-only access"
+    required: false
+    sensitive: false
+    default: "false"
+    validation: "^(true|false)$"
+    
+documentation:
+  setup: |
+    1. By default, $PWD gives access to the repository root directory
+    2. Decide if additional directories are needed
+    3. Add directory paths as command arguments:
+       - During installation, you'll be prompted for paths
+       - Or set FILESYSTEM_PATHS environment variable
+    4. Consider using read-only mode for safety
+    5. Paths must be absolute (not relative)
+    6. $PWD will be replaced with the current working directory
+  features:
+    - "Read: List and read file contents"
+    - "Write: Create, modify, delete files (if not read-only)"
+    - "Directory operations: Create, remove directories"
+  examples:
+    - "List files in /Users/me/Projects"
+    - "Read the contents of README.md"
+    - "Create a new file called notes.txt"
+    - "Search for Python files in the current directory"
+  security_notes: |
+    - Only grant access to necessary directories
+    - Avoid granting access to system directories
+    - Use read-only mode when write access isn't needed
+    - Be cautious with home directory access
+    
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+  
+security:
+  sandbox: critical
+  network_access: none
+  file_access: required
+  data_handling: "Direct filesystem access - handle with care"
+  warnings:
+    - "Grants filesystem access - only allow necessary directories"
+    - "Can modify/delete files if not in read-only mode"
+    - "Avoid granting access to sensitive directories"
+  recommendations:
+    - "Use read-only mode when possible"
+    - "Limit to specific project directories"
+    - "Never grant access to system directories"
+    - "Avoid home directory root access"
+    
+verification:
+  test_command: "List files in the allowed directory"
+  expected_response: "Directory listing"
+  
+configuration_example: |
+  {
+    "mcpServers": {
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "$PWD"
+        ]
+      }
+    }
+  }
+
+  # Or with additional paths:
+  {
+    "mcpServers": {
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "$PWD",
+          "/Users/username/Documents"
+        ]
+      }
+    }
+  }
+  
+links:
+  homepage: https://github.com/modelcontextprotocol/servers
+  documentation: https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+  issues: https://github.com/modelcontextprotocol/servers/issues

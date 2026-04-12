@@ -1,0 +1,132 @@
+# AI Development Tools for macOS
+# Install with: brew bundle --file=Brewfile
+
+# Taps
+tap "homebrew/bundle"
+tap "homebrew/cask"
+tap "homebrew/cask-fonts"
+tap "homebrew/services"
+
+# Core Development Tools
+brew "git"
+brew "git-lfs"
+brew "gh"  # GitHub CLI
+brew "hub" # GitHub hub
+brew "glab" # GitLab CLI
+
+# Build Tools
+brew "cmake"
+brew "make"
+brew "automake"
+brew "autoconf"
+brew "pkg-config"
+
+# Languages and Runtimes
+brew "python@3.11"
+brew "node@20"
+brew "go"
+brew "rust"
+brew "java"
+brew "ruby"
+
+# Python Development
+brew "pyenv"
+brew "pipenv"
+brew "poetry"
+brew "virtualenv"
+
+# Node.js Development
+brew "nvm"
+brew "yarn"
+brew "pnpm"
+
+# Database Tools
+brew "postgresql@15"
+brew "redis"
+brew "sqlite"
+brew "mysql"
+brew "mongodb-community"
+
+# Container Tools
+brew "docker"
+brew "docker-compose"
+brew "colima" # Container runtime for macOS
+brew "podman"
+brew "kubectl"
+brew "k9s"
+brew "helm"
+
+# AI/ML Tools
+brew "jupyter"
+brew "tensorflow"
+brew "pytorch"
+brew "ollama" # Run large language models locally
+
+# Development Utilities
+brew "tmux"
+brew "neovim"
+brew "bat" # Better cat
+brew "fzf" # Fuzzy finder
+brew "ripgrep" # Better grep
+brew "jq" # JSON processor
+brew "yq" # YAML processor
+brew "htop"
+brew "tree"
+brew "wget"
+brew "curl"
+brew "httpie"
+brew "direnv"
+brew "watch"
+brew "gnu-sed"
+brew "coreutils"
+
+# Code Quality Tools
+brew "shellcheck"
+brew "hadolint" # Dockerfile linter
+brew "yamllint"
+brew "pre-commit"
+brew "lefthook" # Git hooks manager
+
+# Cloud Tools
+brew "awscli"
+brew "azure-cli"
+brew "google-cloud-sdk"
+brew "terraform"
+brew "pulumi"
+
+# API Development
+brew "postman-cli"
+brew "grpcurl"
+brew "protobuf"
+
+# Security Tools
+brew "gnupg"
+brew "pass"
+brew "sops"
+brew "age"
+brew "vault"
+
+# Cask Applications (GUI Applications)
+cask "visual-studio-code"
+cask "iterm2"
+cask "docker"
+cask "postman"
+cask "insomnia"
+cask "tableplus"
+cask "dbeaver-community"
+cask "github"
+cask "sourcetree"
+cask "jetbrains-toolbox"
+cask "cursor" # AI-powered code editor
+cask "warp" # AI-powered terminal
+
+# Fonts for Development
+cask "font-fira-code"
+cask "font-jetbrains-mono"
+cask "font-cascadia-code"
+cask "font-hack-nerd-font"
+
+# Optional: Mac App Store apps (requires mas)
+brew "mas"
+# mas "Xcode", id: 497799835
+# mas "Keynote", id: 409183694

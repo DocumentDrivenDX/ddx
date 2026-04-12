@@ -1,0 +1,83 @@
+# Office 365 MCP Server Definition
+name: office-365
+description: "Microsoft 365 integration via Graph API"
+category: productivity
+author: softeria
+version: 1.0.0
+tags: [microsoft, office365, outlook, teams, onedrive, word, excel, powerpoint, sharepoint]
+
+command:
+  executable: npx
+  args: ["-y", "ms-365-mcp-server"]
+
+environment:
+  - name: MICROSOFT_CLIENT_ID
+    description: "Microsoft Azure App Registration Client ID"
+    required: true
+    sensitive: false
+
+  - name: MICROSOFT_CLIENT_SECRET
+    description: "Microsoft Azure App Registration Client Secret"
+    required: true
+    sensitive: true
+
+  - name: MICROSOFT_TENANT_ID
+    description: "Microsoft Azure Tenant ID"
+    required: true
+    sensitive: false
+
+documentation:
+  setup: |
+    1. Go to https://portal.azure.com/
+    2. Navigate to "Azure Active Directory" → "App registrations"
+    3. Click "New registration"
+    4. Enter application name (e.g., "Claude MCP Office 365")
+    5. Set redirect URI to "http://localhost:3000/auth/callback"
+    6. After creation, note the Application (client) ID and Directory (tenant) ID
+    7. Go to "Certificates & secrets" → "New client secret"
+    8. Copy the client secret value immediately
+    9. Go to "API permissions" and add:
+       - Microsoft Graph → Delegated permissions:
+         - Files.ReadWrite.All
+         - Mail.ReadWrite
+         - Calendars.ReadWrite
+         - User.Read
+         - Sites.Read.All
+    10. Grant admin consent for your organization
+  permissions:
+    - Files.ReadWrite.All
+    - Mail.ReadWrite
+    - Calendars.ReadWrite
+    - User.Read
+    - Sites.Read.All
+  examples:
+    - "Read my Outlook emails"
+    - "Create a calendar event for tomorrow"
+    - "List files in my OneDrive"
+    - "Search for Word documents in SharePoint"
+    - "Send an email to my team"
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: recommended
+  network_access: required
+  file_access: none
+  data_handling: "OAuth tokens stored securely with Microsoft Graph API"
+  warnings:
+    - "Review Graph API permissions carefully"
+    - "Grant minimal required permissions"
+    - "Monitor application access in Azure portal"
+
+verification:
+  test_command: "Show my Outlook profile"
+  expected_response: "User profile information from Microsoft Graph"
+
+links:
+  homepage: https://github.com/Softeria/ms-365-mcp-server
+  documentation: https://github.com/Softeria/ms-365-mcp-server/blob/main/README.md
+  issues: https://github.com/Softeria/ms-365-mcp-server/issues

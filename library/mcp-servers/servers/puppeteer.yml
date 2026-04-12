@@ -1,0 +1,88 @@
+# Puppeteer MCP Server Definition
+name: puppeteer
+description: "Browser automation and web scraping using Puppeteer"
+category: automation
+author: modelcontextprotocol
+version: 2025.5.12
+tags: [browser, automation, scraping, web, puppeteer, headless]
+
+command:
+  executable: npx
+  args: ["-y", "@modelcontextprotocol/server-puppeteer"]
+
+environment: []
+
+documentation:
+  setup: |
+    1. The Puppeteer MCP server provides browser automation capabilities
+    2. Uses Google's Puppeteer library for web interaction
+    3. Can run in headless or full browser mode
+    4. Chromium browser will be downloaded automatically on first use
+    5. No additional configuration required for basic usage
+  features:
+    - "Navigate to web pages and interact with elements"
+    - "Take screenshots and generate PDFs"
+    - "Execute JavaScript in browser context"
+    - "Fill forms and submit data programmatically"
+    - "Extract text, links, and data from web pages"
+    - "Monitor network activity and intercept requests"
+    - "Test UI workflows and user interactions"
+  examples:
+    - "Navigate to a website and take a screenshot"
+    - "Scrape product information from an e-commerce site"
+    - "Fill out and submit a contact form"
+    - "Extract all links from a webpage"
+    - "Monitor network requests during page load"
+    - "Generate a PDF of a webpage"
+  security_notes: |
+    - Runs full browser instances that can access any website
+    - Can execute arbitrary JavaScript in browser context
+    - Downloads and executes remote web content
+    - Consider network access restrictions for security
+    - Monitor browser activities in sensitive environments
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+  chromium_version: ">=90.0.0"
+
+security:
+  sandbox: critical
+  network_access: required
+  file_access: limited
+  data_handling: "Can access web content, download files, and execute JavaScript"
+  warnings:
+    - "Provides full browser automation with internet access"
+    - "Can download and execute remote JavaScript"
+    - "May consume significant system resources"
+    - "Can access sensitive websites if not restricted"
+  recommendations:
+    - "Use in isolated environments for security"
+    - "Monitor network activity and resource usage"
+    - "Restrict access to sensitive websites"
+    - "Consider headless mode for performance"
+
+verification:
+  test_command: "Navigate to a test page and verify browser functionality"
+  expected_response: "Browser automation working correctly"
+
+configuration_example: |
+  {
+    "mcpServers": {
+      "puppeteer": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-puppeteer"
+        ]
+      }
+    }
+  }
+
+links:
+  homepage: https://github.com/modelcontextprotocol/servers
+  documentation: https://puppeteer.dev/
+  issues: https://github.com/modelcontextprotocol/servers/issues
+  puppeteer_docs: https://puppeteer.dev/docs

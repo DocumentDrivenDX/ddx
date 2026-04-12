@@ -1,0 +1,76 @@
+# Google Workspace MCP Server Definition
+name: google-workspace
+description: "Comprehensive Google Workspace integration (Drive, Docs, Sheets, Gmail, Calendar)"
+category: productivity
+author: taylorwilsdon
+version: 1.0.0
+tags: [google, workspace, drive, docs, sheets, gmail, calendar, collaboration, productivity]
+
+command:
+  executable: npx
+  args: ["-y", "google-workspace-mcp"]
+
+environment:
+  - name: GOOGLE_CLIENT_ID
+    description: "Google OAuth 2.0 Client ID"
+    required: true
+    sensitive: false
+
+  - name: GOOGLE_CLIENT_SECRET
+    description: "Google OAuth 2.0 Client Secret"
+    required: true
+    sensitive: true
+
+documentation:
+  setup: |
+    1. Go to https://console.cloud.google.com/
+    2. Create a new project or select an existing one
+    3. Enable the following APIs:
+       - Google Drive API
+       - Google Docs API
+       - Google Sheets API
+       - Google Slides API
+       - Gmail API
+       - Google Calendar API
+    4. Go to "Credentials" and create "OAuth 2.0 Client IDs"
+    5. Configure OAuth consent screen with required scopes
+    6. Add authorized redirect URIs for your application
+    7. Copy the Client ID and Client Secret
+  permissions:
+    - https://www.googleapis.com/auth/drive
+    - https://www.googleapis.com/auth/documents
+    - https://www.googleapis.com/auth/spreadsheets
+    - https://www.googleapis.com/auth/presentations
+    - https://www.googleapis.com/auth/gmail.modify
+    - https://www.googleapis.com/auth/calendar
+  examples:
+    - "List my Google Drive files"
+    - "Create a new Google Doc"
+    - "Read my latest emails"
+    - "Schedule a meeting for next week"
+    - "Create a spreadsheet with project data"
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: recommended
+  network_access: required
+  file_access: none
+  data_handling: "OAuth tokens stored securely with automatic refresh"
+  warnings:
+    - "Grant minimal required scopes for your use case"
+    - "Regularly review OAuth application permissions"
+    - "Be mindful of sensitive data in documents and emails"
+
+verification:
+  test_command: "List my Google Drive files"
+  expected_response: "List of Google Drive files and folders"
+
+links:
+  homepage: https://github.com/taylorwilsdon/google_workspace_mcp
+  documentation: https://github.com/taylorwilsdon/google_workspace_mcp/blob/main/README.md
+  issues: https://github.com/taylorwilsdon/google_workspace_mcp/issues

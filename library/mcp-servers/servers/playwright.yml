@@ -1,0 +1,82 @@
+# Playwright MCP Server Definition
+name: playwright
+description: "Browser automation capabilities using Playwright"
+category: automation
+author: microsoft
+version: 1.0.0
+tags: [browser, automation, testing, web, playwright, ui]
+
+command:
+  executable: npx
+  args: ["-y", "@playwright/mcp@latest"]
+
+environment: []
+
+documentation:
+  setup: |
+    1. The Playwright MCP server provides browser automation capabilities
+    2. Uses accessibility tree instead of screenshots for LLM interaction
+    3. Supports Chromium, Firefox, and WebKit browsers
+    4. No additional configuration required for basic usage
+    5. Browsers will be installed automatically on first use
+  features:
+    - "Navigate to web pages and interact with elements"
+    - "Take screenshots and generate accessibility snapshots"
+    - "Execute JavaScript in browser context"
+    - "Fill forms and click buttons programmatically"
+    - "Extract text and data from web pages"
+    - "Generate test code for web automation"
+  examples:
+    - "Navigate to https://example.com and take a screenshot"
+    - "Fill out a contact form on a website"
+    - "Extract all links from a webpage"
+    - "Click the login button and enter credentials"
+    - "Generate Playwright test code for a user workflow"
+  security_notes: |
+    - Runs browser instances that can access any website
+    - Can execute JavaScript and interact with web content
+    - Consider network access restrictions for security
+    - Be cautious when automating sensitive operations
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: recommended
+  network_access: required
+  file_access: limited
+  data_handling: "Can access web content and execute JavaScript in browser context"
+  warnings:
+    - "Provides full browser automation capabilities"
+    - "Can access any website and execute JavaScript"
+    - "Consider network restrictions for sensitive environments"
+  recommendations:
+    - "Use in isolated environments for security"
+    - "Monitor browser activities for compliance"
+    - "Restrict access to sensitive websites if needed"
+
+verification:
+  test_command: "Navigate to a test page and verify functionality"
+  expected_response: "Browser automation working correctly"
+
+configuration_example: |
+  {
+    "mcpServers": {
+      "playwright": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@playwright/mcp@latest"
+        ]
+      }
+    }
+  }
+
+links:
+  homepage: https://github.com/microsoft/playwright-mcp
+  documentation: https://playwright.dev/
+  issues: https://github.com/microsoft/playwright-mcp/issues
+  playwright_docs: https://playwright.dev/docs/intro
