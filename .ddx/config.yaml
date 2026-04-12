@@ -1,0 +1,9 @@
+version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  auto_commit: always
+  commit_prefix: beads
