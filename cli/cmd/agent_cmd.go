@@ -66,6 +66,7 @@ Examples:
 	cmd.AddCommand(f.newAgentReplayCommand())
 	cmd.AddCommand(f.newAgentExecuteBeadCommand())
 	cmd.AddCommand(f.newAgentExecuteLoopCommand())
+	cmd.AddCommand(f.newAgentCatalogCommand())
 
 	return cmd
 }
@@ -601,6 +602,12 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 
 			// Routing mode: probe full HarnessState per harness.
 			if checkRouting {
+				// Refresh quota snapshots via tmux if stale (>15m).
+				// This is the slow path — only called from doctor, not from routing.
+				now := time.Now()
+				_ = r.RefreshClaudeQuotaViaTmux(now, 15*time.Minute)
+				_ = r.RefreshCodexQuotaViaTmux(now, 15*time.Minute)
+
 				type routingEntry struct {
 					Name  string             `json:"name"`
 					State agent.HarnessState `json:"state"`
@@ -666,6 +673,19 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 						line += "  error: " + st.Error
 					}
 					fmt.Fprintln(cmd.OutOrStdout(), line)
+					// Print non-session quota windows (weekly, extra, credit) as sub-lines.
+					if st.RoutingSignal != nil {
+						for _, w := range st.RoutingSignal.QuotaWindows {
+							if w.LimitID == "session" {
+								continue
+							}
+							wline := fmt.Sprintf("  %-10s  %-32s  %3.0f%%  state=%-8s", w.LimitID, w.Name, w.UsedPercent, w.State)
+							if w.ResetsAt != "" {
+								wline += "  resets: " + w.ResetsAt
+							}
+							fmt.Fprintln(cmd.OutOrStdout(), wline)
+						}
+					}
 				}
 				return nil
 			}
@@ -856,6 +876,115 @@ Examples:
 	cmd.Flags().String("suite", "", "Path to benchmark suite JSON file (required)")
 	cmd.Flags().String("output", "", "Path to save results as JSON")
 	cmd.Flags().Bool("json", false, "Output results as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newAgentCatalogCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "catalog",
+		Short: "Manage the model catalog (tier assignments and pricing)",
+	}
+
+	// catalog update: refresh pricing from OpenRouter.
+	updateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "Refresh model pricing from OpenRouter and update ~/.ddx/model-catalog.yaml",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := agent.DefaultModelCatalogPath()
+			if path == "" {
+				return fmt.Errorf("cannot resolve model catalog path")
+			}
+
+			cat, err := agent.LoadModelCatalogYAML(path)
+			if err != nil {
+				return fmt.Errorf("load catalog: %w", err)
+			}
+			if cat == nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "No catalog at %s — creating from built-in defaults.\n", path)
+				cat = agent.DefaultModelCatalogYAML()
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Fetching pricing from OpenRouter...\n")
+			updated, notFound, err := agent.UpdateCatalogPricing(cat, 15*time.Second)
+			if err != nil {
+				return fmt.Errorf("fetch pricing: %w", err)
+			}
+
+			if err := agent.WriteModelCatalogYAML(path, cat); err != nil {
+				return fmt.Errorf("write catalog: %w", err)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Updated %d model(s) → %s\n", updated, path)
+			if len(notFound) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Not found on OpenRouter (local/subscription-only): %s\n", strings.Join(notFound, ", "))
+			}
+			return nil
+		},
+	}
+
+	// catalog show: print current effective catalog.
+	showCmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show the current model catalog (tiers and pricing)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := agent.DefaultModelCatalogPath()
+			cat, err := agent.LoadModelCatalogYAML(path)
+			if err != nil {
+				return fmt.Errorf("load catalog: %w", err)
+			}
+			if cat == nil {
+				cat = agent.DefaultModelCatalogYAML()
+				fmt.Fprintf(cmd.OutOrStdout(), "(built-in defaults — no catalog at %s)\n\n", path)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Catalog: %s (updated %s)\n\n", path, cat.UpdatedAt.Format("2006-01-02"))
+			}
+
+			// Tiers
+			for _, tier := range []string{"smart", "standard", "cheap"} {
+				def, ok := cat.Tiers[tier]
+				if !ok {
+					continue
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n", tier, def.Description)
+				for surface, model := range def.Surfaces {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %s\n", surface, model)
+				}
+			}
+
+			// Models
+			if len(cat.Models) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "\n%-40s %-10s %-8s %-8s %-8s %-10s %-10s\n", "model", "tier", "swe-bench", "in$/M", "out$/M", "cache-r$/M", "cache-w$/M")
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", strings.Repeat("-", 100))
+				for _, m := range cat.Models {
+					swe := "—"
+					if m.SWEBenchVerified > 0 {
+						swe = fmt.Sprintf("%.1f%%", m.SWEBenchVerified)
+					}
+					inCost := "—"
+					if m.CostInputPerM > 0 {
+						inCost = fmt.Sprintf("$%.2f", m.CostInputPerM)
+					}
+					outCost := "—"
+					if m.CostOutputPerM > 0 {
+						outCost = fmt.Sprintf("$%.2f", m.CostOutputPerM)
+					}
+					cacheR := "—"
+					if m.CostCacheReadPerM > 0 {
+						cacheR = fmt.Sprintf("$%.2f", m.CostCacheReadPerM)
+					}
+					cacheW := "—"
+					if m.CostCacheWritePerM > 0 {
+						cacheW = fmt.Sprintf("$%.2f", m.CostCacheWritePerM)
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "%-40s %-10s %-8s %-8s %-8s %-10s %-10s\n", m.ID, m.Tier, swe, inCost, outCost, cacheR, cacheW)
+				}
+			}
+			return nil
+		},
+	}
+
+	cmd.AddCommand(updateCmd)
+	cmd.AddCommand(showCmd)
 	return cmd
 }
 

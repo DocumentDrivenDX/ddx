@@ -14,6 +14,8 @@ type CatalogEntry struct {
 	Deprecated bool
 	// ReplacedBy is the canonical replacement ref when Deprecated is true.
 	ReplacedBy string
+	// Blocked marks this ref as blocked; Resolve() returns ok=false for blocked entries.
+	Blocked bool
 }
 
 // DeprecatedPin records a deprecated explicit model version string.
@@ -35,8 +37,9 @@ type DeprecatedPin struct {
 // This is the authoritative source for aliases, profiles, canonical targets,
 // and deprecation metadata across harness surfaces.
 type Catalog struct {
-	entries        map[string]CatalogEntry
-	deprecatedPins map[string]DeprecatedPin // keyed by Pin
+	entries         map[string]CatalogEntry
+	deprecatedPins  map[string]DeprecatedPin // keyed by Pin
+	blockedModelIDs map[string]bool          // concrete model IDs that routing must never select
 }
 
 // NewCatalog creates a Catalog from a slice of entries.
@@ -58,6 +61,28 @@ func NewCatalogWithPins(entries []CatalogEntry, pins []DeprecatedPin) *Catalog {
 	return c
 }
 
+// AddOrReplace inserts or replaces a catalog entry by Ref.
+func (c *Catalog) AddOrReplace(entry CatalogEntry) {
+	if c.entries == nil {
+		c.entries = make(map[string]CatalogEntry)
+	}
+	c.entries[entry.Ref] = entry
+}
+
+// AddBlockedModelID marks a concrete model ID as blocked.
+// Resolve() returns ok=false for any model that resolves to a blocked ID.
+func (c *Catalog) AddBlockedModelID(id string) {
+	if c.blockedModelIDs == nil {
+		c.blockedModelIDs = make(map[string]bool)
+	}
+	c.blockedModelIDs[id] = true
+}
+
+// IsBlockedModelID reports whether a concrete model ID is blocked.
+func (c *Catalog) IsBlockedModelID(id string) bool {
+	return c.blockedModelIDs[id]
+}
+
 // CheckDeprecatedPin returns the DeprecatedPin entry for an explicit model
 // string, or ok=false if the pin is not deprecated.
 // If surface is non-empty and the pin entry has a Surface set, the match is
@@ -77,14 +102,24 @@ func (c *Catalog) CheckDeprecatedPin(pin, surface string) (DeprecatedPin, bool) 
 }
 
 // Resolve returns the concrete model string for a ref on the given surface.
-// Returns ("", false) if the ref is unknown or not mapped to this surface.
+// Returns ("", false) if the ref is unknown, not mapped to this surface,
+// the entry is blocked, or the resolved concrete model is blocked.
 func (c *Catalog) Resolve(ref, surface string) (string, bool) {
 	e, ok := c.entries[ref]
 	if !ok {
 		return "", false
 	}
+	if e.Blocked {
+		return "", false
+	}
 	model, ok := e.Surfaces[surface]
-	return model, ok
+	if !ok {
+		return "", false
+	}
+	if c.blockedModelIDs[model] {
+		return "", false
+	}
+	return model, true
 }
 
 // Entry returns the full catalog entry for a ref.
@@ -128,28 +163,33 @@ func (c *Catalog) NormalizeModelRef(model string) (modelRef, modelPin string) {
 var BuiltinCatalog = NewCatalogWithPins(
 	[]CatalogEntry{
 		// --- Profiles (available across cloud and embedded surfaces) ---
+		// cheap: mechanical tasks — extraction, formatting, simple transforms.
+		// Minimize cost; prefer local inference first.
 		{
 			Ref: "cheap",
 			Surfaces: map[string]string{
 				"codex":           "gpt-5.4-mini",
-				"claude":          "claude-sonnet-4-6",
+				"claude":          "claude-haiku-4-5",
 				"embedded-openai": "qwen3.5-27b",
 			},
 		},
+		// standard: default for most builds — refactoring, feature work, test writing.
 		{
-			Ref: "fast",
+			Ref: "standard",
 			Surfaces: map[string]string{
-				"codex":           "gpt-5.4-mini",
+				"codex":           "gpt-5.4",
 				"claude":          "claude-sonnet-4-6",
-				"embedded-openai": "qwen3.5-27b",
+				"embedded-openai": "minimax/minimax-m2.7",
 			},
 		},
+		// smart: hard/broad tasks, user interactive sessions, HELIX document alignment.
+		// Always top-tier foundation models; cost is secondary.
 		{
 			Ref: "smart",
 			Surfaces: map[string]string{
 				"codex":           "gpt-5.4",
 				"claude":          "claude-opus-4-6",
-				"embedded-openai": "qwen/qwen3-coder-next",
+				"embedded-openai": "minimax/minimax-m2.7",
 			},
 		},
 

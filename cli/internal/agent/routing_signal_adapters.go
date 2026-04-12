@@ -1,11 +1,11 @@
 package agent
 
 import (
-	"bufio"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,8 +53,10 @@ type UsageSignal struct {
 // CodexNativeSignals is the provider-native routing signal bundle read from a
 // Codex native session JSONL file.
 type CodexNativeSignals struct {
-	CurrentQuota QuotaSignal `json:"current_quota"`
-	RecentUsage  UsageSignal `json:"recent_usage"`
+	CurrentQuota QuotaSignal   `json:"current_quota"`
+	RecentUsage  UsageSignal   `json:"recent_usage"`
+	Account      *AccountInfo  `json:"account,omitempty"`
+	QuotaWindows []QuotaWindow `json:"quota_windows,omitempty"`
 }
 
 // ClaudeNativeSignals is the provider-native routing signal bundle read from
@@ -67,44 +69,56 @@ type ClaudeNativeSignals struct {
 }
 
 type claudeQuotaSnapshotFile struct {
-	ObservedAt    time.Time `json:"observed_at"`
-	State         string    `json:"state"`
-	UsedPercent   int       `json:"used_percent,omitempty"`
-	WindowMinutes int       `json:"window_minutes,omitempty"`
-	ResetsAt      string    `json:"resets_at,omitempty"`
-	Basis         string    `json:"basis,omitempty"`
-	Notes         string    `json:"notes,omitempty"`
+	ObservedAt    time.Time     `json:"observed_at"`
+	State         string        `json:"state"`
+	UsedPercent   int           `json:"used_percent,omitempty"`
+	WindowMinutes int           `json:"window_minutes,omitempty"`
+	ResetsAt      string        `json:"resets_at,omitempty"`
+	Basis         string        `json:"basis,omitempty"`
+	Notes         string        `json:"notes,omitempty"`
+	QuotaWindows  []QuotaWindow `json:"quota_windows,omitempty"`
+	Account       *AccountInfo  `json:"account,omitempty"`
 }
 
-type codexSessionEvent struct {
-	Type  string `json:"type"`
-	Usage struct {
-		InputTokens       int `json:"input_tokens"`
-		CachedInputTokens int `json:"cached_input_tokens"`
-		OutputTokens      int `json:"output_tokens"`
-	} `json:"usage"`
-	TokenCount struct {
-		RateLimits map[string]codexRateLimit `json:"rate_limits"`
-	} `json:"token_count"`
-	RateLimits map[string]codexRateLimit `json:"rate_limits"`
+type codexEventEnvelope struct {
+	Type    string            `json:"type"`
+	Payload codexEventPayload `json:"payload"`
 }
 
-type codexRateLimit struct {
-	UsedPercent   int    `json:"used_percent"`
-	WindowMinutes int    `json:"window_minutes"`
-	ResetsAt      string `json:"resets_at"`
+type codexEventPayload struct {
+	Type       string              `json:"type"`
+	Info       *codexPayloadInfo   `json:"info"`
+	RateLimits *codexRateLimitsObj `json:"rate_limits"`
+}
+
+type codexPayloadInfo struct {
+	TotalTokenUsage codexTokenCounts `json:"total_token_usage"`
+}
+
+type codexTokenCounts struct {
+	InputTokens       int `json:"input_tokens"`
+	CachedInputTokens int `json:"cached_input_tokens"`
+	OutputTokens      int `json:"output_tokens"`
+	TotalTokens       int `json:"total_tokens"`
+}
+
+type codexRateLimitsObj struct {
+	LimitID   string           `json:"limit_id"`
+	PlanType  string           `json:"plan_type"`
+	Primary   *codexRateWindow `json:"primary"`
+	Secondary *codexRateWindow `json:"secondary"`
+}
+
+type codexRateWindow struct {
+	UsedPercent   float64 `json:"used_percent"`
+	WindowMinutes int     `json:"window_minutes"`
+	ResetsAt      int64   `json:"resets_at"`
 }
 
 // ReadCodexNativeSignals scans a native Codex session JSONL file for current
 // quota/headroom and recent usage totals.
 func ReadCodexNativeSignals(path string, now time.Time) (CodexNativeSignals, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return CodexNativeSignals{}, err
-	}
-	defer f.Close()
-
-	stat, statErr := f.Stat()
+	stat, statErr := os.Stat(path)
 	meta := SignalSourceMetadata{
 		Provider:  "codex",
 		Kind:      codexNativeSessionSourceKind,
@@ -147,69 +161,183 @@ func ReadCodexNativeSignals(path string, now time.Time) (CodexNativeSignals, err
 		},
 	}
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	foundQuota := false
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var event codexSessionEvent
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			continue
-		}
+	// Track latest token usage (cumulative, keep latest) and quota by limit_id.
+	var latestUsage *codexTokenCounts
+	quotaByLimitID := map[string]*codexRateLimitsObj{}
 
-		if event.Type == "turn.completed" {
-			signals.RecentUsage.InputTokens += event.Usage.InputTokens
-			signals.RecentUsage.CachedInputTokens += event.Usage.CachedInputTokens
-			signals.RecentUsage.OutputTokens += event.Usage.OutputTokens
+	if err := ForEachJSONL[codexEventEnvelope](path, func(env codexEventEnvelope) error {
+		if env.Type != "event_msg" || env.Payload.Type != "token_count" {
+			return nil
+		}
+		if env.Payload.Info != nil && env.Payload.Info.TotalTokenUsage.TotalTokens != 0 {
+			tc := env.Payload.Info.TotalTokenUsage
+			latestUsage = &tc
 			signals.RecentUsage.SessionCount++
 		}
-
-		if quota, ok := extractCodexRateLimit(event); ok {
-			signals.CurrentQuota.State = quotaStateFromUsedPercent(quota.UsedPercent)
-			signals.CurrentQuota.UsedPercent = quota.UsedPercent
-			signals.CurrentQuota.WindowMinutes = quota.WindowMinutes
-			signals.CurrentQuota.ResetsAt = quota.ResetsAt
-			foundQuota = true
+		if rl := env.Payload.RateLimits; rl != nil && rl.LimitID != "" {
+			copy := *rl
+			quotaByLimitID[rl.LimitID] = &copy
 		}
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	}); err != nil {
 		return CodexNativeSignals{}, err
 	}
 
-	signals.RecentUsage.TotalTokens = signals.RecentUsage.InputTokens + signals.RecentUsage.CachedInputTokens + signals.RecentUsage.OutputTokens
-	if !foundQuota {
+	if latestUsage != nil {
+		signals.RecentUsage.InputTokens = latestUsage.InputTokens
+		signals.RecentUsage.CachedInputTokens = latestUsage.CachedInputTokens
+		signals.RecentUsage.OutputTokens = latestUsage.OutputTokens
+		signals.RecentUsage.TotalTokens = latestUsage.TotalTokens
+	}
+
+	// Build QuotaWindows from the map.
+	var quotaWindows []QuotaWindow
+	for limitID, rl := range quotaByLimitID {
+		prefix := ""
+		if limitID != "codex" && limitID != "" {
+			prefix = limitID + "-"
+		}
+		if rl.Primary != nil {
+			label := prefix + quotaWindowLabel(rl.Primary.WindowMinutes)
+			qw := QuotaWindow{
+				Name:          label,
+				LimitID:       limitID,
+				WindowMinutes: rl.Primary.WindowMinutes,
+				UsedPercent:   rl.Primary.UsedPercent,
+				ResetsAt:      formatResetTime(rl.Primary.ResetsAt, now),
+				ResetsAtUnix:  rl.Primary.ResetsAt,
+				State:         quotaStateFromUsedPercent(int(rl.Primary.UsedPercent + 0.5)),
+			}
+			quotaWindows = append(quotaWindows, qw)
+		}
+		if rl.Secondary != nil {
+			label := prefix + quotaWindowLabel(rl.Secondary.WindowMinutes)
+			qw := QuotaWindow{
+				Name:          label,
+				LimitID:       limitID,
+				WindowMinutes: rl.Secondary.WindowMinutes,
+				UsedPercent:   rl.Secondary.UsedPercent,
+				ResetsAt:      formatResetTime(rl.Secondary.ResetsAt, now),
+				ResetsAtUnix:  rl.Secondary.ResetsAt,
+				State:         quotaStateFromUsedPercent(int(rl.Secondary.UsedPercent + 0.5)),
+			}
+			quotaWindows = append(quotaWindows, qw)
+		}
+	}
+	signals.QuotaWindows = quotaWindows
+
+	// Set CurrentQuota from the "codex" limit_id primary window.
+	if rl, ok := quotaByLimitID["codex"]; ok && rl.Primary != nil {
+		usedPercent := int(rl.Primary.UsedPercent + 0.5)
+		signals.CurrentQuota.State = quotaStateFromUsedPercent(usedPercent)
+		signals.CurrentQuota.UsedPercent = usedPercent
+		signals.CurrentQuota.WindowMinutes = rl.Primary.WindowMinutes
+		signals.CurrentQuota.ResetsAt = formatResetTime(rl.Primary.ResetsAt, now)
+	} else {
 		signals.CurrentQuota.State = "unknown"
 		signals.CurrentQuota.Source.Notes = "no token_count.rate_limits snapshot found in native session jsonl"
 	}
+
 	return signals, nil
 }
 
-func extractCodexRateLimit(event codexSessionEvent) (codexRateLimit, bool) {
-	if quota, ok := pickCodexRateLimit(event.TokenCount.RateLimits); ok {
-		return quota, true
+// quotaWindowLabel converts window_minutes to a human label.
+func quotaWindowLabel(minutes int) string {
+	switch {
+	case minutes < 60:
+		return fmt.Sprintf("%dm", minutes)
+	case minutes%(60*24) == 0:
+		return fmt.Sprintf("%dd", minutes/(60*24))
+	default:
+		return fmt.Sprintf("%dh", minutes/60)
 	}
-	if quota, ok := pickCodexRateLimit(event.RateLimits); ok {
-		return quota, true
-	}
-	return codexRateLimit{}, false
 }
 
-func pickCodexRateLimit(rateLimits map[string]codexRateLimit) (codexRateLimit, bool) {
-	if len(rateLimits) == 0 {
-		return codexRateLimit{}, false
+// formatResetTime converts a unix timestamp to a human-readable reset time.
+// Uses local timezone. Shows time-only if same day, date+time otherwise.
+func formatResetTime(unix int64, now time.Time) string {
+	if unix == 0 {
+		return ""
 	}
-	if quota, ok := rateLimits["primary"]; ok {
-		return quota, true
+	t := time.Unix(unix, 0).Local()
+	nowLocal := now.Local()
+	if t.Year() == nowLocal.Year() && t.YearDay() == nowLocal.YearDay() {
+		return t.Format("3:04pm")
 	}
-	keys := make([]string, 0, len(rateLimits))
-	for key := range rateLimits {
-		keys = append(keys, key)
+	return t.Format("Jan 2 3:04pm")
+}
+
+// ReadCodexAccountInfo reads account metadata from the Codex auth.json file.
+// It decodes the access token JWT payload without signature verification.
+func ReadCodexAccountInfo(path string) (*AccountInfo, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(keys)
-	return rateLimits[keys[0]], true
+	var authFile struct {
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.Unmarshal(data, &authFile); err != nil {
+		return nil, err
+	}
+	payload, err := decodeJWTPayload(authFile.Tokens.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+	acct := &AccountInfo{}
+	if profile, ok := payload["https://api.openai.com/profile"].(map[string]any); ok {
+		if email, ok := profile["email"].(string); ok {
+			acct.Email = email
+		}
+	}
+	if auth, ok := payload["https://api.openai.com/auth"].(map[string]any); ok {
+		if plan, ok := auth["chatgpt_plan_type"].(string); ok {
+			acct.PlanType = plan
+		}
+		if orgs, ok := auth["organizations"].([]any); ok && len(orgs) > 0 {
+			if org, ok := orgs[0].(map[string]any); ok {
+				if title, ok := org["title"].(string); ok {
+					acct.OrgName = title
+				}
+			}
+		}
+	}
+	if acct.Email == "" && acct.PlanType == "" {
+		return nil, fmt.Errorf("no account info found in JWT")
+	}
+	return acct, nil
+}
+
+// discoverCodexAuthPath returns the path to the Codex auth.json file.
+func discoverCodexAuthPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	p := filepath.Join(home, ".codex", "auth.json")
+	if _, err := os.Stat(p); err != nil {
+		return ""
+	}
+	return p
+}
+
+// decodeJWTPayload decodes the payload section of a JWT without verification.
+func decodeJWTPayload(token string) (map[string]any, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid JWT format")
+	}
+	data, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("JWT payload decode: %w", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("JWT payload unmarshal: %w", err)
+	}
+	return out, nil
 }
 
 // ReadClaudeNativeSignals reads Claude's stats-cache.json for historical usage
@@ -353,6 +481,54 @@ func WriteClaudeQuotaSnapshot(path string, signal QuotaSignal) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// WriteClaudeFullQuotaSnapshot writes a full quota snapshot including all windows and account info.
+// The primary window (index 0) is used to populate the top-level state fields for backwards compatibility.
+func WriteClaudeFullQuotaSnapshot(path string, windows []QuotaWindow, acct *AccountInfo, now time.Time) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	payload := claudeQuotaSnapshotFile{
+		ObservedAt:   now.UTC(),
+		Basis:        claudeTmuxSourceKind,
+		QuotaWindows: windows,
+		Account:      acct,
+	}
+	if len(windows) > 0 {
+		w := windows[0]
+		payload.State = w.State
+		payload.UsedPercent = int(w.UsedPercent + 0.5)
+		payload.WindowMinutes = w.WindowMinutes
+		payload.ResetsAt = w.ResetsAt
+	}
+	if payload.State == "" {
+		payload.State = "ok"
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// ReadClaudeFullSnapshot reads quota windows and account info from the snapshot file.
+// Returns the ObservedAt time so callers can apply a TTL check.
+func ReadClaudeFullSnapshot(path string, now time.Time) ([]QuotaWindow, *AccountInfo, time.Time, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, time.Time{}, err
+	}
+	var snapshot claudeQuotaSnapshotFile
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return nil, nil, time.Time{}, err
+	}
+	if snapshot.ObservedAt.IsZero() {
+		if stat, statErr := os.Stat(path); statErr == nil {
+			snapshot.ObservedAt = stat.ModTime().UTC()
+		}
+	}
+	return snapshot.QuotaWindows, snapshot.Account, snapshot.ObservedAt, nil
 }
 
 func coalesce(value, fallback string) string {

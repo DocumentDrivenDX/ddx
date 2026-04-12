@@ -23,11 +23,14 @@ type Harness struct {
 	IsLocal         bool                // true for embedded/local harnesses (no cloud cost)
 	ExactPinSupport bool                // true if harness can accept an exact concrete model pin
 	QuotaCommand    string              // CLI args for non-interactive quota introspection (e.g. "usage", "status"); empty = skip probe. Must NOT be an interactive slash command.
+	TUIQuotaCommand string              // Slash command to send as a prompt when native quota signal is unavailable (e.g. "/usage", "/status"). Invoked with the binary's non-interactive print mode.
+	IsHTTPProvider  bool                // true for API-only providers (openrouter, lmstudio) that have no CLI binary.
+	IsSubscription  bool                // true for fixed-subscription harnesses (codex, claude) — preferred over pay-per-token when within quota.
 }
 
 // Config holds agent service configuration.
 type Config struct {
-	Profile         string              `yaml:"profile"`          // default routing intent: cheap, fast, smart
+	Profile         string              `yaml:"profile"`          // default routing intent: cheap, standard, smart
 	Harness         string              `yaml:"harness"`          // optional forced harness override
 	Model           string              `yaml:"model"`            // optional default model ref or exact pin
 	Models          map[string]string   `yaml:"models"`           // per-harness model overrides
@@ -40,7 +43,7 @@ type Config struct {
 // RouteFlags holds raw CLI flag values before normalization into a RouteRequest.
 // These come directly from parsed command-line arguments.
 type RouteFlags struct {
-	Profile     string // --profile: cheap, fast, smart
+	Profile     string // --profile: cheap, standard, smart
 	Model       string // --model: logical ref or exact pin
 	Harness     string // --harness: forced harness override
 	Effort      string // --effort: low, medium, high
@@ -232,6 +235,24 @@ type QuotaInfo struct {
 	ResetDate   string `json:"reset_date,omitempty"`   // e.g. "April 12"
 }
 
+// AccountInfo captures provider account metadata from local auth files.
+type AccountInfo struct {
+	Email    string `json:"email,omitempty"`
+	PlanType string `json:"plan_type,omitempty"`
+	OrgName  string `json:"org_name,omitempty"`
+}
+
+// QuotaWindow captures one quota window (e.g. 5h, weekly, model-specific).
+type QuotaWindow struct {
+	Name          string  `json:"name"`               // e.g. "5h", "7d", "spark"
+	LimitID       string  `json:"limit_id,omitempty"` // provider limit_id
+	WindowMinutes int     `json:"window_minutes"`
+	UsedPercent   float64 `json:"used_percent"`
+	ResetsAt      string  `json:"resets_at,omitempty"`      // human-readable
+	ResetsAtUnix  int64   `json:"resets_at_unix,omitempty"` // unix timestamp
+	State         string  `json:"state"`
+}
+
 // RoutingSignalSnapshot captures provider-native routing signal metadata and
 // the provider-native usage/quota state attached to a harness state probe.
 type RoutingSignalSnapshot struct {
@@ -239,6 +260,8 @@ type RoutingSignalSnapshot struct {
 	Source          SignalSourceMetadata `json:"source"`
 	CurrentQuota    QuotaSignal          `json:"current_quota,omitempty"`
 	HistoricalUsage UsageSignal          `json:"historical_usage,omitempty"`
+	Account         *AccountInfo         `json:"account,omitempty"`
+	QuotaWindows    []QuotaWindow        `json:"quota_windows,omitempty"`
 }
 
 // RoutingOutcome is one bounded sample of DDx-observed routing performance.
@@ -287,7 +310,7 @@ type BurnSummary struct {
 
 // RouteRequest is the normalized routing ask built from CLI flags and config.
 type RouteRequest struct {
-	Profile         string // cheap, fast, smart
+	Profile         string // cheap, standard, smart
 	ModelRef        string // logical catalog ref or alias
 	ModelPin        string // exact concrete model string (bypasses catalog policy)
 	Effort          string // low, medium, high, etc.
@@ -306,6 +329,7 @@ type CandidatePlan struct {
 	SupportsPermissions bool         `json:"supports_permissions"`
 	State               HarnessState `json:"state"`
 	CostClass           string       `json:"cost_class,omitempty"`          // local, cheap, medium, expensive
+	IsSubscription      bool         `json:"is_subscription,omitempty"`     // fixed-subscription harness; preferred over pay-per-token within quota
 	EstimatedCostUSD    float64      `json:"estimated_cost_usd,omitempty"`  // -1 = unknown
 	RejectReason        string       `json:"reject_reason,omitempty"`       // non-empty means rejected
 	DeprecationWarning  string       `json:"deprecation_warning,omitempty"` // non-empty when requested ref is deprecated

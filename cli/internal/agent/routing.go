@@ -54,6 +54,7 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 		Harness:             name,
 		Surface:             harness.Surface,
 		CostClass:           harness.CostClass,
+		IsSubscription:      harness.IsSubscription,
 		SupportsEffort:      harness.EffortFlag != "",
 		SupportsPermissions: len(harness.PermissionArgs) > 0,
 	}
@@ -347,35 +348,55 @@ func RankCandidates(profile string, plans []CandidatePlan) []CandidatePlan {
 
 // scoreCandidate returns a score for a viable candidate given the profile.
 // Higher is better.
+//
+// Routing priority policy:
+//   - cheap/standard: local (free, no quota) > subscription-within-quota > pay-per-token
+//   - smart: cloud capability wins; local models are typically quantized and lower-quality
 func scoreCandidate(profile string, plan CandidatePlan) float64 {
 	base := 100.0
 
 	cr := costClassRank[plan.CostClass] // 0=local,1=cheap,2=medium,3=expensive
 
+	// withinQuota is true when a subscription harness has headroom (cost already sunk).
+	withinQuota := plan.IsSubscription && (plan.State.QuotaOK || plan.State.QuotaState == "ok")
+
 	switch profile {
 	case "cheap":
-		// Prefer lowest cost. Local = best, then cheap, medium, expensive.
+		// Minimize cost: local >> subscription-within-quota >> pay-per-token.
+		if plan.CostClass == "local" {
+			base += 40
+		} else if withinQuota {
+			base += 20
+		}
 		base -= float64(cr) * 30
-		// Extra bonus for local (no API cost at all).
+
+	case "standard":
+		// Balanced: prefer local and subscription to avoid unnecessary spend.
 		if plan.CostClass == "local" {
-			base += 5
+			base += 25
+		} else if withinQuota {
+			base += 15
 		}
-	case "fast":
-		// Prefer fast response: local first (no network), then cheap cloud.
-		base -= float64(cr) * 15
-		if plan.CostClass == "local" {
-			base += 5
-		}
-	case "smart":
-		// Prefer quality: expensive > medium > cheap > local.
-		// Higher cost rank = higher quality.
-		base += float64(cr) * 20
-	default:
-		// No profile: neutral ranking; local preferred over cloud when equal.
 		base -= float64(cr) * 10
-		if plan.CostClass == "local" {
+
+	case "smart":
+		// Quality first; cost is secondary.
+		// Higher cost rank approximates higher capability.
+		// Local models are typically quantized — no local bonus here.
+		base += float64(cr) * 20
+		// Small bonus for subscription-within-quota at equal quality.
+		if withinQuota {
 			base += 5
 		}
+
+	default:
+		// Treat unspecified as standard.
+		if plan.CostClass == "local" {
+			base += 25
+		} else if withinQuota {
+			base += 15
+		}
+		base -= float64(cr) * 10
 	}
 
 	// Penalize near-limit quota (>= 80% used).

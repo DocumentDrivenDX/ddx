@@ -17,6 +17,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 type ExecuteLoopWorkerSpec struct {
@@ -268,7 +269,41 @@ func (m *WorkerManager) buildAgentRunner(projectRoot string) *agent.Runner {
 	if m.AgentRunnerFactory != nil {
 		return m.AgentRunnerFactory(projectRoot)
 	}
-	return agent.NewRunner(agent.Config{})
+
+	r := agent.NewRunner(agent.Config{})
+
+	// Wire agent config loader — reads from .ddx/config.yaml on each invocation.
+	// This ensures server workers use the same configuration as CLI commands.
+	r.AgentConfigLoader = func() *agent.AgentYAMLConfig {
+		c, err := config.LoadWithWorkingDir(projectRoot)
+		if err != nil || c.Agent == nil || c.Agent.AgentRunner == nil {
+			return nil
+		}
+		fc := c.Agent.AgentRunner
+		yaml := &agent.AgentYAMLConfig{
+			Provider:      fc.Provider,
+			BaseURL:       fc.BaseURL,
+			APIKey:        fc.APIKey,
+			Model:         fc.Model,
+			Preset:        fc.Preset,
+			MaxIterations: fc.MaxIterations,
+		}
+		if fc.Models != nil {
+			yaml.Models = make(map[string]*agent.LLMPresetYAML, len(fc.Models))
+			for name, p := range fc.Models {
+				yaml.Models[name] = &agent.LLMPresetYAML{
+					Model:     p.Model,
+					Provider:  p.Provider,
+					Endpoints: p.Endpoints,
+					APIKey:    p.APIKey,
+					Strategy:  p.Strategy,
+				}
+			}
+		}
+		return yaml
+	}
+
+	return r
 }
 
 func (m *WorkerManager) List() ([]WorkerRecord, error) {

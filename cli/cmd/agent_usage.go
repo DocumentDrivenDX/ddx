@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -192,46 +190,27 @@ func aggregateUsage(logFile, harnessFilter string, since time.Time, mirrored map
 // aggregateUsageAggs is the compatibility-aware session aggregator used by
 // both the primary routing-store path and the legacy fallback path.
 func aggregateUsageAggs(logFile, harnessFilter string, since time.Time, cutoffByHarness map[string]time.Time, mirrored map[string]struct{}) (map[string]*usageAgg, []string, error) {
-	f, err := os.Open(logFile)
-	if os.IsNotExist(err) {
-		return map[string]*usageAgg{}, nil, nil
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	defer f.Close()
-
 	byHarness := map[string]*usageAgg{}
 	order := []string{}
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max line
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var entry agent.SessionEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
+	err := agent.ForEachJSONL[agent.SessionEntry](logFile, func(entry agent.SessionEntry) error {
 		if entry.Timestamp.Before(since) {
-			continue
+			return nil
 		}
 		if mirrored != nil {
 			if key := usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID); key != "" {
 				if _, ok := mirrored[key]; ok {
-					continue
+					return nil
 				}
 			}
 		}
 		if cutoffByHarness != nil {
 			if cutoff, ok := cutoffByHarness[entry.Harness]; ok && !cutoff.IsZero() && !entry.Timestamp.Before(cutoff) {
-				continue
+				return nil
 			}
 		}
 		if harnessFilter != "" && entry.Harness != harnessFilter {
-			continue
+			return nil
 		}
 
 		a, exists := byHarness[entry.Harness]
@@ -241,8 +220,9 @@ func aggregateUsageAggs(logFile, harnessFilter string, since time.Time, cutoffBy
 			order = append(order, entry.Harness)
 		}
 		a.addSession(entry)
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, nil, err
 	}
 
@@ -383,42 +363,21 @@ func usageMirrorKey(nativeSessionID, traceID, spanID string) string {
 }
 
 func readUsageSessionRecords(logFile, harnessFilter string, since time.Time) ([]usageSessionRecord, error) {
-	f, err := os.Open(logFile)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	records := []usageSessionRecord{}
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max line
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var entry agent.SessionEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
+	var records []usageSessionRecord
+	err := agent.ForEachJSONL[agent.SessionEntry](logFile, func(entry agent.SessionEntry) error {
 		if entry.Timestamp.Before(since) {
-			continue
+			return nil
 		}
 		if harnessFilter != "" && entry.Harness != harnessFilter {
-			continue
+			return nil
 		}
 		records = append(records, usageSessionRecord{
 			entry: entry,
 			key:   usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID),
 		})
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return records, nil
+		return nil
+	})
+	return records, err
 }
 
 // formatComma formats an integer with comma separators.

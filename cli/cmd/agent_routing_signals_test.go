@@ -38,8 +38,7 @@ agent:
 
 	codexPath := filepath.Join(dir, "codex-session.jsonl")
 	require.NoError(t, os.WriteFile(codexPath, []byte(
-		`{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":10}}`+"\n"+
-			`{"type":"session.updated","token_count":{"rate_limits":{"primary":{"used_percent":97,"window_minutes":300,"resets_at":"April 12"}}}}`+"\n",
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":10,"total_tokens":135}},"rate_limits":{"limit_id":"codex","plan_type":"pro","primary":{"used_percent":97.0,"window_minutes":300,"resets_at":1776042000}}}}`+"\n",
 	), 0o644))
 	t.Setenv("DDX_CODEX_NATIVE_SESSION_JSONL", codexPath)
 
@@ -131,8 +130,7 @@ agent:
 
 	codexPath := filepath.Join(dir, "codex-session.jsonl")
 	require.NoError(t, os.WriteFile(codexPath, []byte(
-		`{"type":"turn.completed","usage":{"input_tokens":50,"cached_input_tokens":10,"output_tokens":5}}`+"\n"+
-			`{"type":"session.updated","token_count":{"rate_limits":{"primary":{"used_percent":97,"window_minutes":300,"resets_at":"April 12"}}}}`+"\n",
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":50,"cached_input_tokens":10,"output_tokens":5,"total_tokens":65}},"rate_limits":{"limit_id":"codex","plan_type":"pro","primary":{"used_percent":97.0,"window_minutes":300,"resets_at":1776042000}}}}`+"\n",
 	), 0o644))
 	t.Setenv("DDX_CODEX_NATIVE_SESSION_JSONL", codexPath)
 

@@ -51,7 +51,7 @@ type fakeExecuteBeadGit struct {
 func (f *fakeExecuteBeadGit) HeadRev(dir string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if strings.Contains(dir, executeBeadWtPrefix) {
+	if strings.Contains(dir, agent.ExecuteBeadWtPrefix) {
 		if f.wtHeadRevErr != nil {
 			return "", f.wtHeadRevErr
 		}
@@ -78,7 +78,7 @@ func (f *fakeExecuteBeadGit) ResolveRev(dir, rev string) (string, error) {
 func (f *fakeExecuteBeadGit) IsDirty(dir string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if strings.Contains(dir, executeBeadWtPrefix) {
+	if strings.Contains(dir, agent.ExecuteBeadWtPrefix) {
 		return f.wtDirty, nil
 	}
 	return f.dirty, nil
@@ -182,7 +182,7 @@ func assertPreserveRef(t *testing.T, ref, beadID, baseRev string) {
 // runExecuteBead invokes the execute-bead command through the cobra tree and returns
 // the parsed JSON result. It extracts the JSON object from the combined output,
 // skipping any leading note/warning lines written to stderr.
-func runExecuteBead(t *testing.T, f *CommandFactory, git *fakeExecuteBeadGit, beadID string, extraArgs ...string) ExecuteBeadResult {
+func runExecuteBead(t *testing.T, f *CommandFactory, git *fakeExecuteBeadGit, beadID string, extraArgs ...string) agent.ExecuteBeadResult {
 	t.Helper()
 	root := f.NewRootCommand()
 	args := append([]string{"agent", "execute-bead", beadID, "--json"}, extraArgs...)
@@ -191,13 +191,13 @@ func runExecuteBead(t *testing.T, f *CommandFactory, git *fakeExecuteBeadGit, be
 	return parseExecuteBeadJSON(t, out)
 }
 
-func parseExecuteBeadJSON(t *testing.T, out string) ExecuteBeadResult {
+func parseExecuteBeadJSON(t *testing.T, out string) agent.ExecuteBeadResult {
 	t.Helper()
 	// Strip any non-JSON prefix lines (e.g. stderr notes written to the shared buffer).
 	jsonStart := strings.Index(out, "{")
 	require.NotEqual(t, -1, jsonStart, "output should contain JSON: %s", out)
 	jsonPart := out[jsonStart:]
-	var res ExecuteBeadResult
+	var res agent.ExecuteBeadResult
 	dec := json.NewDecoder(bytes.NewBufferString(jsonPart))
 	require.NoError(t, dec.Decode(&res), "output should be valid JSON: %s", jsonPart)
 	return res
@@ -316,7 +316,7 @@ func TestExecuteBeadMerge(t *testing.T) {
 
 	// Worktree should have been created and cleaned up.
 	require.Len(t, git.addedWTs, 1)
-	assert.Contains(t, git.addedWTs[0], executeBeadWtPrefix+"my-bead-")
+	assert.Contains(t, git.addedWTs[0], agent.ExecuteBeadWtPrefix+"my-bead-")
 	require.Len(t, git.removedWTs, 1)
 	assert.Equal(t, git.addedWTs[0], git.removedWTs[0])
 	assert.Equal(t, 1, git.mergeCalls)
@@ -377,7 +377,7 @@ func TestExecuteBeadNoMerge(t *testing.T) {
 // TestExecuteBeadHiddenRefUniqueness verifies that two runs on the same bead-id
 // produce distinct preserve refs (concurrent hidden-ref uniqueness).
 func TestExecuteBeadHiddenRefUniqueness(t *testing.T) {
-	makeRun := func(ts time.Time) ExecuteBeadResult {
+	makeRun := func(ts time.Time) agent.ExecuteBeadResult {
 		oldNow := agent.NowFunc
 		agent.NowFunc = func() time.Time { return ts }
 		defer func() { agent.NowFunc = oldNow }()
@@ -551,7 +551,7 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 
 	resultRaw, err := os.ReadFile(resultPath)
 	require.NoError(t, err)
-	var recorded ExecuteBeadResult
+	var recorded agent.ExecuteBeadResult
 	require.NoError(t, json.Unmarshal(resultRaw, &recorded))
 	assert.Equal(t, res.BeadID, recorded.BeadID)
 	assert.Equal(t, "worker-test", recorded.WorkerID)
@@ -580,7 +580,7 @@ func TestExecuteBeadFromRevFlag(t *testing.T) {
 // prefix are cleaned up at the start of a new run.
 func TestExecuteBeadOrphanRecovery(t *testing.T) {
 	workDir := t.TempDir()
-	orphanPath := workDir + "/.ddx/" + executeBeadWtPrefix + "my-bead-old-attempt"
+	orphanPath := workDir + "/.ddx/" + agent.ExecuteBeadWtPrefix + "my-bead-old-attempt"
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "aaaa1111",
@@ -833,32 +833,32 @@ func TestExecuteBeadEvidenceFields(t *testing.T) {
 func TestExecuteBeadStatusMapping(t *testing.T) {
 	cases := []struct {
 		name     string
-		result   ExecuteBeadResult
+		result   agent.ExecuteBeadResult
 		expected string
 	}{
 		{
 			name:     "merged success",
-			result:   ExecuteBeadResult{Outcome: "merged", ExitCode: 0},
+			result:   agent.ExecuteBeadResult{Outcome: "merged", ExitCode: 0},
 			expected: agent.ExecuteBeadStatusSuccess,
 		},
 		{
 			name:     "no changes stays non-success",
-			result:   ExecuteBeadResult{Outcome: "no-changes", ExitCode: 0},
+			result:   agent.ExecuteBeadResult{Outcome: "no-changes", ExitCode: 0},
 			expected: agent.ExecuteBeadStatusNoChanges,
 		},
 		{
 			name:     "execution failure dominates preserved outcome",
-			result:   ExecuteBeadResult{Outcome: "preserved", ExitCode: 1, Reason: "agent execution failed"},
+			result:   agent.ExecuteBeadResult{Outcome: "preserved", ExitCode: 1, Reason: "agent execution failed"},
 			expected: agent.ExecuteBeadStatusExecutionFailed,
 		},
 		{
 			name:     "error outcome stays execution failure",
-			result:   ExecuteBeadResult{Outcome: "error", ExitCode: -1, Reason: "timeout after 5m"},
+			result:   agent.ExecuteBeadResult{Outcome: "error", ExitCode: -1, Reason: "timeout after 5m"},
 			expected: agent.ExecuteBeadStatusExecutionFailed,
 		},
 		{
 			name:     "land conflict",
-			result:   ExecuteBeadResult{Outcome: "preserved", ExitCode: 0, Reason: "merge failed"},
+			result:   agent.ExecuteBeadResult{Outcome: "preserved", ExitCode: 0, Reason: "merge failed"},
 			expected: agent.ExecuteBeadStatusLandConflict,
 		},
 	}

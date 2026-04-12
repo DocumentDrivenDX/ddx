@@ -531,3 +531,103 @@ func TestCandidatePlanDeprecatedPinWithHarnessOverride(t *testing.T) {
 	assert.Contains(t, codexPlan.DeprecationWarning, "gpt-4o")
 	assert.Contains(t, codexPlan.DeprecationWarning, "gpt-5.4-mini")
 }
+
+// --- Blocked Model Tests (ddx-1c18a107) ---
+
+// TestResolveBlockedEntryReturnsFalse verifies that Resolve returns ok=false
+// when the catalog entry itself is marked Blocked.
+func TestResolveBlockedEntryReturnsFalse(t *testing.T) {
+	cat := NewCatalog([]CatalogEntry{
+		{
+			Ref:     "bad-ref",
+			Blocked: true,
+			Surfaces: map[string]string{
+				"codex": "some-model",
+			},
+		},
+	})
+	model, ok := cat.Resolve("bad-ref", "codex")
+	assert.False(t, ok, "blocked entry must return ok=false from Resolve")
+	assert.Empty(t, model)
+}
+
+// TestResolveBlockedModelIDReturnsFalse verifies that Resolve returns ok=false
+// when the resolved concrete model ID is in the blocked set.
+func TestResolveBlockedModelIDReturnsFalse(t *testing.T) {
+	cat := NewCatalog([]CatalogEntry{
+		{
+			Ref: "standard",
+			Surfaces: map[string]string{
+				"claude": "blocked-concrete-model",
+			},
+		},
+	})
+	cat.AddBlockedModelID("blocked-concrete-model")
+
+	model, ok := cat.Resolve("standard", "claude")
+	assert.False(t, ok, "resolve to a blocked model ID must return ok=false")
+	assert.Empty(t, model)
+}
+
+// TestResolveNonBlockedModelIDSucceeds verifies that Resolve still works
+// normally for model IDs not in the blocked set.
+func TestResolveNonBlockedModelIDSucceeds(t *testing.T) {
+	cat := NewCatalog([]CatalogEntry{
+		{
+			Ref: "standard",
+			Surfaces: map[string]string{
+				"claude": "claude-sonnet-4-6",
+			},
+		},
+	})
+	cat.AddBlockedModelID("some-other-blocked-model")
+
+	model, ok := cat.Resolve("standard", "claude")
+	assert.True(t, ok)
+	assert.Equal(t, "claude-sonnet-4-6", model)
+}
+
+// TestIsBlockedModelID verifies the IsBlockedModelID helper.
+func TestIsBlockedModelID(t *testing.T) {
+	cat := NewCatalog(nil)
+	cat.AddBlockedModelID("gpt-3.5-turbo")
+
+	assert.True(t, cat.IsBlockedModelID("gpt-3.5-turbo"))
+	assert.False(t, cat.IsBlockedModelID("gpt-5.4"))
+	assert.False(t, cat.IsBlockedModelID(""))
+}
+
+// TestApplyModelCatalogYAMLPopulatesBlockedModels verifies that
+// ApplyModelCatalogYAML reads Blocked=true entries and registers them.
+func TestApplyModelCatalogYAMLPopulatesBlockedModels(t *testing.T) {
+	yml := &ModelCatalogYAML{
+		Models: []ModelEntryYAML{
+			{ID: "old-bad-model", Blocked: true, Provider: "openai", Tier: "cheap"},
+			{ID: "current-good-model", Blocked: false, Provider: "openai", Tier: "cheap"},
+		},
+	}
+	cat := NewCatalog(nil)
+	ApplyModelCatalogYAML(cat, yml)
+
+	assert.True(t, cat.IsBlockedModelID("old-bad-model"), "blocked model must be registered")
+	assert.False(t, cat.IsBlockedModelID("current-good-model"), "non-blocked model must not be registered")
+}
+
+// TestDefaultModelCatalogYAMLBlockedModelsNeverResolve verifies that the
+// default catalog blocked entries cannot be resolved on any surface.
+func TestDefaultModelCatalogYAMLBlockedModelsNeverResolve(t *testing.T) {
+	yml := DefaultModelCatalogYAML()
+	cat := NewCatalog(nil)
+	ApplyModelCatalogYAML(cat, yml)
+
+	blockedIDs := []string{
+		"gpt-3.5-turbo",
+		"gpt-3.5-turbo-16k",
+		"claude-opus-4-5",
+		"claude-3-opus-20240229",
+		"claude-3-5-sonnet-20241022",
+	}
+	for _, id := range blockedIDs {
+		assert.True(t, cat.IsBlockedModelID(id), "default blocked model %q must be registered", id)
+	}
+}

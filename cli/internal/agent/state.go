@@ -70,6 +70,21 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 		return state
 	}
 
+	// HTTP-only providers: probe via API, no binary lookup.
+	if harness.IsHTTPProvider {
+		state.Installed = true
+		signal := r.LoadRoutingSignalSnapshot(harnessName, state.LastChecked)
+		state.RoutingSignal = &signal
+		state.Reachable = signal.CurrentQuota.State != "unknown"
+		state.Authenticated = signal.CurrentQuota.State != "unknown"
+		state.QuotaState = signal.CurrentQuota.State
+		state.QuotaOK = signal.CurrentQuota.State == "ok"
+		if state.QuotaState == "" {
+			state.QuotaState = "unknown"
+		}
+		return state
+	}
+
 	// Check binary on PATH.
 	if _, err := r.LookPath(harness.Binary); err != nil {
 		state.Installed = false
@@ -133,11 +148,22 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 		return state
 	}
 
-	// No quota command: mark reachable based on binary presence only.
+	// No quota command: fall back to TUI slash command if native signal is unknown.
 	state.Reachable = true
 	state.Authenticated = true
 	if state.QuotaState == "" {
 		state.QuotaState = "unknown"
+	}
+	if state.QuotaState == "unknown" && harness.TUIQuotaCommand != "" {
+		quota, _ := r.probeQuotaWithArgs(harnessName, harness, strings.Fields(harness.TUIQuotaCommand), timeout)
+		if quota != nil {
+			state.Quota = quota
+			state.QuotaState = quotaStateFromUsedPercent(quota.PercentUsed)
+			if quota.PercentUsed >= 95 {
+				state.QuotaOK = false
+			}
+			r.recordQuotaSnapshot(harnessName, harness, quota, "tui-probe")
+		}
 	}
 	if state.QuotaState != "blocked" {
 		state.QuotaOK = true
@@ -145,21 +171,20 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 	return state
 }
 
-// probeQuota invokes the harness binary with its quota CLI args and parses the output.
-// QuotaCommand must be a whitespace-separated list of CLI arguments for non-interactive
-// quota introspection (e.g. "usage" for a "binary usage" subcommand). It must NOT be
-// an interactive slash command like "/usage" — those only work in interactive sessions
-// and would be passed as an LLM prompt, consuming tokens without returning quota data.
+// probeQuota invokes the harness binary with its QuotaCommand CLI args and parses the output.
 func (r *Runner) probeQuota(harnessName string, harness Harness, timeout time.Duration) (*QuotaInfo, error) {
+	return r.probeQuotaWithArgs(harnessName, harness, strings.Fields(harness.QuotaCommand), timeout)
+}
+
+// probeQuotaWithArgs invokes the harness binary with explicit args and parses quota output.
+// Used both for QuotaCommand (non-interactive CLI subcommands) and TUIQuotaCommand (slash
+// commands sent as a prompt via the binary's print/non-interactive mode).
+func (r *Runner) probeQuotaWithArgs(harnessName string, harness Harness, args []string, timeout time.Duration) (*QuotaInfo, error) {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-
-	// Invoke the binary directly with QuotaCommand as CLI args.
-	// This is a non-LLM invocation: no LLM flags, no prompt, no API call.
-	args := strings.Fields(harness.QuotaCommand)
 
 	result, err := r.Executor.ExecuteInDir(ctx, harness.Binary, args, "", "")
 	if err != nil {

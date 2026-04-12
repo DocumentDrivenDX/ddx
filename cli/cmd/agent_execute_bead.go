@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/cobra"
@@ -103,70 +101,4 @@ func writeExecuteBeadResult(cmd *cobra.Command, res *agent.ExecuteBeadResult, as
 		fmt.Fprintf(cmd.OutOrStdout(), "ref:     %s\n", res.PreserveRef)
 	}
 	return nil
-}
-
-// ExecuteBeadResultFromReport converts a loop report into the CLI display type.
-// Kept for backward compatibility with execute-loop's old inline path.
-func ExecuteBeadResultFromReport(report agent.ExecuteBeadReport) agent.ExecuteBeadResult {
-	return agent.ExecuteBeadResult{
-		BeadID:      report.BeadID,
-		AttemptID:   report.AttemptID,
-		WorkerID:    report.WorkerID,
-		Harness:     report.Harness,
-		Provider:    report.Provider,
-		Model:       report.Model,
-		Status:      report.Status,
-		Detail:      report.Detail,
-		SessionID:   report.SessionID,
-		BaseRev:     report.BaseRev,
-		ResultRev:   report.ResultRev,
-		PreserveRef: report.PreserveRef,
-		Outcome:     report.Status,
-	}
-}
-
-// Legacy helpers kept for test compatibility
-
-type executeBeadGitOps = agent.GitOps
-
-type realExecuteBeadGit = agent.RealGitOps
-
-// beadAgentRunner is a local interface matching *agent.Runner.
-type beadAgentRunner interface {
-	Run(opts agent.RunOptions) (*agent.Result, error)
-}
-
-// executeBeadAttemptID is kept for test compatibility.
-func executeBeadAttemptID() string {
-	return agent.GenerateAttemptID()
-}
-
-// executeBeadSessionID is kept for test compatibility.
-func executeBeadSessionID() string {
-	return agent.GenerateSessionID()
-}
-
-// executeBeadCommitTracker is kept for test compatibility.
-func executeBeadCommitTracker(workDir string, w fmt.Stringer) error {
-	return agent.CommitTracker(workDir)
-}
-
-// Old type aliases for test compatibility
-type ExecuteBeadResult = agent.ExecuteBeadResult
-
-// These are needed by agent_cmd.go's invokeExecuteBeadFromLoop
-// which we'll also refactor, but keep them compiling for now.
-const (
-	executeBeadWtDir       = agent.ExecuteBeadWtDir
-	executeBeadWtPrefix    = agent.ExecuteBeadWtPrefix
-	executeBeadArtifactDir = agent.ExecuteBeadArtifactDir
-)
-
-// executeBeadNow is kept for test compatibility.
-var executeBeadNow = time.Now
-
-func init() {
-	// Ensure old references still compile
-	_ = strings.TrimSpace
-	_ = time.Now
 }

@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -57,17 +56,17 @@ func (s *RoutingMetricsStore) AppendBurnSummary(summary BurnSummary) error {
 
 // ReadOutcomes loads all recorded routing outcomes.
 func (s *RoutingMetricsStore) ReadOutcomes() ([]RoutingOutcome, error) {
-	return readJSONLRecords[RoutingOutcome](s.outcomeFile())
+	return ReadAllJSONL[RoutingOutcome](s.outcomeFile())
 }
 
 // ReadQuotaSnapshots loads all recorded quota snapshots.
 func (s *RoutingMetricsStore) ReadQuotaSnapshots() ([]QuotaSnapshot, error) {
-	return readJSONLRecords[QuotaSnapshot](s.snapshotFile())
+	return ReadAllJSONL[QuotaSnapshot](s.snapshotFile())
 }
 
 // ReadBurnSummaries loads stored burn summaries.
 func (s *RoutingMetricsStore) ReadBurnSummaries() ([]BurnSummary, error) {
-	return readJSONLRecords[BurnSummary](s.burnFile())
+	return ReadAllJSONL[BurnSummary](s.burnFile())
 }
 
 func appendJSONLRecord(path string, v any) error {
@@ -87,36 +86,6 @@ func appendJSONLRecord(path string, v any) error {
 		return err
 	}
 	return nil
-}
-
-func readJSONLRecords[T any](path string) ([]T, error) {
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var records []T
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var rec T
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
-			continue
-		}
-		records = append(records, rec)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return records, nil
 }
 
 // BuildBurnSummaries derives a relative subscription-pressure score from quota snapshots.

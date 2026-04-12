@@ -22,6 +22,17 @@ func TailSessionLogs(ctx context.Context, projectRoot string, dst io.Writer) {
 	logDir := filepath.Join(projectRoot, DefaultLogDir)
 	states := make(map[string]*fileTrackState)
 
+	// Record existing files so we don't replay old logs
+	if entries, err := os.ReadDir(logDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "agent-") && strings.HasSuffix(entry.Name(), ".jsonl") {
+				if info, err := entry.Info(); err == nil {
+					states[filepath.Join(logDir, entry.Name())] = &fileTrackState{offset: info.Size()}
+				}
+			}
+		}
+	}
+
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -71,6 +82,7 @@ func readNewLogLines(logDir string, states map[string]*fileTrackState, dst io.Wr
 
 		_, _ = f.Seek(fs.offset, io.SeekStart)
 		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // 4MB max line
 		var newLines []string
 		for scanner.Scan() {
 			line := scanner.Text()

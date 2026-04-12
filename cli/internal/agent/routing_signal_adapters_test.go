@@ -16,10 +16,13 @@ func TestReadCodexNativeSignals(t *testing.T) {
 	now := time.Date(2026, 4, 10, 15, 0, 0, 0, time.UTC)
 	mtime := time.Date(2026, 4, 10, 14, 30, 0, 0, time.UTC)
 
-	content := "" +
-		`{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":10}}` + "\n" +
-		`{"type":"session.updated","token_count":{"rate_limits":{"primary":{"used_percent":83,"window_minutes":300,"resets_at":"April 12"}}}}` + "\n" +
-		`{"type":"turn.completed","usage":{"input_tokens":75,"output_tokens":5}}` + "\n"
+	// First event: session start with rate limits, no usage yet
+	event1 := `{"type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","plan_type":"pro","primary":{"used_percent":83.0,"window_minutes":300,"resets_at":1776042000},"secondary":{"used_percent":42.0,"window_minutes":10080,"resets_at":1776628800}}}}`
+	// Second event: after first turn, cumulative usage
+	event2 := `{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":10,"total_tokens":135}},"rate_limits":{"limit_id":"codex","plan_type":"pro","primary":{"used_percent":83.0,"window_minutes":300,"resets_at":1776042000},"secondary":{"used_percent":42.0,"window_minutes":10080,"resets_at":1776628800}}}}`
+	// Third event: after second turn, more accumulated usage
+	event3 := `{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":175,"cached_input_tokens":25,"output_tokens":15,"total_tokens":215}},"rate_limits":{"limit_id":"codex","plan_type":"pro","primary":{"used_percent":83.0,"window_minutes":300,"resets_at":1776042000},"secondary":{"used_percent":42.0,"window_minutes":10080,"resets_at":1776628800}}}}`
+	content := event1 + "\n" + event2 + "\n" + event3 + "\n"
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	require.NoError(t, os.Chtimes(path, mtime, mtime))
 
@@ -37,13 +40,19 @@ func TestReadCodexNativeSignals(t *testing.T) {
 	assert.Equal(t, "ok", signals.CurrentQuota.State)
 	assert.Equal(t, 83, signals.CurrentQuota.UsedPercent)
 	assert.Equal(t, 300, signals.CurrentQuota.WindowMinutes)
-	assert.Equal(t, "April 12", signals.CurrentQuota.ResetsAt)
+	assert.NotEmpty(t, signals.CurrentQuota.ResetsAt)
 
 	assert.Equal(t, 175, signals.RecentUsage.InputTokens)
 	assert.Equal(t, 25, signals.RecentUsage.CachedInputTokens)
 	assert.Equal(t, 15, signals.RecentUsage.OutputTokens)
 	assert.Equal(t, 215, signals.RecentUsage.TotalTokens)
 	assert.Equal(t, 2, signals.RecentUsage.SessionCount)
+
+	require.Len(t, signals.QuotaWindows, 2)
+	assert.Equal(t, "5h", signals.QuotaWindows[0].Name)
+	assert.Equal(t, 83.0, signals.QuotaWindows[0].UsedPercent)
+	assert.Equal(t, "7d", signals.QuotaWindows[1].Name)
+	assert.Equal(t, 42.0, signals.QuotaWindows[1].UsedPercent)
 }
 
 func TestReadClaudeNativeSignalsHistoricalUsage(t *testing.T) {

@@ -1,8 +1,7 @@
 package agent
 
 import (
-	"bufio"
-	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,6 +27,10 @@ func (r *Runner) LoadRoutingSignalSnapshot(harnessName string, now time.Time) Ro
 		snapshot = r.loadCodexRoutingSignal(now)
 	case "claude":
 		snapshot = r.loadClaudeRoutingSignal(now)
+	case "openrouter":
+		return ProbeOpenRouterBalance(8 * time.Second)
+	case "lmstudio":
+		return r.loadLMStudioSignal(now)
 	default:
 		return RoutingSignalSnapshot{}
 	}
@@ -88,12 +91,47 @@ func (r *Runner) loadCodexRoutingSignal(now time.Time) RoutingSignalSnapshot {
 		}
 	}
 
-	return RoutingSignalSnapshot{
+	snapshot := RoutingSignalSnapshot{
 		Provider:        "codex",
 		Source:          signals.CurrentQuota.Source,
 		CurrentQuota:    signals.CurrentQuota,
 		HistoricalUsage: signals.RecentUsage,
+		QuotaWindows:    signals.QuotaWindows,
 	}
+	if authPath := discoverCodexAuthPath(); authPath != "" {
+		if acct, err := ReadCodexAccountInfo(authPath); err == nil {
+			snapshot.Account = acct
+		}
+	}
+
+	// Promote worst window state to CurrentQuota so routing sees a blocked weekly as blocked overall.
+	// Skip "extra" usage windows — those are overflow buckets, not hard routing blockers.
+	for _, w := range snapshot.QuotaWindows {
+		if w.LimitID == "extra" {
+			continue
+		}
+		if w.State == "blocked" && snapshot.CurrentQuota.State != "blocked" {
+			snapshot.CurrentQuota.State = "blocked"
+			snapshot.CurrentQuota.ResetsAt = w.ResetsAt
+		}
+	}
+
+	// Overlay codex TUI snapshot if native JSONL quota is unknown.
+	if snapshot.CurrentQuota.State == "unknown" {
+		if snapshotPath := resolveCodexQuotaSnapshotPath(); snapshotPath != "" {
+			if windows, _, _, err := ReadClaudeFullSnapshot(snapshotPath, now); err == nil && len(windows) > 0 {
+				snapshot.QuotaWindows = windows
+				// Use first window as current quota.
+				w := windows[0]
+				snapshot.CurrentQuota.State = w.State
+				snapshot.CurrentQuota.UsedPercent = int(w.UsedPercent + 0.5)
+				snapshot.CurrentQuota.WindowMinutes = w.WindowMinutes
+				snapshot.CurrentQuota.ResetsAt = w.ResetsAt
+			}
+		}
+	}
+
+	return snapshot
 }
 
 func discoverCodexNativeSessionPath() string {
@@ -195,18 +233,158 @@ func (r *Runner) loadClaudeRoutingSignal(now time.Time) RoutingSignalSnapshot {
 		}
 	}
 
-	if snapshotPath := resolveClaudeQuotaSnapshotPath(); snapshotPath != "" {
-		if quota, quotaErr := ReadClaudeQuotaSnapshot(snapshotPath, now); quotaErr == nil {
-			signals.CurrentQuota = quota
-		}
-	}
-
-	return RoutingSignalSnapshot{
+	result := RoutingSignalSnapshot{
 		Provider:        "claude",
 		Source:          signals.HistoricalUsage.Source,
 		CurrentQuota:    signals.CurrentQuota,
 		HistoricalUsage: signals.HistoricalUsage,
 	}
+
+	if snapshotPath := resolveClaudeQuotaSnapshotPath(); snapshotPath != "" {
+		if quota, quotaErr := ReadClaudeQuotaSnapshot(snapshotPath, now); quotaErr == nil {
+			result.CurrentQuota = quota
+		}
+		if windows, acct, _, err := ReadClaudeFullSnapshot(snapshotPath, now); err == nil {
+			if len(windows) > 0 {
+				result.QuotaWindows = windows
+			}
+			if acct != nil {
+				result.Account = acct
+			}
+		}
+	}
+
+	// Promote worst window state to CurrentQuota.
+	// Skip "extra" usage windows — those are overflow buckets, not hard routing blockers.
+	for _, w := range result.QuotaWindows {
+		if w.LimitID == "extra" {
+			continue
+		}
+		if w.State == "blocked" && result.CurrentQuota.State != "blocked" {
+			result.CurrentQuota.State = "blocked"
+			result.CurrentQuota.ResetsAt = w.ResetsAt
+		}
+	}
+
+	return result
+}
+
+// loadLMStudioSignal probes all LM Studio endpoints configured in agent_runner.models.
+func (r *Runner) loadLMStudioSignal(now time.Time) RoutingSignalSnapshot {
+	unknown := RoutingSignalSnapshot{
+		Provider: "lmstudio",
+		Source: SignalSourceMetadata{
+			Provider:  "lmstudio",
+			Kind:      lmstudioSourceKind,
+			Freshness: "unknown",
+			Notes:     "no endpoints configured in agent_runner.models",
+		},
+		CurrentQuota: QuotaSignal{
+			Source: SignalSourceMetadata{
+				Provider:  "lmstudio",
+				Kind:      lmstudioSourceKind,
+				Freshness: "unknown",
+			},
+			State: "unknown",
+		},
+	}
+
+	var cfgModels map[string]*LLMPresetYAML
+	if r.AgentConfigLoader != nil {
+		if cfg := r.AgentConfigLoader(); cfg != nil {
+			cfgModels = cfg.Models
+		}
+	}
+
+	// Collect all unique endpoints across all model presets.
+	var allEndpoints []string
+	seen := map[string]bool{}
+	presetName := ""
+	for name, preset := range cfgModels {
+		if len(preset.Endpoints) > 0 {
+			if presetName == "" {
+				presetName = name
+			}
+			for _, ep := range preset.Endpoints {
+				if !seen[ep] {
+					seen[ep] = true
+					allEndpoints = append(allEndpoints, ep)
+				}
+			}
+		}
+	}
+
+	// Fall back to ~/.config/agent/config.yaml providers if ddx config has no endpoints.
+	if len(allEndpoints) == 0 {
+		for _, ep := range ReadLMStudioEndpointsFromAgentConfig() {
+			if !seen[ep] {
+				seen[ep] = true
+				allEndpoints = append(allEndpoints, ep)
+			}
+		}
+		presetName = "agent-config"
+	}
+
+	if len(allEndpoints) == 0 {
+		return unknown
+	}
+
+	statuses := ProbeLMStudioEndpoints(allEndpoints, 3*time.Second)
+	return BuildLMStudioSignal(presetName, statuses, now)
+}
+
+// RefreshCodexQuotaViaTmux refreshes the codex quota snapshot via tmux if the
+// existing snapshot is older than maxAge (or native JSONL is unavailable).
+// Safe to call from slow-path commands (ddx agent doctor), not from routing hot paths.
+func (r *Runner) RefreshCodexQuotaViaTmux(now time.Time, maxAge time.Duration) error {
+	snapshotPath := resolveCodexQuotaSnapshotPath()
+	if snapshotPath == "" {
+		return fmt.Errorf("cannot resolve codex quota snapshot path")
+	}
+	// Skip if fresh.
+	if _, _, observedAt, err := ReadClaudeFullSnapshot(snapshotPath, now); err == nil {
+		if !observedAt.IsZero() && now.UTC().Sub(observedAt.UTC()) < maxAge {
+			return nil
+		}
+	}
+
+	windows, err := ReadCodexQuotaViaTmux(30 * time.Second)
+	if err != nil {
+		return err
+	}
+	// Use WriteClaudeFullQuotaSnapshot (same format) for the codex snapshot.
+	return WriteClaudeFullQuotaSnapshot(snapshotPath, windows, nil, now)
+}
+
+func resolveCodexQuotaSnapshotPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".ddx", "provider-state", "codex-quota.json")
+}
+
+// RefreshClaudeQuotaViaTmux refreshes the claude quota snapshot via tmux if the
+// existing snapshot is older than maxAge. Safe to call from slow-path commands
+// (ddx agent doctor) but NOT from routing hot paths.
+func (r *Runner) RefreshClaudeQuotaViaTmux(now time.Time, maxAge time.Duration) error {
+	snapshotPath := resolveClaudeQuotaSnapshotPath()
+	if snapshotPath == "" {
+		return fmt.Errorf("cannot resolve claude quota snapshot path")
+	}
+
+	// Skip if snapshot is fresh enough.
+	if _, _, observedAt, err := ReadClaudeFullSnapshot(snapshotPath, now); err == nil {
+		if !observedAt.IsZero() && now.UTC().Sub(observedAt.UTC()) < maxAge {
+			return nil
+		}
+	}
+
+	windows, acct, err := ReadClaudeQuotaViaTmux(30 * time.Second)
+	if err != nil {
+		return err
+	}
+	return WriteClaudeFullQuotaSnapshot(snapshotPath, windows, acct, now)
 }
 
 var sessionQuotaBlockPattern = regexp.MustCompile(`(?i)(you've hit your limit|quota exceeded|quota_exceeded|insufficient credits|insufficient_credits|429|rate limit|ratelimit)`)
@@ -281,41 +459,27 @@ func (r *Runner) readLatestQuotaBlockedSession(harnessName string, now time.Time
 	if path == "" {
 		return SessionEntry{}, false
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return SessionEntry{}, false
-	}
-	defer f.Close()
 
 	cutoff := now.UTC().Add(-12 * time.Hour)
 	var latest SessionEntry
 	found := false
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var entry SessionEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
+	_ = ForEachJSONL[SessionEntry](path, func(entry SessionEntry) error {
 		if entry.Harness != harnessName {
-			continue
+			return nil
 		}
 		if entry.Timestamp.IsZero() || entry.Timestamp.UTC().Before(cutoff) {
-			continue
+			return nil
 		}
 		if !sessionQuotaBlockPattern.MatchString(strings.ToLower(entry.Error + "\n" + entry.Response + "\n" + entry.Stderr)) {
-			continue
+			return nil
 		}
 		if !found || entry.Timestamp.After(latest.Timestamp) {
 			latest = entry
 			found = true
 		}
-	}
+		return nil
+	})
 	return latest, found
 }
 

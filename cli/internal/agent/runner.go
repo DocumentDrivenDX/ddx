@@ -69,10 +69,18 @@ func NewRunner(cfg Config) *Runner {
 	if cfg.SessionLogDir == "" {
 		cfg.SessionLogDir = DefaultLogDir
 	}
+	// Start with built-in catalog, then overlay user's model-catalog.yaml if present.
+	catalog := BuiltinCatalog
+	if path := DefaultModelCatalogPath(); path != "" {
+		if yml, err := LoadModelCatalogYAML(path); err == nil && yml != nil {
+			ApplyModelCatalogYAML(catalog, yml)
+		}
+	}
+
 	r := &Runner{
 		Registry: NewRegistry(),
 		Config:   cfg,
-		Catalog:  BuiltinCatalog,
+		Catalog:  catalog,
 		Executor: &OSExecutor{},
 		LookPath: DefaultLookPath,
 	}

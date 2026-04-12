@@ -35,7 +35,7 @@ type CommandFactory struct {
 	AgentRunnerOverride ddxexec.AgentRunner
 
 	// executeBeadGitOverride overrides git operations in execute-bead (for testing).
-	executeBeadGitOverride executeBeadGitOps
+	executeBeadGitOverride agent.GitOps
 
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper

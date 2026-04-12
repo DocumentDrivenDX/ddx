@@ -4,28 +4,33 @@ package agent
 type ModelTier string
 
 const (
-	TierSmart ModelTier = "smart" // highest quality, higher cost/latency
-	TierFast  ModelTier = "fast"  // good quality, lower cost/latency
+	TierSmart    ModelTier = "smart"    // top-tier foundation models; hard/broad tasks, interactive sessions, HELIX alignment
+	TierStandard ModelTier = "standard" // default for most builds; strong capability at reasonable cost
+	TierCheap    ModelTier = "cheap"    // mechanical tasks: extraction, formatting, simple transforms; minimize cost
 )
 
 // DefaultModelTiers maps harness → tier → model.
 // These are the current production defaults as of 2026-04.
 var DefaultModelTiers = map[string]map[ModelTier]string{
 	"codex": {
-		TierSmart: "gpt-5.4",
-		TierFast:  "gpt-5.4-mini",
+		TierSmart:    "gpt-5.4",
+		TierStandard: "gpt-5.4", // codex routes internally; gpt-5.4 is the available smart/standard model
+		TierCheap:    "gpt-5.4-mini",
 	},
 	"claude": {
-		TierSmart: "claude-opus-4-6",
-		TierFast:  "claude-sonnet-4-6",
+		TierSmart:    "claude-opus-4-6",
+		TierStandard: "claude-sonnet-4-6",
+		TierCheap:    "claude-haiku-4-5",
 	},
 	"agent": {
-		TierSmart: "qwen/qwen3-coder-next",
-		TierFast:  "qwen3.5-27b",
+		TierSmart:    "minimax/minimax-m2.7",
+		TierStandard: "minimax/minimax-m2.7",
+		TierCheap:    "qwen3.5-27b",
 	},
 	"opencode": {
-		TierSmart: "anthropic/claude-opus-4-6",
-		TierFast:  "anthropic/claude-sonnet-4-6",
+		TierSmart:    "anthropic/claude-opus-4-6",
+		TierStandard: "anthropic/claude-sonnet-4-6",
+		TierCheap:    "anthropic/claude-haiku-4-5",
 	},
 }
 
@@ -52,11 +57,14 @@ type BenchmarkArm struct {
 func DefaultBenchmarkArms() []BenchmarkArm {
 	return []BenchmarkArm{
 		{Label: "agent-smart", Harness: "agent", Tier: TierSmart},
-		{Label: "agent-fast", Harness: "agent", Tier: TierFast},
+		{Label: "agent-standard", Harness: "agent", Tier: TierStandard},
+		{Label: "agent-cheap", Harness: "agent", Tier: TierCheap},
 		{Label: "codex-smart", Harness: "codex", Tier: TierSmart},
-		{Label: "codex-fast", Harness: "codex", Tier: TierFast},
+		{Label: "codex-standard", Harness: "codex", Tier: TierStandard},
+		{Label: "codex-cheap", Harness: "codex", Tier: TierCheap},
 		{Label: "claude-smart", Harness: "claude", Tier: TierSmart},
-		{Label: "claude-fast", Harness: "claude", Tier: TierFast},
+		{Label: "claude-standard", Harness: "claude", Tier: TierStandard},
+		{Label: "claude-cheap", Harness: "claude", Tier: TierCheap},
 	}
 }
 

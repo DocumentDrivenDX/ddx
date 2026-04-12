@@ -1,7 +1,7 @@
 package agent
 
 // PreferenceOrder defines the default harness preference when multiple are available.
-var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "agent", "pi"}
+var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "agent", "pi", "openrouter", "lmstudio"}
 
 // builtinHarnesses defines known harnesses and how to invoke them.
 var builtinHarnesses = map[string]Harness{
@@ -25,7 +25,9 @@ var builtinHarnesses = map[string]Harness{
 		Surface:         "codex",
 		CostClass:       "medium",
 		IsLocal:         false,
+		IsSubscription:  true,
 		ExactPinSupport: true,
+		TUIQuotaCommand: "exec /status",
 	},
 	"claude": {
 		Name:     "claude",
@@ -47,7 +49,9 @@ var builtinHarnesses = map[string]Harness{
 		Surface:         "claude",
 		CostClass:       "medium",
 		IsLocal:         false,
+		IsSubscription:  true,
 		ExactPinSupport: true,
+		TUIQuotaCommand: "--bare --print /usage",
 	},
 	"gemini": {
 		Name:            "gemini",
@@ -113,6 +117,20 @@ var builtinHarnesses = map[string]Harness{
 		Surface:      "virtual",
 		CostClass:    "local",
 		IsLocal:      true,
+	},
+	"openrouter": {
+		Name:           "openrouter",
+		Binary:         "",
+		Surface:        "embedded-openai",
+		CostClass:      "medium",
+		IsHTTPProvider: true,
+	},
+	"lmstudio": {
+		Name:           "lmstudio",
+		Binary:         "",
+		Surface:        "embedded-openai",
+		CostClass:      "local",
+		IsHTTPProvider: true,
 	},
 }
 
@@ -188,6 +206,10 @@ func (r *Registry) Discover() []HarnessStatus {
 		if name == "virtual" || name == "agent" {
 			status.Available = true
 			status.Path = "(embedded)"
+		} else if h.IsHTTPProvider {
+			// HTTP-only providers: availability determined by probe, not binary.
+			status.Available = true
+			status.Path = "(http)"
 		} else if path, err := lookPath(h.Binary); err != nil {
 			status.Available = false
 			status.Error = "binary not found"

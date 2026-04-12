@@ -354,33 +354,26 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 		if len(preset.Endpoints) > 0 {
 			cfg.BaseURL = selectEndpoint(preset.Endpoints, preset.Strategy)
 		}
-	} else if isOpenRouterModel(cfg.Model) {
-		// Layer 5: unknown model with vendor/ prefix → fall back to OpenRouter
-		cfg.Provider = "openai-compat"
-		cfg.BaseURL = "https://openrouter.ai/api/v1"
-		if cfg.APIKey == "" {
-			cfg.APIKey = os.Getenv("OPENROUTER_API_KEY")
-		}
 	}
+
+	// Note: vendor/model format (e.g. "qwen/qwen3-coder-next") should be configured
+	// in .ddx/config.yaml under agent_runner.models or the native agent config.
+	// If no matching preset exists, buildAgentProvider will return an error with
+	// guidance to configure the model properly.
 
 	return cfg, nil
 }
 
 func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
-	// Try native agent config first (handles OpenRouter routing when
-	// vendor/model names match the "openrouter" provider in the config).
+	// Try native agent config first (from ~/.config/agent/config.yaml or .agent/config.yaml).
+	// This handles all provider routing including OpenRouter when configured.
 	if resolved, err := r.resolveNativeAgentProvider(workDir, model); err != nil {
 		return nil, err
 	} else if resolved != nil {
 		return resolved, nil
 	}
 
-	// If native config didn't resolve and the model looks like an OpenRouter
-	// model (vendor/name format), route to OpenRouter directly.
-	if isOpenRouterModel(model) {
-		return r.resolveOpenRouterProvider(model)
-	}
-
+	// No native config found. Fall back to .ddx/config.yaml agent_runner section.
 	cfg, err := r.resolveAgentConfig(model)
 	if err != nil {
 		return nil, err
@@ -521,86 +514,10 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
-// resolveOpenRouterProvider builds a provider config for OpenRouter.
-// Models with vendor/name format (e.g. "z-ai/glm-5.1", "qwen/qwen3.6") are
-// routed to OpenRouter unless they match a local preset.
-func (r *Runner) resolveOpenRouterProvider(model string) (*embeddedAgentProviderResolution, error) {
-	cfg := AgentRunConfig{
-		Provider:      "openai-compat",
-		BaseURL:       "https://openrouter.ai/api/v1",
-		APIKey:        os.Getenv("OPENROUTER_API_KEY"),
-		Model:         model,
-		Preset:        "agent",
-		MaxIterations: 100,
-	}
-
-	// Try to load API key from ~/.config/agent/config.yaml if not in env
-	if cfg.APIKey == "" {
-		if key := loadOpenRouterKeyFromAgentConfig(); key != "" {
-			cfg.APIKey = key
-		}
-	}
-
-	// Allow ddx config to override defaults
-	if r.AgentConfigLoader != nil {
-		if fc := r.AgentConfigLoader(); fc != nil {
-			if fc.MaxIterations > 0 {
-				cfg.MaxIterations = fc.MaxIterations
-			}
-		}
-	}
-
-	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("agent: OPENROUTER_API_KEY not set; required for remote model %q", model)
-	}
-
-	provider, err := buildAgentProvider(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("agent: openrouter provider: %w", err)
-	}
-	return &embeddedAgentProviderResolution{Config: cfg, Provider: provider}, nil
-}
-
-// loadOpenRouterKeyFromAgentConfig reads the openrouter API key from
-// ~/.config/agent/config.yaml, which is populated by 'ddx-agent import pi'.
-func loadOpenRouterKeyFromAgentConfig() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	path := filepath.Join(home, ".config", "agent", "config.yaml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	// Simple YAML parse: look for the openrouter provider's api_key field
-	lines := strings.Split(string(data), "\n")
-	inOpenRouter := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "openrouter:" {
-			inOpenRouter = true
-			continue
-		}
-		if inOpenRouter {
-			if strings.HasPrefix(trimmed, "api_key:") {
-				key := strings.TrimSpace(strings.TrimPrefix(trimmed, "api_key:"))
-				// Strip quotes
-				key = strings.Trim(key, "\"'")
-				return key
-			}
-			// If we hit another top-level key, stop looking
-			if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && trimmed != "" && !strings.HasPrefix(trimmed, "#") {
-				break
-			}
-		}
-	}
-	return ""
-}
-
-// isOpenRouterModel returns true if the model name looks like an OpenRouter
-// model identifier (vendor/model format like "qwen/qwen3.6", "z-ai/glm-5.1").
-// Local preset names never contain "/".
+// isOpenRouterModel returns true if the model name looks like a vendor/model
+// format (e.g. "qwen/qwen3-coder-next", "z-ai/glm-5.1"). These should be
+// configured in .ddx/config.yaml under agent_runner.models or the native
+// agent config (~/.config/agent/config.yaml).
 func isOpenRouterModel(model string) bool {
 	if model == "" {
 		return false
