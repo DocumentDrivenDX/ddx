@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -76,7 +77,14 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		maxIter = 100
 	}
 
-	// Build tools
+	// Stall detection: if the agent hasn't made any write/edit calls after
+	// this many consecutive read-only tool calls, cancel execution.
+	// When stall detection is active, allow more iterations — the stall
+	// detector will catch a stuck agent faster than iteration counting.
+	stallThreshold := 12 // ~3 read-only iterations (each iteration has ~4 tool calls)
+	if stallThreshold > 0 && maxIter < 200 {
+		maxIter = 200 // Let stall detection be the primary circuit breaker
+	}
 	tools := []agentlib.Tool{
 		&tool.ReadTool{WorkDir: wd},
 		&tool.WriteTool{WorkDir: wd},
@@ -114,6 +122,31 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var timedOut atomic.Bool
+	var stalled atomic.Bool
+	var readOnlyCount atomic.Int32
+
+	// Stall detection: track write activity in the callback.
+	// If no write/edit tool calls after stallThreshold read-only calls, cancel.
+	writeTools := map[string]bool{"write": true, "edit": true, "bash": true}
+	stallCallback := func(event agentlib.Event) {
+		if event.Type == agentlib.EventToolCall {
+			var data struct {
+				Tool string `json:"tool"`
+			}
+			if err := json.Unmarshal(event.Data, &data); err == nil {
+				if writeTools[data.Tool] {
+					readOnlyCount.Store(0)
+				} else {
+					consecutive := readOnlyCount.Add(1)
+					if consecutive >= int32(stallThreshold) {
+						stalled.Store(true)
+						cancel()
+					}
+				}
+			}
+		}
+	}
+
 	if timeout > 0 {
 		activity := make(chan struct{}, 1)
 		pulse := func() {
@@ -125,6 +158,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		callback := logger.Callback()
 		req.Callback = func(event agentlib.Event) {
 			pulse()
+			stallCallback(event)
 			callback(event)
 		}
 		go func() {
@@ -150,7 +184,11 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 			}
 		}()
 	} else {
-		req.Callback = logger.Callback()
+		callback := logger.Callback()
+		req.Callback = func(event agentlib.Event) {
+			stallCallback(event)
+			callback(event)
+		}
 	}
 
 	start := time.Now()
@@ -189,6 +227,9 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 
 	if timedOut.Load() {
 		result.Error = fmt.Sprintf("timeout after %v", timeout.Round(time.Second))
+		result.ExitCode = 1
+	} else if stalled.Load() {
+		result.Error = fmt.Sprintf("stalled: no write activity after %d consecutive read-only tool calls", stallThreshold)
 		result.ExitCode = 1
 	} else if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
