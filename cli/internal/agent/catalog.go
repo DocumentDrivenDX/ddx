@@ -153,78 +153,55 @@ func (c *Catalog) NormalizeModelRef(model string) (modelRef, modelPin string) {
 	return "", model
 }
 
-// BuiltinCatalog is the DDx shared routing catalog.
-// It contains the initial transitional entries used for harness-surface
-// projection while the full shared ddx-agent catalog is integrated.
-//
-// Rule: entries here supersede DefaultModelTiers for routing decisions.
-// DefaultModelTiers remains as explicit transitional fallback for surfaces
-// or tiers not yet covered by catalog entries.
-var BuiltinCatalog = NewCatalogWithPins(
-	[]CatalogEntry{
-		// --- Profiles (available across cloud and embedded surfaces) ---
-		// cheap: mechanical tasks — extraction, formatting, simple transforms.
-		// Minimize cost; prefer local inference first.
-		{
-			Ref: "cheap",
-			Surfaces: map[string]string{
-				"codex":           "gpt-5.4-mini",
-				"claude":          "claude-haiku-4-5",
-				"embedded-openai": "qwen3.5-27b",
-			},
-		},
-		// standard: default for most builds — refactoring, feature work, test writing.
-		{
-			Ref: "standard",
-			Surfaces: map[string]string{
-				"codex":           "gpt-5.4",
-				"claude":          "claude-sonnet-4-6",
-				"embedded-openai": "minimax/minimax-m2.7",
-			},
-		},
-		// smart: hard/broad tasks, user interactive sessions, HELIX document alignment.
-		// Always top-tier foundation models; cost is secondary.
-		{
-			Ref: "smart",
-			Surfaces: map[string]string{
-				"codex":           "gpt-5.4",
-				"claude":          "claude-opus-4-6",
-				"embedded-openai": "minimax/minimax-m2.7",
-			},
-		},
+// BuiltinCatalog is the DDx shared routing catalog built from the YAML seed.
+// Tier→surface→model assignments come from DefaultModelCatalogYAML so the data
+// lives in one place. Policy aliases (qwen3, codex-mini) and deprecated pins
+// are added here as they are routing policy decisions, not model metadata.
+var BuiltinCatalog = buildBuiltinCatalog()
 
-		// --- Embedded-only refs ---
+func buildBuiltinCatalog() *Catalog {
+	yml := DefaultModelCatalogYAML()
+
+	// Build tier entries from YAML seed.
+	var entries []CatalogEntry
+	for tierName, tierDef := range yml.Tiers {
+		entry := CatalogEntry{
+			Ref:      tierName,
+			Surfaces: make(map[string]string, len(tierDef.Surfaces)),
+		}
+		for surface, model := range tierDef.Surfaces {
+			entry.Surfaces[surface] = model
+		}
+		entries = append(entries, entry)
+	}
+
+	// Policy aliases: logical names not tied to a tier profile.
+	entries = append(entries,
 		// qwen3 is only available via the embedded OpenAI-compatible surface.
-		// DDx selects the embedded harness; ddx-agent resolves the provider/backend.
-		{
-			Ref: "qwen3",
-			Surfaces: map[string]string{
-				"embedded-openai": "qwen/qwen3-coder-next",
-			},
+		CatalogEntry{
+			Ref:      "qwen3",
+			Surfaces: map[string]string{"embedded-openai": "qwen/qwen3-coder-next"},
 		},
-
-		// --- Deprecated aliases ---
-		{
-			Ref: "codex-mini",
-			Surfaces: map[string]string{
-				"codex": "gpt-5.4-mini",
-			},
+		// codex-mini is a deprecated alias for the cheap codex model.
+		CatalogEntry{
+			Ref:        "codex-mini",
+			Surfaces:   map[string]string{"codex": "gpt-5.4-mini"},
 			Deprecated: true,
 			ReplacedBy: "cheap",
 		},
-	},
-	[]DeprecatedPin{
-		// --- Deprecated explicit model version pins ---
-		// These are stale exact version strings for the claude (Anthropic) family.
-		// Users passing these as --model pins bypass catalog policy; DDx warns.
+	)
+
+	pins := []DeprecatedPin{
+		// Stale exact version strings for the claude (Anthropic) family.
 		{Pin: "claude-opus-4-5", Surface: "claude", ReplacedBy: "claude-opus-4-6"},
 		{Pin: "claude-3-5-sonnet-20241022", Surface: "claude", ReplacedBy: "claude-sonnet-4-6"},
 		{Pin: "claude-3-opus-20240229", Surface: "claude", ReplacedBy: "claude-opus-4-6"},
 		{Pin: "claude-3-sonnet-20240229", Surface: "claude", ReplacedBy: "claude-sonnet-4-6"},
-
-		// Deprecated explicit model version pins for the codex (OpenAI) family.
+		// Stale exact version strings for the codex (OpenAI) family.
 		{Pin: "gpt-4o", Surface: "codex", ReplacedBy: "gpt-5.4-mini"},
 		{Pin: "gpt-4-turbo", Surface: "codex", ReplacedBy: "gpt-5.4"},
 		{Pin: "o1-2024-12-17", Surface: "codex", ReplacedBy: "gpt-5.4"},
-	},
-)
+	}
+
+	return NewCatalogWithPins(entries, pins)
+}

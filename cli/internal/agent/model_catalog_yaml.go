@@ -173,10 +173,32 @@ func FetchOpenRouterPricing(timeout time.Duration) (map[string]openrouterModel, 
 	return out, nil
 }
 
+// mergeDefaultRefIDs copies OpenRouterRefID from DefaultModelCatalogYAML into cat
+// for any model entry that lacks one. This lets saved catalogs that predate the
+// OpenRouterRefID field pick up the correct lookup IDs on next update.
+func mergeDefaultRefIDs(cat *ModelCatalogYAML) {
+	defaults := DefaultModelCatalogYAML()
+	refByID := make(map[string]string, len(defaults.Models))
+	for _, d := range defaults.Models {
+		if d.OpenRouterRefID != "" {
+			refByID[d.ID] = d.OpenRouterRefID
+		}
+	}
+	for i := range cat.Models {
+		if cat.Models[i].OpenRouterRefID == "" {
+			if ref, ok := refByID[cat.Models[i].ID]; ok {
+				cat.Models[i].OpenRouterRefID = ref
+			}
+		}
+	}
+}
+
 // UpdateCatalogPricing fetches current OpenRouter pricing and updates the
 // CostInputPerM / CostOutputPerM fields on matching ModelEntryYAML entries.
 // Returns the number of models updated and a list of model IDs not found on OpenRouter.
 func UpdateCatalogPricing(cat *ModelCatalogYAML, timeout time.Duration) (updated int, notFound []string, err error) {
+	mergeDefaultRefIDs(cat)
+
 	prices, err := FetchOpenRouterPricing(timeout)
 	if err != nil {
 		return 0, nil, err
@@ -250,22 +272,21 @@ func DefaultModelCatalogYAML() *ModelCatalogYAML {
 		},
 		Models: []ModelEntryYAML{
 			// Smart tier
-			{ID: "claude-opus-4-6", Provider: "anthropic", Tier: "smart", ModelFamily: "claude-opus", ModelVersion: "4.6", SWEBenchVerified: 80.8, CostInputPerM: 15.0, CostOutputPerM: 75.0, CostCacheWritePerM: 18.75, CostCacheReadPerM: 1.50, BenchmarkAsOf: "2026-04-12"},
-			{ID: "gpt-5.4", Provider: "openai", Tier: "smart", ModelFamily: "gpt-5", ModelVersion: "5.4", OpenRouterRefID: "openai/gpt-5.4", SWEBenchVerified: 78.2, BenchmarkAsOf: "2026-04-12", Notes: "codex harness; no API pricing published"},
+			{ID: "claude-opus-4-6", Provider: "anthropic", Tier: "smart", ModelFamily: "claude-opus", ModelVersion: "4.6", OpenRouterRefID: "anthropic/claude-opus-4.6", SWEBenchVerified: 80.8, CostInputPerM: 15.0, CostOutputPerM: 75.0, CostCacheWritePerM: 18.75, CostCacheReadPerM: 1.50, ContextWindow: 1000000, BenchmarkAsOf: "2026-04-12"},
+			{ID: "gpt-5.4", Provider: "openai", Tier: "smart", ModelFamily: "gpt-5", ModelVersion: "5.4", OpenRouterRefID: "openai/gpt-5.4", SWEBenchVerified: 78.2, CostInputPerM: 2.50, CostOutputPerM: 15.0, CostCacheReadPerM: 0.25, ContextWindow: 1050000, BenchmarkAsOf: "2026-04-12", Notes: "codex harness; OpenRouter pricing"},
 			// Standard tier
-			{ID: "claude-sonnet-4-6", Provider: "anthropic", Tier: "standard", ModelFamily: "claude-sonnet", ModelVersion: "4.6", SWEBenchVerified: 79.6, CostInputPerM: 3.0, CostOutputPerM: 15.0, CostCacheWritePerM: 3.75, CostCacheReadPerM: 0.30, BenchmarkAsOf: "2026-04-12"},
-			{ID: "minimax/minimax-m2.7", Provider: "minimax", Tier: "standard", SWEBenchVerified: 78.0, CostInputPerM: 0.30, CostOutputPerM: 1.20, ContextWindow: 204800, BenchmarkAsOf: "2026-04-12"},
-			{ID: "minimax/minimax-m2.5", Provider: "minimax", Tier: "standard", SWEBenchVerified: 80.2, LiveCodeBench: 65.0, CostInputPerM: 0.12, CostOutputPerM: 0.95, ContextWindow: 196608, BenchmarkAsOf: "2026-04-12"},
-			{ID: "moonshot/kimi-k2.5", Provider: "moonshot", Tier: "standard", SWEBenchVerified: 76.8, LiveCodeBench: 85.0, CostInputPerM: 0.50, CostOutputPerM: 2.50, ContextWindow: 262144, BenchmarkAsOf: "2026-04-12"},
-			{ID: "openai/gpt-4.1", Provider: "openai", Tier: "standard", SWEBenchVerified: 78.0, CostInputPerM: 2.0, CostOutputPerM: 8.0, BenchmarkAsOf: "2026-04-12"},
+			{ID: "claude-sonnet-4-6", Provider: "anthropic", Tier: "standard", ModelFamily: "claude-sonnet", ModelVersion: "4.6", OpenRouterRefID: "anthropic/claude-sonnet-4.6", SWEBenchVerified: 79.6, CostInputPerM: 3.0, CostOutputPerM: 15.0, CostCacheWritePerM: 3.75, CostCacheReadPerM: 0.30, ContextWindow: 1000000, BenchmarkAsOf: "2026-04-12"},
+			{ID: "minimax/minimax-m2.7", Provider: "minimax", Tier: "standard", SWEBenchVerified: 78.0, CostInputPerM: 0.30, CostOutputPerM: 1.20, CostCacheReadPerM: 0.06, ContextWindow: 204800, BenchmarkAsOf: "2026-04-12"},
+			{ID: "minimax/minimax-m2.5", Provider: "minimax", Tier: "standard", SWEBenchVerified: 80.2, LiveCodeBench: 65.0, CostInputPerM: 0.12, CostOutputPerM: 0.99, CostCacheReadPerM: 0.059, ContextWindow: 196608, BenchmarkAsOf: "2026-04-12"},
+			{ID: "moonshot/kimi-k2.5", Provider: "moonshot", Tier: "standard", OpenRouterRefID: "moonshotai/kimi-k2.5", SWEBenchVerified: 76.8, LiveCodeBench: 85.0, CostInputPerM: 0.38, CostOutputPerM: 1.72, CostCacheReadPerM: 0.191, ContextWindow: 262144, BenchmarkAsOf: "2026-04-12"},
+			{ID: "openai/gpt-4.1", Provider: "openai", Tier: "standard", SWEBenchVerified: 78.0, CostInputPerM: 2.0, CostOutputPerM: 8.0, CostCacheReadPerM: 0.50, ContextWindow: 1047576, BenchmarkAsOf: "2026-04-12"},
+			{ID: "openai/gpt-oss-120b", Provider: "openai", Tier: "standard", CostInputPerM: 0.04, CostOutputPerM: 0.19, ContextWindow: 131072, Notes: "local inference on vidar; no SWE-bench published", BenchmarkAsOf: "2026-04-12"},
 			// Cheap tier
-			{ID: "claude-haiku-4-5", Provider: "anthropic", Tier: "cheap", ModelFamily: "claude-haiku", ModelVersion: "4.5", SWEBenchVerified: 73.3, CostInputPerM: 0.80, CostOutputPerM: 4.0, CostCacheWritePerM: 1.00, CostCacheReadPerM: 0.08, BenchmarkAsOf: "2026-04-12"},
-			{ID: "gpt-5.4-mini", Provider: "openai", Tier: "cheap", ModelFamily: "gpt-5-mini", ModelVersion: "5.4", OpenRouterRefID: "openai/gpt-5.4-mini", BenchmarkAsOf: "2026-04-12", Notes: "pricing not yet published"},
-			{ID: "qwen3.5-27b", Provider: "qwen", Tier: "cheap", SWEBenchVerified: 72.4, Notes: "local inference on vidar; benchmark for full precision — quantization reduces scores", BenchmarkAsOf: "2026-04-12"},
-			{ID: "qwen/qwen3-coder-next", Provider: "qwen", Tier: "cheap", SWEBenchVerified: 70.6, LiveCodeBench: 70.7, ContextWindow: 262144, Notes: "local; 80B MoE (3B active); benchmark for full precision — quantization reduces scores", BenchmarkAsOf: "2026-04-12"},
-			{ID: "openai/gpt-oss-20b", Provider: "openai", Tier: "cheap", Notes: "local inference on vidar; no SWE-bench published", BenchmarkAsOf: "2026-04-12"},
-			// Local standard
-			{ID: "openai/gpt-oss-120b", Provider: "openai", Tier: "standard", Notes: "local inference on vidar; no SWE-bench published; benchmark for full precision — quantization reduces scores", BenchmarkAsOf: "2026-04-12"},
+			{ID: "claude-haiku-4-5", Provider: "anthropic", Tier: "cheap", ModelFamily: "claude-haiku", ModelVersion: "4.5", OpenRouterRefID: "anthropic/claude-haiku-4.5", SWEBenchVerified: 73.3, CostInputPerM: 0.80, CostOutputPerM: 4.0, CostCacheWritePerM: 1.00, CostCacheReadPerM: 0.08, ContextWindow: 200000, BenchmarkAsOf: "2026-04-12"},
+			{ID: "gpt-5.4-mini", Provider: "openai", Tier: "cheap", ModelFamily: "gpt-5-mini", ModelVersion: "5.4", OpenRouterRefID: "openai/gpt-5.4-mini", CostInputPerM: 0.75, CostOutputPerM: 4.50, CostCacheReadPerM: 0.075, ContextWindow: 400000, BenchmarkAsOf: "2026-04-12", Notes: "codex harness; OpenRouter pricing"},
+			{ID: "qwen3.5-27b", Provider: "qwen", Tier: "cheap", OpenRouterRefID: "qwen/qwen3.5-27b", SWEBenchVerified: 72.4, CostInputPerM: 0.20, CostOutputPerM: 1.56, ContextWindow: 262144, Notes: "local inference on vidar; benchmark for full precision — quantization reduces scores", BenchmarkAsOf: "2026-04-12"},
+			{ID: "qwen/qwen3-coder-next", Provider: "qwen", Tier: "cheap", SWEBenchVerified: 70.6, LiveCodeBench: 70.7, CostInputPerM: 0.15, CostOutputPerM: 0.80, CostCacheReadPerM: 0.12, ContextWindow: 262144, Notes: "local; 80B MoE (3B active); benchmark for full precision — quantization reduces scores", BenchmarkAsOf: "2026-04-12"},
+			{ID: "openai/gpt-oss-20b", Provider: "openai", Tier: "cheap", CostInputPerM: 0.03, CostOutputPerM: 0.14, ContextWindow: 131072, Notes: "local inference on vidar; no SWE-bench published", BenchmarkAsOf: "2026-04-12"},
 			// Blocked: deprecated/retired models — routing must never select these.
 			{ID: "gpt-3.5-turbo", Provider: "openai", Tier: "cheap", Blocked: true, Notes: "retired; use cheap tier"},
 			{ID: "gpt-3.5-turbo-16k", Provider: "openai", Tier: "cheap", Blocked: true, Notes: "retired; use cheap tier"},

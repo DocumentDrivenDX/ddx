@@ -9,40 +9,25 @@ const (
 	TierCheap    ModelTier = "cheap"    // mechanical tasks: extraction, formatting, simple transforms; minimize cost
 )
 
-// DefaultModelTiers maps harness → tier → model.
-// These are the current production defaults as of 2026-04.
-var DefaultModelTiers = map[string]map[ModelTier]string{
-	"codex": {
-		TierSmart:    "gpt-5.4",
-		TierStandard: "gpt-5.4", // codex routes internally; gpt-5.4 is the available smart/standard model
-		TierCheap:    "gpt-5.4-mini",
-	},
-	"claude": {
-		TierSmart:    "claude-opus-4-6",
-		TierStandard: "claude-sonnet-4-6",
-		TierCheap:    "claude-haiku-4-5",
-	},
-	"agent": {
-		TierSmart:    "minimax/minimax-m2.7",
-		TierStandard: "minimax/minimax-m2.7",
-		TierCheap:    "qwen3.5-27b",
-	},
-	"opencode": {
-		TierSmart:    "anthropic/claude-opus-4-6",
-		TierStandard: "anthropic/claude-sonnet-4-6",
-		TierCheap:    "anthropic/claude-haiku-4-5",
-	},
+// harnessToSurface maps harness names to their catalog surface identifier.
+// This is the only place harness→surface is declared; all model resolution
+// goes through BuiltinCatalog using the surface name.
+var harnessToSurface = map[string]string{
+	"codex":    "codex",
+	"claude":   "claude",
+	"agent":    "embedded-openai",
+	"opencode": "claude",
 }
 
-// ResolveModelTier returns the model for a given harness and tier.
-// Falls back to the harness DefaultModel if the tier is unknown.
+// ResolveModelTier returns the concrete model for a given harness and tier
+// by looking up the tier profile in BuiltinCatalog for the harness's surface.
 func ResolveModelTier(harness string, tier ModelTier) string {
-	if tiers, ok := DefaultModelTiers[harness]; ok {
-		if model, ok := tiers[tier]; ok {
-			return model
-		}
+	surface, ok := harnessToSurface[harness]
+	if !ok {
+		return ""
 	}
-	return ""
+	model, _ := BuiltinCatalog.Resolve(string(tier), surface)
+	return model
 }
 
 // BenchmarkArm defines one arm in a benchmark run.
