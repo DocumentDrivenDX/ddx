@@ -1,0 +1,8 @@
+# DDx runtime scratch
+.ddx/.execute-bead-wt-*/
+.ddx/*.lock/
+.ddx/agent-logs/
+.ddx/workers/
+.codex/
+.agent/logs/
+.agent/sessions/
