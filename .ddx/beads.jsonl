@@ -1,2 +1,2 @@
-{"acceptance":"Artifacts are written for later inspection.","created_at":"2026-04-12T02:13:54.772963701Z","id":"my-bead","issue_type":"task","priority":0,"status":"open","title":"Record execution artifacts","updated_at":"2026-04-12T02:13:54.772963701Z"}
-{"created_at":"2026-04-12T02:13:54.785699811Z","id":"shared-bead","issue_type":"task","priority":0,"status":"open","title":"Shared execute-bead","updated_at":"2026-04-12T02:13:54.785699811Z"}
+{"created_at":"2026-04-12T02:13:54.839935831Z","id":"my-bead","issue_type":"task","priority":0,"status":"open","title":"Test execute-bead","updated_at":"2026-04-12T02:13:54.839935831Z"}
+{"created_at":"2026-04-12T02:13:54.844892909Z","id":"shared-bead","issue_type":"task","priority":0,"status":"open","title":"Shared execute-bead","updated_at":"2026-04-12T02:13:54.844892909Z"}
