@@ -34,6 +34,10 @@ type fakeExecuteBeadGit struct {
 	wtDirty bool
 	// wtHeadRevErr, if set, is returned by HeadRev for worktree paths.
 	wtHeadRevErr error
+	// wtCommitAllRev is returned by CommitAll for worktree paths.
+	wtCommitAllRev string
+	// commitAllErr, if set, is returned by CommitAll.
+	commitAllErr error
 	dirty        bool
 	mergeErr     error
 	updateRefErr error
@@ -44,8 +48,9 @@ type fakeExecuteBeadGit struct {
 	refs       map[string]string // ref -> sha recorded by UpdateRef
 	worktrees  []string          // paths returned by WorktreeList
 
-	mergeCalls int
-	mergeRev   string
+	mergeCalls    int
+	mergeRev      string
+	commitAllCalls int
 }
 
 func (f *fakeExecuteBeadGit) HeadRev(dir string) (string, error) {
@@ -82,6 +87,16 @@ func (f *fakeExecuteBeadGit) IsDirty(dir string) (bool, error) {
 		return f.wtDirty, nil
 	}
 	return f.dirty, nil
+}
+
+func (f *fakeExecuteBeadGit) CommitAll(dir, message string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.commitAllCalls++
+	if f.commitAllErr != nil {
+		return "", f.commitAllErr
+	}
+	return f.wtCommitAllRev, nil
 }
 
 func (f *fakeExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {

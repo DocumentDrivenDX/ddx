@@ -59,6 +59,8 @@ type ExecuteBeadOptions struct {
 type GitOps interface {
 	HeadRev(dir string) (string, error)
 	ResolveRev(dir, rev string) (string, error)
+	IsDirty(dir string) (bool, error)
+	CommitAll(dir, message string) (string, error)
 	WorktreeAdd(dir, wtPath, rev string) error
 	WorktreeRemove(dir, wtPath string) error
 	WorktreeList(dir string) ([]string, error)
@@ -147,6 +149,24 @@ func (r *RealGitOps) ResolveRev(dir, rev string) (string, error) {
 		return "", fmt.Errorf("git rev-parse %s: %w", rev, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func (r *RealGitOps) IsDirty(dir string) (bool, error) {
+	out, err := osexec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	if err != nil {
+		return false, fmt.Errorf("git status --porcelain: %w", err)
+	}
+	return strings.TrimSpace(string(out)) != "", nil
+}
+
+func (r *RealGitOps) CommitAll(dir, message string) (string, error) {
+	if out, err := osexec.Command("git", "-C", dir, "add", "-A").CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git add -A: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	if out, err := osexec.Command("git", "-C", dir, "commit", "-m", message).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git commit: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return r.HeadRev(dir)
 }
 
 func (r *RealGitOps) WorktreeAdd(dir, wtPath, rev string) error {
@@ -384,6 +404,22 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		ResultFile:   artifacts.ResultRel,
 		StartedAt:    startedAt,
 		FinishedAt:   finishedAt,
+	}
+
+	// If the agent left uncommitted changes in the worktree,
+	// auto-commit them so the work is preserved rather than discarded.
+	if resultRev == baseRev {
+		dirty, dirtyErr := gitOps.IsDirty(wtPath)
+		if dirtyErr == nil && dirty {
+			commitMsg := fmt.Sprintf("auto-commit: agent edits for bead %s (attempt %s)", beadID, attemptID)
+			newRev, commitErr := gitOps.CommitAll(wtPath, commitMsg)
+			if commitErr == nil && newRev != "" {
+				resultRev = newRev
+				res.ResultRev = newRev
+			}
+			// If auto-commit fails, fall through with resultRev == baseRev.
+			// The existing no-changes/error classification applies.
+		}
 	}
 
 	// Determine outcome: error, no-changes, merge, or preserve.
