@@ -49,12 +49,14 @@ DDx embeds the agent library and calls its run function. The boundary:
 - Bead linkage and execution evidence
 - Normalized routing-signal views across harnesses
 - Minimal DDx-observed performance metrics for routing
-- Configuration in `.ddx/config.yaml` (maps to agent runner config)
+- DDx orchestration config in `.ddx/config.yaml`: harness selection, timeout,
+  session log dir, permissions, and DDx routing controls (not provider config)
 
 **Integration rules:**
 - DDx calls the agent library run function and maps the result to `agent.Result`
-- Configuration (provider, model, base URL, preset, max iterations)
-  flows from `.ddx/config.yaml` and env vars into the agent library request
+- Native `.agent/config.yaml` is the authoritative source for embedded-harness
+  provider config (provider type, base URL, API key, model, preset, max
+  iterations). See "Embedded Harness Configuration Ownership" below.
 - DDx does not re-implement prompt building — it calls
   `prompt.NewFromPreset()` and passes through
 - DDx does not manage agent tools — it constructs the standard tool
@@ -66,6 +68,100 @@ DDx embeds the agent library and calls its run function. The boundary:
   and records only the correlation and metadata needed for DDx workflows.
 - Forge's `Result.ToolCalls` are preserved in comparison arms for
   richer evaluation (subprocess harnesses don't have this)
+
+## Embedded Harness Configuration Ownership
+
+The embedded `agent` harness resolves its provider configuration through a
+layered precedence chain. The design goal is that `.agent/config.yaml` (the
+native ddx-agent runtime config) is the single authoritative source for
+provider-level settings. DDx orchestration config (`.ddx/config.yaml`) owns
+only cross-harness routing controls and must not duplicate provider-level fields
+from the native runtime config.
+
+### Authoritative Config Source
+
+**`.agent/config.yaml`** (native ddx-agent runtime config) is the authoritative
+source for embedded-harness provider configuration:
+
+- Provider type (`openai-compat`, `anthropic`)
+- Base URL / endpoint
+- API key
+- Default model
+- Prompt preset
+- Max iterations
+- Named provider definitions with OpenRouter and multi-endpoint support
+
+This file is loaded from `.agent/config.yaml` in the working directory or
+`~/.config/agent/config.yaml` as a global fallback.
+
+### Precedence Chain
+
+Config resolution for one embedded-agent invocation applies layers in this
+order (highest priority first):
+
+1. **CLI flags** (`--model`, `--harness`, `--effort`, etc.) — always win
+2. **Native `.agent/config.yaml`** — authoritative provider config when present
+3. **`.ddx/config.yaml` `agent_runner` section** — deprecated fallback mirror;
+   used only when no native config file exists. See "Migration" below.
+4. **Built-in defaults** — `openai-compat` provider, `http://localhost:1234/v1`
+   base URL, `agent` preset, 100 max iterations
+
+### Environment Variables
+
+The `AGENT_*` env vars (`AGENT_MODEL`, `AGENT_PROVIDER`, `AGENT_BASE_URL`,
+`AGENT_API_KEY`, `AGENT_PRESET`) currently apply only in the `.ddx/config.yaml`
+fallback path. They are **not** forwarded into the native config path. This is a
+known gap to be closed as part of the `agent_runner` mirror removal work.
+
+Native agent config supports `$ENV_VAR` expansion inside the YAML file itself;
+use that pattern when targeting the native config path.
+
+### Special Cases
+
+- **OpenRouter models** (vendor/model format, e.g. `qwen/qwen3.6`): when the
+  requested model contains a `/`, DDx prefers the `openrouter` provider from
+  native config if present, falling back to default provider otherwise.
+- **Named legacy presets** (e.g. `qwen-local` from `.ddx/config.yaml`
+  `agent_runner.models`): when the model name matches a named preset in
+  `.ddx/config.yaml` and a native config is also present, the legacy preset
+  takes precedence to preserve backward compatibility. This behavior is
+  deprecated and will be removed with the `agent_runner` mirror.
+
+### DDx Orchestration Config (`.ddx/config.yaml`)
+
+The `agent` section of `.ddx/config.yaml` owns DDx-level routing controls only:
+
+```yaml
+agent:
+  harness: claude          # default harness for ddx agent run
+  model: gpt-4o            # per-harness model override (routing hint)
+  timeout_ms: 300000       # invocation timeout
+  session_log_dir: ...     # where DDx writes invocation metadata
+  permissions: safe        # automation level for subprocess harnesses
+  routing:                 # cross-harness routing policy
+    profile_priority: [cheap]
+    default_harness: agent
+    model_overrides:
+      cheap: qwen/qwen3.6
+```
+
+The `agent_runner` sub-section is a **deprecated lossy mirror** of native
+`.agent/config.yaml` fields. New deployments should use `.agent/config.yaml`
+instead. The `agent_runner` section will be removed once all known usages have
+migrated.
+
+### Migration
+
+To migrate from `.ddx/config.yaml` `agent_runner` to native `.agent/config.yaml`:
+
+1. Create `.agent/config.yaml` with `providers`, `default`, `preset`, and
+   `max_iterations` fields matching your current `agent_runner` values.
+2. For OpenRouter, add an `openrouter` provider entry with your API key.
+3. Remove the `agent_runner` block from `.ddx/config.yaml`.
+
+The implementation work to remove the `agent_runner` mirror from DDx config
+schema, apply `AGENT_*` env vars in the native path, and clean up the fallback
+logic is tracked separately (see bead `ddx-remove-agent-runner-mirror`).
 
 The full routing contract — normalized request model, candidate planning,
 ranking rules, rejection criteria, and the DDx-vs-embedded boundary — is
