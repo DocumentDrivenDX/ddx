@@ -209,8 +209,9 @@ references for a recent agent invocation
 - Given a valid bead ID, when `ddx agent execute-bead <id>` is invoked, then DDx resolves the bead and governing artifacts and begins the workflow.
 - Given `--from` is omitted, when the base revision is resolved, then DDx uses `HEAD`.
 - Given `--harness`, `--model`, and `--effort` are provided, when the agent runs, then execute-bead honors them exactly as a normal `ddx agent run` invocation would.
-- Given graph-discovered required executions fail, when the merge decision is made, then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch.
-- Given all required executions pass and ratchets are satisfied, when the merge decision is made and `--no-merge` is not set, then DDx lands the result by fast-forward.
+- Given the agent run succeeds and produces tracked changes, when post-run merge-gate evaluation begins, then execute-bead treats the iteration as merge-by-default unless `--no-merge` is set, a governing-snapshot execution document blocks landing, or the final land step conflicts.
+- Given required executions resolved from the governing graph snapshot fail, when the merge decision is made, then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch.
+- Given all governing-snapshot required executions pass and their explicit ratchets are satisfied, when the merge decision is made and `--no-merge` is not set, then DDx lands the result by fast-forward.
 - Given `--no-merge` is set, when the iteration completes, then DDx creates a committed attempt and preserves it under a hidden ref. It is not landed regardless of execution outcomes.
 - Given execution completes, when the worktree is cleaned up, then no temporary worktree created by execute-bead remains in the filesystem.
 - Given execute-bead completes, when the run record is inspected, then it contains built-in runtime metrics as specified in FEAT-014 US-145, captured automatically for the iteration.
@@ -304,19 +305,31 @@ different.
    execution worktree (see FEAT-007). **Execution documents are resolved from
    the base revision before the agent runs.** If the agent modifies execution
    document definitions or ratchet thresholds during its run, the pre-run
-   versions govern the current iteration's evaluation.
-8. Run all required execution documents plus relevant metric/observation
-   executions.
-9. Evaluate required execution results and metric ratchets (see TD-005).
+   versions govern the current iteration's evaluation. Only this explicit,
+   graph-authored execution-document set can add automatic post-run landing
+   gates for the current iteration.
+8. Run the resolved execution documents. Required executions are merge-gating;
+   non-required metric or observation executions are evidence-producing unless
+   their resolved definition explicitly carries blocking ratchet semantics.
+9. Evaluate post-run merge gates separately from the pre-launch execution-ready
+   validator (see TD-005).
+   - The pre-launch validator only decides whether the bead is structurally
+     eligible to start from the chosen base revision and governing snapshot.
    - For `kind: command` executions, success means exit code 0.
    - For `kind: agent` executions, success means exit code 0 (structured result schema validation is optional and governed by the definition).
    - When a `required: true` execution also has a ratchet threshold, landing is blocked if EITHER condition fails (OR semantics) — non-success status OR ratchet regression blocks the merge.
+   - Only explicit blockers from the resolved execution documents can make a
+     successful run non-merge-eligible. Built-in runtime metrics, warnings, and
+     runtime-managed execution definitions do not implicitly block landing for
+     `execute-bead`.
 10. If the agent produced tracked worktree edits without creating commits,
     synthesize a DDx-owned result commit before merge/preserve evaluation so
     the work is not discarded merely because the harness left file edits
     uncommitted.
-11. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
-    semantics, then reset the worker worktree to the updated branch tip.
+11. If the run succeeded, produced tracked changes (including a synthesized
+    result commit when needed), remains merge-eligible after step 9, and
+    `--no-merge` is not set, land by rebase + fast-forward semantics, then
+    reset the worker worktree to the updated branch tip.
 12. Otherwise, preserve the iteration result under a hidden ref and do not merge
     (see SD-012 for the hidden-ref naming scheme).
 13. Always remove the temporary worktree after preserving enough evidence for
@@ -367,6 +380,10 @@ agent-authored commits.
 - Agent-created commits are optional, not required.
 - A run that leaves coherent tracked edits in the managed worktree still counts
   as produced work.
+- After a successful run that produces tracked changes, `execute-bead` is
+  merge-by-default. Preservation requires an explicit blocker: `--no-merge`,
+  a failed required execution, an execution-defined ratchet block, or a land
+  conflict.
 - A run is only `no_changes` when the managed worktree ends clean and there are
   no new tracked changes to preserve or land.
 - If DDx needs a commit object for preserve/merge mechanics and the agent left

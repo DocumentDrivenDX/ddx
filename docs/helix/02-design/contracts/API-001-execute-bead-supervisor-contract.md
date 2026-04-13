@@ -49,12 +49,21 @@ The first shipped supervisor is intentionally **not** the epic worker. Epic
 execution uses a separate worker mode because it needs a persistent branch,
 worktree, and merge-commit landing contract.
 
-`ddx agent execute-bead` remains the single owner of required execution
-document resolution, required post-run checks, merge-eligibility evaluation,
+`ddx agent execute-bead` remains the single owner of execution-document
+resolution, explicit required post-run checks, merge-eligibility evaluation,
 and land/preserve mechanics, including creation and cleanup of its isolated
 worktree. The supervisor only orchestrates queue selection, invokes that
 command from the project root, and records the result states emitted by that
 command.
+
+That ownership boundary is intentionally narrow:
+
+- structural execution-ready validation happens before launch against the base
+  revision and governing snapshot
+- post-run merge gating happens only after a successful execution attempt has
+  produced work
+- only explicit execution documents resolved from the governing graph snapshot
+  may block landing automatically for that attempt
 
 The command requires a reproducible git base revision, not a pristine root
 checkout. Tracked root changes may be checkpointed into an immutable base
@@ -93,7 +102,7 @@ drained, the operator stops it, or a fatal project error occurs.
    supervisor-visible `status` field:
    - structural validation failure before launch
    - execution failure
-   - post-run check failure
+   - post-run check failure caused by a governing-snapshot execution gate
    - land conflict after a successful attempt
    - success
 8. Continue scanning the same project queue.
@@ -135,6 +144,11 @@ without creating commits, `execute-bead` synthesizes the result commit and
 then evaluates land/preserve semantics. Only a truly clean managed worktree may
 be reported as `no_changes`.
 
+For control-flow purposes, a successful run with tracked changes is
+merge-eligible by default unless `--no-merge`, an explicit
+governing-snapshot execution gate, or the final land step prevents landing.
+The supervisor must not invent additional blocking policy.
+
 ## Validation And Retry Semantics
 
 Structural validation happens before any irreversible execution step.
@@ -146,7 +160,9 @@ Structural validation happens before any irreversible execution step.
   records that result `status`.
 - If post-run required checks fail, `execute-bead` preserves the iteration
   under a hidden ref, sets the documented failure `status`, and the supervisor
-  records that result `status`.
+  records that result `status`. Those checks are limited to the explicit
+  execution documents resolved from the governing graph snapshot for the
+  attempt, including any merge-blocking ratchet semantics authored there.
 - If a rebase or fast-forward land fails after a successful run, `execute-bead`
   preserves the iteration and the preserved iteration remains the canonical
   evidence for that attempt.
@@ -163,14 +179,21 @@ prior attempt.
 
 ## Land And Preserve Semantics
 
-Success is only complete after the result is landed by rebase plus
-fast-forward.
+After a successful run with tracked changes, landing is the default. Success is
+only complete after the result is landed by rebase plus fast-forward.
 
 - rebase the execution branch onto the latest target tip
 - fast-forward the target branch when the rebase result is clean
 - reset the worker worktree to the updated branch tip after a successful land
 - preserve the iteration under a hidden ref when the result cannot be landed or
   `--no-merge` semantics apply
+
+Automatic preservation therefore has only three documented causes once
+execution has produced work:
+
+- `--no-merge` was requested
+- a governing-snapshot execution document blocked landing
+- the final rebase/fast-forward land conflicted
 
 These mechanics are owned by `ddx agent execute-bead`; the supervisor observes
 the resulting landed or preserved state rather than performing them itself.
