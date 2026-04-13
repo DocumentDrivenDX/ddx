@@ -768,6 +768,9 @@ func TestIntegration_ClaudeEcho(t *testing.T) {
 }
 
 func TestIntegration_OpencodeEcho(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test skipped in short mode")
+	}
 	if _, err := DefaultLookPath("opencode"); err != nil {
 		t.Skip("opencode not available")
 	}

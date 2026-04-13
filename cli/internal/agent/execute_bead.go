@@ -181,6 +181,21 @@ func (r *RealGitOps) WorktreePrune(dir string) error {
 }
 
 func (r *RealGitOps) Merge(dir, rev string) error {
+	// For bare repositories git merge requires a working tree, so we advance
+	// the HEAD branch directly via a local fast-forward fetch instead.
+	isBare, _ := osexec.Command("git", "-C", dir, "rev-parse", "--is-bare-repository").Output()
+	if strings.TrimSpace(string(isBare)) == "true" {
+		symRef, err := osexec.Command("git", "-C", dir, "symbolic-ref", "HEAD").Output()
+		if err != nil {
+			return fmt.Errorf("bare repo HEAD is not a branch ref: %w", err)
+		}
+		targetRef := strings.TrimSpace(string(symRef))
+		out, err := osexec.Command("git", "-C", dir, "fetch", ".", rev+":"+targetRef).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return nil
+	}
 	out, err := osexec.Command("git", "-C", dir, "merge", rev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
