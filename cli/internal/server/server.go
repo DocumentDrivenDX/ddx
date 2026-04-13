@@ -42,19 +42,41 @@ type Server struct {
 	mux         *http.ServeMux
 	startTime   time.Time
 	workers     *WorkerManager
+	state       *ServerState
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
 func New(addr, workingDir string) *Server {
+	nodeName := resolveNodeName()
+	stateDir := filepath.Join(workingDir, ".ddx", "server")
+	state := loadServerState(stateDir, nodeName)
+
 	s := &Server{
 		Addr:       addr,
 		WorkingDir: workingDir,
 		mux:        http.NewServeMux(),
 		startTime:  time.Now().UTC(),
 		workers:    NewWorkerManager(workingDir),
+		state:      state,
 	}
+
+	// Register the server's own project immediately.
+	state.RegisterProject(workingDir)
+	_ = state.save()
+
 	s.routes()
 	return s
+}
+
+// resolveNodeName returns DDX_NODE_NAME env, or the system hostname.
+func resolveNodeName() string {
+	if n := os.Getenv("DDX_NODE_NAME"); n != "" {
+		return n
+	}
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return "unknown"
 }
 
 // Handler returns the server's HTTP handler (useful for testing).
@@ -95,6 +117,7 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 			return fmt.Errorf("generating self-signed cert: %w", err)
 		}
 	}
+	s.writeAddrFile("https")
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 		go func() {
@@ -106,6 +129,65 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 		return <-errCh
 	}
 	return http.ListenAndServeTLS(s.Addr, certFile, keyFile, s.mux)
+}
+
+// writeAddrFile writes the server's address to a user-level file so CLI
+// clients can auto-discover it without configuration.
+func (s *Server) writeAddrFile(scheme string) {
+	type addrFile struct {
+		Node      string    `json:"node"`
+		NodeID    string    `json:"node_id"`
+		URL       string    `json:"url"`
+		PID       int       `json:"pid"`
+		StartedAt time.Time `json:"started_at"`
+	}
+	af := addrFile{
+		Node:      s.state.Node.Name,
+		NodeID:    s.state.Node.ID,
+		URL:       fmt.Sprintf("%s://%s", scheme, s.Addr),
+		PID:       os.Getpid(),
+		StartedAt: s.startTime,
+	}
+	data, err := json.MarshalIndent(af, "", "  ")
+	if err != nil {
+		return
+	}
+	dir := serverAddrDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, "server.addr"), data, 0600)
+}
+
+// serverAddrDir returns the user-level directory for the server address file.
+// Follows XDG_DATA_HOME if set, else ~/.local/share/ddx.
+func serverAddrDir() string {
+	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+		return filepath.Join(xdg, "ddx")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join("/tmp", "ddx")
+	}
+	return filepath.Join(home, ".local", "share", "ddx")
+}
+
+// ReadServerAddr reads the last-written server address from the user-level
+// addr file. Returns "" if none is present.
+func ReadServerAddr() string {
+	type addrFile struct {
+		URL string `json:"url"`
+	}
+	path := filepath.Join(serverAddrDir(), "server.addr")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var af addrFile
+	if err := json.Unmarshal(data, &af); err != nil {
+		return ""
+	}
+	return af.URL
 }
 
 // ensureSelfSignedCert returns paths to a self-signed cert/key in dir,
@@ -252,6 +334,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/ready", s.handleReady)
 
+	// Node + project registry
+	s.mux.HandleFunc("GET /api/node", s.handleGetNode)
+	s.mux.HandleFunc("GET /api/projects", s.handleListProjects)
+	s.mux.HandleFunc("POST /api/projects/register", s.handleRegisterProject)
+
 	// Documents
 	s.mux.HandleFunc("GET /api/documents", s.handleListDocuments)
 	s.mux.HandleFunc("PUT /api/documents/{path...}", s.handleWriteDocument)
@@ -342,6 +429,35 @@ func spaHandler(fsys http.FileSystem) http.Handler {
 }
 
 // --- Health Endpoints ---
+
+func (s *Server) handleGetNode(w http.ResponseWriter, _ *http.Request) {
+	s.state.mu.RLock()
+	node := s.state.Node
+	s.state.mu.RUnlock()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name":       node.Name,
+		"id":         node.ID,
+		"started_at": node.StartedAt,
+		"last_seen":  node.LastSeen,
+	})
+}
+
+func (s *Server) handleListProjects(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.state.GetProjects())
+}
+
+func (s *Server) handleRegisterProject(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		return
+	}
+	entry := s.state.RegisterProject(body.Path)
+	_ = s.state.save()
+	writeJSON(w, http.StatusOK, entry)
+}
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{

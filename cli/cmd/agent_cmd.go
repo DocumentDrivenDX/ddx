@@ -19,6 +19,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +51,10 @@ Examples:
   ddx agent capabilities codex
   ddx agent doctor
   ddx agent log`,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			serverreg.TryRegisterAsync(f.WorkingDir)
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},

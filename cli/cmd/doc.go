@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +36,10 @@ Examples:
   ddx doc deps helix.arch    # Show what a document depends on
   ddx doc dependents helix.prd  # Show what depends on a document`,
 		Aliases: []string{"docs"},
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			serverreg.TryRegisterAsync(f.WorkingDir)
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},
