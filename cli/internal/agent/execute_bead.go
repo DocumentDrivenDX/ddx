@@ -84,6 +84,8 @@ type GitOps interface {
 	WorktreePrune(dir string) error
 	Merge(dir, rev string) error
 	UpdateRef(dir, ref, sha string) error
+	IsDirty(dir string) (bool, error)
+	SynthesizeCommit(dir string) error
 }
 
 // AgentRunner runs an agent with the given options.
@@ -220,6 +222,25 @@ func (r *RealGitOps) UpdateRef(dir, ref, sha string) error {
 	out, err := osexec.Command("git", "-C", dir, "update-ref", ref, sha).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+// IsDirty reports whether dir has tracked file modifications not yet committed.
+func (r *RealGitOps) IsDirty(dir string) (bool, error) {
+	err := osexec.Command("git", "-C", dir, "diff-index", "--quiet", "HEAD").Run()
+	return err != nil, nil
+}
+
+// SynthesizeCommit stages all tracked modifications in dir and creates a commit
+// so that the agent's uncommitted edits are not lost.
+func (r *RealGitOps) SynthesizeCommit(dir string) error {
+	if err := osexec.Command("git", "-C", dir, "add", "-u").Run(); err != nil {
+		return fmt.Errorf("staging tracked changes: %w", err)
+	}
+	out, err := osexec.Command("git", "-C", dir, "commit", "-m", "chore: execute-bead synthesized result commit").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
@@ -429,11 +450,6 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
 
-	// Set DDX_EXECUTE_BEAD_ID so that commands run inside the worktree (e.g.
-	// ddx init) can detect the execute-bead context and refuse destructive ops.
-	_ = os.Setenv("DDX_EXECUTE_BEAD_ID", beadID)
-	defer func() { _ = os.Unsetenv("DDX_EXECUTE_BEAD_ID") }()
-
 	// Run the agent
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
@@ -516,6 +532,19 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		populateStatus(res)
 		_ = writeArtifactJSON(artifacts.ResultAbs, res)
 		return res, fmt.Errorf("failed to read worktree HEAD: %w", revErr)
+	}
+
+	// Synthesize a commit when the agent left tracked edits without committing.
+	// This prevents useful work from being discarded as "no-changes" merely
+	// because the harness did not commit before exiting.
+	if resultRev == baseRev {
+		if isDirty, _ := gitOps.IsDirty(wtPath); isDirty {
+			if synthErr := gitOps.SynthesizeCommit(wtPath); synthErr == nil {
+				if newRev, _ := gitOps.HeadRev(wtPath); newRev != baseRev {
+					resultRev = newRev
+				}
+			}
+		}
 	}
 
 	res := &ExecuteBeadResult{

@@ -32,6 +32,8 @@ type fakeExecuteBeadGit struct {
 	wtHeadRev string
 	// wtDirty is returned by IsDirty for worktree paths.
 	wtDirty bool
+	// synthRev, if set, is applied as wtHeadRev when SynthesizeCommit is called.
+	synthRev string
 	// wtHeadRevErr, if set, is returned by HeadRev for worktree paths.
 	wtHeadRevErr error
 	dirty        bool
@@ -121,6 +123,15 @@ func (f *fakeExecuteBeadGit) WorktreeList(dir string) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.worktrees, nil
+}
+
+func (f *fakeExecuteBeadGit) SynthesizeCommit(dir string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if strings.Contains(dir, agent.ExecuteBeadWtPrefix) && f.synthRev != "" {
+		f.wtHeadRev = f.synthRev
+	}
+	return nil
 }
 
 func (f *fakeExecuteBeadGit) WorktreePrune(dir string) error { return nil }
@@ -418,6 +429,30 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
 	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Empty(t, res.PreserveRef)
+}
+
+// TestExecuteBeadDirtyWorktreeWithoutCommits verifies that tracked file edits
+// left uncommitted by the agent are synthesized into a commit and treated as
+// real output rather than being discarded as "no-changes".
+func TestExecuteBeadDirtyWorktreeWithoutCommits(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "aaaa1111", // agent made no commits
+		wtDirty:     true,       // but left tracked file edits
+		synthRev:    "cccc3333", // SynthesizeCommit produces this rev
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.NotEqual(t, "no-changes", res.Outcome, "dirty worktree should not be classified as no-changes")
+	assert.Equal(t, "cccc3333", res.ResultRev)
+	assert.Equal(t, "aaaa1111", res.BaseRev)
+	assert.Equal(t, "merged", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
+	assert.Equal(t, 1, git.mergeCalls)
+	assert.Equal(t, "cccc3333", git.mergeRev)
 }
 
 func TestExecuteBeadMergePreservesContext(t *testing.T) {
