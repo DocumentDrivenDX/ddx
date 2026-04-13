@@ -4,7 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -477,4 +480,121 @@ func TestUnclaimDoesNotReopenClosedBead(t *testing.T) {
 	got, err = s.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status, "unclaim must not reopen a closed bead")
+}
+
+// withHeartbeat temporarily overrides HeartbeatInterval and HeartbeatTTL for
+// the duration of a test.
+func withHeartbeat(t *testing.T, interval, ttl time.Duration) {
+	t.Helper()
+	origInterval := HeartbeatInterval
+	origTTL := HeartbeatTTL
+	HeartbeatInterval = interval
+	HeartbeatTTL = ttl
+	t.Cleanup(func() {
+		HeartbeatInterval = origInterval
+		HeartbeatTTL = origTTL
+	})
+}
+
+func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
+	withHeartbeat(t, 10*time.Millisecond, 50*time.Millisecond)
+
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-hb-stale", Title: "Stale claim"}
+	require.NoError(t, s.Create(b))
+
+	// First worker claims it normally.
+	require.NoError(t, s.Claim(b.ID, "worker-a"))
+
+	// Forge a stale heartbeat by rewriting the store under its lock.
+	require.NoError(t, s.Update(b.ID, func(bd *Bead) {
+		if bd.Extra == nil {
+			bd.Extra = map[string]any{}
+		}
+		stale := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+		bd.Extra["execute-loop-heartbeat-at"] = stale
+		bd.Extra["claimed-at"] = stale
+	}))
+
+	// A fresh worker must be able to reclaim the stalled bead.
+	require.NoError(t, s.Claim(b.ID, "worker-b"))
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusInProgress, got.Status)
+	assert.Equal(t, "worker-b", got.Owner)
+
+	// The ready-execution queue must surface the stale bead too.
+	s2 := newTestStore(t)
+	orig := &Bead{ID: "ddx-hb-stale-2", Title: "Stale claim 2"}
+	require.NoError(t, s2.Create(orig))
+	require.NoError(t, s2.Claim(orig.ID, "worker-a"))
+	require.NoError(t, s2.Update(orig.ID, func(bd *Bead) {
+		stale := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+		bd.Extra["execute-loop-heartbeat-at"] = stale
+	}))
+	ready, err := s2.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, orig.ID, ready[0].ID)
+}
+
+func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
+	withHeartbeat(t, 5*time.Millisecond, 50*time.Millisecond)
+
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-hb-live", Title: "Live claim"}
+	require.NoError(t, s.Create(b))
+
+	require.NoError(t, s.Claim(b.ID, "worker-a"))
+
+	// Actively refresh the heartbeat for longer than the TTL.
+	deadline := time.Now().Add(150 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		require.NoError(t, s.Heartbeat(b.ID))
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// The last heartbeat was just written — well within the TTL window.
+	// Worker B must NOT reclaim an actively-heartbeating bead.
+	err := s.Claim(b.ID, "worker-b")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot claim")
+
+	// It must also not appear in the ready-execution queue.
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	assert.Len(t, ready, 0)
+
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "worker-a", got.Owner)
+}
+
+func TestAtomicClaimUnderContention(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-atomic-claim", Title: "Only one wins"}
+	require.NoError(t, s.Create(b))
+
+	const n = 16
+	var wg sync.WaitGroup
+	var successes atomic.Int32
+	start := make(chan struct{})
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			if err := s.Claim(b.ID, "worker"); err == nil {
+				successes.Add(1)
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	assert.Equal(t, int32(1), successes.Load(), "exactly one goroutine must win the race")
+
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusInProgress, got.Status)
 }

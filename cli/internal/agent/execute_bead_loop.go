@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -40,6 +41,7 @@ type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
 	Claim(id, assignee string) error
 	Unclaim(id string) error
+	Heartbeat(id string) error
 	CloseWithEvidence(id, sessionID, commitSHA string) error
 	AppendEvent(id string, event bead.BeadEvent) error
 	SetExecutionCooldown(id string, until time.Time, status, detail string) error
@@ -52,7 +54,10 @@ type ExecuteBeadLoopOptions struct {
 	PollInterval            time.Duration
 	NoProgressCooldown      time.Duration
 	MaxNoChangesBeforeClose int
-	Log                     io.Writer
+	// HeartbeatInterval, if > 0, overrides bead.HeartbeatInterval for this
+	// worker's claim heartbeat loop. Tests use this to shorten the tick.
+	HeartbeatInterval time.Duration
+	Log               io.Writer
 }
 
 type ExecuteBeadLoopResult struct {
@@ -98,6 +103,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 	if maxNoChangesBeforeClose <= 0 {
 		maxNoChangesBeforeClose = 3
 	}
+	heartbeatInterval := opts.HeartbeatInterval
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = bead.HeartbeatInterval
+	}
 
 	result := &ExecuteBeadLoopResult{}
 	attempted := make(map[string]struct{})
@@ -125,7 +134,26 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			continue
 		}
 
+		hbCtx, hbCancel := context.WithCancel(ctx)
+		var hbWG sync.WaitGroup
+		hbWG.Add(1)
+		go func(beadID string) {
+			defer hbWG.Done()
+			ticker := time.NewTicker(heartbeatInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-hbCtx.Done():
+					return
+				case <-ticker.C:
+					_ = w.Store.Heartbeat(beadID)
+				}
+			}
+		}(candidate.ID)
+
 		report, err := w.Executor.Execute(ctx, candidate.ID)
+		hbCancel()
+		hbWG.Wait()
 		if err != nil {
 			report = ExecuteBeadReport{
 				BeadID: candidate.ID,

@@ -430,14 +430,28 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 	})
 }
 
+// HeartbeatInterval is how often a claim owner should refresh
+// execute-loop-heartbeat-at while running. Exposed as a variable so tests
+// can override it.
+var HeartbeatInterval = 30 * time.Second
+
+// HeartbeatTTL is the maximum allowed age of execute-loop-heartbeat-at
+// before another worker may reclaim the bead. Defaults to 3× HeartbeatInterval.
+// Exposed as a variable so tests can override it.
+var HeartbeatTTL = 90 * time.Second
+
 // Claim sets a bead to in_progress with claim metadata.
-// Fails if the bead is already claimed (status == in_progress).
+// Fails if the bead is already claimed (status == in_progress) with a
+// fresh heartbeat. A bead whose execute-loop-heartbeat-at is older than
+// HeartbeatTTL is considered stalled and will be reclaimed atomically.
 func (s *Store) Claim(id, assignee string) error {
 	return s.ClaimWithOptions(id, assignee, "", "")
 }
 
 // ClaimWithOptions sets a bead to in_progress with extended claim metadata.
 // session and worktree are optional; machine is derived from os.Hostname().
+// A stalled in_progress bead (heartbeat older than HeartbeatTTL) is reclaimed
+// atomically under the store's lock.
 func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 	machine, _ := os.Hostname()
 	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
@@ -452,17 +466,27 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 			if beads[i].ID != id {
 				continue
 			}
-			if beads[i].Status != StatusOpen {
+			switch beads[i].Status {
+			case StatusOpen:
+				// normal claim path
+			case StatusInProgress:
+				if !heartbeatIsStale(beads[i].Extra) {
+					return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
+				}
+				// stalled claim — reclaim atomically below
+			default:
 				return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
 			}
 			if beads[i].Extra == nil {
 				beads[i].Extra = make(map[string]any)
 			}
+			now := time.Now().UTC()
 			beads[i].Status = StatusInProgress
 			beads[i].Owner = assignee
-			beads[i].UpdatedAt = time.Now().UTC()
-			beads[i].Extra["claimed-at"] = time.Now().UTC().Format(time.RFC3339)
+			beads[i].UpdatedAt = now
+			beads[i].Extra["claimed-at"] = now.Format(time.RFC3339)
 			beads[i].Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
+			beads[i].Extra["execute-loop-heartbeat-at"] = now.Format(time.RFC3339Nano)
 			if machine != "" {
 				beads[i].Extra["claimed-machine"] = machine
 			}
@@ -484,6 +508,54 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 	})
 }
 
+// Heartbeat refreshes execute-loop-heartbeat-at on a claimed bead. Returns
+// an error if the bead is no longer in_progress (e.g., reclaimed by another
+// worker), allowing the caller to stop its heartbeat loop.
+func (s *Store) Heartbeat(id string) error {
+	return s.WithLock(func() error {
+		beads, _, err := s.readAllLatestRaw()
+		if err != nil {
+			return err
+		}
+		for i := range beads {
+			if beads[i].ID != id {
+				continue
+			}
+			if beads[i].Status != StatusInProgress {
+				return fmt.Errorf("bead: cannot heartbeat %s from status %s", id, beads[i].Status)
+			}
+			if beads[i].Extra == nil {
+				beads[i].Extra = make(map[string]any)
+			}
+			beads[i].Extra["execute-loop-heartbeat-at"] = time.Now().UTC().Format(time.RFC3339Nano)
+			beads[i].UpdatedAt = time.Now().UTC()
+			return s.WriteAll(beads)
+		}
+		return fmt.Errorf("bead: not found: %s", id)
+	})
+}
+
+// heartbeatIsStale returns true if the given bead's Extra map has no
+// execute-loop-heartbeat-at or one older than HeartbeatTTL.
+func heartbeatIsStale(extra map[string]any) bool {
+	if extra == nil {
+		return true
+	}
+	raw, ok := extra["execute-loop-heartbeat-at"]
+	if !ok {
+		return true
+	}
+	s, ok := raw.(string)
+	if !ok || s == "" {
+		return true
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return true
+	}
+	return time.Since(t) > HeartbeatTTL
+}
+
 // Unclaim clears claim metadata. Only reverts status to open if the bead
 // is currently in_progress — a closed bead stays closed.
 func (s *Store) Unclaim(id string) error {
@@ -498,6 +570,7 @@ func (s *Store) Unclaim(id string) error {
 			delete(b.Extra, "claimed-machine")
 			delete(b.Extra, "claimed-session")
 			delete(b.Extra, "claimed-worktree")
+			delete(b.Extra, "execute-loop-heartbeat-at")
 		}
 	})
 }
@@ -764,7 +837,13 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 	var ready []Bead
 	for _, b := range beads {
 		if b.Status != StatusOpen {
-			continue
+			// Surface stalled in_progress beads so a fresh worker can
+			// reclaim them atomically in Claim().
+			if executionOnly && b.Status == StatusInProgress && heartbeatIsStale(b.Extra) {
+				// fall through to dependency check below
+			} else {
+				continue
+			}
 		}
 		allSatisfied := true
 		for _, depID := range b.DepIDs() {
