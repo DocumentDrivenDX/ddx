@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -226,17 +227,17 @@ func (r *RealGitOps) UpdateRef(dir, ref, sha string) error {
 	return nil
 }
 
-// IsDirty reports whether dir has tracked file modifications not yet committed.
+// IsDirty reports whether dir has any uncommitted changes (tracked modifications or untracked files).
 func (r *RealGitOps) IsDirty(dir string) (bool, error) {
-	err := osexec.Command("git", "-C", dir, "diff-index", "--quiet", "HEAD").Run()
-	return err != nil, nil
+	out, _ := osexec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
-// SynthesizeCommit stages all tracked modifications in dir and creates a commit
+// SynthesizeCommit stages all modifications and untracked files in dir and creates a commit
 // so that the agent's uncommitted edits are not lost.
 func (r *RealGitOps) SynthesizeCommit(dir string) error {
-	if err := osexec.Command("git", "-C", dir, "add", "-u").Run(); err != nil {
-		return fmt.Errorf("staging tracked changes: %w", err)
+	if err := osexec.Command("git", "-C", dir, "add", "-A").Run(); err != nil {
+		return fmt.Errorf("staging changes: %w", err)
 	}
 	out, err := osexec.Command("git", "-C", dir, "commit", "-m", "chore: execute-bead synthesized result commit").CombinedOutput()
 	if err != nil {
