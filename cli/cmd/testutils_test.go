@@ -15,6 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMain clears git environment variables before running tests so that tests
+// invoking git commands operate on their own temp-dir repositories rather than
+// any repository inherited from a hook invocation (e.g. GIT_DIR set by lefthook
+// during pre-commit).
+func TestMain(m *testing.M) {
+	for _, v := range []string{"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_OBJECT_DIRECTORY"} {
+		_ = os.Unsetenv(v)
+	}
+	os.Exit(m.Run())
+}
+
 var (
 	testLibraryPath string
 	testLibraryOnce sync.Once
@@ -236,19 +247,27 @@ func NewTestEnvironment(t *testing.T, opts ...TestEnvOption) *TestEnvironment {
 func (te *TestEnvironment) initGit() {
 	te.t.Helper()
 
+	// Strip inherited git env vars so git commands operate on the test
+	// directory's own repository, not any repository inherited from a
+	// hook or parent process (e.g. GIT_DIR set by lefthook).
+	cleanEnv := gitEnvForDir()
+
 	// git init
 	gitInit := exec.Command("git", "init")
 	gitInit.Dir = te.Dir
+	gitInit.Env = cleanEnv
 	require.NoError(te.t, gitInit.Run(), "git init should succeed")
 
 	// git config user.email
 	gitEmail := exec.Command("git", "config", "user.email", "test@example.com")
 	gitEmail.Dir = te.Dir
+	gitEmail.Env = cleanEnv
 	require.NoError(te.t, gitEmail.Run(), "git config user.email should succeed")
 
 	// git config user.name
 	gitName := exec.Command("git", "config", "user.name", "Test User")
 	gitName.Dir = te.Dir
+	gitName.Env = cleanEnv
 	require.NoError(te.t, gitName.Run(), "git config user.name should succeed")
 }
 
@@ -318,12 +337,15 @@ func (te *TestEnvironment) InitWithDDx(flags ...string) {
 
 	// If git is initialized and we're not using --no-git, create initial commit
 	if te.GitInitialized && !hasNoGitFlag {
+		cleanEnv := gitEnvForDir()
 		te.CreateFile("README.md", "# Test Project")
 		gitAdd := exec.Command("git", "add", ".")
 		gitAdd.Dir = te.Dir
+		gitAdd.Env = cleanEnv
 		require.NoError(te.t, gitAdd.Run())
 		gitCommit := exec.Command("git", "commit", "-m", "Initial commit")
 		gitCommit.Dir = te.Dir
+		gitCommit.Env = cleanEnv
 		require.NoError(te.t, gitCommit.Run())
 	}
 

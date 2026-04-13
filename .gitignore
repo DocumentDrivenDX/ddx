@@ -1,8 +1,451 @@
-# DDx runtime scratch
+################################################################################
+# DDx Project .gitignore
+# Generated using the comprehensive gitignore evaluation guide
+################################################################################
+
+################################################################################
+# Operating System Files
+################################################################################
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+.nfs*
+
+################################################################################
+# IDE and Editor Files
+################################################################################
+
+# Obsidian
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/workspace/*
+# Uncomment below if you want to ignore all Obsidian settings except specific ones
+# .obsidian/*
+# !.obsidian/app.json
+# !.obsidian/appearance.json
+# !.obsidian/core-plugins.json
+# !.obsidian/community-plugins.json
+# !.obsidian/hotkeys.json
+# !.obsidian/graph.json
+
+# JetBrains IDEs (IntelliJ, GoLand, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+.history/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Vim
+*.swp
+*.swo
+*.swn
+*.swm
+*~
+.*.sw[a-z]
+[._]*.s[a-v][a-z]
+[._]*.sw[a-z]
+Session.vim
+Sessionx.vim
+.netrwhist
+tags
+[._]*.un~
+
+# Emacs
+\#*\#
+.\#*
+*~
+.emacs.desktop
+.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+
+# Other editors
+.project
+.classpath
+.settings/
+*.tmproj
+.externalToolBuilders/
+*.launch
+
+################################################################################
+# Go Language Specific
+################################################################################
+
+# Binaries
+/ddx
+/cli/ddx
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*.test
+*.out
+coverage.txt
+coverage.html
+coverage.xml
+*.cover
+*.coverprofile
+.coverage/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Dependency directories (optional - uncomment if not using vendoring)
+# vendor/
+
+# Go build cache
+.cache/
+
+################################################################################
+# Node.js/JavaScript (for templates and web projects)
+################################################################################
+
+# Dependencies
+node_modules/
+jspm_packages/
+bower_components/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.nuxt/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
+coverage/
+.nyc_output/
+lib-cov
+*.lcov
+
+# Package manager files
+.npm
+.yarn
+.pnp.*
+.yarn-integrity
+
+################################################################################
+# Python (for Python templates)
+################################################################################
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv
+
+# Testing
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+################################################################################
+# Security and Credentials
+################################################################################
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.template
+.env.local
+.env.*.local
+
+# Credentials and keys
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+id_dsa
+id_dsa.pub
+*.ppk
+*.pub
+
+# Secrets
+secrets.yml
+secrets.yaml
+secrets.json
+credentials.json
+auth.json
+
+# Cloud provider configs
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+kubeconfig
+.aws/
+.gcp/
+.azure/
+
+# API tokens
+.npmrc
+.pypirc
+.netrc
+.dockercfg
+
+################################################################################
+# Logs and Temporary Files
+################################################################################
+
+# Log files
+*.log
+logs/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+tmp/
+temp/
+cache/
+
+# Core dumps
+core
+core.*
+*.stackdump
+
+################################################################################
+# Build and Package Files
+################################################################################
+
+# Archives (add back specific ones if needed for distribution)
+*.zip
+*.tar.gz
+*.tar.bz2
+*.rar
+*.7z
+*.gz
+*.bz2
+
+# Installers
+*.dmg
+*.iso
+*.msi
+*.pkg
+*.deb
+*.rpm
+*.AppImage
+*.snap
+
+# Compiled documentation
+*.pdf
+*.chm
+
+################################################################################
+# Project-Specific
+################################################################################
+
+# DDx local configuration
+.ddx.local.yml
+.ddx.local/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Lefthook local configuration
+.lefthook-local.yml
+.lefthook-local/
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# CI/CD artifacts
+# artifacts/  # Commented out - needed for workflow phase artifacts
+.buildpath
+
+# Generated documentation
+docs/_build/
+site/
+
+# Docker
+*.pid
+
+################################################################################
+# Exceptions - Files to keep
+################################################################################
+
+# Keep .gitkeep files for empty directories
+!.gitkeep
+
+# Keep example and template files
+!*.example
+!*.template
+!*.sample
+
+# Keep GitHub templates
+!.github/
+
+# Keep CI configurations
+!.gitlab-ci.yml
+!.travis.yml
+!.circleci/
+
+# Keep documentation
+!README.md
+!CONTRIBUTING.md
+!LICENSE
+!CHANGELOG.md
+!docs/
+
+# Keep configuration examples
+!config.example.*
+!settings.example.*
+cli/internal/agent/.ddx/
+
+# DDx runtime artifacts (generated, not source)
+.ddx/agent-logs/
+.ddx/hooks/
+.ddx/run-state.json
+.ddx/exec-runs.d/
 .ddx/.execute-bead-wt-*/
 .ddx/*.lock/
-.ddx/agent-logs/
 .ddx/workers/
-.codex/
-.agent/logs/
-.agent/sessions/
+.ddx/tsnet/
+.ddx/plugins/
+.helix-logs/
+
+# Tracked execute-bead evidence bundles intentionally live under .ddx/executions/
+
+# Temporary demo home (created by run-docker-demos.sh)
+.demo-home/
+
+# Secondary bead store (cli/ has its own during dev)
+cli/.ddx/
+
+# Forge session logs (generated by embedded forge agent)
+.forge/
+cli/.forge/
+
+# gendoc binary (built by go build, not tracked)
+cli/gendoc
+
+# Test results (generated by Playwright)
+**/test-results/
+**/playwright-report/
+**/demo-output/
+
+# Keep embedded frontend build (required for go:embed)
+!cli/internal/server/frontend/dist/
+
+.claude/worktrees/
+cli/internal/server/frontend/public/sql-wasm.wasm

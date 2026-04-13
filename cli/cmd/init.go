@@ -284,14 +284,17 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		generateAgentsMD(workingDir)
 
 		// Commit config and versions files
+		cleanEnv := gitEnvForDir()
 		gitAdd := exec.Command("git", "add", ".ddx/config.yaml", ".ddx/versions.yaml", "AGENTS.md", ".gitignore")
 		gitAdd.Dir = workingDir
+		gitAdd.Env = cleanEnv
 		if err := gitAdd.Run(); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to stage config file: %v", err))
 		}
 
 		gitCommit := exec.Command("git", "commit", "-m", "chore: add DDx configuration")
 		gitCommit.Dir = workingDir
+		gitCommit.Env = cleanEnv
 		if err := gitCommit.Run(); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to commit config file: %v", err))
 		}
@@ -303,6 +306,7 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		// core.bare when running in an isolated worktree.
 		gitWorktreeCfg := exec.Command("git", "config", "extensions.worktreeConfig", "true")
 		gitWorktreeCfg.Dir = workingDir
+		gitWorktreeCfg.Env = cleanEnv
 		_ = gitWorktreeCfg.Run() // best-effort; older git versions may not support it
 	}
 
@@ -681,9 +685,12 @@ func containsExactLine(content, target string) bool {
 
 // validateGitRepo is the pure business logic for git repository validation
 func validateGitRepo(workingDir string) error {
-	// Use git rev-parse --git-dir to check if we're in a git repository
+	// Use git rev-parse --git-dir to check if we're in a git repository.
+	// Use gitEnvForDir to strip inherited GIT_DIR / GIT_WORK_TREE so the
+	// check reflects the actual directory, not an inherited git context.
 	gitCmd := exec.Command("git", "rev-parse", "--git-dir")
 	gitCmd.Dir = workingDir
+	gitCmd.Env = gitEnvForDir()
 	gitCmd.Stderr = nil // Suppress error output
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("Error: ddx init must be run inside a git repository. Please run 'git init' first")
@@ -755,6 +762,31 @@ func isExecuteBeadWorktree(dir string) bool {
 		}
 	}
 	return false
+}
+
+// gitEnvForDir returns an environment slice suitable for running a git command
+// in dir. It inherits the current process environment but strips any inherited
+// GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE, and GIT_OBJECT_DIRECTORY variables
+// that might redirect git commands to the wrong repository (e.g. when init.go
+// is invoked from a git hook that has these vars set).
+func gitEnvForDir() []string {
+	stripVars := map[string]bool{
+		"GIT_DIR":              true,
+		"GIT_INDEX_FILE":       true,
+		"GIT_WORK_TREE":        true,
+		"GIT_OBJECT_DIRECTORY": true,
+	}
+	var filtered []string
+	for _, kv := range os.Environ() {
+		key := kv
+		if i := strings.Index(kv, "="); i >= 0 {
+			key = kv[:i]
+		}
+		if !stripVars[key] {
+			filtered = append(filtered, kv)
+		}
+	}
+	return filtered
 }
 
 // generateAgentsMD creates AGENTS.md with guidance for AI agents working in
