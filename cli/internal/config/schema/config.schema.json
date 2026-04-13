@@ -338,6 +338,27 @@
           },
           "additionalProperties": false
         },
+        "routing": {
+          "type": "object",
+          "description": "Model routing configuration",
+          "properties": {
+            "profile_priority": {
+              "type": "array",
+              "description": "Ordered list of cost/speed profiles to prefer",
+              "items": { "type": "string" }
+            },
+            "default_harness": {
+              "type": "string",
+              "description": "Fallback harness when no profile matches"
+            },
+            "model_overrides": {
+              "type": "object",
+              "description": "Per-profile model override map",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        },
         "virtual": {
           "type": "object",
           "description": "Configuration for the virtual agent harness",
