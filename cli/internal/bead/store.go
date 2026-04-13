@@ -549,9 +549,15 @@ func heartbeatIsStale(extra map[string]any) bool {
 	if !ok || s == "" {
 		return true
 	}
-	t, err := time.Parse(time.RFC3339, s)
+	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return true
+		// Fall back to RFC3339 for compatibility with legacy entries written
+		// before sub-second resolution. RFC3339Nano is the current canonical
+		// format used by both ClaimWithOptions and Heartbeat write sites.
+		t, err = time.Parse(time.RFC3339, s)
+		if err != nil {
+			return true
+		}
 	}
 	return time.Since(t) > HeartbeatTTL
 }
