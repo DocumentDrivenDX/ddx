@@ -3,9 +3,17 @@ package server
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/fs"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -73,6 +81,95 @@ func (s *Server) ListenAndServe() error {
 		return <-errCh
 	}
 	return http.ListenAndServe(s.Addr, s.mux)
+}
+
+// ListenAndServeTLS starts the server with TLS. If certFile and keyFile are
+// empty, a self-signed certificate is auto-generated and cached under
+// workingDir/.ddx/server/tls/.
+func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
+	if certFile == "" || keyFile == "" {
+		tlsDir := filepath.Join(s.WorkingDir, ".ddx", "server", "tls")
+		var err error
+		certFile, keyFile, err = ensureSelfSignedCert(tlsDir)
+		if err != nil {
+			return fmt.Errorf("generating self-signed cert: %w", err)
+		}
+	}
+	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
+		errCh := make(chan error, 2)
+		go func() {
+			errCh <- http.ListenAndServeTLS(s.Addr, certFile, keyFile, s.mux)
+		}()
+		go func() {
+			errCh <- s.listenTsnet()
+		}()
+		return <-errCh
+	}
+	return http.ListenAndServeTLS(s.Addr, certFile, keyFile, s.mux)
+}
+
+// ensureSelfSignedCert returns paths to a self-signed cert/key in dir,
+// generating them if they don't already exist.
+func ensureSelfSignedCert(dir string) (certFile, keyFile string, err error) {
+	if err = os.MkdirAll(dir, 0700); err != nil {
+		return
+	}
+	certFile = filepath.Join(dir, "cert.pem")
+	keyFile = filepath.Join(dir, "key.pem")
+
+	// Re-use existing pair if both files are present and cert is still valid.
+	if _, e1 := os.Stat(certFile); e1 == nil {
+		if _, e2 := os.Stat(keyFile); e2 == nil {
+			if pair, e3 := tls.LoadX509KeyPair(certFile, keyFile); e3 == nil {
+				leaf, e4 := x509.ParseCertificate(pair.Certificate[0])
+				if e4 == nil && time.Now().Before(leaf.NotAfter.Add(-24*time.Hour)) {
+					return certFile, keyFile, nil
+				}
+			}
+		}
+	}
+
+	// Generate new key + cert.
+	key, e := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if e != nil {
+		err = e
+		return
+	}
+	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: "ddx-server"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("0.0.0.0")},
+		DNSNames:     []string{"localhost"},
+	}
+	certDER, e := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if e != nil {
+		err = e
+		return
+	}
+
+	cf, e := os.OpenFile(certFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if e != nil {
+		err = e
+		return
+	}
+	_ = pem.Encode(cf, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	_ = cf.Close()
+
+	kf, e := os.OpenFile(keyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if e != nil {
+		err = e
+		return
+	}
+	keyDER, _ := x509.MarshalECPrivateKey(key)
+	_ = pem.Encode(kf, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	_ = kf.Close()
+
+	return certFile, keyFile, nil
 }
 
 // listenTsnet starts a Tailscale ts-net TLS listener and serves the same mux.

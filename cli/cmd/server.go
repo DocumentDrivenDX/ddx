@@ -25,6 +25,8 @@ func resolveTsnetAuthKey(envKey, flagKey, configKey string) string {
 func (f *CommandFactory) newServerCommand() *cobra.Command {
 	var port int
 	var addr string
+	var tlsCert string
+	var tlsKey string
 	var tsnetEnabled bool
 	var tsnetHostname string
 	var tsnetAuthKey string
@@ -77,7 +79,7 @@ MCP (POST /mcp):
 		Aliases: []string{"serve"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
-			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on %s\n", listenAddr)
+			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
 			srv := server.New(listenAddr, f.WorkingDir)
 
 			// Build tsnet config: flags override config file
@@ -103,12 +105,14 @@ MCP (POST /mcp):
 				}())
 			}
 
-			return srv.ListenAndServe()
+			return srv.ListenAndServeTLS(tlsCert, tlsKey)
 		},
 	}
 
-	cmd.Flags().IntVarP(&port, "port", "p", 8080, "Port to listen on")
+	cmd.Flags().IntVarP(&port, "port", "p", 7743, "Port to listen on")
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1", "Address to bind to")
+	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "TLS certificate file (PEM); auto-generates self-signed cert if omitted")
+	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "TLS private key file (PEM); auto-generates self-signed key if omitted")
 	cmd.Flags().BoolVar(&tsnetEnabled, "tsnet", false, "Enable Tailscale ts-net listener (opt-in, see ADR-006)")
 	cmd.Flags().StringVar(&tsnetHostname, "tsnet-hostname", "", "Tailscale hostname (default: ddx)")
 	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use (SECURITY: visible in ps/history; prefer TS_AUTHKEY env var)")
