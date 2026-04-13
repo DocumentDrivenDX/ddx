@@ -322,9 +322,52 @@ different.
 13. Always remove the temporary worktree after preserving enough evidence for
     replay and introspection.
 
+### Prompt Rationalizer Contract
+
+Before launching the agent, `execute-bead` compiles a **rationalizer prompt**
+from machine-readable inputs and writes it to `prompt.md` in the execution
+bundle. This compilation is DDx-owned; it does not mutate the bead.
+
+**Inputs (all from tracked sources):**
+
+- bead fields: `id`, `title`, `description`, `acceptance`, `parent`, `labels`,
+  `spec-id`, and any structured metadata
+- resolved governing references from the document graph: artifact ID, path, and
+  title for each governing document
+- base git revision
+- execution bundle path
+
+**Prompt structure:**
+
+The rationalizer emits a structured prompt with machine-significant
+XML-tagged sections so the prompt can be parsed, validated, diffed, and
+replayed deterministically. The required sections are:
+
+```
+<bead>...</bead>             — identity fields (id, title, labels, spec-id, base_rev, bundle)
+<description>...</description>   — bead description verbatim
+<acceptance>...</acceptance>     — bead acceptance criteria verbatim
+<governing_refs>...</governing_refs>  — resolved governing artifact list
+<execution_rules>...</execution_rules>  — DDx-injected execution rules and conventions
+```
+
+Optional sections may include `<additional_context>` for injected content
+such as persona instructions or workflow hints. The rationalizer must not
+invent unavailable fields; it omits sections with no content rather than
+emitting placeholder text.
+
+The prompt is the agent's primary input for the attempt. The rationalizer
+contract is independent of the harness: every harness receives the same
+compiled `prompt.md` regardless of whether it is a subprocess or embedded
+runner.
+
+**Prompt override:** If `--prompt-file` is provided, the rationalizer is
+bypassed and the given file is used as-is. The bundle still records the
+source as `prompt_source: override` in `manifest.json`.
+
 ### Execute-Bead Evidence Bundle
 
-`execute-bead` also produces a tracked attempt bundle under:
+`execute-bead` produces a tracked attempt bundle under:
 
 ```text
 .ddx/executions/<attempt-id>/
@@ -338,21 +381,41 @@ FEAT-010.
 - `.ddx/executions/<attempt-id>/` is the tracked execute-bead attempt bundle
   used for replay, commit provenance, and autoresearch.
 
-At minimum, the execute-bead bundle may contain:
+**Tracked artifact set (committed with the attempt):**
 
-- `prompt.md`
-- `manifest.json`
-- `result.json`
-- `checks.json` when required gates or checks ran
-- normalized DDx-owned execution logs or provider/session references
+| File | When written | Purpose |
+|------|-------------|---------|
+| `prompt.md` | before agent runs | compiled rationalizer prompt |
+| `manifest.json` | before agent runs | attempt identity, bead snapshot, governing refs, paths, prompt source |
+| `result.json` | after agent finishes | runtime metrics, outcome, gate results, native session references |
+| `checks.json` | when gates ran | per-gate results with stdout/stderr |
+| `usage.json` | when harness reports usage | token counts, cost, model identity |
 
-Default policy:
+`result.json` and `checks.json` are the canonical machine-readable sources for
+commit-message provenance. Commit-message metadata must be projected from these
+files, never from ad hoc runtime state.
 
-- landed attempts commit their `.ddx/executions/<attempt-id>/` bundle with the
-  landed work or in an adjacent execution-evidence commit
-- preserved attempts keep the same tracked bundle on the preserved ref
-- provider-native transcripts remain external by default unless DDx explicitly
-  owns them
+**Ignored runtime scratch (not committed, not tracked):**
+
+The following paths are disposable and must not contaminate the checkpoint
+snapshot or the tracked bundle:
+
+- `.ddx/exec-runs.d/` — generic runtime execution history (append-only store)
+- `.ddx/agent-logs/` — DDx invocation activity metadata
+- `.ddx/.execute-bead-wt-*/` — ephemeral isolated execution worktrees
+- provider-native session stores (e.g., `~/.claude/projects/`, codex local state)
+
+These paths must be listed in the repository's `.gitignore` (or the DDx
+default gitignore template) so they never accidentally enter the tracked snapshot.
+
+**Default commit policy:**
+
+- landed attempts: the `.ddx/executions/<attempt-id>/` bundle is committed with
+  the landed work or in an immediately adjacent execution-evidence commit on the
+  same branch
+- preserved attempts: the same bundle exists on the preserved ref
+- provider-native transcripts remain external by default; DDx records references
+  (`native_session_id`, `native_log_ref`) rather than duplicating bodies
 
 This split is intentional: the generic execution store remains append-only
 runtime history, while execute-bead bundles are tracked git artifacts tied to a
@@ -424,6 +487,7 @@ session attachments:
 ```
 ddx-iteration: {
   "bead_id": "ddx-abc12345",
+  "attempt_id": "20260413T140544-6b4034a1",
   "session_id": "agent-1744128000000",
   "harness": "agent",
   "model": "qwen3.5-27b",
@@ -433,15 +497,24 @@ ddx-iteration: {
   "result_rev": "63f71eeabc12",
   "required_exec_summary": "pass",
   "ratchet_summary": "ok",
-  "outcome": "landed"
+  "outcome": "landed",
+  "execution_bundle": ".ddx/executions/20260413T140544-6b4034a1"
 }
 ```
 
 Field notes:
+- `attempt_id`: matches the execution bundle directory name for cross-referencing
 - `cost_usd`: `0` for local models; `-1` when the harness does not report cost
 - `required_exec_summary`: `"pass"`, `"fail"`, or `"skipped"` (no exec docs found)
 - `ratchet_summary`: `"ok"`, `"warn"`, or `"blocked"`
 - `outcome`: `"landed"` or `"preserved"`
+- `execution_bundle`: relative path to the tracked evidence bundle for this attempt
+
+**Provenance rule:** All values in the `ddx-iteration` trailer must be
+projected from the tracked artifact files in `.ddx/executions/<attempt-id>/`
+(primarily `result.json`), never from ad hoc in-memory runtime state. The
+purpose is reproducibility: anyone can re-derive the commit trailer from the
+tracked bundle without re-running the agent.
 
 Full conversation transcripts and detailed session evidence remain in
 provider-native stores or embedded-runtime telemetry stores. DDx keeps routing
