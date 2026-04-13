@@ -430,6 +430,13 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
 	}()
 
+	// Repair project-local skill symlinks whose targets do not resolve inside
+	// the freshly created worktree. Git tracks these as symlinks but their
+	// recorded targets may point at build-machine-specific absolute paths
+	// (e.g. /home/demo/.ddx/plugins/...), which leaves the harness walking
+	// broken links and logging repeated "failed to stat" errors at startup.
+	_ = materializeWorktreeSkills(wtPath)
+
 	// Prepare artifacts (context load, prompt generation)
 	artifacts, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, opts)
 	if err != nil {
