@@ -43,14 +43,16 @@ type ExecuteBeadLoopStore interface {
 	CloseWithEvidence(id, sessionID, commitSHA string) error
 	AppendEvent(id string, event bead.BeadEvent) error
 	SetExecutionCooldown(id string, until time.Time, status, detail string) error
+	IncrNoChangesCount(id string) (int, error)
 }
 
 type ExecuteBeadLoopOptions struct {
-	Assignee           string
-	Once               bool
-	PollInterval       time.Duration
-	NoProgressCooldown time.Duration
-	Log                io.Writer
+	Assignee                string
+	Once                    bool
+	PollInterval            time.Duration
+	NoProgressCooldown      time.Duration
+	MaxNoChangesBeforeClose int
+	Log                     io.Writer
 }
 
 type ExecuteBeadLoopResult struct {
@@ -91,6 +93,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 	noProgressCooldown := opts.NoProgressCooldown
 	if noProgressCooldown <= 0 {
 		noProgressCooldown = 6 * time.Hour
+	}
+	maxNoChangesBeforeClose := opts.MaxNoChangesBeforeClose
+	if maxNoChangesBeforeClose <= 0 {
+		maxNoChangesBeforeClose = 3
 	}
 
 	result := &ExecuteBeadLoopResult{}
@@ -149,15 +155,43 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			if err := w.Store.Unclaim(candidate.ID); err != nil {
 				return result, err
 			}
-			if shouldSuppressNoProgress(report) {
-				retryAfter := now().UTC().Add(noProgressCooldown)
-				if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
-					return result, err
+			if report.Status == ExecuteBeadStatusNoChanges {
+				count, cerr := w.Store.IncrNoChangesCount(candidate.ID)
+				if cerr != nil {
+					return result, cerr
 				}
-				report.RetryAfter = retryAfter.Format(time.RFC3339)
+				if count >= maxNoChangesBeforeClose {
+					// Bead has returned no_changes on every attempt up to the
+					// threshold. Treat it as already-satisfied: close with the
+					// accumulated no-changes evidence so the queue can drain.
+					if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); cerr != nil {
+						return result, cerr
+					}
+					report.Status = ExecuteBeadStatusAlreadySatisfied
+					result.Successes++
+					result.LastSuccessAt = now().UTC()
+				} else {
+					if shouldSuppressNoProgress(report) {
+						retryAfter := now().UTC().Add(noProgressCooldown)
+						if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
+							return result, cerr
+						}
+						report.RetryAfter = retryAfter.Format(time.RFC3339)
+					}
+					result.Failures++
+					result.LastFailureStatus = report.Status
+				}
+			} else {
+				if shouldSuppressNoProgress(report) {
+					retryAfter := now().UTC().Add(noProgressCooldown)
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+						return result, err
+					}
+					report.RetryAfter = retryAfter.Format(time.RFC3339)
+				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			}
-			result.Failures++
-			result.LastFailureStatus = report.Status
 		}
 
 		result.Results = append(result.Results, report)
