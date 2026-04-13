@@ -232,36 +232,21 @@ ddx:
 | `ddx.id` | Unique document ID; by convention prefixed `exec.` |
 | `ddx.depends_on` | Governing artifacts this execution is linked to |
 | `ddx.execution.kind` | Executor kind: `command` or `agent` |
-| `ddx.execution.required` | `true` means this execution is an explicit merge gate in `execute-bead`; if its run is non-success, landing is blocked |
+| `ddx.execution.required` | `true` means this execution is merge-blocking in `execute-bead` |
 
 ### Discovery
 
 `ddx agent execute-bead` resolves applicable execution documents from the graph
 inside the execution worktree by following dependency links from the target bead
-and its governing artifacts. Resolution happens against the governing graph
-snapshot captured from the chosen base revision before the agent runs. DDx
-indexes execution documents like other graph artifacts; no separate registry is
-required.
-
-Only these explicitly resolved execution documents participate in automatic
-landing gates for `execute-bead`. Runtime-managed execution definitions,
-built-in runtime metrics, or edits the agent makes to execution docs during the
-run do not become new blocking gates for the current iteration. Ratchet or
-threshold semantics only affect the land/preserve decision when those blocking
-rules are authored on one of the execution documents resolved from that
-governing snapshot.
+and its governing artifacts. DDx indexes execution documents like other graph
+artifacts; no separate registry is required.
 
 ### Relationship to FEAT-010
 
 Execution documents are the git-backed, authored source of truth for what
-`ddx exec` runs and for which post-run gates `ddx agent execute-bead` may apply
-automatically to one iteration. FEAT-010's exec substrate stores immutable run
-history. FEAT-007's graph owns the discovery and indexing of execution document
-definitions. Structural execution readiness remains a separate pre-launch
-validator concern; graph discovery only tells `execute-bead` which explicit
-execution documents exist in the governing snapshot. Whether a completed run is
-landed or preserved is still a separate post-run decision made after the agent
-attempt succeeds and produces tracked changes.
+`ddx exec` runs. FEAT-010's exec substrate stores immutable run history.
+FEAT-007's graph owns the discovery and indexing of execution document
+definitions.
 
 ## Git-Aware History (FEAT-012 Integration)
 

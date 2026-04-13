@@ -180,33 +180,18 @@ func (r *RealGitOps) WorktreePrune(dir string) error {
 	return osexec.Command("git", "-C", dir, "worktree", "prune").Run()
 }
 
+// Merge merges rev into dir's working tree via git merge. It commits any
+// tracked uncommitted changes in dir first so the working tree is clean.
 func (r *RealGitOps) Merge(dir, rev string) error {
-	// Advance the HEAD branch via update-ref (fast-forward only). This works
-	// regardless of whether the repository has a checked-out working tree,
-	// and is sufficient for execute-bead which only needs the branch ref to land.
-	symRef, err := osexec.Command("git", "-C", dir, "symbolic-ref", "HEAD").Output()
-	if err != nil {
-		return fmt.Errorf("HEAD is not a branch ref: %w", err)
+	// Commit any uncommitted tracked changes before merging
+	if osexec.Command("git", "-C", dir, "diff-index", "--quiet", "HEAD").Run() != nil {
+		_ = osexec.Command("git", "-C", dir, "add", "-u").Run()
+		_ = osexec.Command("git", "-C", dir, "commit", "-m", "chore: checkpoint before merge").Run()
 	}
-	targetRef := strings.TrimSpace(string(symRef))
-
-	currentOut, err := osexec.Command("git", "-C", dir, "rev-parse", targetRef).Output()
+	out, err := osexec.Command("git", "-C", dir, "merge", "--no-edit", rev).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("resolving %s: %w", targetRef, err)
-	}
-	current := strings.TrimSpace(string(currentOut))
-
-	newOut, err := osexec.Command("git", "-C", dir, "rev-parse", rev).Output()
-	if err != nil {
-		return fmt.Errorf("resolving %s: %w", rev, err)
-	}
-	newSHA := strings.TrimSpace(string(newOut))
-
-	if err := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", current, newSHA).Run(); err != nil {
-		return fmt.Errorf("merge: not a fast-forward (%s → %s)", current[:12], newSHA[:12])
-	}
-	out, err := osexec.Command("git", "-C", dir, "update-ref", targetRef, newSHA, current).CombinedOutput()
-	if err != nil {
+		// Clean up any partial merge state
+		_ = osexec.Command("git", "-C", dir, "merge", "--abort").Run()
 		return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil

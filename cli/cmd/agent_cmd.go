@@ -1111,13 +1111,6 @@ structured result, and continues until no unattempted ready work remains.
 Use execute-loop as the normal queue-driven execution surface. By default it
 submits to the running ddx server as a background worker and returns immediately.
 Use --local to run inline in the current process.
-
-Attempts reported as no_changes stay non-success. Execute-loop either closes
-the bead as already satisfied when the attempt bundle proves the bead already
-meets acceptance and required gates at the base revision, or leaves the bead
-open with cooldown metadata. The first shipped operator-visible cooldown
-surface is bead metadata: execute-loop-last-status, execute-loop-last-detail,
-and execute-loop-retry-after.
 `,
 		Example: `  # Drain the current execution-ready queue once and exit
   ddx agent execute-loop

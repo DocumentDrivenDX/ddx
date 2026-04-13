@@ -18,13 +18,6 @@ execution-ready bead queue from the current project, delegates each attempt to
 ddx agent execute-bead, and records the resulting loop status back into the
 tracker.
 
-Attempts reported as `no_changes` stay non-success. Execute-loop either closes
-the bead as already satisfied when the attempt bundle proves the bead already
-meets acceptance and required gates at the base revision, or leaves the bead
-open with cooldown metadata. The first shipped operator-visible cooldown
-surface is bead metadata: `execute-loop-last-status`,
-`execute-loop-last-detail`, and `execute-loop-retry-after`.
-
 ```
 ddx agent execute-loop [flags]
 ```

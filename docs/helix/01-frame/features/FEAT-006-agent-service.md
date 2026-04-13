@@ -209,14 +209,9 @@ references for a recent agent invocation
 - Given a valid bead ID, when `ddx agent execute-bead <id>` is invoked, then DDx resolves the bead and governing artifacts and begins the workflow.
 - Given `--from` is omitted, when the base revision is resolved, then DDx uses `HEAD`.
 - Given `--harness`, `--model`, and `--effort` are provided, when the agent runs, then execute-bead honors them exactly as a normal `ddx agent run` invocation would.
-- Given the agent run succeeds and produces tracked changes, when post-run merge-gate evaluation begins, then execute-bead treats the iteration as merge-by-default unless `--no-merge` is set, a governing-snapshot execution document blocks landing, or the final land step conflicts.
-- Given required executions resolved from the governing graph snapshot fail, when the merge decision is made, then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch.
-- Given a governing-snapshot execution document carries explicit blocking ratchet semantics, when its ratchet evaluation regresses past the authored blocking threshold, then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch even if the execution itself is otherwise non-required.
-- Given all governing-snapshot required executions pass and their explicit ratchets are satisfied, when the merge decision is made and `--no-merge` is not set, then DDx lands the result by fast-forward.
+- Given graph-discovered required executions fail, when the merge decision is made, then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch.
+- Given all required executions pass and ratchets are satisfied, when the merge decision is made and `--no-merge` is not set, then DDx lands the result by fast-forward.
 - Given `--no-merge` is set, when the iteration completes, then DDx creates a committed attempt and preserves it under a hidden ref. It is not landed regardless of execution outcomes.
-- Given an execution attempt ends with a clean managed worktree and no tracked result to preserve or land, when `execute-bead` records the result, then the attempt `status` is `no_changes` and the attempt itself is not reclassified as `success`.
-- Given a `no_changes` attempt and the governing snapshot, acceptance validation evidence, and required execution evidence all prove the bead is already satisfied at `base_rev`, when execute-loop adjudicates the result, then DDx closes the bead with `no_change_disposition=already_satisfied` without calling the execution attempt a success.
-- Given a `no_changes` attempt and that satisfaction proof is missing, incomplete, failed, or blocked by a required execution, explicit ratchet, or future required close gate, when execute-loop adjudicates the result, then DDx leaves the bead open, records `no_change_disposition=unresolved`, and suppresses immediate retries until `retry_after`.
 - Given execution completes, when the worktree is cleaned up, then no temporary worktree created by execute-bead remains in the filesystem.
 - Given execute-bead completes, when the run record is inspected, then it contains built-in runtime metrics as specified in FEAT-014 US-145, captured automatically for the iteration.
 
@@ -309,31 +304,19 @@ different.
    execution worktree (see FEAT-007). **Execution documents are resolved from
    the base revision before the agent runs.** If the agent modifies execution
    document definitions or ratchet thresholds during its run, the pre-run
-   versions govern the current iteration's evaluation. Only this explicit,
-   graph-authored execution-document set can add automatic post-run landing
-   gates for the current iteration.
-8. Run the resolved execution documents. Required executions are merge-gating;
-   non-required metric or observation executions are evidence-producing unless
-   their resolved definition explicitly carries blocking ratchet semantics.
-9. Evaluate post-run merge gates separately from the pre-launch execution-ready
-   validator (see TD-005).
-   - The pre-launch validator only decides whether the bead is structurally
-     eligible to start from the chosen base revision and governing snapshot.
+   versions govern the current iteration's evaluation.
+8. Run all required execution documents plus relevant metric/observation
+   executions.
+9. Evaluate required execution results and metric ratchets (see TD-005).
    - For `kind: command` executions, success means exit code 0.
    - For `kind: agent` executions, success means exit code 0 (structured result schema validation is optional and governed by the definition).
    - When a `required: true` execution also has a ratchet threshold, landing is blocked if EITHER condition fails (OR semantics) — non-success status OR ratchet regression blocks the merge.
-   - Only explicit blockers from the resolved execution documents can make a
-     successful run non-merge-eligible. Built-in runtime metrics, warnings, and
-     runtime-managed execution definitions do not implicitly block landing for
-     `execute-bead`.
 10. If the agent produced tracked worktree edits without creating commits,
     synthesize a DDx-owned result commit before merge/preserve evaluation so
     the work is not discarded merely because the harness left file edits
     uncommitted.
-11. If the run succeeded, produced tracked changes (including a synthesized
-    result commit when needed), remains merge-eligible after step 9, and
-    `--no-merge` is not set, land by rebase + fast-forward semantics, then
-    reset the worker worktree to the updated branch tip.
+11. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
+    semantics, then reset the worker worktree to the updated branch tip.
 12. Otherwise, preserve the iteration result under a hidden ref and do not merge
     (see SD-012 for the hidden-ref naming scheme).
 13. Always remove the temporary worktree after preserving enough evidence for
@@ -384,112 +367,10 @@ agent-authored commits.
 - Agent-created commits are optional, not required.
 - A run that leaves coherent tracked edits in the managed worktree still counts
   as produced work.
-- After a successful run that produces tracked changes, `execute-bead` is
-  merge-by-default. Preservation requires an explicit blocker: `--no-merge`,
-  a failed required execution, an explicit ratchet block from a resolved
-  governing-snapshot execution document, or a land conflict.
 - A run is only `no_changes` when the managed worktree ends clean and there are
   no new tracked changes to preserve or land.
 - If DDx needs a commit object for preserve/merge mechanics and the agent left
   only tracked edits, DDx synthesizes the result commit itself.
-
-### No-Change Adjudication
-
-`no_changes` is an execution outcome, not a success alias. The attempt says
-"the agent produced nothing new in the managed worktree." A later
-adjudication step decides whether that means the bead was already satisfied or
-whether the bead remains unresolved.
-
-The satisfaction decision is conservative and snapshot-based:
-
-1. Evaluate against the attempt's `base_rev` and governing snapshot recorded in
-   `manifest.json`. Agent edits to docs, execution definitions, or ratchet
-   thresholds during the attempt do not change the current attempt's
-   adjudication contract.
-2. Require complete evidence. `prompt.md`, `manifest.json`, and `result.json`
-   are always required. `checks.json` is required whenever the governing
-   snapshot resolved required executions, explicit acceptance validators, or
-   future authored close/merge gates that were supposed to run for the attempt.
-   Missing required evidence keeps the disposition unresolved.
-3. Require positive acceptance proof. A bead may be closed from `no_changes`
-   only when acceptance is explicitly validated at `base_rev`. "No failing
-   checks were found" is not enough. Positive proof must come from authored
-   validation evidence such as a passing acceptance validator, a passing
-   required execution that explicitly covers the bead's acceptance, or a future
-   close gate that declares acceptance satisfied.
-4. Require gate satisfaction. All governing-snapshot required executions must
-   pass, all explicit blocking ratchets must be non-blocking, and any future
-   gate marked as required for closure/satisfaction must pass. `warn` is
-   evidence only; `fail`, `blocked`, `missing`, or `not_run` prevents
-   already-satisfied closure.
-
-Adjudication has only two dispositions:
-
-- `already_satisfied` — close the bead, keep the attempt `status=no_changes`,
-  and record that the closure came from satisfaction proof rather than from a
-  successful implementation attempt.
-- `unresolved` — leave the bead open, unclaim it, attach the blocking reasons,
-  and apply cooldown / retry suppression so the queue does not immediately
-  select the same bead again.
-
-The execute-bead attempt bundle must expose this decision in machine-readable
-form. At minimum, `result.json` must include:
-
-```json
-{
-  "status": "no_changes",
-  "no_change_disposition": "already_satisfied",
-  "close_bead": true,
-  "retry_after": "",
-  "satisfaction": {
-    "decision": "satisfied",
-    "acceptance": "passed",
-    "required_checks": "passed",
-    "future_gates": "passed",
-    "evidence_complete": true,
-    "blocking_reasons": []
-  }
-}
-```
-
-For unresolved `no_changes`, the same surface changes to:
-
-```json
-{
-  "status": "no_changes",
-  "no_change_disposition": "unresolved",
-  "close_bead": false,
-  "retry_after": "2026-04-12T18:00:00Z",
-  "satisfaction": {
-    "decision": "unresolved",
-    "acceptance": "not_evaluated",
-    "required_checks": "missing",
-    "future_gates": "not_applicable",
-    "evidence_complete": false,
-    "blocking_reasons": [
-      "acceptance validation missing",
-      "required execution checks.json missing"
-    ]
-  }
-}
-```
-
-`checks.json` remains the detailed evidence surface for individual checks and
-gates. Each entry must identify enough to drive both loop control and UI
-inspection without reinterpreting prose:
-
-- `id`
-- `category`: `required_execution`, `acceptance_validation`, or `future_gate`
-- `required`
-- `status`: `pass`, `fail`, `missing`, or `not_run`
-- `ratchet`: `ok`, `warn`, `blocked`, or `not_applicable`
-- `blocks_satisfaction`
-- `blocks_merge`
-
-Future gate enforcement plugs into the same contract. A later graph-authored
-gate only affects `no_changes` closure when its result is surfaced through
-these machine-readable fields and it is explicitly marked as blocking
-closure/satisfaction for the attempt.
 
 ### Epic Execution Workflow
 
