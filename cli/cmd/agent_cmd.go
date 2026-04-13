@@ -1124,15 +1124,37 @@ func (f *CommandFactory) newAgentExecuteLoopCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "execute-loop",
 		Short: "Drain the single-project execution-ready bead queue",
-		Long: `Scans the current project's execution-ready bead queue, claims the next
-ready bead, runs ddx agent execute-bead from the project root, records the
+		Long: `execute-loop is the primary queue-driven execution surface. It scans the
+current project's execution-ready bead queue, claims the next ready bead,
+runs "ddx agent execute-bead" on it from the project root, records the
 structured result, and continues until no unattempted ready work remains.
 
-Use execute-loop as the normal queue-driven execution surface. By default it
-submits to the running ddx server as a background worker and returns immediately.
-Use --local to run inline in the current process.
+Reach for execute-loop by default. Use "ddx agent execute-bead" directly
+only as the primitive for debugging or re-running one specific bead.
+
+Planning and document-only beads are valid execution targets — any bead
+with unmet acceptance criteria and no blocking deps is eligible.
+
+Close semantics (per execute-bead result status):
+  success                      — close bead with session + commit evidence
+  already_satisfied            — close bead (after repeated no_changes)
+  no_changes                   — unclaim; may cooldown or close after retries
+  land_conflict                — unclaim; result preserved under refs/ddx/iterations/
+  post_run_check_failed        — unclaim; result preserved
+  execution_failed             — unclaim
+  structural_validation_failed — unclaim
+
+Only success (and already_satisfied) closes the bead. Every other status
+leaves the bead open and unclaimed so a later attempt can try again. Each
+attempt is appended to the bead as an execute-bead event (status, detail,
+base_rev, result_rev, preserve_ref, retry_after), and the underlying agent
+session log is recorded under the execute-bead agent-log path.
+
+By default execute-loop submits to the running ddx server as a background
+worker and returns immediately. Use --local to run inline in the current
+process.
 `,
-		Example: `  # Drain the current execution-ready queue once and exit
+		Example: `  # Drain the current execution-ready queue once and exit (normal surface)
   ddx agent execute-loop
 
   # Pick one ready bead, execute it, and stop

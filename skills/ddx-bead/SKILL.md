@@ -137,11 +137,26 @@ ddx bead status            # Summary counts by state
 ## Execution Guidance
 
 When using DDx agent primitives against bead work:
-- Prefer `ddx agent execute-loop` for normal queue-driven execution.
-- Use `ddx agent execute-bead <id>` for a specific manual single-bead run.
+- `ddx agent execute-loop` is the **normal queue-driven surface**. It drains
+  the execution-ready queue, claiming and running each bead through
+  `execute-bead`, and closes beads only on `success`/`already_satisfied`.
+  Reach for it by default.
+- `ddx agent execute-bead <id>` is the **primitive** — one agent on one bead
+  in an isolated worktree. Use it to debug or re-run a specific bead; the
+  loop calls it internally.
+- Planning and document-only beads are valid execution targets. Any bead
+  with unmet acceptance criteria and no blocking deps is eligible; acceptance
+  can produce docs, specs, code, or any other artifact.
+- The loop closes the bead with session + commit evidence only on `success`
+  (and `already_satisfied` after repeated `no_changes`). Every other status
+  — `no_changes`, `land_conflict`, `post_run_check_failed`, `execution_failed`,
+  `structural_validation_failed` — leaves the bead open and unclaimed for a
+  later attempt.
 - For direct `ddx agent run` usage, prefer `--profile smart` or another profile.
 - Treat `--model` and `--effort` as explicit overrides; do not add them on top
   of `--profile` unless you are intentionally testing or pinning behavior.
+- See `docs/agent-execute.md` for the operator reference on close semantics
+  and result statuses.
 
 ## References
 

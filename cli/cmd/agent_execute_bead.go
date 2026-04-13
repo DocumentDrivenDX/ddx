@@ -15,10 +15,45 @@ var validBeadID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 func (f *CommandFactory) newAgentExecuteBeadCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "execute-bead <bead-id>",
-		Short: "Run an agent on a bead in an isolated worktree, then merge or preserve the result",
-		Long: `execute-bead creates an isolated git worktree from HEAD,
-runs an agent within it, then merges the result back (ff if clean, merge commit if not).
-Orphan worktrees from previous crashed runs are recovered automatically.`,
+		Short: "Run an agent on one bead in an isolated worktree, then merge or preserve the result",
+		Long: `execute-bead is the primitive: it runs a single agent on a single bead in
+an isolated git worktree, then merges the result back (fast-forward if clean,
+merge commit if not) or preserves it under refs/ddx/iterations/<bead-id>/...
+when --no-merge is set. Orphan worktrees from previous crashed runs are
+recovered automatically.
+
+Planning and document-only beads are valid execution targets — the agent
+produces whatever artifacts (docs, specs, code) the bead's acceptance
+criteria call for.
+
+For normal queue-driven work use "ddx agent execute-loop", which claims
+ready beads, calls this command, and closes or unclaims each bead based on
+the result. Reach for execute-bead directly only to debug or re-run a
+specific bead.
+
+Result status is reported on the "status:" line and is one of:
+  success                          — merged (or preserved with --no-merge)
+  no_changes                       — agent ran but produced no diff
+  already_satisfied                — closed by the loop after repeated no_changes
+  land_conflict                    — rebase/merge failed; result preserved
+  post_run_check_failed            — checks failed; result preserved
+  execution_failed                 — agent or harness error
+  structural_validation_failed     — bead or prompt inputs invalid
+
+execute-loop closes the bead with session/commit evidence only on success
+(and already_satisfied); every other status leaves the bead open and
+unclaimed for a later attempt.`,
+		Example: `  # Debug one specific bead (prefer "execute-loop" for normal queue work)
+  ddx agent execute-bead ddx-7a01ba6c
+
+  # Run against a non-HEAD base revision
+  ddx agent execute-bead ddx-7a01ba6c --from main
+
+  # Preserve the result under refs/ddx/iterations/... instead of merging
+  ddx agent execute-bead ddx-7a01ba6c --no-merge
+
+  # Pin harness/model for a debugging pass
+  ddx agent execute-bead ddx-7a01ba6c --harness codex`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runAgentExecuteBead,
 	}
