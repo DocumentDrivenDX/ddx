@@ -435,22 +435,34 @@ bundle. This compilation is DDx-owned; it does not mutate the bead.
 
 **Prompt structure:**
 
-The rationalizer emits a structured prompt with machine-significant
-XML-tagged sections so the prompt can be parsed, validated, diffed, and
-replayed deterministically. The required sections are:
+The rationalizer emits a structured prompt wrapped in an `<execute-bead>`
+root element with machine-significant XML-tagged sections so the prompt
+can be parsed, validated, diffed, and replayed deterministically. The
+required top-level sections are:
 
 ```
-<bead>...</bead>             — identity fields (id, title, labels, spec-id, base_rev, bundle)
-<description>...</description>   — bead description verbatim
-<acceptance>...</acceptance>     — bead acceptance criteria verbatim
-<governing_refs>...</governing_refs>  — resolved governing artifact list
-<execution_rules>...</execution_rules>  — DDx-injected execution rules and conventions
+<execute-bead>
+  <bead id="...">                          — identity fields (id as attribute; title, description, acceptance, labels, metadata as children)
+    <title>...</title>                     — bead title verbatim
+    <description>...</description>         — bead description verbatim
+    <acceptance>...</acceptance>           — bead acceptance criteria verbatim
+    <labels>...</labels>                   — comma-separated label list (empty element when none)
+    <metadata parent="..." spec-id="..." base-rev="..." bundle="..."/>
+                                           — parent, spec-id, base git revision, and execution bundle path
+  </bead>
+  <governing>                              — resolved governing artifact list
+    <ref id="..." path="...">title</ref>   — one element per governing document
+  </governing>
+  <instructions>...</instructions>         — DDx-injected per-bead task instructions and execution conventions
+</execute-bead>
 ```
 
-Optional sections may include `<additional_context>` for injected content
-such as persona instructions or workflow hints. The rationalizer must not
-invent unavailable fields; it omits sections with no content rather than
-emitting placeholder text.
+The rationalizer must not invent unavailable fields; it emits empty
+self-closing elements (e.g. `<description/>`) for missing content rather
+than emitting placeholder text. When no governing references resolve,
+the `<governing>` section contains a single `<note>` element describing
+the discovery fallback instead of being omitted, so downstream tooling
+can distinguish "no refs" from "section not emitted".
 
 The prompt is the agent's primary input for the attempt. The rationalizer
 contract is independent of the harness: every harness receives the same

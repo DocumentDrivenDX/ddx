@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
@@ -1051,4 +1052,89 @@ func TestExecuteBeadNoGatesWhenNoChanges(t *testing.T) {
 
 	assert.Equal(t, "no-changes", res.Outcome)
 	assert.Empty(t, res.GateResults, "gates must not run when agent made no changes")
+}
+
+// TestExecuteBeadPromptIsXMLTagged verifies that the synthesized execute-bead
+// prompt is emitted as a well-structured XML document with the tags required
+// by FEAT-006's Prompt Rationalizer Contract. It also guards against regression
+// to the old markdown-heading-only prompt structure.
+func TestExecuteBeadPromptIsXMLTagged(t *testing.T) {
+	workDir := t.TempDir()
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:          "xml-bead",
+		Title:       "Adopt XML-tagged execute-bead prompt template",
+		Status:      bead.StatusOpen,
+		Priority:    0,
+		IssueType:   bead.DefaultType,
+		Parent:      "ddx-parent",
+		Description: "Replace the markdown-heading prompt with an XML-tagged structure so downstream tooling can diff and validate sections deterministically.",
+		Acceptance:  "Prompt is XML-tagged with <execute-bead>, <bead>, <governing>, and <instructions>.",
+		Labels:      []string{"area:agent", "area:docs"},
+		Extra:       map[string]any{"spec-id": "FEAT-XML-TEST"},
+	})
+	specPath := filepath.Join(workDir, "docs", "feat-xml.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
+	require.NoError(t, os.WriteFile(specPath, []byte(`---
+ddx:
+  id: FEAT-XML-TEST
+  title: XML Test Spec
+---
+# XML Test Spec
+`), 0o644))
+
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111cafe",
+		wtHeadRev:   "bbbb2222beef",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	f := NewCommandFactory(workDir)
+	seedDefaultExecuteBeads(t, workDir)
+	f.AgentRunnerOverride = runner
+	f.executeBeadGitOverride = git
+
+	_ = runExecuteBead(t, f, git, "xml-bead")
+
+	require.NotEmpty(t, runner.last.PromptFile)
+	promptRaw, err := os.ReadFile(runner.last.PromptFile)
+	require.NoError(t, err)
+	promptText := string(promptRaw)
+
+	// Required root and subsection tags.
+	assert.Contains(t, promptText, "<execute-bead>")
+	assert.Contains(t, promptText, "</execute-bead>")
+	assert.Contains(t, promptText, `<bead id="xml-bead">`)
+	assert.Contains(t, promptText, "</bead>")
+	assert.Contains(t, promptText, "<title>Adopt XML-tagged execute-bead prompt template</title>")
+	assert.Contains(t, promptText, "<description>")
+	assert.Contains(t, promptText, "</description>")
+	assert.Contains(t, promptText, "<acceptance>")
+	assert.Contains(t, promptText, "</acceptance>")
+	assert.Contains(t, promptText, "<labels>area:agent, area:docs</labels>")
+	assert.Contains(t, promptText, `parent="ddx-parent"`)
+	assert.Contains(t, promptText, `spec-id="FEAT-XML-TEST"`)
+	assert.Contains(t, promptText, `base-rev="aaaa1111cafe"`)
+	assert.Contains(t, promptText, `<metadata `)
+	assert.Contains(t, promptText, "<governing>")
+	assert.Contains(t, promptText, "</governing>")
+	assert.Contains(t, promptText, `<ref id="FEAT-XML-TEST"`)
+	assert.Contains(t, promptText, "<instructions>")
+	assert.Contains(t, promptText, "</instructions>")
+
+	// Regression guard: no markdown-heading-only sections.
+	assert.NotContains(t, promptText, "# Execute Bead\n")
+	assert.NotContains(t, promptText, "## Bead\n")
+	assert.NotContains(t, promptText, "## Description\n")
+	assert.NotContains(t, promptText, "## Acceptance Criteria\n")
+	assert.NotContains(t, promptText, "## Governing References\n")
+	assert.NotContains(t, promptText, "## Execution Rules\n")
+
+	// The prompt must be parseable as a well-formed XML document.
+	decoder := xml.NewDecoder(bytes.NewBufferString(promptText))
+	for {
+		_, tokErr := decoder.Token()
+		if tokErr == io.EOF {
+			break
+		}
+		require.NoError(t, tokErr, "prompt must be well-formed XML: %s", promptText)
+	}
 }

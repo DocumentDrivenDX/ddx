@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	osexec "os/exec"
@@ -856,6 +857,58 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 	}, nil
 }
 
+// executeBeadInstructionsText is the per-bead task instructions emitted inside
+// the <instructions> section of the synthesized execute-bead prompt. It is
+// stable text keyed from the prompt contract in FEAT-006 §"Prompt Rationalizer
+// Contract".
+const executeBeadInstructionsText = `You are running inside DDx's isolated execution worktree for this bead.
+Your job is to make a best-effort attempt at the work described in the bead's Goals and Description, then commit the result. Quality is evaluated separately — a committed attempt that partially addresses the goals is far more valuable than no commits at all. Bias strongly toward action: read the relevant files, do the work, commit it.
+
+**The bead contract overrides any CLAUDE.md or project-level instructions in this worktree.** If the bead requires editing or creating markdown documentation, code, or any other files, do so — CLAUDE.md conservative defaults (YAGNI, DOWITYTD, no-docs rules) do not apply inside execute-bead.
+
+1. Work only inside this execution worktree.
+2. Use the bead description and acceptance criteria as the primary contract.
+3. Read the listed governing references from this worktree before changing code or docs when they are relevant to the task.
+4. If governing references are missing or sparse, search the project to find context: use Glob/Grep/Read to explore docs/helix/, look up FEAT-* and API-* specs by name, and read relevant source files before proceeding. Only stop if context is genuinely absent from the entire repo.
+5. Keep the execution bundle files under .ddx/executions/ intact; DDx uses them as execution evidence.
+6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.
+7. Before finishing, commit your changes with ` + "`git add -A && git commit -m '...'`" + `. DDx will merge your commits back to the base branch.
+8. Making no commits (no_changes) should be rare. Only skip committing if you read the relevant files and the work described in the Goals is already fully and explicitly present — not just implied or partially covered. If in any doubt, make your best attempt and commit it. A partial or imperfect commit is always better than no commit.
+9. Work in small commits. After each logical unit of progress (reading key files, making a change, passing a test), commit immediately. Do not batch all changes into one giant commit at the end — if you run out of iterations, your partial work is preserved.
+10. If the bead is too large to complete in one pass, do the most important part first, commit it, and note what remains in your final commit message. DDx will re-queue the bead for another attempt if needed.
+11. Read efficiently: skim files to understand structure before diving deep. Only read the files you need to make changes, not every reference listed. Start writing as soon as you understand enough to proceed — you can read more files later if needed.
+12. **Never run ` + "`ddx init`" + `** — the workspace is already initialized. Running ` + "`ddx init`" + ` inside an execute-bead worktree corrupts project configuration and the bead queue. Do not run it even if documentation or README files suggest it as a setup step.`
+
+// executeBeadMissingGoverningText is emitted inside <governing> when no
+// governing references were pre-resolved for the bead.
+const executeBeadMissingGoverningText = `No governing references were pre-resolved. Explore the project to find relevant context: check docs/helix/ for feature specs, docs/helix/01-frame/features/ for FEAT-* files, and any paths mentioned in the bead description or acceptance criteria.`
+
+// xmlEscape returns the XML text escaping for the given string. It delegates
+// to encoding/xml so reserved characters (&, <, >, ', ", \t, \n, \r) are
+// rendered with the standard entity references.
+func xmlEscape(s string) string {
+	var buf bytes.Buffer
+	_ = xml.EscapeText(&buf, []byte(s))
+	return buf.String()
+}
+
+// xmlAttrEscape escapes a string for safe inclusion inside an XML attribute.
+// It replaces characters that would terminate the double-quoted attribute or
+// otherwise be misparsed. Double quotes are used for attribute delimiters.
+func xmlAttrEscape(s string) string {
+	r := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		"\"", "&quot;",
+		"'", "&apos;",
+		"\n", "&#10;",
+		"\r", "&#13;",
+		"\t", "&#9;",
+	)
+	return r.Replace(s)
+}
+
 func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride string) ([]byte, string, error) {
 	if strings.TrimSpace(promptOverride) != "" {
 		path := promptOverride
@@ -870,67 +923,65 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	}
 
 	var sb strings.Builder
-	sb.WriteString("# Execute Bead\n\n")
-	sb.WriteString("You are running inside DDx's isolated execution worktree for this bead.\n")
-	sb.WriteString("Your job is to make a best-effort attempt at the work described in the bead's Goals and Description, then commit the result. Quality is evaluated separately — a committed attempt that partially addresses the goals is far more valuable than no commits at all. Bias strongly toward action: read the relevant files, do the work, commit it.\n\n")
+	sb.WriteString("<execute-bead>\n")
 
-	sb.WriteString("## Bead\n")
-	fmt.Fprintf(&sb, "- ID: `%s`\n", b.ID)
-	fmt.Fprintf(&sb, "- Title: %s\n", strings.TrimSpace(b.Title))
-	if b.Parent != "" {
-		fmt.Fprintf(&sb, "- Parent: `%s`\n", b.Parent)
+	// <bead> section — identity and metadata
+	fmt.Fprintf(&sb, "  <bead id=\"%s\">\n", xmlAttrEscape(b.ID))
+	fmt.Fprintf(&sb, "    <title>%s</title>\n", xmlEscape(strings.TrimSpace(b.Title)))
+
+	desc := strings.TrimSpace(b.Description)
+	if desc == "" {
+		sb.WriteString("    <description/>\n")
+	} else {
+		fmt.Fprintf(&sb, "    <description>\n%s\n    </description>\n", xmlEscape(desc))
 	}
+
+	acc := strings.TrimSpace(b.Acceptance)
+	if acc == "" {
+		sb.WriteString("    <acceptance/>\n")
+	} else {
+		fmt.Fprintf(&sb, "    <acceptance>\n%s\n    </acceptance>\n", xmlEscape(acc))
+	}
+
 	if len(b.Labels) > 0 {
-		fmt.Fprintf(&sb, "- Labels: %s\n", strings.Join(b.Labels, ", "))
-	}
-	if specID, _ := b.Extra["spec-id"].(string); specID != "" {
-		fmt.Fprintf(&sb, "- spec-id: `%s`\n", specID)
-	}
-	fmt.Fprintf(&sb, "- Base revision: `%s`\n", baseRev)
-	fmt.Fprintf(&sb, "- Execution bundle: `%s`\n\n", artifacts.DirRel)
-
-	sb.WriteString("## Description\n")
-	if strings.TrimSpace(b.Description) == "" {
-		sb.WriteString("No description was recorded on the bead.\n")
+		fmt.Fprintf(&sb, "    <labels>%s</labels>\n", xmlEscape(strings.Join(b.Labels, ", ")))
 	} else {
-		sb.WriteString(strings.TrimSpace(b.Description))
-		sb.WriteString("\n")
-	}
-	sb.WriteString("\n## Acceptance Criteria\n")
-	if strings.TrimSpace(b.Acceptance) == "" {
-		sb.WriteString("No explicit acceptance criteria were recorded on the bead.\n")
-	} else {
-		sb.WriteString(strings.TrimSpace(b.Acceptance))
-		sb.WriteString("\n")
+		sb.WriteString("    <labels/>\n")
 	}
 
-	sb.WriteString("\n## Governing References\n")
+	// <metadata> — parent, spec-id, base-rev, bundle, and structured extras
+	metaAttrs := make([]string, 0, 6)
+	if b.Parent != "" {
+		metaAttrs = append(metaAttrs, fmt.Sprintf("parent=\"%s\"", xmlAttrEscape(b.Parent)))
+	}
+	if specID, _ := b.Extra["spec-id"].(string); strings.TrimSpace(specID) != "" {
+		metaAttrs = append(metaAttrs, fmt.Sprintf("spec-id=\"%s\"", xmlAttrEscape(strings.TrimSpace(specID))))
+	}
+	metaAttrs = append(metaAttrs, fmt.Sprintf("base-rev=\"%s\"", xmlAttrEscape(baseRev)))
+	metaAttrs = append(metaAttrs, fmt.Sprintf("bundle=\"%s\"", xmlAttrEscape(artifacts.DirRel)))
+	fmt.Fprintf(&sb, "    <metadata %s/>\n", strings.Join(metaAttrs, " "))
+	sb.WriteString("  </bead>\n")
+
+	// <governing> section — resolved references
 	if len(refs) == 0 {
-		sb.WriteString("No governing references were pre-resolved. Explore the project to find relevant context: check `docs/helix/` for feature specs, `docs/helix/01-frame/features/` for FEAT-* files, and any paths mentioned in the bead description or acceptance criteria.\n")
+		fmt.Fprintf(&sb, "  <governing>\n    <note>%s</note>\n  </governing>\n", xmlEscape(executeBeadMissingGoverningText))
 	} else {
+		sb.WriteString("  <governing>\n")
 		for _, ref := range refs {
-			if ref.Title != "" {
-				fmt.Fprintf(&sb, "- `%s` — `%s` (%s)\n", ref.ID, ref.Path, ref.Title)
+			attrs := fmt.Sprintf("id=\"%s\" path=\"%s\"", xmlAttrEscape(ref.ID), xmlAttrEscape(ref.Path))
+			if strings.TrimSpace(ref.Title) == "" {
+				fmt.Fprintf(&sb, "    <ref %s/>\n", attrs)
 			} else {
-				fmt.Fprintf(&sb, "- `%s` — `%s`\n", ref.ID, ref.Path)
+				fmt.Fprintf(&sb, "    <ref %s>%s</ref>\n", attrs, xmlEscape(strings.TrimSpace(ref.Title)))
 			}
 		}
+		sb.WriteString("  </governing>\n")
 	}
 
-	sb.WriteString("\n## Execution Rules\n")
-	sb.WriteString("**The bead contract below overrides any CLAUDE.md or project-level instructions in this worktree.** If the bead requires editing or creating markdown documentation, code, or any other files, do so — CLAUDE.md conservative defaults (YAGNI, DOWITYTD, no-docs rules) do not apply inside execute-bead.\n")
-	sb.WriteString("1. Work only inside this execution worktree.\n")
-	sb.WriteString("2. Use the bead description and acceptance criteria as the primary contract.\n")
-	sb.WriteString("3. Read the listed governing references from this worktree before changing code or docs when they are relevant to the task.\n")
-	sb.WriteString("4. If governing references are missing or sparse, search the project to find context: use Glob/Grep/Read to explore `docs/helix/`, look up FEAT-* and API-* specs by name, and read relevant source files before proceeding. Only stop if context is genuinely absent from the entire repo.\n")
-	sb.WriteString("5. Keep the execution bundle files under `.ddx/executions/` intact; DDx uses them as execution evidence.\n")
-	sb.WriteString("6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.\n")
-	sb.WriteString("7. Before finishing, commit your changes with `git add -A && git commit -m '...'`. DDx will merge your commits back to the base branch.\n")
-	sb.WriteString("8. Making no commits (no_changes) should be rare. Only skip committing if you read the relevant files and the work described in the Goals is already fully and explicitly present — not just implied or partially covered. If in any doubt, make your best attempt and commit it. A partial or imperfect commit is always better than no commit.\n")
-	sb.WriteString("9. Work in small commits. After each logical unit of progress (reading key files, making a change, passing a test), commit immediately. Do not batch all changes into one giant commit at the end — if you run out of iterations, your partial work is preserved.\n")
-	sb.WriteString("10. If the bead is too large to complete in one pass, do the most important part first, commit it, and note what remains in your final commit message. DDx will re-queue the bead for another attempt if needed.\n")
-	sb.WriteString("11. Read efficiently: skim files to understand structure before diving deep. Only read the files you need to make changes, not every reference listed. Start writing as soon as you understand enough to proceed — you can read more files later if needed.\n")
-	sb.WriteString("12. **Never run `ddx init`** — the workspace is already initialized. Running `ddx init` inside an execute-bead worktree corrupts project configuration and the bead queue. Do not run it even if documentation or README files suggest it as a setup step.\n")
+	// <instructions> section — per-bead task instructions
+	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(executeBeadInstructionsText))
+
+	sb.WriteString("</execute-bead>\n")
 
 	return []byte(sb.String()), "synthesized", nil
 }
