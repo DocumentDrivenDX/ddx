@@ -8,20 +8,25 @@ ddx:
     - FEAT-006
     - FEAT-008
     - FEAT-012
+    - FEAT-020
     - SD-004
     - SD-006
     - SD-012
     - SD-013
 ---
-# Solution Design: One-Machine Multi-Project Server Topology
+# Solution Design: Host+User Multi-Project Server Topology
 
 ## Purpose
 
-Define the first-step `ddx server` topology that can host multiple project
-roots on one machine without collapsing back to a single-repo assumption.
-The server remains local-first and git-native. The new contract adds an
-explicit registry, request scoping, per-project isolation, and backward
-compatibility for today's single-project invocation.
+Define the `ddx server` topology that runs as a per-user host daemon and
+hosts multiple project roots on one machine without collapsing back to a
+single-repo assumption. One `ddx-server` process serves one operating-system
+user on one machine, holds its identity and project registry in user-level
+state (FEAT-020), and supervises execute-loop workers for every registered
+project. The server remains local-first and git-native. The contract adds an
+explicit registry, request scoping, per-project isolation, an in-process
+worker boundary, and backward compatibility for today's single-project
+invocation.
 
 ## Scope
 
@@ -40,40 +45,56 @@ Out of scope:
 
 ## Project Registry And Discovery
 
-`ddx server` loads a registry of project roots before it serves requests.
-Registry entries are config-first and describe local roots that belong to the
-same server process.
+`ddx server` holds one project registry per host+user. The registry is
+persisted at user-level state (not inside any project) and projects enter it
+through a mix of server startup, CLI auto-registration, and optional config
+seed entries. FEAT-020 is the authoritative spec for the on-disk shape and
+auto-registration flow; SD-019 describes how the server uses that registry to
+route requests and isolate projects.
 
-### Registry Shape
+### Storage Location
 
-The canonical server config shape is:
+Runtime state is host+user scoped:
 
-```yaml
-server:
-  projects:
-    - id: ddx
-      root: /Users/erik/Projects/ddx
-      name: DDx
-      default: true
-    - id: notes
-      root: /Users/erik/Projects/notes
-      name: Notes
+```
+~/.local/share/ddx/            (XDG_DATA_HOME/ddx if set)
+  server-state.json            node identity + project registry
+  server.addr                  last-known server URL + PID
 ```
 
-Fields:
+State that describes the server instance never lives inside one project's
+`.ddx/` directory. The addr file and state file both belong to the operator
+(the user running the server), not to any project. One server per machine:
+the addr file is a single-entry file; a new server start overwrites it.
 
-- `id` is the stable project key used in URLs, MCP calls, and caches
-- `root` is the absolute filesystem path for the project
-- `name` is optional display text for UI labels
-- `default` marks the project that legacy unscoped routes resolve to
+### Registry Population
 
-If `server.projects` is absent, the server synthesizes a singleton registry
-from the current working directory. That preserves today's `ddx server`
-invocation without requiring a new config file shape.
+Three paths contribute entries:
 
-If an `id` is omitted, the server may derive one from the root basename plus a
-short path hash, but the derived value must remain stable for that root during
-the lifetime of the registry.
+1. **Server startup** registers the project at the server's own working
+   directory.
+2. **CLI auto-registration** — `ddx agent`, `ddx bead`, and `ddx doc`
+   subcommand groups fire a fire-and-forget `POST /api/projects/register` in
+   `PersistentPreRunE` so any project the user touches on the machine shows
+   up in the host+user registry without manual configuration (FEAT-020).
+3. **Optional config seed** — a `server.projects` block in config may list
+   known roots so a fresh install can boot with a non-empty registry before
+   any CLI command runs. Seed entries are merged into the persisted state,
+   not kept as a separate source of truth.
+
+Each registry entry carries:
+
+- `id` — stable project key used in URLs, MCP calls, and caches
+- `name` — optional display text for UI labels
+- `path` — the absolute filesystem path for the project
+- `git_remote` — captured when available
+- `registered_at` / `last_seen` timestamps
+
+If the state file is absent and no CLI has registered, the server synthesizes
+a singleton registry from the current working directory so today's `ddx server`
+invocation still works. If an `id` is omitted, the server derives one from the
+root basename plus a short path hash and keeps it stable for the lifetime of
+the registry.
 
 ### Discovery Contract
 
@@ -192,14 +213,24 @@ project can be repaired without taking down the others.
 
 ## Worktrees And Worker Pools
 
-The server is allowed to supervise worktree-backed activity across multiple
-projects, but the worktree and worker pools remain project-scoped.
+The host+user `ddx-server` process hosts an in-process `WorkerManager` that
+supervises execute-loop workers as goroutines. Worker lifecycle — start, live
+logs, stop, and on-disk record — is owned by the server, but every worker is
+scoped to one project context and the worktree and worker pools remain
+project-scoped.
 
-The first shipped execute-bead supervisor remains a single-project worker.
-Multi-project scheduling is a later-stage server topology concern and does not
-change the contract for one worker operating on one project context at a time.
-Epic execution introduces a second worker type: an epic-scoped worker that owns
-one persistent epic branch and worktree for that project.
+The first shipped execute-bead supervisor is a single-project worker running
+inside the server's `WorkerManager`. Multi-project scheduling across workers
+is still one-worker-per-project-context: a goroutine handling project A never
+reaches into project B. Epic execution introduces a second worker type: an
+epic-scoped worker that owns one persistent epic branch and worktree for that
+project.
+
+Worker records live under the project's own `.ddx/workers/` directory, and
+execute-bead attempt artifacts live under `.ddx/executions/<attempt-id>/` in
+the same project (FEAT-006). Host+user server state never absorbs those
+files; the user-level state file only tracks node identity and the project
+registry, not the replay-backed artifacts produced by a worker.
 
 ### Worktree Model
 
@@ -343,8 +374,22 @@ Integration*.
 
 This design should be covered by tests that verify:
 
-- registry enumeration returns multiple project roots with a default marker
+- registry enumeration returns multiple project roots and reflects host+user
+  state persisted at `~/.local/share/ddx/server-state.json`
+- CLI auto-registration adds a previously unknown project to the registry
+  through `POST /api/projects/register`
 - scoped HTTP and MCP requests resolve the correct project context
 - singleton fallback preserves today's `ddx server` invocation
-- a broken project stays isolated from healthy sibling projects
-- UI routing lands on the correct project-specific route
+- a broken project stays isolated from healthy sibling projects (host+user
+  isolation: one bad project does not poison the rest of the host)
+- concurrent requests that hit different registered projects do not collide
+  on adapters, caches, or worker records
+- UI routing lands on the correct project-specific route at
+  `/nodes/:nodeId/projects/:projectId/...`
+- execute-loop workers supervised by `WorkerManager` start, stream logs, and
+  stop cleanly, producing attempt artifacts under the owning project's
+  `.ddx/executions/<attempt-id>/` directory
+- a worker running against one project cannot reach into another project's
+  bead store, worktree, or execution artifacts
+
+TP-002 carries the concrete test cases that implement this validation plan.

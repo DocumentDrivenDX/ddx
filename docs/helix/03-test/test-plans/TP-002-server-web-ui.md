@@ -4,19 +4,26 @@ ddx:
   depends_on:
     - FEAT-002
     - FEAT-008
+    - FEAT-020
+    - FEAT-021
+    - SD-019
 ---
 # Test Plan: DDx Server and Web UI
 
 **ID:** TP-002
-**Features:** FEAT-002 (Server), FEAT-008 (Web UI)
+**Features:** FEAT-002 (Server), FEAT-008 (Web UI), FEAT-020 (Node State),
+FEAT-021 (Dashboard UI), SD-019 (Host+User Multi-Project Topology)
 **Status:** Active
 
 ## Scope
 
 End-to-end testing of the DDx server HTTP API, MCP tools, and embedded web
-UI. Tests run against a live `ddx server` instance with real project data
-(documents, beads, personas, execution definitions) from one or more project
-roots.
+UI. Tests run against a live `ddx server` instance — a per-user host daemon
+holding its state at `~/.local/share/ddx/server-state.json` — with real
+project data (documents, beads, personas, execution definitions) from one or
+more project roots. Coverage includes host+user isolation across registered
+projects, concurrent project access, and execute-loop worker lifecycle
+supervised by the in-process `WorkerManager`.
 
 ## Test Infrastructure
 
@@ -47,8 +54,13 @@ bun run demo:record
 ```
 
 The Playwright configs auto-start `ddx server --port 18080` via `webServer`.
-Multi-project fixtures use a server config that registers multiple project
-roots so request routing and the UI project picker can be exercised in one run.
+Multi-project fixtures point the server at an isolated `XDG_DATA_HOME` so
+the host+user state file at `~/.local/share/ddx/server-state.json` is
+scoped to the test run, and either seed `server.projects` in config or drive
+`POST /api/projects/register` to populate the registry with several project
+roots. That gives request routing, the UI project picker, host+user
+isolation, and concurrent-project behaviors a shared fixture to exercise in
+one run.
 
 ## Test Cases
 
@@ -174,6 +186,50 @@ These cases are owned by the Go server tests in
 | TC-010.7 | MCP registry listing | `ddx_list_projects` lists the registered projects and marks the default project | Planned |
 | TC-010.8 | MCP project lookup | `ddx_show_project` resolves the selected project context and returns the matching project metadata | Planned |
 | TC-010.9 | MCP scoped tool call | A project-aware MCP tool call runs against the selected project and returns that project's data | Planned |
+
+### TC-011: Host+User State and Node Identity
+
+Verifies that `ddx-server` runs as a per-user host daemon with state at
+`~/.local/share/ddx/server-state.json` and writes `~/.local/share/ddx/server.addr`,
+per FEAT-020. These cases are owned by the Go server tests in
+`cli/internal/server/server_test.go` (and companion `node_state_test.go`).
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-011.1 | State file location | Server writes `server-state.json` under `XDG_DATA_HOME/ddx` (not inside `.ddx/server/`) | Planned |
+| TC-011.2 | Addr file location | Server writes `server.addr` with URL, node name, and node ID under `XDG_DATA_HOME/ddx` | Planned |
+| TC-011.3 | Node identity endpoint | `GET /api/node` returns a stable `node-<hash>` ID derived from hostname or `DDX_NODE_NAME` | Planned |
+| TC-011.4 | State survives restart | Projects registered before a restart are still returned by `GET /api/projects` after restart | Planned |
+| TC-011.5 | CLI auto-registration | Running `ddx bead list` in a fresh project directory causes that project to appear in `GET /api/projects` within 1s | Planned |
+| TC-011.6 | Single instance per host | A second `ddx server` start overwrites the addr file and the first instance does not continue serving the addr | Planned |
+
+### TC-012: Host+User Project Isolation and Concurrency
+
+Verifies that one host+user server can serve multiple projects concurrently
+without cross-project leakage, per SD-019.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-012.1 | Bead isolation | `GET /api/projects/proj-a/beads` and `GET /api/projects/proj-b/beads` return disjoint bead sets from each project's own store | Planned |
+| TC-012.2 | Document isolation | A document present only in project A is not visible via project B's documents endpoint | Planned |
+| TC-012.3 | Concurrent requests | Parallel requests against different registered projects complete successfully without racing on adapters or caches | Planned |
+| TC-012.4 | Degraded project isolation | A malformed project root is reported as degraded in `GET /api/projects` while sibling projects continue serving | Planned |
+| TC-012.5 | Cache namespace | A cached lookup in project A does not surface the same key in project B | Planned |
+
+### TC-013: Execute-Loop Worker Lifecycle
+
+Verifies that the in-process `WorkerManager` supervises execute-loop workers
+as goroutines scoped to one project, per FEAT-002 and SD-019. These cases are
+owned by `cli/internal/server/workers_test.go`.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-013.1 | Worker start | `StartExecuteLoop` against a registered project creates a worker record and starts a goroutine | Planned |
+| TC-013.2 | Live logs | `Logs` returns streaming log output while the worker is running | Planned |
+| TC-013.3 | Worker stop | `Stop` cancels the running worker and the on-disk record transitions to a terminal state | Planned |
+| TC-013.4 | Worker scope | A worker started for project A writes worker records and execution artifacts only under project A's `.ddx/workers/` and `.ddx/executions/<attempt-id>/` directories | Planned |
+| TC-013.5 | Replay-backed attempts | Runtime metrics (harness, model, tokens, cost, base_rev, result_rev) are persisted into the project's `.ddx/executions/<attempt-id>/` bundle per FEAT-014 | Planned |
+| TC-013.6 | Concurrent workers | Workers for two different registered projects run in parallel without cross-project filesystem writes | Planned |
 
 ## Out of Scope
 

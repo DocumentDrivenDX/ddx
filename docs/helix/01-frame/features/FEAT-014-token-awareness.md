@@ -161,7 +161,14 @@ Interpretation:
 **Always-on execute-bead runtime metrics**
 19. `ddx agent execute-bead` must capture built-in runtime metrics for every
     iteration, independent of any graph-authored execution documents. These are
-    DDx runtime facts, not substitutes for project-authored metric docs.
+    DDx runtime facts, not substitutes for project-authored metric docs. The
+    fields below are persisted into the project's
+    `.ddx/executions/<attempt-id>/` attempt bundle (FEAT-006) so the host+user
+    `ddx-server` and its dashboards can replay runtime metrics from the same
+    replay-backed artifacts that back execution history — DDx does not keep a
+    separate runtime-metrics store. When execute-bead runs inside the server's
+    supervised `WorkerManager` (FEAT-002), the worker writes the same bundle to
+    the project that owns the bead.
     Minimum fields (where available):
     - `harness`, `model`, `session_id`
     - `elapsed_ms`

@@ -7,6 +7,7 @@ ddx:
     - FEAT-010
     - FEAT-007
     - FEAT-012
+    - FEAT-020
 ---
 # Feature: DDx Server
 
@@ -17,7 +18,21 @@ ddx:
 
 ## Overview
 
-`ddx-server` is a lightweight Go web server that exposes DDx platform services over HTTP and MCP endpoints. It serves documents, beads, execution definitions and run history, the document dependency graph, DDx agent invocation activity plus embedded-agent telemetry references, and (via FEAT-008) an embedded web UI — all from a single binary. In the multi-project topology, one binary can serve several project roots on one machine with explicit project scoping.
+`ddx-server` is a lightweight Go web server that exposes DDx platform services
+over HTTP and MCP endpoints. It serves documents, beads, execution definitions
+and run history, the document dependency graph, DDx agent invocation activity
+plus embedded-agent telemetry references, and (via FEAT-008) an embedded web
+UI — all from a single binary.
+
+`ddx-server` runs as a per-user host daemon: one server process per machine,
+scoped to one operating-system user. It holds its identity and project
+registry in user-level state — not inside any project — and supervises
+execute-loop workers for every project it has registered. The state file lives
+at `~/.local/share/ddx/server-state.json` (`$XDG_DATA_HOME/ddx/server-state.json`
+when set), and the last-known server URL is written to
+`~/.local/share/ddx/server.addr` (see FEAT-020). The server binds multiple
+project roots concurrently; each request is resolved against one explicit
+project context before adapters run.
 
 ## Architecture
 
@@ -38,9 +53,17 @@ before dispatching to feature-specific adapters.
 
 **Registry contract**
 
-- `server.projects` declares the local project roots served by one server process
-- each entry carries a stable `id`, an absolute `root`, an optional display `name`, and an optional `default` marker
-- if no registry is configured, the server synthesizes a singleton project from the current working directory so today's `ddx server` invocation still works
+- the server holds one project registry per host+user, persisted at
+  `~/.local/share/ddx/server-state.json` as specified in FEAT-020
+- projects enter the registry by auto-registration from CLI commands
+  (`ddx bead`, `ddx agent`, `ddx doc`) running in any project directory on
+  the machine, and by the server registering its own startup working directory
+- optional seed entries may be provided via `server.projects` in config so a
+  fresh install can boot with a known project list before any CLI commands run
+- each entry carries a stable `id`, an absolute `root`, an optional display
+  `name`, a `git_remote`, and `registered_at`/`last_seen` timestamps
+- if the state file is absent, the server synthesizes a singleton project from
+  the current working directory so today's `ddx server` invocation still works
 
 **Canonical project-scoped surfaces**
 
@@ -57,6 +80,27 @@ before dispatching to feature-specific adapters.
 4. implicit singleton project when only one project exists
 
 Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility aliases when the server can resolve exactly one project context. They are not the canonical multi-project contract.
+
+### Worker Boundaries
+
+`ddx-server` hosts an in-process `WorkerManager` that supervises
+execute-loop workers as goroutines. Each execute-loop worker runs a
+`ddx agent execute-loop` against exactly one registered project context; it
+never crosses project boundaries. Worker lifecycle (start, live logs, stop,
+record on disk) is owned by the server, so the host+user daemon is the single
+point of coordination for all long-running agent activity on the machine. The
+supervisor exposes worker state through the same project-scoped API surface
+used for beads and executions, and worker records persist under the project's
+own `.ddx/workers/` directory so preservation and cleanup stay scoped per
+project.
+
+### Replay-Backed Execution Evidence
+
+Execute-bead attempts store their normalized prompt, manifest, transcript, and
+runtime metrics under `.ddx/executions/<attempt-id>/` inside the project that
+owns the bead (see FEAT-006). These bundles are the replay-backed source of
+truth that server endpoints and dashboards read to reconstruct attempt history;
+the server does not own a separate transcript store.
 
 ## Requirements
 
@@ -107,8 +151,13 @@ resolve exactly one project context.
 27. MCP tools: `ddx_exec_definitions`, `ddx_exec_show`, `ddx_exec_history` (project selector required unless singleton compatibility mode applies)
 
 **Configuration**
-28. Library path, project registry, port, optional ts-net hostname via CLI flags or config file (see ADR-006 and SD-019)
+28. Library path, optional `server.projects` seed registry, port, optional
+    ts-net hostname via CLI flags or config file (see ADR-006, SD-019, and
+    FEAT-020). Runtime state (`server-state.json`, `server.addr`) lives at the
+    host+user level in `~/.local/share/ddx/`, not inside any project.
 29. Default: localhost only, no auth required
+30. One server per machine: the addr file is single-entry and a new
+    `ddx server` overwrites any prior entry (see FEAT-020)
 
 ### Non-Functional
 
@@ -149,8 +198,13 @@ resolve exactly one project context.
 - FEAT-010 (Executions) — execution endpoints read definitions and immutable run history
 - FEAT-007 (Doc Graph) — graph/stale endpoints use doc graph engine
 - FEAT-006 (Agent Service) — agent activity endpoints read DDx invocation
-  metadata and embedded telemetry references
+  metadata and embedded telemetry references; execute-bead attempt artifacts
+  live in each project's `.ddx/executions/<attempt-id>/` bundle
 - FEAT-008 (Web UI) — embedded SPA served at `/`
+- FEAT-020 (Server Node State) — host+user state file, addr file, and
+  project auto-registration
+- FEAT-021 (Dashboard UI) — per-project beads/sessions/graph surfaced under
+  `/nodes/:nodeId/projects/:projectId/...`
 - mcp-go SDK for MCP transport
 
 **Document Write + Commit (FEAT-012)**

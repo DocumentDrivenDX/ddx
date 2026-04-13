@@ -7,6 +7,7 @@ ddx:
     - FEAT-004
     - FEAT-006
     - FEAT-012
+    - FEAT-020
 ---
 # Feature: Multi-Agent and Multi-Machine Coordination
 
@@ -19,11 +20,15 @@ ddx:
 
 DDx needs to be safe and useful in a world where multiple agents — possibly
 on different machines, using different models, working in parallel worktrees —
-interact with the same project. The first-stage server topology also allows
-one `ddx server` process to host multiple project roots on one machine. This
-is not cluster orchestration. DDx stays local-first and git-native. But it
-must design for coordination at the edges: safe concurrent writes,
-observable state, and composable dispatch patterns.
+interact with the same project. On each machine, `ddx server` runs as a
+per-user host daemon: one server process per machine, holding a host+user
+project registry in `~/.local/share/ddx/server-state.json` (FEAT-020) and
+serving every registered project from a single process. Inside that one
+daemon, the in-process `WorkerManager` supervises execute-loop workers in
+goroutines, one worker per project context. This is not cluster
+orchestration. DDx stays local-first and git-native. But it must design for
+coordination at the edges: safe concurrent writes, observable state, and
+composable dispatch patterns.
 
 ## Problem Statement
 
@@ -36,8 +41,10 @@ observable state, and composable dispatch patterns.
 - There is no way to spread work across machines or agent accounts (for token
   budget distribution, compile/test parallelism, or model diversity).
 - Concurrent bead updates from multiple agents can race on the JSONL store.
-- A single server process currently assumes one repository; multi-project
-  routing and isolation are still missing.
+- Execute-loop workers and their lifecycle (start/logs/stop) were not
+  previously visible to a remote supervisor; they now run inside the host+user
+  `ddx-server` as supervised goroutines, but the coordination primitives for
+  multi-agent work still need to be spelled out.
 
 **Desired outcome:** DDx provides the primitives that make multi-agent
 work safe and observable, without becoming an orchestration framework.
@@ -136,8 +143,14 @@ multi-machine safe.
 remote supervisors and tools. This is the "side channel" that supervisors
 use. It does not replace the CLI for heavy operations.
 
-When the server hosts multiple project roots, every request and tool call is
-resolved against one selected project context before the adapter runs.
+The server is a per-user host daemon: one instance per machine, with a
+host+user project registry persisted at
+`~/.local/share/ddx/server-state.json` (FEAT-020). Every request and tool
+call is resolved against one selected project context before the adapter
+runs. Execute-loop workers are supervised inside the same process by the
+server's `WorkerManager`, so a remote supervisor that talks to one host+user
+daemon can observe and coordinate every worker, bead, session, and execution
+attempt on that machine through a single project-scoped API surface.
 
 ### 4. Worktrees are the isolation boundary
 
@@ -212,9 +225,10 @@ to handle conflicts. That's workflow-level policy (HELIX). DDx provides:
 
 | Spec | Change |
 |------|--------|
-| FEAT-002 (Server) | Add project registry, project-scoped request routing, bead write MCP tools, optional auth |
+| FEAT-002 (Server) | Host+user daemon model, project-scoped request routing, bead write MCP tools, optional auth |
 | FEAT-004 (Beads) | Add machine/session identity and project identity to claims |
-| FEAT-006 (Agent) | Worktree-aware dispatch flag resolved within a selected project context |
+| FEAT-006 (Agent) | Worktree-aware dispatch flag resolved within a selected project context; execute-loop workers supervised in the host+user server |
+| FEAT-020 (Node State) | Host+user state file and project auto-registration are the authoritative registry surface |
 
 ## Out of Scope
 

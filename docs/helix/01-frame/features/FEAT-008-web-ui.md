@@ -14,7 +14,17 @@ ddx:
 
 ## Overview
 
-The DDx server (`ddx-server`) serves a web UI for browsing documents, beads, the document dependency graph, and DDx agent invocation activity. The UI is a TypeScript SPA built with Vite, embedded into the Go binary via `embed.FS`, and served alongside the MCP and HTTP API endpoints from a single process. In the multi-project topology, the same UI can also enumerate project roots and bind its navigation to one selected project context.
+The DDx server (`ddx-server`) serves a web UI for browsing documents, beads,
+the document dependency graph, and DDx agent invocation activity. The UI is a
+TypeScript SPA built with Vite, embedded into the Go binary via `embed.FS`,
+and served alongside the MCP and HTTP API endpoints from a single process.
+
+`ddx-server` runs as a per-user host daemon (one instance per machine, see
+FEAT-002 and FEAT-020), so the same UI enumerates every project that the
+host+user registry knows about and binds its navigation to one selected
+project context at a time. The node-aware URL structure and combined
+cross-project dashboards are specified in FEAT-021; FEAT-008 owns the
+underlying views that those routes render.
 
 ## Problem Statement
 
@@ -43,11 +53,15 @@ All three surfaces share the same underlying services (document library, bead st
 
 ### Project Context
 
-When more than one project is registered, the UI adds a project picker and
-renders all main routes under a project-scoped path such as
-`/projects/:project/...`. The root `/` redirects to the default project when
-one exists, otherwise it shows the picker. All API calls issued by the UI are
-bound to the selected project context.
+The UI is rendered under the node-scoped URL structure defined in FEAT-021:
+`/nodes/:nodeId/projects/:projectId/...` for project-scoped views and
+`/nodes/:nodeId/...` for combined node-wide dashboards. The root `/`
+redirects to `/nodes/:nodeId` using the ID returned by `GET /api/node`
+(FEAT-020). When more than one project is registered the navigation bar
+exposes a project picker populated from `GET /api/projects`; selecting a
+project swaps the `:projectId` segment in place. All API calls issued by the
+UI are bound to the selected project context via
+`/api/projects/:project/...`.
 
 ### Build Pipeline
 
