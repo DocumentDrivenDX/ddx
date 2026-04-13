@@ -105,6 +105,14 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		}
 	}
 
+	// Guard against running inside an execute-bead worktree. These are isolated
+	// execution environments under .ddx/.execute-bead-wt-*; running ddx init
+	// inside one would overwrite the project's .ddx/ config and beads.jsonl.
+	if isExecuteBeadWorktree(workingDir) {
+		return nil, NewExitError(1,
+			"ddx init cannot be run inside an execute-bead worktree (.ddx/.execute-bead-wt-*)")
+	}
+
 	// Guard against nested workspaces: if a parent directory already has a
 	// .ddx/ workspace, refuse to create a second one in a subdirectory.
 	// This prevents the split-tracker bug where commands from different
@@ -282,6 +290,15 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		if err := gitCommit.Run(); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to commit config file: %v", err))
 		}
+
+		// Enable per-worktree git config so that `git config --local` inside
+		// linked worktrees (e.g. execute-bead worktrees) writes to a
+		// worktree-specific file rather than the shared .git/config. This
+		// prevents agents from accidentally corrupting repo-level settings like
+		// core.bare when running in an isolated worktree.
+		gitWorktreeCfg := exec.Command("git", "config", "extensions.worktreeConfig", "true")
+		gitWorktreeCfg.Dir = workingDir
+		_ = gitWorktreeCfg.Run() // best-effort; older git versions may not support it
 	}
 
 	// Store config for CLI layer to use for sync setup
@@ -681,6 +698,22 @@ func validateGitRepository(cmd *cobra.Command) error {
 
 	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Git repository detected\n")
 	return nil
+}
+
+// isExecuteBeadWorktree reports whether dir is inside an execute-bead worktree
+// (a path component matching .execute-bead-wt-*). These are linked git
+// worktrees created under .ddx/ and must not be re-initialized.
+func isExecuteBeadWorktree(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for _, part := range strings.Split(filepath.ToSlash(abs), "/") {
+		if strings.HasPrefix(part, ".execute-bead-wt-") {
+			return true
+		}
+	}
+	return false
 }
 
 // findParentDDxWorkspace walks up from dir looking for a .ddx/ directory in
