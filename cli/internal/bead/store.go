@@ -856,6 +856,10 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 			continue
 		}
 		if executionOnly {
+			// Epics are structural containers, not executable work items.
+			if b.IssueType == "epic" {
+				continue
+			}
 			// Filter by execution-eligible (default true if absent)
 			eligible, ok := b.Extra["execution-eligible"]
 			if ok {

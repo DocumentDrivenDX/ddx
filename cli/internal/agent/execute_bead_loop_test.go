@@ -400,6 +400,21 @@ func TestExecuteBeadWorkerConcurrentWorkersDistributeDistinctReadyBeads(t *testi
 	assert.Equal(t, "sess-"+second.ID, secondGot.Extra["session_id"])
 }
 
+func TestReadyExecutionExcludesEpics(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	task := &bead.Bead{ID: "ddx-task01", Title: "Task work", IssueType: "task", Priority: 1}
+	epic := &bead.Bead{ID: "ddx-epic01", Title: "Epic container", IssueType: "epic", Priority: 0}
+	require.NoError(t, store.Create(task))
+	require.NoError(t, store.Create(epic))
+
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, task.ID, ready[0].ID)
+}
+
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
 	t.Helper()
 
