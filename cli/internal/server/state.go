@@ -126,6 +126,30 @@ func (s *ServerState) GetProjects() []ProjectEntry {
 	return out
 }
 
+// GetProjectByID returns the project entry with the given ID, if any.
+func (s *ServerState) GetProjectByID(id string) (ProjectEntry, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, p := range s.Projects {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return ProjectEntry{}, false
+}
+
+// GetProjectByPath returns the project entry with the given path, if any.
+func (s *ServerState) GetProjectByPath(path string) (ProjectEntry, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, p := range s.Projects {
+		if p.Path == path {
+			return p, true
+		}
+	}
+	return ProjectEntry{}, false
+}
+
 // nodeID produces a stable short ID from the node name.
 func nodeID(name string) string {
 	h := sha256.Sum256([]byte(name))

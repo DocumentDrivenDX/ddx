@@ -19,7 +19,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -338,6 +340,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/node", s.handleGetNode)
 	s.mux.HandleFunc("GET /api/projects", s.handleListProjects)
 	s.mux.HandleFunc("POST /api/projects/register", s.handleRegisterProject)
+	s.mux.HandleFunc("GET /api/projects/{project}/commits", s.handleProjectCommits)
 
 	// Documents
 	s.mux.HandleFunc("GET /api/documents", s.handleListDocuments)
@@ -457,6 +460,95 @@ func (s *Server) handleRegisterProject(w http.ResponseWriter, r *http.Request) {
 	entry := s.state.RegisterProject(body.Path)
 	_ = s.state.save()
 	writeJSON(w, http.StatusOK, entry)
+}
+
+// commitEntry is the JSON shape returned by the commits endpoint.
+type commitEntry struct {
+	SHA      string   `json:"sha"`
+	ShortSHA string   `json:"short_sha"`
+	Author   string   `json:"author"`
+	Date     string   `json:"date"`
+	Subject  string   `json:"subject"`
+	Body     string   `json:"body"`
+	BeadRefs []string `json:"bead_refs"`
+}
+
+// beadRefRegex matches bead IDs of the form ddx-<8 hex chars>.
+var beadRefRegex = regexp.MustCompile(`ddx-[a-f0-9]{8}`)
+
+func (s *Server) handleProjectCommits(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("project")
+	entry, ok := s.state.GetProjectByID(key)
+	if !ok {
+		entry, ok = s.state.GetProjectByPath(key)
+	}
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+		return
+	}
+
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	since := r.URL.Query().Get("since")
+	author := r.URL.Query().Get("author")
+
+	// Use ASCII control chars for delimiters to avoid collisions with commit
+	// message content. NUL cannot be used because Go's exec package rejects
+	// it in argv. \x1f = unit separator, \x1e = record separator.
+	const sep = "\x1f"
+	const recSep = "\x1e"
+	format := "--pretty=format:%H" + sep + "%h" + sep + "%an" + sep + "%aI" + sep + "%s" + sep + "%b" + recSep
+
+	args := []string{"-C", entry.Path, "log", format, "-n", strconv.Itoa(limit)}
+	if since != "" {
+		args = append(args, "--since="+since)
+	}
+	if author != "" {
+		args = append(args, "--author="+author)
+	}
+
+	cmd := exec.Command("git", args...) //nolint:gosec
+	// Scrub inherited GIT_* env vars so `-C` takes effect reliably even when
+	// running inside a parent git hook context.
+	cmd.Env = scrubbedGitEnv()
+	out, err := cmd.Output()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed: " + err.Error()})
+		return
+	}
+
+	commits := []commitEntry{}
+	records := strings.Split(string(out), recSep)
+	for _, rec := range records {
+		rec = strings.TrimLeft(rec, "\n")
+		if rec == "" {
+			continue
+		}
+		fields := strings.SplitN(rec, sep, 6)
+		if len(fields) < 6 {
+			continue
+		}
+		body := fields[5]
+		refs := beadRefRegex.FindAllString(fields[4]+"\n"+body, -1)
+		if refs == nil {
+			refs = []string{}
+		}
+		commits = append(commits, commitEntry{
+			SHA:      fields[0],
+			ShortSHA: fields[1],
+			Author:   fields[2],
+			Date:     fields[3],
+			Subject:  fields[4],
+			Body:     body,
+			BeadRefs: refs,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, commits)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -1267,6 +1359,7 @@ func (s *Server) handleDocHistory(w http.ResponseWriter, r *http.Request) {
 	gitArgs := []string{"log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path}
 	gitCmd := exec.Command("git", gitArgs...)
 	gitCmd.Dir = s.WorkingDir
+	gitCmd.Env = scrubbedGitEnv()
 	out, gitErr := gitCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed"})
@@ -1338,6 +1431,7 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 
 	diffCmd := exec.Command("git", gitArgs...)
 	diffCmd.Dir = s.WorkingDir
+	diffCmd.Env = scrubbedGitEnv()
 	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git diff failed"})
@@ -2186,6 +2280,25 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
+		{
+			Name:        "ddx_list_projects",
+			Description: "List projects registered with this ddx-server node",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "ddx_show_project",
+			Description: "Show a registered project by ID or path",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":   map[string]any{"type": "string", "description": "Project ID (proj-...)"},
+					"path": map[string]any{"type": "string", "description": "Project path"},
+				},
+			},
+		},
 	}
 }
 
@@ -2310,6 +2423,12 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		id, _ := call.Arguments["id"].(string)
 		ref, _ := call.Arguments["ref"].(string)
 		return s.mcpDocDiff(id, ref)
+	case "ddx_list_projects":
+		return s.mcpListProjects()
+	case "ddx_show_project":
+		id, _ := call.Arguments["id"].(string)
+		path, _ := call.Arguments["path"].(string)
+		return s.mcpShowProject(id, path)
 	default:
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("unknown tool: %s", call.Name)}},
@@ -2499,6 +2618,42 @@ func (s *Server) mcpShowBead(id string) mcpToolResult {
 		}
 	}
 	data, _ := json.Marshal(b)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpListProjects() mcpToolResult {
+	projects := s.state.GetProjects()
+	if projects == nil {
+		projects = []ProjectEntry{}
+	}
+	data, _ := json.Marshal(projects)
+	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+}
+
+func (s *Server) mcpShowProject(id, path string) mcpToolResult {
+	if id == "" && path == "" {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "id or path is required"}},
+			IsError: true,
+		}
+	}
+	var (
+		entry ProjectEntry
+		ok    bool
+	)
+	if id != "" {
+		entry, ok = s.state.GetProjectByID(id)
+	}
+	if !ok && path != "" {
+		entry, ok = s.state.GetProjectByPath(path)
+	}
+	if !ok {
+		return mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "project not found"}},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(entry)
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
@@ -2994,6 +3149,22 @@ func (s *Server) mcpDocChanged(since string) mcpToolResult {
 }
 
 // --- Helpers ---
+
+// scrubbedGitEnv returns the current process environment with GIT_* variables
+// removed. This ensures git subcommands invoked by the server honour explicit
+// -C <dir>/cmd.Dir settings instead of inheriting e.g. GIT_DIR / GIT_WORK_TREE
+// from a parent git hook.
+func scrubbedGitEnv() []string {
+	src := os.Environ()
+	out := make([]string, 0, len(src))
+	for _, kv := range src {
+		if strings.HasPrefix(kv, "GIT_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
 
 func (s *Server) libraryPath() string {
 	cfg, err := config.LoadWithWorkingDir(s.WorkingDir)

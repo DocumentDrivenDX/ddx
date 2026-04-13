@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -893,8 +894,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 25 {
-		t.Fatalf("expected 25 MCP tools, got %d", len(tools))
+	if len(tools) != 27 {
+		t.Fatalf("expected 27 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -912,6 +913,7 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_exec_dispatch", "ddx_agent_dispatch",
 		"ddx_doc_changed",
 		"ddx_doc_write", "ddx_doc_history", "ddx_doc_diff",
+		"ddx_list_projects", "ddx_show_project",
 	}
 	for _, name := range expected {
 		if !names[name] {
@@ -1202,9 +1204,19 @@ func setupGitTestDir(t *testing.T) (dir string, docID string) {
 }
 
 // runGit runs a git command and fails the test if it returns an error.
+// It scrubs inherited GIT_* environment variables so tests remain isolated
+// when run from inside git hooks (lefthook sets GIT_DIR, GIT_WORK_TREE, etc.).
 func runGit(t *testing.T, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
+	env := make([]string, 0, len(os.Environ()))
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "GIT_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	cmd.Env = env
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
@@ -2552,5 +2564,250 @@ func TestRegisterProjectIdempotent(t *testing.T) {
 	}
 	if len(projects) != 2 {
 		t.Errorf("expected 2 projects after 3 idempotent registrations, got %d", len(projects))
+	}
+}
+
+// setupCommitsTestDir sets up an isolated state dir, a git repo with the given
+// number of commits, and returns (dir, server, projectID).
+func setupCommitsTestDir(t *testing.T, subjects []string) (string, *Server, string) {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("DDX_NODE_NAME", "test-node")
+
+	dir := setupTestDir(t)
+	runGit(t, "init", dir)
+	runGit(t, "-C", dir, "config", "user.email", "test@test.com")
+	runGit(t, "-C", dir, "config", "user.name", "Test User")
+
+	for i, subject := range subjects {
+		name := filepath.Join(dir, fmt.Sprintf("file%d.txt", i))
+		if err := os.WriteFile(name, []byte(subject), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		runGit(t, "-C", dir, "add", ".")
+		runGit(t, "-C", dir, "commit", "-m", subject)
+	}
+
+	srv := New(":0", dir)
+	return dir, srv, projectID(dir)
+}
+
+func TestListCommits(t *testing.T) {
+	subjects := []string{"first commit", "second commit", "third commit"}
+	_, srv, projID := setupCommitsTestDir(t, subjects)
+
+	req := httptest.NewRequest("GET", "/api/projects/"+projID+"/commits", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var commits []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &commits); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(commits) != 3 {
+		t.Fatalf("expected 3 commits, got %d", len(commits))
+	}
+	// Newest first: third, second, first.
+	expectedOrder := []string{"third commit", "second commit", "first commit"}
+	for i, want := range expectedOrder {
+		if got := commits[i]["subject"]; got != want {
+			t.Errorf("commit[%d] subject: want %q, got %v", i, want, got)
+		}
+	}
+	// Check required fields are present on the first commit.
+	first := commits[0]
+	for _, field := range []string{"sha", "short_sha", "author", "date", "subject", "body", "bead_refs"} {
+		if _, ok := first[field]; !ok {
+			t.Errorf("commit missing field %q", field)
+		}
+	}
+	if author := first["author"]; author != "Test User" {
+		t.Errorf("expected author=Test User, got %v", author)
+	}
+}
+
+func TestListCommitsLimitParam(t *testing.T) {
+	subjects := []string{"one", "two", "three"}
+	_, srv, projID := setupCommitsTestDir(t, subjects)
+
+	req := httptest.NewRequest("GET", "/api/projects/"+projID+"/commits?limit=1", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var commits []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &commits); err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("expected 1 commit with limit=1, got %d", len(commits))
+	}
+}
+
+func TestListCommitsProjectNotFound(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("DDX_NODE_NAME", "test-node")
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/projects/proj-nosuch/commits", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestListCommitsBeadRefs(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("DDX_NODE_NAME", "test-node")
+
+	dir := setupTestDir(t)
+	runGit(t, "init", dir)
+	runGit(t, "-C", dir, "config", "user.email", "test@test.com")
+	runGit(t, "-C", dir, "config", "user.name", "Test User")
+
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, "-C", dir, "add", ".")
+	// Multi-line commit message with a body referencing a bead.
+	runGit(t, "-C", dir, "commit", "-m", "feat: add thing", "-m", "Closes ddx-abc12345")
+
+	srv := New(":0", dir)
+	projID := projectID(dir)
+
+	req := httptest.NewRequest("GET", "/api/projects/"+projID+"/commits", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var commits []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &commits); err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("expected 1 commit, got %d", len(commits))
+	}
+	refs, ok := commits[0]["bead_refs"].([]any)
+	if !ok {
+		t.Fatalf("expected bead_refs to be an array, got %T", commits[0]["bead_refs"])
+	}
+	found := false
+	for _, r := range refs {
+		if s, _ := r.(string); s == "ddx-abc12345" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected bead_refs to contain ddx-abc12345, got %v", refs)
+	}
+}
+
+func TestMCPListProjects(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("DDX_NODE_NAME", "test-node")
+
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// tools/list should include ddx_list_projects.
+	w := mcpRequest(t, srv, "tools/list", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "ddx_list_projects") {
+		t.Error("expected tools/list to include ddx_list_projects")
+	}
+
+	// tools/call should return the registered project.
+	w = mcpRequest(t, srv, "tools/call", `{"name":"ddx_list_projects","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatal("expected result map")
+	}
+	content, ok := result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatal("expected content array")
+	}
+	text, _ := content[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, projectID(dir)) {
+		t.Errorf("expected tool output to contain project ID %s, got %s", projectID(dir), text)
+	}
+}
+
+func TestMCPShowProject(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("DDX_NODE_NAME", "test-node")
+
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+	projID := projectID(dir)
+
+	// Show by ID.
+	body := fmt.Sprintf(`{"name":"ddx_show_project","arguments":{"id":%q}}`, projID)
+	w := mcpRequest(t, srv, "tools/call", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, _ := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); isErr {
+		t.Fatalf("expected success, got error: %v", result)
+	}
+	content, _ := result["content"].([]any)
+	text, _ := content[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, projID) {
+		t.Errorf("expected output to contain %s, got %s", projID, text)
+	}
+
+	// Show by path.
+	body = fmt.Sprintf(`{"name":"ddx_show_project","arguments":{"path":%q}}`, dir)
+	w = mcpRequest(t, srv, "tools/call", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, _ = resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); isErr {
+		t.Fatalf("expected success for path lookup, got error: %v", result)
+	}
+	content, _ = result["content"].([]any)
+	text, _ = content[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, projID) {
+		t.Errorf("expected output to contain %s, got %s", projID, text)
+	}
+
+	// Missing project should error.
+	body = `{"name":"ddx_show_project","arguments":{"id":"proj-nosuch"}}`
+	w = mcpRequest(t, srv, "tools/call", body)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, _ = resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Errorf("expected isError=true for missing project, got %v", result)
 	}
 }
