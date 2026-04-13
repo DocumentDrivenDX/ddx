@@ -17,24 +17,32 @@ type DocFrontmatter struct {
 	Inputs     []string    `yaml:"inputs"`
 	Review     DocReview   `yaml:"review"`
 	ParkingLot bool        `yaml:"parking_lot"`
-	Exec       *DocExecDef `yaml:"exec"`
+	Exec       *DocExecDef `yaml:"execution"`
 }
 
 // DocExecDef describes an execution definition embedded in a graph document.
+// The YAML key is "execution" (matching the ddx: frontmatter convention).
+// Fields are flat to match the authored document format:
+//
+//	ddx:
+//	  execution:
+//	    kind: command
+//	    required: true
+//	    command: ["make", "test"]
+//	    cwd: cli
+//	    timeout_ms: 120000
+//
+// ArtifactIDs is optional; when absent, the document's depends_on list is used
+// to determine which artifacts this execution is linked to.
 type DocExecDef struct {
-	ArtifactIDs []string        `yaml:"artifact_ids"`
-	Executor    DocExecExecutor `yaml:"executor"`
-	Required    bool            `yaml:"required"`
-	Active      bool            `yaml:"active"`
-}
-
-// DocExecExecutor describes how a graph-authored execution definition is invoked.
-type DocExecExecutor struct {
-	Kind      string            `yaml:"kind"`
-	Command   []string          `yaml:"command"`
-	Cwd       string            `yaml:"cwd"`
-	Env       map[string]string `yaml:"env"`
-	TimeoutMS int               `yaml:"timeout_ms"`
+	Kind        string            `yaml:"kind"`
+	Command     []string          `yaml:"command"`
+	Cwd         string            `yaml:"cwd"`
+	Env         map[string]string `yaml:"env"`
+	TimeoutMS   int               `yaml:"timeout_ms"`
+	ArtifactIDs []string          `yaml:"artifact_ids"`
+	Required    bool              `yaml:"required"`
+	Active      bool              `yaml:"active"`
 }
 
 // DocReview holds staleness tracking metadata.

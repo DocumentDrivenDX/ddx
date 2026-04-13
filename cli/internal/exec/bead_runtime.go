@@ -88,15 +88,20 @@ func (s *Store) loadGraphDefinitions() (*docgraph.Graph, []Definition, error) {
 			continue
 		}
 		ed := doc.ExecDef
+		// ArtifactIDs: prefer the explicit list; fall back to the document's depends_on.
+		artifactIDs := append([]string{}, ed.ArtifactIDs...)
+		if len(artifactIDs) == 0 {
+			artifactIDs = append(artifactIDs, doc.DependsOn...)
+		}
 		def := Definition{
 			ID:          doc.ID,
-			ArtifactIDs: ed.ArtifactIDs,
+			ArtifactIDs: artifactIDs,
 			Executor: ExecutorSpec{
-				Kind:      ed.Executor.Kind,
-				Command:   ed.Executor.Command,
-				Cwd:       ed.Executor.Cwd,
-				Env:       ed.Executor.Env,
-				TimeoutMS: ed.Executor.TimeoutMS,
+				Kind:      ed.Kind,
+				Command:   ed.Command,
+				Cwd:       ed.Cwd,
+				Env:       ed.Env,
+				TimeoutMS: ed.TimeoutMS,
 			},
 			Required:    ed.Required,
 			Active:      ed.Active,

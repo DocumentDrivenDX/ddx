@@ -434,14 +434,15 @@ func TestHistoryFallsBackToLegacyExecBundle(t *testing.T) {
 	assert.Equal(t, result.Stderr, stderr)
 }
 
-// writeGraphExecDoc writes a markdown file with an exec: block in its ddx: frontmatter.
+// writeGraphExecDoc writes a markdown file with an execution: block in its ddx: frontmatter.
+// The document uses depends_on to link to artifactID, matching the execution document convention.
 func writeGraphExecDoc(t *testing.T, wd, id, artifactID, kind string, command []string, required, active bool) {
 	t.Helper()
 	path := filepath.Join(wd, "docs", "exec", id+".md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	cmdYAML := ""
 	for _, c := range command {
-		cmdYAML += "        - " + c + "\n"
+		cmdYAML += "      - " + c + "\n"
 	}
 	requiredStr := "false"
 	if required {
@@ -451,8 +452,8 @@ func writeGraphExecDoc(t *testing.T, wd, id, artifactID, kind string, command []
 	if active {
 		activeStr = "true"
 	}
-	content := "---\nddx:\n  id: " + id + "\n  exec:\n    artifact_ids:\n      - " + artifactID +
-		"\n    executor:\n      kind: " + kind + "\n      command:\n" + cmdYAML +
+	content := "---\nddx:\n  id: " + id + "\n  depends_on:\n    - " + artifactID +
+		"\n  execution:\n    kind: " + kind + "\n    command:\n" + cmdYAML +
 		"    required: " + requiredStr + "\n    active: " + activeStr + "\n---\n# " + id + "\n"
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
