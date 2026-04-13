@@ -12,6 +12,8 @@ github.com/DocumentDrivenDX/agent v0.3.0 h1:rkuDdFgL9tgkHFS7oSolG1LAbj6FVIIjHLs9
 github.com/DocumentDrivenDX/agent v0.3.0/go.mod h1:tTZSeU/V+X3en5sEmS7TJRhIMQgDDkxP1kXfYcTdYQ4=
 github.com/DocumentDrivenDX/agent v0.3.2 h1:pYBDEJMw+Fi97mN9gOBac1Bfnro3zXD0ITywYuoYUYM=
 github.com/DocumentDrivenDX/agent v0.3.2/go.mod h1:tTZSeU/V+X3en5sEmS7TJRhIMQgDDkxP1kXfYcTdYQ4=
+github.com/DocumentDrivenDX/agent v0.3.3 h1:7zVU/Xqh1Ij8XBmwisB/3sg7MjxHdcc83zbgIr+mxj4=
+github.com/DocumentDrivenDX/agent v0.3.3/go.mod h1:tTZSeU/V+X3en5sEmS7TJRhIMQgDDkxP1kXfYcTdYQ4=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
 github.com/akutz/memconn v0.1.0/go.mod h1:Jo8rI7m0NieZyLI5e2CDlRdRqRRB4S7Xp77ukDjH+Fw=
 github.com/alexbrainman/sspi v0.0.0-20231016080023-1a75b4708caa h1:LHTHcTQiSGT7VVbI0o4wBRNQIgn917usHWOd6VAffYI=
