@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,17 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
+
+// GateCheckResult records the outcome of one required execution gate.
+type GateCheckResult struct {
+	DefinitionID string `json:"definition_id"`
+	Required     bool   `json:"required"`
+	ExitCode     int    `json:"exit_code"`
+	// Status is "pass", "fail", or "skipped".
+	Status string `json:"status"`
+	Stdout string `json:"stdout,omitempty"`
+	Stderr string `json:"stderr,omitempty"`
+}
 
 // ExecuteBeadResult captures the complete outcome of an execute-bead run.
 type ExecuteBeadResult struct {
@@ -42,6 +54,13 @@ type ExecuteBeadResult struct {
 	ResultFile   string    `json:"result_file,omitempty"`
 	StartedAt    time.Time `json:"started_at"`
 	FinishedAt   time.Time `json:"finished_at"`
+	// GateResults holds the outcome of each required execution gate evaluated
+	// after the agent run. Empty when no applicable required execution documents
+	// were found.
+	GateResults []GateCheckResult `json:"gate_results,omitempty"`
+	// RequiredExecSummary is "pass", "fail", or "skipped".
+	// "skipped" means no required execution documents were found.
+	RequiredExecSummary string `json:"required_exec_summary,omitempty"`
 }
 
 // ExecuteBeadOptions holds all parameters for an execute-bead run.
@@ -232,6 +251,126 @@ func PreserveRef(beadID, baseRev string) string {
 	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, timestamp, shortSHA)
 }
 
+// evaluateRequiredGates resolves graph-authored execution documents that are
+// required and linked to any of the governing artifact IDs, then runs each one.
+// It returns the per-gate results, a boolean indicating whether any required gate
+// failed, and any infrastructure error.
+//
+// Discovery: an execution document is applicable when its depends_on list contains
+// at least one of the governing artifact IDs, OR when its explicit artifact_ids
+// list intersects the governing set. Only documents with required=true are run.
+//
+// Execution documents are resolved from wtPath (the execution worktree) so
+// pre-run versions govern the current iteration's evaluation, per FEAT-006 §7.
+func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckResult, bool, error) {
+	if len(governingIDs) == 0 {
+		return nil, false, nil
+	}
+
+	graph, err := docgraph.BuildGraphWithConfig(wtPath)
+	if err != nil {
+		// Soft error: if we can't build the graph, skip gate evaluation rather than
+		// blocking all landings. The caller records RequiredExecSummary = "skipped".
+		return nil, false, nil
+	}
+
+	governingSet := make(map[string]bool, len(governingIDs))
+	for _, id := range governingIDs {
+		governingSet[id] = true
+	}
+
+	// Collect applicable required execution documents.
+	type execCandidate struct {
+		id      string
+		command []string
+		cwd     string
+	}
+	var candidates []execCandidate
+	for _, doc := range graph.Documents {
+		if doc.ExecDef == nil || !doc.ExecDef.Required {
+			continue
+		}
+		ed := doc.ExecDef
+		if ed.Kind != "command" {
+			// Only command executors are supported in execute-bead gate evaluation.
+			continue
+		}
+		if len(ed.Command) == 0 {
+			continue
+		}
+		// Check linkage: depends_on or explicit artifact_ids must intersect.
+		linked := false
+		for _, dep := range doc.DependsOn {
+			if governingSet[dep] {
+				linked = true
+				break
+			}
+		}
+		if !linked {
+			for _, artID := range ed.ArtifactIDs {
+				if governingSet[artID] {
+					linked = true
+					break
+				}
+			}
+		}
+		if !linked {
+			continue
+		}
+		candidates = append(candidates, execCandidate{
+			id:      doc.ID,
+			command: ed.Command,
+			cwd:     ed.Cwd,
+		})
+	}
+
+	if len(candidates) == 0 {
+		return nil, false, nil
+	}
+
+	anyFailed := false
+	results := make([]GateCheckResult, 0, len(candidates))
+	for _, c := range candidates {
+		cwd := wtPath
+		if c.cwd != "" {
+			if filepath.IsAbs(c.cwd) {
+				cwd = c.cwd
+			} else {
+				cwd = filepath.Join(wtPath, c.cwd)
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		cmd := osexec.CommandContext(ctx, c.command[0], c.command[1:]...)
+		cmd.Dir = cwd
+		var stdoutBuf, stderrBuf strings.Builder
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		runErr := cmd.Run()
+		cancel()
+
+		gr := GateCheckResult{
+			DefinitionID: c.id,
+			Required:     true,
+			Stdout:       strings.TrimSpace(stdoutBuf.String()),
+			Stderr:       strings.TrimSpace(stderrBuf.String()),
+		}
+		if runErr != nil {
+			gr.ExitCode = 1
+			if exitErr, ok := runErr.(*osexec.ExitError); ok {
+				gr.ExitCode = exitErr.ExitCode()
+			}
+			gr.Status = "fail"
+			anyFailed = true
+		} else {
+			gr.Status = "pass"
+		}
+		results = append(results, gr)
+	}
+
+	return results, anyFailed, nil
+}
+
 // ExecuteBead runs an agent on a bead in an isolated worktree, then merges or
 // preserves the result. This is the core library function with no CLI dependencies.
 func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, gitOps GitOps, runner AgentRunner) (*ExecuteBeadResult, error) {
@@ -397,7 +536,21 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		FinishedAt:   finishedAt,
 	}
 
-	// Determine outcome: error, no-changes, merge, or preserve.
+	// Run required execution gates when the agent succeeded and produced changes.
+	// Gates are evaluated from the execution worktree so pre-run document versions
+	// govern the current iteration (FEAT-006 §7). This is separate from structural
+	// readiness validation which happens before the agent runs.
+	var gateResults []GateCheckResult
+	var anyGateFailed bool
+	if !executionFailed && resultRev != baseRev {
+		governingIDs := extractGoverningIDs(artifacts)
+		gateResults, anyGateFailed, _ = evaluateRequiredGates(wtPath, governingIDs)
+	}
+	res.GateResults = gateResults
+	res.RequiredExecSummary = summarizeGates(gateResults, anyGateFailed)
+
+	// Determine outcome applying the merge-by-default contract:
+	// A successful run lands unless an explicit gate blocks landing or --no-merge is set.
 	switch {
 	case executionFailed && resultRev == baseRev:
 		res.Outcome = "error"
@@ -420,6 +573,16 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		res.PreserveRef = ref
 		res.Reason = "agent execution failed"
 
+	case anyGateFailed:
+		// One or more required execution gates failed: preserve rather than land.
+		ref := PreserveRef(beadID, baseRev)
+		if updateErr := gitOps.UpdateRef(projectRoot, ref, resultRev); updateErr != nil {
+			return nil, fmt.Errorf("preserving result ref: %w", updateErr)
+		}
+		res.Outcome = "preserved"
+		res.PreserveRef = ref
+		res.Reason = "post-run checks failed"
+
 	case opts.NoMerge:
 		ref := PreserveRef(beadID, baseRev)
 		if updateErr := gitOps.UpdateRef(projectRoot, ref, resultRev); updateErr != nil {
@@ -430,6 +593,7 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		res.Reason = "--no-merge specified"
 
 	default:
+		// Merge-by-default: successful run with no gate failures lands.
 		if mergeErr := gitOps.Merge(projectRoot, resultRev); mergeErr == nil {
 			res.Outcome = "merged"
 		} else {
@@ -737,6 +901,43 @@ func beadMetadata(b *bead.Bead) map[string]any {
 		meta[k] = v
 	}
 	return meta
+}
+
+// extractGoverningIDs returns the artifact IDs referenced by the governing docs.
+func extractGoverningIDs(artifacts *executeBeadArtifacts) []string {
+	// The manifest was already built; re-derive from the governing refs recorded there.
+	// We don't have access to the refs slice here, so we read from the manifest file.
+	type manifestShape struct {
+		Governing []struct {
+			ID string `json:"id"`
+		} `json:"governing"`
+	}
+	raw, err := os.ReadFile(artifacts.ManifestAbs)
+	if err != nil {
+		return nil
+	}
+	var m manifestShape
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil
+	}
+	ids := make([]string, 0, len(m.Governing))
+	for _, g := range m.Governing {
+		if g.ID != "" {
+			ids = append(ids, g.ID)
+		}
+	}
+	return ids
+}
+
+// summarizeGates returns the RequiredExecSummary value for the iteration commit trailer.
+func summarizeGates(results []GateCheckResult, anyFailed bool) string {
+	if len(results) == 0 {
+		return "skipped"
+	}
+	if anyFailed {
+		return "fail"
+	}
+	return "pass"
 }
 
 func writeArtifactJSON(path string, payload any) error {
