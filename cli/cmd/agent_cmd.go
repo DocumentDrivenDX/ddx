@@ -671,6 +671,21 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 							line += fmt.Sprintf("  native-usage: %d tokens", signal.HistoricalUsage.TotalTokens)
 						}
 					}
+					if st.ClaudeQuotaDecision != nil {
+						d := st.ClaudeQuotaDecision
+						if d.SnapshotPresent {
+							ageSec := int(d.Age.Round(time.Second).Seconds())
+							line += fmt.Sprintf("  claude-quota-cache: age=%ds fresh=%v", ageSec, d.Fresh)
+							if d.Snapshot != nil {
+								line += fmt.Sprintf(" 5h=%d/%d weekly=%d/%d source=%s",
+									d.Snapshot.FiveHourRemaining, d.Snapshot.FiveHourLimit,
+									d.Snapshot.WeeklyRemaining, d.Snapshot.WeeklyLimit,
+									d.Snapshot.Source)
+							}
+						} else {
+							line += "  claude-quota-cache: absent"
+						}
+					}
 					if !st.LastChecked.IsZero() {
 						line += fmt.Sprintf("  checked: %s", st.LastChecked.UTC().Format(time.RFC3339))
 					}

@@ -116,6 +116,22 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 		if signal.CurrentQuota.State == "unknown" && harnessName == "claude" {
 			state.QuotaOK = true
 		}
+		// Consult the durable Claude current-quota cache for absolute
+		// 5-hour/weekly headroom. Foreground routing prefers cached
+		// snapshots over inline PTY capture: when the cache has a fresh
+		// snapshot reporting no headroom, prefer a non-claude fallback;
+		// when the snapshot is missing or stale, keep the routing signal
+		// but do NOT invoke PTY capture inline.
+		if harnessName == "claude" {
+			decision := ReadClaudeQuotaRoutingDecision(state.LastChecked, DefaultClaudeQuotaStaleAfter)
+			state.ClaudeQuotaDecision = &decision
+			if decision.Fresh && !decision.PreferClaude {
+				state.QuotaOK = false
+				if state.QuotaState == "" || state.QuotaState == "unknown" || state.QuotaState == "ok" {
+					state.QuotaState = "blocked"
+				}
+			}
+		}
 	}
 
 	// If there's a quota command, drive it to get quota data.

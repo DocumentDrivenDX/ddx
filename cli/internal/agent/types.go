@@ -226,6 +226,10 @@ type HarnessState struct {
 	Error         string                 `json:"error,omitempty"`
 	Quota         *QuotaInfo             `json:"quota,omitempty"`
 	RoutingSignal *RoutingSignalSnapshot `json:"routing_signal,omitempty"`
+	// ClaudeQuotaDecision is populated for the claude harness from the
+	// durable Claude current-quota cache. Diagnostic surfaces such as
+	// `ddx agent doctor --routing` use it to report cache freshness.
+	ClaudeQuotaDecision *ClaudeQuotaRoutingDecision `json:"claude_quota_decision,omitempty"`
 }
 
 // QuotaInfo holds parsed quota data from CLI introspection.
