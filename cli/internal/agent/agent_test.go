@@ -81,7 +81,7 @@ func TestRegistryDefaultBaseArgs(t *testing.T) {
 
 	claude, ok := r.Get("claude")
 	require.True(t, ok)
-	assert.Equal(t, []string{"--print", "-p", "--output-format", "json"}, claude.BaseArgs)
+	assert.Equal(t, []string{"--print", "-p", "--verbose", "--output-format", "stream-json"}, claude.BaseArgs)
 	assert.NotContains(t, claude.BaseArgs, "--no-session-persistence")
 }
 
@@ -131,8 +131,9 @@ func TestBuildArgsClaudeBasic(t *testing.T) {
 	r := NewRegistry()
 	h, _ := r.Get("claude")
 	args := BuildArgs(h, RunOptions{Prompt: "review code"}, "")
-	// Should have base args + prompt, with structured JSON output preserved.
-	assert.Equal(t, []string{"--print", "-p", "--output-format", "json", "review code"}, args)
+	// Should have base args + prompt, with stream-json output preserved so the
+	// harness emits real-time progress during a run.
+	assert.Equal(t, []string{"--print", "-p", "--verbose", "--output-format", "stream-json", "review code"}, args)
 }
 
 func TestBuildArgsClaudeWithModel(t *testing.T) {
@@ -416,13 +417,16 @@ func TestExtractUsageCodexGarbageInput(t *testing.T) {
 	assert.Equal(t, UsageData{}, usage)
 }
 
-// TC-011: claude harness BaseArgs contains "--output-format" and "json"
+// TC-011: claude harness BaseArgs contains "--output-format" and a structured format.
+// The harness switched from non-streaming "json" to "stream-json" to emit
+// real-time progress during long-running bead executions.
 func TestClaudeArgsContainsOutputFormatJSON(t *testing.T) {
 	r := NewRegistry()
 	h, ok := r.Get("claude")
 	require.True(t, ok)
 	assert.Contains(t, h.BaseArgs, "--output-format")
-	assert.Contains(t, h.BaseArgs, "json")
+	assert.Contains(t, h.BaseArgs, "stream-json")
+	assert.Contains(t, h.BaseArgs, "--verbose")
 }
 
 // --- Session logging ---

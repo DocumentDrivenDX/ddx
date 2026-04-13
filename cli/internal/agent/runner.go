@@ -164,6 +164,26 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	if opts.WorkDir != "" && harness.WorkDirFlag == "" {
 		execDir = opts.WorkDir
 	}
+
+	// Claude streaming path: when running against the real OSExecutor, pipe
+	// claude's stream-json stdout through parseClaudeStream so operators see
+	// real-time progress (tool calls, turn counts, elapsed) in
+	// `ddx server workers log` instead of a 20–40 minute silence. The path
+	// falls back to the legacy buffered --print behaviour automatically if
+	// the CLI rejects the stream-json flags.
+	if harnessName == "claude" {
+		if _, isOS := r.Executor.(*OSExecutor); isOS {
+			result, err := r.runClaudeWithFallback(ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
+			if err == nil && result != nil {
+				r.finalizeClaudeResult(result, opts, prompt, time.Since(start))
+				return result, nil
+			}
+			// If the streaming path failed outright (not just claude exit != 0),
+			// fall through to the classic Executor path so behaviour degrades
+			// gracefully.
+		}
+	}
+
 	execResult, execErr := r.Executor.ExecuteInDir(ctx, harness.Binary, args, stdin, execDir)
 	elapsed := time.Since(start)
 
@@ -425,38 +445,11 @@ func ExtractUsage(harnessName string, output string) UsageData {
 		}
 		return UsageData{}
 	case "claude":
-		var envelope struct {
-			Usage struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
-			} `json:"usage"`
-			TotalCostUSD float64 `json:"total_cost_usd"`
-		}
-		// Try whole output first, then fall back to last non-empty line.
-		if err := json.Unmarshal([]byte(output), &envelope); err != nil {
-			lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
-			last := ""
-			for i := len(lines) - 1; i >= 0; i-- {
-				if strings.TrimSpace(lines[i]) != "" {
-					last = lines[i]
-					break
-				}
-			}
-			if last == "" {
-				return UsageData{}
-			}
-			if err2 := json.Unmarshal([]byte(last), &envelope); err2 != nil {
-				return UsageData{}
-			}
-		}
-		if envelope.Usage.InputTokens == 0 && envelope.Usage.OutputTokens == 0 && envelope.TotalCostUSD == 0 {
-			return UsageData{}
-		}
-		return UsageData{
-			InputTokens:  envelope.Usage.InputTokens,
-			OutputTokens: envelope.Usage.OutputTokens,
-			CostUSD:      envelope.TotalCostUSD,
-		}
+		// Claude may emit either the legacy single-JSON envelope
+		// ({"usage":{...},"total_cost_usd":N,"result":"..."}) or a stream-json
+		// sequence of one JSON event per line, the last of which is a
+		// {"type":"result",...} event with the same usage/cost fields.
+		return extractUsageClaude(output)
 	case "opencode":
 		// opencode -f json emits a JSON object; parse usage fields if present.
 		var envelope struct {
@@ -659,26 +652,80 @@ func extractOutputCodex(rawOutput string) string {
 }
 
 func extractOutputClaude(rawOutput string) string {
+	// Legacy non-streaming mode: single JSON envelope with a "result" field.
 	var envelope struct {
 		Result string `json:"result"`
 	}
-	if err := json.Unmarshal([]byte(rawOutput), &envelope); err == nil {
+	if err := json.Unmarshal([]byte(rawOutput), &envelope); err == nil && envelope.Result != "" {
 		return envelope.Result
 	}
-	// Try last non-empty line (in case of preamble)
+	// Stream-json mode: scan lines for the final {"type":"result",...} event.
 	lines := strings.Split(strings.TrimRight(rawOutput, "\n"), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
-		if line != "" {
-			var envelope struct {
-				Result string `json:"result"`
+		if line == "" {
+			continue
+		}
+		var ev struct {
+			Type   string `json:"type"`
+			Result string `json:"result"`
+		}
+		if err := json.Unmarshal([]byte(line), &ev); err == nil {
+			if ev.Type == "result" && ev.Result != "" {
+				return ev.Result
 			}
-			if err := json.Unmarshal([]byte(line), &envelope); err == nil {
-				return envelope.Result
+			if ev.Type == "" && ev.Result != "" {
+				// Legacy envelope as last line.
+				return ev.Result
 			}
 		}
 	}
 	return rawOutput
+}
+
+// extractUsageClaude parses token usage and cost from claude output.
+// It handles both the legacy non-streaming envelope and the stream-json
+// format (one JSON event per line, final "result" event carries usage).
+func extractUsageClaude(output string) UsageData {
+	parse := func(s string) (UsageData, bool) {
+		var envelope struct {
+			Type  string `json:"type"`
+			Usage struct {
+				InputTokens  int `json:"input_tokens"`
+				OutputTokens int `json:"output_tokens"`
+			} `json:"usage"`
+			TotalCostUSD float64 `json:"total_cost_usd"`
+		}
+		if err := json.Unmarshal([]byte(s), &envelope); err != nil {
+			return UsageData{}, false
+		}
+		if envelope.Usage.InputTokens == 0 && envelope.Usage.OutputTokens == 0 && envelope.TotalCostUSD == 0 {
+			return UsageData{}, false
+		}
+		return UsageData{
+			InputTokens:  envelope.Usage.InputTokens,
+			OutputTokens: envelope.Usage.OutputTokens,
+			CostUSD:      envelope.TotalCostUSD,
+		}, true
+	}
+
+	// Try whole output as a single JSON envelope first (legacy path).
+	if u, ok := parse(output); ok {
+		return u
+	}
+	// Stream-json: scan lines, prefer the final "type":"result" event,
+	// else fall back to the last line that parses with usage.
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if u, ok := parse(line); ok {
+			return u
+		}
+	}
+	return UsageData{}
 }
 
 // ExtractTokens parses token usage from agent output using the harness's pattern.

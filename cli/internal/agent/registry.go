@@ -30,9 +30,13 @@ var builtinHarnesses = map[string]Harness{
 		TUIQuotaCommand: "exec /status",
 	},
 	"claude": {
-		Name:     "claude",
-		Binary:   "claude",
-		BaseArgs: []string{"--print", "-p", "--output-format", "json"},
+		Name:   "claude",
+		Binary: "claude",
+		// stream-json emits one JSON event per stdout line while the agent runs,
+		// which lets DDx surface real-time progress (tool calls, turn counts,
+		// elapsed) instead of blocking until completion. --verbose is required
+		// by claude CLI when --output-format=stream-json is combined with --print.
+		BaseArgs: []string{"--print", "-p", "--verbose", "--output-format", "stream-json"},
 		PermissionArgs: map[string][]string{
 			"safe":         {},
 			"supervised":   {"--permission-mode", "default"},
