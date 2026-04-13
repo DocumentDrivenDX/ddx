@@ -1201,6 +1201,20 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 
+	// Structured progress sink for this loop run. Events emitted at
+	// loop.start, bead.claimed, bead.result, and loop.end land here so
+	// log aggregators (FormatSessionLogLines, `ddx server workers log`)
+	// can parse the same JSONL envelope used by harness session logs.
+	loopSessionID := fmt.Sprintf("agent-loop-%d", time.Now().UnixNano())
+	loopLogDir := filepath.Join(projectRoot, agent.DefaultLogDir)
+	_ = os.MkdirAll(loopLogDir, 0o755)
+	loopLogPath := filepath.Join(loopLogDir, loopSessionID+".jsonl")
+	var loopSink io.Writer
+	if f, err := os.OpenFile(loopLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+		loopSink = f
+		defer f.Close() //nolint:errcheck
+	}
+
 	// Start session log tailer so the user sees progress during agent execution
 	tailCtx, tailCancel := context.WithCancel(context.Background())
 	go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
@@ -1258,6 +1272,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		Once:         once,
 		PollInterval: pollInterval,
 		Log:          cmd.OutOrStdout(),
+		EventSink:    loopSink,
+		WorkerID:     resolveClaimAssignee(),
+		ProjectRoot:  projectRoot,
+		Harness:      harness,
+		Model:        model,
+		SessionID:    loopSessionID,
 	})
 	tailCancel() // stop session log tailer
 	if err != nil {

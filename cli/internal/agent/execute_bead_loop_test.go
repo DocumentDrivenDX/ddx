@@ -1,7 +1,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -413,6 +416,152 @@ func TestReadyExecutionExcludesEpics(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ready, 1)
 	assert.Equal(t, task.ID, ready[0].ID)
+}
+
+func TestExecuteBeadWorkerEmitsStructuredProgressEvents(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			if beadID == first.ID {
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					Detail:    "merged cleanly",
+					SessionID: "sess-first",
+					ResultRev: "feedbeef",
+				}, nil
+			}
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				Status:      ExecuteBeadStatusExecutionFailed,
+				Detail:      "agent execution failed",
+				PreserveRef: "refs/ddx/iterations/" + beadID + "/attempt-1",
+				ResultRev:   "baadf00d",
+			}, nil
+		}),
+	}
+
+	var sink bytes.Buffer
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:    "worker",
+		EventSink:   &sink,
+		WorkerID:    "worker-42",
+		ProjectRoot: "/tmp/fake-project",
+		Harness:     "claude",
+		Model:       "claude-3.5-sonnet",
+		SessionID:   "agent-loop-test",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 2, result.Attempts)
+
+	lines := strings.Split(strings.TrimRight(sink.String(), "\n"), "\n")
+	require.GreaterOrEqual(t, len(lines), 6, "expected loop.start + 2*(bead.claimed+bead.result) + loop.end")
+
+	parse := func(t *testing.T, line string) (string, map[string]any) {
+		t.Helper()
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		typ, _ := entry["type"].(string)
+		data, _ := entry["data"].(map[string]any)
+		// Every entry must carry the envelope fields.
+		assert.Equal(t, "agent-loop-test", entry["session_id"])
+		assert.NotEmpty(t, entry["ts"])
+		return typ, data
+	}
+
+	// First line must be loop.start with metadata.
+	typ, data := parse(t, lines[0])
+	assert.Equal(t, "loop.start", typ)
+	assert.Equal(t, "worker-42", data["worker_id"])
+	assert.Equal(t, "/tmp/fake-project", data["project_root"])
+	assert.Equal(t, "claude", data["harness"])
+	assert.Equal(t, "claude-3.5-sonnet", data["model"])
+
+	// Collect the rest by type so ordering between beads isn't load-bearing.
+	byType := map[string][]map[string]any{}
+	for _, line := range lines {
+		typ, data := parse(t, line)
+		byType[typ] = append(byType[typ], data)
+	}
+
+	require.Len(t, byType["loop.start"], 1)
+	require.Len(t, byType["loop.end"], 1)
+	require.Len(t, byType["bead.claimed"], 2)
+	require.Len(t, byType["bead.result"], 2)
+
+	claimedIDs := []string{}
+	for _, d := range byType["bead.claimed"] {
+		id, _ := d["bead_id"].(string)
+		claimedIDs = append(claimedIDs, id)
+		assert.NotEmpty(t, d["title"], "bead.claimed should carry the title")
+	}
+	assert.ElementsMatch(t, []string{first.ID, second.ID}, claimedIDs)
+
+	// bead.result must carry status + duration_ms for every attempt, and
+	// success/result_rev for the successful bead.
+	var sawSuccess, sawFailure bool
+	for _, d := range byType["bead.result"] {
+		beadID, _ := d["bead_id"].(string)
+		status, _ := d["status"].(string)
+		_, hasDuration := d["duration_ms"]
+		assert.True(t, hasDuration, "bead.result must include duration_ms")
+		if beadID == first.ID {
+			sawSuccess = true
+			assert.Equal(t, ExecuteBeadStatusSuccess, status)
+			assert.Equal(t, "sess-first", d["session_id"])
+			assert.Equal(t, "feedbeef", d["result_rev"])
+		}
+		if beadID == second.ID {
+			sawFailure = true
+			assert.Equal(t, ExecuteBeadStatusExecutionFailed, status)
+			assert.Equal(t, "agent execution failed", d["detail"])
+		}
+	}
+	assert.True(t, sawSuccess, "bead.result missing for successful bead")
+	assert.True(t, sawFailure, "bead.result missing for failed bead")
+
+	// loop.end must summarise attempts/successes/failures.
+	endData := byType["loop.end"][0]
+	assert.EqualValues(t, 2, endData["attempts"])
+	assert.EqualValues(t, 1, endData["successes"])
+	assert.EqualValues(t, 1, endData["failures"])
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, endData["last_failure_status"])
+}
+
+func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("unexpected execution for %s", beadID)
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	var sink bytes.Buffer
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:  "worker",
+		EventSink: &sink,
+		SessionID: "agent-loop-empty",
+	})
+	require.NoError(t, err)
+	require.True(t, result.NoReadyWork)
+
+	lines := strings.Split(strings.TrimRight(sink.String(), "\n"), "\n")
+	require.Len(t, lines, 2, "empty queue should still emit loop.start and loop.end")
+
+	var start, end map[string]any
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &start))
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &end))
+	assert.Equal(t, "loop.start", start["type"])
+	assert.Equal(t, "loop.end", end["type"])
+	endData, _ := end["data"].(map[string]any)
+	assert.EqualValues(t, 0, endData["attempts"])
 }
 
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {

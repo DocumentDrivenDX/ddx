@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -58,6 +59,21 @@ type ExecuteBeadLoopOptions struct {
 	// worker's claim heartbeat loop. Tests use this to shorten the tick.
 	HeartbeatInterval time.Duration
 	Log               io.Writer
+
+	// EventSink receives structured JSONL progress events emitted at
+	// loop.start, bead.claimed, bead.result, and loop.end milestones.
+	// When nil, no structured events are written. Log (terminal text)
+	// is independent and still emitted for human operators.
+	EventSink io.Writer
+
+	// Worker/session metadata included in loop.start events so log
+	// aggregators can correlate structured output with the executing
+	// harness/worker. None of these are required.
+	WorkerID    string
+	ProjectRoot string
+	Harness     string
+	Model       string
+	SessionID   string
 }
 
 type ExecuteBeadLoopResult struct {
@@ -111,6 +127,28 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 	result := &ExecuteBeadLoopResult{}
 	attempted := make(map[string]struct{})
 
+	emit := func(eventType string, data map[string]any) {
+		writeLoopEvent(opts.EventSink, opts.SessionID, eventType, data, now().UTC())
+	}
+
+	emit("loop.start", map[string]any{
+		"worker_id":    opts.WorkerID,
+		"project_root": opts.ProjectRoot,
+		"harness":      opts.Harness,
+		"model":        opts.Model,
+		"session_id":   opts.SessionID,
+		"assignee":     assignee,
+		"once":         opts.Once,
+	})
+	defer func() {
+		emit("loop.end", map[string]any{
+			"attempts":            result.Attempts,
+			"successes":           result.Successes,
+			"failures":            result.Failures,
+			"last_failure_status": result.LastFailureStatus,
+		})
+	}()
+
 	for {
 		candidate, ok, err := w.nextCandidate(attempted)
 		if err != nil {
@@ -134,6 +172,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			continue
 		}
 
+		emit("bead.claimed", map[string]any{
+			"bead_id":  candidate.ID,
+			"title":    candidate.Title,
+			"assignee": assignee,
+		})
+
 		hbCtx, hbCancel := context.WithCancel(ctx)
 		var hbWG sync.WaitGroup
 		hbWG.Add(1)
@@ -151,6 +195,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			}
 		}(candidate.ID)
 
+		runStart := now()
 		report, err := w.Executor.Execute(ctx, candidate.ID)
 		hbCancel()
 		hbWG.Wait()
@@ -228,6 +273,16 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			return result, err
 		}
 
+		emit("bead.result", map[string]any{
+			"bead_id":     candidate.ID,
+			"status":      report.Status,
+			"detail":      report.Detail,
+			"session_id":  report.SessionID,
+			"result_rev":  report.ResultRev,
+			"base_rev":    report.BaseRev,
+			"duration_ms": now().Sub(runStart).Milliseconds(),
+		})
+
 		if opts.Log != nil {
 			resultStr := report.Status
 			if report.ResultRev != "" {
@@ -289,6 +344,33 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt,
 	}
+}
+
+// writeLoopEvent emits one structured JSONL line to sink describing a
+// milestone in an execute-bead loop run. Entries use the same envelope as
+// the ddx-agent harness (session_id/seq/type/ts/data) so existing log
+// aggregators (FormatSessionLogLines, ddx server workers log) can parse
+// the stream uniformly. Errors are swallowed: structured logging must
+// never break the core execute-loop.
+func writeLoopEvent(sink io.Writer, sessionID, eventType string, data map[string]any, ts time.Time) {
+	if sink == nil {
+		return
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
+	entry := map[string]any{
+		"session_id": sessionID,
+		"type":       eventType,
+		"ts":         ts.UTC().Format(time.RFC3339Nano),
+		"data":       data,
+	}
+	line, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	_, _ = sink.Write(line)
+	_, _ = sink.Write([]byte("\n"))
 }
 
 func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
