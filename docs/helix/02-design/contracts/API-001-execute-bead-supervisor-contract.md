@@ -70,6 +70,13 @@ artifacts, but it does not reinterpret them as generic `exec-runs`
 attachments; the bundle is the canonical tracked evidence for one
 `execute-bead` attempt.
 
+The prompt delivered to the agent for each attempt is compiled by the
+**execute-bead prompt rationalizer** from bead fields and resolved governing
+references (see FEAT-006 §"Prompt Rationalizer Contract"). The rationalizer
+writes `prompt.md` to the bundle before the agent runs; this file is the
+authoritative record of exactly what the agent received. The supervisor does
+not author or modify the prompt.
+
 ## Single-Project State Machine
 
 The supervision loop is a bounded state machine that repeats until the queue is
