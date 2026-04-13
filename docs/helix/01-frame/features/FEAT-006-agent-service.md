@@ -211,6 +211,7 @@ references for a recent agent invocation
 - Given `--harness`, `--model`, and `--effort` are provided, when the agent runs, then execute-bead honors them exactly as a normal `ddx agent run` invocation would.
 - Given the agent run succeeds and produces tracked changes, when post-run merge-gate evaluation begins, then execute-bead treats the iteration as merge-by-default unless `--no-merge` is set, a governing-snapshot execution document blocks landing, or the final land step conflicts.
 - Given required executions resolved from the governing graph snapshot fail, when the merge decision is made, then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch.
+- Given a governing-snapshot execution document carries explicit blocking ratchet semantics, when its ratchet evaluation regresses past the authored blocking threshold, then DDx preserves the iteration under a hidden ref and does not fast-forward the target branch even if the execution itself is otherwise non-required.
 - Given all governing-snapshot required executions pass and their explicit ratchets are satisfied, when the merge decision is made and `--no-merge` is not set, then DDx lands the result by fast-forward.
 - Given `--no-merge` is set, when the iteration completes, then DDx creates a committed attempt and preserves it under a hidden ref. It is not landed regardless of execution outcomes.
 - Given execution completes, when the worktree is cleaned up, then no temporary worktree created by execute-bead remains in the filesystem.
@@ -382,8 +383,8 @@ agent-authored commits.
   as produced work.
 - After a successful run that produces tracked changes, `execute-bead` is
   merge-by-default. Preservation requires an explicit blocker: `--no-merge`,
-  a failed required execution, an execution-defined ratchet block, or a land
-  conflict.
+  a failed required execution, an explicit ratchet block from a resolved
+  governing-snapshot execution document, or a land conflict.
 - A run is only `no_changes` when the managed worktree ends clean and there are
   no new tracked changes to preserve or land.
 - If DDx needs a commit object for preserve/merge mechanics and the agent left

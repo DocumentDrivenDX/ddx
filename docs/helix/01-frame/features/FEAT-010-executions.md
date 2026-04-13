@@ -104,7 +104,9 @@ only graph-authored execution definitions resolved from the governing graph
 snapshot may add automatic landing blockers for that iteration. Runtime-managed
 definitions remain valid runtime inputs for `ddx exec`, but they do not become
 implicit merge gates for `execute-bead` unless surfaced through the governing
-graph snapshot as execution documents.
+graph snapshot as execution documents. Required definitions block landing when
+their run result is non-success; explicit ratchet semantics authored on one of
+those resolved graph documents may also block landing for that iteration.
 
 ### Execution Run
 
@@ -165,7 +167,8 @@ preserved implementation work.
 definition is well-formed and runnable; it does not classify one completed run
 as merge-eligible or merge-blocking. `ddx agent execute-bead` performs that
 post-run gate evaluation separately using the graph-resolved governing
-execution-document set for the iteration.
+execution-document set for the iteration after the agent attempt succeeds and
+produces tracked changes.
 
 ### Non-Functional
 
@@ -256,6 +259,8 @@ The HTTP/MCP surface is read-only for v1. Execution invocation remains CLI-only.
 - Given only a runtime-managed definition exists for an artifact, when `ddx exec run` is invoked, then it proceeds using the runtime-managed definition without error.
 - Given `ddx agent execute-bead` finishes a successful run with tracked changes, when it evaluates post-run gates, then the iteration is merge-eligible by default unless `--no-merge` is set, landing conflicts, or a graph-authored execution definition resolved from the governing snapshot blocks it.
 - Given a graph-authored execution definition resolved from the governing snapshot is marked `required: true`, when its execution run terminates with a non-success status, then the result is classified as merge-blocking and any execute-bead workflow consuming it preserves rather than lands.
+- Given a graph-authored execution definition resolved from the governing snapshot carries an explicit blocking ratchet threshold, when its execution result regresses past that authored threshold, then the result is classified as merge-blocking and any execute-bead workflow consuming it preserves rather than lands even if the definition is otherwise non-required.
+- Given a graph-authored execution definition resolved from the governing snapshot is marked `required: true` and also carries an explicit blocking ratchet threshold, when execute-bead evaluates the result, then either condition is sufficient to block landing: non-success status or ratchet regression.
 - Given a runtime-managed execution definition is not also present as a graph-authored execution document in the governing snapshot, when `ddx agent execute-bead` evaluates merge eligibility, then that runtime-managed definition does not add an automatic landing gate for the iteration.
 - Given `ddx exec validate` succeeds for a definition, when no execution run has occurred yet, then no merge decision has been made; structural validation remains distinct from post-run gate evaluation.
 - Given a metric-producing execution run completes, when `ddx metric` queries for that metric, then the result is served from the `exec-runs` collection — no `.ddx/metrics/` directory is created or required.

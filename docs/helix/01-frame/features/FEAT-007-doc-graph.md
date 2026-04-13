@@ -246,7 +246,10 @@ required.
 Only these explicitly resolved execution documents participate in automatic
 landing gates for `execute-bead`. Runtime-managed execution definitions,
 built-in runtime metrics, or edits the agent makes to execution docs during the
-run do not become new blocking gates for the current iteration.
+run do not become new blocking gates for the current iteration. Ratchet or
+threshold semantics only affect the land/preserve decision when those blocking
+rules are authored on one of the execution documents resolved from that
+governing snapshot.
 
 ### Relationship to FEAT-010
 
@@ -256,7 +259,9 @@ automatically to one iteration. FEAT-010's exec substrate stores immutable run
 history. FEAT-007's graph owns the discovery and indexing of execution document
 definitions. Structural execution readiness remains a separate pre-launch
 validator concern; graph discovery only tells `execute-bead` which explicit
-execution documents exist in the governing snapshot.
+execution documents exist in the governing snapshot. Whether a completed run is
+landed or preserved is still a separate post-run decision made after the agent
+attempt succeeds and produces tracked changes.
 
 ## Git-Aware History (FEAT-012 Integration)
 

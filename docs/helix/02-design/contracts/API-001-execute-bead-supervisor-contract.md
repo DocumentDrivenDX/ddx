@@ -61,9 +61,11 @@ That ownership boundary is intentionally narrow:
 - structural execution-ready validation happens before launch against the base
   revision and governing snapshot
 - post-run merge gating happens only after a successful execution attempt has
-  produced work
+  produced tracked work and is merge-eligible by default before explicit gates
+  are applied
 - only explicit execution documents resolved from the governing graph snapshot
-  may block landing automatically for that attempt
+  may block landing automatically for that attempt, including any explicit
+  merge-blocking ratchet semantics authored on those documents
 
 The command requires a reproducible git base revision, not a pristine root
 checkout. Tracked root changes may be checkpointed into an immutable base
@@ -102,7 +104,8 @@ drained, the operator stops it, or a fatal project error occurs.
    supervisor-visible `status` field:
    - structural validation failure before launch
    - execution failure
-   - post-run check failure caused by a governing-snapshot execution gate
+   - post-run check failure caused by a governing-snapshot execution gate,
+     including explicit ratchet blockers authored there
    - land conflict after a successful attempt
    - success
 8. Continue scanning the same project queue.
@@ -158,11 +161,13 @@ Structural validation happens before any irreversible execution step.
 - If execution starts and later fails, `execute-bead` preserves the iteration
   under a hidden ref using the documented naming scheme, and the supervisor
   records that result `status`.
-- If post-run required checks fail, `execute-bead` preserves the iteration
+- If post-run governing execution checks fail, `execute-bead` preserves the iteration
   under a hidden ref, sets the documented failure `status`, and the supervisor
   records that result `status`. Those checks are limited to the explicit
   execution documents resolved from the governing graph snapshot for the
-  attempt, including any merge-blocking ratchet semantics authored there.
+  attempt. A required execution blocks on non-success status, and any explicit
+  merge-blocking ratchet semantics authored on those resolved documents also
+  block landing for that attempt.
 - If a rebase or fast-forward land fails after a successful run, `execute-bead`
   preserves the iteration and the preserved iteration remains the canonical
   evidence for that attempt.
@@ -192,7 +197,8 @@ Automatic preservation therefore has only three documented causes once
 execution has produced work:
 
 - `--no-merge` was requested
-- a governing-snapshot execution document blocked landing
+- a governing-snapshot execution document blocked landing, including required
+  non-success or an explicit ratchet blocker authored there
 - the final rebase/fast-forward land conflicted
 
 These mechanics are owned by `ddx agent execute-bead`; the supervisor observes
