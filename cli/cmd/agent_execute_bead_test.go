@@ -865,6 +865,48 @@ func TestExecuteBeadEvidenceFields(t *testing.T) {
 	assert.Equal(t, "bbbb2222", res.ResultRev)
 }
 
+// TestExecuteBeadModelFlagPassthrough locks in the resolution contract for
+// execute-bead's model option: the value supplied via ExecuteBeadOptions.Model
+// is passed verbatim to the runner, and an empty value is not silently replaced
+// by any hardcoded or catalog-derived default. This regression test guards
+// against routing layers injecting a model (e.g. a stale vendor/model like
+// "z-ai/glm-5.1") when the caller did not request one — the case the agent
+// harness resolves from ~/.config/agent/config.yaml must be preserved by
+// ExecuteBead handing the runner an empty Model so the harness's own
+// resolution chain runs.
+func TestExecuteBeadModelFlagPassthrough(t *testing.T) {
+	t.Run("empty model stays empty through ExecuteBead", func(t *testing.T) {
+		git := &fakeExecuteBeadGit{
+			mainHeadRev: "aaaa1111",
+			wtHeadRev:   "bbbb2222",
+		}
+		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+		f := newExecuteBeadFactory(t, git, runner)
+
+		// No --model flag supplied to execute-bead.
+		runExecuteBead(t, f, git, "my-bead")
+
+		assert.Equal(t, "", runner.last.Model,
+			"runner must receive an empty Model when no --model flag is provided; "+
+				"any non-empty value here indicates a routing layer injected a default, "+
+				"which would override the harness's own config-driven resolution")
+	})
+
+	t.Run("explicit model is forwarded verbatim", func(t *testing.T) {
+		git := &fakeExecuteBeadGit{
+			mainHeadRev: "aaaa1111",
+			wtHeadRev:   "bbbb2222",
+		}
+		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+		f := newExecuteBeadFactory(t, git, runner)
+
+		runExecuteBead(t, f, git, "my-bead", "--model", "qwen3.5-27b")
+
+		assert.Equal(t, "qwen3.5-27b", runner.last.Model,
+			"runner must receive the exact --model value the caller passed")
+	})
+}
+
 func TestExecuteBeadStatusMapping(t *testing.T) {
 	cases := []struct {
 		name     string

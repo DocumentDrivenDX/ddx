@@ -415,9 +415,10 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 	}
 	providerName := cfg.DefaultName()
 
-	// If the model looks like a vendor/model (e.g. "z-ai/glm-5.1", "qwen/qwen3.6"),
-	// prefer the "openrouter" provider if it exists in the config. These models
-	// are only available through OpenRouter; local providers will reject them.
+	// If the model looks like a vendor/model (e.g. "anthropic/claude-sonnet-4.6",
+	// "qwen/qwen3-coder-next"), prefer the "openrouter" provider if it exists
+	// in the config. These models are only available through OpenRouter; local
+	// providers will reject them.
 	if isOpenRouterModel(model) {
 		if _, ok := cfg.GetProvider("openrouter"); ok {
 			providerName = "openrouter"
@@ -525,9 +526,9 @@ func envOrDefault(key, def string) string {
 }
 
 // isOpenRouterModel returns true if the model name looks like a vendor/model
-// format (e.g. "qwen/qwen3-coder-next", "z-ai/glm-5.1"). These should be
-// configured in .ddx/config.yaml under agent_runner.models or the native
-// agent config (~/.config/agent/config.yaml).
+// format (e.g. "qwen/qwen3-coder-next", "anthropic/claude-sonnet-4.6"). These
+// should be configured in .ddx/config.yaml under agent_runner.models or the
+// native agent config (~/.config/agent/config.yaml).
 func isOpenRouterModel(model string) bool {
 	if model == "" {
 		return false
