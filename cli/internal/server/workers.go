@@ -270,7 +270,20 @@ func (m *WorkerManager) buildAgentRunner(projectRoot string) *agent.Runner {
 		return m.AgentRunnerFactory(projectRoot)
 	}
 
-	r := agent.NewRunner(agent.Config{})
+	// Load project config so server workers respect the same settings as CLI commands.
+	cfg, err := config.LoadWithWorkingDir(projectRoot)
+	agentCfg := agent.Config{}
+	if err == nil && cfg.Agent != nil {
+		agentCfg.Harness = cfg.Agent.Harness
+		agentCfg.Model = cfg.Agent.Model
+		agentCfg.Models = cfg.Agent.Models
+		agentCfg.ReasoningLevels = cfg.Agent.ReasoningLevels
+		agentCfg.TimeoutMS = cfg.Agent.TimeoutMS
+		agentCfg.SessionLogDir = cfg.Agent.SessionLogDir
+		agentCfg.Permissions = cfg.Agent.Permissions
+	}
+
+	r := agent.NewRunner(agentCfg)
 
 	// Wire agent config loader — reads from .ddx/config.yaml on each invocation.
 	// This ensures server workers use the same configuration as CLI commands.

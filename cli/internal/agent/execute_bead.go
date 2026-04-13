@@ -286,12 +286,13 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	startedAt := time.Now().UTC()
 
 	agentResult, agentErr := runner.Run(RunOptions{
-		Harness:    opts.Harness,
-		Prompt:     "",
-		PromptFile: artifacts.PromptAbs,
-		Model:      opts.Model,
-		Effort:     opts.Effort,
-		WorkDir:    wtPath,
+		Harness:     opts.Harness,
+		Prompt:      "",
+		PromptFile:  artifacts.PromptAbs,
+		Model:       opts.Model,
+		Effort:      opts.Effort,
+		WorkDir:     wtPath,
+		Permissions: "unrestricted", // execute-bead runs in an isolated worktree; file writes must not require approval
 		Correlation: map[string]string{
 			"bead_id":    beadID,
 			"base_rev":   baseRev,
