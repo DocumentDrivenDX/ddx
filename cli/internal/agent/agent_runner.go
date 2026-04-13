@@ -90,6 +90,9 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		&tool.WriteTool{WorkDir: wd},
 		&tool.EditTool{WorkDir: wd},
 		&tool.BashTool{WorkDir: wd},
+		&tool.LsTool{WorkDir: wd},
+		&tool.GrepTool{WorkDir: wd},
+		&findTool{Glob: tool.GlobTool{WorkDir: wd}},
 	}
 
 	// Build system prompt using presets.
@@ -127,14 +130,17 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 
 	// Stall detection: track write activity in the callback.
 	// If no write/edit tool calls after stallThreshold read-only calls, cancel.
-	writeTools := map[string]bool{"write": true, "edit": true, "bash": true}
+	// Write-capable tools: bash, write, edit. bash is classified as write-only
+	// because the dedicated ls/find/grep tools now cover all read-only shell
+	// use cases — any bash invocation is assumed to be a mutation.
+	// Read-only tools: read, ls, find, grep.
 	stallCallback := func(event agentlib.Event) {
 		if event.Type == agentlib.EventToolCall {
 			var data struct {
 				Tool string `json:"tool"`
 			}
 			if err := json.Unmarshal(event.Data, &data); err == nil {
-				if writeTools[data.Tool] {
+				if isWriteCapableTool(data.Tool) {
 					readOnlyCount.Store(0)
 				} else {
 					consecutive := readOnlyCount.Add(1)
@@ -527,6 +533,38 @@ func isOpenRouterModel(model string) bool {
 		return false
 	}
 	return strings.Contains(model, "/")
+}
+
+// writeCapableTools lists tools that count as write activity for stall
+// detection. bash is included because the dedicated ls/find/grep tools now
+// cover read-only shell use cases — bash is assumed to be a mutation.
+var writeCapableTools = map[string]bool{
+	"bash":  true,
+	"write": true,
+	"edit":  true,
+}
+
+// isWriteCapableTool reports whether the named tool counts as a write action
+// for stall detection purposes.
+func isWriteCapableTool(name string) bool {
+	return writeCapableTools[name]
+}
+
+// findTool is a thin wrapper around tool.GlobTool that exposes the tool as
+// "find" to the model, so agents have an intuitive name for locating files by
+// pattern instead of shelling out through bash.
+type findTool struct {
+	Glob tool.GlobTool
+}
+
+func (t *findTool) Name() string { return "find" }
+func (t *findTool) Description() string {
+	return "Find files matching a glob pattern. Use instead of the find/ls shell commands to locate files by name."
+}
+func (t *findTool) Schema() json.RawMessage { return t.Glob.Schema() }
+func (t *findTool) Parallel() bool          { return t.Glob.Parallel() }
+func (t *findTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
+	return t.Glob.Execute(ctx, params)
 }
 
 // buildAgentProvider creates an agentlib.Provider from resolved config.

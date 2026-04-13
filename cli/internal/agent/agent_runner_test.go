@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/agent/compaction"
 	"github.com/DocumentDrivenDX/agent/prompt"
 	"github.com/DocumentDrivenDX/agent/provider/virtual"
+	"github.com/DocumentDrivenDX/agent/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -841,4 +842,77 @@ func (p *sequenceProvider) Chat(ctx context.Context, _ []agentlib.Message, _ []a
 		}
 	}
 	return p.responses[idx], nil
+}
+
+// --- Read-only tool classification and dedicated tools ---
+
+func TestIsWriteCapableTool(t *testing.T) {
+	// Write-capable tools.
+	for _, name := range []string{"bash", "write", "edit"} {
+		assert.True(t, isWriteCapableTool(name), "%s should be write-capable", name)
+	}
+	// Read-only tools.
+	for _, name := range []string{"read", "ls", "find", "grep", "glob", "unknown"} {
+		assert.False(t, isWriteCapableTool(name), "%s should not be write-capable", name)
+	}
+}
+
+func TestFindToolDelegatesToGlob(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.go"), []byte("package x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.txt"), []byte("hello\n"), 0o644))
+
+	ft := &findTool{Glob: tool.GlobTool{WorkDir: dir}}
+	assert.Equal(t, "find", ft.Name())
+	assert.NotEmpty(t, ft.Description())
+	assert.NotEmpty(t, ft.Schema())
+	assert.True(t, ft.Parallel())
+
+	out, err := ft.Execute(context.Background(), json.RawMessage(`{"pattern":"*.go"}`))
+	require.NoError(t, err)
+	assert.Contains(t, out, "a.go")
+	assert.NotContains(t, out, "b.txt")
+
+	// Verify findTool satisfies agentlib.Tool.
+	var _ agentlib.Tool = (*findTool)(nil)
+}
+
+func TestLsGrepFindToolsWiredForAgent(t *testing.T) {
+	wd := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "hello.go"), []byte("package main\n// TODO: something\n"), 0o644))
+
+	tools := []agentlib.Tool{
+		&tool.ReadTool{WorkDir: wd},
+		&tool.WriteTool{WorkDir: wd},
+		&tool.EditTool{WorkDir: wd},
+		&tool.BashTool{WorkDir: wd},
+		&tool.LsTool{WorkDir: wd},
+		&tool.GrepTool{WorkDir: wd},
+		&findTool{Glob: tool.GlobTool{WorkDir: wd}},
+	}
+
+	names := make(map[string]agentlib.Tool, len(tools))
+	for _, tl := range tools {
+		names[tl.Name()] = tl
+	}
+	for _, want := range []string{"read", "write", "edit", "bash", "ls", "grep", "find"} {
+		_, ok := names[want]
+		assert.True(t, ok, "expected %q tool to be wired", want)
+	}
+
+	// ls executes successfully over the temp dir.
+	lsOut, err := names["ls"].Execute(context.Background(), json.RawMessage(`{}`))
+	require.NoError(t, err)
+	assert.Contains(t, lsOut, "hello.go")
+
+	// grep finds the TODO line.
+	grepOut, err := names["grep"].Execute(context.Background(), json.RawMessage(`{"pattern":"TODO"}`))
+	require.NoError(t, err)
+	assert.Contains(t, grepOut, "hello.go")
+	assert.Contains(t, grepOut, "TODO")
+
+	// find locates the Go file.
+	findOut, err := names["find"].Execute(context.Background(), json.RawMessage(`{"pattern":"*.go"}`))
+	require.NoError(t, err)
+	assert.Contains(t, findOut, "hello.go")
 }
