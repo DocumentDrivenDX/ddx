@@ -86,7 +86,12 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		maxIter = 200 // Let stall detection be the primary circuit breaker
 	}
 	tools := []agentlib.Tool{
+		// Read-only tools: classified as read-only by stall detector
 		&tool.ReadTool{WorkDir: wd},
+		&tool.LsTool{WorkDir: wd},
+		&tool.GlobTool{WorkDir: wd},
+		&tool.GrepTool{WorkDir: wd},
+		// Write-capable tools: reset stall counter when called
 		&tool.WriteTool{WorkDir: wd},
 		&tool.EditTool{WorkDir: wd},
 		&tool.BashTool{WorkDir: wd},
