@@ -231,16 +231,17 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		opts.WorkerID = os.Getenv("DDX_WORKER_ID")
 	}
 
-	// Resolve base revision
-	baseRev, err := resolveBase(gitOps, projectRoot, opts.FromRev)
-	if err != nil {
+	wtPath := filepath.Join(projectRoot, ExecuteBeadWtDir, ExecuteBeadWtPrefix+beadID+"-"+attemptID)
+
+	// Commit beads.jsonl before spawning worktree, then resolve base so the
+	// worktree snapshot includes any bead metadata updates (e.g. spec-id).
+	if err := CommitTracker(projectRoot); err != nil {
 		return nil, err
 	}
 
-	wtPath := filepath.Join(projectRoot, ExecuteBeadWtDir, ExecuteBeadWtPrefix+beadID+"-"+attemptID)
-
-	// Commit beads.jsonl before spawning worktree
-	if err := CommitTracker(projectRoot); err != nil {
+	// Resolve base revision after the tracker commit so the worktree includes it
+	baseRev, err := resolveBase(gitOps, projectRoot, opts.FromRev)
+	if err != nil {
 		return nil, err
 	}
 
@@ -655,7 +656,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	var sb strings.Builder
 	sb.WriteString("# Execute Bead\n\n")
 	sb.WriteString("You are running inside DDx's isolated execution worktree for this bead.\n")
-	sb.WriteString("Treat the bead contract below as authoritative, then read the listed governing references from this worktree when they are relevant.\n\n")
+	sb.WriteString("Your job is to make a best-effort attempt at the work described in the bead's Goals and Description, then commit the result. Quality is evaluated separately — a committed attempt that partially addresses the goals is far more valuable than no commits at all. Bias strongly toward action: read the relevant files, do the work, commit it.\n\n")
 
 	sb.WriteString("## Bead\n")
 	fmt.Fprintf(&sb, "- ID: `%s`\n", b.ID)
@@ -709,7 +710,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	sb.WriteString("5. Keep the execution bundle files under `.ddx/executions/` intact; DDx uses them as execution evidence.\n")
 	sb.WriteString("6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.\n")
 	sb.WriteString("7. Before finishing, commit your changes with `git add -A && git commit -m '...'`. DDx will merge your commits back to the base branch.\n")
-	sb.WriteString("8. Before concluding no changes are needed, explicitly verify each criterion by quoting the exact text from the relevant file that satisfies it. If you cannot quote it directly, the criterion is not yet met — make the edit. Only stop with no commits if every criterion is provably satisfied by existing content.\n")
+	sb.WriteString("8. Making no commits (no_changes) should be rare. Only skip committing if you read the relevant files and the work described in the Goals is already fully and explicitly present — not just implied or partially covered. If in any doubt, make your best attempt and commit it. A partial or imperfect commit is always better than no commit.\n")
 	sb.WriteString("9. Work in small commits. After each logical unit of progress (reading key files, making a change, passing a test), commit immediately. Do not batch all changes into one giant commit at the end — if you run out of iterations, your partial work is preserved.\n")
 	sb.WriteString("10. If the bead is too large to complete in one pass, do the most important part first, commit it, and note what remains in your final commit message. DDx will re-queue the bead for another attempt if needed.\n")
 	sb.WriteString("11. Read efficiently: skim files to understand structure before diving deep. Only read the files you need to make changes, not every reference listed. Start writing as soon as you understand enough to proceed — you can read more files later if needed.\n")
