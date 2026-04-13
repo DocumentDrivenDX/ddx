@@ -165,6 +165,85 @@ Write endpoints commit by default (configurable via `git.auto_commit` in
 `.ddx/config.yaml`). Commit messages follow the structured format defined
 in FEAT-012.
 
+## Service Manager Integration
+
+`ddx-server` runs as a user-level background service on each supported
+platform. Service manager integration is always **user-level** for this
+phase; machine-level (root/LaunchDaemon) installs are explicitly out of
+scope. The contract below covers Linux (systemd) and macOS (launchd) and
+is the template for future platforms.
+
+Shared contract across platforms:
+
+- **Working directory:** the project root supplied at install time, or the
+  user's home directory if no project root is configured
+- **State location:** unchanged from FEAT-020 — `~/.local/share/ddx/`, or
+  `$XDG_DATA_HOME/ddx` when set. State and address files never live inside
+  the service-manager unit directory
+- **Environment overrides:** `DDX_NODE_NAME`, `DDX_DATA_HOME` (when used),
+  and any TLS certificate path overrides are passed through to the server
+  process by the service manager
+- **Restart on crash:** the service manager must restart the server on
+  unclean exit with a minimum back-off to prevent tight crash loops
+- **Start on login/boot:** the service must start automatically when the
+  user's session starts
+- **Lifecycle parity:** install enables and starts the service; uninstall
+  disables, stops, and removes the unit; status reports the running state
+  and recent exit reason
+
+### Linux (systemd user unit)
+
+- **Unit path:** `~/.config/systemd/user/ddx-server.service`
+- **Working directory:** the project root passed via `--workdir`, defaulting
+  to the current directory at install time
+- **Logs:** `<workdir>/.ddx/logs/ddx-server.log` via `StandardOutput=append:`
+  and `StandardError=append:` (both streams share one file). `journalctl
+  --user -u ddx-server -f` remains available for live tailing
+- **Environment file:** `<workdir>/.ddx/server.env`, written with mode
+  `0600` at install time. Loaded through systemd `EnvironmentFile=`
+- **Restart policy:** `Restart=on-failure`, `RestartSec=5`
+- **Lifecycle commands:**
+  - install/enable: `systemctl --user daemon-reload && systemctl --user enable --now ddx-server.service`
+  - disable/remove: `systemctl --user disable --now ddx-server.service`
+  - status: `systemctl --user status ddx-server.service`
+  - restart: `systemctl --user restart ddx-server.service`
+- **Install target:** `WantedBy=default.target` so the service starts with
+  the user session
+
+### macOS (launchd user agent)
+
+- **Plist path:** `~/Library/LaunchAgents/com.documentdriven.ddx-server.plist`
+  (user LaunchAgent; never a machine-level `/Library/LaunchDaemons` entry
+  in this phase)
+- **Label:** `com.documentdriven.ddx-server`
+- **Working directory:** `WorkingDirectory` set to the project root passed
+  at install time, or the user's home directory if none is configured
+- **Logs:** `~/Library/Logs/ddx-server/stdout.log` for `StandardOutPath`
+  and `~/Library/Logs/ddx-server/stderr.log` for `StandardErrorPath`. The
+  installer must create `~/Library/Logs/ddx-server/` with mode `0700` if
+  absent
+- **Environment overrides:** `EnvironmentVariables` carries `DDX_NODE_NAME`,
+  `DDX_DATA_HOME` (when set), and any TLS certificate path overrides. API
+  keys from `.ddx/server.env` are read by the server at startup; they are
+  not duplicated into the plist
+- **Run policy:**
+  - `RunAtLoad = true` — start when the user logs in
+  - `KeepAlive = true` — restart when the process exits for any reason
+  - `ThrottleInterval = 10` — minimum 10 seconds between restarts to
+    prevent tight crash loops
+- **Lifecycle commands:**
+  - install/enable: `launchctl load -w ~/Library/LaunchAgents/com.documentdriven.ddx-server.plist`
+  - disable/remove: `launchctl unload ~/Library/LaunchAgents/com.documentdriven.ddx-server.plist`
+    followed by deletion of the plist file
+  - restart: `launchctl kickstart -k gui/$(id -u)/com.documentdriven.ddx-server`
+  - status: `launchctl print gui/$(id -u)/com.documentdriven.ddx-server`
+- **Install target:** the user's GUI domain (`gui/<uid>`), so the service
+  follows the login session rather than a system boot
+
+Machine-level installs (LaunchDaemon under `/Library/LaunchDaemons`, or
+system-level systemd units) are out of scope for this phase and will be
+specified separately if and when multi-user server hosting is required.
+
 ## Out of Scope
 
 - Agent/execution invocation from non-localhost without ts-net (security
@@ -173,3 +252,4 @@ in FEAT-012.
 - Multi-library aggregation
 - Hosting as a cloud service
 - Branch management or merge conflict resolution via API
+- Machine-level service installs (LaunchDaemon, system systemd units)

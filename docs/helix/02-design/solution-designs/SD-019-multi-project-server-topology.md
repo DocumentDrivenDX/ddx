@@ -299,6 +299,46 @@ Migration must preserve the current single-project local use case.
 - if a project is removed from the registry, its cache and runtime state are
   left isolated rather than merged into another project
 
+## Service Manager Integration
+
+One-machine multi-project topology assumes a single long-lived `ddx server`
+process per user session. That process is supervised by the host's
+user-level service manager so project registry, node state, and worker
+pools survive logout, crash, and reboot.
+
+Service manager integration is **user-level only** in this phase. Both
+Linux (systemd user units) and macOS (launchd user agents) are supported,
+with parallel lifecycle semantics:
+
+- **Linux (systemd user unit)**
+  - unit path: `~/.config/systemd/user/ddx-server.service`
+  - logs: `<workdir>/.ddx/logs/ddx-server.log` via `StandardOutput=append:`
+  - env file: `<workdir>/.ddx/server.env`
+  - restart: `Restart=on-failure`, `RestartSec=5`
+  - install: `systemctl --user enable --now ddx-server.service`
+
+- **macOS (launchd user agent)**
+  - plist path: `~/Library/LaunchAgents/com.documentdriven.ddx-server.plist`
+  - label: `com.documentdriven.ddx-server`
+  - working directory: configured project root or `$HOME`
+  - logs: `~/Library/Logs/ddx-server/stdout.log` and `stderr.log`
+  - environment overrides: `DDX_NODE_NAME`, `DDX_DATA_HOME`, TLS cert
+    paths via `EnvironmentVariables`
+  - run policy: `RunAtLoad=true`, `KeepAlive=true`, `ThrottleInterval=10`
+  - install/enable: `launchctl load -w <plist>`
+  - disable/remove: `launchctl unload <plist>` and delete the file
+  - restart: `launchctl kickstart -k gui/<uid>/com.documentdriven.ddx-server`
+
+Node state and the project registry live in `~/.local/share/ddx/`
+(or `$XDG_DATA_HOME/ddx`) on every platform, per FEAT-020, and are never
+stored inside the service-manager unit directory. The address file at
+`~/.local/share/ddx/server.addr` is authoritative for client discovery.
+
+Machine-level installs (root `LaunchDaemon` under `/Library/LaunchDaemons`
+or system-level systemd units) are out of scope for this phase. The full
+per-platform contract is specified in FEAT-002 under *Service Manager
+Integration*.
+
 ## Validation
 
 This design should be covered by tests that verify:
