@@ -203,23 +203,25 @@ func runCmd(t *testing.T, dir string, name string, args ...string) {
 func TestFormatSessionLogLines(t *testing.T) {
 	lines := []string{
 		`{"type":"session.start","data":{"model":"qwen/qwen3.6-plus"}}`,
-		`{"type":"llm.request","data":{"attempt_index":1}}`,
+		`{"type":"llm.request","data":{"attempt_index":1,"messages":[{"role":"user","content":"find .rs files"}]}}`,
 		`{"type":"llm.response","data":{"model":"qwen/qwen3.6-plus-04-02","latency_ms":5491,"attempt":{"cost":{"raw":{"total_tokens":8408,"prompt_tokens":8204,"completion_tokens":204}}},"tool_calls":[{"name":"read","arguments":{"path":"docs/FEAT-006.md"}}],"finish_reason":"tool_calls"}}`,
 		`{"type":"tool.call","data":{"tool":"read","input":{"path":"docs/FEAT-006.md"},"duration_ms":120,"error":""}}`,
 		`{"type":"tool.call","data":{"tool":"write","input":{"path":"docs/new.md"},"duration_ms":50,"error":"permission denied"}}`,
 		`{"type":"compaction.start","data":{}}`,
 		`{"type":"compaction.end","data":{}}`,
+		`{"type":"compaction.start","data":{}}`,
+		`{"type":"compaction.end","data":{"success":true,"tokens_before":10000,"tokens_after":3000}}`,
 		`{"type":"llm.delta","data":{}}`,
 	}
 
 	result := agent.FormatSessionLogLines(lines)
 
 	assert.Contains(t, result, "session started (model: qwen/qwen3.6-plus)")
-	assert.Contains(t, result, "→ llm request (attempt 1)")
+	assert.Contains(t, result, "→ llm request (attempt 1) [find .rs files]")
 	assert.Contains(t, result, "← llm response (8408 tokens, 5.5s) qwen/qwen3.6-plus-04-02 → read")
 	assert.Contains(t, result, "🔧 read docs/FEAT-006.md (0.1s)")
 	assert.Contains(t, result, "🔧 write docs/new.md (0.1s) ❌ permission denied")
-	assert.Contains(t, result, "⚡ compacting context...")
-	assert.Contains(t, result, "⚡ compaction done")
+	assert.NotContains(t, result, "compacting context...") // no-op compactions are suppressed
+	assert.Contains(t, result, "⚡ compacted context (10000 → 3000 tokens)")
 	assert.NotContains(t, result, "llm.delta") // deltas should be suppressed
 }

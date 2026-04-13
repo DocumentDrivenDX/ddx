@@ -27,7 +27,21 @@ func FormatSessionLogLines(lines []string) string {
 		case "llm.request":
 			data, _ := entry["data"].(map[string]any)
 			attemptIdx, _ := data["attempt_index"].(float64)
-			fmt.Fprintf(&sb, "  → llm request (attempt %.0f)\n", attemptIdx)
+			// Extract a hint from the last user message in the conversation.
+			promptHint := ""
+			if msgs, ok := data["messages"].([]any); ok {
+				for i := len(msgs) - 1; i >= 0; i-- {
+					if msg, ok := msgs[i].(map[string]any); ok {
+						if role, _ := msg["role"].(string); role == "user" {
+							if content, _ := msg["content"].(string); content != "" {
+								promptHint = " [" + truncateStr(strings.TrimSpace(content), 60) + "]"
+							}
+							break
+						}
+					}
+				}
+			}
+			fmt.Fprintf(&sb, "  → llm request (attempt %.0f)%s\n", attemptIdx, promptHint)
 		case "llm.response":
 			data, _ := entry["data"].(map[string]any)
 			model, _ := data["model"].(string)
@@ -94,9 +108,19 @@ func FormatSessionLogLines(lines []string) string {
 			}
 			fmt.Fprintf(&sb, "  🔧 %s %s%s%s\n", name, argHint, durSuffix, errSuffix)
 		case "compaction.start":
-			fmt.Fprintf(&sb, "  ⚡ compacting context...\n")
+			// Suppress: we'll show a single line on compaction.end only if it succeeded.
 		case "compaction.end":
-			fmt.Fprintf(&sb, "  ⚡ compaction done\n")
+			data, _ := entry["data"].(map[string]any)
+			success, _ := data["success"].(bool)
+			if success {
+				tokensBefore, _ := data["tokens_before"].(float64)
+				tokensAfter, _ := data["tokens_after"].(float64)
+				if tokensBefore > 0 && tokensAfter > 0 {
+					fmt.Fprintf(&sb, "  ⚡ compacted context (%.0f → %.0f tokens)\n", tokensBefore, tokensAfter)
+				} else {
+					fmt.Fprintf(&sb, "  ⚡ compacted context\n")
+				}
+			}
 		}
 	}
 	return sb.String()
