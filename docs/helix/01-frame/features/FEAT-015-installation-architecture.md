@@ -165,6 +165,13 @@ Desired behavior:
 - **No Repo Bloat:** plugins live in `.ddx/plugins/` (gitignored or committed per user preference)
 - **Git-Trackable Skills:** `ddx init` copies real files, not symlinks
 - **Git-Trackable Versions:** `.ddx/versions.yaml` committed to git — teammates get version gate on clone
+- **Git-Trackable Execution Evidence:** `.ddx/executions/<attempt-id>/` is
+  the tracked execute-bead attempt bundle defined in FEAT-006 §"Execute-Bead
+  Evidence Bundle". `ddx init` and any DDx-managed `.gitignore` template
+  must leave `.ddx/executions/` trackable so bundles committed by
+  `execute-bead` survive clones. Only the ignored runtime scratch paths
+  listed in FEAT-006 (`.ddx/exec-runs.d/`, `.ddx/agent-logs/`,
+  `.ddx/.execute-bead-wt-*/`) may be excluded from tracking.
 - **Relative Symlinks for Plugins:** work across machines, no absolute paths
 - **No Windows Targets:** relative symlinks are acceptable
 - **Offline-First:** bootstrap skills work without network; version gate is local-only
@@ -205,6 +212,8 @@ project/
 │   ├── skills/
 │   │   ├── ddx-doctor/   (real files, git-tracked)
 │   │   └── ddx-run/      (real files, git-tracked)
+│   ├── executions/       (tracked execute-bead attempt bundles; see FEAT-006)
+│   │   └── <attempt-id>/ (prompt.md, manifest.json, result.json, ...)
 │   └── plugins/
 │       └── helix/        (cloned plugin)
 │           └── .agents/skills/

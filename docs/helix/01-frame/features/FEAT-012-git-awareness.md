@@ -250,6 +250,22 @@ only within the execute-bead workflow:
 33. Epic worktrees are long-lived only for the lifetime of an active epic
     worker; once the epic is merged, abandoned, or reset, DDx must remove the
     managed epic worktree and leave no orphaned epic worktree behind
+34. **Tracked execution-evidence bundle.** Each execute-bead attempt writes
+    a tracked bundle at `.ddx/executions/<attempt-id>/` containing at least
+    `prompt.md`, `manifest.json`, and `result.json` per FEAT-006
+    §"Execute-Bead Evidence Bundle". The bundle is committed as part of the
+    iteration (landed or preserved under the hidden ref in requirement 26).
+    The DDx default `.gitignore` template and git safety posture must not
+    exclude `.ddx/executions/` from tracking; only the ignored runtime
+    scratch paths listed in FEAT-006 may be excluded.
+35. **Canonical commit provenance trailers.** Each iteration commit
+    (landed or preserved) carries the canonical Git trailer set defined in
+    FEAT-006 §"Canonical Git trailers": `Ddx-Attempt-Id`, `Ddx-Worker-Id`,
+    `Ddx-Harness`, `Ddx-Model`, and `Ddx-Result-Status`. The git layer must
+    preserve these trailers verbatim on rebase+fast-forward landing and on
+    hidden-ref preservation; it must not rewrite, strip, or reorder them.
+    Consumers of commit history rely on these trailer names as the stable
+    provenance surface.
 
 All other DDx git operations remain conservative: DDx does not force-push,
 rebase outside execute-bead, delete branches, or amend commits outside this

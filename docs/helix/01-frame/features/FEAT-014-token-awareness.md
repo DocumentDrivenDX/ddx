@@ -169,6 +169,16 @@ Interpretation:
     - `cost_usd` (`-1` when unknown, `0` for local models)
     - `base_rev`
     - `result_rev`
+20. **Tracked metrics surface.** The runtime metrics captured in requirement
+    19 are persisted in the tracked execute-bead attempt bundle at
+    `.ddx/executions/<attempt-id>/result.json` per FEAT-006 §"Execute-Bead
+    Evidence Bundle". The runtime `harness`, `model`, and `session_id`
+    values must also be projected into the canonical Git trailer set on
+    the iteration commit (`Ddx-Harness`, `Ddx-Model`, and `Ddx-Worker-Id`
+    when no distinct worker identity is available) per FEAT-006
+    §"Canonical Git trailers". The commit trailers and the JSON block in
+    FEAT-006 §"Iteration commit summary" must both be projected from
+    `result.json`, never from ad hoc runtime state.
 
 ### Non-Functional
 

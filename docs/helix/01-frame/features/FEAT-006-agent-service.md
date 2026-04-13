@@ -656,6 +656,46 @@ projected from the tracked artifact files in `.ddx/executions/<attempt-id>/`
 purpose is reproducibility: anyone can re-derive the commit trailer from the
 tracked bundle without re-running the agent.
 
+#### Canonical Git trailers
+
+In addition to the structured `ddx-iteration` JSON block, every execute-bead
+iteration commit (landed or preserved) carries a fixed set of canonical Git
+trailer lines. These trailers are the minimum provenance surface that any
+tool — including `git log`, `git interpret-trailers`, and other specs that
+reference execute-bead commit provenance — can rely on without parsing the
+JSON block:
+
+```
+Ddx-Attempt-Id: 20260413T140544-6b4034a1
+Ddx-Worker-Id: <worker-id>
+Ddx-Harness: agent
+Ddx-Model: qwen3.5-27b
+Ddx-Result-Status: success
+```
+
+Trailer semantics:
+
+- `Ddx-Attempt-Id` — matches the `.ddx/executions/<attempt-id>/` bundle
+  directory name and the JSON block's `attempt_id` field.
+- `Ddx-Worker-Id` — stable identifier for the worker instance that ran the
+  attempt. For a local run this is the DDx session or host-scoped worker ID;
+  for a server-hosted run this is the server's worker identity. When no
+  distinct worker identity exists, DDx uses the session ID from
+  `result.json`.
+- `Ddx-Harness` — harness name as recorded in `result.json` (e.g. `agent`,
+  `claude`, `codex`).
+- `Ddx-Model` — resolved model identity as recorded in `result.json`.
+- `Ddx-Result-Status` — one of the documented execute-bead result statuses
+  (`success`, `execution_failed`, `post_run_check_failed`, `land_conflict`,
+  `structural_validation_failed`, `no_changes`, `already_satisfied`).
+
+Like the JSON block, all trailer values must be projected from the tracked
+artifact files in `.ddx/executions/<attempt-id>/` — never from ad hoc
+in-memory runtime state. The trailers and the JSON block are two views of
+the same underlying result and must agree by construction. Other specs
+(API-001, FEAT-012, FEAT-014) that reference commit provenance refer to
+this trailer set as the canonical contract.
+
 Full conversation transcripts and detailed session evidence remain in
 provider-native stores or embedded-runtime telemetry stores. DDx keeps routing
 facts, runtime metadata, and references rather than duplicating those bodies in

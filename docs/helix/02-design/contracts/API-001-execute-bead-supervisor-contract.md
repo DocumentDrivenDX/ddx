@@ -70,12 +70,27 @@ artifacts, but it does not reinterpret them as generic `exec-runs`
 attachments; the bundle is the canonical tracked evidence for one
 `execute-bead` attempt.
 
+The bundle contents and write order are owned by `execute-bead` and
+specified in FEAT-006 §"Execute-Bead Evidence Bundle". At minimum, the
+bundle contains `prompt.md`, `manifest.json`, and `result.json`, and is
+committed alongside the iteration (landed or preserved). The supervisor
+must not treat the absence of any of those files as a normal post-run
+state.
+
 The prompt delivered to the agent for each attempt is compiled by the
 **execute-bead prompt rationalizer** from bead fields and resolved governing
 references (see FEAT-006 §"Prompt Rationalizer Contract"). The rationalizer
 writes `prompt.md` to the bundle before the agent runs; this file is the
 authoritative record of exactly what the agent received. The supervisor does
 not author or modify the prompt.
+
+Each iteration commit (landed or preserved under a hidden ref) carries the
+canonical Git trailer set defined in FEAT-006 §"Canonical Git trailers":
+`Ddx-Attempt-Id`, `Ddx-Worker-Id`, `Ddx-Harness`, `Ddx-Model`, and
+`Ddx-Result-Status`. The supervisor relies on `Ddx-Attempt-Id` and
+`Ddx-Result-Status` when projecting its observability surface from commit
+history, and treats the trailer set as authoritative alongside the
+supervisor-visible `status` field emitted by `execute-bead`.
 
 ## Single-Project State Machine
 
