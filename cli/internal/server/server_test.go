@@ -2388,3 +2388,169 @@ func TestMCPToolsListIncludesExec(t *testing.T) {
 		}
 	}
 }
+
+// setupNodeTestDir creates a temp dir and sets XDG_DATA_HOME and DDX_NODE_NAME
+// so node-state tests are isolated from the real user state file.
+func setupNodeTestDir(t *testing.T) (workDir string) {
+	t.Helper()
+	workDir = setupTestDir(t)
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node")
+	return workDir
+}
+
+func TestGetNode(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	req := httptest.NewRequest("GET", "/api/node", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var node struct {
+		Name string `json:"name"`
+		ID   string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &node); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if node.Name != "test-node" {
+		t.Errorf("expected name=test-node, got %q", node.Name)
+	}
+	if !strings.HasPrefix(node.ID, "node-") {
+		t.Errorf("expected id to start with 'node-', got %q", node.ID)
+	}
+}
+
+func TestListProjects(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var projects []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &projects); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	// Server registers workDir as a project on startup.
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project (the startup project), got %d", len(projects))
+	}
+	if projects[0].Path != workDir {
+		t.Errorf("expected path=%s, got %s", workDir, projects[0].Path)
+	}
+	if !strings.HasPrefix(projects[0].ID, "proj-") {
+		t.Errorf("expected id to start with 'proj-', got %q", projects[0].ID)
+	}
+}
+
+func TestRegisterProject(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	// Register a second project path.
+	body := `{"path":"/tmp/other-project"}`
+	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var entry struct {
+		ID   string `json:"id"`
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &entry); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if entry.Path != "/tmp/other-project" {
+		t.Errorf("expected path=/tmp/other-project, got %s", entry.Path)
+	}
+	if !strings.HasPrefix(entry.ID, "proj-") {
+		t.Errorf("expected id prefix 'proj-', got %q", entry.ID)
+	}
+
+	// Confirm it now appears in GET /api/projects.
+	req2 := httptest.NewRequest("GET", "/api/projects", nil)
+	w2 := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w2, req2)
+
+	var projects []struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w2.Body.Bytes(), &projects); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	found := false
+	for _, p := range projects {
+		if p.Path == "/tmp/other-project" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("registered project not returned by GET /api/projects")
+	}
+}
+
+func TestRegisterProjectMissingPath(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRegisterProjectIdempotent(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	body := `{"path":"/tmp/idempotent-project"}`
+	for range 3 {
+		req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 on repeat registration, got %d", w.Code)
+		}
+	}
+
+	// Should still have exactly 2 projects: startup + idempotent.
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	var projects []struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &projects); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(projects) != 2 {
+		t.Errorf("expected 2 projects after 3 idempotent registrations, got %d", len(projects))
+	}
+}

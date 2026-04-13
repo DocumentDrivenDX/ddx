@@ -908,3 +908,105 @@ func TestExecuteBeadStatusMapping(t *testing.T) {
 		})
 	}
 }
+
+// seedGateDocs writes a governing spec doc and a required execution gate doc
+// into workDir/docs/ so they are copied into worktrees by fakeExecuteBeadGit.
+func seedGateDocs(t *testing.T, workDir string, gateCommand []string) {
+	t.Helper()
+	docsDir := filepath.Join(workDir, "docs")
+	require.NoError(t, os.MkdirAll(docsDir, 0o755))
+
+	specDoc := "---\nddx:\n  id: FEAT-GATE-TEST\n---\n# Spec: Gate Test\n"
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "spec-gate-test.md"), []byte(specDoc), 0o644))
+
+	var cmdYAML string
+	for _, part := range gateCommand {
+		cmdYAML += fmt.Sprintf("      - \"%s\"\n", part)
+	}
+	gateDoc := fmt.Sprintf("---\nddx:\n  id: EXEC-GATE-TEST\n  depends_on:\n    - FEAT-GATE-TEST\n  execution:\n    kind: command\n    required: true\n    command:\n%s---\n# Gate\n", cmdYAML)
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "exec-gate-test.md"), []byte(gateDoc), 0o644))
+}
+
+// TestExecuteBeadGatePass verifies that when all required gates pass,
+// the bead outcome is "merged" and gate results report "pass".
+func TestExecuteBeadGatePass(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "bbbb2222",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	seedExecuteBead(t, f.WorkingDir, &bead.Bead{
+		ID:        "gate-bead",
+		Title:     "Bead with required gate",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+		Extra:     map[string]any{"spec-id": "FEAT-GATE-TEST"},
+	})
+	seedGateDocs(t, f.WorkingDir, []string{"true"})
+
+	res := runExecuteBead(t, f, git, "gate-bead")
+
+	assert.Equal(t, "merged", res.Outcome, "gate pass should land the result")
+	require.Len(t, res.GateResults, 1)
+	assert.Equal(t, "pass", res.GateResults[0].Status)
+	assert.Equal(t, "EXEC-GATE-TEST", res.GateResults[0].DefinitionID)
+	assert.Equal(t, 0, res.GateResults[0].ExitCode)
+	assert.Equal(t, "pass", res.RequiredExecSummary)
+}
+
+// TestExecuteBeadGateBlocksLanding verifies that when a required gate fails,
+// the result is preserved rather than merged.
+func TestExecuteBeadGateBlocksLanding(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "bbbb2222",
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	seedExecuteBead(t, f.WorkingDir, &bead.Bead{
+		ID:        "gate-bead-fail",
+		Title:     "Bead with failing gate",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+		Extra:     map[string]any{"spec-id": "FEAT-GATE-TEST"},
+	})
+	seedGateDocs(t, f.WorkingDir, []string{"false"})
+
+	res := runExecuteBead(t, f, git, "gate-bead-fail")
+
+	assert.Equal(t, "preserved", res.Outcome, "gate failure should preserve rather than merge")
+	assert.Equal(t, "post-run checks failed", res.Reason)
+	assertPreserveRef(t, res.PreserveRef, "gate-bead-fail", "aaaa1111")
+	require.Len(t, res.GateResults, 1)
+	assert.Equal(t, "fail", res.GateResults[0].Status)
+	assert.NotEqual(t, 0, res.GateResults[0].ExitCode)
+	assert.Equal(t, "fail", res.RequiredExecSummary)
+}
+
+// TestExecuteBeadNoGatesWhenNoChanges verifies that gates are not evaluated
+// when the agent produces no changes (resultRev == baseRev).
+func TestExecuteBeadNoGatesWhenNoChanges(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "aaaa1111", // same rev = no changes
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	seedExecuteBead(t, f.WorkingDir, &bead.Bead{
+		ID:        "gate-bead-nochange",
+		Title:     "Bead with gate but no changes",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+		Extra:     map[string]any{"spec-id": "FEAT-GATE-TEST"},
+	})
+	seedGateDocs(t, f.WorkingDir, []string{"false"})
+
+	res := runExecuteBead(t, f, git, "gate-bead-nochange")
+
+	assert.Equal(t, "no-changes", res.Outcome)
+	assert.Empty(t, res.GateResults, "gates must not run when agent made no changes")
+}
