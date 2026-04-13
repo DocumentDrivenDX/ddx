@@ -181,40 +181,31 @@ func (r *RealGitOps) WorktreePrune(dir string) error {
 }
 
 func (r *RealGitOps) Merge(dir, rev string) error {
-	// For bare repositories git merge requires a working tree. Instead, resolve
-	// the target SHA and advance the HEAD branch via update-ref (fast-forward only).
-	isBare, _ := osexec.Command("git", "-C", dir, "rev-parse", "--is-bare-repository").Output()
-	if strings.TrimSpace(string(isBare)) == "true" {
-		symRef, err := osexec.Command("git", "-C", dir, "symbolic-ref", "HEAD").Output()
-		if err != nil {
-			return fmt.Errorf("bare repo HEAD is not a branch ref: %w", err)
-		}
-		targetRef := strings.TrimSpace(string(symRef))
-
-		// Resolve current branch tip and rev to full SHAs.
-		currentOut, err := osexec.Command("git", "-C", dir, "rev-parse", targetRef).Output()
-		if err != nil {
-			return fmt.Errorf("resolving %s: %w", targetRef, err)
-		}
-		current := strings.TrimSpace(string(currentOut))
-
-		newOut, err := osexec.Command("git", "-C", dir, "rev-parse", rev).Output()
-		if err != nil {
-			return fmt.Errorf("resolving %s: %w", rev, err)
-		}
-		newSHA := strings.TrimSpace(string(newOut))
-
-		// Verify fast-forward before advancing.
-		if err := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", current, newSHA).Run(); err != nil {
-			return fmt.Errorf("merge: not a fast-forward (%s → %s)", current[:12], newSHA[:12])
-		}
-		out, err := osexec.Command("git", "-C", dir, "update-ref", targetRef, newSHA, current).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
-		}
-		return nil
+	// Advance the HEAD branch via update-ref (fast-forward only). This works
+	// regardless of whether the repository has a checked-out working tree,
+	// and is sufficient for execute-bead which only needs the branch ref to land.
+	symRef, err := osexec.Command("git", "-C", dir, "symbolic-ref", "HEAD").Output()
+	if err != nil {
+		return fmt.Errorf("HEAD is not a branch ref: %w", err)
 	}
-	out, err := osexec.Command("git", "-C", dir, "merge", rev).CombinedOutput()
+	targetRef := strings.TrimSpace(string(symRef))
+
+	currentOut, err := osexec.Command("git", "-C", dir, "rev-parse", targetRef).Output()
+	if err != nil {
+		return fmt.Errorf("resolving %s: %w", targetRef, err)
+	}
+	current := strings.TrimSpace(string(currentOut))
+
+	newOut, err := osexec.Command("git", "-C", dir, "rev-parse", rev).Output()
+	if err != nil {
+		return fmt.Errorf("resolving %s: %w", rev, err)
+	}
+	newSHA := strings.TrimSpace(string(newOut))
+
+	if err := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", current, newSHA).Run(); err != nil {
+		return fmt.Errorf("merge: not a fast-forward (%s → %s)", current[:12], newSHA[:12])
+	}
+	out, err := osexec.Command("git", "-C", dir, "update-ref", targetRef, newSHA, current).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
 	}
