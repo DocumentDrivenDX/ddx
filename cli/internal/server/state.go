@@ -42,7 +42,7 @@ type ServerState struct {
 
 const stateSchemaVersion = "1"
 
-// loadServerState reads state from dir/state.json, initialising a fresh state
+// loadServerState reads state from dir/server-state.json, initialising a fresh state
 // if the file does not exist. nodeName is the resolved hostname/configured name.
 func loadServerState(dir, nodeName string) *ServerState {
 	s := &ServerState{
@@ -56,7 +56,7 @@ func loadServerState(dir, nodeName string) *ServerState {
 		},
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "server-state.json"))
 	if err != nil {
 		return s // fresh state
 	}
@@ -81,7 +81,7 @@ func (s *ServerState) save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.dir, "state.json"), data, 0600)
+	return os.WriteFile(filepath.Join(s.dir, "server-state.json"), data, 0600)
 }
 
 // RegisterProject adds or updates a project entry. Returns the entry.

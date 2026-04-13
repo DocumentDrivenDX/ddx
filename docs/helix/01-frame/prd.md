@@ -64,6 +64,16 @@ specifications. The PRD stays at the user- and capability-level:
 - FEAT-019 defines agent evaluation and prompt comparison: dispatch the same
   prompt to multiple harnesses, capture structured outputs, and surface
   side-by-side comparisons for human review
+- FEAT-020 defines server node state and project registry: the server acquires
+  a stable node identity (hostname or DDX_NODE_NAME), persists a project
+  registry in an XDG-standard JSON file, writes a discovery addr file, and
+  CLI commands auto-register their project with the server via a fire-and-
+  forget background call
+- FEAT-021 defines the multi-node dashboard UI: extends the FEAT-008 web UI
+  with node/project-aware routing so every view is bookmarkable
+  (/nodes/:nodeId/projects/:projectId/...), combined cross-project views for
+  beads and agent sessions, and project-scoped views for documents, dependency
+  graph, and commit log
 
 ## Problem
 

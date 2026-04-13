@@ -48,7 +48,7 @@ type Server struct {
 // New creates a new DDx server bound to addr, serving data from workingDir.
 func New(addr, workingDir string) *Server {
 	nodeName := resolveNodeName()
-	stateDir := filepath.Join(workingDir, ".ddx", "server")
+	stateDir := serverAddrDir() // XDG-standard user-level dir, one per node
 	state := loadServerState(stateDir, nodeName)
 
 	s := &Server{
