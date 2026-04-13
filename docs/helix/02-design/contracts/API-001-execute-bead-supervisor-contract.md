@@ -107,6 +107,9 @@ drained, the operator stops it, or a fatal project error occurs.
    - post-run check failure caused by a governing-snapshot execution gate,
      including explicit ratchet blockers authored there
    - land conflict after a successful attempt
+   - `no_changes`, which requires explicit already-satisfied vs unresolved
+     adjudication before the loop decides whether to close or cool down the
+     bead
    - success
 8. Continue scanning the same project queue.
 
@@ -135,11 +138,26 @@ The supervisor consumes only the documented result envelope emitted by
 `ddx agent execute-bead`:
 
 - `status`: one of `structural_validation_failed`, `execution_failed`,
-  `post_run_check_failed`, `land_conflict`, or `success`
+  `post_run_check_failed`, `land_conflict`, `no_changes`, or `success`
 - `detail`: optional operator-facing text for logging and diagnostics
+- `no_change_disposition`: omitted unless `status=no_changes`; one of
+  `already_satisfied` or `unresolved`
+- `close_bead`: boolean; only `true` for `status=success` or
+  `status=no_changes` with `no_change_disposition=already_satisfied`
+- `retry_after`: optional RFC3339 timestamp used when a `no_changes`
+  disposition is unresolved and the loop should suppress immediate retry
+- `satisfaction`: omitted unless `status=no_changes`; aggregate machine-readable
+  adjudication summary with:
+  - `decision`: `satisfied` or `unresolved`
+  - `acceptance`: `passed`, `failed`, or `not_evaluated`
+  - `required_checks`: `passed`, `failed`, `missing`, or `not_applicable`
+  - `future_gates`: `passed`, `blocked`, `missing`, or `not_applicable`
+  - `evidence_complete`: boolean
+  - `blocking_reasons`: string array
 
-The supervisor must not infer state from free-form reason strings. It uses the
-`status` field for control flow and may surface `detail` for observability.
+The supervisor must not infer control flow from free-form reason strings or
+from `base_rev == result_rev`. It uses the documented machine-readable fields
+for control flow and may surface `detail` for observability.
 
 `execute-bead` result classification is based on the managed worktree outcome,
 not solely on agent-authored commits. If the agent leaves tracked file edits
@@ -151,6 +169,11 @@ For control-flow purposes, a successful run with tracked changes is
 merge-eligible by default unless `--no-merge`, an explicit
 governing-snapshot execution gate, or the final land step prevents landing.
 The supervisor must not invent additional blocking policy.
+
+`no_changes` remains non-success even when the loop later closes the bead as
+already satisfied. The close/open decision comes from the explicit
+`no_change_disposition` and `close_bead` fields, not by rewriting the attempt
+status to `success`.
 
 ## Validation And Retry Semantics
 
@@ -171,6 +194,17 @@ Structural validation happens before any irreversible execution step.
 - If a rebase or fast-forward land fails after a successful run, `execute-bead`
   preserves the iteration and the preserved iteration remains the canonical
   evidence for that attempt.
+- If `status=no_changes`, the supervisor must run the documented satisfaction
+  check using the result bundle and aggregate adjudication fields:
+  - `prompt.md`, `manifest.json`, and `result.json` are always required
+  - `checks.json` is required whenever the governing snapshot resolved required
+    executions, explicit acceptance validation, or future authored close gates
+    that were supposed to run for the attempt
+  - missing required evidence, missing acceptance proof, failed required
+    execution, blocked ratchet, or a failed/missing future required close gate
+    all force `no_change_disposition=unresolved`
+  - only positive acceptance proof plus passing required checks/gates permits
+    `no_change_disposition=already_satisfied`
 
 Retry surface:
 
@@ -178,6 +212,21 @@ Retry surface:
   environment
 - the bead is unclaimed and made ready again
 - the next loop pass may claim it and create a new iteration
+
+For unresolved `no_changes`:
+
+- the supervisor unclaims the bead and leaves it open
+- the supervisor records cooldown metadata and suppresses reselection until
+  `retry_after`
+- the operator-visible surface must include the unresolved disposition, retry
+  timestamp, and blocking reasons so the next action is explicit
+
+For already-satisfied `no_changes`:
+
+- the supervisor closes the bead with execution evidence from the attempt
+- the recorded attempt status remains `no_changes`
+- closure reason is "already satisfied at base revision", not "successful new
+  implementation"
 
 Previous preserved refs remain immutable. A retry does not rewrite or reuse the
 prior attempt.
@@ -241,9 +290,23 @@ At minimum, the loop should expose:
 - current state machine step
 - last success timestamp
 - last failure `status`
+- last `no_change_disposition`, when applicable
 - current worktree path
 - current execution bundle path
 - current preserve ref, if any
+- current `retry_after`, when applicable
+- current `blocking_reasons`, when applicable
+
+When unresolved `no_changes` cooldown is applied, the first shipped tracker
+surface is the bead's extra metadata:
+
+- `execute-loop-last-status`
+- `execute-loop-last-detail`
+- `execute-loop-retry-after`
+
+Future UI/server views may project richer adjudication fields directly, but the
+loop contract requires these operator-visible facts to remain queryable without
+reading prose-only logs.
 
 ## Acceptance Notes
 
