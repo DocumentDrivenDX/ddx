@@ -255,6 +255,42 @@ All other DDx git operations remain conservative: DDx does not force-push,
 rebase outside execute-bead, delete branches, or amend commits outside this
 managed flow.
 
+**Epic branch and worktree naming rules**
+
+Requirements 29–33 above establish that DDx may create a persistent epic
+worktree and branch. The following naming and persistence rules pin down the
+contract so external tools can observe epic state deterministically:
+
+34. The epic branch name is `ddx/epics/<epic-id>`. The segment `<epic-id>` is
+    the tracker id of the epic bead. DDx must not reuse this branch name for
+    anything other than that epic.
+35. The epic branch is created from the resolved base revision on the target
+    branch the first time the epic worker launches for that epic, and is
+    reused across subsequent launches of the same worker until the epic is
+    merged, abandoned, or reset.
+36. The epic worktree path follows a single managed pattern derived from the
+    epic id so crash-recovery logic can match orphans by path. The worktree
+    is attached to the epic branch and lives until the epic worker exits
+    cleanly or the epic is reset.
+37. Child-bead commits on the epic branch are ordinary commits (requirement
+    30). A child bead may be closed in the tracker as soon as its acceptance
+    and required gates pass in the epic branch context, even though its
+    commit still lives only on `ddx/epics/<epic-id>` and has not yet reached
+    the target branch. "Closed on epic" means the child work is finalized on
+    the epic branch and is waiting for the epic merge, not that it has
+    landed on the target branch.
+38. Final integration of a completed epic uses `git merge --no-ff` from
+    `ddx/epics/<epic-id>` into the target branch so the full child-commit
+    history remains visible in target history. Fast-forwarding an epic
+    branch into the target branch is not permitted.
+39. Epic merge gates run against the merge candidate — the epic branch tip
+    after it has been rebased onto the latest target tip — not against
+    individual child commits. The merge commit is only created after those
+    gates pass.
+40. A failed epic merge gate preserves the epic branch and worktree for
+    operator inspection; DDx must not silently discard an epic branch that
+    failed to merge.
+
 ### Non-Functional
 
 - **Safety:** Never force-push, rebase, or delete branches — except within the

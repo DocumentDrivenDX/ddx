@@ -234,12 +234,35 @@ Epic execution preserves the history of child tickets on the epic branch and
 lands that branch with a regular merge commit rather than a fast-forward.
 
 - Child ticket completions are committed sequentially on the epic branch
-- The branch itself is named after the epic and is the durable integration
-  surface for that epic's work
+- The branch itself is named `ddx/epics/<epic-id>` and is the durable
+  integration surface for that epic's work for the lifetime of the epic
+- The epic worker attaches one persistent managed worktree to the epic branch
+  and does not spawn per-child worktrees
 - Epic merge gates run on the merge candidate, not just on individual child
   commits
-- The final integration to the target branch uses a regular merge commit so the
-  full epic branch history remains visible in git history
+- The final integration to the target branch uses a regular merge commit
+  (`git merge --no-ff`) so the full epic branch history remains visible in
+  git history; epic branches are never fast-forwarded to the target branch
+
+Child beads may be closed mid-epic as soon as their own acceptance and
+required gates pass inside the epic branch context. Such a child is "closed
+on epic": its commit is durable on `ddx/epics/<epic-id>` but has not yet
+reached the target branch. Downstream single-ticket work that depends on the
+target-branch effect of a closed-on-epic child must wait until the epic
+merges.
+
+Before the epic worker creates the final merge commit, it evaluates an
+aggregate merge gate that confirms:
+
+- every required child bead for the epic is in a closed state
+- no child execution is still in flight inside the epic worktree
+- no in-flight external dependencies remain for the epic
+- any epic-level required executions pass against the merge candidate (the
+  epic branch rebased onto the current target tip)
+
+If any of those checks fail, the worker preserves the epic branch and
+worktree for operator inspection rather than silently discarding the work or
+landing a partial epic.
 
 This topology is intentionally compatible with a later server-managed
 `execute-bead` supervisor, but it does not itself define the full execution

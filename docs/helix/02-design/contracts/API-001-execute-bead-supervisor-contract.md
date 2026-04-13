@@ -121,6 +121,36 @@ single-ticket supervisor.
   commits each child result on the epic branch, and merges the completed epic
   to the target branch with a regular merge commit.
 
+The epic worker's branch, worktree, child-execution, merge-gate, and final
+merge-commit contract is defined in API-002 (Epic Worker Surfaces) and the
+"Epic Execution Workflow" section of FEAT-006. The single-ticket supervisor
+must observe these boundary rules even though it does not operate on epics
+itself:
+
+1. **No epic claims.** This supervisor must never claim an epic bead. Ready
+   epics are filtered out of its candidate set even when they pass the
+   structural execution validator.
+2. **Child beads during an active epic.** When a child bead belongs to an
+   epic that is currently being executed by an epic worker, this supervisor
+   must not claim that child. The epic worker is the authoritative consumer
+   of in-flight epic children. The supervisor treats such children as
+   already claimed by the epic worker.
+3. **Child beads for idle epics.** Children of epics that have no active
+   epic worker remain ineligible for this supervisor by default. Promoting
+   an orphaned child to the single-ticket queue is a workflow-tool decision,
+   not a supervisor decision.
+4. **Child close semantics.** When the epic worker closes a child mid-epic,
+   the child's result commit lives on the epic branch (`ddx/epics/<epic-id>`)
+   and has not yet reached the target branch. This supervisor must treat
+   such a child as "closed on epic" rather than "landed on target" when
+   computing readiness for its own queue — downstream beads that depend on a
+   child closed on epic are not yet eligible for single-ticket execution on
+   the target branch until the epic itself merges.
+5. **Final landing is not this supervisor's job.** Landing the completed
+   epic with a `--no-ff` merge commit is owned by the epic worker. This
+   supervisor does not evaluate epic merge gates, does not rebase the epic
+   branch, and does not perform the final merge.
+
 This contract therefore remains the single-ticket worker contract even after
 epic execution is introduced elsewhere in the system.
 

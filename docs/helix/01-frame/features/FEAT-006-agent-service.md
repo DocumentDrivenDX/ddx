@@ -552,6 +552,50 @@ Epics are worked differently from single tickets.
   the merge candidate and integrates the epic branch to the target branch with
   a regular merge commit so the child commit history remains intact.
 
+#### Epic worker contract
+
+The epic worker obeys a fixed contract so its behavior is predictable from
+outside the loop:
+
+1. **Branch naming.** The epic branch is `ddx/epics/<epic-id>` and is the
+   durable integration surface for the epic. The worker creates the branch
+   from the resolved base revision of the target branch on first launch and
+   reuses the existing branch on subsequent launches of the same epic.
+2. **Persistent worktree.** One managed worktree is attached to the epic
+   branch for the full lifetime of the epic worker. Child-bead executions do
+   not create or destroy per-child worktrees. The worktree is removed only
+   when the epic is merged, abandoned, or reset.
+3. **Sequential child execution.** Children are executed one at a time in
+   topological (dependency-respecting) queue order inside the epic worktree.
+   The worker does not start the next child until the previous child has
+   either been recorded as a child commit on the epic branch or been recorded
+   as a failed attempt.
+4. **Child commits.** Each child bead produces one ordinary commit on the
+   epic branch. Child commits are never fast-forwarded directly to the target
+   branch. A failed child does not block subsequent children unless the
+   worker was launched with stop-on-failure semantics.
+5. **Child close semantics.** A child bead may be closed as soon as its own
+   acceptance and required gates pass inside the epic branch context. Closing
+   a child mid-epic does not land that child's commit on the target branch;
+   the child's work remains on the epic branch until the epic itself merges.
+   A closed child whose commit still lives only on the epic branch is
+   considered "closed on epic", not "landed on target".
+6. **Epic merge gates.** Before the final merge, the worker evaluates the
+   epic's aggregate merge gates on the merge candidate (the epic branch tip
+   rebased onto the latest target tip). Merge gates must confirm that:
+   all required children are closed, no in-flight child executions remain,
+   no unresolved in-flight dependencies exist outside the epic, and any
+   declared epic-level required executions pass on the merge candidate.
+7. **Final merge.** When the gates pass, the epic branch is integrated into
+   the target branch with a regular merge commit (`git merge --no-ff`),
+   preserving the full child-commit history. Fast-forward landing is
+   explicitly forbidden for epic branches so the epic remains visible as a
+   single merge in target history.
+8. **Cleanup.** After a successful merge (or an explicit abandon/reset), the
+   epic worktree is removed and the epic branch may be deleted or retained
+   per project policy. A failed merge gate preserves the epic branch and
+   worktree for operator inspection rather than discarding work.
+
 This means DDx owns two execution modes:
 
 - single-ticket mode: isolated temporary worktree, linear rebase + fast-forward
