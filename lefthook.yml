@@ -337,7 +337,7 @@ pre-push:
       name: "No debug statements"
       run: |
         if command -v rg >/dev/null 2>&1; then
-          rg "(console\.log|fmt\.Print(ln|f)?\(\"DEBUG|pdb\.set_trace|debugger)" \
+          rg "(console\.log|console\.debug\(|console\.error\(\"DEBUG|fmt\.Print(ln|f)?\(\"DEBUG|pdb\.set_trace|debugger|breakpoint\(\))" \
             --type-add 'code:*.{go,js,jsx,ts,tsx,py}' -t code
           status=$?
           # rg exit codes: 0=match found (fail), 1=no match (pass), 2+=error (fail closed)

@@ -9,7 +9,7 @@ PASS=0
 FAIL=0
 
 # Pattern extracted from lefthook.yml no-debug hook
-NO_DEBUG_PATTERN='(console\.log|console\.debug\(|console\.error\("DEBUG|fmt\.Print|pdb\.set_trace|debugger|breakpoint\(\))'
+NO_DEBUG_PATTERN='(console\.log|console\.debug\(|console\.error\("DEBUG|fmt\.Print(ln|f)?\("DEBUG|pdb\.set_trace|debugger|breakpoint\(\))'
 
 pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
@@ -82,13 +82,23 @@ else
 fi
 rm -f "$f"
 
-# Should BLOCK: fmt.Print
+# Should BLOCK: fmt.Println("DEBUG ...")
 f=$(mktemp /tmp/test-hooks-XXXXXX.go)
-echo 'fmt.Print("x")' > "$f"
+echo 'fmt.Println("DEBUG leftover")' > "$f"
 if rg -q "$NO_DEBUG_PATTERN" "$f"; then
-  pass "no-debug blocks fmt.Print"
+  pass "no-debug blocks fmt.Println(\"DEBUG ...\")"
 else
-  fail "no-debug should block fmt.Print"
+  fail "no-debug should block fmt.Println(\"DEBUG ...\")"
+fi
+rm -f "$f"
+
+# Should PASS: legitimate fmt.Println without DEBUG prefix
+f=$(mktemp /tmp/test-hooks-XXXXXX.go)
+echo 'fmt.Println("Usage: ddx bead create")' > "$f"
+if ! rg -q "$NO_DEBUG_PATTERN" "$f"; then
+  pass "no-debug passes legitimate fmt.Println"
+else
+  fail "no-debug should pass legitimate fmt.Println"
 fi
 rm -f "$f"
 
