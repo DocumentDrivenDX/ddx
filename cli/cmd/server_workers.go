@@ -37,7 +37,7 @@ func (f *CommandFactory) newServerWorkersListCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -101,7 +101,7 @@ func (f *CommandFactory) newServerWorkersShowCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -177,7 +177,7 @@ func (f *CommandFactory) newServerWorkersLogCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {

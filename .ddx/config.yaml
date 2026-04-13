@@ -2,31 +2,9 @@ version: "1.0"
 library:
     path: .ddx/plugins/ddx
     repository:
-        url: https://github.com/easel/ddx-library
+        url: https://github.com/DocumentDrivenDX/ddx-library
         branch: main
+bead: {}
 update_check:
     enabled: true
     frequency: 24h
-agent:
-    harness: claude
-    agent_runner:
-        provider: openai-compat
-        preset: agent
-        max_iterations: 30
-        models:
-            qwen-local:
-                model: qwen3.5-27b
-                provider: openai-compat
-                strategy: round-robin
-                endpoints:
-                    - http://vidar:1234/v1
-                    - http://grendel:1234/v1
-                    - http://bragi:1234/v1
-    routing:
-        profile_priority:
-            - cheap
-        default_harness: agent
-        model_overrides:
-            cheap: qwen/qwen3.6
-            fast: kimi/k2.5
-            smart: minimax/minimax-m2.7

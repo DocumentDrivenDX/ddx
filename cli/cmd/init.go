@@ -105,6 +105,11 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		}
 	}
 
+	// Guard against running inside an execute-bead context.
+	if os.Getenv("DDX_EXECUTE_BEAD_ID") != "" {
+		return nil, NewExitError(1,
+			"ddx init cannot be run inside an execute-bead context (DDX_EXECUTE_BEAD_ID is set)")
+	}
 	// Guard against running inside an execute-bead worktree. These are isolated
 	// execution environments under .ddx/.execute-bead-wt-*; running ddx init
 	// inside one would overwrite the project's .ddx/ config and beads.jsonl.
@@ -700,22 +705,6 @@ func validateGitRepository(cmd *cobra.Command) error {
 	return nil
 }
 
-// isExecuteBeadWorktree reports whether dir is inside an execute-bead worktree
-// (a path component matching .execute-bead-wt-*). These are linked git
-// worktrees created under .ddx/ and must not be re-initialized.
-func isExecuteBeadWorktree(dir string) bool {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return false
-	}
-	for _, part := range strings.Split(filepath.ToSlash(abs), "/") {
-		if strings.HasPrefix(part, ".execute-bead-wt-") {
-			return true
-		}
-	}
-	return false
-}
-
 // findParentDDxWorkspace walks up from dir looking for a .ddx/ directory in
 // any ancestor within the same git repository. Returns the ancestor path if
 // found, or "" if none exists. Only checks within the git repo boundary to
@@ -750,6 +739,22 @@ func findParentDDxWorkspace(dir string) string {
 		current = parent
 	}
 	return ""
+}
+
+// isExecuteBeadWorktree reports whether dir is inside an execute-bead worktree
+// (a path component matching .execute-bead-wt-*). These are linked git
+// worktrees created under .ddx/ and must not be re-initialized.
+func isExecuteBeadWorktree(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for _, part := range strings.Split(filepath.ToSlash(abs), "/") {
+		if strings.HasPrefix(part, ".execute-bead-wt-") {
+			return true
+		}
+	}
+	return false
 }
 
 // generateAgentsMD creates AGENTS.md with guidance for AI agents working in

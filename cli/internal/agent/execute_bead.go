@@ -429,6 +429,11 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
 
+	// Set DDX_EXECUTE_BEAD_ID so that commands run inside the worktree (e.g.
+	// ddx init) can detect the execute-bead context and refuse destructive ops.
+	_ = os.Setenv("DDX_EXECUTE_BEAD_ID", beadID)
+	defer func() { _ = os.Unsetenv("DDX_EXECUTE_BEAD_ID") }()
+
 	// Run the agent
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
