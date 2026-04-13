@@ -503,6 +503,28 @@ FEAT-010.
 commit-message provenance. Commit-message metadata must be projected from these
 files, never from ad hoc runtime state.
 
+**Embedded-harness runtime state path:**
+
+When execute-bead invokes the embedded `agent` harness, any session logs,
+telemetry, or other runtime state the harness would ordinarily write to its
+working directory is redirected into `embedded/` inside the execution bundle:
+
+```text
+.ddx/executions/<attempt-id>/embedded/
+```
+
+DDx owns the artifact location for managed runs: the embedded harness must
+not accumulate root-level runtime state (e.g. `./.agent-session.json`,
+loose `*.jsonl` session files) inside the execution worktree, because that
+would contaminate the tracked worktree snapshot and the commit provenance
+pipeline. The redirection is implemented by passing a per-run
+`SessionLogDir` override from execute-bead to the embedded runner.
+
+This is distinct from provider-native external stores (e.g. codex local
+state, `~/.claude/projects/`): those remain outside DDx ownership. The
+`embedded/` path applies only to the embedded DDx-agent harness where DDx
+owns the runtime loop.
+
 **Ignored runtime scratch (not committed, not tracked):**
 
 The following paths are disposable and must not contaminate the checkpoint

@@ -459,18 +459,26 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
 
-	// Run the agent
+	// Run the agent. Redirect any per-run session/telemetry output into a
+	// DDx-owned directory inside the execution bundle so the embedded ddx-agent
+	// harness does not accumulate runtime state at the worktree root.
+	embeddedStateDir := filepath.Join(artifacts.DirAbs, "embedded")
+	if err := os.MkdirAll(embeddedStateDir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating embedded state dir: %w", err)
+	}
+
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
 
 	agentResult, agentErr := runner.Run(RunOptions{
-		Harness:     opts.Harness,
-		Prompt:      "",
-		PromptFile:  artifacts.PromptAbs,
-		Model:       opts.Model,
-		Effort:      opts.Effort,
-		WorkDir:     wtPath,
-		Permissions: "unrestricted", // execute-bead runs in an isolated worktree; file writes must not require approval
+		Harness:       opts.Harness,
+		Prompt:        "",
+		PromptFile:    artifacts.PromptAbs,
+		Model:         opts.Model,
+		Effort:        opts.Effort,
+		WorkDir:       wtPath,
+		Permissions:   "unrestricted", // execute-bead runs in an isolated worktree; file writes must not require approval
+		SessionLogDir: embeddedStateDir,
 		Correlation: map[string]string{
 			"bead_id":    beadID,
 			"base_rev":   baseRev,

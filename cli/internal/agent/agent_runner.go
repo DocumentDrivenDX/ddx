@@ -102,8 +102,14 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		WithWorkDir(wd).
 		Build()
 
-	// Session logger
-	logDir := r.Config.SessionLogDir
+	// Session logger. Per-run override (opts.SessionLogDir) takes precedence over
+	// the runner-wide Config.SessionLogDir so managed execute-bead invocations can
+	// redirect embedded-agent runtime state into a DDx-owned execution bundle
+	// instead of the runner cwd.
+	logDir := opts.SessionLogDir
+	if logDir == "" {
+		logDir = r.Config.SessionLogDir
+	}
 	if logDir == "" {
 		logDir = DefaultLogDir
 	}

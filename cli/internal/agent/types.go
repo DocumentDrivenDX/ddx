@@ -52,16 +52,17 @@ type RouteFlags struct {
 
 // RunOptions holds options for a single agent invocation.
 type RunOptions struct {
-	Harness      string
-	Prompt       string // prompt text (or path to file)
-	PromptFile   string // explicit file path
-	PromptSource string
-	Correlation  map[string]string
-	Model        string
-	Effort       string
-	Timeout      time.Duration
-	WorkDir      string
-	Permissions  string // permission level override: safe, supervised, unrestricted
+	Harness       string
+	Prompt        string // prompt text (or path to file)
+	PromptFile    string // explicit file path
+	PromptSource  string
+	Correlation   map[string]string
+	Model         string
+	Effort        string
+	Timeout       time.Duration
+	WorkDir       string
+	Permissions   string // permission level override: safe, supervised, unrestricted
+	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
 }
 
 // QuorumOptions extends RunOptions for multi-agent consensus.
