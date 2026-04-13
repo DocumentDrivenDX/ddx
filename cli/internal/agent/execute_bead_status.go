@@ -6,6 +6,7 @@ const (
 	ExecuteBeadStatusPostRunCheckFailed         = "post_run_check_failed"
 	ExecuteBeadStatusLandConflict               = "land_conflict"
 	ExecuteBeadStatusNoChanges                  = "no_changes"
+	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
 )
 

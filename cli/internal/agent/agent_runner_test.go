@@ -616,6 +616,180 @@ default: openrouter
 	assert.Equal(t, 11, resolved.Config.MaxIterations)
 }
 
+// --- Config precedence regression tests ---
+//
+// These tests document the authoritative precedence chain for embedded-agent
+// config resolution:
+//
+//  1. CLI opts (model from --model flag) — highest priority
+//  2. Native `.agent/config.yaml` — authoritative embedded-agent config source
+//  3. `.ddx/config.yaml` agent_runner section — deprecated fallback mirror
+//     (bypassed entirely when native config is present)
+//  4. Built-in defaults — lowest priority
+//
+// Note: AGENT_* env vars (AGENT_MODEL, AGENT_PROVIDER, AGENT_BASE_URL,
+// AGENT_API_KEY, AGENT_PRESET) currently only apply in the .ddx fallback path.
+// They are not forwarded into the native config path. This is a known gap
+// tracked for resolution in the agent_runner mirror removal work.
+
+// TestConfigPrecedenceNativeWinsOverDdxAgentRunner verifies that native
+// .agent/config.yaml takes precedence over .ddx/config.yaml agent_runner when
+// both are present.
+func TestConfigPrecedenceNativeWinsOverDdxAgentRunner(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-native
+    model: native/model
+default: openrouter
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	// Wire up .ddx/config.yaml agent_runner section with a different model/URL.
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{
+			Provider:      "openai-compat",
+			BaseURL:       "http://ddx-fallback:1234/v1",
+			APIKey:        "sk-ddx",
+			Model:         "ddx/model",
+			Preset:        "agent",
+			MaxIterations: 50,
+		}
+	}
+
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	// Native config wins — should NOT see ddx-fallback or ddx/model.
+	assert.Equal(t, "https://openrouter.ai/api/v1", resolved.Config.BaseURL, "native config base_url must win over .ddx agent_runner")
+	assert.Equal(t, "native/model", resolved.Config.Model, "native config model must win over .ddx agent_runner")
+}
+
+// TestConfigPrecedenceCliModelOverridesNativeConfig verifies that --model
+// (CLI opts) overrides the model from native .agent/config.yaml.
+func TestConfigPrecedenceCliModelOverridesNativeConfig(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-test
+    model: native/model
+default: openrouter
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+
+	// CLI-supplied model should override the native config's model.
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "override/model")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "override/model", resolved.Config.Model, "CLI --model must override native config model")
+	// Provider endpoint from native config is preserved.
+	assert.Equal(t, "https://openrouter.ai/api/v1", resolved.Config.BaseURL)
+}
+
+// TestConfigPrecedenceEnvVarAppliesInDdxFallbackPath documents that AGENT_MODEL
+// env var is respected in the .ddx/config.yaml fallback path but NOT when native
+// .agent/config.yaml is present. This is a known gap — see the removal bead.
+func TestConfigPrecedenceEnvVarAppliesInDdxFallbackPath(t *testing.T) {
+	isolateNativeAgentHome(t)
+	t.Setenv("AGENT_MODEL", "env-override-model")
+	t.Setenv("AGENT_BASE_URL", "http://env-endpoint:1234/v1")
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{
+			Provider:      "openai-compat",
+			BaseURL:       "http://ddx-config:1234/v1",
+			Model:         "ddx/config-model",
+			Preset:        "agent",
+			MaxIterations: 30,
+		}
+	}
+
+	// No native .agent/config.yaml present — resolves via .ddx fallback path.
+	wd := t.TempDir()
+	cfg, err := r.resolveAgentConfig("")
+	require.NoError(t, err)
+	// Env vars must override .ddx/config.yaml values in the fallback path.
+	assert.Equal(t, "env-override-model", cfg.Model, "AGENT_MODEL env var must override .ddx agent_runner model")
+	assert.Equal(t, "http://env-endpoint:1234/v1", cfg.BaseURL, "AGENT_BASE_URL env var must override .ddx agent_runner base_url")
+	_ = wd
+}
+
+// TestConfigPrecedenceNativeConfigAbsentFallsToDdx verifies that when no native
+// .agent/config.yaml exists, the .ddx/config.yaml agent_runner section is used.
+func TestConfigPrecedenceNativeConfigAbsentFallsToDdx(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	// No .agent/config.yaml written — native config path returns nil.
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{
+			Provider:      "openai-compat",
+			BaseURL:       "http://ddx-only:1234/v1",
+			APIKey:        "sk-ddx",
+			Model:         "ddx-only/model",
+			Preset:        "agent",
+			MaxIterations: 25,
+		}
+	}
+
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "http://ddx-only:1234/v1", resolved.Config.BaseURL, "must use .ddx agent_runner when no native config")
+	assert.Equal(t, "ddx-only/model", resolved.Config.Model)
+	assert.Equal(t, 25, resolved.Config.MaxIterations)
+}
+
+// TestConfigPrecedenceOpenRouterModelSelectsOpenRouterProvider verifies that a
+// vendor/model string (e.g. "qwen/qwen3.6") routes to the openrouter provider
+// when present in native config, enabling OpenRouter setups without DDx config.
+func TestConfigPrecedenceOpenRouterModelSelectsOpenRouterProvider(t *testing.T) {
+	isolateNativeAgentHome(t)
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  local:
+    type: openai-compat
+    base_url: http://local:1234/v1
+    api_key: sk-local
+    model: local-model
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-openrouter
+    model: anthropic/claude-haiku-4-5
+default: local
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+
+	// Requesting a vendor/model format should route to openrouter provider.
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "qwen/qwen3.6")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "https://openrouter.ai/api/v1", resolved.Config.BaseURL, "vendor/model must route to openrouter provider in native config")
+	assert.Equal(t, "qwen/qwen3.6", resolved.Config.Model, "requested model must be applied as override")
+}
+
 // --- Helpers ---
 
 type notFoundError struct {

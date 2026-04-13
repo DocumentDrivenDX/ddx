@@ -517,6 +517,33 @@ func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail 
 	})
 }
 
+// IncrNoChangesCount increments the execute-loop no-changes counter for a bead
+// and returns the new count. Used by the execute-bead worker to detect when a
+// bead should be auto-closed after repeated no-change attempts.
+func (s *Store) IncrNoChangesCount(id string) (int, error) {
+	var newCount int
+	err := s.Update(id, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		var count int
+		if v, ok := b.Extra["execute-loop-no-changes-count"]; ok {
+			switch n := v.(type) {
+			case int:
+				count = n
+			case float64:
+				count = int(n)
+			case int64:
+				count = int(n)
+			}
+		}
+		count++
+		b.Extra["execute-loop-no-changes-count"] = count
+		newCount = count
+	})
+	return newCount, err
+}
+
 // AppendEvent adds an immutable execution evidence entry to a bead.
 func (s *Store) AppendEvent(id string, event BeadEvent) error {
 	if event.CreatedAt.IsZero() {
