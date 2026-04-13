@@ -5,7 +5,7 @@ ddx:
     - FEAT-006
   execution:
     kind: command
-    required: false
+    required: true
     command:
       - go
       - test
