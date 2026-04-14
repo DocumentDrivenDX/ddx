@@ -748,16 +748,30 @@ func findParentDDxWorkspace(dir string) string {
 	return ""
 }
 
-// isExecuteBeadWorktree reports whether dir is inside an execute-bead worktree
-// (a path component matching .execute-bead-wt-*). These are linked git
-// worktrees created under .ddx/ and must not be re-initialized.
+// isExecuteBeadWorktree reports whether dir is inside an execute-bead
+// worktree. Detects both the legacy in-repo location (.execute-bead-wt-*
+// under .ddx/) and the current out-of-repo location ($TMPDIR/ddx-exec-wt/
+// or DDX_EXEC_WT_DIR override). These are linked git worktrees and must
+// not be re-initialized.
 func isExecuteBeadWorktree(dir string) bool {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return false
 	}
-	for _, part := range strings.Split(filepath.ToSlash(abs), "/") {
+	slash := filepath.ToSlash(abs)
+	// Legacy: a path component starting with .execute-bead-wt-.
+	for _, part := range strings.Split(slash, "/") {
 		if strings.HasPrefix(part, ".execute-bead-wt-") {
+			return true
+		}
+	}
+	// Current: $TMPDIR/ddx-exec-wt/ (or DDX_EXEC_WT_DIR) container.
+	tmpContainer := filepath.ToSlash(filepath.Join(os.TempDir(), "ddx-exec-wt"))
+	if strings.HasPrefix(slash, tmpContainer+"/") {
+		return true
+	}
+	if override := os.Getenv("DDX_EXEC_WT_DIR"); override != "" {
+		if strings.HasPrefix(slash, filepath.ToSlash(override)+"/") {
 			return true
 		}
 	}

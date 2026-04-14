@@ -152,10 +152,31 @@ type executeBeadArtifactPaths struct {
 
 // Constants for worktree and artifact paths.
 const (
-	ExecuteBeadWtDir       = ".ddx"
+	ExecuteBeadWtDir       = ".ddx" // legacy; kept for compatibility
 	ExecuteBeadWtPrefix    = ".execute-bead-wt-"
 	ExecuteBeadArtifactDir = ".ddx/executions"
+
+	// ExecuteBeadTmpSubdir is the subdirectory under $TMPDIR in which
+	// execute-bead creates its isolated worktrees. Keeping them outside
+	// the project tree prevents child processes (tests, hooks) running
+	// inside the worktree from mutating the parent repository's
+	// .git/config via inherited GIT_DIR.
+	ExecuteBeadTmpSubdir = "ddx-exec-wt"
 )
+
+// executeBeadWorktreePath returns the absolute path where an execute-bead
+// isolated worktree for (beadID, attemptID) should live. It respects the
+// DDX_EXEC_WT_DIR environment override (useful for tests and CI), falling
+// back to $TMPDIR/ddx-exec-wt/. The worktree basename always uses the
+// ExecuteBeadWtPrefix so orphan recovery can match it via `git worktree
+// list` regardless of parent path.
+func executeBeadWorktreePath(beadID, attemptID string) string {
+	base := os.Getenv("DDX_EXEC_WT_DIR")
+	if base == "" {
+		base = filepath.Join(os.TempDir(), ExecuteBeadTmpSubdir)
+	}
+	return filepath.Join(base, ExecuteBeadWtPrefix+beadID+"-"+attemptID)
+}
 
 // RealGitOps implements GitOps via os/exec git commands.
 type RealGitOps struct{}
@@ -402,7 +423,11 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		opts.WorkerID = os.Getenv("DDX_WORKER_ID")
 	}
 
-	wtPath := filepath.Join(projectRoot, ExecuteBeadWtDir, ExecuteBeadWtPrefix+beadID+"-"+attemptID)
+	wtPath := executeBeadWorktreePath(beadID, attemptID)
+	// Ensure the parent directory exists so `git worktree add` can create the leaf.
+	if mkErr := os.MkdirAll(filepath.Dir(wtPath), 0o755); mkErr != nil {
+		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", mkErr)
+	}
 
 	// Commit beads.jsonl before spawning worktree, then resolve base so the
 	// worktree snapshot includes any bead metadata updates (e.g. spec-id).
@@ -731,9 +756,14 @@ func recoverOrphans(gitOps GitOps, workDir, beadID string) {
 	if err != nil {
 		return
 	}
-	prefix := filepath.Join(workDir, ExecuteBeadWtDir, ExecuteBeadWtPrefix+beadID+"-")
+	// Match by basename prefix (not full-path prefix) so orphans are
+	// discovered regardless of whether the worktree lives in the legacy
+	// .ddx/.execute-bead-wt-* location OR the new $TMPDIR/ddx-exec-wt/
+	// location. git worktree list returns absolute paths; we compare the
+	// leaf directory name.
+	basenamePrefix := ExecuteBeadWtPrefix + beadID + "-"
 	for _, p := range paths {
-		if strings.HasPrefix(p, prefix) {
+		if strings.HasPrefix(filepath.Base(p), basenamePrefix) {
 			_ = gitOps.WorktreeRemove(workDir, p)
 		}
 	}

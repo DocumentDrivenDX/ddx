@@ -593,7 +593,11 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	assert.Contains(t, string(manifestRaw), `"bead_id": "my-bead"`)
 	assert.Contains(t, string(manifestRaw), `"worker_id": "worker-test"`)
 	assert.Contains(t, string(manifestRaw), `"prompt": "synthesized"`)
-	assert.Contains(t, string(manifestRaw), `"worktree": ".ddx/`)
+	// Worktree path is now under $TMPDIR/ddx-exec-wt/ — moved from .ddx/
+	// so test runs inside the worktree don't corrupt the parent repo via
+	// GIT_DIR inheritance. The leaf name still starts with
+	// .execute-bead-wt- for orphan recovery via git worktree list.
+	assert.Contains(t, string(manifestRaw), agent.ExecuteBeadWtPrefix+"my-bead-")
 
 	resultRaw, err := os.ReadFile(resultPath)
 	require.NoError(t, err)
