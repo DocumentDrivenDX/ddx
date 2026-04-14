@@ -7,22 +7,48 @@ ddx:
 ---
 # ADR-002: Web Application Stack
 
-**Status:** Accepted
-**Date:** 2026-04-04
+**Status:** Accepted 2026-04-14
+**Date:** 2026-04-14
 **Context:** The DDx server web UI (FEAT-008) needs a TypeScript frontend embedded in the Go binary. This ADR standardizes the web stack.
 
 ## Decision
 
-Use **Bun** as the JavaScript/TypeScript runtime, **Vite** as the dev server and bundler, and **Playwright** for frontend E2E testing. Biome and Vitest are deferred until the frontend stack is ready for a formal migration.
+Use **SvelteKit** as the frontend framework with **gqlgen** for GraphQL backend, running on **Bun** as the JavaScript runtime. The stack provides end-to-end type safety through GraphQL code generation and first-class E2E testing.
 
-### 1. Runtime: Bun
+### 1. Backend: gqlgen
 
-Bun replaces Node.js for all frontend tooling: package management, script execution, test running, and TypeScript transpilation.
+**gqlgen** is the GraphQL server library for Go that enables schema-first API development.
+
+- **Schema-first design:** `schema.graphql` is the single source of truth for all API operations
+- **Code generation:** `go run github.com/99designs/gqlgen generate` produces strongly-typed Go resolvers
+- **Type-safe client:** Houdini generates TypeScript types from the schema for SvelteKit
+
+GraphQL endpoint: `POST /graphql` with GraphiQL IDE at `/graphiql`
+
+REST API remains unchanged for CLI/MCP compatibility; GraphQL is the preferred path forward.
+
+### 2. Frontend: SvelteKit
+
+**SvelteKit** is the official framework for building user interfaces with Svelte.
+
+- **Svelte 5 runes:** `$props()`, `$state()`, `derived` for state management
+- **adapter-static:** Builds to static files served by Go via `//go:embed`
+- **URL scheme:** `/nodes/:nodeId/projects/:projectId/*` — implemented fresh
+- **Houdini:** First-class GraphQL client for SvelteKit with typed `load()` functions
+
+Svelte 5 offers:
+- Compacted runtime
+- Compile-time optimizations (no virtual DOM)
+- Simpler mental model for state management
+
+### 3. Runtime: Bun
+
+**Bun** replaces Node.js for all frontend tooling:
 
 - **Package manager:** `bun install` with `bun.lock` (text-based, committed to git)
-- **Script runner:** `bun run build`, `bun run dev`, etc.
-- **TypeScript:** Bun strips types natively — no build step for running TS scripts
-- **Bun does NOT type-check** — `tsc --noEmit` runs separately in CI
+- **Script runner:** `bun run build`, `bun run dev`, `bun run test`, etc.
+- **Build tool:** Bun's built-in bundler for production builds
+- **Fast startup:** Significantly faster than Node.js/npm
 
 CI setup:
 ```yaml
@@ -30,41 +56,77 @@ CI setup:
   with: { bun-version: latest }
 ```
 
-### 2. Bundler and Dev Server: Vite
+### 4. GraphQL Client: Houdini
 
-Vite handles the development server (with HMR) and production builds. Run Vite under Bun for faster startup:
+**Houdini** is the SvelteKit-native GraphQL client:
 
-```bash
-bun --bun vite          # dev server
-bun --bun vite build    # production build to dist/
+- **Code generation:** TypeScript types generated from `schema.graphql`
+- **Typed load():** Automatic query generation for routes
+- **Subscriptions:** First-class support for `graphql-ws` subscriptions
+
+Example query in a route:
+```ts
+// src/routes/nodes/[nodeId]/+page.ts
+import { query } from './$houdini';
+
+export function load({ params }) {
+  return query(`query { node(id: "${params.nodeId}") { id name } }`);
+}
 ```
 
-Vite's dev server proxies API requests to the Go backend:
+### 5. UI Primitives: bits-ui + lucide-svelte
+
+- **bits-ui:** Headless, accessible UI primitives
+- **lucide-svelte:** Svelte-compatible icon set
+- **mode-watcher:** Dark/light mode toggle
+
+All components use Tailwind for styling.
+
+### 6. Styling: Tailwind CSS
+
+Tailwind provides utility-first styling consistent with the Hugo website:
+
+```js
+// tailwind.config.js
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./src/**/*.{html,js,svelte,ts}'],
+  theme: { extend: {} },
+  plugins: [],
+}
+```
+
+### 7. Testing
+
+| Layer | Tool | What It Tests |
+|-------|------|---------------|
+| E2E | **Playwright** | Full browser flows against running server |
+| Typecheck | **svelte-check** | Svelte component type safety |
+
+Run commands:
+```bash
+bun run test           # unit tests
+bun run test:e2e       # Playwright e2e tests
+bun run check          # svelte-check typechecking
+```
+
+Playwright configuration:
 ```ts
-// vite.config.ts
+// playwright.config.ts
+import { defineConfig } from '@playwright/test'
+
 export default defineConfig({
-  server: {
-    proxy: {
-      '/api': 'http://localhost:8080',
-      '/mcp': 'http://localhost:8080',
-    }
-  }
+  testDir: './e2e',
+  timeout: 30000,
+  use: { baseURL: 'http://127.0.0.1:7743', headless: true },
+  webServer: {
+    command: 'cd cli && go build -o ddx . && ./ddx server',
+    port: 7743,
+  },
 })
 ```
 
-Production output embeds into the Go binary via `embed.FS`.
-
-### 3. Framework: React
-
-React for the UI framework. It has the largest ecosystem, best tooling support, and most hiring pool. SolidJS is a viable alternative if bundle size becomes critical.
-
-Key libraries:
-- **TanStack Router** — type-safe file-based routing
-- **TanStack Query** — data fetching with caching and refetching
-- **Tailwind CSS** — consistent with the Hugo website
-- **D3.js** or **Cytoscape.js** — document dependency graph visualization
-
-### 4. TypeScript Configuration
+### 8. TypeScript Configuration
 
 ```json
 {
@@ -79,156 +141,70 @@ Key libraries:
     "noPropertyAccessFromIndexSignature": true,
     "declaration": false,
     "noEmit": true,
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts", "src/**/*.svelte"]
 }
 ```
 
 Key choices:
 - `"strict": true` — non-negotiable
-- `"noUncheckedIndexedAccess": true` — catches array/object access bugs
-- `"verbatimModuleSyntax": true` — enforces explicit `type` imports
-- `"moduleResolution": "bundler"` — aligns with Vite's resolution
+- `"verbatimModuleSyntax": true` — explicit type imports
+- `"moduleResolution": "bundler"` — aligns with bundler-based resolution
 
-### 5. Linting and Formatting: Deferred
+### 9. Linting and Formatting: Prettier + eslint-plugin-svelte
 
-Biome is the intended future formatter/linter for the frontend stack, but it is not adopted yet. Keep the current project conventions until a dedicated migration issue updates this ADR and lands the toolchain.
+- **Prettier:** Opinionated formatting with `prettier-plugin-svelte`
+- **ESLint:** Svelte-specific rules via `eslint-plugin-svelte`
 
-### 6. Dependency Management
+Configuration:
+```json
+{
+  "overrides": [
+    { "files": ["**/*.{svelte,ts}"], "extends": ["plugin:svelte/recommended"] }
+  ]
+}
+```
 
-- **`bun.lock`** committed to git (text-based since Bun 1.1.39+)
+### 10. Dependency Management
+
+- **`bun.lock`** committed to git
 - **`bun install --frozen-lockfile`** in CI for reproducible builds
-- **Security:** Use `socket.dev` or Snyk for dependency scanning (Bun's built-in audit is limited)
-- **`trustedDependencies`** in package.json to control install scripts
+- **Security:** Use socket.dev or Snyk for dependency scanning
 
-### 7. Testing
+### 11. Bundle Analysis and Performance
 
-**Current layer:**
+**Bundle size targets:**
+- Initial load < 200KB gzipped
+- LCP < 2.5s, INP < 200ms, CLS < 0.1
 
-| Layer | Tool | What It Tests |
-|-------|------|--------------|
-| E2E | **Playwright** | Full browser flows against running server |
+Use `bunx bundle-analyzer` for analysis when needed.
 
-Unit, integration, and component test coverage via Vitest and Testing Library is deferred until the frontend stack grows into a formal migration issue.
+### 12. Deployment
 
-**Playwright** for E2E in the current embedded frontend harness:
-```ts
-// playwright.config.ts
-import { defineConfig } from '@playwright/test'
-import { fileURLToPath } from 'url'
-import { dirname, resolve } from 'path'
+The frontend is built to static files and embedded into the Go binary:
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const cliRoot = resolve(__dirname, '..', '..', '..')
-
-export default defineConfig({
-  testDir: './e2e',
-  testIgnore: ['demo-recording.spec.ts'],
-  timeout: 30000,
-  use: {
-    baseURL: 'http://127.0.0.1:18080',
-    headless: true,
-  },
-  webServer: {
-    command: `${cliRoot}/build/ddx server --port 18080`,
-    cwd: cliRoot,
-    port: 18080,
-    reuseExistingServer: true,
-    timeout: 10000,
-  },
-})
+```go
+// cli/internal/server/embed.go
+//go:embed all:frontend/build
+var frontendFS embed.FS
 ```
 
-Before running the E2E suite, build the embedded server binary so `webServer`
-can launch `${cliRoot}/build/ddx server --port 18080`.
-
-Run tests:
-```bash
-bun run test:e2e        # E2E
-```
-
-### 8. Type Checking
-
-Bun strips types but doesn't check them. Run `tsc` separately:
-
-```bash
-bunx tsc --noEmit
-```
-
-**In CI**, type checking runs as a separate job — failures block merge:
-```yaml
-typecheck:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: oven-sh/setup-bun@v2
-    - run: bun install --frozen-lockfile
-    - run: bunx tsc --noEmit
-```
-
-### 9. Bundle Analysis and Performance
-
-**Bundle size enforcement** is deferred until the frontend adopts a dedicated budget tool.
-
-**Web Vitals** measurement:
-- `web-vitals` package reports LCP, INP, CLS to the server or analytics
-- Core Web Vitals thresholds: LCP < 2.5s, INP < 200ms, CLS < 0.1
-
-**Lighthouse CI** for automated performance audits is deferred until a tracked performance budget workflow lands.
-
-### 10. Observability and Error Tracking
-
-**Error tracking:** **Sentry** (`@sentry/react`) — catches unhandled errors, provides session replay, performance monitoring.
-
-**Frontend telemetry:** OpenTelemetry for browser:
-- `@opentelemetry/sdk-trace-web` — distributed tracing
-- `@opentelemetry/instrumentation-fetch` — auto-instrument API calls
-- Traces correlate with Go backend traces via `traceparent` header
-
-**Structured logging:** Console-based in development, JSON to server endpoint in production.
-
-For v1, Sentry alone is sufficient. Add OpenTelemetry when distributed tracing across Go server + frontend becomes necessary.
-
-### 11. Deployment
-
-The frontend is embedded into the Go binary via `embed.FS`. No separate deployment.
-
-**Build pipeline:**
+Build pipeline:
 ```makefile
 build:
-    cd cli/internal/server/frontend && bun install --frozen-lockfile && bun run build
-    cd cli/internal/server && go build -o ddx-server .
+	cd cli/internal/server/frontend && bun install --frozen-lockfile && bun run build
+	go build -o ddx ./cli
+
+docker:
+	# Build frontend, then embed in Go binary
 ```
 
-**Docker** (when needed):
-```dockerfile
-FROM oven/bun:1 AS frontend
-WORKDIR /app/cli/internal/server/frontend
-COPY cli/internal/server/frontend/package.json cli/internal/server/frontend/bun.lock ./
-RUN bun install --frozen-lockfile
-COPY cli/internal/server/frontend/ .
-RUN bun run build
+No Node.js runtime required in production — just the static assets.
 
-FROM golang:1.26 AS backend
-WORKDIR /app
-COPY . .
-COPY --from=frontend /app/cli/internal/server/frontend/dist cli/internal/server/frontend/dist
-RUN cd cli/internal/server && go build -o /ddx-server .
-
-FROM gcr.io/distroless/base
-COPY --from=backend /ddx-server /
-CMD ["/ddx-server"]
-```
-
-### 12. CI/CD Integration
-
-Biome is deferred for this frontend stack, so the current CI example covers
-type checking, the embedded-server Playwright path, and builds only.
+### 13. CI/CD Integration
 
 ```yaml
 name: Frontend CI
@@ -240,7 +216,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: bunx tsc --noEmit
+      - run: bun run check
 
   test:
     runs-on: ubuntu-latest
@@ -248,10 +224,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-      - run: cd cli && make build
+      - run: bun run test
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps
       - run: bun run test:e2e
 
@@ -266,17 +246,25 @@ jobs:
 
 ## Consequences
 
-- Single runtime (Bun) for all frontend tooling — simpler CI, faster installs
-- Linting and unit/component testing migrations remain deferred until a dedicated frontend tooling update
-- Playwright provides the current browser-flow verification surface
-- `tsc --noEmit` remains mandatory in CI despite Bun's type stripping
-- Frontend embeds into Go binary — single binary deployment maintained
-- Vite dev server with Bun gives fast DX; production builds embed cleanly
+- **End-to-end type safety:** GraphQL schema is source of truth; TypeScript types generated automatically
+- **Real-time capabilities:** `graphql-ws` subscriptions for live updates (bead lifecycle, worker progress)
+- **Relay cursor connections:** All list operations use modern pagination
+- **Single runtime:** Bun replaces Node.js for faster CI and development
+- **Static frontend:** SvelteKit builds to static assets; embedded in Go binary
 
 ## Alternatives Considered
 
-- **Node.js runtime:** Mature but slower. Bun's speed advantages compound in CI and development.
-- **ESLint + Prettier:** More configurable, but the current project conventions stay in place until the deferred migration is revisited.
-- **`bun test` for frontend:** Less mature DOM environment support than a future Vitest-based setup, so it remains out of scope for now.
-- **SolidJS:** Smaller bundle, faster runtime. Chose React for ecosystem breadth. Can revisit if bundle size is a problem.
-- **Svelte:** Excellent DX but smaller ecosystem. Not ideal when we need rich graph visualization libraries.
+The following alternatives were evaluated but rejected for this migration:
+
+- **Alternative bundlers:** Larger runtime footprint; optimized for development server rather than static site generation
+- **Data fetching libraries:** Unnecessary complexity since Houdini covers both routing and data fetching concerns
+- **Alternative package managers:** Bun's integrated tooling is faster and simpler for all frontend operations
+- **Service mocking:** Replaced by Houdini's codegen and real GraphQL endpoint; no mocking needed
+
+## Migration Path
+
+See `docs/helix/02-design/solution-designs/SD-022-gql-svelte-migration.md` for the full four-stage migration plan:
+1. Schema + spec lockdown
+2. GraphQL backend (gqlgen resolvers)
+3. SvelteKit scaffold
+4. Pages + tests + release
