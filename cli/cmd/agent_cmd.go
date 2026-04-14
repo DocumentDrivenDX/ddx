@@ -1408,6 +1408,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		}),
 	}
 
+	cliLandingOps := agent.RealLandingGitOps{}
 	result, err := worker.Run(cmd.Context(), agent.ExecuteBeadLoopOptions{
 		Assignee:     resolveClaimAssignee(),
 		Once:         once,
@@ -1419,6 +1420,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		Harness:      harness,
 		Model:        model,
 		SessionID:    loopSessionID,
+		PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps),
 	})
 	tailCancel() // stop session log tailer
 	if err != nil {
@@ -1553,6 +1555,27 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	fmt.Fprintf(cmd.OutOrStdout(), "Monitor progress: ddx server workers show %s\n", workerRecord.ID)
 	fmt.Fprintf(cmd.OutOrStdout(), "View logs:        ddx server workers log %s\n", workerRecord.ID)
 	return nil
+}
+
+// buildCLIPreClaimHook returns a PreClaimHook for the --local execute-loop
+// that fetches origin and verifies ancestry before each bead claim. Fetch
+// failures are logged but do not block the worker (air-gap friendly).
+func buildCLIPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		branch, err := gitOps.CurrentBranch(projectRoot)
+		if err != nil {
+			return nil // can't determine branch — skip
+		}
+		res, err := gitOps.FetchOriginAncestryCheck(projectRoot, branch)
+		if err != nil {
+			return nil // fetch failure is non-fatal
+		}
+		if res.Action == "diverged" {
+			return fmt.Errorf("local branch %s has diverged from origin (local=%s origin=%s); reconcile manually before claiming",
+				branch, res.LocalSHA, res.OriginSHA)
+		}
+		return nil
+	}
 }
 
 // resolveServerURL determines the base URL for the running DDx server.

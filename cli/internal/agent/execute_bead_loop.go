@@ -119,6 +119,14 @@ type ExecuteBeadLoopOptions struct {
 	// caller (WorkerManager.runWorker) closes it after Run returns.
 	ProgressCh chan<- ProgressEvent
 
+	// PreClaimHook, when non-nil, is called before Store.Claim for each
+	// candidate bead. If it returns an error the bead is not claimed and the
+	// loop continues to the next iteration (ctx is NOT cancelled). A nil hook
+	// disables the check. Server and CLI paths wire a real implementation
+	// backed by LandingGitOps.FetchOriginAncestryCheck; tests may inject nil
+	// or a stub that always returns nil.
+	PreClaimHook func(ctx context.Context) error
+
 	// Worker/session metadata included in loop.start events so log
 	// aggregators can correlate structured output with the executing
 	// harness/worker. None of these are required.
@@ -264,6 +272,23 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		}
 
 		attempted[candidate.ID] = struct{}{}
+
+		// Pre-claim hook: fetch origin + verify ancestry before claiming.
+		// On error the bead is skipped for this iteration; the loop
+		// continues (ctx is not cancelled).
+		if opts.PreClaimHook != nil {
+			if hookErr := opts.PreClaimHook(ctx); hookErr != nil {
+				if opts.Log != nil {
+					_, _ = fmt.Fprintf(opts.Log, "pre-claim hook: %v (skipping %s)\n", hookErr, candidate.ID)
+				}
+				emit("preclaim.skipped", map[string]any{
+					"bead_id": candidate.ID,
+					"reason":  hookErr.Error(),
+				})
+				continue
+			}
+		}
+
 		if err := w.Store.Claim(candidate.ID, assignee); err != nil {
 			continue
 		}

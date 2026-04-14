@@ -104,6 +104,24 @@ type LandResult struct {
 
 	// PushError captures the underlying push error when PushFailed is true.
 	PushError string
+
+	// RebaseCommitCount is the number of commits that were replayed during a
+	// rebase land. Zero on the fast-forward path. Set on both "landed" (after a
+	// clean rebase) and "preserved" (after a conflict).
+	RebaseCommitCount int
+}
+
+// PreClaimResult is the outcome of a FetchOriginAncestryCheck call.
+type PreClaimResult struct {
+	// Action is one of:
+	//   "unchanged"     — local tip == origin tip, no action taken
+	//   "fast-forwarded"— local was behind origin; local branch was advanced
+	//   "no-origin"     — no origin remote; check skipped
+	//   "local-ahead"   — local is ahead of origin; no action needed
+	//   "diverged"      — neither is ancestor of the other; claim should be aborted
+	Action    string
+	LocalSHA  string
+	OriginSHA string
 }
 
 // LandingGitOps abstracts the git operations Land() needs. RealLandingGitOps
@@ -161,6 +179,19 @@ type LandingGitOps interface {
 	// fast-forward semantics. Returns an error when the push would not be
 	// fast-forward or when the network call fails.
 	PushFFOnly(dir, remote, localRef, targetBranch string) error
+
+	// FetchOriginAncestryCheck fetches origin/targetBranch and compares it
+	// to the local branch tip. When origin is ahead the local branch is
+	// fast-forwarded via update-ref + read-tree. When the two tips have
+	// diverged (neither is ancestor of the other) the returned result has
+	// Action == "diverged". When no origin remote exists the result has
+	// Action == "no-origin". The caller decides whether to abort a claim.
+	FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error)
+
+	// CountCommits returns the number of commits reachable from tip but not
+	// from base (i.e. git rev-list --count base..tip). Used to record
+	// rebase depth in land metrics. Returns 0 on error.
+	CountCommits(dir, base, tip string) int
 }
 
 // RealLandingGitOps implements LandingGitOps via os/exec git commands.
@@ -285,6 +316,77 @@ func (RealLandingGitOps) PushFFOnly(dir, remote, localRef, targetBranch string) 
 	return nil
 }
 
+func (RealLandingGitOps) CountCommits(dir, base, tip string) int {
+	out, err := osexec.Command("git", "-C", dir, "rev-list", "--count", base+".."+tip).CombinedOutput()
+	if err != nil {
+		return 0
+	}
+	s := strings.TrimSpace(string(out))
+	n := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		}
+	}
+	return n
+}
+
+// FetchOriginAncestryCheck implements LandingGitOps.FetchOriginAncestryCheck.
+func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
+	// Step 1: check for origin remote.
+	out, err := osexec.Command("git", "-C", dir, "remote", "get-url", "origin").CombinedOutput()
+	if err != nil {
+		// No origin remote — single-machine case; skip check.
+		return PreClaimResult{Action: "no-origin"}, nil
+	}
+	_ = out // remote URL not needed
+
+	// Step 2: fetch origin/targetBranch (best-effort; failure is non-fatal but surfaced).
+	if fetchOut, fetchErr := osexec.Command("git", "-C", dir, "fetch", "origin", targetBranch).CombinedOutput(); fetchErr != nil {
+		return PreClaimResult{}, fmt.Errorf("git fetch origin %s: %s: %w", targetBranch, strings.TrimSpace(string(fetchOut)), fetchErr)
+	}
+
+	// Step 3: resolve local tip.
+	localOut, localErr := osexec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/heads/"+targetBranch).CombinedOutput()
+	if localErr != nil {
+		return PreClaimResult{}, fmt.Errorf("resolving local %s: %s: %w", targetBranch, strings.TrimSpace(string(localOut)), localErr)
+	}
+	localSHA := strings.TrimSpace(string(localOut))
+
+	// Step 4: resolve origin tip.
+	originOut, originErr := osexec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/remotes/origin/"+targetBranch).CombinedOutput()
+	if originErr != nil {
+		return PreClaimResult{}, fmt.Errorf("resolving origin/%s: %s: %w", targetBranch, strings.TrimSpace(string(originOut)), originErr)
+	}
+	originSHA := strings.TrimSpace(string(originOut))
+
+	// Step 5: compare.
+	if localSHA == originSHA {
+		return PreClaimResult{Action: "unchanged", LocalSHA: localSHA, OriginSHA: originSHA}, nil
+	}
+
+	// Is local an ancestor of origin? (origin is ahead)
+	localAncestorErr := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", localSHA, originSHA).Run()
+	if localAncestorErr == nil {
+		// Origin is ahead: fast-forward local branch via update-ref + read-tree.
+		targetRef := "refs/heads/" + targetBranch
+		if upErr := osexec.Command("git", "-C", dir, "update-ref", targetRef, originSHA, localSHA).Run(); upErr != nil {
+			return PreClaimResult{}, fmt.Errorf("fast-forwarding %s to %s: %w", targetRef, originSHA, upErr)
+		}
+		_ = osexec.Command("git", "-C", dir, "read-tree", "HEAD").Run()
+		return PreClaimResult{Action: "fast-forwarded", LocalSHA: localSHA, OriginSHA: originSHA}, nil
+	}
+
+	// Is origin an ancestor of local? (local is ahead)
+	originAncestorErr := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", originSHA, localSHA).Run()
+	if originAncestorErr == nil {
+		return PreClaimResult{Action: "local-ahead", LocalSHA: localSHA, OriginSHA: originSHA}, nil
+	}
+
+	// Neither is ancestor of the other: diverged.
+	return PreClaimResult{Action: "diverged", LocalSHA: localSHA, OriginSHA: originSHA}, nil
+}
+
 // landIterationRef returns the documented hidden ref for a land-time preserve.
 // Format: refs/ddx/iterations/<bead-id>/<attempt-id>-<short-tip>. The short-tip
 // captures the current target tip at the time of the conflict so subsequent
@@ -387,6 +489,8 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	}
 	defer func() { _ = gitOps.RemoveWorktree(wd, tempWT) }()
 
+	rebaseCount := gitOps.CountCommits(wd, req.BaseRev, req.ResultRev)
+
 	if err := gitOps.RebaseOnto(tempWT, currentTip, req.BaseRev); err != nil {
 		// Rebase conflict: preserve the original ResultRev and return.
 		preserveRef := landIterationRef(req.BeadID, req.AttemptID, currentTip)
@@ -394,9 +498,10 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 			return nil, fmt.Errorf("preserving %s after rebase conflict: %w", preserveRef, upErr)
 		}
 		return &LandResult{
-			Status:      "preserved",
-			PreserveRef: preserveRef,
-			Reason:      "rebase conflict",
+			Status:            "preserved",
+			PreserveRef:       preserveRef,
+			Reason:            "rebase conflict",
+			RebaseCommitCount: rebaseCount,
 		}, nil
 	}
 
@@ -413,9 +518,10 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	_ = gitOps.SyncIndexToHead(wd)
 
 	result := &LandResult{
-		Status:  "landed",
-		NewTip:  newTip,
-		Rebased: true,
+		Status:            "landed",
+		NewTip:            newTip,
+		Rebased:           true,
+		RebaseCommitCount: rebaseCount,
 	}
 	landPush(wd, targetBranch, newTip, hasOrigin, gitOps, result)
 	return result, nil

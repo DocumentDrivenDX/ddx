@@ -94,6 +94,7 @@ type WorkerRecord struct {
 	CurrentAttempt *CurrentAttemptInfo    `json:"current_attempt,omitempty"`
 	RecentPhases   []PhaseTransition      `json:"recent_phases,omitempty"`
 	LastAttempt    *LastAttemptInfo       `json:"last_attempt,omitempty"`
+	LandSummary    *CoordinatorMetrics    `json:"land_summary,omitempty"`
 }
 
 type WorkerExecutionResult struct {
@@ -318,6 +319,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		}
 	}
 
+	landingOps := agent.RealLandingGitOps{}
 	loopResult, err := worker.Run(ctx, agent.ExecuteBeadLoopOptions{
 		Assignee:     "ddx",
 		Once:         spec.Once,
@@ -329,6 +331,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Harness:      spec.Harness,
 		Model:        spec.Model,
 		ProgressCh:   progressCh,
+		PreClaimHook: buildPreClaimHook(m.projectRoot, landingOps),
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
@@ -708,6 +711,30 @@ func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 	}
 
 	return agent.FormatSessionLogLines(lines[start:])
+}
+
+// buildPreClaimHook returns a PreClaimHook function that fetches origin and
+// verifies ancestry before each bead claim. It resolves the target branch at
+// call time via LandingGitOps.CurrentBranch so detached-HEAD and non-main
+// trunks are handled correctly.
+func buildPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		branch, err := gitOps.CurrentBranch(projectRoot)
+		if err != nil {
+			// Can't determine branch — skip rather than block.
+			return nil
+		}
+		res, err := gitOps.FetchOriginAncestryCheck(projectRoot, branch)
+		if err != nil {
+			// Fetch failure is non-fatal (air-gap friendly); skip the check.
+			return nil
+		}
+		if res.Action == "diverged" {
+			return fmt.Errorf("local branch %s has diverged from origin (local=%s origin=%s); reconcile manually before claiming",
+				branch, res.LocalSHA, res.OriginSHA)
+		}
+		return nil
+	}
 }
 
 func (m *WorkerManager) writeRecord(dir string, record WorkerRecord) error {
