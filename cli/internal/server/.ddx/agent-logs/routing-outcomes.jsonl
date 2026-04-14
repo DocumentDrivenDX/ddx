@@ -22,3 +22,4 @@
 {"harness":"claude","surface":"claude","canonical_target":"claude-sonnet-4-6","observed_at":"2026-04-13T02:08:30.978084467Z","success":true,"latency_ms":2758,"input_tokens":3,"output_tokens":12,"cost_usd":0.02241315}
 {"harness":"claude","surface":"claude","canonical_target":"claude-sonnet-4-6","observed_at":"2026-04-13T02:10:33.526847962Z","success":true,"latency_ms":1810,"input_tokens":3,"output_tokens":12,"cost_usd":0.02240565}
 {"harness":"claude","surface":"claude","canonical_target":"claude-sonnet-4-6","observed_at":"2026-04-13T13:40:30.696689465Z","success":true,"latency_ms":3084,"input_tokens":3,"output_tokens":12,"cost_usd":0.02251815}
+{"harness":"claude","surface":"claude","canonical_target":"claude-sonnet-4-6","observed_at":"2026-04-14T10:04:32.671616445Z","success":true,"latency_ms":2595,"input_tokens":3,"output_tokens":13,"cost_usd":0.041039,"native_session_id":"7de82b73-fdfe-4784-80a8-d38e16c165ca"}

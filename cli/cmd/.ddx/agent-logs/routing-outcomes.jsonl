@@ -1,3 +1,3 @@
-{"harness":"agent","surface":"embedded-openai","canonical_target":"qwen3.5-27b","observed_at":"2026-04-14T08:37:02.856769945Z","success":false,"latency_ms":6014,"native_session_id":"s-1776155816842453927"}
-{"harness":"agent","surface":"embedded-openai","canonical_target":"qwen3.5-27b","observed_at":"2026-04-14T08:37:09.389779733Z","success":false,"latency_ms":6013,"native_session_id":"s-1776155823375741048"}
-{"harness":"agent","surface":"embedded-openai","canonical_target":"agent","observed_at":"2026-04-14T08:37:24.430891787Z","success":false,"latency_ms":15017,"native_session_id":"s-1776155829413119888"}
+{"harness":"agent","surface":"embedded-openai","canonical_target":"qwen3.5-27b","observed_at":"2026-04-14T10:06:46.362730016Z","success":false,"latency_ms":6007,"native_session_id":"s-1776161200355185899"}
+{"harness":"agent","surface":"embedded-openai","canonical_target":"qwen3.5-27b","observed_at":"2026-04-14T10:06:53.455834063Z","success":false,"latency_ms":6021,"native_session_id":"s-1776161207434738755"}
+{"harness":"agent","surface":"embedded-openai","canonical_target":"agent","observed_at":"2026-04-14T10:07:08.524528794Z","success":false,"latency_ms":15030,"native_session_id":"s-1776161213493567976"}

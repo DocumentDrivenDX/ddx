@@ -83,7 +83,7 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 	if err != nil || cfg.Agent == nil {
 		return agent.NewRunner(agent.Config{})
 	}
-	r := agent.NewRunner(agent.Config{
+	return agent.NewRunner(agent.Config{
 		Harness:         cfg.Agent.Harness,
 		Model:           cfg.Agent.Model,
 		Models:          cfg.Agent.Models,
@@ -92,38 +92,6 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 		SessionLogDir:   cfg.Agent.SessionLogDir,
 		Permissions:     cfg.Agent.Permissions,
 	})
-
-	// Wire agent config loader — reads from .ddx/config.yaml on each invocation.
-	r.AgentConfigLoader = func() *agent.AgentYAMLConfig {
-		c, err := config.LoadWithWorkingDir(f.WorkingDir)
-		if err != nil || c.Agent == nil || c.Agent.AgentRunner == nil {
-			return nil
-		}
-		fc := c.Agent.AgentRunner
-		yaml := &agent.AgentYAMLConfig{
-			Provider:      fc.Provider,
-			BaseURL:       fc.BaseURL,
-			APIKey:        fc.APIKey,
-			Model:         fc.Model,
-			Preset:        fc.Preset,
-			MaxIterations: fc.MaxIterations,
-		}
-		if fc.Models != nil {
-			yaml.Models = make(map[string]*agent.LLMPresetYAML, len(fc.Models))
-			for name, p := range fc.Models {
-				yaml.Models[name] = &agent.LLMPresetYAML{
-					Model:     p.Model,
-					Provider:  p.Provider,
-					Endpoints: p.Endpoints,
-					APIKey:    p.APIKey,
-					Strategy:  p.Strategy,
-				}
-			}
-		}
-		return yaml
-	}
-
-	return r
 }
 
 func (f *CommandFactory) newAgentRunCommand() *cobra.Command {

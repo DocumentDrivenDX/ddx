@@ -248,7 +248,7 @@
         },
         "agent_runner": {
           "type": "object",
-          "description": "Configuration for the DDx agent harness",
+          "description": "DEPRECATED: Use native .agent/config.yaml instead. This section is no longer applied by DDx; existing configurations are silently ignored.",
           "properties": {
             "provider": {
               "type": "string",

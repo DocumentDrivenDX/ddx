@@ -45,27 +45,30 @@ type AgentConfig struct {
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
 	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
-	AgentRunner     *AgentRunnerConfig  `yaml:"agent_runner,omitempty" json:"agent_runner,omitempty"`
 }
 
-// AgentRunnerConfig configures the embedded DDx Agent harness.
+// AgentRunnerConfig was the embedded DDx Agent harness config block.
+// Deprecated: Use native .agent/config.yaml instead. This type is retained for
+// schema compatibility so existing configs with agent_runner blocks parse without error,
+// but DDx no longer reads or applies these values.
 type AgentRunnerConfig struct {
-	Provider      string                      `yaml:"provider,omitempty" json:"provider,omitempty"`             // "openai-compat" or "anthropic"
-	BaseURL       string                      `yaml:"base_url,omitempty" json:"base_url,omitempty"`             // provider endpoint
-	APIKey        string                      `yaml:"api_key,omitempty" json:"api_key,omitempty"`               // API key
-	Model         string                      `yaml:"model,omitempty" json:"model,omitempty"`                   // default model
-	Preset        string                      `yaml:"preset,omitempty" json:"preset,omitempty"`                 // prompt preset (agent/benchmark/minimal/claude/codex/cursor)
-	MaxIterations int                         `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // max tool-call rounds
-	Models        map[string]*LLMPresetConfig `yaml:"models,omitempty" json:"models,omitempty"`                 // named LLM presets
+	Provider      string                      `yaml:"provider,omitempty" json:"provider,omitempty"`
+	BaseURL       string                      `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	APIKey        string                      `yaml:"api_key,omitempty" json:"api_key,omitempty"`
+	Model         string                      `yaml:"model,omitempty" json:"model,omitempty"`
+	Preset        string                      `yaml:"preset,omitempty" json:"preset,omitempty"`
+	MaxIterations int                         `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"`
+	Models        map[string]*LLMPresetConfig `yaml:"models,omitempty" json:"models,omitempty"`
 }
 
 // LLMPresetConfig defines a named LLM configuration with optional multi-endpoint support.
+// Deprecated: kept for schema compatibility; no longer read by DDx code.
 type LLMPresetConfig struct {
-	Model     string   `yaml:"model" json:"model"`                             // model name passed to the provider
-	Provider  string   `yaml:"provider,omitempty" json:"provider,omitempty"`   // override agent_runner.provider (default: openai-compat)
-	Endpoints []string `yaml:"endpoints,omitempty" json:"endpoints,omitempty"` // one or more base URLs; single entry = no balancing
-	APIKey    string   `yaml:"api_key,omitempty" json:"api_key,omitempty"`     // override agent_runner.api_key
-	Strategy  string   `yaml:"strategy,omitempty" json:"strategy,omitempty"`   // endpoint selection: round-robin (default) | first-available
+	Model     string   `yaml:"model" json:"model"`
+	Provider  string   `yaml:"provider,omitempty" json:"provider,omitempty"`
+	Endpoints []string `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	APIKey    string   `yaml:"api_key,omitempty" json:"api_key,omitempty"`
+	Strategy  string   `yaml:"strategy,omitempty" json:"strategy,omitempty"`
 }
 
 // VirtualConfig configures the virtual agent harness.

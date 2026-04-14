@@ -24,38 +24,14 @@ func containsString(slice []string, s string) bool {
 	return false
 }
 
-// AgentConfigFunc returns agent runner config from .ddx/config.yaml. Nil return = no config.
-type AgentConfigFunc func() *AgentYAMLConfig
-
-// AgentYAMLConfig mirrors config.AgentRunnerConfig without importing the config package.
-type AgentYAMLConfig struct {
-	Provider      string
-	BaseURL       string
-	APIKey        string
-	Model         string
-	Preset        string
-	MaxIterations int
-	Models        map[string]*LLMPresetYAML // named LLM presets
-}
-
-// LLMPresetYAML mirrors config.LLMPresetConfig without importing the config package.
-type LLMPresetYAML struct {
-	Model     string
-	Provider  string
-	Endpoints []string
-	APIKey    string
-	Strategy  string
-}
-
 // Runner executes agent invocations.
 type Runner struct {
-	Registry          *Registry
-	Config            Config
-	Catalog           *Catalog        // model catalog for routing; defaults to BuiltinCatalog
-	Executor          Executor        // injected; defaults to OSExecutor
-	LookPath          LookPathFunc    // injected; defaults to exec.LookPath
-	AgentProvider     interface{}     // injected agentlib.Provider for testing; nil = resolve from config
-	AgentConfigLoader AgentConfigFunc // injected; loads agent runner config from .ddx/config.yaml
+	Registry      *Registry
+	Config        Config
+	Catalog       *Catalog     // model catalog for routing; defaults to BuiltinCatalog
+	Executor      Executor     // injected; defaults to OSExecutor
+	LookPath      LookPathFunc // injected; defaults to exec.LookPath
+	AgentProvider interface{}  // injected agentlib.Provider for testing; nil = resolve from config
 }
 
 // NewRunner creates a runner with defaults.
@@ -234,14 +210,6 @@ func (r *Runner) ValidateForExecuteLoop(harnessName, model string) error {
 		if dp, deprecated := cat.CheckDeprecatedPin(model, h.Surface); deprecated {
 			fmt.Fprintf(os.Stderr, "execute-loop: model %q is deprecated for harness %q; use %q instead\n",
 				model, name, dp.ReplacedBy)
-		}
-
-		// Reject model if it is a named preset in agent_runner.models and the
-		// harness is not "agent". Preset names like "vidar" or "bragi" are
-		// routing keys for the embedded agent, not model IDs for external CLIs.
-		if name != "agent" && r.legacyPresetExists(model) {
-			return fmt.Errorf("model %q is a local agent preset; "+
-				"use --harness agent or remove --harness to route automatically", model)
 		}
 	}
 	return nil

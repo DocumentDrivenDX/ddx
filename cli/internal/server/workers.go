@@ -381,40 +381,7 @@ func (m *WorkerManager) buildAgentRunner(projectRoot string) *agent.Runner {
 		agentCfg.Permissions = cfg.Agent.Permissions
 	}
 
-	r := agent.NewRunner(agentCfg)
-
-	// Wire agent config loader — reads from .ddx/config.yaml on each invocation.
-	// This ensures server workers use the same configuration as CLI commands.
-	r.AgentConfigLoader = func() *agent.AgentYAMLConfig {
-		c, err := config.LoadWithWorkingDir(projectRoot)
-		if err != nil || c.Agent == nil || c.Agent.AgentRunner == nil {
-			return nil
-		}
-		fc := c.Agent.AgentRunner
-		yaml := &agent.AgentYAMLConfig{
-			Provider:      fc.Provider,
-			BaseURL:       fc.BaseURL,
-			APIKey:        fc.APIKey,
-			Model:         fc.Model,
-			Preset:        fc.Preset,
-			MaxIterations: fc.MaxIterations,
-		}
-		if fc.Models != nil {
-			yaml.Models = make(map[string]*agent.LLMPresetYAML, len(fc.Models))
-			for name, p := range fc.Models {
-				yaml.Models[name] = &agent.LLMPresetYAML{
-					Model:     p.Model,
-					Provider:  p.Provider,
-					Endpoints: p.Endpoints,
-					APIKey:    p.APIKey,
-					Strategy:  p.Strategy,
-				}
-			}
-		}
-		return yaml
-	}
-
-	return r
+	return agent.NewRunner(agentCfg)
 }
 
 func (m *WorkerManager) List() ([]WorkerRecord, error) {

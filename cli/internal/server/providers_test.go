@@ -14,11 +14,7 @@ import (
 // noProbeRunnerFactory returns a runner with no lmstudio endpoints configured
 // to avoid live HTTP probes in tests.
 func noProbeRunnerFactory(projectRoot string) *agent.Runner {
-	r := agent.NewRunner(agent.Config{SessionLogDir: projectRoot})
-	r.AgentConfigLoader = func() *agent.AgentYAMLConfig {
-		return &agent.AgentYAMLConfig{} // no lmstudio endpoints → fast signal load
-	}
-	return r
+	return agent.NewRunner(agent.Config{SessionLogDir: projectRoot})
 }
 
 // TestListProviders verifies GET /api/providers returns a JSON array containing
