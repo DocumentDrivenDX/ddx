@@ -455,8 +455,9 @@ func (s *Server) handleGetNode(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (s *Server) handleListProjects(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.state.GetProjects())
+func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
+	includeUnreachable := r.URL.Query().Get("include_unreachable") == "true"
+	writeJSON(w, http.StatusOK, s.state.GetProjects(includeUnreachable))
 }
 
 func (s *Server) handleRegisterProject(w http.ResponseWriter, r *http.Request) {

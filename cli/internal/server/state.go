@@ -21,12 +21,14 @@ type NodeState struct {
 
 // ProjectEntry represents a ddx project registered with this server.
 type ProjectEntry struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Path         string    `json:"path"`
-	GitRemote    string    `json:"git_remote,omitempty"`
-	RegisteredAt time.Time `json:"registered_at"`
-	LastSeen     time.Time `json:"last_seen"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Path         string     `json:"path"`
+	GitRemote    string     `json:"git_remote,omitempty"`
+	RegisteredAt time.Time  `json:"registered_at"`
+	LastSeen     time.Time  `json:"last_seen"`
+	Unreachable  bool       `json:"unreachable,omitempty"`
+	TombstonedAt *time.Time `json:"tombstoned_at,omitempty"`
 }
 
 // ServerState is the full persistent state for a ddx-server node.
@@ -67,7 +69,81 @@ func loadServerState(dir, nodeName string) *ServerState {
 	// Preserve projects and node ID from prior run; update runtime fields.
 	s.Node.ID = persisted.Node.ID
 	s.Projects = persisted.Projects
+
+	// Migration: canonicalize paths, resolve linked worktrees, dedupe, sweep.
+	s.migrate()
 	return s
+}
+
+// migrate canonicalises all stored project paths, resolves linked-worktree
+// paths to the primary worktree, deduplicates entries with the same canonical
+// path, and marks entries whose paths no longer exist as unreachable. Entries
+// that are unreachable and whose last_seen is older than 24 h are removed.
+//
+// This runs once on startup so a state file that accumulated thousands of
+// phantom worktree paths is cleaned up automatically.
+func (s *ServerState) migrate() {
+	now := time.Now().UTC()
+	cutoff := now.Add(-24 * time.Hour)
+
+	// Pass 1: canonicalize paths (symlinks + abs). We do NOT run git commands
+	// here — linked-worktree resolution happens at RegisterProject time.
+	// Keeping migration git-free makes it safe to run against state files that
+	// contain thousands of temp-dir paths, many of which may exist on disk.
+	for i := range s.Projects {
+		canonical := canonicalizePath(s.Projects[i].Path)
+		if canonical != "" {
+			s.Projects[i].Path = canonical
+			s.Projects[i].Name = filepath.Base(canonical)
+			s.Projects[i].ID = projectID(canonical)
+		}
+	}
+
+	// Pass 2: dedupe by canonical path — keep earliest RegisteredAt, latest LastSeen.
+	seen := make(map[string]int) // path → index in deduped
+	projects := make([]ProjectEntry, 0, len(s.Projects))
+	for _, p := range s.Projects {
+		if idx, ok := seen[p.Path]; ok {
+			// Merge: keep earliest RegisteredAt, latest LastSeen.
+			if p.RegisteredAt.Before(projects[idx].RegisteredAt) {
+				projects[idx].RegisteredAt = p.RegisteredAt
+			}
+			if p.LastSeen.After(projects[idx].LastSeen) {
+				projects[idx].LastSeen = p.LastSeen
+			}
+			// Keep non-empty git remote.
+			if p.GitRemote != "" && projects[idx].GitRemote == "" {
+				projects[idx].GitRemote = p.GitRemote
+			}
+		} else {
+			seen[p.Path] = len(projects)
+			projects = append(projects, p)
+		}
+	}
+
+	// Pass 3: reachability sweep — stat each path.
+	kept := make([]ProjectEntry, 0, len(projects))
+	for _, p := range projects {
+		_, statErr := os.Stat(p.Path)
+		if statErr == nil {
+			// Path exists — clear any stale tombstone.
+			p.Unreachable = false
+			p.TombstonedAt = nil
+			kept = append(kept, p)
+			continue
+		}
+		// Path missing. Drop immediately if last seen > 24 h ago (old phantom).
+		if p.LastSeen.Before(cutoff) {
+			continue
+		}
+		// Recently registered but now missing — mark unreachable for GC later.
+		if !p.Unreachable {
+			p.Unreachable = true
+			p.TombstonedAt = &now
+		}
+		kept = append(kept, p)
+	}
+	s.Projects = kept
 }
 
 func (s *ServerState) save() error {
@@ -85,19 +161,30 @@ func (s *ServerState) save() error {
 }
 
 // RegisterProject adds or updates a project entry. Returns the entry.
+// The path is canonicalized (symlinks resolved) and, if inside a linked git
+// worktree, resolved to the primary worktree path before storage.
 func (s *ServerState) RegisterProject(path string) ProjectEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	canonical := resolvedProjectPath(path)
+	if canonical == "" {
+		canonical = path
+	}
+
 	now := time.Now().UTC()
-	id := projectID(path)
-	name := filepath.Base(path)
-	remote := resolveGitRemote(path)
+	id := projectID(canonical)
+	name := filepath.Base(canonical)
+	remote := resolveGitRemote(canonical)
 
 	for i, p := range s.Projects {
 		if p.ID == id {
 			s.Projects[i].LastSeen = now
-			s.Projects[i].Path = path // normalise in case of symlink change
+			s.Projects[i].Path = canonical // normalise in case of symlink change
+			s.Projects[i].Name = name
+			// Clear any stale tombstone on re-registration.
+			s.Projects[i].Unreachable = false
+			s.Projects[i].TombstonedAt = nil
 			if remote != "" {
 				s.Projects[i].GitRemote = remote
 			}
@@ -108,7 +195,7 @@ func (s *ServerState) RegisterProject(path string) ProjectEntry {
 	entry := ProjectEntry{
 		ID:           id,
 		Name:         name,
-		Path:         path,
+		Path:         canonical,
 		GitRemote:    remote,
 		RegisteredAt: now,
 		LastSeen:     now,
@@ -117,12 +204,57 @@ func (s *ServerState) RegisterProject(path string) ProjectEntry {
 	return entry
 }
 
-// GetProjects returns a snapshot of all registered projects.
-func (s *ServerState) GetProjects() []ProjectEntry {
+// SweepProjects checks each registered project's path on disk.
+// Paths that no longer exist are marked unreachable with a tombstone timestamp.
+// Entries tombstoned for more than 24 h are removed.
+// Returns the post-sweep project list (all entries, including unreachable).
+func (s *ServerState) SweepProjects() []ProjectEntry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().UTC()
+	cutoff := now.Add(-24 * time.Hour)
+
+	kept := make([]ProjectEntry, 0, len(s.Projects))
+	for _, p := range s.Projects {
+		_, err := os.Stat(p.Path)
+		if err == nil {
+			// Path exists — clear any stale tombstone.
+			p.Unreachable = false
+			p.TombstonedAt = nil
+			kept = append(kept, p)
+			continue
+		}
+		// Path doesn't exist.
+		if p.TombstonedAt != nil && p.TombstonedAt.Before(cutoff) {
+			// Tombstoned >24 h ago — drop the entry.
+			continue
+		}
+		if !p.Unreachable {
+			// First time marking unreachable.
+			p.Unreachable = true
+			p.TombstonedAt = &now
+		}
+		kept = append(kept, p)
+	}
+	s.Projects = kept
+	return append([]ProjectEntry(nil), s.Projects...)
+}
+
+// GetProjects returns a snapshot of registered projects.
+// When includeUnreachable is false (the default for API callers), entries
+// marked as unreachable are omitted.
+func (s *ServerState) GetProjects(includeUnreachable ...bool) []ProjectEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]ProjectEntry, len(s.Projects))
-	copy(out, s.Projects)
+	showAll := len(includeUnreachable) > 0 && includeUnreachable[0]
+	out := make([]ProjectEntry, 0, len(s.Projects))
+	for _, p := range s.Projects {
+		if !showAll && p.Unreachable {
+			continue
+		}
+		out = append(out, p)
+	}
 	return out
 }
 
@@ -160,6 +292,55 @@ func nodeID(name string) string {
 func projectID(path string) string {
 	h := sha256.Sum256([]byte(path))
 	return fmt.Sprintf("proj-%x", h[:4])
+}
+
+// canonicalizePath returns the canonical absolute path, resolving symlinks.
+// Falls back to filepath.Abs if symlinks cannot be resolved (e.g. path absent).
+func canonicalizePath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return abs
+	}
+	return resolved
+}
+
+// resolvedProjectPath canonicalizes path and, if it sits inside a linked git
+// worktree, returns the primary worktree root instead. Returns "" only if
+// filepath.Abs itself fails (practically impossible).
+func resolvedProjectPath(path string) string {
+	canonical := canonicalizePath(path)
+	if canonical == "" {
+		return path
+	}
+
+	// Detect linked worktree via git rev-parse.
+	gitDirOut, err := runGitCapture(canonical, "rev-parse", "--path-format=absolute", "--git-dir")
+	if err != nil {
+		return canonical
+	}
+	gitDir := trimNL(string(gitDirOut))
+
+	commonDirOut, err := runGitCapture(canonical, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return canonical
+	}
+	commonDir := trimNL(string(commonDirOut))
+
+	if gitDir == commonDir {
+		// Not a linked worktree.
+		return canonical
+	}
+
+	// In a linked worktree. Primary worktree is the parent of the shared .git dir.
+	if filepath.Base(commonDir) == ".git" {
+		return canonicalizePath(filepath.Dir(commonDir))
+	}
+	// Bare repo: no primary worktree — return canonical path.
+	return canonical
 }
 
 // resolveGitRemote returns the origin URL for the repo at path, or "".
