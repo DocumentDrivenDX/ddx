@@ -28,11 +28,42 @@ type ProjectSnapshot struct {
 	TombstonedAt *time.Time
 }
 
+// BeadDependencySnapshot holds dependency data for resolver consumption.
+type BeadDependencySnapshot struct {
+	IssueID     string
+	DependsOnID string
+	Type        string
+	CreatedAt   string
+	CreatedBy   string
+	Metadata    string
+}
+
+// BeadSnapshot holds bead data for resolver consumption.
+type BeadSnapshot struct {
+	ProjectID    string
+	ID           string
+	Title        string
+	Status       string
+	Priority     int
+	IssueType    string
+	Owner        string
+	CreatedAt    time.Time
+	CreatedBy    string
+	UpdatedAt    time.Time
+	Labels       []string
+	Parent       string
+	Description  string
+	Acceptance   string
+	Notes        string
+	Dependencies []BeadDependencySnapshot
+}
+
 // StateProvider is the minimal interface the node/projects resolvers need.
 type StateProvider interface {
 	GetNodeSnapshot() NodeStateSnapshot
 	GetProjectSnapshots(includeUnreachable bool) []ProjectSnapshot
 	GetProjectSnapshotByID(id string) (ProjectSnapshot, bool)
+	GetBeadSnapshots(status, label, projectID string) []BeadSnapshot
 }
 
 // Node is the resolver for the node(id: ID!) field (Relay lookup by global ID).

@@ -41,16 +41,6 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 	panic("not implemented")
 }
 
-// Beads is the resolver for the beads field.
-func (r *queryResolver) Beads(ctx context.Context, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) (*BeadConnection, error) {
-	panic("not implemented")
-}
-
-// BeadsByProject is the resolver for the beadsByProject field.
-func (r *queryResolver) BeadsByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, status *string, label *string) (*BeadConnection, error) {
-	panic("not implemented")
-}
-
 // BeadsReady is the resolver for the beadsReady field.
 func (r *queryResolver) BeadsReady(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
 	panic("not implemented")
