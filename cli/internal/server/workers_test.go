@@ -2,7 +2,9 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -546,6 +548,85 @@ func TestWorkerScopeToProject(t *testing.T) {
 		entries, _ := os.ReadDir(workersDirB)
 		assert.Empty(t, entries, "project B's .ddx/workers/ must be empty")
 	}
+}
+
+// TestWorkerLiveCounters verifies that Attempts/Successes/Failures on the
+// WorkerRecord are updated incrementally as each bead completes, not just when
+// the loop exits. A fake executor completes 3 beads (2 success, 1 failure) with
+// a 50ms delay each. The test polls Show() every 30ms and asserts that at least
+// one poll observes Attempts >= 1 while the worker is still running (FinishedAt
+// is zero). After the loop exits the counters must be Attempts=3, Successes=2,
+// Failures=1.
+func TestWorkerLiveCounters(t *testing.T) {
+	root := t.TempDir()
+	ddxDir := filepath.Join(root, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+
+	// Initialise a git repo so CloseWithEvidence can write bead events.
+	initGitRepo(t, root)
+
+	// Create 3 ready beads.
+	store := bead.NewStore(ddxDir)
+	for i := 1; i <= 3; i++ {
+		err := store.Create(&bead.Bead{
+			ID:        fmt.Sprintf("ddx-live%02d", i),
+			Title:     fmt.Sprintf("Live counter test bead %d", i),
+			Status:    bead.StatusOpen,
+			IssueType: bead.DefaultType,
+		})
+		require.NoError(t, err)
+	}
+
+	m := NewWorkerManager(root)
+
+	// Inject a fake executor: first 2 calls succeed, 3rd fails.
+	callCount := 0
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				time.Sleep(50 * time.Millisecond)
+				callCount++
+				if callCount == 3 {
+					return agent.ExecuteBeadReport{
+						BeadID: beadID,
+						Status: agent.ExecuteBeadStatusExecutionFailed,
+						Detail: "injected test failure",
+					}, nil
+				}
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusSuccess,
+				}, nil
+			}),
+		}
+	}
+
+	// Start worker with no PollInterval so it exits once the queue is empty.
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{})
+	require.NoError(t, err)
+
+	// Poll every 30ms; record whether we see Attempts >= 1 while still running.
+	deadline := time.Now().Add(10 * time.Second)
+	var sawLiveAttempts bool
+	for time.Now().Before(deadline) {
+		rec, pollErr := m.Show(record.ID)
+		require.NoError(t, pollErr)
+		if rec.Attempts >= 1 && rec.FinishedAt.IsZero() {
+			sawLiveAttempts = true
+		}
+		if !rec.FinishedAt.IsZero() {
+			break
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+
+	assert.True(t, sawLiveAttempts, "expected Attempts >= 1 while worker was still running (before FinishedAt was set)")
+	assert.Equal(t, 3, final.Attempts)
+	assert.Equal(t, 2, final.Successes)
+	assert.Equal(t, 1, final.Failures)
 }
 
 // TC-013.6 — Workers for two different registered projects run in parallel
