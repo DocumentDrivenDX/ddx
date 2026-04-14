@@ -49,8 +49,8 @@ Bead-scoped work uses `area:bead` as an additive label, not a replacement for an
   hot module replacement and the plugin ecosystem for the embedded SPA.
 - **Test runner**: Playwright for E2E (not `bun:test`). Tests need the Go
   server running.
-- **Formatter**: Project uses existing Vite/TypeScript conventions. Biome
-  migration deferred.
+- **Formatter**: Project uses existing SvelteKit/TypeScript conventions
+  (prettier-plugin-svelte + eslint-plugin-svelte). Biome migration deferred.
 - **Package manager**: Bun for install and scripts (`bun install`, `bun run build`).
 - **Lockfile**: `bun.lock` committed (not `package-lock.json`).
 - **Runtime**: Frontend is browser-only (SvelteKit embedded in Go binary via
