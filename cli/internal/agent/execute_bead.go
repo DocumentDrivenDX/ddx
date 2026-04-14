@@ -54,6 +54,8 @@ type ExecuteBeadResult struct {
 	PromptFile   string    `json:"prompt_file,omitempty"`
 	ManifestFile string    `json:"manifest_file,omitempty"`
 	ResultFile   string    `json:"result_file,omitempty"`
+	ChecksFile   string    `json:"checks_file,omitempty"`
+	UsageFile    string    `json:"usage_file,omitempty"`
 	StartedAt    time.Time `json:"started_at"`
 	FinishedAt   time.Time `json:"finished_at"`
 	// GateResults holds the outcome of each required execution gate evaluated
@@ -109,6 +111,10 @@ type executeBeadArtifacts struct {
 	ManifestRel string
 	ResultAbs   string
 	ResultRel   string
+	ChecksAbs   string
+	ChecksRel   string
+	UsageAbs    string
+	UsageRel    string
 }
 
 type executeBeadManifest struct {
@@ -151,6 +157,8 @@ type executeBeadArtifactPaths struct {
 	Prompt   string `json:"prompt"`
 	Manifest string `json:"manifest"`
 	Result   string `json:"result"`
+	Checks   string `json:"checks,omitempty"`
+	Usage    string `json:"usage,omitempty"`
 	Worktree string `json:"worktree"`
 }
 
@@ -537,6 +545,8 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 
 	exitCode := 0
 	tokens := 0
+	inputTokens := 0
+	outputTokens := 0
 	costUSD := 0.0
 	resultModel := opts.Model
 	resultHarness := opts.Harness
@@ -545,6 +555,8 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	if agentResult != nil {
 		exitCode = agentResult.ExitCode
 		tokens = agentResult.Tokens
+		inputTokens = agentResult.InputTokens
+		outputTokens = agentResult.OutputTokens
 		costUSD = agentResult.CostUSD
 		if agentResult.Error != "" {
 			agentErrMsg = agentResult.Error
@@ -635,6 +647,23 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		FinishedAt:   finishedAt,
 	}
 
+	// Write usage.json when the harness reports token usage or cost.
+	if tokens > 0 || costUSD > 0 {
+		usage := executeBeadUsage{
+			AttemptID:    attemptID,
+			Harness:      resultHarness,
+			Provider:     resultProvider,
+			Model:        resultModel,
+			Tokens:       tokens,
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+			CostUSD:      costUSD,
+		}
+		if writeErr := writeArtifactJSON(artifacts.UsageAbs, usage); writeErr == nil {
+			res.UsageFile = artifacts.UsageRel
+		}
+	}
+
 	// Run required execution gates when the agent succeeded and produced changes.
 	// Gates are evaluated from the execution worktree so pre-run document versions
 	// govern the current iteration (FEAT-006 §7). This is separate from structural
@@ -647,6 +676,19 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	}
 	res.GateResults = gateResults
 	res.RequiredExecSummary = summarizeGates(gateResults, anyGateFailed)
+
+	// Write checks.json when gate evaluation ran (results are non-empty).
+	if len(gateResults) > 0 {
+		checks := executeBeadChecks{
+			AttemptID:   attemptID,
+			EvaluatedAt: finishedAt,
+			Summary:     res.RequiredExecSummary,
+			Results:     gateResults,
+		}
+		if writeErr := writeArtifactJSON(artifacts.ChecksAbs, checks); writeErr == nil {
+			res.ChecksFile = artifacts.ChecksRel
+		}
+	}
 
 	// Determine outcome applying the merge-by-default contract:
 	// A successful run lands unless an explicit gate blocks landing or --no-merge is set.
@@ -838,6 +880,8 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, op
 			Prompt:   artifacts.PromptRel,
 			Manifest: artifacts.ManifestRel,
 			Result:   artifacts.ResultRel,
+			Checks:   artifacts.ChecksRel,
+			Usage:    artifacts.UsageRel,
 			Worktree: filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(wtPath, projectRoot), string(filepath.Separator))),
 		},
 	}
@@ -915,6 +959,10 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 		ManifestRel: filepath.ToSlash(filepath.Join(dirRel, "manifest.json")),
 		ResultAbs:   filepath.Join(dirAbs, "result.json"),
 		ResultRel:   filepath.ToSlash(filepath.Join(dirRel, "result.json")),
+		ChecksAbs:   filepath.Join(dirAbs, "checks.json"),
+		ChecksRel:   filepath.ToSlash(filepath.Join(dirRel, "checks.json")),
+		UsageAbs:    filepath.Join(dirAbs, "usage.json"),
+		UsageRel:    filepath.ToSlash(filepath.Join(dirRel, "usage.json")),
 	}, nil
 }
 
@@ -1096,6 +1144,28 @@ func summarizeGates(results []GateCheckResult, anyFailed bool) string {
 		return "fail"
 	}
 	return "pass"
+}
+
+// executeBeadChecks is the machine-readable schema for checks.json.
+// It is written when gate evaluation ran (gate results are non-empty).
+type executeBeadChecks struct {
+	AttemptID   string            `json:"attempt_id"`
+	EvaluatedAt time.Time         `json:"evaluated_at"`
+	Summary     string            `json:"summary"`
+	Results     []GateCheckResult `json:"results"`
+}
+
+// executeBeadUsage is the machine-readable schema for usage.json.
+// It is written when the harness reports token usage or cost.
+type executeBeadUsage struct {
+	AttemptID    string  `json:"attempt_id"`
+	Harness      string  `json:"harness,omitempty"`
+	Provider     string  `json:"provider,omitempty"`
+	Model        string  `json:"model,omitempty"`
+	Tokens       int     `json:"tokens"`
+	InputTokens  int     `json:"input_tokens,omitempty"`
+	OutputTokens int     `json:"output_tokens,omitempty"`
+	CostUSD      float64 `json:"cost_usd,omitempty"`
 }
 
 func writeArtifactJSON(path string, payload any) error {
