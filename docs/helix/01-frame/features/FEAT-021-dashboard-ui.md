@@ -10,7 +10,7 @@ ddx:
 # Feature: Multi-Node Dashboard UI
 
 **ID:** FEAT-021
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P1
 **Owner:** DDx Team
 
@@ -21,6 +21,10 @@ show a combined view of beads and agent sessions across all registered projects
 on a node, or narrow to a specific project for context-dependent views
 (document browser, dependency graph, commit log). Node, project, and page are
 all embedded in the URL so every view is bookmarkable and shareable.
+
+The dashboard UI is implemented as a SvelteKit application with Houdini for
+GraphQL data fetching. Every page uses `+page.ts` load functions to fetch data
+from the `/graphql` endpoint defined in SD-022.
 
 ## Problem Statement
 
@@ -83,6 +87,10 @@ The `:nodeId` segment is the stable node ID from `GET /api/node` (e.g.
 - Quick links to combined sessions and combined beads
 - Server version and started_at
 
+**GraphQL Query:** `node` query from FEAT-020, `projects` query for project list.
+
+**File:** `src/routes/nodes/[nodeId]/+page.svelte`
+
 ### Combined Bead Queue (`/nodes/:nodeId/beads`)
 
 All beads from all registered projects merged into one view. The project each
@@ -96,6 +104,10 @@ capabilities from FEAT-008 US-082, applied across projects.
 - Clicking a bead navigates to its project-scoped detail:
   `/nodes/:nodeId/projects/:projectId/beads#:beadId`
 
+**GraphQL Query:** `beads` with `projectID:` argument per SD-019.
+
+**File:** `src/routes/nodes/[nodeId]/beads/+page.svelte`
+
 ### Combined Agent Sessions (`/nodes/:nodeId/sessions`)
 
 All agent sessions across all registered projects, newest first. The project
@@ -107,6 +119,10 @@ each session belongs to is shown inline.
 - Click to expand: DDx metadata, native session references, token usage
 - Same capabilities as FEAT-008 US-086
 
+**GraphQL Query:** `agentSessions` from FEAT-020.
+
+**File:** `src/routes/nodes/[nodeId]/sessions/+page.svelte`
+
 ### Project Overview (`/nodes/:nodeId/projects/:projectId`)
 
 - Project name, path, git remote
@@ -115,19 +131,36 @@ each session belongs to is shown inline.
 - Recent agent activity: last 5 sessions
 - Quick links to project-scoped views
 
+**GraphQL Query:** `project` by ID, `beads` count aggregation, `agentSessions`
+filtered by project.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/+page.svelte`
+
 ### Project Beads (`/nodes/:nodeId/projects/:projectId/beads`)
 
 Same as FEAT-008 bead views (list, kanban, ready queue, detail) scoped to one
 project. This is the same UI already specified in FEAT-008 US-082 through
 US-086, with the URL carrying the project context.
 
+**GraphQL Query:** `beadsByProject` with cursor pagination per SD-019.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/beads/+page.svelte`
+
 ### Document Browser (`/nodes/:nodeId/projects/:projectId/documents`)
 
 FEAT-008 artifact browser scoped to the selected project.
 
+**GraphQL Query:** `documents` with project context per SD-019.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/documents/+page.svelte`
+
 ### Document Dependency Graph (`/nodes/:nodeId/projects/:projectId/graph`)
 
 FEAT-008 dependency graph view scoped to the selected project.
+
+**GraphQL Query:** `docGraph` per SD-019.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/graph/+page.svelte`
 
 ### Commit Log (`/nodes/:nodeId/projects/:projectId/commits`)
 
@@ -138,9 +171,17 @@ endpoint. Displays:
 - Filter by author, date range
 - Link from a commit to any bead whose `closing_commit_sha` matches
 
+**GraphQL Query:** `commits` with cursor pagination per SD-019.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/commits/+page.svelte`
+
 ### Project Agent Sessions (`/nodes/:nodeId/projects/:projectId/sessions`)
 
 Agent sessions filtered to one project. Same UI as combined sessions view.
+
+**GraphQL Query:** `agentSessions` with project filter per SD-019.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte`
 
 ## Navigation
 
@@ -154,6 +195,10 @@ The global navigation bar shows:
 The project picker changes the `:projectId` segment in-place while preserving
 the current page tab. So switching project while on the Graph tab navigates to
 the new project's graph directly.
+
+**GraphQL Query:** `projects` for picker options.
+
+**File:** `src/lib/components/ProjectPicker.svelte`
 
 ## Requirements
 
@@ -264,36 +309,114 @@ FEAT-006, FEAT-008, and SD-019.
 
 ### Router
 
-Use TanStack Router (specified in ADR-002) for type-safe route params. Routes
-are nested:
+SvelteKit handles routing automatically based on `src/routes/` file structure.
+Routes are nested using the folder hierarchy:
 
 ```
-/nodes/$nodeId
-  /                   → NodeOverview
-  /beads              → CombinedBeads
-  /sessions           → CombinedSessions
-  /projects/$projectId
-    /                 → ProjectOverview
-    /beads            → ProjectBeads
-    /documents        → DocumentBrowser
-    /graph            → DocGraph
-    /commits          → CommitLog
-    /sessions         → ProjectSessions
+src/routes/
+├── +layout.svelte              → Node+Project layout with nav
+├── +page.ts                    → Root redirect to /nodes/:nodeId
+└── nodes/
+    └── [$nodeId]/
+        ├── +layout.ts          → Load node context
+        ├── +page.svelte        → NodeOverview
+        ├── beads/              → CombinedBeads
+        │   └── +page.svelte
+        ├── sessions/           → CombinedSessions
+        │   └── +page.svelte
+        └── projects/
+            └── [$projectId]/
+                ├── +page.svelte      → ProjectOverview
+                ├── beads/            → ProjectBeads
+                │   └── +page.svelte
+                ├── documents/        → DocumentBrowser
+                │   └── +page.svelte
+                ├── graph/            → DocGraph
+                │   └── +page.svelte
+                ├── commits/          → CommitLog
+                │   └── +page.svelte
+                └── sessions/         → ProjectSessions
+                    └── +page.svelte
 ```
 
-Filter state uses TanStack Router's search params so it's part of the URL.
+The `[$nodeId]` and `[$projectId]` dynamic route segments capture URL parameters.
+SvelteKit's `+layout.ts` and `+page.ts` files define load functions that
+fetch data via Houdini.
 
 ### Data Layer
 
-TanStack Query fetches from the HTTP API. Combined views do a `useQueries`
-across all registered projects and merge client-side. Since all data is
-local (one server = one machine), latency is negligible.
+Houdini is the GraphQL client for SvelteKit. Every page defines queries in
+`.gql` files, and Houdini generates TypeScript types and `+page.ts` helpers.
+
+Example bead list query:
+
+```gql
+# src/routes/nodes/$nodeId/beads/beads.gql
+query BeadList($projectID: ID) {
+  beads(projectID: $projectID, first: 50) {
+    edges {
+      node {
+        id
+        title
+        status
+        priority
+        projectID
+      }
+    }
+  }
+}
+```
+
+The generated code is imported in `+page.ts`:
+
+```typescript
+// src/routes/nodes/$nodeId/beads/+page.ts
+import { query } from '$houdini';
+import './beads.gql';
+
+export const load = query(function ({ data }) {
+  return { beads: data.beads };
+});
+```
+
+Houdini's subscription support enables real-time updates without polling.
 
 ### Project Context
 
-A React context `ProjectContext` stores the selected node ID and project ID,
-populated from the URL params. All components that need project-scoped data
-read from this context rather than threading params through props.
+The `ProjectStore` (using Svelte 5 runes) stores the selected node ID and
+project ID. It's populated from URL params by `+layout.ts` load functions:
+
+```typescript
+// src/lib/stores/project.ts
+import { writable } from 'svelte/store';
+
+export const projectStore = writable<{
+  nodeId: string;
+  projectId?: string;
+} | null>(null);
+```
+
+Components read from `projectStore` to construct API URLs and filter queries.
+
+### Testing
+
+Playwright e2e tests verify the complete user flow. Each test file covers a
+specific feature area:
+
+| Playwright Spec | TC Identifiers Covered |
+|-----------------|------------------------|
+| `e2e/navigation.spec.ts` | TC-010, TC-012 |
+| `e2e/node-beads.spec.ts` | TC-023 |
+| `e2e/node-agents.spec.ts` | TC-022 |
+| `e2e/projects.spec.ts` | TC-010, TC-012 |
+| `e2e/workers.spec.ts` | TC-009 |
+| `cli/internal/server/frontend/e2e/app.spec.ts` | TC-001 through TC-008 |
+
+Each test file documents the TC identifiers it covers in a header comment.
+Test names use the pattern `TC-NNN.N — description` to match the test plan.
+
+**Example:** `e2e/node-beads.spec.ts` covers TC-023 through TC-023.9, testing
+the cross-project beads view at `/nodes/:nodeId/beads`.
 
 ## Dependencies
 
