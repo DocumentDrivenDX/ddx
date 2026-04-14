@@ -7,7 +7,8 @@ import (
 )
 
 type Resolver struct {
-	State StateProvider
+	State      StateProvider
+	WorkingDir string
 }
 
 // BeadCreate is the resolver for the beadCreate field.
@@ -75,18 +76,8 @@ func (r *queryResolver) Bead(ctx context.Context, id string) (*Bead, error) {
 	panic("not implemented")
 }
 
-// Documents is the resolver for the documents field.
-func (r *queryResolver) Documents(ctx context.Context, first *int, after *string, last *int, before *string, typeArg *string) (*DocumentConnection, error) {
-	panic("not implemented")
-}
-
 // DocumentByPath is the resolver for the documentByPath field.
 func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Document, error) {
-	panic("not implemented")
-}
-
-// DocGraph is the resolver for the docGraph field.
-func (r *queryResolver) DocGraph(ctx context.Context) (*DocGraph, error) {
 	panic("not implemented")
 }
 

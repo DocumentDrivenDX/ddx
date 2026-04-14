@@ -3463,7 +3463,7 @@ func containsString(ss []string, s string) bool {
 func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers:  &ddxgraphql.Resolver{State: s.state},
+		Resolvers:  &ddxgraphql.Resolver{State: s.state, WorkingDir: s.WorkingDir},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
 	gqlServer.AddTransport(transport.POST{})
