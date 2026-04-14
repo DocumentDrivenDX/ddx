@@ -1,0 +1,56 @@
+## No Changes Rationale
+
+### What I looked for
+
+The bead asks for:
+1. Dedicated ls, find, and grep tools added to ddx-agent
+2. Stall detector classifying ls/find/grep as read-only (stall counter increments)
+3. Bash classified as write-capable (stall counter resets)
+4. Agents transition from reading to writing faster (behavioral goal)
+
+### Where I found it
+
+All three acceptance criteria are already fully implemented in:
+
+**cli/internal/agent/agent_runner.go**
+
+1. **Dedicated tools registered** (lines 88–96):
+   ```go
+   tools := []agentlib.Tool{
+       &tool.ReadTool{WorkDir: wd},
+       &tool.WriteTool{WorkDir: wd},
+       &tool.EditTool{WorkDir: wd},
+       &tool.BashTool{WorkDir: wd},
+       &tool.LsTool{WorkDir: wd},       // read-only
+       &tool.GrepTool{WorkDir: wd},     // read-only
+       &findTool{Glob: tool.GlobTool{WorkDir: wd}}, // read-only, wraps GlobTool as "find"
+   }
+   ```
+
+2. **Stall detector classifies bash as write-capable** (lines 563–576):
+   ```go
+   var writeCapableTools = map[string]bool{
+       "bash":  true,
+       "write": true,
+       "edit":  true,
+   }
+   ```
+   ls, find, and grep are NOT in this map, so they increment the stall counter.
+
+3. **findTool wrapper** (lines 578–593): `tool.GlobTool` is exposed as "find" to give models an intuitive file-location tool.
+
+4. **Stall detector wired** (lines 143–159): Calls `isWriteCapableTool()` on every tool call event; resets counter on write tools, increments on read-only, cancels after 30 consecutive read-only calls.
+
+### Relevant commits
+
+- `484f391` — "feat(agent): add ls/find/grep tools and tighten stall detector"
+- `439e51c` — "fix: increase stall threshold to 30 — bash ls resets counter too easily"
+- `53960c4` — "fix(agent): enforce WorkDir containment for ls/grep/glob tools"
+
+### Why I'm confident
+
+The acceptance criteria are met exactly:
+- ddx-agent has dedicated ls, find, and grep tools ✓
+- Stall detector classifies them as read-only ✓
+- Bash is classified as write-capable ✓
+- The tool separation gives models clearer affordances for exploration vs. mutation ✓
