@@ -1707,3 +1707,202 @@ type Query {
     name: String!
   ): Provider
 }
+
+# ============================================
+# Mutations
+# ============================================
+
+"""Mutation is the root entry point for all write operations"""
+type Mutation {
+  """Create a new bead (maps to POST /api/beads)"""
+  beadCreate(input: BeadInput!): Bead!
+
+  """Update an existing bead (maps to POST /api/beads/{id})"""
+  beadUpdate(
+    """Bead ID to update"""
+    id: ID!,
+    """Fields to update"""
+    input: BeadUpdateInput!
+  ): Bead!
+
+  """Claim a bead for execution (maps to POST /api/beads/{id}/claim)"""
+  beadClaim(
+    """Bead ID to claim"""
+    id: ID!,
+    """Agent or human identifier claiming the bead"""
+    assignee: String!
+  ): Bead!
+
+  """Unclaim a bead (maps to POST /api/beads/{id}/unclaim)"""
+  beadUnclaim(
+    """Bead ID to unclaim"""
+    id: ID!
+  ): Bead!
+
+  """Reopen a closed bead (maps to POST /api/beads/{id}/reopen)"""
+  beadReopen(
+    """Bead ID to reopen"""
+    id: ID!
+  ): Bead!
+
+  """Write or update a document in the library (maps to PUT /api/docs/{id})"""
+  documentWrite(
+    """Document path relative to the library root"""
+    path: String!,
+    """Document content"""
+    content: String!
+  ): Document!
+}
+
+# ============================================
+# Input Types for Mutations
+# ============================================
+
+"""Input type for creating a new bead"""
+input BeadInput {
+  """Short summary of the work"""
+  title: String!
+  """Lifecycle status (default: "open")"""
+  status: String
+  """Numeric priority (default: 2)"""
+  priority: Int
+  """Issue classification (e.g. "task", "bug")"""
+  issueType: String
+  """Freeform labels for filtering and grouping"""
+  labels: [String!]
+  """Parent bead ID for hierarchy"""
+  parent: String
+  """Full description / body text"""
+  description: String
+  """Acceptance criteria text"""
+  acceptance: String
+  """Freeform notes appended during work"""
+  notes: String
+}
+
+"""Input type for updating an existing bead"""
+input BeadUpdateInput {
+  """Short summary of the work"""
+  title: String
+  """Lifecycle status"""
+  status: String
+  """Numeric priority"""
+  priority: Int
+  """Issue classification"""
+  issueType: String
+  """Freeform labels for filtering and grouping"""
+  labels: [String!]
+  """Parent bead ID for hierarchy"""
+  parent: String
+  """Full description / body text"""
+  description: String
+  """Acceptance criteria text"""
+  acceptance: String
+  """Freeform notes appended during work"""
+  notes: String
+}
+
+# ============================================
+# Subscriptions
+# ============================================
+
+"""Subscription is the root entry point for all real-time events"""
+type Subscription {
+  """Stream progress events for a worker (maps to GET /api/projects/{project}/workers/{id}/progress SSE)"""
+  workerProgress(
+    """Worker identifier"""
+    workerID: ID!
+  ): WorkerEvent!
+
+  """Stream bead lifecycle events for a project (maps to bead store AppendEvent)"""
+  beadLifecycle(
+    """Project root path to monitor for bead events"""
+    projectID: ID!
+  ): BeadEvent!
+
+  """Stream execution evidence (stdout/stderr) for a run (maps to GET /api/exec/runs/{id}/log)"""
+  executionEvidence(
+    """Run identifier"""
+    runID: ID!
+  ): ExecutionEvent!
+
+  """Stream coordinator metrics updates (maps to land coordinator event hook)"""
+  coordinatorMetrics(
+    """Project root path"""
+    projectRoot: String!
+  ): CoordinatorMetricsUpdate!
+}
+
+# ============================================
+# Event Types for Subscriptions
+# ============================================
+
+"""WorkerEvent is a progress or lifecycle event from a worker"""
+type WorkerEvent {
+  """Unique event identifier"""
+  eventID: ID!
+  """Worker that emitted this event"""
+  workerID: String!
+  """Current execution phase (e.g. "pending", "running", "done")"""
+  phase: String!
+  """Timestamp of the event"""
+  timestamp: DateTime!
+  """Log line output from the worker (if any)"""
+  logLine: String
+  """Bead ID being executed (null if not executing a bead)"""
+  beadID: String
+}
+
+"""BeadEvent is an immutable execution evidence entry from the bead store"""
+type BeadEvent {
+  """Unique event identifier (bead ID + sequence)"""
+  eventID: ID!
+  """Bead ID that emitted this event"""
+  beadID: String!
+  """Event kind (e.g. "claim", "unclaim", "reopen", "summary")"""
+  kind: String!
+  """Human-readable summary of the event"""
+  summary: String
+  """Full body text (e.g. agent output, metadata changes)"""
+  body: String
+  """Actor that triggered this event (agent name or human name)"""
+  actor: String
+  """Timestamp of the event"""
+  timestamp: DateTime!
+}
+
+"""ExecutionEvent is a log output from an execution run"""
+type ExecutionEvent {
+  """Unique event identifier (run ID + sequence)"""
+  eventID: ID!
+  """Run that emitted this event"""
+  runID: String!
+  """Output stream (stdout or stderr)"""
+  stream: String!
+  """Log line content"""
+  line: String!
+  """Timestamp of the event"""
+  timestamp: DateTime!
+}
+
+"""CoordinatorMetricsUpdate is a metrics snapshot from a land coordinator"""
+type CoordinatorMetricsUpdate {
+  """Unique update identifier"""
+  updateID: ID!
+  """Project root these metrics belong to"""
+  projectRoot: String!
+  """Timestamp of the update"""
+  timestamp: DateTime!
+  """Number of submissions successfully merged"""
+  landed: Int!
+  """Number of submissions kept in a separate worktree"""
+  preserved: Int!
+  """Number of submissions that failed"""
+  failed: Int!
+  """Number of submissions that failed to push"""
+  pushFailed: Int!
+  """Sum of all submission durations in milliseconds"""
+  totalDurationMs: Int!
+  """Total commits across all submissions"""
+  totalCommits: Int!
+}
