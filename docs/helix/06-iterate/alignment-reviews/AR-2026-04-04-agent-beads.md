@@ -6,6 +6,8 @@ ddx:
     - FEAT-004
     - FEAT-006
 ---
+
+> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 # Alignment Review: Agent Harness & Bead Storage
 
 **Date:** 2026-04-04

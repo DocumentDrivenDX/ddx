@@ -13,6 +13,8 @@ ddx:
 **ID:** TP-002
 **Features:** FEAT-002 (Server), FEAT-008 (Web UI), FEAT-020 (Node State),
 FEAT-021 (Dashboard UI), SD-019 (Host+User Multi-Project Topology)
+
+> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 **Status:** Active
 
 ## Scope

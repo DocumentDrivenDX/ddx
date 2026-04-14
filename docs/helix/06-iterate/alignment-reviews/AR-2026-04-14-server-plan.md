@@ -1,5 +1,7 @@
 # Alignment Review: Server-Plan Evolution
 
+
+> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 ## Review Metadata
 
 **Review Date**: 2026-04-14

@@ -5,6 +5,8 @@ ddx:
     - helix.prd
     - product-vision
 ---
+
+> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 # Alignment Review: Post-Evolution Reconciliation
 
 **Date:** 2026-04-06
