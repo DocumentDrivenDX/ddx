@@ -14,6 +14,8 @@ ddx:
     - TP-010
     - TP-005
 ---
+
+> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 # Alignment Review: Execution Model (FEAT-010)
 
 **Review Date**: 2026-04-04

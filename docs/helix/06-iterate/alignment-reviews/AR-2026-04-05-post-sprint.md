@@ -7,6 +7,8 @@ ddx:
     - FEAT-009
     - FEAT-012
 ---
+
+> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 # Alignment Review: Post-Sprint Reconciliation
 
 **Date:** 2026-04-05

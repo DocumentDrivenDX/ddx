@@ -1,5 +1,7 @@
 # Alignment Review: skill install cleanup
 
+
+> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 **Review Date**: 2026-04-07
 **Scope**: ddx init + ddx install skill cleanup
 **Status**: complete
