@@ -118,6 +118,15 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		return WorkerRecord{}, err
 	}
 
+	// Open structured event sink — loop milestones (bead.claimed, bead.result,
+	// loop.start/end) land here as JSONL so log aggregators and future server
+	// endpoints can parse them independently of the human-readable worker.log.
+	eventsPath := filepath.Join(dir, "worker-events.jsonl")
+	eventsFile, eventsErr := os.OpenFile(eventsPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if eventsErr != nil {
+		eventsFile = nil // non-fatal; structured events silently disabled
+	}
+
 	record := WorkerRecord{
 		ID:           id,
 		Kind:         "execute-loop",
@@ -150,12 +159,15 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	m.workers[id] = handle
 	m.mu.Unlock()
 
-	go m.runWorker(ctx, id, dir, spec, handle, multiLog)
+	go m.runWorker(ctx, id, dir, spec, handle, multiLog, eventsFile)
 
 	return record, nil
 }
 
-func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, handle *workerHandle, log io.Writer) {
+func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, handle *workerHandle, log io.Writer, eventSink io.WriteCloser) {
+	if eventSink != nil {
+		defer eventSink.Close() //nolint:errcheck
+	}
 	store := bead.NewStore(filepath.Join(m.projectRoot, ".ddx"))
 
 	// Build an executor that calls agent.ExecuteBead directly (in-process, no subprocess)
@@ -197,6 +209,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Once:         spec.Once,
 		PollInterval: spec.PollInterval,
 		Log:          log,
+		EventSink:    eventSink,
+		WorkerID:     id,
+		ProjectRoot:  m.projectRoot,
+		Harness:      spec.Harness,
+		Model:        spec.Model,
 	})
 
 	m.mu.Lock()
@@ -420,6 +437,11 @@ func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 	cutoff := time.Now().Add(-30 * time.Minute)
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "agent-") || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		// Skip loop event files — they contain loop milestones, not agent session
+		// entries. Loop milestone progress is already captured in worker.log.
+		if strings.HasPrefix(entry.Name(), "agent-loop-") {
 			continue
 		}
 		info, err := entry.Info()
