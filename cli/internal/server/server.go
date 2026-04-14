@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -33,7 +34,6 @@ import (
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
-	"github.com/99designs/gqlgen/graphql/handler"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 	"tailscale.com/tsnet"
 )
@@ -3462,8 +3462,7 @@ func containsString(ss []string, s string) bool {
 func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers:  ddxgraphql.Resolver{},
-		Schema:     nil,
+		Resolvers:  &ddxgraphql.Resolver{},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
 
@@ -3489,7 +3488,7 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 	<title>GraphiQL - DDx</title>
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/graphiql@0.18.0/graphiql.min.css" />
 	<script src="https://cdn.jsdelivr.net/npm/subscriptions-transport-ws@0.11.0/browser/client.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/graphiql@0.18.0/browser graphiql.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/graphiql@3/graphiql.min.js"></script>
 </head>
 <body>
 	<div id="graphiql">Loading...</div>
