@@ -94,6 +94,13 @@ used for beads and executions, and worker records persist under the project's
 own `.ddx/workers/` directory so preservation and cleanup stay scoped per
 project.
 
+When multiple machines each run `ddx-server` against the same project, each
+machine runs its own land coordinator against its local clone. The shared git
+remote is the only coordination point between machines: a `git push --ff-only`
+is atomic at the remote, so the remote's target branch is the single source of
+truth. The per-machine coordinator topology and the operator-visible conflict,
+divergence, and recovery contract are specified in SD-020.
+
 ### Replay-Backed Execution Evidence
 
 Execute-bead attempts store their normalized prompt, manifest, transcript, and

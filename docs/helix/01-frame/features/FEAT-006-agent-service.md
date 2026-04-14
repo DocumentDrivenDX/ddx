@@ -412,7 +412,10 @@ different.
     the work is not discarded merely because the harness left file edits
     uncommitted.
 11. If merge-eligible and `--no-merge` is not set, land by rebase + fast-forward
-    semantics, then reset the worker worktree to the updated branch tip.
+    semantics: fetch origin, rebase onto `origin/<target>`, push `--ff-only` to
+    origin, then reset the worker worktree to the updated branch tip. The origin
+    remote is the serialization point for concurrent coordinators — see SD-020
+    for the multi-machine coordinator topology and operator contract.
 12. Otherwise, preserve the iteration result under a hidden ref and do not merge
     (see SD-012 for the hidden-ref naming scheme).
 13. Always remove the temporary worktree after preserving enough evidence for

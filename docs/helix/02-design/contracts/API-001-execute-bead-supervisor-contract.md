@@ -218,11 +218,20 @@ prior attempt.
 Success is only complete after the result is landed by rebase plus
 fast-forward.
 
+- fetch origin before the rebase step so the local target tip reflects the
+  latest remote state
 - rebase the execution branch onto the latest target tip
-- fast-forward the target branch when the rebase result is clean
+- push `--ff-only` to origin; the remote's atomic ref-update is the
+  serialization point for concurrent coordinators on other machines
+- fast-forward the local target branch to match after a successful push
 - reset the worker worktree to the updated branch tip after a successful land
 - preserve the iteration under a hidden ref when the result cannot be landed or
   `--no-merge` semantics apply
+
+On push rejection (another coordinator landed first), the losing coordinator
+preserves the iteration under `refs/ddx/iterations/` and unclaims the bead
+without force-pushing. The multi-machine coordinator topology and the full
+conflict and divergence recovery contract are specified in SD-020.
 
 These mechanics are owned by `ddx agent execute-bead`; the supervisor observes
 the resulting landed or preserved state rather than performing them itself.
