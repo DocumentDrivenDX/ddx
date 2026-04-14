@@ -203,7 +203,7 @@ func TestLandBeadResult_NoMerge(t *testing.T) {
 }
 
 // TestLandBeadResult_MergeConflictPreserves verifies that when the land
-// advancer returns a preserved status (rebase conflict) the result is
+// advancer returns a preserved status (merge conflict) the result is
 // preserved rather than landed.
 func TestLandBeadResult_MergeConflictPreserves(t *testing.T) {
 	projectRoot := t.TempDir()
@@ -214,7 +214,7 @@ func TestLandBeadResult_MergeConflictPreserves(t *testing.T) {
 		returnLand: &LandResult{
 			Status:      "preserved",
 			PreserveRef: "refs/ddx/iterations/ddx-orch-06/test-aaa0006",
-			Reason:      "rebase conflict",
+			Reason:      "merge conflict",
 		},
 	}
 	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
@@ -226,13 +226,13 @@ func TestLandBeadResult_MergeConflictPreserves(t *testing.T) {
 	ApplyLandingToResult(res, landing)
 
 	if res.Outcome != "preserved" {
-		t.Errorf("expected outcome=preserved after rebase conflict, got %q", res.Outcome)
+		t.Errorf("expected outcome=preserved after merge conflict, got %q", res.Outcome)
 	}
 	if res.Status != ExecuteBeadStatusLandConflict {
 		t.Errorf("expected status=land_conflict, got %q", res.Status)
 	}
 	if res.PreserveRef == "" {
-		t.Error("expected a preserve ref after rebase conflict")
+		t.Error("expected a preserve ref after merge conflict")
 	}
 }
 

@@ -241,18 +241,22 @@ func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: five concurrent beads, linear history
-// TODO: When ddx-8746d8a6 coordinator is fully in place, assert no merge
-// commits and exactly 5 iteration commits. Currently the Land() path already
-// provides linear history (rebase-then-ff) so merge commits should be absent.
+// Test 5: five concurrent workers drain a five-bead queue; every bead lands.
+//
+// The integration-test executor holds a per-projectRoot mutex across both
+// ExecuteBead and Land() (needed so CommitTracker doesn't race on the main
+// worktree's git index), so each worker effectively runs serially and every
+// land takes the fast-forward path. The merge path itself is covered by
+// TestLand_MergeRequired and the real-git merge conflict is covered by
+// internal/server.TestLandCoordinatorIntegration. This test asserts that
+// the end-to-end pipeline (claim → execute → land → close) drains all beads
+// and that every bead's file is reachable from main.
 // ---------------------------------------------------------------------------
 
-// TestIntegration_ScriptHarness_FiveConcurrentBeads_LinearHistory seeds 5
+// TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded seeds 5
 // distinct beads and runs 5 workers concurrently (single shared store, single
-// projectRoot). All workers use the script harness. After completion: every
-// bead is closed and git log shows no merge commits (linear history invariant
-// for ddx-6aa50e57).
-func TestIntegration_ScriptHarness_FiveConcurrentBeads_LinearHistory(t *testing.T) {
+// projectRoot). All workers use the script harness.
+func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 	const n = 5
 	projectRoot, initialSHA := newScriptHarnessRepo(t, n)
 	ddxDir := filepath.Join(projectRoot, ".ddx")
@@ -320,14 +324,13 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_LinearHistory(t *testing.
 	closedCount := countClosedBeads(t, ddxDir)
 	assert.Equal(t, n, closedCount, "all 5 beads must be closed")
 
-	// Linear history invariant: no merge commits.
-	hasMerge := gitHasMergeCommits(t, projectRoot, "HEAD")
-	assert.False(t, hasMerge,
-		"git log must show no merge commits (linear history invariant for ddx-6aa50e57)")
-
-	// At least n iteration commits must have landed on main beyond the initial seed.
+	// At least n iteration commits must have landed on main beyond the
+	// initial seed. Merge vs. fast-forward is not asserted here — this
+	// test's executor holds a per-projectRoot mutex across ExecuteBead+Land
+	// so everything effectively serializes and every land fast-forwards.
+	// Merge-path coverage lives in TestLand_MergeRequired and
+	// TestLandCoordinatorIntegration.
 	commitsOnMain := gitCommitCount(t, projectRoot, "HEAD", "--not", initialSHA)
-	// n iteration commits + n tracker commits (one per bead).
 	assert.GreaterOrEqual(t, commitsOnMain, n,
 		"at least %d iteration commits must be on main", n)
 
@@ -402,22 +405,18 @@ func TestIntegration_ScriptHarness_TwoWorkersSameBead_ClaimedOnce(t *testing.T) 
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: rebase conflict → preserved (skipped until ddx-8746d8a6 coordinator)
+// Test 7: merge conflict → preserved (coordinator is in place; see
+// TestLandCoordinatorIntegration in internal/server for the real-git
+// conflict assertion driving the coordinator directly).
 // ---------------------------------------------------------------------------
 
-// TestIntegration_ScriptHarness_RebaseConflict_Preserved is gated on the land
-// coordinator from ddx-8746d8a6. The coordinator is needed to serialize land
-// operations per projectRoot so the second bead's rebase conflict is
-// deterministic. Without it, one of the two workers may land first and the
-// second would also land cleanly (both write different files, no real conflict).
-//
-// The test would need to inject a conflict (same line in same file modified by
-// both beads), which is feasible but requires the rebase path to be deterministic.
-// That requires the coordinator to gate Land() calls. Skip for now.
-//
-// TODO: implement once ddx-8746d8a6 LandCoordinator is in place.
-func TestIntegration_ScriptHarness_RebaseConflict_Preserved(t *testing.T) {
-	t.Skip("requires ddx-8746d8a6 land coordinator for deterministic rebase conflict serialization")
+// TestIntegration_ScriptHarness_MergeConflict_Preserved is intentionally
+// covered by internal/server/land_coordinator_test.go:TestLandCoordinatorIntegration
+// which exercises a real merge conflict through the coordinator. Driving
+// a conflict through the full ExecuteBead + script harness path would
+// duplicate that coverage without adding new invariants.
+func TestIntegration_ScriptHarness_MergeConflict_Preserved(t *testing.T) {
+	t.Skip("covered by internal/server.TestLandCoordinatorIntegration real-git merge conflict")
 }
 
 // ---------------------------------------------------------------------------

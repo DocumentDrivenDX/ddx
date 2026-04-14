@@ -53,9 +53,11 @@ type executeBeadChecks struct {
 // coordinator redesign has been DELETED. All target-branch writes now flow
 // through Land() in execute_bead_land.go and its per-project serialized
 // coordinator. See ddx-8746d8a6 / ddx-e14efc58 / ddx-6aa50e57 for the
-// rationale: the old path produced merge-commit fans and "chore: checkpoint
-// before merge" noise, and workers racing on the same projectRoot could
-// silently produce 2-parent merges instead of linear history.
+// rationale: the old path produced "chore: checkpoint before merge" noise
+// and workers racing on the same projectRoot could corrupt each other's
+// intermediate state. Land() serializes through a single goroutine and
+// uses `git merge --no-ff` when the target has advanced, so the worker's
+// commit is never rewritten and replay sees the same inputs it originally saw.
 //
 // The LandingAdvancer field on BeadLandingOptions is the coordinator
 // injection point for LandBeadResult callers that need to ff the target
@@ -101,7 +103,7 @@ type BeadLandingOptions struct {
 
 	// LandingAdvancer, when non-nil, replaces the old in-process Merge step
 	// with the coordinator-pattern Land() call. The callback is expected to
-	// run fetch → rebase → ff → push serialized against other submissions
+	// run fetch → (ff or merge) → push serialized against other submissions
 	// for the same projectRoot. When nil, LandBeadResult falls back to
 	// preserving the result under refs/ddx/iterations/<bead-id>/...
 	// rather than touching the target branch.
@@ -229,11 +231,11 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 
 	// Default: land the worker's commits on the target branch. When a
 	// LandingAdvancer is provided (server coordinator / --local coordinator)
-	// it runs the rebase → ff → push sequence serialized per projectRoot.
-	// When no advancer is provided, LandBeadResult falls back to preserving
-	// the result under refs/ddx/iterations/ — the interactive single-bead
-	// CLI path, which intentionally does NOT auto-advance the target branch
-	// (the operator moves the ref themselves).
+	// it runs the fetch → (ff or merge) → push sequence serialized per
+	// projectRoot. When no advancer is provided, LandBeadResult falls back
+	// to preserving the result under refs/ddx/iterations/ — the interactive
+	// single-bead CLI path, which intentionally does NOT auto-advance the
+	// target branch (the operator moves the ref themselves).
 	if opts.LandingAdvancer != nil {
 		land, landErr := opts.LandingAdvancer(res)
 		if landErr != nil {
@@ -242,8 +244,8 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 		switch land.Status {
 		case "landed":
 			landing.Outcome = "merged"
-			if land.Rebased {
-				landing.Reason = "rebased onto current tip"
+			if land.Merged {
+				landing.Reason = "merged onto current tip"
 			}
 			if land.NewTip != "" {
 				res.ResultRev = land.NewTip

@@ -38,7 +38,7 @@ type LandOutcomeSummary struct {
 	AttemptID   string    `json:"attempt_id,omitempty"`
 	Outcome     string    `json:"outcome"` // landed | preserved | failed | push_failed
 	DurationMS  int64     `json:"duration_ms"`
-	RebaseCount int       `json:"rebase_count"` // 0 on fast-forward, N on rebase path
+	CommitCount int       `json:"commit_count"` // worker's contribution size (BaseRev..ResultRev)
 }
 
 // CoordinatorMetrics holds all in-memory metrics for one LandCoordinator.
@@ -51,8 +51,9 @@ type CoordinatorMetrics struct {
 	PushFailed int64 `json:"push_failed"`
 	// Total duration in milliseconds (sum, for computing avg)
 	TotalDurationMS int64 `json:"total_duration_ms"`
-	// Total rebase commit count (sum)
-	TotalRebaseCommits int64 `json:"total_rebase_commits"`
+	// Total contribution commits across all submissions (sum of
+	// BaseRev..ResultRev counts)
+	TotalCommits int64 `json:"total_commits"`
 	// PreservedRatio is (preserved+failed) / total over the last window
 	PreservedRatio float64 `json:"preserved_ratio"`
 	// LastSubmissions holds up to the last 10 outcomes
@@ -157,7 +158,7 @@ func (c *LandCoordinator) recordMetrics(req agent.LandRequest, result *agent.Lan
 	const maxLastSubmissions = 10
 
 	outcome := "failed"
-	rebaseCount := 0
+	commitCount := 0
 	if err == nil && result != nil {
 		switch result.Status {
 		case "landed":
@@ -166,10 +167,10 @@ func (c *LandCoordinator) recordMetrics(req agent.LandRequest, result *agent.Lan
 			} else {
 				outcome = "landed"
 			}
-			rebaseCount = result.RebaseCommitCount
+			commitCount = result.MergedCommitCount
 		case "preserved":
 			outcome = "preserved"
-			rebaseCount = result.RebaseCommitCount
+			commitCount = result.MergedCommitCount
 		default:
 			outcome = "failed"
 		}
@@ -192,7 +193,7 @@ func (c *LandCoordinator) recordMetrics(req agent.LandRequest, result *agent.Lan
 		c.metrics.Landed++ // push_failed still landed locally
 	}
 	c.metrics.TotalDurationMS += elapsedMS
-	c.metrics.TotalRebaseCommits += int64(rebaseCount)
+	c.metrics.TotalCommits += int64(commitCount)
 
 	total := c.metrics.Landed + c.metrics.Preserved + c.metrics.Failed
 	if total > 0 {
@@ -205,7 +206,7 @@ func (c *LandCoordinator) recordMetrics(req agent.LandRequest, result *agent.Lan
 		AttemptID:   req.AttemptID,
 		Outcome:     outcome,
 		DurationMS:  elapsedMS,
-		RebaseCount: rebaseCount,
+		CommitCount: commitCount,
 	}
 	c.metrics.LastSubmissions = append(c.metrics.LastSubmissions, entry)
 	if len(c.metrics.LastSubmissions) > maxLastSubmissions {

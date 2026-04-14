@@ -30,7 +30,6 @@ type fakeLandingGitOps struct {
 func (f *fakeLandingGitOps) HasRemote(_, _ string) bool         { return false }
 func (f *fakeLandingGitOps) FetchBranch(_, _, _ string) error   { return nil }
 func (f *fakeLandingGitOps) SyncIndexToHead(_ string) error     { return nil }
-func (f *fakeLandingGitOps) DeleteBranch(_, _ string) error     { return nil }
 func (f *fakeLandingGitOps) RemoveWorktree(_, _ string) error   { return nil }
 func (f *fakeLandingGitOps) PushFFOnly(_, _, _, _ string) error { return nil }
 func (f *fakeLandingGitOps) CountCommits(_, _, _ string) int    { return 1 }
@@ -41,7 +40,7 @@ func (f *fakeLandingGitOps) CurrentBranch(_ string) (string, error) {
 
 func (f *fakeLandingGitOps) ResolveRef(_, ref string) (string, error) {
 	// For simplicity always claim the target ref is at "base000" so fast-path
-	// is taken unless we want rebase. Since we drive outcomes by intercepting
+	// is taken unless we want a merge. Since we drive outcomes by intercepting
 	// UpdateRefTo, returning "base000" matches the base we send in LandRequest.
 	return "base000", nil
 }
@@ -52,12 +51,11 @@ func (f *fakeLandingGitOps) UpdateRefTo(_, ref, sha, _ string) error {
 	return nil
 }
 
-func (f *fakeLandingGitOps) CreateBranch(_, _, _ string) error  { return nil }
 func (f *fakeLandingGitOps) AddWorktree(_, _, _ string) error   { return nil }
 func (f *fakeLandingGitOps) HeadRevAt(_ string) (string, error) { return "newTip123", nil }
 
-func (f *fakeLandingGitOps) RebaseOnto(_, _, _ string) error {
-	// Decide based on current pending outcome whether the rebase should fail.
+func (f *fakeLandingGitOps) MergeInto(_, _, _ string) error {
+	// Decide based on current pending outcome whether the merge should fail.
 	idx := f.callIdx
 	if idx < len(f.outcomes) && f.outcomes[idx] == "preserved" {
 		return assert.AnError // triggers preserved path
@@ -69,12 +67,11 @@ func (f *fakeLandingGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClai
 	return agent.PreClaimResult{Action: "no-origin"}, nil
 }
 
-// fakeLandCoordinatorGitOps wraps fakeLandingGitOps and drives outcomes by
-// controlling whether the repo "has advanced" (to take rebase path) or not.
+// outcomeGitOps drives Land() outcomes deterministically from a test script.
 //
-// We need a smarter approach: Land() takes the rebase path only when
-// currentTip != req.BaseRev.  So for "preserved" outcomes we return a
-// different currentTip from ResolveRef.
+// Land() takes the merge path only when currentTip != req.BaseRev, so for
+// "preserved" outcomes we return a different currentTip from ResolveRef and
+// make MergeInto return an error.
 type outcomeGitOps struct {
 	outcomes []string
 	callIdx  int
@@ -83,26 +80,24 @@ type outcomeGitOps struct {
 func (o *outcomeGitOps) HasRemote(_, _ string) bool             { return false }
 func (o *outcomeGitOps) FetchBranch(_, _, _ string) error       { return nil }
 func (o *outcomeGitOps) SyncIndexToHead(_ string) error         { return nil }
-func (o *outcomeGitOps) DeleteBranch(_, _ string) error         { return nil }
 func (o *outcomeGitOps) RemoveWorktree(_, _ string) error       { return nil }
 func (o *outcomeGitOps) CountCommits(_, _, _ string) int        { return 2 }
 func (o *outcomeGitOps) CurrentBranch(_ string) (string, error) { return "main", nil }
-func (o *outcomeGitOps) CreateBranch(_, _, _ string) error      { return nil }
 func (o *outcomeGitOps) AddWorktree(_, _, _ string) error       { return nil }
-func (o *outcomeGitOps) HeadRevAt(_ string) (string, error)     { return "rebasedTip", nil }
+func (o *outcomeGitOps) HeadRevAt(_ string) (string, error)     { return "mergedTip", nil }
 func (o *outcomeGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return agent.PreClaimResult{Action: "no-origin"}, nil
 }
 func (o *outcomeGitOps) PushFFOnly(_, _, _, _ string) error { return nil }
 
 func (o *outcomeGitOps) ResolveRef(_, ref string) (string, error) {
-	// For "preserved" and rebase-path "landed" we return a tip that differs
-	// from the base so Land() takes the rebase code path.
+	// For "preserved" and merge-path "landed" we return a tip that differs
+	// from the base so Land() takes the merge code path.
 	idx := o.callIdx
 	if idx < len(o.outcomes) {
 		switch o.outcomes[idx] {
-		case "preserved", "landed_rebase":
-			return "advancedTip", nil // != "base000" → rebase path
+		case "preserved", "landed_merge":
+			return "advancedTip", nil // != "base000" → merge path
 		}
 	}
 	return "base000", nil // fast-forward path
@@ -110,7 +105,7 @@ func (o *outcomeGitOps) ResolveRef(_, ref string) (string, error) {
 
 func (o *outcomeGitOps) UpdateRefTo(_, _, _, _ string) error { return nil }
 
-func (o *outcomeGitOps) RebaseOnto(_, _, _ string) error {
+func (o *outcomeGitOps) MergeInto(_, _, _ string) error {
 	idx := o.callIdx
 	if idx < len(o.outcomes) && o.outcomes[idx] == "preserved" {
 		return assert.AnError
@@ -119,7 +114,7 @@ func (o *outcomeGitOps) RebaseOnto(_, _, _ string) error {
 }
 
 // submit sends one LandRequest to the coordinator using the given base so
-// the gitOps mock can decide the fast vs rebase path.
+// the gitOps stub can decide the fast vs merge path.
 func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, outcome string, base string) {
 	t.Helper()
 	ops.callIdx = len(ops.outcomes)
@@ -137,13 +132,8 @@ func submitOne(t *testing.T, c *LandCoordinator, ops *outcomeGitOps, outcome str
 }
 
 // TestLandCoordinatorMetrics submits 10 simulated submissions
-// (3 landed, 2 preserved, 1 failed-by-error, 4 landed) from the bead spec
-// and asserts the counters reflect the correct outcome counts.
-//
-// Sequence: 3 landed, 2 preserved, 1 landed, 4 landed → 8 landed, 2 preserved.
-// The "1 failed" case from the bead spec is represented here by "preserved"
-// since both are non-landed outcomes; the coordinator counts them separately
-// but both increment the numerator of PreservedRatio.
+// (3 landed, 2 preserved, 1 landed, 4 landed) and asserts the counters
+// reflect the correct outcome counts.
 func TestLandCoordinatorMetrics(t *testing.T) {
 	ops := &outcomeGitOps{}
 
@@ -154,7 +144,7 @@ func TestLandCoordinatorMetrics(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		submitOne(t, c, ops, "landed", "base000")
 	}
-	// 2 preserved (rebase path with conflict)
+	// 2 preserved (merge path with conflict)
 	submitOne(t, c, ops, "preserved", "base000")
 	submitOne(t, c, ops, "preserved", "base000")
 	// 1 landed
@@ -184,12 +174,12 @@ func TestLandCoordinatorMetrics(t *testing.T) {
 	for _, s := range m.LastSubmissions {
 		assert.Contains(t, []string{"landed", "preserved", "failed", "push_failed"}, s.Outcome)
 	}
-	// RebaseCount is non-zero for preserved entries (CountCommits returns 2)
+	// CommitCount is non-zero for preserved entries (CountCommits returns 2)
 	preservedEntries := 0
 	for _, s := range m.LastSubmissions {
 		if s.Outcome == "preserved" {
 			preservedEntries++
-			assert.Equal(t, 2, s.RebaseCount, "preserved entry should have rebase count from CountCommits")
+			assert.Equal(t, 2, s.CommitCount, "preserved entry should have commit count from CountCommits")
 		}
 	}
 	assert.Equal(t, 2, preservedEntries, "exactly 2 preserved entries in last submissions")
@@ -336,7 +326,7 @@ func (r *landIntegRepo) commitOn(baseSHA, file, content, msg string) string {
 
 // TestLandCoordinatorIntegration wires a real LandCoordinator to a real temp
 // git repo. It submits 3 separate LandRequests where 2 are designed to produce
-// a rebase-conflict (preserved) outcome by advancing the target branch between
+// a merge-conflict (preserved) outcome by advancing the target branch between
 // submissions. Asserts that the metrics endpoint reflects at least 1 preserved
 // outcome after the submissions.
 //
@@ -369,10 +359,10 @@ func TestLandCoordinatorIntegration(t *testing.T) {
 
 	// The target branch has now advanced to result1SHA.
 	// Submission 2 was branched off baseSHA (stale), writes to SAME file as
-	// submission 3 to guarantee a rebase conflict.
+	// submission 3 to guarantee a merge conflict.
 	result2SHA := r.commitOn(baseSHA, "conflict.txt", "version-A\n", "feat: conflict-A")
 
-	// Submission 3: advance the target further first so the rebase base
+	// Submission 3: advance the target further first so the merge base
 	// diverges even more (makes the conflict certain).
 	result3SHA := r.commitOn(r.headSHA(), "conflict.txt", "version-B\n", "feat: conflict-B")
 	_, err = c.Submit(agent.LandRequest{
@@ -387,7 +377,7 @@ func TestLandCoordinatorIntegration(t *testing.T) {
 	// submission 3 lands first to advance the target
 
 	// Now submit result2 (branched off baseSHA, writes to same conflict.txt
-	// as result3 which is now on main). Rebase should conflict.
+	// as result3 which is now on main). Merge should conflict.
 	res2, err := c.Submit(agent.LandRequest{
 		WorktreeDir:  r.dir,
 		BaseRev:      baseSHA,
@@ -397,9 +387,9 @@ func TestLandCoordinatorIntegration(t *testing.T) {
 		TargetBranch: "main",
 	})
 	require.NoError(t, err)
-	// This should be preserved (rebase conflict) because both result2 and
+	// This should be preserved (merge conflict) because both result2 and
 	// result3 modify conflict.txt from the same base.
-	assert.Equal(t, "preserved", res2.Status, "submission 2 should be preserved due to rebase conflict")
+	assert.Equal(t, "preserved", res2.Status, "submission 2 should be preserved due to merge conflict")
 
 	// Verify coordinator metrics reflect at least 1 preserved outcome.
 	m := c.Metrics()

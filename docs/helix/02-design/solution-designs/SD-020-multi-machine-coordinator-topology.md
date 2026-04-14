@@ -34,8 +34,12 @@ Out of scope:
 
 Each machine that participates in execute-loop work runs one `ddx-server`
 process. That server hosts one land coordinator goroutine per registered
-project. The coordinator owns the rebase → fast-forward → push sequence for
-all landings on that machine.
+project. The coordinator owns the fetch → (fast-forward or merge) → push
+sequence for all landings on that machine. When the target has not advanced
+since the worker started, Land() fast-forwards via `update-ref`. When the
+target has advanced (because a sibling worker on either machine landed
+first), Land() creates a `--no-ff` merge commit so the worker's original
+commit is never rewritten and replay fidelity is preserved.
 
 ```
   eitri                           bragi
@@ -72,15 +76,19 @@ other; they only need write access to the shared `origin`.
 1. Worker on machine A claims a bead (bead is marked claimed in local
    `beads.jsonl`; not yet visible on machine B).
 2. Worker executes the bead in an isolated worktree.
-3. Land coordinator on machine A: `git fetch origin`, rebase onto
-   `origin/<target>`, verify fast-forward, `git push --ff-only origin <target>`.
+3. Land coordinator on machine A: `git fetch origin`, compare local target
+   tip to the worker's BaseRev. When equal, fast-forward the local branch
+   via `update-ref` (no new commit). When advanced, merge via `--no-ff` in
+   a temp worktree to produce a merge commit whose parents are
+   `[currentTip, ResultRev]`. Then `git push --ff-only origin <target>`.
 4. Push succeeds. Origin advances. Machine A closes the bead.
-5. Machine B's coordinator will see the new tip on its next fetch before its
-   own rebase step.
+5. Machine B's coordinator will see the new tip on its next pre-claim fetch.
 
-Operators see a linear history on origin. Each landed commit carries the
-`Ddx-Attempt-Id` and `Ddx-Worker-Id` trailers so post-hoc attribution is
-unambiguous across machines.
+Each landed commit (or merge commit) carries the `Ddx-Attempt-Id` and
+`Ddx-Worker-Id` trailers so post-hoc attribution is unambiguous across
+machines. The worker's own commit always keeps its original parent (the
+BaseRev the worker saw), so a later replay observes the same inputs the
+worker saw at execution time.
 
 ## Conflict Path (Concurrent Push)
 
@@ -106,7 +114,7 @@ a local fast-forward conflict.
 
 If someone force-pushes to the target branch on origin from outside DDx, the
 affected machine's coordinator will detect a non-ff divergence on its next
-`git fetch` before the rebase step. The coordinator fails the submission with
+`git fetch` before the merge step. The coordinator fails the submission with
 a clear error and stops.
 
 **DDx does NOT auto-force-push to recover.** Operator must reconcile manually:
@@ -177,11 +185,15 @@ origin remote provides the only coordination point between hosts.
 ## Invariants
 
 1. A coordinator **never force-pushes** to origin.
-2. A coordinator always fetches from origin before its rebase step.
+2. A coordinator always fetches from origin before its merge step.
 3. A push rejection always results in preserve-under-ref + unclaim, never a
    retry with force.
 4. The origin target branch is the single source of truth. Local branch state
    is always subordinate to origin after a fetch.
+5. A worker's result commit is **never rewritten**. The coordinator uses
+   merge commits (not rebase) when the target has advanced, so replay of the
+   worker's commit sees the same parent and same inputs the worker saw at
+   execution time.
 
 ## Validation
 

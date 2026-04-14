@@ -47,7 +47,7 @@ Result status is reported on the "status:" line and is one of:
   success                          — merged (or preserved with --no-merge)
   no_changes                       — agent ran but produced no diff
   already_satisfied                — closed by the loop after repeated no_changes
-  land_conflict                    — rebase/merge failed; result preserved
+  land_conflict                    — merge failed; result preserved
   post_run_check_failed            — checks failed; result preserved
   execution_failed                 — agent or harness error
   structural_validation_failed     — bead or prompt inputs invalid
@@ -130,7 +130,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		return err
 	}
 
-	// Orchestrator step: land the result (rebase → ff → push, gate eval,
+	// Orchestrator step: land the result (ff or merge → push, gate eval,
 	// preserve). Always run when we have a result — the orchestrator handles
 	// all cases including no-changes and error (agent failed with no commits).
 	//

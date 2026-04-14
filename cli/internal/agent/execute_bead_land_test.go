@@ -3,10 +3,11 @@ package agent
 // execute_bead_land_test.go — Land() coordinator-pattern unit tests.
 //
 // These tests run against a real temp git repo so they exercise the actual
-// git plumbing (update-ref, rebase --onto, worktree add, etc.) rather than a
-// mock. Each scenario asserts that the new target tip is reachable on the
-// target branch, that no merge commits are introduced, and that concurrent
-// submissions are serialized correctly.
+// git plumbing (update-ref, merge --no-ff, worktree add, etc.) rather than a
+// mock. Each scenario asserts that the target tip advances correctly and —
+// crucially for replay fidelity — that the worker's own commit is never
+// rewritten. Its parent always stays BaseRev so replay sees the same inputs
+// the worker saw at execution time.
 
 import (
 	"fmt"
@@ -131,7 +132,8 @@ func (r *landTestRepo) commitOn(baseSHA, path, content, msg string) string {
 }
 
 // mergeCommitCount returns the number of merge commits (commits with >1
-// parent) reachable from ref. Used to assert linear history.
+// parent) reachable from ref. Used to assert merge-commit semantics on the
+// merge path.
 func (r *landTestRepo) mergeCommitCount(ref string) int {
 	r.t.Helper()
 	out := r.runGit("log", "--merges", "--format=%H", ref)
@@ -150,13 +152,32 @@ func (r *landTestRepo) commitCount(ref string) int {
 	return n
 }
 
+// commitParents returns the parent SHAs of sha.
+func (r *landTestRepo) commitParents(sha string) []string {
+	r.t.Helper()
+	out := r.runGit("rev-list", "--parents", "-n", "1", sha)
+	fields := strings.Fields(out)
+	if len(fields) <= 1 {
+		return nil
+	}
+	return fields[1:]
+}
+
+// shaReachable returns true when sha is reachable from ref via any commit
+// path (including through merge commit parents).
+func (r *landTestRepo) shaReachable(ref, sha string) bool {
+	r.t.Helper()
+	cmd := exec.Command("git", "-C", r.dir, "merge-base", "--is-ancestor", sha, ref)
+	return cmd.Run() == nil
+}
+
 // ----------------------------------------------------------------------------
 // Tests
 // ----------------------------------------------------------------------------
 
 // TestLand_HappyPath_FastForward verifies the fast-forward path: currentTip
 // == BaseRev → target branch is advanced directly to ResultRev with no
-// merge commit.
+// merge commit. The worker's commit becomes the new tip unchanged.
 func TestLand_HappyPath_FastForward(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
@@ -179,8 +200,8 @@ func TestLand_HappyPath_FastForward(t *testing.T) {
 	if land.Status != "landed" {
 		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
 	}
-	if land.Rebased {
-		t.Errorf("expected Rebased=false on fast path, got true")
+	if land.Merged {
+		t.Errorf("expected Merged=false on fast path, got true")
 	}
 	if land.NewTip != resultSHA {
 		t.Errorf("expected NewTip=%s, got %s", resultSHA, land.NewTip)
@@ -189,14 +210,20 @@ func TestLand_HappyPath_FastForward(t *testing.T) {
 		t.Errorf("main tip = %s, want %s", got, resultSHA)
 	}
 	if n := r.mergeCommitCount("refs/heads/main"); n != 0 {
-		t.Errorf("expected 0 merge commits on main, got %d", n)
+		t.Errorf("expected 0 merge commits on main on ff path, got %d", n)
+	}
+	// Replay fidelity: the worker commit's parent must still be BaseRev.
+	parents := r.commitParents(resultSHA)
+	if len(parents) != 1 || parents[0] != r.baseSHA {
+		t.Errorf("worker commit parent = %v, want [%s]", parents, r.baseSHA)
 	}
 }
 
-// TestLand_RebaseRequired verifies the rebase path: the target has advanced
-// since the worker started. The worker's commit is replayed onto the new tip,
-// producing a different SHA, and no merge commit is introduced.
-func TestLand_RebaseRequired(t *testing.T) {
+// TestLand_MergeRequired verifies the merge path: the target has advanced
+// since the worker started. Land() creates a merge commit whose parents are
+// [currentTip, workerSHA], and critically the worker's own commit is NOT
+// rewritten — its parent is still baseSHA so replay sees the original inputs.
+func TestLand_MergeRequired(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
 
@@ -207,12 +234,12 @@ func TestLand_RebaseRequired(t *testing.T) {
 	siblingSHA := r.commitOn(r.baseSHA, "sibling.txt", "sibling-content\n", "feat: sibling")
 	r.runGit("update-ref", "refs/heads/main", siblingSHA)
 
-	// Now land the worker's result. currentTip = siblingSHA != baseSHA → rebase.
+	// Now land the worker's result. currentTip = siblingSHA != baseSHA → merge.
 	req := LandRequest{
 		WorktreeDir:  r.dir,
 		BaseRev:      r.baseSHA,
 		ResultRev:    workerSHA,
-		BeadID:       "ddx-land-rebase",
+		BeadID:       "ddx-land-merge",
 		AttemptID:    "20260414T000001-ccdd",
 		TargetBranch: "main",
 	}
@@ -223,36 +250,54 @@ func TestLand_RebaseRequired(t *testing.T) {
 	if land.Status != "landed" {
 		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
 	}
-	if !land.Rebased {
-		t.Errorf("expected Rebased=true on sibling-advanced tip, got false")
+	if !land.Merged {
+		t.Errorf("expected Merged=true on sibling-advanced tip, got false")
 	}
 	if land.NewTip == workerSHA {
-		t.Errorf("expected NewTip to be rebased (different from %s), got same SHA", workerSHA)
+		t.Errorf("expected NewTip to be the merge commit (different from worker %s), got same SHA", workerSHA)
 	}
 	if got := r.resolveRef("refs/heads/main"); got != land.NewTip {
 		t.Errorf("main tip = %s, want %s", got, land.NewTip)
 	}
-	if n := r.mergeCommitCount("refs/heads/main"); n != 0 {
-		t.Errorf("expected 0 merge commits on main after rebase, got %d", n)
+	// Exactly one merge commit was created.
+	if n := r.mergeCommitCount("refs/heads/main"); n != 1 {
+		t.Errorf("expected 1 merge commit on main after merge path, got %d", n)
 	}
-	// main should have baseSHA + siblingSHA + rebased-worker = 3 commits.
-	if n := r.commitCount("refs/heads/main"); n != 3 {
-		t.Errorf("expected 3 commits on main, got %d", n)
+	// The merge commit's parents must be [siblingSHA, workerSHA] (in that order:
+	// `git merge --no-ff` from a worktree at currentTip produces [currentTip, incoming]).
+	parents := r.commitParents(land.NewTip)
+	if len(parents) != 2 {
+		t.Fatalf("merge commit should have 2 parents, got %v", parents)
+	}
+	if parents[0] != siblingSHA {
+		t.Errorf("merge commit parent[0] = %s, want currentTip %s", parents[0], siblingSHA)
+	}
+	if parents[1] != workerSHA {
+		t.Errorf("merge commit parent[1] = %s, want workerSHA %s", parents[1], workerSHA)
+	}
+	// Replay fidelity: the worker's commit is NOT rewritten — its parent is still baseSHA.
+	workerParents := r.commitParents(workerSHA)
+	if len(workerParents) != 1 || workerParents[0] != r.baseSHA {
+		t.Errorf("worker commit parent = %v, want [%s] (replay fidelity)", workerParents, r.baseSHA)
+	}
+	// main should have baseSHA + siblingSHA + workerSHA + merge commit = 4 commits.
+	if n := r.commitCount("refs/heads/main"); n != 4 {
+		t.Errorf("expected 4 commits on main (base+sibling+worker+merge), got %d", n)
 	}
 }
 
-// TestLand_RebaseConflict verifies that a rebase conflict is handled cleanly:
+// TestLand_MergeConflict verifies that a merge conflict is handled cleanly:
 // the target branch is untouched, the original ResultRev is preserved under
-// refs/ddx/iterations/, and no stale worktree or branch is left behind.
-func TestLand_RebaseConflict(t *testing.T) {
+// refs/ddx/iterations/, and no stale worktree is left behind.
+func TestLand_MergeConflict(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
 
 	// Worker edits feature.txt starting from baseSHA.
 	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "worker-version\n", "feat: worker")
 
-	// Sibling edits the SAME file (feature.txt) on main. Rebasing the worker
-	// commit onto this tip will conflict.
+	// Sibling edits the SAME file (feature.txt) on main. Merging the worker
+	// commit into this tip will conflict.
 	siblingSHA := r.commitOn(r.baseSHA, "feature.txt", "sibling-version\n", "feat: sibling")
 	r.runGit("update-ref", "refs/heads/main", siblingSHA)
 
@@ -285,15 +330,8 @@ func TestLand_RebaseConflict(t *testing.T) {
 	if got := r.resolveRef(land.PreserveRef); got != workerSHA {
 		t.Errorf("preserve ref resolves to %s, want %s", got, workerSHA)
 	}
-	// No stale ddx-land-* branches left over.
-	branches := r.runGit("branch", "--format=%(refname:short)")
-	for _, b := range strings.Split(branches, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(b), "ddx-land-") {
-			t.Errorf("stale temp branch left behind: %q", b)
-		}
-	}
-	// No stale ddx-land-* worktrees (the rebase ran in a temp worktree which
-	// must have been cleaned up on abort).
+	// No stale ddx-land-wt-* worktrees (the merge ran in a temp worktree
+	// which must have been cleaned up on abort).
 	wtList := r.runGit("worktree", "list", "--porcelain")
 	for _, line := range strings.Split(wtList, "\n") {
 		if strings.HasPrefix(line, "worktree ") && strings.Contains(line, "ddx-land-wt-") {
@@ -304,16 +342,20 @@ func TestLand_RebaseConflict(t *testing.T) {
 
 // TestLand_ConcurrentSubmissions_Serialized spawns N concurrent Land() calls
 // through a single coordinator-like serialization (sync.Mutex) and asserts
-// that all N commits end up on main in linear order with no merge commits.
-// This is a direct test of the "single-writer" contract that the server
-// coordinator must enforce.
+// that (a) all N worker commits are reachable from main, (b) each non-first
+// submission took the merge path and produced a merge commit, and (c) every
+// worker commit's original parent is preserved (replay fidelity).
+//
+// This is a direct test of the "single-writer" contract the server
+// coordinator enforces, plus the replay-fidelity invariant of the
+// merge-over-rebase design.
 func TestLand_ConcurrentSubmissions_Serialized(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
 
 	const N = 5
 	// Prepare N worker commits, each branching off the original baseSHA.
-	// Each touches a distinct file so rebases always merge cleanly.
+	// Each touches a distinct file so merges always complete cleanly.
 	workerSHAs := make([]string, N)
 	for i := 0; i < N; i++ {
 		workerSHAs[i] = r.commitOn(r.baseSHA, fmt.Sprintf("worker-%d.txt", i), fmt.Sprintf("content-%d\n", i), fmt.Sprintf("feat: worker %d", i))
@@ -354,24 +396,45 @@ func TestLand_ConcurrentSubmissions_Serialized(t *testing.T) {
 		}
 	}
 
-	// main must have baseSHA + N new commits = N+1 total.
-	if got := r.commitCount("refs/heads/main"); got != N+1 {
-		t.Errorf("expected %d commits on main, got %d", N+1, got)
-	}
-	// Zero merge commits — strictly linear history.
-	if n := r.mergeCommitCount("refs/heads/main"); n != 0 {
-		t.Errorf("expected 0 merge commits, got %d", n)
-	}
-	// At least N-1 submissions must have been rebased (the first one ffs;
-	// every subsequent one sees an advanced tip).
-	rebased := 0
+	// Exactly one submission took the ff path (the first one under lock);
+	// every subsequent one saw an advanced tip and took the merge path.
+	merged := 0
+	ff := 0
 	for _, res := range results {
-		if res != nil && res.Rebased {
-			rebased++
+		if res == nil {
+			continue
+		}
+		if res.Merged {
+			merged++
+		} else {
+			ff++
 		}
 	}
-	if rebased < N-1 {
-		t.Errorf("expected at least %d rebased submissions, got %d", N-1, rebased)
+	if ff != 1 {
+		t.Errorf("expected exactly 1 fast-forward submission, got %d", ff)
+	}
+	if merged != N-1 {
+		t.Errorf("expected %d merged submissions, got %d", N-1, merged)
+	}
+
+	// All N worker commits must be reachable from main.
+	for i, sha := range workerSHAs {
+		if !r.shaReachable("refs/heads/main", sha) {
+			t.Errorf("worker %d commit %s not reachable from main", i, sha)
+		}
+	}
+
+	// Replay fidelity: every worker commit must still have parent == baseSHA.
+	for i, sha := range workerSHAs {
+		parents := r.commitParents(sha)
+		if len(parents) != 1 || parents[0] != r.baseSHA {
+			t.Errorf("worker %d commit parent = %v, want [%s]", i, parents, r.baseSHA)
+		}
+	}
+
+	// Each non-ff submission produced exactly one merge commit on main.
+	if n := r.mergeCommitCount("refs/heads/main"); n != N-1 {
+		t.Errorf("expected %d merge commits on main, got %d", N-1, n)
 	}
 }
 
@@ -409,17 +472,11 @@ func TestLand_PushIsFFOnly(t *testing.T) {
 	runCmd(sideDir, "commit", "-m", "remote: seed")
 	runCmd(sideDir, "push", "origin", "main")
 
-	// Now the origin has advanced beyond the local r.dir/main. Produce a
-	// worker commit on top of the local baseSHA and try to land it. The
-	// local fetch will pull the remote tip, so Land() will actually take
-	// the rebase path and then attempt a fast-forward push.
-	//
-	// Wait — we want the push to FAIL (not the rebase). To force a push
-	// failure specifically, we need the local main to be advanced ahead of
-	// origin AND the push to conflict. Simplest construction: disable the
-	// auto-fetch by marking the remote as unreachable. We can do that by
-	// overwriting the remote URL with an invalid path after the initial
-	// push, then landing a local commit.
+	// Now the origin has advanced beyond the local r.dir/main. To force a
+	// push failure specifically, we need the local main to be advanced
+	// ahead of origin AND the push to conflict. Simplest construction:
+	// disable the auto-fetch by marking the remote as unreachable, then
+	// land a local commit via the ff path and watch the push fail.
 	r.runGit("remote", "set-url", "origin", "/nonexistent/path/"+filepath.Base(r.dir))
 
 	workerSHA := r.commitOn(r.baseSHA, "local-only.txt", "local\n", "feat: local")

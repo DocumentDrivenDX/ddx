@@ -13,22 +13,28 @@ package agent
 //   1. Fetch the current target tip (from origin when a remote exists, or
 //      from the local branch otherwise).
 //   2. If the current tip equals the worker's BaseRev — fast-forward the
-//      target branch directly to the worker's ResultRev. One bead → one
-//      commit, linear history.
+//      target branch directly to the worker's ResultRev via update-ref. The
+//      worker's commit keeps its original parent; no new commit is created.
 //   3. Otherwise — the target has advanced since the worker started. Create
-//      a temporary worktree at ResultRev, rebase onto the current tip, and
-//      fast-forward the target branch to the rebased commit. Still one
-//      bead → one commit, still linear.
-//   4. If the rebase conflicts — abort cleanly, preserve the original
+//      a temporary detached worktree at the current target tip, run
+//      `git merge --no-ff` to introduce the worker's ResultRev, and
+//      fast-forward the target branch to the resulting merge commit. The
+//      worker's commit is NEVER rewritten: its parent is still BaseRev, so
+//      a later replay observes the same inputs the worker saw.
+//   4. If the merge conflicts — abort cleanly, preserve the original
 //      ResultRev under refs/ddx/iterations/<bead-id>/<attempt-id>-<short-tip>,
 //      and return preserved status. Target branch is never modified.
 //   5. If an origin remote exists — push the new target tip. The push is
 //      strictly fast-forward; push failures are reported via PushFailed but
 //      do not roll back the local target ref.
 //
-// NO git merge --no-edit. NO "chore: checkpoint before merge" commits. The
-// coordinator owning the goroutine provides the serialization guarantee, so
-// Land() itself does not take any locks.
+// Replay fidelity is the reason for merge-over-rebase: a rebased commit has
+// a rewritten parent that lies about what the worker saw at execution time.
+// A merge commit preserves both histories — the worker's original commit
+// (parent = BaseRev) and the target's prior tip — losslessly.
+//
+// The coordinator owning the goroutine provides the serialization guarantee,
+// so Land() itself does not take any locks.
 
 import (
 	"fmt"
@@ -44,7 +50,7 @@ type LandRequest struct {
 	// WorktreeDir is the path to the project's repository directory (the
 	// directory the coordinator operates on). The original worker worktree
 	// has typically already been removed by the time Land() runs — Land()
-	// creates its own temporary worktrees when a rebase is needed.
+	// creates its own temporary worktrees when a merge is needed.
 	WorktreeDir string
 
 	// BaseRev is the revision the worker branched off when it started.
@@ -73,27 +79,32 @@ type LandRequest struct {
 type LandResult struct {
 	// Status is one of:
 	//   - "landed":    the target branch now points at a new commit
-	//                  (either ResultRev itself on the fast path, or the
-	//                  rebased tip on the rebase path).
-	//   - "preserved": the rebase conflicted; ResultRev is saved under
+	//                  (either ResultRev itself on the fast-forward path,
+	//                  or a merge commit on the merge path).
+	//   - "preserved": the merge conflicted; ResultRev is saved under
 	//                  PreserveRef and the target branch is unchanged.
 	//   - "no-changes": ResultRev == BaseRev; nothing to land.
 	Status string
 
 	// NewTip is the new value of the target branch when Status == "landed".
-	// Empty when preserved or no-changes.
+	// On the fast-forward path NewTip == ResultRev; on the merge path NewTip
+	// is the SHA of the merge commit (whose parents are the prior target
+	// tip and ResultRev). Empty when preserved or no-changes.
 	NewTip string
 
-	// Rebased is true when the land took the rebase path (current tip had
-	// advanced beyond BaseRev). False on the fast-forward path.
-	Rebased bool
+	// Merged is true when the land took the merge-commit path (current tip
+	// had advanced beyond BaseRev, so Land() created a merge commit to
+	// combine the worker's result with the new target tip). False on the
+	// fast-forward path where the worker's commit became the new tip
+	// unchanged.
+	Merged bool
 
 	// PreserveRef is set when Status == "preserved". It names the ref under
 	// refs/ddx/iterations/ where ResultRev was saved for later recovery.
 	PreserveRef string
 
 	// Reason is a human-readable explanation, especially useful when
-	// Status == "preserved" (e.g. "rebase conflict") or when PushFailed.
+	// Status == "preserved" (e.g. "merge conflict") or when PushFailed.
 	Reason string
 
 	// PushFailed is true when the local target ref was advanced successfully
@@ -105,10 +116,11 @@ type LandResult struct {
 	// PushError captures the underlying push error when PushFailed is true.
 	PushError string
 
-	// RebaseCommitCount is the number of commits that were replayed during a
-	// rebase land. Zero on the fast-forward path. Set on both "landed" (after a
-	// clean rebase) and "preserved" (after a conflict).
-	RebaseCommitCount int
+	// MergedCommitCount is the number of commits reachable from ResultRev but
+	// not from BaseRev — i.e. the "size" of the worker's contribution being
+	// merged in. Zero on the no-changes path. Set on both the fast-forward
+	// and merge-commit paths so metrics can compare contribution sizes.
+	MergedCommitCount int
 }
 
 // PreClaimResult is the outcome of a FetchOriginAncestryCheck call.
@@ -154,23 +166,19 @@ type LandingGitOps interface {
 	// advanced HEAD. Safe when the worktree is clean; a no-op otherwise.
 	SyncIndexToHead(dir string) error
 
-	// CreateBranch creates branch at sha in dir. It is an error if branch
-	// already exists.
-	CreateBranch(dir, branch, sha string) error
-
-	// DeleteBranch deletes branch in dir (force delete).
-	DeleteBranch(dir, branch string) error
-
 	// AddWorktree creates a new worktree at path checked out at rev in dir.
 	AddWorktree(dir, path, rev string) error
 
 	// RemoveWorktree removes the worktree at path in dir (force).
 	RemoveWorktree(dir, path string) error
 
-	// RebaseOnto runs `git rebase --onto onto upstream HEAD` inside wtDir.
-	// Returns nil on clean rebase, or an error on conflict. On error, the
-	// implementation is responsible for running `git rebase --abort`.
-	RebaseOnto(wtDir, onto, upstream string) error
+	// MergeInto runs `git merge --no-ff -m msg srcRev` inside wtDir, which
+	// must already be checked out at the current target tip. A clean merge
+	// produces a merge commit whose parents are [currentTip, srcRev]; the
+	// commit SHA can be read with HeadRevAt. Returns nil on clean merge,
+	// or an error on conflict. On error, the implementation is responsible
+	// for running `git merge --abort` so the worktree is left clean.
+	MergeInto(wtDir, srcRev, msg string) error
 
 	// HeadRevAt returns HEAD of the git workdir at dir.
 	HeadRevAt(dir string) (string, error)
@@ -189,8 +197,8 @@ type LandingGitOps interface {
 	FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error)
 
 	// CountCommits returns the number of commits reachable from tip but not
-	// from base (i.e. git rev-list --count base..tip). Used to record
-	// rebase depth in land metrics. Returns 0 on error.
+	// from base (i.e. git rev-list --count base..tip). Used to record the
+	// contribution size in land metrics. Returns 0 on error.
 	CountCommits(dir, base, tip string) int
 }
 
@@ -259,24 +267,9 @@ func (RealLandingGitOps) SyncIndexToHead(dir string) error {
 	return nil
 }
 
-func (RealLandingGitOps) CreateBranch(dir, branch, sha string) error {
-	out, err := osexec.Command("git", "-C", dir, "branch", branch, sha).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git branch %s %s: %s: %w", branch, sha, strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
-func (RealLandingGitOps) DeleteBranch(dir, branch string) error {
-	out, err := osexec.Command("git", "-C", dir, "branch", "-D", branch).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git branch -D %s: %s: %w", branch, strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
 func (RealLandingGitOps) AddWorktree(dir, path, rev string) error {
-	out, err := osexec.Command("git", "-C", dir, "worktree", "add", "--force", path, rev).CombinedOutput()
+	// --detach so the worktree does not create a persistent branch.
+	out, err := osexec.Command("git", "-C", dir, "worktree", "add", "--force", "--detach", path, rev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree add %s %s: %s: %w", path, rev, strings.TrimSpace(string(out)), err)
 	}
@@ -289,11 +282,22 @@ func (RealLandingGitOps) RemoveWorktree(dir, path string) error {
 	return nil
 }
 
-func (RealLandingGitOps) RebaseOnto(wtDir, onto, upstream string) error {
-	out, err := osexec.Command("git", "-C", wtDir, "rebase", "--onto", onto, upstream).CombinedOutput()
+func (RealLandingGitOps) MergeInto(wtDir, srcRev, msg string) error {
+	// --no-ff forces a merge commit even when the merge could fast-forward
+	// (which shouldn't happen given our caller's ancestry check, but is a
+	// defensive guarantee that target history always gets a marker commit).
+	// We inject user.name/user.email via -c so the merge commit can be
+	// created even when the worktree inherited no git config; the
+	// coordinator is a machine actor and should not adopt a human's identity.
+	out, err := osexec.Command(
+		"git", "-C", wtDir,
+		"-c", "user.name=ddx-land-coordinator",
+		"-c", "user.email=coordinator@ddx.local",
+		"merge", "--no-ff", "-m", msg, srcRev,
+	).CombinedOutput()
 	if err != nil {
-		_ = osexec.Command("git", "-C", wtDir, "rebase", "--abort").Run()
-		return fmt.Errorf("git rebase --onto %s %s: %s: %w", onto, upstream, strings.TrimSpace(string(out)), err)
+		_ = osexec.Command("git", "-C", wtDir, "merge", "--abort").Run()
+		return fmt.Errorf("git merge --no-ff %s: %s: %w", srcRev, strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
@@ -390,7 +394,7 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 // landIterationRef returns the documented hidden ref for a land-time preserve.
 // Format: refs/ddx/iterations/<bead-id>/<attempt-id>-<short-tip>. The short-tip
 // captures the current target tip at the time of the conflict so subsequent
-// recovery tools can reconstruct which rebase target was in play.
+// recovery tools can reconstruct which merge target was in play.
 func landIterationRef(beadID, attemptID, tip string) string {
 	short := tip
 	if len(short) > 12 {
@@ -403,7 +407,7 @@ func landIterationRef(beadID, attemptID, tip string) string {
 	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, attempt, short)
 }
 
-// Land performs fetch → rebase-if-needed → ff → push for a single submission.
+// Land performs fetch → (ff or merge) → push for a single submission.
 // Callers MUST serialize calls per projectRoot (the server coordinator
 // goroutine provides this). Land() itself takes no internal locks.
 //
@@ -450,7 +454,12 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		return nil, fmt.Errorf("resolving target tip %s: %w", targetRef, err)
 	}
 
-	// Fast path: no sibling advanced the target branch → straight ff.
+	contribCount := gitOps.CountCommits(wd, req.BaseRev, req.ResultRev)
+
+	// Fast path: no sibling advanced the target branch → straight ff via
+	// update-ref. The worker's commit becomes the new tip unchanged; its
+	// parent is still BaseRev, so replay sees the same inputs the worker
+	// saw. No merge commit is created.
 	if currentTip == req.BaseRev {
 		if err := gitOps.UpdateRefTo(wd, targetRef, req.ResultRev, currentTip); err != nil {
 			return nil, fmt.Errorf("fast-forwarding %s to %s: %w", targetRef, req.ResultRev, err)
@@ -459,24 +468,20 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		// doesn't build a stale tree. Non-fatal on error.
 		_ = gitOps.SyncIndexToHead(wd)
 		result := &LandResult{
-			Status:  "landed",
-			NewTip:  req.ResultRev,
-			Rebased: false,
+			Status:            "landed",
+			NewTip:            req.ResultRev,
+			Merged:            false,
+			MergedCommitCount: contribCount,
 		}
 		landPush(wd, targetBranch, req.ResultRev, hasOrigin, gitOps, result)
 		return result, nil
 	}
 
-	// Rebase path: the target has advanced since the worker started. Replay
-	// the worker's commits (BaseRev..ResultRev) onto currentTip in a
-	// throwaway temp worktree.
-	tempBranch := fmt.Sprintf("ddx-land-%s-%s", req.BeadID, shortAttempt(req.AttemptID))
-	if err := gitOps.CreateBranch(wd, tempBranch, req.ResultRev); err != nil {
-		return nil, fmt.Errorf("creating temp land branch %s: %w", tempBranch, err)
-	}
-	// Ensure the temp branch is always cleaned up (even on rebase conflict).
-	defer func() { _ = gitOps.DeleteBranch(wd, tempBranch) }()
-
+	// Merge path: the target has advanced since the worker started. Create
+	// a temp detached worktree at currentTip and run `git merge --no-ff
+	// ResultRev` inside it. The result is a merge commit whose parents are
+	// [currentTip, ResultRev]. Crucially, ResultRev itself is NOT rewritten:
+	// its parent is still BaseRev, so replay observes the original inputs.
 	tempWT, tempWtErr := os.MkdirTemp("", "ddx-land-wt-*")
 	if tempWtErr != nil {
 		return nil, fmt.Errorf("creating temp worktree dir: %w", tempWtErr)
@@ -484,34 +489,34 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	// os.MkdirTemp creates the dir, but git worktree add refuses to run if
 	// the target already exists. Remove it first so git can recreate it.
 	_ = os.RemoveAll(tempWT)
-	if err := gitOps.AddWorktree(wd, tempWT, tempBranch); err != nil {
-		return nil, fmt.Errorf("adding temp worktree: %w", err)
+	if err := gitOps.AddWorktree(wd, tempWT, currentTip); err != nil {
+		return nil, fmt.Errorf("adding temp worktree at %s: %w", currentTip, err)
 	}
 	defer func() { _ = gitOps.RemoveWorktree(wd, tempWT) }()
 
-	rebaseCount := gitOps.CountCommits(wd, req.BaseRev, req.ResultRev)
-
-	if err := gitOps.RebaseOnto(tempWT, currentTip, req.BaseRev); err != nil {
-		// Rebase conflict: preserve the original ResultRev and return.
+	mergeMsg := fmt.Sprintf("Merge bead %s attempt %s into %s", req.BeadID, shortAttempt(req.AttemptID), targetBranch)
+	if err := gitOps.MergeInto(tempWT, req.ResultRev, mergeMsg); err != nil {
+		// Merge conflict: preserve the original ResultRev and return.
 		preserveRef := landIterationRef(req.BeadID, req.AttemptID, currentTip)
 		if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
-			return nil, fmt.Errorf("preserving %s after rebase conflict: %w", preserveRef, upErr)
+			return nil, fmt.Errorf("preserving %s after merge conflict: %w", preserveRef, upErr)
 		}
 		return &LandResult{
 			Status:            "preserved",
 			PreserveRef:       preserveRef,
-			Reason:            "rebase conflict",
-			RebaseCommitCount: rebaseCount,
+			Reason:            "merge conflict",
+			MergedCommitCount: contribCount,
 		}, nil
 	}
 
-	// Rebase clean: read the new tip from the temp worktree and ff the target.
-	newTip, err := gitOps.HeadRevAt(tempWT)
+	// Merge clean: read the merge commit SHA from the temp worktree's HEAD
+	// and fast-forward the target branch to it.
+	mergeSHA, err := gitOps.HeadRevAt(tempWT)
 	if err != nil {
-		return nil, fmt.Errorf("reading rebased HEAD: %w", err)
+		return nil, fmt.Errorf("reading merge HEAD: %w", err)
 	}
-	if err := gitOps.UpdateRefTo(wd, targetRef, newTip, currentTip); err != nil {
-		return nil, fmt.Errorf("fast-forwarding %s to rebased tip %s: %w", targetRef, newTip, err)
+	if err := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, currentTip); err != nil {
+		return nil, fmt.Errorf("fast-forwarding %s to merge commit %s: %w", targetRef, mergeSHA, err)
 	}
 	// Refresh the main worktree's index so a subsequent CommitTracker
 	// doesn't build a stale tree. Non-fatal on error.
@@ -519,11 +524,11 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 
 	result := &LandResult{
 		Status:            "landed",
-		NewTip:            newTip,
-		Rebased:           true,
-		RebaseCommitCount: rebaseCount,
+		NewTip:            mergeSHA,
+		Merged:            true,
+		MergedCommitCount: contribCount,
 	}
-	landPush(wd, targetBranch, newTip, hasOrigin, gitOps, result)
+	landPush(wd, targetBranch, mergeSHA, hasOrigin, gitOps, result)
 	return result, nil
 }
 
@@ -561,17 +566,20 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 	}
 	switch land.Status {
 	case "landed":
-		// One bead → one (rebased) commit → linear history.
-		res.Outcome = "merged" // kept as "merged" for compatibility with existing supervisors
+		// Fast-forward or merge commit — either way the target branch now
+		// contains the worker's result. ResultRev's own parent is still
+		// BaseRev so replay fidelity is preserved.
+		res.Outcome = "merged"
 		res.Reason = ""
 		res.PreserveRef = ""
-		if land.Rebased {
-			res.Reason = "rebased onto current tip"
+		if land.Merged {
+			res.Reason = "merged onto current tip"
 		}
 		if land.PushFailed {
 			res.Reason = "landed locally; push failed: " + land.PushError
 		}
-		// ResultRev now reflects the ref actually on the target branch.
+		// NewTip reflects the ref actually on the target branch (either
+		// ResultRev on the ff path or the merge commit SHA on the merge path).
 		if land.NewTip != "" {
 			res.ResultRev = land.NewTip
 		}
@@ -594,7 +602,7 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 	if land.Status == "preserved" {
 		// Route preserve reasons through the land-conflict classifier so the
 		// loop sees land_conflict (not generic success).
-		reasonForStatus = "rebase failed"
+		reasonForStatus = "merge conflict"
 	}
 	res.Status = ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, reasonForStatus)
 	res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
