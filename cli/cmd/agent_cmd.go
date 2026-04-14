@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -735,6 +736,9 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r := f.agentRunner()
 			logDir := r.Config.SessionLogDir
+			if !filepath.IsAbs(logDir) {
+				logDir = filepath.Join(f.WorkingDir, logDir)
+			}
 			logFile := logDir + "/sessions.jsonl"
 
 			data, err := os.ReadFile(logFile)
@@ -768,6 +772,117 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 				return fmt.Errorf("session not found: %s", args[0])
 			}
 
+			beadID, _ := cmd.Flags().GetString("bead")
+			asJSON, _ := cmd.Flags().GetBool("json")
+
+			// --bead filter: show per-bead attempt history
+			if beadID != "" {
+				var filtered []agent.SessionEntry
+				for _, line := range lines {
+					var entry agent.SessionEntry
+					if err := json.Unmarshal([]byte(line), &entry); err != nil {
+						continue
+					}
+					if entry.Correlation["bead_id"] == beadID {
+						filtered = append(filtered, entry)
+					}
+				}
+
+				if len(filtered) == 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "no sessions found for bead %s\n", beadID)
+					return nil
+				}
+
+				// Sort ascending by timestamp (attempt order)
+				sort.Slice(filtered, func(i, j int) bool {
+					return filtered[i].Timestamp.Before(filtered[j].Timestamp)
+				})
+
+				execBaseDir := filepath.Join(f.WorkingDir, agent.ExecuteBeadArtifactDir)
+				resolveOutcome := func(entry agent.SessionEntry) string {
+					attemptID := entry.Correlation["attempt_id"]
+					if attemptID != "" {
+						resultPath := filepath.Join(execBaseDir, attemptID, "result.json")
+						if rdata, rerr := os.ReadFile(resultPath); rerr == nil {
+							var result agent.ExecuteBeadResult
+							if jerr := json.Unmarshal(rdata, &result); jerr == nil && result.Outcome != "" {
+								return result.Outcome
+							}
+						}
+					}
+					if entry.ExitCode == 0 {
+						return "success"
+					}
+					return "error"
+				}
+
+				if asJSON {
+					type entryWithOutcome struct {
+						agent.SessionEntry
+						Outcome string `json:"outcome"`
+					}
+					out := make([]entryWithOutcome, len(filtered))
+					for i, e := range filtered {
+						out[i] = entryWithOutcome{SessionEntry: e, Outcome: resolveOutcome(e)}
+					}
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(out)
+				}
+
+				var nMerged, nPreserved, nErrors int
+				now := time.Now()
+				var lastAttemptTime time.Time
+
+				tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+				fmt.Fprintln(tw, "ATTEMPT\tSTARTED\tDURATION\tHARNESS\tMODEL\tOUTCOME\tTOKENS\tCOST\tSESSION")
+				for i, entry := range filtered {
+					outcome := resolveOutcome(entry)
+					switch outcome {
+					case "merged":
+						nMerged++
+					case "preserved":
+						nPreserved++
+					case "error", "task_failed":
+						nErrors++
+					}
+					if entry.Timestamp.After(lastAttemptTime) {
+						lastAttemptTime = entry.Timestamp
+					}
+
+					model := entry.Model
+					if model == "" {
+						model = "-"
+					}
+					cost := "local"
+					if entry.CostUSD > 0 {
+						cost = fmt.Sprintf("$%.4f", entry.CostUSD)
+					}
+					sessionShort := entry.ID
+					if len(sessionShort) > 8 {
+						sessionShort = sessionShort[:8]
+					}
+
+					fmt.Fprintf(tw, "%d\t%s\t%dms\t%s\t%s\t%s\t%d\t%s\t%s\n",
+						i+1,
+						entry.Timestamp.Format("2006-01-02 15:04:05"),
+						entry.Duration,
+						entry.Harness,
+						model,
+						outcome,
+						entry.Tokens,
+						cost,
+						sessionShort,
+					)
+				}
+				_ = tw.Flush()
+
+				elapsed := agentLogFormatElapsed(now.Sub(lastAttemptTime))
+				fmt.Fprintf(cmd.OutOrStdout(), "\n%s: %d attempts, %d merged, %d preserved, %d errors. Last attempt: %s ago.\n",
+					beadID, len(filtered), nMerged, nPreserved, nErrors, elapsed)
+				return nil
+			}
+
 			// Show recent sessions
 			limit, _ := cmd.Flags().GetInt("limit")
 			start := 0
@@ -788,7 +903,26 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Int("limit", 20, "Number of recent sessions to show")
+	cmd.Flags().String("bead", "", "Filter sessions by bead ID and show attempt history")
+	cmd.Flags().Bool("json", false, "Output as JSON (with --bead)")
 	return cmd
+}
+
+// agentLogFormatElapsed formats a duration as a human-readable string (e.g. "5s", "3m", "2h", "1d").
+func agentLogFormatElapsed(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
 func (f *CommandFactory) newAgentBenchmarkCommand() *cobra.Command {
