@@ -46,7 +46,7 @@ func (m *gateTestGitOps) WorktreePrune(dir string) error { return nil }
 
 func (m *gateTestGitOps) IsDirty(dir string) (bool, error) { return false, nil }
 
-func (m *gateTestGitOps) SynthesizeCommit(dir string) (bool, error) { return false, nil }
+func (m *gateTestGitOps) SynthesizeCommit(dir, msg string) (bool, error) { return false, nil }
 
 // gateTestOrchestratorGitOps is an OrchestratorGitOps mock for landing tests.
 type gateTestOrchestratorGitOps struct {

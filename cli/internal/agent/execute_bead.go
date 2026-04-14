@@ -87,10 +87,10 @@ type GitOps interface {
 	WorktreePrune(dir string) error
 	IsDirty(dir string) (bool, error)
 	// SynthesizeCommit stages real file changes (excluding harness noise paths) and
-	// commits them. Returns (true, nil) when a commit was made, (false, nil) when
-	// there was nothing real to commit (all dirty files were noise), and (false, err)
-	// on failure.
-	SynthesizeCommit(dir string) (bool, error)
+	// commits them using msg as the commit message. Returns (true, nil) when a
+	// commit was made, (false, nil) when there was nothing real to commit (all
+	// dirty files were noise), and (false, err) on failure.
+	SynthesizeCommit(dir, msg string) (bool, error)
 }
 
 // AgentRunner runs an agent with the given options.
@@ -236,10 +236,10 @@ func (r *RealGitOps) IsDirty(dir string) (bool, error) {
 }
 
 // SynthesizeCommit stages real file changes, explicitly excluding harness noise
-// paths, and creates a commit. Returns (true, nil) when a commit was made,
-// (false, nil) when nothing real remained to commit after exclusions, and
-// (false, err) on failure.
-func (r *RealGitOps) SynthesizeCommit(dir string) (bool, error) {
+// paths, and creates a commit with msg as the commit message. Returns (true, nil)
+// when a commit was made, (false, nil) when nothing real remained to commit
+// after exclusions, and (false, err) on failure.
+func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	addArgs := []string{
 		"-C", dir, "add", "-A", "--",
 		".",
@@ -256,7 +256,10 @@ func (r *RealGitOps) SynthesizeCommit(dir string) (bool, error) {
 	if len(bytes.TrimSpace(statusOut)) == 0 {
 		return false, nil
 	}
-	out, err := osexec.Command("git", "-C", dir, "commit", "-m", "chore: execute-bead synthesized result commit").CombinedOutput()
+	if msg == "" {
+		msg = "chore: execute-bead synthesized result commit"
+	}
+	out, err := osexec.Command("git", "-C", dir, "commit", "-m", msg).CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -440,13 +443,77 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		return res, fmt.Errorf("failed to read worktree HEAD: %w", revErr)
 	}
 
+	// Write usage.json when the harness reports token usage or cost.
+	// Done before SynthesizeCommit so usage data is available in the
+	// preliminary result written for commit-message sourcing.
+	var usageFileRel string
+	if tokens > 0 || costUSD > 0 {
+		usage := executeBeadUsage{
+			AttemptID:    attemptID,
+			Harness:      resultHarness,
+			Provider:     resultProvider,
+			Model:        resultModel,
+			Tokens:       tokens,
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+			CostUSD:      costUSD,
+		}
+		if writeErr := writeArtifactJSON(artifacts.UsageAbs, usage); writeErr == nil {
+			usageFileRel = artifacts.UsageRel
+		}
+	}
+
 	// Synthesize a commit when the agent left tracked edits without committing.
 	// Only do so for real changes — harness noise paths are excluded. If nothing
 	// real was staged (committed is false), leave resultRev == baseRev so the
 	// outcome is classified as task_no_changes.
 	if resultRev == baseRev {
 		if isDirty, _ := gitOps.IsDirty(wtPath); isDirty {
-			if committed, synthErr := gitOps.SynthesizeCommit(wtPath); synthErr == nil && committed {
+			// Build a preliminary result and write it to result.json before
+			// calling SynthesizeCommit. The commit message is then sourced from
+			// the tracked artifact file, satisfying the provenance contract:
+			// "commit-message metadata must be projected from tracked artifact
+			// files, never from ad hoc runtime state" (FEAT-006).
+			// The final result.json is re-written after the commit with the
+			// correct ResultRev, Outcome, and Status.
+			prelimOutcome := ExecuteBeadOutcomeTaskSucceeded
+			if exitCode != 0 {
+				prelimOutcome = ExecuteBeadOutcomeTaskFailed
+			}
+			prelimRes := &ExecuteBeadResult{
+				BeadID:       beadID,
+				AttemptID:    attemptID,
+				WorkerID:     opts.WorkerID,
+				BaseRev:      baseRev,
+				ResultRev:    "", // unknown until commit is made
+				Harness:      resultHarness,
+				Provider:     resultProvider,
+				Model:        resultModel,
+				SessionID:    sessionID,
+				DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
+				Tokens:       tokens,
+				CostUSD:      costUSD,
+				ExitCode:     exitCode,
+				Error:        agentErrMsg,
+				ExecutionDir: artifacts.DirRel,
+				PromptFile:   artifacts.PromptRel,
+				ManifestFile: artifacts.ManifestRel,
+				ResultFile:   artifacts.ResultRel,
+				UsageFile:    usageFileRel,
+				StartedAt:    startedAt,
+				FinishedAt:   finishedAt,
+				Outcome:      prelimOutcome,
+			}
+			populateWorkerStatus(prelimRes)
+			_ = writeArtifactJSON(artifacts.ResultAbs, prelimRes)
+
+			// Render the commit message from the tracked artifact file.
+			commitMsg, msgErr := BuildCommitMessageFromResultFile(artifacts.ResultAbs)
+			if msgErr != nil {
+				commitMsg = "chore: execute-bead iteration " + beadID
+			}
+
+			if committed, synthErr := gitOps.SynthesizeCommit(wtPath, commitMsg); synthErr == nil && committed {
 				if newRev, _ := gitOps.HeadRev(wtPath); newRev != baseRev {
 					resultRev = newRev
 				}
@@ -473,25 +540,9 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		PromptFile:   artifacts.PromptRel,
 		ManifestFile: artifacts.ManifestRel,
 		ResultFile:   artifacts.ResultRel,
+		UsageFile:    usageFileRel,
 		StartedAt:    startedAt,
 		FinishedAt:   finishedAt,
-	}
-
-	// Write usage.json when the harness reports token usage or cost.
-	if tokens > 0 || costUSD > 0 {
-		usage := executeBeadUsage{
-			AttemptID:    attemptID,
-			Harness:      resultHarness,
-			Provider:     resultProvider,
-			Model:        resultModel,
-			Tokens:       tokens,
-			InputTokens:  inputTokens,
-			OutputTokens: outputTokens,
-			CostUSD:      costUSD,
-		}
-		if writeErr := writeArtifactJSON(artifacts.UsageAbs, usage); writeErr == nil {
-			res.UsageFile = artifacts.UsageRel
-		}
 	}
 
 	// Classify worker outcome: task_succeeded / task_failed / task_no_changes.

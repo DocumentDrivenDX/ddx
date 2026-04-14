@@ -126,7 +126,7 @@ func (f *fakeExecuteBeadGit) WorktreeList(dir string) ([]string, error) {
 	return f.worktrees, nil
 }
 
-func (f *fakeExecuteBeadGit) SynthesizeCommit(dir string) (bool, error) {
+func (f *fakeExecuteBeadGit) SynthesizeCommit(dir, msg string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if strings.Contains(dir, agent.ExecuteBeadWtPrefix) && f.synthRev != "" {
