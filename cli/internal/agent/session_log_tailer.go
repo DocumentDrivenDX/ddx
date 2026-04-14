@@ -25,7 +25,7 @@ func TailSessionLogs(ctx context.Context, projectRoot string, dst io.Writer) {
 	// Record existing files so we don't replay old logs
 	if entries, err := os.ReadDir(logDir); err == nil {
 		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "agent-") && strings.HasSuffix(entry.Name(), ".jsonl") {
+			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "agent-") && strings.HasSuffix(entry.Name(), ".jsonl") && !strings.HasPrefix(entry.Name(), "agent-loop-") {
 				if info, err := entry.Info(); err == nil {
 					states[filepath.Join(logDir, entry.Name())] = &fileTrackState{offset: info.Size()}
 				}
@@ -56,6 +56,12 @@ func readNewLogLines(logDir string, states map[string]*fileTrackState, dst io.Wr
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "agent-") || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		// Skip loop event files — their milestones are emitted directly via
+		// opts.Log in ExecuteBeadWorker; processing them here would produce
+		// duplicate output for human operators.
+		if strings.HasPrefix(entry.Name(), "agent-loop-") {
 			continue
 		}
 

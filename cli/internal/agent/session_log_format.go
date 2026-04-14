@@ -107,6 +107,60 @@ func FormatSessionLogLines(lines []string) string {
 				durSuffix = fmt.Sprintf(" (%.1fs)", dur/1000)
 			}
 			fmt.Fprintf(&sb, "  🔧 %s %s%s%s\n", name, argHint, durSuffix, errSuffix)
+		case "bead.claimed":
+			data, _ := entry["data"].(map[string]any)
+			beadID, _ := data["bead_id"].(string)
+			title, _ := data["title"].(string)
+			if title != "" {
+				fmt.Fprintf(&sb, "\n▶ %s: %s\n", beadID, title)
+			} else {
+				fmt.Fprintf(&sb, "\n▶ %s\n", beadID)
+			}
+		case "bead.result":
+			data, _ := entry["data"].(map[string]any)
+			beadID, _ := data["bead_id"].(string)
+			status, _ := data["status"].(string)
+			detail, _ := data["detail"].(string)
+			resultRev, _ := data["result_rev"].(string)
+			preserveRef, _ := data["preserve_ref"].(string)
+			durationMs, _ := data["duration_ms"].(float64)
+			var outcome string
+			switch status {
+			case "success":
+				shortRev := resultRev
+				if len(shortRev) > 8 {
+					shortRev = shortRev[:8]
+				}
+				if shortRev != "" {
+					outcome = fmt.Sprintf("merged (%s)", shortRev)
+				} else {
+					outcome = "merged"
+				}
+			case "already_satisfied", "no_changes":
+				outcome = status
+			default:
+				if detail == "" {
+					detail = status
+				}
+				if preserveRef != "" {
+					outcome = fmt.Sprintf("preserved: %s", detail)
+				} else {
+					outcome = fmt.Sprintf("error: %s", detail)
+				}
+			}
+			durStr := ""
+			if durationMs > 0 {
+				durStr = fmt.Sprintf(" (%.1fs)", durationMs/1000)
+			}
+			fmt.Fprintf(&sb, "✓ %s → %s%s\n", beadID, outcome, durStr)
+		case "loop.end":
+			data, _ := entry["data"].(map[string]any)
+			attempts, _ := data["attempts"].(float64)
+			successes, _ := data["successes"].(float64)
+			failures, _ := data["failures"].(float64)
+			if attempts > 0 {
+				fmt.Fprintf(&sb, "\nloop done: %.0f attempted, %.0f succeeded, %.0f failed\n", attempts, successes, failures)
+			}
 		case "compaction.start":
 			// Suppress: we'll show a single line on compaction.end only if it succeeded.
 		case "compaction.end":

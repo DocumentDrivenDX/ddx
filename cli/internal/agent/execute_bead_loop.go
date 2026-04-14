@@ -178,6 +178,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			"assignee": assignee,
 		})
 
+		if opts.Log != nil {
+			if candidate.Title != "" {
+				_, _ = fmt.Fprintf(opts.Log, "\n▶ %s: %s\n", candidate.ID, candidate.Title)
+			} else {
+				_, _ = fmt.Fprintf(opts.Log, "\n▶ %s\n", candidate.ID)
+			}
+		}
+
 		hbCtx, hbCancel := context.WithCancel(ctx)
 		var hbWG sync.WaitGroup
 		hbWG.Add(1)
@@ -274,28 +282,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		}
 
 		emit("bead.result", map[string]any{
-			"bead_id":     candidate.ID,
-			"status":      report.Status,
-			"detail":      report.Detail,
-			"session_id":  report.SessionID,
-			"result_rev":  report.ResultRev,
-			"base_rev":    report.BaseRev,
-			"duration_ms": now().Sub(runStart).Milliseconds(),
+			"bead_id":      candidate.ID,
+			"status":       report.Status,
+			"detail":       report.Detail,
+			"session_id":   report.SessionID,
+			"result_rev":   report.ResultRev,
+			"base_rev":     report.BaseRev,
+			"preserve_ref": report.PreserveRef,
+			"duration_ms":  now().Sub(runStart).Milliseconds(),
 		})
 
 		if opts.Log != nil {
-			resultStr := report.Status
-			if report.ResultRev != "" {
-				shortRev := report.ResultRev
-				if len(shortRev) > 8 {
-					shortRev = shortRev[:8]
-				}
-				resultStr = fmt.Sprintf("%s (%s)", report.Status, shortRev)
-			}
-			if report.Detail != "" && report.Detail != report.Status {
-				resultStr = fmt.Sprintf("%s: %s", resultStr, report.Detail)
-			}
-			_, _ = fmt.Fprintf(opts.Log, "✓ %s → %s\n", candidate.ID, resultStr)
+			_, _ = fmt.Fprintf(opts.Log, "✓ %s → %s\n", candidate.ID, formatLoopResult(report))
 		}
 
 		if opts.Once {
@@ -371,6 +369,35 @@ func writeLoopEvent(sink io.Writer, sessionID, eventType string, data map[string
 	}
 	_, _ = sink.Write(line)
 	_, _ = sink.Write([]byte("\n"))
+}
+
+// formatLoopResult returns a concise human-readable summary of a bead execution
+// result using merged/preserved/error terminology instead of raw status codes.
+func formatLoopResult(report ExecuteBeadReport) string {
+	switch report.Status {
+	case ExecuteBeadStatusSuccess:
+		shortRev := report.ResultRev
+		if len(shortRev) > 8 {
+			shortRev = shortRev[:8]
+		}
+		if shortRev != "" {
+			return fmt.Sprintf("merged (%s)", shortRev)
+		}
+		return "merged"
+	case ExecuteBeadStatusAlreadySatisfied:
+		return "already_satisfied"
+	case ExecuteBeadStatusNoChanges:
+		return "no_changes"
+	default:
+		detail := report.Detail
+		if detail == "" {
+			detail = report.Status
+		}
+		if report.PreserveRef != "" {
+			return fmt.Sprintf("preserved: %s", detail)
+		}
+		return fmt.Sprintf("error: %s", detail)
+	}
 }
 
 func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
