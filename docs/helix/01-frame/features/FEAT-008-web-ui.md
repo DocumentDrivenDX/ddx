@@ -201,7 +201,36 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    - Quick links to ready beads, stale documents, recent agent activity
    - Project health indicators (library populated, config valid, beads active)
    - Worker list includes single-ticket workers and epic workers separately,
-     showing the active bead/epic, worktree, branch, and current phase
+     showing the active bead/epic, worktree, branch, and current phase.
+     The worker list is populated from
+     `GET /api/projects/:project/workers` (see FEAT-002). Each worker card
+     renders the `current_attempt.phase` field as a color-coded phase badge:
+
+     | Phase | Badge color |
+     |-------|------------|
+     | `queueing` | gray |
+     | `launching` | blue |
+     | `running` | green |
+     | `post_checks` | yellow |
+     | `landing` | purple |
+     | `done` | teal |
+     | `preserved` | orange |
+     | `failed` | red |
+
+   - Clicking a worker card expands to show the `recent_phases` timeline from
+     `GET /api/projects/:project/workers/:id`. The expanded view also shows
+     elapsed time, harness/model identity, cumulative token counts, and a link
+     to the full execution evidence bundle for completed attempts.
+   - For in-flight workers, the card auto-refreshes using the SSE stream at
+     `GET /api/projects/:project/workers/:id/progress`. The UI updates the
+     phase badge, elapsed time, and token count from each progress event without
+     re-fetching the full worker record. When the terminal phase event arrives,
+     the stream closes and the card switches to a static completed state.
+   - The live progress feed (SSE) and the polling fallback (worker detail
+     endpoint) are the same shared read model; the UI uses SSE when available
+     and falls back to polling at the configured refresh interval otherwise.
+     No additional workflow policy is applied by the UI — it observes and
+     displays the events emitted by `execute-bead` without triggering actions.
 
 6. **Epic execution view**
    - Lists open epics separately from single-ticket ready work
@@ -359,6 +388,30 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 - Given I submit the form, then a bead is created via the API and appears in the list
 - Given I click a bead's status, then I can transition it (open → in_progress → closed)
 - Given I'm viewing a bead, then I can add/remove dependencies by selecting other beads
+
+### US-085b: Operator Tracks Live Worker Progress from Status Dashboard
+**As an** operator supervising a running execute-loop
+**I want** to see each worker's current execution phase in real time
+**So that** I can tell whether an agent is making progress, stalled, or done
+**without** leaving the browser
+
+**Acceptance Criteria:**
+- Given a worker is in the `running` phase, when I open the status dashboard,
+  then I see a green "running" phase badge on the worker card with the elapsed
+  time and current token count
+- Given the worker transitions to `post_checks`, then the badge updates to
+  yellow "post_checks" within the SSE delivery latency (no manual refresh required)
+- Given I click a worker card, then I see the `recent_phases` timeline showing
+  when each phase started (timestamp and elapsed since attempt began)
+- Given the worker reaches a terminal phase (`done`, `preserved`, or `failed`),
+  then the card updates to the terminal badge color and stops live-updating
+- Given the SSE stream is unavailable, then the UI falls back to polling the
+  worker detail endpoint and renders the same phase information from
+  `recent_phases` without showing an error to the user
+- Given I look at a worker card, then I can see harness, model, and bead title
+  without expanding the card
+- Given I expand a worker card for a completed attempt, then I see a link to
+  the execution evidence bundle for that attempt
 
 ### US-086: Developer Monitors Agent Activity in Real Time
 **As a** developer running agents against my project

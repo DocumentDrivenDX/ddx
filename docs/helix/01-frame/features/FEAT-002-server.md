@@ -142,6 +142,77 @@ resolve exactly one project context.
     session/trace references and any DDx-owned transcript data
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
+**Worker Progress (FEAT-006 embedded-agent progress contract)**
+
+Worker state is read from the WorkerManager's in-memory registry plus the
+per-project `.ddx/workers/` directory. The WorkerManager is the single
+authoritative source for live phase state; the on-disk records are the
+authoritative source for historical phase summaries.
+
+22. `GET /api/projects/:project/workers` — list active and recently completed
+    workers for a project; each entry includes worker identity, current status
+    (`idle` | `running` | `stopped` | `error`), and, when a run is in flight, the
+    current attempt identity and phase.
+23. `GET /api/projects/:project/workers/:id` — worker detail including:
+    - worker identity (`id`, `project_id`, `started_at`)
+    - current status and current attempt fields (same as list entry)
+    - `recent_phases`: ordered list of the last N phase-transition events for
+      the current or most recent attempt, so the UI can show a phase timeline
+      without a live stream connection
+    - `last_attempt`: summary of the most recently completed attempt with
+      outcome, duration, and token totals
+24. `GET /api/projects/:project/workers/:id/progress` — Server-Sent Events
+    stream of live progress events for the running worker. Each event is a
+    JSON-encoded progress event as defined in FEAT-006 "Embedded-Agent Progress
+    Events". The stream delivers phase-transition and heartbeat events in
+    real time. When no run is active the stream stays open and emits a
+    keepalive comment line (`": keepalive"`) at the configured heartbeat interval
+    so clients can distinguish a quiet-but-alive worker from a dropped connection.
+    When the attempt reaches a terminal phase (`done`, `preserved`, or `failed`),
+    the server emits the final event and closes the stream.
+    - Polling alternative: clients that cannot use SSE may poll
+      `GET /api/projects/:project/workers/:id` at their own interval and use the
+      `recent_phases` field to reconstruct phase history.
+25. MCP tool: `ddx_worker_list`, `ddx_worker_show` — project-scoped worker
+    state reads (project selector required unless singleton compatibility mode applies).
+    MCP tools do not expose the SSE stream; polling via `ddx_worker_show` is the
+    MCP-compatible alternative.
+
+Worker state object structure (both list and detail responses embed the same
+shape for the in-flight attempt, enabling a single read model across CLI and UI):
+
+```json
+{
+  "id":         "worker-abc123",
+  "project_id": "proj-xyz",
+  "status":     "running",
+  "current_attempt": {
+    "attempt_id": "20260413T140544-6b4034a1",
+    "bead_id":    "ddx-abc12345",
+    "bead_title": "Add structured progress output",
+    "harness":    "agent",
+    "model":      "qwen3.5-27b",
+    "profile":    "cheap",
+    "phase":      "running",
+    "phase_seq":  3,
+    "started_at": "2026-04-14T05:09:51Z",
+    "elapsed_ms": 45000,
+    "tokens":     { "input": 8500, "output": 350, "total": 8850 },
+    "cost_usd":   0
+  },
+  "recent_phases": [
+    { "phase": "queueing",  "ts": "2026-04-14T05:09:00Z", "phase_seq": 1 },
+    { "phase": "launching", "ts": "2026-04-14T05:09:10Z", "phase_seq": 2 },
+    { "phase": "running",   "ts": "2026-04-14T05:09:51Z", "phase_seq": 3 }
+  ],
+  "last_attempt": null
+}
+```
+
+`recent_phases` retains only phase-transition events (not heartbeats) and is
+capped at the last 20 entries. This is the shared read model for both the CLI
+`ddx agent log --worker` command and the UI status dashboard worker cards.
+
 **Executions (FEAT-010)**
 22. `GET /api/projects/:project/exec/definitions` — list execution definitions with optional artifact filter
 23. `GET /api/projects/:project/exec/definitions/:id` — show one execution definition

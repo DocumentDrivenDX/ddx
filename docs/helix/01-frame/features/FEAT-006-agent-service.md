@@ -651,6 +651,130 @@ independent of graph-authored execution documents (see FEAT-014):
 - cost (where available)
 - base revision, result revision
 
+### Embedded-Agent Progress Events
+
+`execute-bead` emits structured progress events for each managed
+embedded-agent run. These events are the authoritative DDx-owned telemetry
+surface for live execution status; they are normalized runtime signals, not
+transcript duplication. Provider-native transcripts remain in external stores.
+
+#### Phase definitions
+
+Every managed run transitions through a fixed ordered phase sequence. Each
+phase transition emits one progress event; additional heartbeat events are
+emitted at a fixed interval during the `running` phase (≥ 1 per 30 seconds)
+so observers can detect stalls without waiting for phase transitions.
+
+| Phase | Meaning |
+|-------|---------|
+| `queueing` | Bead has been claimed by a worker; pre-launch validation is in progress |
+| `launching` | Worktree is being created and the rationalizer prompt is being compiled |
+| `running` | Agent is executing; heartbeats emitted periodically with elapsed and token deltas |
+| `post_checks` | Agent has finished; gate checks are being evaluated |
+| `landing` | Gate checks passed; merge/fast-forward is being applied |
+| `done` | Attempt completed and landed on the target branch |
+| `preserved` | Attempt completed but not landed; result is under a hidden ref |
+| `failed` | Attempt terminated with an unrecoverable error |
+
+The terminal phases are `done`, `preserved`, and `failed`. A run in any other
+phase is considered in-flight.
+
+#### Progress event schema
+
+Each event is a JSON object. Events emitted to the same attempt share the
+same `attempt_id`. The `phase_seq` counter increments monotonically within an
+attempt so consumers can detect duplicates or re-ordered delivery.
+
+```json
+{
+  "event_id":   "evt-<random>",
+  "attempt_id": "20260413T140544-6b4034a1",
+  "worker_id":  "worker-abc123",
+  "project_id": "proj-xyz",
+  "bead_id":    "ddx-abc12345",
+  "harness":    "agent",
+  "model":      "qwen3.5-27b",
+  "profile":    "cheap",
+  "phase":      "running",
+  "phase_seq":  3,
+  "heartbeat":  true,
+  "ts":         "2026-04-14T05:09:51Z",
+  "elapsed_ms": 45000,
+  "tokens": {
+    "input":  8500,
+    "output": 350,
+    "total":  8850
+  },
+  "cost_usd":   0,
+  "message":    "Agent running (iteration 5)"
+}
+```
+
+Required fields: `event_id`, `attempt_id`, `worker_id`, `project_id`,
+`bead_id`, `phase`, `phase_seq`, `heartbeat`, `ts`, `elapsed_ms`.
+
+Optional fields: `harness`, `model`, `profile`, `tokens`, `cost_usd`,
+`message`. Token and cost fields are omitted when the harness has not yet
+reported usage; consumers must treat their absence as "not yet known" rather
+than "zero".
+
+Field semantics:
+
+- `heartbeat`: `true` for periodic heartbeats within a phase; `false` for
+  phase-transition events. Phase-transition events are the canonical record of
+  when a phase began.
+- `elapsed_ms`: wall-clock milliseconds since the attempt started (phase
+  `queueing` transition). Not relative to the current phase start.
+- `tokens`: cumulative counts for the attempt, not delta from last event.
+  Consumers wanting deltas subtract the previous event's values.
+- `cost_usd`: `0` for local/free models; `-1` when the harness does not
+  report cost; omitted before any cost signal is available.
+- `message`: human-readable status string. Not machine-parsed; format may
+  change across DDx releases. Intended for CLI spinners and log tails only.
+
+#### Runtime-only vs. tracked distinction
+
+Progress events are **runtime-only telemetry**. They are not committed and are
+not guaranteed to survive beyond the live run. The following are the canonical
+tracked artifacts for post-hoc inspection; progress events complement these
+but do not replace them:
+
+| Artifact | Location | Scope |
+|----------|----------|-------|
+| Execution evidence bundle | `.ddx/executions/<attempt-id>/` | Tracked in git; full attempt record |
+| Worker lifecycle record | `.ddx/workers/<worker-id>.json` | Tracked on disk; worker start/stop history |
+| Invocation activity | `.ddx/agent-logs/` | Tracked on disk; per-invocation metadata |
+
+The terminal-phase event (`done`, `preserved`, or `failed`) is the only
+progress event whose payload is also reflected in the tracked execution
+evidence bundle (`result.json`). All other events are transient and are not
+back-filled into tracked artifacts.
+
+Servers and CLIs that poll or stream progress must handle gaps: if a
+connection drops and reconnects, they receive current phase state from the
+worker record, not a replay of all past events.
+
+#### Delivery contract
+
+Progress events are delivered through a single shared mechanism so CLI and
+server/UI consumers use the same feed without duplication or hidden policy:
+
+- **In-process channel**: during a local `execute-bead` run, events flow
+  through a buffered Go channel owned by the `execute-bead` coordinator.
+  The CLI subscriber drains this channel to render a live spinner/log output.
+- **Server SSE**: when the embedded-agent run is managed by `ddx-server`, the
+  WorkerManager subscribes to the same in-process channel and broadcasts each
+  event over a Server-Sent Events stream at
+  `GET /api/projects/:project/workers/:id/progress` (see FEAT-002).
+  Browser and CLI consumers connect to this endpoint for identical live output.
+- **Fan-out rule**: no consumer may introduce additional workflow policy
+  (e.g., automated retries, status transitions) purely from progress event
+  observation. Policy decisions remain inside `execute-bead` and the
+  WorkerManager. Consumers observe and display; they do not act.
+
+The CLI live output and the SSE stream are two views of the same channel.
+There is no separate CLI-specific progress bus.
+
 ### Iteration commit summary
 
 Each execute-bead iteration produces a commit (landed or preserved under a
