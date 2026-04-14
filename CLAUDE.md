@@ -60,6 +60,26 @@ make build-all      # Build for all platforms
 make release        # Create release archives
 ```
 
+### Frontend Development (SvelteKit)
+
+The web UI is a SvelteKit application built with Bun. Run from the repository root:
+
+```bash
+# Install frontend dependencies and start dev server
+cd cli/internal/server/frontend && bun install && bun run dev
+
+# Generate GraphQL types from schema
+bun run houdini:generate
+
+# Run unit tests
+bun run test
+
+# Run e2e tests with Playwright
+bun run test:e2e
+```
+
+Frontend build output is embedded into the Go binary via `//go:embed`.
+
 ### Project Structure Navigation
 
 The CLI uses git subtree for managing the relationship between individual projects and the master DDx repository. The `.ddx.yml` configuration file defines:
