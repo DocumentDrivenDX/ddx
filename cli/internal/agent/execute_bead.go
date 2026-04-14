@@ -545,6 +545,8 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 
 	exitCode := 0
 	tokens := 0
+	inputTokens := 0
+	outputTokens := 0
 	costUSD := 0.0
 	resultModel := opts.Model
 	resultHarness := opts.Harness
@@ -553,6 +555,8 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	if agentResult != nil {
 		exitCode = agentResult.ExitCode
 		tokens = agentResult.Tokens
+		inputTokens = agentResult.InputTokens
+		outputTokens = agentResult.OutputTokens
 		costUSD = agentResult.CostUSD
 		if agentResult.Error != "" {
 			agentErrMsg = agentResult.Error
@@ -643,6 +647,23 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		FinishedAt:   finishedAt,
 	}
 
+	// Write usage.json when the harness reports token usage or cost.
+	if tokens > 0 || costUSD > 0 {
+		usage := executeBeadUsage{
+			AttemptID:    attemptID,
+			Harness:      resultHarness,
+			Provider:     resultProvider,
+			Model:        resultModel,
+			Tokens:       tokens,
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+			CostUSD:      costUSD,
+		}
+		if writeErr := writeArtifactJSON(artifacts.UsageAbs, usage); writeErr == nil {
+			res.UsageFile = artifacts.UsageRel
+		}
+	}
+
 	// Run required execution gates when the agent succeeded and produced changes.
 	// Gates are evaluated from the execution worktree so pre-run document versions
 	// govern the current iteration (FEAT-006 §7). This is separate from structural
@@ -655,6 +676,19 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	}
 	res.GateResults = gateResults
 	res.RequiredExecSummary = summarizeGates(gateResults, anyGateFailed)
+
+	// Write checks.json when gate evaluation ran (results are non-empty).
+	if len(gateResults) > 0 {
+		checks := executeBeadChecks{
+			AttemptID:   attemptID,
+			EvaluatedAt: finishedAt,
+			Summary:     res.RequiredExecSummary,
+			Results:     gateResults,
+		}
+		if writeErr := writeArtifactJSON(artifacts.ChecksAbs, checks); writeErr == nil {
+			res.ChecksFile = artifacts.ChecksRel
+		}
+	}
 
 	// Determine outcome applying the merge-by-default contract:
 	// A successful run lands unless an explicit gate blocks landing or --no-merge is set.
