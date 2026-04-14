@@ -64,6 +64,24 @@ type StateProvider interface {
 	GetProjectSnapshots(includeUnreachable bool) []ProjectSnapshot
 	GetProjectSnapshotByID(id string) (ProjectSnapshot, bool)
 	GetBeadSnapshots(status, label, projectID string) []BeadSnapshot
+
+	// Worker queries
+	GetWorkersGraphQL(projectID string) []*Worker
+	GetWorkerGraphQL(id string) (*Worker, bool)
+	GetWorkerLogGraphQL(id string) *WorkerLog
+	GetWorkerProgressGraphQL(id string) []*PhaseTransition
+	GetWorkerPromptGraphQL(id string) string
+
+	// AgentSession queries
+	GetAgentSessionsGraphQL() []*AgentSession
+	GetAgentSessionGraphQL(id string) (*AgentSession, bool)
+
+	// Exec queries
+	GetExecDefinitionsGraphQL(artifactID string) []*ExecutionDefinition
+	GetExecDefinitionGraphQL(id string) (*ExecutionDefinition, bool)
+	GetExecRunsGraphQL(artifactID, definitionID string) []*ExecutionRun
+	GetExecRunGraphQL(id string) (*ExecutionRun, bool)
+	GetExecRunLogGraphQL(runID string) *ExecutionRunLog
 }
 
 // Node is the resolver for the node(id: ID!) field (Relay lookup by global ID).

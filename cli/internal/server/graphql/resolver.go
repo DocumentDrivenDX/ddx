@@ -106,46 +106,6 @@ func (r *queryResolver) Search(ctx context.Context, query string, first *int, af
 	panic("not implemented")
 }
 
-// Workers is the resolver for the workers field.
-func (r *queryResolver) Workers(ctx context.Context, first *int, after *string, last *int, before *string) (*WorkerConnection, error) {
-	panic("not implemented")
-}
-
-// WorkersByProject is the resolver for the workersByProject field.
-func (r *queryResolver) WorkersByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string) (*WorkerConnection, error) {
-	panic("not implemented")
-}
-
-// Worker is the resolver for the worker field.
-func (r *queryResolver) Worker(ctx context.Context, id string) (*Worker, error) {
-	panic("not implemented")
-}
-
-// WorkerProgress is the resolver for the workerProgress field.
-func (r *queryResolver) WorkerProgress(ctx context.Context, workerID string) ([]*PhaseTransition, error) {
-	panic("not implemented")
-}
-
-// WorkerLog is the resolver for the workerLog field.
-func (r *queryResolver) WorkerLog(ctx context.Context, workerID string) (*WorkerLog, error) {
-	panic("not implemented")
-}
-
-// WorkerPrompt is the resolver for the workerPrompt field.
-func (r *queryResolver) WorkerPrompt(ctx context.Context, workerID string) (string, error) {
-	panic("not implemented")
-}
-
-// AgentSessions is the resolver for the agentSessions field.
-func (r *queryResolver) AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string) (*AgentSessionConnection, error) {
-	panic("not implemented")
-}
-
-// AgentSession is the resolver for the agentSession field.
-func (r *queryResolver) AgentSession(ctx context.Context, id string) (*AgentSession, error) {
-	panic("not implemented")
-}
-
 // Personas is the resolver for the personas field.
 func (r *queryResolver) Personas(ctx context.Context, first *int, after *string, last *int, before *string) (*PersonaConnection, error) {
 	panic("not implemented")
@@ -158,31 +118,6 @@ func (r *queryResolver) Persona(ctx context.Context, name string) (*Persona, err
 
 // PersonaByRole is the resolver for the personaByRole field.
 func (r *queryResolver) PersonaByRole(ctx context.Context, role string) (*Persona, error) {
-	panic("not implemented")
-}
-
-// ExecDefinitions is the resolver for the execDefinitions field.
-func (r *queryResolver) ExecDefinitions(ctx context.Context, first *int, after *string, last *int, before *string, artifactID *string) (*ExecutionDefinitionConnection, error) {
-	panic("not implemented")
-}
-
-// ExecDefinition is the resolver for the execDefinition field.
-func (r *queryResolver) ExecDefinition(ctx context.Context, id string) (*ExecutionDefinition, error) {
-	panic("not implemented")
-}
-
-// ExecRuns is the resolver for the execRuns field.
-func (r *queryResolver) ExecRuns(ctx context.Context, first *int, after *string, last *int, before *string, artifactID *string, definitionID *string) (*ExecutionRunConnection, error) {
-	panic("not implemented")
-}
-
-// ExecRun is the resolver for the execRun field.
-func (r *queryResolver) ExecRun(ctx context.Context, id string) (*ExecutionRun, error) {
-	panic("not implemented")
-}
-
-// ExecRunLog is the resolver for the execRunLog field.
-func (r *queryResolver) ExecRunLog(ctx context.Context, runID string) (*ExecutionRunLog, error) {
 	panic("not implemented")
 }
 

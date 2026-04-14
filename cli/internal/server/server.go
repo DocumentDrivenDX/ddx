@@ -55,6 +55,7 @@ func New(addr, workingDir string) *Server {
 	nodeName := resolveNodeName()
 	stateDir := serverAddrDir() // XDG-standard user-level dir, one per node
 	state := loadServerState(stateDir, nodeName)
+	state.workingDir = workingDir
 
 	s := &Server{
 		Addr:       addr,

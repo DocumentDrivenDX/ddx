@@ -38,8 +38,9 @@ type ServerState struct {
 	Node          NodeState      `json:"node"`
 	Projects      []ProjectEntry `json:"projects"`
 
-	mu  sync.RWMutex `json:"-"`
-	dir string       `json:"-"`
+	mu         sync.RWMutex `json:"-"`
+	dir        string       `json:"-"`
+	workingDir string       `json:"-"` // root working directory; set post-init by server
 }
 
 const stateSchemaVersion = "1"
