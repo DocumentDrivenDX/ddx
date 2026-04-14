@@ -131,9 +131,14 @@ AI agents can connect to `ddx server` via MCP (Streamable HTTP at `POST /mcp`). 
 
 **Agent:** `ddx_agent_sessions`, `ddx_agent_dispatch`
 
+## GraphQL API
+
+AI clients and the web UI use the GraphQL endpoint at `POST /graphql`. The schema covers all types available via REST. Use [GraphiQL](http://127.0.0.1:8080/graphiql) to explore the schema interactively.
+
 ## Architecture
 
-- **Single binary** — server and web UI are embedded in the `ddx` CLI
+- **Single binary** — server and web UI (SvelteKit) are embedded in the `ddx` CLI
 - **Stateless** — reads from filesystem on each request, no database
 - **Localhost by default** — binds to `127.0.0.1` for security
 - **File-backed** — all data comes from git-tracked files (`.ddx/beads.jsonl`, library docs, agent logs)
+- **Web UI stack** — SvelteKit (Svelte 5, `adapter-static`) + GraphQL (Houdini client) + Bun; built to static files and embedded via `//go:embed`
