@@ -259,9 +259,37 @@ func (s *Store) readAllLatestRaw() ([]Bead, []string, error) {
 	return foldLatestBeads(beads), warnings, nil
 }
 
+// tmpPath returns a unique temp file path in the same directory as path.
+// Uses pid + 4 random bytes so concurrent processes don't collide.
+func tmpPath(path string) (string, error) {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s.tmp-%d-%s", path, os.Getpid(), hex.EncodeToString(b)), nil
+}
+
 func writeAtomicFile(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	tmp, err := tmpPath(path)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -294,8 +322,11 @@ func (s *Store) WriteAll(beads []Bead) error {
 		return fmt.Errorf("bead: mkdir: %w", err)
 	}
 
-	tmp := s.File + ".tmp"
-	f, err := os.Create(tmp)
+	tmp, err := tmpPath(s.File)
+	if err != nil {
+		return fmt.Errorf("bead: tmp name: %w", err)
+	}
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return fmt.Errorf("bead: create tmp: %w", err)
 	}
@@ -321,11 +352,20 @@ func (s *Store) WriteAll(beads []Bead) error {
 		}
 	}
 
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("bead: sync tmp: %w", err)
+	}
 	if err := f.Close(); err != nil {
 		os.Remove(tmp)
 		return fmt.Errorf("bead: close tmp: %w", err)
 	}
-	return os.Rename(tmp, s.File)
+	if err := os.Rename(tmp, s.File); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("bead: rename tmp: %w", err)
+	}
+	return nil
 }
 
 // Create adds a new bead. Assigns defaults, validates, then persists.
