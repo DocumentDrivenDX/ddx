@@ -402,6 +402,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/metrics/cycle-time", s.handleMetricsCycleTime)
 	s.mux.HandleFunc("GET /api/metrics/rework", s.handleMetricsRework)
 
+	// Providers (FEAT-002 §26-27, host+user global — not project-scoped)
+	s.mux.HandleFunc("GET /api/providers", s.handleListProviders)
+	s.mux.HandleFunc("GET /api/providers/{harness}", s.handleShowProvider)
+
 	// MCP
 	s.mux.HandleFunc("POST /mcp", s.handleMCP)
 
@@ -2136,6 +2140,25 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_provider_list",
+			Description: "List all configured provider harnesses with routing availability, auth state, quota/headroom, and signal freshness (host+user global, not project-scoped)",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "ddx_provider_show",
+			Description: "Get full routing signal snapshot for one provider harness (FEAT-014 read model)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"harness": map[string]any{"type": "string", "description": "Harness name (e.g. claude, codex, gemini)"},
+				},
+				"required": []string{"harness"},
+			},
+		},
+		{
 			Name:        "ddx_bead_create",
 			Description: "Create a new bead (work item)",
 			InputSchema: map[string]any{
@@ -2350,6 +2373,11 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_agent_sessions":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentSessions(harness)
+	case "ddx_provider_list":
+		return s.mcpProviderList()
+	case "ddx_provider_show":
+		harness, _ := call.Arguments["harness"].(string)
+		return s.mcpProviderShow(harness)
 	case "ddx_bead_create":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
