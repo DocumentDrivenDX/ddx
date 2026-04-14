@@ -1089,6 +1089,72 @@ func TestOSExecutor_EarlyCancel(t *testing.T) {
 	assert.Equal(t, -1, result.ExitCode)
 }
 
+// --- ValidateForExecuteLoop tests ---
+
+// TestValidateForExecuteLoopUnknownHarness verifies that an unknown harness
+// returns an error immediately so execute-loop fails before claiming any beads.
+func TestValidateForExecuteLoopUnknownHarness(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	err := r.ValidateForExecuteLoop("nonexistent", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown harness")
+}
+
+// TestValidateForExecuteLoopEmptyHarnessIsNoop verifies that an empty harness
+// (routing will pick at bead-claim time) returns no error.
+func TestValidateForExecuteLoopEmptyHarnessIsNoop(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateForExecuteLoop("", "some-model"))
+}
+
+// TestValidateForExecuteLoopValidHarnessNoModel verifies that a valid,
+// available harness passes pre-flight with no model specified.
+func TestValidateForExecuteLoopValidHarnessNoModel(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateForExecuteLoop("claude", ""))
+}
+
+// TestValidateForExecuteLoopValidHarnessAndModel verifies that a valid harness
+// with a compatible model string passes pre-flight.
+func TestValidateForExecuteLoopValidHarnessAndModel(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateForExecuteLoop("claude", "claude-sonnet-4-6"))
+}
+
+// TestValidateForExecuteLoopAgentPresetWithNonAgentHarness verifies that a
+// model name that is a known agent preset (legacy config entry) is rejected
+// when paired with a non-agent harness, since the preset name is a routing
+// key for the embedded agent and not a model ID.
+func TestValidateForExecuteLoopAgentPresetWithNonAgentHarness(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	// Wire a fake AgentConfigLoader with a "vidar" preset.
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{
+			Models: map[string]*LLMPresetYAML{
+				"vidar": {Model: "qwen3.5-27b", Provider: "openai-compat"},
+			},
+		}
+	}
+	err := r.ValidateForExecuteLoop("claude", "vidar")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "local agent preset")
+}
+
+// TestValidateForExecuteLoopAgentPresetWithAgentHarness verifies that a
+// model that is a legacy preset is accepted when the harness IS "agent".
+func TestValidateForExecuteLoopAgentPresetWithAgentHarness(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	r.AgentConfigLoader = func() *AgentYAMLConfig {
+		return &AgentYAMLConfig{
+			Models: map[string]*LLMPresetYAML{
+				"vidar": {Model: "qwen3.5-27b", Provider: "openai-compat"},
+			},
+		}
+	}
+	// agent harness with a preset model must pass pre-flight.
+	assert.NoError(t, r.ValidateForExecuteLoop("agent", "vidar"))
+}
+
 func TestOSExecutor_NormalExit(t *testing.T) {
 	ex := &OSExecutor{}
 	ctx := context.Background()
