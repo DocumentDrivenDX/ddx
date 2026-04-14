@@ -170,6 +170,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 	}()
 
 	for {
+		// Respect context cancellation between iterations. Without this check,
+		// a Stop() request (which cancels ctx) would only take effect during
+		// the idle poll sleep — the loop would happily claim the next ready
+		// bead as soon as the current Execute returned, ignoring the cancel.
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+
 		candidate, ok, err := w.nextCandidate(attempted)
 		if err != nil {
 			return result, err
