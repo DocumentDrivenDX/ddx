@@ -289,6 +289,44 @@ func TestFindProjectRoot(t *testing.T) {
 	})
 }
 
+// TestFindNearestDDxWorkspace_LinkedWorktreePrefersPrimary verifies that
+// FindNearestDDxWorkspace resolves to the PRIMARY worktree's .ddx/ when
+// called from inside a linked worktree, even if the linked worktree itself
+// has its own .ddx/ directory. This protects bead store mutations from
+// silently landing in an ephemeral execution worktree (ddx-381f4171).
+func TestFindNearestDDxWorkspace_LinkedWorktreePrefersPrimary(t *testing.T) {
+	primary := setupTestGitRepo(t)
+
+	// Create the primary's .ddx/ with a marker file so we can tell them apart.
+	primaryDdx := filepath.Join(primary, ".ddx")
+	require.NoError(t, os.MkdirAll(primaryDdx, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(primaryDdx, "marker.txt"), []byte("primary"), 0644))
+
+	// Add a linked worktree as a sibling of the primary.
+	linked := filepath.Join(filepath.Dir(primary), "linked-wt")
+	runGitInDir(t, primary, "worktree", "add", "-b", "linked-branch", linked)
+
+	// Create the linked worktree's own .ddx/ — this is the trap. Without the
+	// fix, FindNearestDDxWorkspace would return the linked dir.
+	linkedDdx := filepath.Join(linked, ".ddx")
+	require.NoError(t, os.MkdirAll(linkedDdx, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(linkedDdx, "marker.txt"), []byte("linked"), 0644))
+
+	// From inside the linked worktree, we must resolve to the PRIMARY.
+	got := FindNearestDDxWorkspace(linked)
+	assert.Equal(t, primary, got, "expected primary worktree root, got linked worktree")
+
+	// From a subdir of the linked worktree, same result.
+	subdir := filepath.Join(linked, "some", "deep", "dir")
+	require.NoError(t, os.MkdirAll(subdir, 0755))
+	got = FindNearestDDxWorkspace(subdir)
+	assert.Equal(t, primary, got, "expected primary worktree root from subdir of linked worktree")
+
+	// From inside the primary, resolve to the primary as before.
+	got = FindNearestDDxWorkspace(primary)
+	assert.Equal(t, primary, got)
+}
+
 // TestGetCurrentBranch_EdgeCases tests edge cases for GetCurrentBranch
 func TestGetCurrentBranch_EdgeCases(t *testing.T) {
 	originalDir, _ := os.Getwd()
