@@ -2924,3 +2924,265 @@ func writeTestWorkerRecord(t *testing.T, projectRoot, id string, rec WorkerRecor
 		t.Fatal(err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Project registry: deduplication, linked-worktree resolution, reachability
+// sweep, and startup migration.
+// ---------------------------------------------------------------------------
+
+// TestRegisterProjectDeduplicate registers the same project path 5 times and
+// asserts that GET /api/projects returns exactly 1 project whose last_seen is
+// at or after the time of the first registration call.
+func TestRegisterProjectDeduplicate(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	start := time.Now()
+
+	for range 5 {
+		body := fmt.Sprintf(`{"path":%q}`, workDir)
+		req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var projects []struct {
+		Path     string    `json:"path"`
+		LastSeen time.Time `json:"last_seen"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &projects); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project after 5+1 duplicate registrations, got %d", len(projects))
+	}
+	if projects[0].LastSeen.Before(start) {
+		t.Errorf("last_seen %v should be >= start of registrations %v", projects[0].LastSeen, start)
+	}
+}
+
+// TestRegisterProjectLinkedWorktree registers a path inside a git linked
+// worktree and asserts that the server stores the PRIMARY worktree path, not
+// the linked worktree path.
+func TestRegisterProjectLinkedWorktree(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	// Create a primary git repo with one commit.
+	primary := t.TempDir()
+	runGit(t, "init", primary)
+	runGit(t, "-C", primary, "config", "user.email", "test@test.com")
+	runGit(t, "-C", primary, "config", "user.name", "Test")
+	sentinel := filepath.Join(primary, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("primary"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, "-C", primary, "add", ".")
+	runGit(t, "-C", primary, "commit", "-m", "init")
+
+	// Create a linked worktree.
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGit(t, "-C", primary, "worktree", "add", "--detach", linked)
+	t.Cleanup(func() { runGit(t, "-C", primary, "worktree", "remove", "--force", linked) })
+
+	// Register the linked worktree path.
+	body := fmt.Sprintf(`{"path":%q}`, linked)
+	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var entry struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &entry); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// Canonicalize primary for comparison (handles /tmp symlinks on macOS).
+	canonicalPrimary := canonicalizePath(primary)
+	if entry.Path != canonicalPrimary {
+		t.Errorf("expected path=%q (primary worktree), got %q (linked worktree)", canonicalPrimary, entry.Path)
+	}
+}
+
+// TestSweepProjectsUnreachable registers a project, deletes its directory,
+// runs SweepProjects, and asserts the project is marked unreachable with a
+// tombstone timestamp. It then verifies GET /api/projects hides it by default
+// and exposes it with ?include_unreachable=true.
+func TestSweepProjectsUnreachable(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	// Create and register an extra project directory.
+	projDir := t.TempDir()
+	body := fmt.Sprintf(`{"path":%q}`, projDir)
+	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("register: expected 200, got %d", w.Code)
+	}
+
+	// Delete the project directory.
+	if err := os.RemoveAll(projDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run the reachability sweep.
+	swept := srv.state.SweepProjects()
+
+	// Find the swept entry for projDir — path has been canonicalized.
+	var found *ProjectEntry
+	for i := range swept {
+		if swept[i].Path == canonicalizePath(projDir) {
+			found = &swept[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("swept entry for deleted project not found in SweepProjects result")
+	}
+	if !found.Unreachable {
+		t.Error("expected Unreachable=true after path deleted")
+	}
+	if found.TombstonedAt == nil {
+		t.Error("expected TombstonedAt to be set")
+	}
+
+	// Default GET /api/projects should hide unreachable entries.
+	req2 := httptest.NewRequest("GET", "/api/projects", nil)
+	w2 := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w2, req2)
+	var defaultList []struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w2.Body.Bytes(), &defaultList); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	for _, p := range defaultList {
+		if p.Path == canonicalizePath(projDir) {
+			t.Error("unreachable project should be hidden from default listing")
+		}
+	}
+
+	// With ?include_unreachable=true it should appear.
+	req3 := httptest.NewRequest("GET", "/api/projects?include_unreachable=true", nil)
+	w3 := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w3, req3)
+	var fullList []struct {
+		Path        string `json:"path"`
+		Unreachable bool   `json:"unreachable"`
+	}
+	if err := json.Unmarshal(w3.Body.Bytes(), &fullList); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	found2 := false
+	for _, p := range fullList {
+		if p.Path == canonicalizePath(projDir) {
+			found2 = true
+			if !p.Unreachable {
+				t.Error("expected unreachable=true in full listing")
+			}
+		}
+	}
+	if !found2 {
+		t.Error("unreachable project should appear with ?include_unreachable=true")
+	}
+}
+
+// TestMigrateDeduplicatesDuplicateEntries writes a state file with 50
+// duplicate entries for the same canonical path, starts the server, and
+// asserts the post-startup state has exactly 1 entry for that path.
+func TestMigrateDeduplicatesDuplicateEntries(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node")
+
+	workDir := setupTestDir(t)
+
+	// Use a real directory that exists so the reachability sweep keeps it.
+	dupPath := t.TempDir()
+
+	// Build a state file with 50 duplicate entries for dupPath.
+	type entry struct {
+		ID           string    `json:"id"`
+		Name         string    `json:"name"`
+		Path         string    `json:"path"`
+		RegisteredAt time.Time `json:"registered_at"`
+		LastSeen     time.Time `json:"last_seen"`
+	}
+	type stateFile struct {
+		SchemaVersion string    `json:"schema_version"`
+		Node          NodeState `json:"node"`
+		Projects      []entry   `json:"projects"`
+	}
+	entries := make([]entry, 50)
+	base := time.Now().UTC().Add(-time.Hour)
+	for i := range 50 {
+		entries[i] = entry{
+			ID:           fmt.Sprintf("proj-dup%02d", i),
+			Name:         "dup",
+			Path:         dupPath,
+			RegisteredAt: base.Add(time.Duration(i) * time.Second),
+			LastSeen:     base.Add(time.Duration(i) * time.Second),
+		}
+	}
+	sf := stateFile{
+		SchemaVersion: "1",
+		Node:          NodeState{Name: "test-node", ID: "node-test"},
+		Projects:      entries,
+	}
+	stateDir := filepath.Join(xdgDir, "ddx")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.MarshalIndent(sf, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "server-state.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start the server — migration runs during loadServerState.
+	srv := New(":0", workDir)
+
+	// GET /api/projects?include_unreachable=true to see everything.
+	req := httptest.NewRequest("GET", "/api/projects?include_unreachable=true", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	var projects []struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &projects); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// Count entries for dupPath — must be exactly 1 after migration.
+	count := 0
+	for _, p := range projects {
+		if p.Path == dupPath {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 entry for dupPath after migration, got %d (total projects: %d)", count, len(projects))
+	}
+}
