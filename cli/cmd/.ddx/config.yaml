@@ -1,7 +1,0 @@
-version: "1.0"
-library:
-  path: "./library"
-  repository:
-    url: "https://github.com/DocumentDrivenDX/ddx-library"
-    branch: "main"
-persona_bindings: {}
