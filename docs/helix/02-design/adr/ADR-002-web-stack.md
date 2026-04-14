@@ -39,7 +39,7 @@ REST API remains unchanged for CLI/MCP compatibility; GraphQL is the preferred p
 Svelte 5 offers:
 - Compacted runtime
 - Compile-time optimizations (no virtual DOM)
-- Simpler mental model to state management
+- Simpler mental model for state management
 
 ### 3. Runtime: Bun
 
@@ -100,13 +100,12 @@ export default {
 
 | Layer | Tool | What It Tests |
 |-------|------|---------------|
-| Unit | **Vitest** | Component and utility functions |
 | E2E | **Playwright** | Full browser flows against running server |
 | Typecheck | **svelte-check** | Svelte component type safety |
 
 Run commands:
 ```bash
-bun run test           # Vitest unit tests
+bun run test           # unit tests
 bun run test:e2e       # Playwright e2e tests
 bun run check          # svelte-check typechecking
 ```
