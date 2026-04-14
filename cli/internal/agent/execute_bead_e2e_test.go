@@ -65,7 +65,7 @@ func (m *gateTestGitOps) UpdateRef(dir, ref, sha string) error {
 
 func (m *gateTestGitOps) IsDirty(dir string) (bool, error) { return false, nil }
 
-func (m *gateTestGitOps) SynthesizeCommit(dir string) error { return nil }
+func (m *gateTestGitOps) SynthesizeCommit(dir string) (bool, error) { return false, nil }
 
 // gateTestAgentRunner is a minimal AgentRunner mock that always succeeds.
 type gateTestAgentRunner struct {

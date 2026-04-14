@@ -87,7 +87,11 @@ type GitOps interface {
 	Merge(dir, rev string) error
 	UpdateRef(dir, ref, sha string) error
 	IsDirty(dir string) (bool, error)
-	SynthesizeCommit(dir string) error
+	// SynthesizeCommit stages real file changes (excluding harness noise paths) and
+	// commits them. Returns (true, nil) when a commit was made, (false, nil) when
+	// there was nothing real to commit (all dirty files were noise), and (false, err)
+	// on failure.
+	SynthesizeCommit(dir string) (bool, error)
 }
 
 // AgentRunner runs an agent with the given options.
@@ -255,17 +259,35 @@ func (r *RealGitOps) IsDirty(dir string) (bool, error) {
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
-// SynthesizeCommit stages all modifications and untracked files in dir and creates a commit
-// so that the agent's uncommitted edits are not lost.
-func (r *RealGitOps) SynthesizeCommit(dir string) error {
-	if err := osexec.Command("git", "-C", dir, "add", "-A").Run(); err != nil {
-		return fmt.Errorf("staging changes: %w", err)
+// SynthesizeCommit stages real file changes, explicitly excluding harness noise
+// paths, and creates a commit. Returns (true, nil) when a commit was made,
+// (false, nil) when nothing real remained to commit after exclusions, and
+// (false, err) on failure.
+func (r *RealGitOps) SynthesizeCommit(dir string) (bool, error) {
+	// Stage everything except harness bookkeeping paths.
+	addArgs := []string{
+		"-C", dir, "add", "-A", "--",
+		".",
+		":(exclude).ddx/agent-logs",
+		":(exclude).ddx/workers",
+		":(exclude).ddx/executions/*/embedded",
+		":(exclude).claude/skills",
+		":(exclude).agents/skills",
+	}
+	if err := osexec.Command("git", addArgs...).Run(); err != nil {
+		return false, fmt.Errorf("staging changes: %w", err)
+	}
+	// Check whether anything was actually staged.
+	statusOut, _ := osexec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
+	if len(bytes.TrimSpace(statusOut)) == 0 {
+		// Nothing real to commit — all dirty files were noise.
+		return false, nil
 	}
 	out, err := osexec.Command("git", "-C", dir, "commit", "-m", "chore: execute-bead synthesized result commit").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
+		return false, fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-	return nil
+	return true, nil
 }
 
 // GenerateAttemptID generates a unique attempt identifier.
@@ -577,11 +599,12 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	}
 
 	// Synthesize a commit when the agent left tracked edits without committing.
-	// This prevents useful work from being discarded as "no-changes" merely
-	// because the harness did not commit before exiting.
+	// Only do so for real changes — harness noise paths are excluded. If nothing
+	// real was staged (committed is false), leave resultRev == baseRev so the
+	// outcome is classified as no-changes.
 	if resultRev == baseRev {
 		if isDirty, _ := gitOps.IsDirty(wtPath); isDirty {
-			if synthErr := gitOps.SynthesizeCommit(wtPath); synthErr == nil {
+			if committed, synthErr := gitOps.SynthesizeCommit(wtPath); synthErr == nil && committed {
 				if newRev, _ := gitOps.HeadRev(wtPath); newRev != baseRev {
 					resultRev = newRev
 				}
@@ -911,7 +934,7 @@ Your job is to make a best-effort attempt at the work described in the bead's Go
 5. Keep the execution bundle files under .ddx/executions/ intact; DDx uses them as execution evidence.
 6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.
 7. Before finishing, commit your changes with ` + "`git add -A && git commit -m '...'`" + `. DDx will merge your commits back to the base branch.
-8. Making no commits (no_changes) should be rare. Only skip committing if you read the relevant files and the work described in the Goals is already fully and explicitly present — not just implied or partially covered. If in any doubt, make your best attempt and commit it. A partial or imperfect commit is always better than no commit.
+8. Report ` + "`no_changes`" + ` when the bead's work is already present. A well-justified no_changes is always preferred to a cosmetic synthesized commit. If you decide not to commit, write your reasoning to ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` with: (a) what you looked for, (b) where you found it — cite specific commits, files, or test names, and (c) why you're confident the bead is satisfied. Only commit if there is real work to do.
 9. Work in small commits. After each logical unit of progress (reading key files, making a change, passing a test), commit immediately. Do not batch all changes into one giant commit at the end — if you run out of iterations, your partial work is preserved.
 10. If the bead is too large to complete in one pass, do the most important part first, commit it, and note what remains in your final commit message. DDx will re-queue the bead for another attempt if needed.
 11. Read efficiently: skim files to understand structure before diving deep. Only read the files you need to make changes, not every reference listed. Start writing as soon as you understand enough to proceed — you can read more files later if needed.
@@ -1016,8 +1039,11 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 		sb.WriteString("  </governing>\n")
 	}
 
-	// <instructions> section — per-bead task instructions
-	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(executeBeadInstructionsText))
+	// <instructions> section — per-bead task instructions.
+	// {{.AttemptDir}} is substituted with the execution bundle directory
+	// so the agent can write a no_changes rationale to a concrete path.
+	instructions := strings.ReplaceAll(executeBeadInstructionsText, "{{.AttemptDir}}", artifacts.DirRel)
+	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(instructions))
 
 	sb.WriteString("</execute-bead>\n")
 

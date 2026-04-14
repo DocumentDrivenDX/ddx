@@ -126,13 +126,15 @@ func (f *fakeExecuteBeadGit) WorktreeList(dir string) ([]string, error) {
 	return f.worktrees, nil
 }
 
-func (f *fakeExecuteBeadGit) SynthesizeCommit(dir string) error {
+func (f *fakeExecuteBeadGit) SynthesizeCommit(dir string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if strings.Contains(dir, agent.ExecuteBeadWtPrefix) && f.synthRev != "" {
 		f.wtHeadRev = f.synthRev
+		return true, nil
 	}
-	return nil
+	// wtDirty is true but synthRev is empty: simulates all-noise worktree.
+	return false, nil
 }
 
 func (f *fakeExecuteBeadGit) WorktreePrune(dir string) error { return nil }
@@ -649,6 +651,30 @@ func TestExecuteBeadOrphanRecovery(t *testing.T) {
 	// The orphan worktree should have been removed.
 	assert.Contains(t, git.removedWTs, orphanPath,
 		"orphan worktree should be removed before the new run")
+}
+
+// TestExecuteBeadHarnessNoiseNotSynthesized verifies that when the agent makes no
+// real commits but the worktree is dirty with only harness bookkeeping files
+// (e.g. .ddx/agent-logs), SynthesizeCommit returns (false, nil) and the outcome
+// is "no-changes", not "merged" or "success". ResultRev must equal BaseRev.
+func TestExecuteBeadHarnessNoiseNotSynthesized(t *testing.T) {
+	git := &fakeExecuteBeadGit{
+		mainHeadRev: "aaaa1111",
+		wtHeadRev:   "aaaa1111", // agent made no real commits
+		wtDirty:     true,       // worktree is dirty (e.g. agent-logs written)
+		// synthRev is intentionally empty: SynthesizeCommit returns (false, nil)
+		// simulating that all dirty files were harness noise.
+	}
+	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
+	f := newExecuteBeadFactory(t, git, runner)
+
+	res := runExecuteBead(t, f, git, "my-bead")
+
+	assert.Equal(t, "no-changes", res.Outcome, "harness-noise-only dirty worktree must not produce a synthesis commit")
+	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
+	assert.Equal(t, "aaaa1111", res.BaseRev)
+	assert.Equal(t, "aaaa1111", res.ResultRev, "ResultRev must equal BaseRev when no real commit was made")
+	assert.Equal(t, 0, git.mergeCalls, "merge must not be called when outcome is no-changes")
 }
 
 // TestExecuteBeadAgentErrorNoCommits verifies that when the agent runner returns
