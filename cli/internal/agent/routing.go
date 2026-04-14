@@ -188,7 +188,11 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 // the precedence rules from SD-015 and the routing plan:
 //
 //  1. If flags.Harness is set → HarnessOverride (constrains routing to one harness).
-//  2. If flags.Model is set → try catalog resolution:
+//  2. If flags.Model is set → model resolution:
+//     - When HarnessOverride is set: always treat as an exact ModelPin so the
+//     explicit harness is never rejected by catalog-surface mismatch. The
+//     harness binary receives the model string as-is and can error clearly.
+//     - Otherwise: try catalog resolution:
 //     - If known in catalog: ModelRef.
 //     - If not known: ModelPin (exact pin, bypasses catalog).
 //  3. If flags.Profile is set → Profile.
@@ -211,11 +215,20 @@ func NormalizeRouteRequest(flags RouteFlags, cfg Config, catalog *Catalog) Route
 		req.HarnessOverride = cfg.Harness
 	}
 
-	// 2. Model flag: catalog resolution or exact pin.
+	// 2. Model flag: resolution depends on whether a harness is pinned.
 	if flags.Model != "" {
-		modelRef, modelPin := catalog.NormalizeModelRef(flags.Model)
-		req.ModelRef = modelRef
-		req.ModelPin = modelPin
+		if req.HarnessOverride != "" {
+			// Harness is explicit: always treat the model as an exact pin so
+			// --harness <h> always wins. Passing it as ModelPin means the
+			// harness is never rejected because of a catalog-surface mismatch;
+			// the binary receives the string as-is and will error clearly if it
+			// doesn't recognize the model.
+			req.ModelPin = flags.Model
+		} else {
+			modelRef, modelPin := catalog.NormalizeModelRef(flags.Model)
+			req.ModelRef = modelRef
+			req.ModelPin = modelPin
+		}
 		return req
 	}
 

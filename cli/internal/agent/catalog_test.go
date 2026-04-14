@@ -631,3 +631,81 @@ func TestDefaultModelCatalogYAMLBlockedModelsNeverResolve(t *testing.T) {
 		assert.True(t, cat.IsBlockedModelID(id), "default blocked model %q must be registered", id)
 	}
 }
+
+// --- Regression: --harness flag takes precedence over --model-based routing ---
+
+// TestHarnessOverrideWithModelUsesPin verifies that when --harness is set,
+// NormalizeRouteRequest always treats --model as a ModelPin (never ModelRef).
+// This ensures that --harness claude --model claude-sonnet-4-6 never switches
+// to the embedded agent harness because of a catalog-surface mismatch.
+func TestHarnessOverrideWithModelUsesPin(t *testing.T) {
+	// "qwen3" is a catalog-known ref (embedded-openai surface only).
+	// Without a harness override, it would become a ModelRef and route to "agent".
+	// With --harness claude, it must become a ModelPin so claude is not rejected.
+	req := NormalizeRouteRequest(
+		RouteFlags{Harness: "claude", Model: "qwen3"},
+		Config{},
+		BuiltinCatalog,
+	)
+	assert.Equal(t, "claude", req.HarnessOverride)
+	assert.Equal(t, "qwen3", req.ModelPin, "model must be a pin when harness override is set")
+	assert.Empty(t, req.ModelRef, "ModelRef must not be set when HarnessOverride is active")
+}
+
+// TestHarnessOverrideClaudeWithModelPinIsViable verifies end-to-end that
+// --harness claude --model claude-sonnet-4-6 selects claude, not the embedded agent.
+// This is the regression guard for the execute-loop silent harness-switch bug.
+func TestHarnessOverrideClaudeWithModelPinIsViable(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"claude": healthyState(),
+		"agent":  healthyLocalState(),
+		"codex":  healthyState(),
+	}
+
+	req := NormalizeRouteRequest(
+		RouteFlags{Harness: "claude", Model: "claude-sonnet-4-6"},
+		Config{},
+		BuiltinCatalog,
+	)
+
+	plans := r.BuildCandidatePlans(req, states)
+	ranked := RankCandidates("", plans)
+
+	best, err := SelectBestCandidate(ranked)
+	require.NoError(t, err, "routing must find a viable candidate")
+	assert.Equal(t, "claude", best.Harness,
+		"--harness claude must win even when --model is set")
+	assert.NotEqual(t, "agent", best.Harness,
+		"embedded agent must not be selected when --harness claude is explicit")
+}
+
+// TestHarnessOverrideAgentWithModelVidar verifies that --harness agent --model vidar
+// continues to work (regression guard for the embedded-agent case).
+func TestHarnessOverrideAgentWithModelVidar(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"claude": healthyState(),
+		"agent":  healthyLocalState(),
+		"codex":  healthyState(),
+	}
+
+	req := NormalizeRouteRequest(
+		RouteFlags{Harness: "agent", Model: "vidar"},
+		Config{},
+		BuiltinCatalog,
+	)
+
+	assert.Equal(t, "agent", req.HarnessOverride)
+	assert.Equal(t, "vidar", req.ModelPin, "vidar must be treated as a pin")
+
+	plans := r.BuildCandidatePlans(req, states)
+	ranked := RankCandidates("", plans)
+
+	best, err := SelectBestCandidate(ranked)
+	require.NoError(t, err, "routing must find a viable candidate")
+	assert.Equal(t, "agent", best.Harness,
+		"--harness agent --model vidar must still route to the embedded agent")
+}
