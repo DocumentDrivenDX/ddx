@@ -217,6 +217,22 @@ func TestLand_HappyPath_FastForward(t *testing.T) {
 	if len(parents) != 1 || parents[0] != r.baseSHA {
 		t.Errorf("worker commit parent = %v, want [%s]", parents, r.baseSHA)
 	}
+	// Worktree sync: feature.txt must exist on disk in the main worktree
+	// after Land() (bug ddx-eaebaffb regression test — pre-fix, the file
+	// was in the index but missing from disk because update-ref bypassed
+	// the working tree).
+	featurePath := filepath.Join(r.dir, "feature.txt")
+	content, readErr := os.ReadFile(featurePath)
+	if readErr != nil {
+		t.Errorf("feature.txt not materialized in working tree after Land(): %v", readErr)
+	} else if string(content) != "hello\n" {
+		t.Errorf("feature.txt content = %q, want %q", string(content), "hello\n")
+	}
+	// git status should show NO phantom deleted/modified entries for feature.txt.
+	statusOut := r.runGit("status", "--porcelain", "feature.txt")
+	if strings.TrimSpace(statusOut) != "" {
+		t.Errorf("git status after Land() shows unexpected entry for feature.txt: %q", statusOut)
+	}
 }
 
 // TestLand_MergeRequired verifies the merge path: the target has advanced

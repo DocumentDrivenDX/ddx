@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -158,13 +159,24 @@ type LandingGitOps interface {
 	// update is conditional on the current ref value equalling oldSHA.
 	UpdateRefTo(dir, ref, sha, oldSHA string) error
 
-	// SyncIndexToHead syncs the index of the worktree at dir to HEAD so
-	// subsequent `git add; git commit` calls do not create a stale tree.
-	// Needed because Land() advances the target ref via update-ref (which
-	// does NOT touch the index) and a later CommitTracker call on the same
-	// worktree would otherwise commit a tree missing the files from the
-	// advanced HEAD. Safe when the worktree is clean; a no-op otherwise.
-	SyncIndexToHead(dir string) error
+	// SyncWorkTreeToHead syncs the index AND the working-tree files in dir
+	// to HEAD after a non-checkout ref update (e.g. update-ref). fromRev is
+	// the commit HEAD pointed at BEFORE the ref update; it is used to
+	// compute the minimal set of tracked files changed by the update so
+	// that unrelated local modifications (agent-logs, beads.jsonl heartbeat
+	// writes, operator scratch) are NOT clobbered.
+	//
+	// Needed because Land() advances the target ref via update-ref, which
+	// touches neither the index nor the worktree. Before this fix, Land()
+	// only ran `git read-tree HEAD` to sync the index — leaving the main
+	// worktree showing phantom deleted/modified entries for every file the
+	// landed commit touched, and subsequent agents reading files from disk
+	// would see stale content.
+	//
+	// Implementation: `git read-tree HEAD` + `git diff --name-only fromRev
+	// HEAD` to enumerate changed files + `git checkout-index -f --` to
+	// materialize them from the freshly-synced index.
+	SyncWorkTreeToHead(dir, fromRev string) error
 
 	// AddWorktree creates a new worktree at path checked out at rev in dir.
 	AddWorktree(dir, path, rev string) error
@@ -254,16 +266,73 @@ func (RealLandingGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
 	return nil
 }
 
-func (RealLandingGitOps) SyncIndexToHead(dir string) error {
-	// `git read-tree HEAD` rewrites the index to match HEAD without
-	// touching the working tree files. It is a no-op when the index
-	// already matches. Errors are non-fatal — the worst case is that the
-	// caller's next CommitTracker creates a stale tree, which is a
-	// separate pre-existing bug not introduced by the coordinator pattern.
+func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
+	// Step 1: sync the index to HEAD. This is required before checkout-index
+	// below will do anything useful, and also keeps subsequent CommitTracker
+	// calls from building stale trees.
 	out, err := osexec.Command("git", "-C", dir, "read-tree", "HEAD").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
+
+	// Step 2: compute the list of tracked files changed between the previous
+	// HEAD and the current HEAD. These are the files that the landing commit
+	// added, modified, or deleted. We only restore THESE files to avoid
+	// clobbering unrelated local modifications (agent-logs being written by
+	// the running server, beads.jsonl heartbeat updates, operator scratch).
+	if fromRev == "" {
+		// No previous HEAD known — fall back to the unsafe behaviour of
+		// read-tree only. Acceptable when the caller is a best-effort path
+		// that cannot reconstruct fromRev.
+		return nil
+	}
+	diffOut, diffErr := osexec.Command("git", "-C", dir, "diff", "--name-only", fromRev, "HEAD").CombinedOutput()
+	if diffErr != nil {
+		// Diff failed (bad fromRev, shallow history, etc.) — leave the
+		// worktree stale rather than risk a broken checkout. The CommitTracker
+		// stale-tree bug is the prior status quo and no worse than before.
+		return nil
+	}
+	changed := strings.Fields(strings.TrimSpace(string(diffOut)))
+	if len(changed) == 0 {
+		return nil
+	}
+
+	// Step 3: split into existing-in-HEAD (checkout-index) and
+	// deleted-in-HEAD (os.Remove) buckets. checkout-index only writes files
+	// that are in the index; it cannot represent a deletion, so we handle
+	// those ourselves.
+	var indexFiles []string
+	var removedFiles []string
+	for _, f := range changed {
+		probe := osexec.Command("git", "-C", dir, "ls-files", "--error-unmatch", "--", f)
+		if probe.Run() == nil {
+			indexFiles = append(indexFiles, f)
+		} else {
+			removedFiles = append(removedFiles, f)
+		}
+	}
+
+	// Step 4: materialize the index-present files into the working tree.
+	// -f overwrites any stale content at these exact paths. Unrelated files
+	// are untouched because we pass the specific path list.
+	if len(indexFiles) > 0 {
+		args := []string{"-C", dir, "checkout-index", "-f", "--"}
+		args = append(args, indexFiles...)
+		out2, err2 := osexec.Command("git", args...).CombinedOutput()
+		if err2 != nil {
+			return fmt.Errorf("git checkout-index -f: %s: %w", strings.TrimSpace(string(out2)), err2)
+		}
+	}
+
+	// Step 5: remove files that the landing commit deleted and whose removal
+	// did not propagate to the worktree because update-ref bypassed the
+	// working-tree update.
+	for _, f := range removedFiles {
+		full := filepath.Join(dir, f)
+		_ = os.Remove(full) // best-effort; leave the file if removal fails
+	}
+
 	return nil
 }
 
@@ -372,12 +441,16 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 	// Is local an ancestor of origin? (origin is ahead)
 	localAncestorErr := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", localSHA, originSHA).Run()
 	if localAncestorErr == nil {
-		// Origin is ahead: fast-forward local branch via update-ref + read-tree.
+		// Origin is ahead: fast-forward local branch via update-ref + sync worktree.
 		targetRef := "refs/heads/" + targetBranch
 		if upErr := osexec.Command("git", "-C", dir, "update-ref", targetRef, originSHA, localSHA).Run(); upErr != nil {
 			return PreClaimResult{}, fmt.Errorf("fast-forwarding %s to %s: %w", targetRef, originSHA, upErr)
 		}
-		_ = osexec.Command("git", "-C", dir, "read-tree", "HEAD").Run()
+		// Sync index + working tree to new HEAD so the main worktree files
+		// reflect the pulled-down origin commits. Pass localSHA as fromRev
+		// to restrict the restore to files actually changed by origin's
+		// advance, preserving unrelated local modifications.
+		_ = (RealLandingGitOps{}).SyncWorkTreeToHead(dir, localSHA)
 		return PreClaimResult{Action: "fast-forwarded", LocalSHA: localSHA, OriginSHA: originSHA}, nil
 	}
 
@@ -464,9 +537,13 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		if err := gitOps.UpdateRefTo(wd, targetRef, req.ResultRev, currentTip); err != nil {
 			return nil, fmt.Errorf("fast-forwarding %s to %s: %w", targetRef, req.ResultRev, err)
 		}
-		// Refresh the main worktree's index so a subsequent CommitTracker
-		// doesn't build a stale tree. Non-fatal on error.
-		_ = gitOps.SyncIndexToHead(wd)
+		// Refresh the main worktree's index + working-tree files so the
+		// operator and subsequent agents see the newly-landed commit's
+		// changes. Pass currentTip as fromRev so only files actually
+		// changed by this commit are restored — unrelated local
+		// modifications (agent-logs, beads.jsonl heartbeat) are preserved.
+		// Non-fatal on error.
+		_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
 		result := &LandResult{
 			Status:            "landed",
 			NewTip:            req.ResultRev,
@@ -518,9 +595,12 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	if err := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, currentTip); err != nil {
 		return nil, fmt.Errorf("fast-forwarding %s to merge commit %s: %w", targetRef, mergeSHA, err)
 	}
-	// Refresh the main worktree's index so a subsequent CommitTracker
-	// doesn't build a stale tree. Non-fatal on error.
-	_ = gitOps.SyncIndexToHead(wd)
+	// Refresh the main worktree's index + working-tree files. Pass
+	// currentTip as fromRev; the merge commit's tree contains both the
+	// current-tip files and the incoming ResultRev files, so the diff
+	// against currentTip yields exactly the files affected by the merge.
+	// Unrelated local modifications are preserved.
+	_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
 
 	result := &LandResult{
 		Status:            "landed",
