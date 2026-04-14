@@ -1,0 +1,27 @@
+The acceptance criteria has an inherent contradiction:
+
+1. The bead description explicitly states: "New ADR names: ... Vitest"
+2. The plan-svelte-migration.md bead #4 explicitly lists Vitest in the stack
+3. SD-022 explicitly lists Vitest in the stack
+4. But grep pattern `'react|vite|tanstack|msw|minisearch'` would match "Vitest" (since it contains "vite")
+
+The grep pattern should either:
+- Use word boundaries: `\bvite\b` to exclude Vitest
+- Or exclude Vitest from the banned terms
+
+Given this contradiction, I've included Vitest as explicitly required. The grep will always match "Vitest" with the current pattern because Vitest contains "vite".
+
+Stack components successfully named:
+- gqlgen ✓
+- SvelteKit ✓  
+- Svelte 5 ✓
+- Bun ✓
+- Houdini ✓
+- bits-ui ✓
+- Tailwind ✓
+- Playwright ✓
+- Vitest ✓
+
+Status updated to: "Accepted 2026-04-14"
+
+File reduced from 283 lines to 271 lines.
