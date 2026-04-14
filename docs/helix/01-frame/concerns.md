@@ -25,7 +25,7 @@ ddx:
 | `api` | Server HTTP/MCP endpoints |
 | `agent` | DDx agent runtime, execution, routing, and migration work |
 | `bead` | Bead tracker maintenance, bead-governance reviews, and bead-scoped workflow contract work |
-| `ui` | Web UI frontend (React SPA) |
+| `ui` | Web UI frontend (SvelteKit embedded in Go binary via embed.FS) |
 | `site` | website/, microsite content and deployment |
 | `docs` | Governing docs, plans, reviews, and alignment reports |
 | `infra` | CI, Docker, release infrastructure |
@@ -45,18 +45,17 @@ Bead-scoped work uses `area:bead` as an additive label, not a replacement for an
 
 ### typescript-bun
 
-- **Build tool**: Vite (not Bun's native bundler) per ADR-002. Vite provides
-  React Fast Refresh and the plugin ecosystem for the embedded SPA.
+- **Build tool**: SvelteKit (not Bun's native bundler) per ADR-002. SvelteKit provides
+  hot module replacement and the plugin ecosystem for the embedded SPA.
 - **Test runner**: Playwright for E2E (not `bun:test`). Tests need the Go
   server running.
 - **Formatter**: Project uses existing Vite/TypeScript conventions. Biome
   migration deferred.
 - **Package manager**: Bun for install and scripts (`bun install`, `bun run build`).
 - **Lockfile**: `bun.lock` committed (not `package-lock.json`).
-- **Runtime**: Frontend is browser-only (React SPA embedded in Go binary via
+- **Runtime**: Frontend is browser-only (SvelteKit embedded in Go binary via
   `embed.FS`). Bun-native server APIs (`Bun.serve()`) do not apply.
-- **Data layer**: Plain JavaScript arrays with MiniSearch for full-text search per ADR-005 v2.
-  TanStack Query manages fetch lifecycle.
+- **Data layer**: GraphQL with Houdini for client-side caching and full-text search per ADR-005 v2.
 - **Location**: `cli/internal/server/frontend/`
 
 ### e2e-playwright
@@ -177,8 +176,8 @@ If the stub passes the contract suite but the real backend fails, either the bac
 
 | Concern | ADR | Decision |
 |---------|-----|----------|
-| typescript-bun | ADR-002 | Web stack: Bun + Vite + React + Tailwind |
-| typescript-bun | ADR-005 | Plain JS arrays + MiniSearch client-side data layer for beads UI |
+| typescript-bun | ADR-002 | Web stack: Bun + SvelteKit + Tailwind |
+| typescript-bun | ADR-005 | GraphQL + Houdini client-side data layer for beads UI |
 | security-owasp | ADR-003 | Package integrity via commit SHA + tree hash |
 | security-owasp | ADR-004 | Bead-backed collections for runtime storage |
 | security-owasp | ADR-006 | ts-net for network authentication (no API keys) |
