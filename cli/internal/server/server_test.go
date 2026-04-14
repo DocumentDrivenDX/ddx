@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
@@ -2828,5 +2829,98 @@ func TestMCPShowProject(t *testing.T) {
 	result, _ = resp.Result.(map[string]any)
 	if isErr, _ := result["isError"].(bool); !isErr {
 		t.Errorf("expected isError=true for missing project, got %v", result)
+	}
+}
+
+// TC-022: GET /api/agent/workers returns workers from multiple registered
+// projects in a single response array.
+func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
+	// Isolate server state from the real user state file.
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-aggregate")
+
+	rootA := setupTestDir(t)
+	rootB := t.TempDir()
+
+	// Write a pre-canned worker record under project A (older).
+	writeTestWorkerRecord(t, rootA, "w-aaa111aaa111", WorkerRecord{
+		ID:          "w-aaa111aaa111",
+		Kind:        "execute-loop",
+		State:       "exited",
+		ProjectRoot: rootA,
+		StartedAt:   time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC),
+	})
+
+	// Write a pre-canned worker record under project B (newer).
+	writeTestWorkerRecord(t, rootB, "w-bbb222bbb222", WorkerRecord{
+		ID:          "w-bbb222bbb222",
+		Kind:        "execute-loop",
+		State:       "exited",
+		ProjectRoot: rootB,
+		StartedAt:   time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC),
+	})
+
+	srv := New(":0", rootA)
+	// Register project B so the server knows about it.
+	srv.state.RegisterProject(rootB)
+
+	req := httptest.NewRequest("GET", "/api/agent/workers", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var workers []WorkerRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &workers); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	ids := map[string]bool{}
+	for _, wr := range workers {
+		ids[wr.ID] = true
+	}
+
+	if !ids["w-aaa111aaa111"] {
+		t.Error("expected worker from project A (w-aaa111aaa111) in /api/agent/workers response")
+	}
+	if !ids["w-bbb222bbb222"] {
+		t.Error("expected worker from project B (w-bbb222bbb222) in /api/agent/workers response")
+	}
+
+	// Verify ordering: worker B started later so it must appear first.
+	if len(workers) >= 2 {
+		// Find positions of the two known workers.
+		posA, posB := -1, -1
+		for i, wr := range workers {
+			if wr.ID == "w-aaa111aaa111" {
+				posA = i
+			}
+			if wr.ID == "w-bbb222bbb222" {
+				posB = i
+			}
+		}
+		if posA >= 0 && posB >= 0 && posB > posA {
+			t.Errorf("expected newer worker B (pos %d) to appear before older worker A (pos %d)", posB, posA)
+		}
+	}
+}
+
+// writeTestWorkerRecord writes a WorkerRecord as status.json under the project's
+// .ddx/workers/<id>/ directory — the same layout used by WorkerManager.
+func writeTestWorkerRecord(t *testing.T, projectRoot, id string, rec WorkerRecord) {
+	t.Helper()
+	dir := filepath.Join(projectRoot, ".ddx", "workers", id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "status.json"), append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
