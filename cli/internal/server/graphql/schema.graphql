@@ -351,15 +351,275 @@ type ComparisonResult {
   direction: String!
 }
 
-# CoordinatorMetrics holds land coordinator metrics
+# LandOutcomeSummary is one entry in the coordinator's last-N submissions log
+type LandOutcomeSummary {
+  ts: DateTime!
+  beadId: String
+  attemptId: String
+  # outcome is one of: landed | preserved | failed | push_failed
+  outcome: String!
+  durationMs: Int!
+  commitCount: Int!
+}
+
+# CoordinatorMetrics holds in-memory outcome metrics for one land coordinator
 type CoordinatorMetrics {
+  # landed is the number of submissions that were successfully merged
+  landed: Int!
+  # preserved is the number of submissions kept in a separate worktree
+  preserved: Int!
+  # failed is the number of submissions that failed
+  failed: Int!
+  # pushFailed is the number of submissions that failed to push
+  pushFailed: Int!
+  # totalDurationMs is the sum of all submission durations in milliseconds
+  totalDurationMs: Int!
+  # totalCommits is the total number of commits across all submissions
+  totalCommits: Int!
+  # preservedRatio is the ratio of preserved+failed to total submissions
+  preservedRatio: Float!
+  # lastSubmissions holds up to the last 10 submission outcomes
+  lastSubmissions: [LandOutcomeSummary!]
+}
+
+# CoordinatorMetricsEntry is one project's coordinator metrics
+type CoordinatorMetricsEntry {
+  # projectRoot is the absolute path to the project root
   projectRoot: String!
-  branch: String!
-  lastLandTime: DateTime
-  lastLandResult: String
-  queueLength: Int!
-  meanQueueTimeMs: Float
-  lastQueueTimeMs: Float
+  # metrics holds the coordinator outcome metrics for this project
+  metrics: CoordinatorMetrics!
+}
+
+# HealthStatus represents the server health response
+type HealthStatus {
+  # status is "ok" when the server is healthy
+  status: String!
+  # startedAt is when the server process started
+  startedAt: DateTime!
+}
+
+# ReadyCheck represents one readiness check result
+type ReadyCheck {
+  # name identifies the subsystem being checked
+  name: String!
+  # status is "ok" or a short description of the problem
+  status: String!
+}
+
+# ReadyStatus represents the server readiness response
+type ReadyStatus {
+  # ready is true when all checks pass
+  ready: Boolean!
+  # checks holds per-subsystem readiness state
+  checks: [ReadyCheck!]!
+}
+
+# WorkerLog holds stdout and stderr output from a worker process
+type WorkerLog {
+  # stdout is the captured standard output of the worker
+  stdout: String!
+  # stderr is the captured standard error of the worker
+  stderr: String!
+}
+
+# Window captures the time window used to scope a metrics query
+type Window {
+  # since is the cutoff time for the metrics window (null means all-time)
+  since: DateTime
+}
+
+# SourceRef explains where a derived fact came from
+type SourceRef {
+  beadId: String
+  sessionId: String
+  nativeSessionId: String
+  nativeLogRef: String
+  closingCommitSha: String
+  timestamp: DateTime
+  source: String
+}
+
+# AggregateSummaryBeads holds bead-level aggregate counts
+type AggregateSummaryBeads {
+  total: Int!
+  open: Int!
+  inProgress: Int!
+  closed: Int!
+  reopened: Int!
+  knownCycleTime: Int!
+  unknownCycleTime: Int!
+  knownCost: Int!
+  estimatedCost: Int!
+  unknownCost: Int!
+}
+
+# AggregateSummarySessions holds session-level aggregate counts
+type AggregateSummarySessions {
+  total: Int!
+  correlated: Int!
+  uncorrelated: Int!
+  inputTokens: Int!
+  outputTokens: Int!
+  totalTokens: Int!
+  knownCost: Int!
+  estimatedCost: Int!
+  unknownCost: Int!
+  costUsd: Float!
+}
+
+# AggregateSummaryCost holds cost aggregates
+type AggregateSummaryCost {
+  beads: Int!
+  features: Int!
+  knownCostUsd: Float!
+  estimatedCostUsd: Float!
+  unknownBeads: Int!
+}
+
+# AggregateSummaryCycleTime holds cycle time aggregates
+type AggregateSummaryCycleTime {
+  knownCount: Int!
+  unknownCount: Int!
+  averageMs: Int
+  minMs: Int
+  maxMs: Int
+}
+
+# AggregateSummaryRework holds rework aggregates
+type AggregateSummaryRework {
+  knownClosed: Int!
+  knownReopened: Int!
+  unknownCount: Int!
+  reopenRate: Float!
+  revisionCount: Int!
+}
+
+# AggregateSummary is the full process-metrics summary returned by metricsSummary
+type AggregateSummary {
+  beads: AggregateSummaryBeads!
+  sessions: AggregateSummarySessions!
+  cost: AggregateSummaryCost!
+  cycleTime: AggregateSummaryCycleTime!
+  rework: AggregateSummaryRework!
+}
+
+# CostSummary aggregates cost across all beads/features in a report
+type CostSummary {
+  beads: Int!
+  features: Int!
+  knownCostUsd: Float!
+  estimatedCostUsd: Float!
+  unknownBeads: Int!
+}
+
+# BeadCostRow is one bead's cost attribution within a CostReport
+type BeadCostRow {
+  beadId: String!
+  title: String!
+  specId: String
+  status: String!
+  sessionIds: [String!]
+  inputTokens: Int!
+  outputTokens: Int!
+  totalTokens: Int!
+  # costState is one of: known | estimated | unknown
+  costState: String!
+  costUsd: Float
+  unknownSessions: Int
+  provenance: [SourceRef!]
+}
+
+# FeatureCostRow aggregates bead rows by spec-id
+type FeatureCostRow {
+  specId: String!
+  beadIds: [String!]
+  inputTokens: Int!
+  outputTokens: Int!
+  totalTokens: Int!
+  # costState is one of: known | estimated | unknown
+  costState: String!
+  costUsd: Float
+  unknownBeads: Int
+}
+
+# CostReport describes bead and feature cost attribution over a time window
+type CostReport {
+  scope: String!
+  window: Window
+  beadId: String
+  featureId: String
+  beads: [BeadCostRow!]
+  features: [FeatureCostRow!]
+  summary: CostSummary!
+}
+
+# CycleTimeSummary aggregates lifecycle timing across all beads in a report
+type CycleTimeSummary {
+  knownCount: Int!
+  unknownCount: Int!
+  averageMs: Int
+  minMs: Int
+  maxMs: Int
+}
+
+# CycleTimeRow describes one bead's lifecycle timing
+type CycleTimeRow {
+  beadId: String!
+  title: String!
+  specId: String
+  status: String!
+  createdAt: DateTime!
+  firstClosedAt: DateTime
+  lastClosedAt: DateTime
+  cycleTimeMs: Int
+  reopenCount: Int
+  revisionCount: Int
+  timeInOpenMs: Int
+  timeInProgressMs: Int
+  timeInClosedMs: Int
+  # cycleState is one of: known | estimated | unknown
+  cycleState: String!
+  provenance: [SourceRef!]
+}
+
+# CycleTimeReport describes lifecycle timing over a time window
+type CycleTimeReport {
+  scope: String!
+  window: Window
+  beads: [CycleTimeRow!]
+  summary: CycleTimeSummary!
+}
+
+# ReworkSummary aggregates reopen and post-close churn across all beads
+type ReworkSummary {
+  knownClosed: Int!
+  knownReopened: Int!
+  unknownCount: Int!
+  reopenRate: Float!
+  revisionCount: Int!
+}
+
+# ReworkRow describes reopen and revision facts for one bead
+type ReworkRow {
+  beadId: String!
+  title: String!
+  specId: String
+  status: String!
+  firstClosedAt: DateTime
+  reopened: Boolean!
+  reopenCount: Int
+  revisionCount: Int
+  # reworkState is one of: known | estimated | unknown
+  reworkState: String!
+  provenance: [SourceRef!]
+}
+
+# ReworkReport describes reopen and post-close churn over a time window
+type ReworkReport {
+  scope: String!
+  window: Window
+  beads: [ReworkRow!]
+  summary: ReworkSummary!
 }
 
 # Provider represents an agent provider configuration
@@ -524,26 +784,47 @@ type Query {
   execRunLog(runID: ID!): ExecutionRunLog!
 
   # ==========================================
+  # Health Queries
+  # ==========================================
+
+  # health returns the server health status (maps to GET /api/health)
+  health: HealthStatus!
+
+  # ready returns per-subsystem readiness checks (maps to GET /api/ready)
+  ready: ReadyStatus!
+
+  # ==========================================
+  # Worker Log + Prompt Queries
+  # ==========================================
+
+  # workerLog returns the stdout and stderr captured from a worker (maps to GET /api/agent/workers/{id}/log)
+  workerLog(workerID: ID!): WorkerLog!
+
+  # workerPrompt returns the prompt text for the current or last attempt of a worker (maps to GET /api/agent/workers/{id}/prompt)
+  workerPrompt(workerID: ID!): String!
+
+  # ==========================================
+  # Coordinator Queries
+  # ==========================================
+
+  # coordinators returns metrics for every active land coordinator (maps to GET /api/agent/coordinators)
+  coordinators: [CoordinatorMetricsEntry!]!
+
+  # ==========================================
   # Metrics Queries
   # ==========================================
 
-  # coordinatorMetrics returns land coordinator metrics
-  coordinatorMetrics: CoordinatorMetrics!
+  # metricsSummary returns aggregate process metrics (maps to GET /api/metrics/summary)
+  metricsSummary(since: String): AggregateSummary!
 
-  # coordinatorMetricsByProject returns coordinator metrics for a project
-  coordinatorMetricsByProject(projectID: ID!): CoordinatorMetrics!
+  # metricsCost returns bead and feature cost attribution (maps to GET /api/metrics/cost)
+  metricsCost(since: String, bead: String, feature: String): CostReport!
 
-  # metricsSummary returns a summary of metrics
-  metricsSummary: CoordinatorMetrics
+  # metricsCycleTime returns lifecycle timing data (maps to GET /api/metrics/cycle-time)
+  metricsCycleTime(since: String): CycleTimeReport!
 
-  # metricsCost returns cost metrics
-  metricsCost: CoordinatorMetrics
-
-  # metricsCycleTime returns cycle time metrics
-  metricsCycleTime: CoordinatorMetrics
-
-  # metricsRework returns rework metrics
-  metricsRework: CoordinatorMetrics
+  # metricsRework returns reopen and post-close churn data (maps to GET /api/metrics/rework)
+  metricsRework(since: String): ReworkReport!
 
   # ==========================================
   # Provider Queries
