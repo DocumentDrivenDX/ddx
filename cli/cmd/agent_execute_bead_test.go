@@ -190,7 +190,31 @@ func newExecuteBeadFactory(t *testing.T, git *fakeExecuteBeadGit, runner *fakeAg
 	f.AgentRunnerOverride = runner
 	f.executeBeadGitOverride = git
 	f.executeBeadOrchestratorGitOverride = git
+	f.executeBeadLandingAdvancerOverride = fakeLandingAdvancerFromGit(git)
 	return f
+}
+
+// fakeLandingAdvancerFromGit returns a LandingAdvancer callback that maps the
+// fake git's Merge/UpdateRef semantics onto the coordinator-pattern advancer
+// interface. Semantically, "mergeCalls" now means "number of times
+// LandBeadResult invoked the advancer (attempted to advance the target
+// branch)". Used by tests that were written against the old Merge() path so
+// they continue to pass after the land-coordinator refactor.
+func fakeLandingAdvancerFromGit(git *fakeExecuteBeadGit) func(res *agent.ExecuteBeadResult) (*agent.LandResult, error) {
+	return func(res *agent.ExecuteBeadResult) (*agent.LandResult, error) {
+		if err := git.Merge("", res.ResultRev); err != nil {
+			preserveRef := agent.PreserveRef(res.BeadID, res.BaseRev)
+			// Record the preserve ref in the fake's refs map so tests that
+			// assert git.refs[preserveRef] continue to pass.
+			_ = git.UpdateRef("", preserveRef, res.ResultRev)
+			return &agent.LandResult{
+				Status:      "preserved",
+				PreserveRef: preserveRef,
+				Reason:      "merge failed",
+			}, nil
+		}
+		return &agent.LandResult{Status: "landed", NewTip: res.ResultRev}, nil
+	}
 }
 
 func assertPreserveRef(t *testing.T, ref, beadID, baseRev string) {
@@ -520,6 +544,7 @@ ddx:
 	f.AgentRunnerOverride = runner
 	f.executeBeadGitOverride = git
 	f.executeBeadOrchestratorGitOverride = git
+	f.executeBeadLandingAdvancerOverride = fakeLandingAdvancerFromGit(git)
 
 	res := runExecuteBead(t, f, git, "my-bead")
 
@@ -583,6 +608,7 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	f.AgentRunnerOverride = runner
 	f.executeBeadGitOverride = git
 	f.executeBeadOrchestratorGitOverride = git
+	f.executeBeadLandingAdvancerOverride = fakeLandingAdvancerFromGit(git)
 
 	t.Setenv("DDX_WORKER_ID", "worker-test")
 	res := runExecuteBead(t, f, git, "my-bead")
@@ -1228,6 +1254,7 @@ ddx:
 	f.AgentRunnerOverride = runner
 	f.executeBeadGitOverride = git
 	f.executeBeadOrchestratorGitOverride = git
+	f.executeBeadLandingAdvancerOverride = fakeLandingAdvancerFromGit(git)
 
 	_ = runExecuteBead(t, f, git, "xml-bead")
 

@@ -1334,6 +1334,11 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	tailCtx, tailCancel := context.WithCancel(context.Background())
 	go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
 
+	// Instantiate a process-local LandCoordinator so --local uses the same
+	// single-writer land path as the server worker. Stopped on function exit.
+	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
+	defer localCoord.Stop()
+
 	worker := &agent.ExecuteBeadWorker{
 		Store: store,
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
@@ -1367,13 +1372,20 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			if execErr != nil && res == nil {
 				return agent.ExecuteBeadReport{}, execErr
 			}
-			if res != nil {
-				landingOpts := agent.BeadLandingOptions{}
-				if landing, landErr := agent.LandBeadResult(projectRoot, res, &agent.RealOrchestratorGitOps{}, landingOpts); landErr == nil {
-					agent.ApplyLandingToResult(res, landing)
+			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
+				landReq := agent.BuildLandRequestFromResult(projectRoot, res)
+				landRes, landErr := localCoord.Submit(landReq)
+				if landErr == nil {
+					agent.ApplyLandResultToExecuteBeadResult(res, landRes)
 				} else if execErr == nil {
 					execErr = landErr
 				}
+			} else if res != nil && res.ResultRev == res.BaseRev {
+				res.Outcome = "no-changes"
+				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+			} else if res != nil && res.ExitCode != 0 {
+				res.Outcome = "preserved"
+				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			}
 			if execErr != nil {
 				return agent.ExecuteBeadReport{}, execErr

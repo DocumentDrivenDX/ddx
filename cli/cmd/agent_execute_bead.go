@@ -13,6 +13,15 @@ import (
 
 var validBeadID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
+// landingGitOpsFromFactory returns the agent.LandingGitOps the CommandFactory
+// should use — either the test override or the default RealLandingGitOps.
+func landingGitOpsFromFactory(f *CommandFactory) agent.LandingGitOps {
+	if f.executeBeadLandingGitOverride != nil {
+		return f.executeBeadLandingGitOverride
+	}
+	return agent.RealLandingGitOps{}
+}
+
 func (f *CommandFactory) newAgentExecuteBeadCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "execute-bead <bead-id>",
@@ -121,15 +130,30 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		return err
 	}
 
-	// Orchestrator step: land the result (merge, gate eval, preserve).
-	// Always run when we have a result — the orchestrator handles all cases
-	// including no-changes and error (agent failed with no commits).
+	// Orchestrator step: land the result (rebase → ff → push, gate eval,
+	// preserve). Always run when we have a result — the orchestrator handles
+	// all cases including no-changes and error (agent failed with no commits).
+	//
+	// Single-bead CLI is strictly serial (no sibling workers in this
+	// process), so we can wire the LandingAdvancer to call Land() directly
+	// without going through a per-project coordinator goroutine. Tests may
+	// inject a custom advancer via f.executeBeadLandingAdvancerOverride.
 	if res != nil {
+		var advancer func(r *agent.ExecuteBeadResult) (*agent.LandResult, error)
+		if f.executeBeadLandingAdvancerOverride != nil {
+			advancer = f.executeBeadLandingAdvancerOverride
+		} else {
+			landingGitOps := landingGitOpsFromFactory(f)
+			advancer = func(r *agent.ExecuteBeadResult) (*agent.LandResult, error) {
+				return agent.Land(projectRoot, agent.BuildLandRequestFromResult(projectRoot, r), landingGitOps)
+			}
+		}
 		landingOpts := agent.BeadLandingOptions{
 			NoMerge: noMerge,
 			// WtPath and GovernIDs are intentionally empty: the worktree has
 			// been cleaned up by ExecuteBead. Gate evaluation is skipped; use
 			// a separate 'ddx agent check' step when post-run checks are needed.
+			LandingAdvancer: advancer,
 		}
 		if landing, landErr := agent.LandBeadResult(projectRoot, res, orchestratorGitOps, landingOpts); landErr == nil {
 			agent.ApplyLandingToResult(res, landing)

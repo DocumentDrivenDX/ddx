@@ -138,6 +138,12 @@ type WorkerManager struct {
 	// Override in tests to inject a fake executor.
 	BeadWorkerFactory func(store agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker
 
+	// LandCoordinators is the per-project registry of land coordinators.
+	// Exported so tests and server integration tests can stop coordinators
+	// on teardown, or inject a custom LandingGitOps via
+	// LandCoordinators.gitOpsOverride.
+	LandCoordinators *coordinatorRegistry
+
 	mu      sync.Mutex
 	workers map[string]*workerHandle
 }
@@ -147,9 +153,10 @@ type AgentRunnerFactory func(projectRoot string) *agent.Runner
 
 func NewWorkerManager(projectRoot string) *WorkerManager {
 	return &WorkerManager{
-		projectRoot: projectRoot,
-		rootDir:     filepath.Join(projectRoot, ".ddx", "workers"),
-		workers:     map[string]*workerHandle{},
+		projectRoot:      projectRoot,
+		rootDir:          filepath.Join(projectRoot, ".ddx", "workers"),
+		workers:          map[string]*workerHandle{},
+		LandCoordinators: newCoordinatorRegistry(),
 	}
 }
 
@@ -244,7 +251,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	if m.BeadWorkerFactory != nil {
 		worker = m.BeadWorkerFactory(store)
 	} else {
-		// Build an executor that calls agent.ExecuteBead directly (in-process, no subprocess)
+		// Build an executor that calls agent.ExecuteBead in-process, then
+		// submits the result to the project's land coordinator. The
+		// coordinator (a single goroutine per projectRoot) serializes all
+		// target-ref writes for this project — this is the server-side
+		// implementation of the human-PR landing model. See ddx-8746d8a6
+		// for the rationale. Prior to this rewrite, runWorker never called
+		// LandBeadResult at all, so commits produced by server-managed
+		// workers were silently lost (ddx-e14efc58).
+		coordinator := m.LandCoordinators.Get(m.projectRoot)
 		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 			runner := m.buildAgentRunner(m.projectRoot)
 			gitOps := &agent.RealGitOps{}
@@ -254,6 +269,30 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Model:   spec.Model,
 				Effort:  spec.Effort,
 			}, gitOps, runner)
+			if err != nil && res == nil {
+				return agent.ExecuteBeadReport{}, err
+			}
+			// Submit the worker's result to the coordinator and block on the
+			// LandResult. This is the call site that used to be silently
+			// missing (ddx-e14efc58).
+			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
+				landReq := agent.BuildLandRequestFromResult(m.projectRoot, res)
+				landRes, landErr := coordinator.Submit(landReq)
+				if landErr == nil {
+					agent.ApplyLandResultToExecuteBeadResult(res, landRes)
+				} else if err == nil {
+					err = landErr
+				}
+			} else if res != nil && res.ResultRev == res.BaseRev {
+				// No commits — let the classifier map this to no_changes.
+				res.Outcome = "no-changes"
+				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+			} else if res != nil && res.ExitCode != 0 {
+				// Agent failed with commits: preserve via UpdateRef rather
+				// than land. The coordinator is only for clean results.
+				res.Outcome = "preserved"
+				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+			}
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}

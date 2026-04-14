@@ -38,7 +38,7 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 		return ExecuteBeadStatusExecutionFailed
 	case "preserved":
 		switch reason {
-		case "rebase failed", "ff-merge not possible", "ff-merge failed after rebase", "merge failed":
+		case "rebase failed", "rebase conflict", "ff-merge not possible", "ff-merge failed after rebase", "merge failed":
 			return ExecuteBeadStatusLandConflict
 		case "post-run checks failed":
 			return ExecuteBeadStatusPostRunCheckFailed

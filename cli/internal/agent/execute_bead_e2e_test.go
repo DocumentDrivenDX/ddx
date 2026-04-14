@@ -49,24 +49,33 @@ func (m *gateTestGitOps) IsDirty(dir string) (bool, error) { return false, nil }
 func (m *gateTestGitOps) SynthesizeCommit(dir, msg string) (bool, error) { return false, nil }
 
 // gateTestOrchestratorGitOps is an OrchestratorGitOps mock for landing tests.
+// After the land-coordinator redesign, OrchestratorGitOps only needs UpdateRef;
+// the old Merge path has been replaced by LandingAdvancer (see execute_bead_land.go).
 type gateTestOrchestratorGitOps struct {
-	mergeErr    error
-	mergeCalled bool
-	mergedRev   string
 	preserveRef string
 	preserveSHA string
-}
-
-func (m *gateTestOrchestratorGitOps) Merge(dir, rev string) error {
-	m.mergeCalled = true
-	m.mergedRev = rev
-	return m.mergeErr
 }
 
 func (m *gateTestOrchestratorGitOps) UpdateRef(dir, ref, sha string) error {
 	m.preserveRef = ref
 	m.preserveSHA = sha
 	return nil
+}
+
+// gateTestLandingAdvancer is a minimal LandingAdvancer stub for gate tests.
+// It always returns a landed result so the gate tests can assert the landing
+// path without spinning up a real coordinator.
+type gateTestLandingAdvancer struct {
+	called    bool
+	returnErr error
+}
+
+func (a *gateTestLandingAdvancer) advance(res *ExecuteBeadResult) (*LandResult, error) {
+	a.called = true
+	if a.returnErr != nil {
+		return nil, a.returnErr
+	}
+	return &LandResult{Status: "landed", NewTip: res.ResultRev}, nil
 }
 
 // gateTestAgentRunner is a minimal AgentRunner mock that always succeeds.
@@ -161,9 +170,11 @@ func TestExecuteBead_MergeDefault_NoGates(t *testing.T) {
 	}
 
 	orch := &gateTestOrchestratorGitOps{}
+	advancer := &gateTestLandingAdvancer{}
 	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
-		WtPath:    wtPath,
-		GovernIDs: []string{specID},
+		WtPath:          wtPath,
+		GovernIDs:       []string{specID},
+		LandingAdvancer: advancer.advance,
 	})
 	if err != nil {
 		t.Fatalf("LandBeadResult returned error: %v", err)
@@ -173,8 +184,8 @@ func TestExecuteBead_MergeDefault_NoGates(t *testing.T) {
 	if res.Outcome != "merged" {
 		t.Errorf("expected outcome=merged, got %q (reason=%q)", res.Outcome, res.Reason)
 	}
-	if !orch.mergeCalled {
-		t.Error("expected Merge to be called for merge-by-default path")
+	if !advancer.called {
+		t.Error("expected LandingAdvancer to be called for the merge-by-default path")
 	}
 	if orch.preserveRef != "" {
 		t.Errorf("expected no preserve ref, got %q", orch.preserveRef)
@@ -203,9 +214,11 @@ func TestExecuteBead_RequiredGateFails_Preserves(t *testing.T) {
 	}
 
 	orch := &gateTestOrchestratorGitOps{}
+	advancer := &gateTestLandingAdvancer{}
 	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
-		WtPath:    wtPath,
-		GovernIDs: []string{specID},
+		WtPath:          wtPath,
+		GovernIDs:       []string{specID},
+		LandingAdvancer: advancer.advance,
 	})
 	if err != nil {
 		t.Fatalf("LandBeadResult returned error: %v", err)
@@ -215,8 +228,8 @@ func TestExecuteBead_RequiredGateFails_Preserves(t *testing.T) {
 	if res.Outcome != "preserved" {
 		t.Errorf("expected outcome=preserved when required gate fails, got %q", res.Outcome)
 	}
-	if orch.mergeCalled {
-		t.Error("Merge must not be called when required gate fails")
+	if advancer.called {
+		t.Error("LandingAdvancer must not be called when required gate fails")
 	}
 	if orch.preserveRef == "" {
 		t.Error("expected a preserve ref to be set when required gate fails")
@@ -251,9 +264,11 @@ func TestExecuteBead_RequiredGatePasses_Merges(t *testing.T) {
 	}
 
 	orch := &gateTestOrchestratorGitOps{}
+	advancer := &gateTestLandingAdvancer{}
 	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
-		WtPath:    wtPath,
-		GovernIDs: []string{specID},
+		WtPath:          wtPath,
+		GovernIDs:       []string{specID},
+		LandingAdvancer: advancer.advance,
 	})
 	if err != nil {
 		t.Fatalf("LandBeadResult returned error: %v", err)
@@ -263,8 +278,8 @@ func TestExecuteBead_RequiredGatePasses_Merges(t *testing.T) {
 	if res.Outcome != "merged" {
 		t.Errorf("expected outcome=merged when required gate passes, got %q (reason=%q)", res.Outcome, res.Reason)
 	}
-	if !orch.mergeCalled {
-		t.Error("Merge must be called when required gate passes")
+	if !advancer.called {
+		t.Error("LandingAdvancer must be called when required gate passes")
 	}
 	if orch.preserveRef != "" {
 		t.Errorf("expected no preserve ref when gate passes, got %q", orch.preserveRef)

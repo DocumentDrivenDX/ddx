@@ -47,29 +47,27 @@ type executeBeadChecks struct {
 }
 
 // OrchestratorGitOps abstracts the git operations needed by the parent-side
-// orchestrator for merging and preserving worker results.
+// orchestrator for preserving worker results under iteration refs.
+//
+// NOTE: The Merge(dir, rev) method that existed here before the land
+// coordinator redesign has been DELETED. All target-branch writes now flow
+// through Land() in execute_bead_land.go and its per-project serialized
+// coordinator. See ddx-8746d8a6 / ddx-e14efc58 / ddx-6aa50e57 for the
+// rationale: the old path produced merge-commit fans and "chore: checkpoint
+// before merge" noise, and workers racing on the same projectRoot could
+// silently produce 2-parent merges instead of linear history.
+//
+// The LandingAdvancer field on BeadLandingOptions is the coordinator
+// injection point for LandBeadResult callers that need to ff the target
+// branch. When LandingAdvancer is nil (the interactive single-bead CLI),
+// LandBeadResult falls back to preserving the result under
+// refs/ddx/iterations/<bead-id>/... rather than modifying the target branch.
 type OrchestratorGitOps interface {
-	Merge(dir, rev string) error
 	UpdateRef(dir, ref, sha string) error
 }
 
 // RealOrchestratorGitOps implements OrchestratorGitOps via os/exec git commands.
 type RealOrchestratorGitOps struct{}
-
-// Merge merges rev into dir's working tree via git merge. It commits any
-// tracked uncommitted changes in dir first so the working tree is clean.
-func (r *RealOrchestratorGitOps) Merge(dir, rev string) error {
-	if osexec.Command("git", "-C", dir, "diff-index", "--quiet", "HEAD").Run() != nil {
-		_ = osexec.Command("git", "-C", dir, "add", "-u").Run()
-		_ = osexec.Command("git", "-C", dir, "commit", "-m", "chore: checkpoint before merge").Run()
-	}
-	out, err := osexec.Command("git", "-C", dir, "merge", "--no-edit", rev).CombinedOutput()
-	if err != nil {
-		_ = osexec.Command("git", "-C", dir, "merge", "--abort").Run()
-		return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
 
 // UpdateRef updates a git ref to point at sha.
 func (r *RealOrchestratorGitOps) UpdateRef(dir, ref, sha string) error {
@@ -82,7 +80,7 @@ func (r *RealOrchestratorGitOps) UpdateRef(dir, ref, sha string) error {
 
 // BeadLandingOptions controls how the orchestrator lands a completed worker result.
 type BeadLandingOptions struct {
-	// NoMerge skips the merge step and preserves the result under
+	// NoMerge skips the land step and preserves the result under
 	// refs/ddx/iterations/<bead-id>/... instead.
 	NoMerge bool
 
@@ -100,6 +98,14 @@ type BeadLandingOptions struct {
 	ChecksArtifactPath string
 	// ChecksArtifactRel is the relative path stored in the result for checks.json.
 	ChecksArtifactRel string
+
+	// LandingAdvancer, when non-nil, replaces the old in-process Merge step
+	// with the coordinator-pattern Land() call. The callback is expected to
+	// run fetch → rebase → ff → push serialized against other submissions
+	// for the same projectRoot. When nil, LandBeadResult falls back to
+	// preserving the result under refs/ddx/iterations/<bead-id>/...
+	// rather than touching the target branch.
+	LandingAdvancer func(res *ExecuteBeadResult) (*LandResult, error)
 }
 
 // BeadLandingResult records the outcome of the orchestrator's landing step.
@@ -221,18 +227,52 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 		return landing, nil
 	}
 
-	// Default: merge the worker's commits into projectRoot.
-	if err := gitOps.Merge(projectRoot, res.ResultRev); err == nil {
-		landing.Outcome = "merged"
-	} else {
-		ref := PreserveRef(res.BeadID, res.BaseRev)
-		if updErr := gitOps.UpdateRef(projectRoot, ref, res.ResultRev); updErr != nil {
-			return nil, fmt.Errorf("preserving result ref after merge failure: %w", updErr)
+	// Default: land the worker's commits on the target branch. When a
+	// LandingAdvancer is provided (server coordinator / --local coordinator)
+	// it runs the rebase → ff → push sequence serialized per projectRoot.
+	// When no advancer is provided, LandBeadResult falls back to preserving
+	// the result under refs/ddx/iterations/ — the interactive single-bead
+	// CLI path, which intentionally does NOT auto-advance the target branch
+	// (the operator moves the ref themselves).
+	if opts.LandingAdvancer != nil {
+		land, landErr := opts.LandingAdvancer(res)
+		if landErr != nil {
+			return nil, fmt.Errorf("land advancer: %w", landErr)
 		}
-		landing.Outcome = "preserved"
-		landing.PreserveRef = ref
-		landing.Reason = "merge failed"
+		switch land.Status {
+		case "landed":
+			landing.Outcome = "merged"
+			if land.Rebased {
+				landing.Reason = "rebased onto current tip"
+			}
+			if land.NewTip != "" {
+				res.ResultRev = land.NewTip
+			}
+			if land.PushFailed {
+				landing.Reason = "landed locally; push failed: " + land.PushError
+			}
+		case "preserved":
+			landing.Outcome = "preserved"
+			landing.PreserveRef = land.PreserveRef
+			landing.Reason = land.Reason
+		case "no-changes":
+			landing.Outcome = "no-changes"
+			landing.Reason = land.Reason
+		default:
+			landing.Outcome = "preserved"
+			landing.Reason = "unknown land status: " + land.Status
+		}
+		return landing, nil
 	}
+
+	// No advancer: preserve under refs/ddx/iterations/ as a safe fallback.
+	ref := PreserveRef(res.BeadID, res.BaseRev)
+	if err := gitOps.UpdateRef(projectRoot, ref, res.ResultRev); err != nil {
+		return nil, fmt.Errorf("preserving result ref (no land advancer): %w", err)
+	}
+	landing.Outcome = "preserved"
+	landing.PreserveRef = ref
+	landing.Reason = "no land advancer configured"
 	return landing, nil
 }
 

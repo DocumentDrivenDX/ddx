@@ -629,6 +629,139 @@ func TestWorkerLiveCounters(t *testing.T) {
 	assert.Equal(t, 1, final.Failures)
 }
 
+// TestWorkerLandsCommitViaCoordinator is the regression test for ddx-e14efc58:
+// a server-managed worker whose execution produces a commit must advance the
+// project's target branch via the land coordinator, visible in `git log main -1`
+// after the worker exits.
+//
+// Pre-fix, runWorker's executor closure at workers.go:248 called
+// agent.ExecuteBead but never called LandBeadResult/Land, so commits were
+// silently lost. Post-fix, the executor closure submits every successful
+// result to m.LandCoordinators.Get(projectRoot) which runs agent.Land() to
+// advance main. This test asserts main is advanced by using a BeadWorkerFactory
+// shim that mirrors the real runWorker closure's land-submission path.
+//
+// The shim is required because the real closure calls agent.ExecuteBead which
+// needs a real harness binary to run; using BeadWorkerFactory lets us create
+// commits directly via git plumbing while still exercising the coordinator
+// integration (m.LandCoordinators.Get -> Submit -> agent.Land -> advance main).
+func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
+	root := t.TempDir()
+
+	// Real git repo fixture.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# test\n"), 0o644))
+	runCmd(t, root, "git", "init", "-b", "main")
+	runCmd(t, root, "git", "config", "user.name", "Test")
+	runCmd(t, root, "git", "config", "user.email", "test@test.local")
+	runCmd(t, root, "git", "add", "-A")
+	runCmd(t, root, "git", "commit", "-m", "init")
+
+	// Get the initial main tip for comparison later.
+	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
+	initialTipOut, err := initialTipCmd.Output()
+	require.NoError(t, err)
+	initialTip := strings.TrimSpace(string(initialTipOut))
+
+	// Seed the bead store with one ready bead.
+	ddxDir := filepath.Join(root, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:         "ddx-integration-01",
+		Title:      "integration test bead",
+		Status:     bead.StatusOpen,
+		Priority:   0,
+		IssueType:  bead.DefaultType,
+		Acceptance: "Worker lands commit via coordinator",
+	}))
+
+	m := NewWorkerManager(root)
+
+	// Inject a BeadWorkerFactory that mirrors the real runWorker closure's
+	// land-submission path. We do not call agent.ExecuteBead directly (no real
+	// harness available in the test env); instead we create a real commit
+	// via git plumbing and submit its SHA to the coordinator the same way
+	// the real executor closure does.
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				// Produce a real commit in a throwaway worktree at main's
+				// current tip. This simulates what ExecuteBead produces.
+				wt, err := os.MkdirTemp("", "integ-wt-*")
+				require.NoError(t, err)
+				_ = os.RemoveAll(wt)
+				runCmd(t, root, "git", "worktree", "add", "--detach", wt, "refs/heads/main")
+				defer func() {
+					runCmd(t, root, "git", "worktree", "remove", "--force", wt)
+				}()
+
+				require.NoError(t, os.WriteFile(filepath.Join(wt, "worker-file.txt"), []byte("worker content\n"), 0o644))
+				runCmd(t, wt, "git", "add", "-A")
+				runCmd(t, wt, "git", "-c", "user.name=Worker", "-c", "user.email=worker@test.local", "commit", "-m", "feat: worker commit")
+				newHeadCmd := exec.Command("git", "-C", wt, "rev-parse", "HEAD")
+				newHeadOut, err := newHeadCmd.Output()
+				require.NoError(t, err)
+				resultRev := strings.TrimSpace(string(newHeadOut))
+
+				// Pin the commit with a temporary ref so it survives the
+				// worktree removal (the real ExecuteBead flow has the same
+				// lifetime concern).
+				runCmd(t, root, "git", "update-ref", "refs/ddx/integ-pins/"+beadID, resultRev)
+
+				// Submit to the coordinator — same call site pattern as the
+				// real runWorker closure in workers.go.
+				coord := m.LandCoordinators.Get(root)
+				landRes, landErr := coord.Submit(agent.LandRequest{
+					WorktreeDir:  root,
+					BaseRev:      initialTip,
+					ResultRev:    resultRev,
+					BeadID:       beadID,
+					AttemptID:    "integ-attempt-01",
+					TargetBranch: "main",
+				})
+				if landErr != nil {
+					return agent.ExecuteBeadReport{}, landErr
+				}
+				return agent.ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    agent.ExecuteBeadStatusSuccess,
+					BaseRev:   initialTip,
+					ResultRev: landRes.NewTip,
+				}, nil
+			}),
+		}
+	}
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	require.NoError(t, err)
+
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	assert.Equal(t, "exited", final.State, "worker should have exited cleanly")
+
+	// The coordinator should have advanced main beyond the initial tip.
+	tipAfterCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
+	tipAfterOut, err := tipAfterCmd.Output()
+	require.NoError(t, err)
+	tipAfter := strings.TrimSpace(string(tipAfterOut))
+	assert.NotEqual(t, initialTip, tipAfter, "main should have advanced from initial tip")
+
+	// The advanced tip must have the worker's file.
+	showCmd := exec.Command("git", "-C", root, "show", tipAfter+":worker-file.txt")
+	showOut, err := showCmd.Output()
+	require.NoError(t, err, "worker-file.txt should exist at main tip after land")
+	assert.Equal(t, "worker content\n", string(showOut))
+
+	// No merge commits on main.
+	mergesCmd := exec.Command("git", "-C", root, "log", "--merges", "--format=%H", "refs/heads/main")
+	mergesOut, err := mergesCmd.Output()
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(string(mergesOut)), "main should have no merge commits after land")
+
+	// Cleanup coordinators for this test.
+	m.LandCoordinators.StopAll()
+}
+
 // TC-013.6 — Workers for two different registered projects run in parallel
 // without cross-project filesystem writes.
 func TestConcurrentWorkersFromDifferentProjects(t *testing.T) {

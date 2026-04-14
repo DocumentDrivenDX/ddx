@@ -41,6 +41,16 @@ type CommandFactory struct {
 	// execute-bead orchestrator (LandBeadResult) for testing.
 	executeBeadOrchestratorGitOverride agent.OrchestratorGitOps
 
+	// executeBeadLandingGitOverride overrides the LandingGitOps used by the
+	// single-bead CLI and the execute-loop LandCoordinator for testing.
+	executeBeadLandingGitOverride agent.LandingGitOps
+
+	// executeBeadLandingAdvancerOverride, when non-nil, replaces the default
+	// Land() wrapper used by the interactive single-bead CLI with a custom
+	// callback. Tests inject this to assert on the number of land calls
+	// without needing a real git repo.
+	executeBeadLandingAdvancerOverride func(res *agent.ExecuteBeadResult) (*agent.LandResult, error)
+
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper
 
@@ -83,6 +93,8 @@ func (f *CommandFactory) withWorkingDir(workingDir string) *CommandFactory {
 		AgentRunnerOverride:                f.AgentRunnerOverride,
 		executeBeadGitOverride:             f.executeBeadGitOverride,
 		executeBeadOrchestratorGitOverride: f.executeBeadOrchestratorGitOverride,
+		executeBeadLandingGitOverride:      f.executeBeadLandingGitOverride,
+		executeBeadLandingAdvancerOverride: f.executeBeadLandingAdvancerOverride,
 		viperInstance:                      f.viperInstance,
 		updateChecker:                      f.updateChecker,
 		updateDone:                         f.updateDone,

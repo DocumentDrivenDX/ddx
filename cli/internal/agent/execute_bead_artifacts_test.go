@@ -357,7 +357,6 @@ func TestExecuteBead_ResultShape(t *testing.T) {
 // artifactTestOrchestratorGitOps is a no-op OrchestratorGitOps for artifact tests.
 type artifactTestOrchestratorGitOps struct{}
 
-func (m *artifactTestOrchestratorGitOps) Merge(dir, rev string) error          { return nil }
 func (m *artifactTestOrchestratorGitOps) UpdateRef(dir, ref, sha string) error { return nil }
 
 // TestExecuteBead_ChecksArtifact verifies that checks.json is written by the

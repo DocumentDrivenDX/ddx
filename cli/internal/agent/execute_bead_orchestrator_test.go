@@ -8,21 +8,11 @@ import (
 )
 
 // orchTestGitOps is a minimal OrchestratorGitOps mock for orchestrator unit tests.
+// After the land-coordinator redesign, OrchestratorGitOps only needs UpdateRef.
 type orchTestGitOps struct {
 	mu          sync.Mutex
-	mergeErr    error
-	mergeCalled int
-	mergedRevs  []string
 	preserveRef string
 	preserveSHA string
-}
-
-func (m *orchTestGitOps) Merge(dir, rev string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.mergeCalled++
-	m.mergedRevs = append(m.mergedRevs, rev)
-	return m.mergeErr
 }
 
 func (m *orchTestGitOps) UpdateRef(dir, ref, sha string) error {
@@ -31,6 +21,26 @@ func (m *orchTestGitOps) UpdateRef(dir, ref, sha string) error {
 	m.preserveRef = ref
 	m.preserveSHA = sha
 	return nil
+}
+
+// fakeLandingAdvancer returns a LandingAdvancer callback that records each
+// invocation and returns the given result/err. Used by orchestrator tests to
+// simulate the coordinator-pattern Land() call without spinning up a real
+// coordinator goroutine.
+type fakeLandingAdvancer struct {
+	mu         sync.Mutex
+	calls      int
+	lastResult *ExecuteBeadResult
+	returnLand *LandResult
+	returnErr  error
+}
+
+func (f *fakeLandingAdvancer) advance(res *ExecuteBeadResult) (*LandResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	f.lastResult = res
+	return f.returnLand, f.returnErr
 }
 
 func makeWorkerResult(beadID, baseRev, resultRev string, exitCode int) *ExecuteBeadResult {
@@ -50,13 +60,20 @@ func makeWorkerResult(beadID, baseRev, resultRev string, exitCode int) *ExecuteB
 	}
 }
 
-// TestLandBeadResult_Merge verifies the default path: agent succeeded with commits → merge.
+// TestLandBeadResult_Merge verifies the default path: agent succeeded with
+// commits → LandBeadResult invokes the LandingAdvancer (coordinator Land()
+// callback) and classifies the outcome as merged.
 func TestLandBeadResult_Merge(t *testing.T) {
 	projectRoot := t.TempDir()
 	res := makeWorkerResult("ddx-orch-01", "aaa0001", "bbb0001", 0)
 	orch := &orchTestGitOps{}
 
-	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{})
+	advancer := &fakeLandingAdvancer{
+		returnLand: &LandResult{Status: "landed", NewTip: "bbb0001"},
+	}
+	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		LandingAdvancer: advancer.advance,
+	})
 	if err != nil {
 		t.Fatalf("LandBeadResult: %v", err)
 	}
@@ -65,8 +82,8 @@ func TestLandBeadResult_Merge(t *testing.T) {
 	if res.Outcome != "merged" {
 		t.Errorf("expected outcome=merged, got %q", res.Outcome)
 	}
-	if orch.mergeCalled != 1 {
-		t.Errorf("expected 1 merge call, got %d", orch.mergeCalled)
+	if advancer.calls != 1 {
+		t.Errorf("expected 1 advancer call, got %d", advancer.calls)
 	}
 	if res.Status != ExecuteBeadStatusSuccess {
 		t.Errorf("expected status=success, got %q", res.Status)
@@ -74,13 +91,16 @@ func TestLandBeadResult_Merge(t *testing.T) {
 }
 
 // TestLandBeadResult_NoChanges verifies that when resultRev == baseRev the
-// landing outcome is "no-changes" and no merge is attempted.
+// landing outcome is "no-changes" and the advancer is not invoked.
 func TestLandBeadResult_NoChanges(t *testing.T) {
 	projectRoot := t.TempDir()
 	res := makeWorkerResult("ddx-orch-02", "aaa0002", "aaa0002", 0)
 	orch := &orchTestGitOps{}
 
-	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{})
+	advancer := &fakeLandingAdvancer{}
+	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		LandingAdvancer: advancer.advance,
+	})
 	if err != nil {
 		t.Fatalf("LandBeadResult: %v", err)
 	}
@@ -89,8 +109,8 @@ func TestLandBeadResult_NoChanges(t *testing.T) {
 	if res.Outcome != "no-changes" {
 		t.Errorf("expected outcome=no-changes, got %q", res.Outcome)
 	}
-	if orch.mergeCalled != 0 {
-		t.Errorf("expected 0 merge calls, got %d", orch.mergeCalled)
+	if advancer.calls != 0 {
+		t.Errorf("expected 0 advancer calls, got %d", advancer.calls)
 	}
 	if res.Status != ExecuteBeadStatusNoChanges {
 		t.Errorf("expected status=no_changes, got %q", res.Status)
@@ -105,7 +125,10 @@ func TestLandBeadResult_AgentFailedNoCommits(t *testing.T) {
 	res.Error = "agent crashed"
 	orch := &orchTestGitOps{}
 
-	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{})
+	advancer := &fakeLandingAdvancer{}
+	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		LandingAdvancer: advancer.advance,
+	})
 	if err != nil {
 		t.Fatalf("LandBeadResult: %v", err)
 	}
@@ -114,8 +137,8 @@ func TestLandBeadResult_AgentFailedNoCommits(t *testing.T) {
 	if res.Outcome != "error" {
 		t.Errorf("expected outcome=error, got %q", res.Outcome)
 	}
-	if orch.mergeCalled != 0 {
-		t.Errorf("expected 0 merge calls for error outcome, got %d", orch.mergeCalled)
+	if advancer.calls != 0 {
+		t.Errorf("expected 0 advancer calls for error outcome, got %d", advancer.calls)
 	}
 	if res.Status != ExecuteBeadStatusExecutionFailed {
 		t.Errorf("expected status=execution_failed, got %q", res.Status)
@@ -123,13 +146,16 @@ func TestLandBeadResult_AgentFailedNoCommits(t *testing.T) {
 }
 
 // TestLandBeadResult_AgentFailedWithCommits verifies that when exitCode != 0 but
-// commits were produced, the result is preserved rather than merged or discarded.
+// commits were produced, the result is preserved rather than landed or discarded.
 func TestLandBeadResult_AgentFailedWithCommits(t *testing.T) {
 	projectRoot := t.TempDir()
 	res := makeWorkerResult("ddx-orch-04", "aaa0004", "bbb0004", 1)
 	orch := &orchTestGitOps{}
 
-	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{})
+	advancer := &fakeLandingAdvancer{}
+	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		LandingAdvancer: advancer.advance,
+	})
 	if err != nil {
 		t.Fatalf("LandBeadResult: %v", err)
 	}
@@ -138,8 +164,8 @@ func TestLandBeadResult_AgentFailedWithCommits(t *testing.T) {
 	if res.Outcome != "preserved" {
 		t.Errorf("expected outcome=preserved, got %q", res.Outcome)
 	}
-	if orch.mergeCalled != 0 {
-		t.Errorf("expected 0 merge calls when agent failed, got %d", orch.mergeCalled)
+	if advancer.calls != 0 {
+		t.Errorf("expected 0 advancer calls when agent failed, got %d", advancer.calls)
 	}
 	if orch.preserveRef == "" {
 		t.Error("expected a preserve ref when agent failed with commits")
@@ -155,7 +181,11 @@ func TestLandBeadResult_NoMerge(t *testing.T) {
 	res := makeWorkerResult("ddx-orch-05", "aaa0005", "bbb0005", 0)
 	orch := &orchTestGitOps{}
 
-	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{NoMerge: true})
+	advancer := &fakeLandingAdvancer{}
+	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		NoMerge:         true,
+		LandingAdvancer: advancer.advance,
+	})
 	if err != nil {
 		t.Fatalf("LandBeadResult: %v", err)
 	}
@@ -164,40 +194,52 @@ func TestLandBeadResult_NoMerge(t *testing.T) {
 	if res.Outcome != "preserved" {
 		t.Errorf("expected outcome=preserved with --no-merge, got %q", res.Outcome)
 	}
-	if orch.mergeCalled != 0 {
-		t.Errorf("expected 0 merge calls with --no-merge, got %d", orch.mergeCalled)
+	if advancer.calls != 0 {
+		t.Errorf("expected 0 advancer calls with --no-merge, got %d", advancer.calls)
 	}
 	if res.Status != ExecuteBeadStatusSuccess {
 		t.Errorf("expected status=success even when preserved via --no-merge, got %q", res.Status)
 	}
 }
 
-// TestLandBeadResult_MergeConflictPreserves verifies that when merge fails the
-// result is preserved rather than discarded.
+// TestLandBeadResult_MergeConflictPreserves verifies that when the land
+// advancer returns a preserved status (rebase conflict) the result is
+// preserved rather than landed.
 func TestLandBeadResult_MergeConflictPreserves(t *testing.T) {
 	projectRoot := t.TempDir()
 	res := makeWorkerResult("ddx-orch-06", "aaa0006", "bbb0006", 0)
-	orch := &orchTestGitOps{mergeErr: fmt.Errorf("merge conflict")}
+	orch := &orchTestGitOps{}
 
-	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{})
+	advancer := &fakeLandingAdvancer{
+		returnLand: &LandResult{
+			Status:      "preserved",
+			PreserveRef: "refs/ddx/iterations/ddx-orch-06/test-aaa0006",
+			Reason:      "rebase conflict",
+		},
+	}
+	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		LandingAdvancer: advancer.advance,
+	})
 	if err != nil {
 		t.Fatalf("LandBeadResult: %v", err)
 	}
 	ApplyLandingToResult(res, landing)
 
 	if res.Outcome != "preserved" {
-		t.Errorf("expected outcome=preserved after merge conflict, got %q", res.Outcome)
+		t.Errorf("expected outcome=preserved after rebase conflict, got %q", res.Outcome)
 	}
 	if res.Status != ExecuteBeadStatusLandConflict {
 		t.Errorf("expected status=land_conflict, got %q", res.Status)
 	}
-	if orch.preserveRef == "" {
-		t.Error("expected a preserve ref after merge conflict")
+	if res.PreserveRef == "" {
+		t.Error("expected a preserve ref after rebase conflict")
 	}
 }
 
-// TestLandBeadResult_PreserveRefFormat verifies that the generated preserve ref
-// matches the documented pattern refs/ddx/iterations/<bead-id>/<ts>-<sha>.
+// TestLandBeadResult_PreserveRefFormat verifies that when LandBeadResult
+// falls back to preserving (no LandingAdvancer configured, e.g. for the
+// interactive single-bead CLI), the generated preserve ref matches the
+// documented pattern refs/ddx/iterations/<bead-id>/<ts>-<sha>.
 func TestLandBeadResult_PreserveRefFormat(t *testing.T) {
 	projectRoot := t.TempDir()
 	const beadID = "ddx-orch-07"
@@ -208,8 +250,9 @@ func TestLandBeadResult_PreserveRefFormat(t *testing.T) {
 	defer func() { NowFunc = oldNow }()
 
 	res := makeWorkerResult(beadID, baseRev, "abcd1234abcd", 0)
-	orch := &orchTestGitOps{mergeErr: fmt.Errorf("force preserve")}
+	orch := &orchTestGitOps{}
 
+	// No LandingAdvancer → LandBeadResult preserves as a safe fallback.
 	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{})
 	if err != nil {
 		t.Fatalf("LandBeadResult: %v", err)
@@ -223,8 +266,10 @@ func TestLandBeadResult_PreserveRefFormat(t *testing.T) {
 
 // TestConcurrentWorkersNoMergeRace is a regression test verifying that two
 // concurrent workers each complete independently without producing merge races.
-// Each worker calls LandBeadResult independently; the orchestrator serializes
-// via the git lock. This test verifies the concurrency contract.
+// After the land-coordinator redesign the actual land step is serialized by
+// the coordinator goroutine, not by LandBeadResult itself; this test just
+// asserts that LandBeadResult is safe to call concurrently with
+// independent per-worker advancers.
 func TestConcurrentWorkersNoMergeRace(t *testing.T) {
 	projectRoot := t.TempDir()
 
@@ -233,13 +278,8 @@ func TestConcurrentWorkersNoMergeRace(t *testing.T) {
 		seq int
 	}
 	var mu sync.Mutex
-	var mergeCalls []call
+	var landCalls []call
 	callCount := 0
-
-	// Use separate orchestrators per worker to avoid lock contention in the mock.
-	makeOrch := func() OrchestratorGitOps {
-		return &orchTestGitOps{}
-	}
 
 	const numWorkers = 2
 	results := make([]*ExecuteBeadResult, numWorkers)
@@ -255,8 +295,13 @@ func TestConcurrentWorkersNoMergeRace(t *testing.T) {
 			resultRev := fmt.Sprintf("result%06d", i)
 
 			res := makeWorkerResult(beadID, baseRev, resultRev, 0)
-			o := makeOrch()
-			landing, err := LandBeadResult(projectRoot, res, o, BeadLandingOptions{})
+			orch := &orchTestGitOps{}
+			advancer := &fakeLandingAdvancer{
+				returnLand: &LandResult{Status: "landed", NewTip: resultRev},
+			}
+			landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+				LandingAdvancer: advancer.advance,
+			})
 			if err != nil {
 				t.Errorf("worker %d: LandBeadResult: %v", i, err)
 				return
@@ -264,7 +309,7 @@ func TestConcurrentWorkersNoMergeRace(t *testing.T) {
 			ApplyLandingToResult(res, landing)
 			mu.Lock()
 			results[i] = res
-			mergeCalls = append(mergeCalls, call{rev: resultRev, seq: callCount})
+			landCalls = append(landCalls, call{rev: resultRev, seq: callCount})
 			callCount++
 			mu.Unlock()
 		}()
@@ -283,7 +328,7 @@ func TestConcurrentWorkersNoMergeRace(t *testing.T) {
 		}
 	}
 	// Both workers must have landed.
-	if len(mergeCalls) != numWorkers {
-		t.Errorf("expected %d landing calls, got %d", numWorkers, len(mergeCalls))
+	if len(landCalls) != numWorkers {
+		t.Errorf("expected %d landing calls, got %d", numWorkers, len(landCalls))
 	}
 }
