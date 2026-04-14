@@ -132,6 +132,22 @@ export interface WorkerExecutionResult {
   retry_after?: string
 }
 
+export interface ProjectEntry {
+  id: string
+  name: string
+  path: string
+  git_remote?: string
+  registered_at: string
+  last_seen: string
+}
+
+export interface NodeInfo {
+  name: string
+  id: string
+  started_at: string
+  last_seen: string
+}
+
 export interface WorkerRecord {
   id: string
   kind: string

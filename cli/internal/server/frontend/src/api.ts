@@ -1,4 +1,4 @@
-import type { AgentSessionDetail, AgentSessionSummary, WorkerRecord } from './types'
+import type { AgentSessionDetail, AgentSessionSummary, NodeInfo, ProjectEntry, WorkerRecord } from './types'
 
 const BASE = '/api'
 
@@ -86,4 +86,6 @@ export const api = {
   personas: () => fetchJSON<any[]>('/personas'),
   personaDetail: (role: string) => fetchJSON<any>(`/personas/${role}`),
   health: () => fetchJSON<any>('/health'),
+  node: () => fetchJSON<NodeInfo>('/node'),
+  projects: () => fetchJSON<ProjectEntry[]>('/projects'),
 }
