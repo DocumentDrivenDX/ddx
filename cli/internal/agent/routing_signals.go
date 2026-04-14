@@ -269,7 +269,7 @@ func (r *Runner) loadClaudeRoutingSignal(now time.Time) RoutingSignalSnapshot {
 	return result
 }
 
-// loadLMStudioSignal probes all LM Studio endpoints configured in agent_runner.models.
+// loadLMStudioSignal probes all LM Studio endpoints from ~/.config/agent/config.yaml.
 func (r *Runner) loadLMStudioSignal(now time.Time) RoutingSignalSnapshot {
 	unknown := RoutingSignalSnapshot{
 		Provider: "lmstudio",
@@ -277,7 +277,7 @@ func (r *Runner) loadLMStudioSignal(now time.Time) RoutingSignalSnapshot {
 			Provider:  "lmstudio",
 			Kind:      lmstudioSourceKind,
 			Freshness: "unknown",
-			Notes:     "no endpoints configured in agent_runner.models",
+			Notes:     "no LM Studio endpoints configured in ~/.config/agent/config.yaml",
 		},
 		CurrentQuota: QuotaSignal{
 			Source: SignalSourceMetadata{
@@ -289,48 +289,14 @@ func (r *Runner) loadLMStudioSignal(now time.Time) RoutingSignalSnapshot {
 		},
 	}
 
-	var cfgModels map[string]*LLMPresetYAML
-	if r.AgentConfigLoader != nil {
-		if cfg := r.AgentConfigLoader(); cfg != nil {
-			cfgModels = cfg.Models
-		}
-	}
-
-	// Collect all unique endpoints across all model presets.
-	var allEndpoints []string
-	seen := map[string]bool{}
-	presetName := ""
-	for name, preset := range cfgModels {
-		if len(preset.Endpoints) > 0 {
-			if presetName == "" {
-				presetName = name
-			}
-			for _, ep := range preset.Endpoints {
-				if !seen[ep] {
-					seen[ep] = true
-					allEndpoints = append(allEndpoints, ep)
-				}
-			}
-		}
-	}
-
-	// Fall back to ~/.config/agent/config.yaml providers if ddx config has no endpoints.
-	if len(allEndpoints) == 0 {
-		for _, ep := range ReadLMStudioEndpointsFromAgentConfig() {
-			if !seen[ep] {
-				seen[ep] = true
-				allEndpoints = append(allEndpoints, ep)
-			}
-		}
-		presetName = "agent-config"
-	}
-
+	// Read LM Studio endpoints from native ~/.config/agent/config.yaml.
+	allEndpoints := ReadLMStudioEndpointsFromAgentConfig()
 	if len(allEndpoints) == 0 {
 		return unknown
 	}
 
 	statuses := ProbeLMStudioEndpoints(allEndpoints, 3*time.Second)
-	return BuildLMStudioSignal(presetName, statuses, now)
+	return BuildLMStudioSignal("agent-config", statuses, now)
 }
 
 // RefreshCodexQuotaViaTmux refreshes the codex quota snapshot via tmux if the

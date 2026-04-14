@@ -33,9 +33,6 @@ type AgentRunConfig struct {
 	MaxIterations int
 }
 
-// roundRobinCounter is shared across all agent runs for endpoint rotation.
-var roundRobinCounter uint64
-
 // RunAgent executes a prompt using the embedded agent library.
 // This runs in-process — no subprocess, no binary lookup.
 func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
@@ -53,7 +50,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		wd, _ = os.Getwd()
 	}
 
-	// Resolve agent configuration (config.yaml → env vars → opts)
+	// Resolve agent configuration (native config → env vars → built-in defaults).
 	// Use injected provider (testing) or build from resolved config.
 	var agentCfg AgentRunConfig
 	var provider agentlib.Provider
@@ -290,9 +287,10 @@ func embeddedCompactionConfig(model string) compaction.Config {
 	return cfg
 }
 
-// resolveAgentConfig builds an AgentRunConfig from .ddx/config.yaml, env vars, and opts.
-// Priority: opts > env vars > config > built-in defaults.
-// If model resolves to a named preset in agent.models, the preset's endpoint and model are applied.
+// resolveAgentConfig builds an AgentRunConfig from built-in defaults, env vars, and opts.
+// Priority: opts (model arg) > env vars > built-in defaults.
+// Used for the testing path (when AgentProvider is injected) and as the fallback when no
+// native .agent/config.yaml is present.
 func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 	cfg := AgentRunConfig{
 		Provider:      "openai-compat",
@@ -301,34 +299,7 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 		MaxIterations: 100,
 	}
 
-	var yamlModels map[string]*LLMPresetYAML
-
-	// Layer 1: .ddx/config.yaml (if AgentConfigLoader is set)
-	if r.AgentConfigLoader != nil {
-		if fc := r.AgentConfigLoader(); fc != nil {
-			if fc.Provider != "" {
-				cfg.Provider = fc.Provider
-			}
-			if fc.BaseURL != "" {
-				cfg.BaseURL = fc.BaseURL
-			}
-			if fc.APIKey != "" {
-				cfg.APIKey = fc.APIKey
-			}
-			if fc.Model != "" {
-				cfg.Model = fc.Model
-			}
-			if fc.Preset != "" {
-				cfg.Preset = fc.Preset
-			}
-			if fc.MaxIterations > 0 {
-				cfg.MaxIterations = fc.MaxIterations
-			}
-			yamlModels = fc.Models
-		}
-	}
-
-	// Layer 2: environment variables override config
+	// Layer 1: environment variables override built-in defaults
 	if v := os.Getenv("AGENT_PROVIDER"); v != "" {
 		cfg.Provider = v
 	}
@@ -345,7 +316,7 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 		cfg.Preset = v
 	}
 
-	// Layer 3: opts.Model overrides everything
+	// Layer 2: opts.Model overrides everything
 	if model != "" {
 		cfg.Model = model
 	}
@@ -353,25 +324,6 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 	if !containsString(prompt.PresetNames(), cfg.Preset) {
 		return AgentRunConfig{}, fmt.Errorf("agent: unsupported preset %q; supported presets: %s", cfg.Preset, strings.Join(prompt.PresetNames(), ", "))
 	}
-
-	// Layer 4: if cfg.Model names a preset, resolve it to endpoint + model.
-	if preset, ok := yamlModels[cfg.Model]; ok {
-		cfg.Model = preset.Model
-		if preset.Provider != "" {
-			cfg.Provider = preset.Provider
-		}
-		if preset.APIKey != "" {
-			cfg.APIKey = preset.APIKey
-		}
-		if len(preset.Endpoints) > 0 {
-			cfg.BaseURL = selectEndpoint(preset.Endpoints, preset.Strategy)
-		}
-	}
-
-	// Note: vendor/model format (e.g. "qwen/qwen3-coder-next") should be configured
-	// in .ddx/config.yaml under agent_runner.models or the native agent config.
-	// If no matching preset exists, buildAgentProvider will return an error with
-	// guidance to configure the model properly.
 
 	return cfg, nil
 }
@@ -385,7 +337,7 @@ func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedA
 		return resolved, nil
 	}
 
-	// No native config found. Fall back to .ddx/config.yaml agent_runner section.
+	// No native config found. Use built-in defaults + env vars.
 	cfg, err := r.resolveAgentConfig(model)
 	if err != nil {
 		return nil, err
@@ -398,10 +350,6 @@ func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedA
 }
 
 func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
-	if model != "" && r.legacyPresetExists(model) {
-		return nil, nil
-	}
-
 	cfg, err := agentconfig.Load(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: native config: %w", err)
@@ -477,17 +425,6 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 	}, nil
 }
 
-func (r *Runner) legacyPresetExists(model string) bool {
-	if model == "" || r.AgentConfigLoader == nil {
-		return false
-	}
-	if fc := r.AgentConfigLoader(); fc != nil && fc.Models != nil {
-		_, ok := fc.Models[model]
-		return ok
-	}
-	return false
-}
-
 func applyNativeDefaultProviderCompatibility(cfg *agentconfig.Config, workDir string) {
 	if cfg == nil || cfg.Default != "" || len(cfg.Providers) == 0 {
 		return
@@ -526,27 +463,6 @@ func nativeDefaultProviderAlias(workDir string) string {
 		}
 	}
 	return alias
-}
-
-// selectEndpoint picks one endpoint from the list using the specified strategy.
-// Strategies: "round-robin" (default), "first-available" (first entry, no rotation).
-func selectEndpoint(endpoints []string, strategy string) string {
-	if len(endpoints) == 1 {
-		return endpoints[0]
-	}
-	if strategy == "first-available" {
-		return endpoints[0]
-	}
-	// Default: round-robin using a global atomic counter.
-	idx := atomic.AddUint64(&roundRobinCounter, 1) - 1
-	return endpoints[idx%uint64(len(endpoints))]
-}
-
-func envOrDefault(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 // isOpenRouterModel returns true if the model name looks like a vendor/model
