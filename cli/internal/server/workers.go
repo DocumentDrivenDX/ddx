@@ -150,6 +150,15 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 }
 
 func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerRecord, error) {
+	// Pre-flight: validate harness availability and model compatibility
+	// before creating the worker record or claiming any beads.
+	if spec.Harness != "" {
+		runner := m.buildAgentRunner(m.projectRoot)
+		if err := runner.ValidateForExecuteLoop(spec.Harness, spec.Model); err != nil {
+			return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
+		}
+	}
+
 	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {
 		return WorkerRecord{}, err
 	}

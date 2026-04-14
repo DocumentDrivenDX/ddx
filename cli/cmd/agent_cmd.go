@@ -1201,6 +1201,17 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		return f.executeLoopWithServer(cmd, projectRoot, harness, model, effort, once, pollInterval, asJSON)
 	}
 
+	// Pre-flight: validate harness availability and model compatibility
+	// before claiming any beads. This surfaces errors like "claude binary
+	// not found" or "vidar is an agent preset, not a claude model" before
+	// any bead status changes hands.
+	if harness != "" {
+		preflightRunner := f.agentRunner()
+		if err := preflightRunner.ValidateForExecuteLoop(harness, model); err != nil {
+			return fmt.Errorf("execute-loop: %w", err)
+		}
+	}
+
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 
 	// Structured progress sink for this loop run. Events emitted at

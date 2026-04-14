@@ -201,6 +201,44 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	return result, nil
 }
 
+// ValidateForExecuteLoop checks harness availability and model compatibility
+// before any beads are claimed. Returns an error if the harness is not
+// available or if the model is clearly incompatible with the harness
+// (e.g. a local agent preset used with a non-agent harness). Emits a
+// deprecation warning to stderr if the model pin is deprecated.
+//
+// Call this in execute-loop before starting the worker so failures are
+// surfaced before any beads are claimed rather than mid-execution.
+func (r *Runner) ValidateForExecuteLoop(harnessName, model string) error {
+	if harnessName == "" {
+		return nil // no explicit harness; routing will pick at claim time
+	}
+
+	h, name, err := r.resolveHarness(RunOptions{Harness: harnessName})
+	if err != nil {
+		return err
+	}
+
+	if model != "" {
+		cat := r.catalog()
+
+		// Warn about deprecated model pins before any bead is claimed.
+		if dp, deprecated := cat.CheckDeprecatedPin(model, h.Surface); deprecated {
+			fmt.Fprintf(os.Stderr, "execute-loop: model %q is deprecated for harness %q; use %q instead\n",
+				model, name, dp.ReplacedBy)
+		}
+
+		// Reject model if it is a named preset in agent_runner.models and the
+		// harness is not "agent". Preset names like "vidar" or "bragi" are
+		// routing keys for the embedded agent, not model IDs for external CLIs.
+		if name != "agent" && r.legacyPresetExists(model) {
+			return fmt.Errorf("model %q is a local agent preset; "+
+				"use --harness agent or remove --harness to route automatically", model)
+		}
+	}
+	return nil
+}
+
 // Capabilities reports the model and reasoning options for a harness.
 func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 	harness, harnessName, err := r.resolveHarness(RunOptions{Harness: name})
