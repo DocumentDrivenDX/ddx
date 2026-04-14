@@ -1,0 +1,687 @@
+# DDx GraphQL Schema
+# This schema defines all queries for the GraphQL endpoint.
+# Every field is doc-commented for clarity.
+
+# Scalar definitions
+scalar DateTime
+scalar JSON
+
+# Node is the base interface for all entities in the system.
+interface Node {
+  id: ID!
+}
+
+# ============================================
+# Core Types
+# ============================================
+
+# NodeInfo represents the ddx-server instance
+type NodeInfo implements Node {
+  id: ID!
+  name: String!
+  startedAt: DateTime!
+  lastSeen: DateTime!
+}
+
+# Project represents a registered ddx project
+type Project implements Node {
+  id: ID!
+  name: String!
+  path: String!
+  gitRemote: String
+  registeredAt: DateTime!
+  lastSeen: DateTime!
+  unreachable: Boolean
+  tombstonedAt: DateTime
+}
+
+# Bead represents a portable work item with metadata
+type Bead implements Node {
+  id: ID!
+  title: String!
+  status: String!
+  priority: Int!
+  issueType: String!
+  owner: String
+  createdAt: DateTime!
+  createdBy: String
+  updatedAt: DateTime!
+  labels: [String!]
+  parent: String
+  description: String
+  acceptance: String
+  notes: String
+  dependencies: [Dependency!]
+}
+
+# Dependency represents a link between two beads
+type Dependency {
+  issueId: String!
+  dependsOnId: String!
+  type: String!
+  createdAt: String
+  createdBy: String
+  metadata: String
+}
+
+# BeadEdge represents one edge in the BeadConnection cursor connection
+type BeadEdge {
+  node: Bead!
+  cursor: String!
+}
+
+# BeadConnection represents a relay-compatible cursor connection for beads
+type BeadConnection {
+  edges: [BeadEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# Document represents a docgraph document
+type Document implements Node {
+  id: ID!
+  path: String!
+  title: String!
+  dependsOn: [String!]!
+  inputs: [String!]!
+  dependents: [String!]!
+  review: DocumentReview
+  parkingLot: Boolean!
+  prompt: String
+  execDef: DocumentExecDef
+}
+
+# DocumentReview holds review metadata for a document
+type DocumentReview {
+  selfHash: String!
+  deps: JSON!
+  reviewedAt: String!
+}
+
+# DocumentExecDef holds execution definition for a document
+type DocumentExecDef {
+  id: String
+  artifactIds: [String!]
+  executor: ExecutorSpec
+  result: ResultSpec
+  evaluation: Evaluation
+  active: Boolean
+  required: Boolean
+  graphSource: Boolean
+  createdAt: DateTime
+}
+
+# ExecutorSpec captures how a definition should be invoked
+type ExecutorSpec {
+  kind: String!
+  command: [String!]
+  cwd: String
+  env: JSON
+  timeoutMs: Int
+}
+
+# ResultSpec describes the structured result payload
+type ResultSpec {
+  metric: MetricResultSpec
+}
+
+# MetricResultSpec defines metric-shaped projection fields
+type MetricResultSpec {
+  unit: String
+  valuePath: String
+  samplesPath: String
+}
+
+# Evaluation holds optional interpretation rules
+type Evaluation {
+  comparison: String
+  thresholds: Thresholds
+}
+
+# Thresholds captures the ratchet policy
+type Thresholds {
+  warnMs: Float
+  ratchetMs: Float
+}
+
+# DocGraph represents the document dependency graph
+type DocGraph {
+  rootDir: String!
+  documents: [Document!]!
+  pathToId: JSON!
+  dependents: JSON!
+  warnings: [String!]!
+}
+
+# StaleReason represents why a document is stale
+type StaleReason {
+  id: ID!
+  path: String!
+  reasons: [String!]!
+}
+
+# Commit represents a git commit
+type Commit {
+  sha: String!
+  shortSha: String!
+  author: String!
+  date: DateTime!
+  subject: String!
+  body: String
+  beadRefs: [String!]
+}
+
+# CommitEdge represents one edge in the CommitConnection cursor connection
+type CommitEdge {
+  node: Commit!
+  cursor: String!
+}
+
+# CommitConnection represents a relay-compatible cursor connection for commits
+type CommitConnection {
+  edges: [CommitEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# Worker represents an execute-loop worker
+type Worker implements Node {
+  id: ID!
+  kind: String!
+  state: String!
+  status: String
+  projectRoot: String!
+  harness: String
+  provider: String
+  model: String
+  effort: String
+  once: Boolean
+  pollInterval: String
+  startedAt: DateTime
+  finishedAt: DateTime
+  error: String
+  stdoutPath: String
+  specPath: String
+  attempts: Int
+  successes: Int
+  failures: Int
+  currentBead: String
+  lastError: String
+  lastResult: WorkerExecutionResult
+  currentAttempt: CurrentAttemptInfo
+  recentPhases: [PhaseTransition!]
+  lastAttempt: LastAttemptInfo
+  landSummary: CoordinatorMetrics
+}
+
+# CurrentAttemptInfo is the in-flight attempt summary
+type CurrentAttemptInfo {
+  attemptId: String!
+  beadId: String!
+  beadTitle: String
+  harness: String
+  model: String
+  profile: String
+  phase: String!
+  phaseSeq: Int!
+  startedAt: DateTime!
+  elapsedMs: Int!
+}
+
+# PhaseTransition is one phase-transition entry
+type PhaseTransition {
+  phase: String!
+  ts: DateTime!
+  phaseSeq: Int!
+}
+
+# LastAttemptInfo summarises the most recently completed attempt
+type LastAttemptInfo {
+  attemptId: String!
+  beadId: String!
+  phase: String!
+  startedAt: DateTime!
+  endedAt: DateTime!
+  elapsedMs: Int!
+}
+
+# WorkerExecutionResult represents an execution result
+type WorkerExecutionResult {
+  beadId: String
+  attemptId: String
+  workerId: String
+  harness: String
+  provider: String
+  model: String
+  status: String
+  detail: String
+  sessionId: String
+  baseRev: String
+  resultRev: String
+  retryAfter: String
+}
+
+# AgentSession represents an agent execution session
+type AgentSession implements Node {
+  id: ID!
+  projectId: String!
+  beadId: String
+  harness: String!
+  model: String!
+  effort: String!
+  status: String!
+  startedAt: DateTime!
+  endedAt: DateTime
+  stdoutPath: String
+  stderrPath: String
+  durationMs: Int!
+  cost: Float
+  tokens: TokenUsage
+  outcome: String
+  detail: String
+  resultRev: String
+  baseRev: String
+}
+
+# TokenUsage represents token consumption
+type TokenUsage {
+  prompt: Int
+  completion: Int
+  total: Int
+  cached: Int
+}
+
+# Persona represents an AI persona definition
+type Persona implements Node {
+  id: ID!
+  name: String!
+  roles: [String!]!
+  description: String!
+  tags: [String!]!
+  content: String!
+  filePath: String
+  modTime: DateTime
+}
+
+# ExecutionRun represents an execution run
+type ExecutionRun implements Node {
+  id: ID!
+  definitionId: String!
+  artifactIds: [String!]!
+  startedAt: DateTime!
+  finishedAt: DateTime!
+  status: String!
+  exitCode: Int!
+  mergeBlocking: Boolean
+  agentSessionId: String
+  attachments: JSON
+  provenance: Provenance
+  metric: MetricObservation
+  stdout: String
+  stderr: String
+  value: Float
+  unit: String
+  parsed: Boolean
+}
+
+# Provenance captures host and version metadata
+type Provenance {
+  actor: String
+  host: String
+  gitRev: String
+  ddxVersion: String
+}
+
+# MetricObservation records a metric-shaped observation
+type MetricObservation {
+  artifactId: String!
+  definitionId: String!
+  observedAt: DateTime!
+  status: String!
+  value: Float!
+  unit: String
+  samples: [Float!]
+  comparison: ComparisonResult
+}
+
+# ComparisonResult records comparison against baseline
+type ComparisonResult {
+  baseline: Float!
+  delta: Float!
+  direction: String!
+}
+
+# CoordinatorMetrics holds land coordinator metrics
+type CoordinatorMetrics {
+  projectRoot: String!
+  branch: String!
+  lastLandTime: DateTime
+  lastLandResult: String
+  queueLength: Int!
+  meanQueueTimeMs: Float
+  lastQueueTimeMs: Float
+}
+
+# Provider represents an agent provider configuration
+type Provider implements Node {
+  id: ID!
+  name: String!
+  kind: String!
+  defaultModel: String
+  models: [String!]
+  defaultEffort: String
+  effortLevels: [String!]
+  timeoutMs: Int
+  permissions: [String!]
+}
+
+# PageInfo represents pagination information (relay standard)
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+# ============================================
+# Query Root
+# ============================================
+
+# Query is the entry point for all GraphQL queries
+type Query {
+  # node fetches any entity by ID
+  node(id: ID!): Node
+
+  # ==========================================
+  # Node & Project Queries
+  # ==========================================
+
+  # nodeInfo returns the server node information
+  nodeInfo: NodeInfo!
+
+  # projects returns all registered projects
+  projects(first: Int, after: String, last: Int, before: String, includeUnreachable: Boolean): ProjectConnection!
+
+  # ==========================================
+  # Bead Queries
+  # ==========================================
+
+  # beads returns all beads with cursor pagination
+  beads(first: Int, after: String, last: Int, before: String, status: String, label: String, projectID: String): BeadConnection!
+
+  # beadsByProject returns beads for a specific project
+  beadsByProject(projectID: String!, first: Int, after: String, last: Int, before: String, status: String, label: String): BeadConnection!
+
+  # beadsReady returns open beads whose dependencies are closed
+  beadsReady(first: Int, after: String, last: Int, before: String): BeadConnection!
+
+  # beadsBlocked returns open beads with unclosed dependencies
+  beadsBlocked(first: Int, after: String, last: Int, before: String): BeadConnection!
+
+  # beadsStatus returns aggregate bead counts
+  beadsStatus: BeadStatusCounts!
+
+  # beadDepTree returns the dependency tree for a bead
+  beadDepTree(beadID: ID!): String!
+
+  # bead returns a single bead by ID
+  bead(id: ID!): Bead
+
+  # ==========================================
+  # Document Queries
+  # ==========================================
+
+  # documents returns all library documents
+  documents(first: Int, after: String, last: Int, before: String, type: String): DocumentConnection!
+
+  # docGraph returns the full document dependency graph
+  docGraph: DocGraph!
+
+  # docStale returns documents that are stale
+  docStale: [StaleReason!]!
+
+  # docDeps returns the dependencies of a document
+  docDeps(documentID: ID!): [String!]!
+
+  # docDependents returns the dependents of a document
+  docDependents(documentID: ID!): [String!]!
+
+  # docHistory returns the git history for a document
+  docHistory(documentID: ID!, first: Int, after: String, last: Int, before: String): CommitConnection!
+
+  # docDiff returns the diff for a document
+  docDiff(documentID: ID!, ref: String): String!
+
+  # doc returns a single document by ID
+  doc(id: ID!): Document
+
+  # search searches library documents
+  search(query: String!, first: Int, after: String, last: Int, before: String): [SearchResult!]!
+
+  # ==========================================
+  # Commit Queries
+  # ==========================================
+
+  # commits returns git commits for a project
+  commits(projectID: ID!, first: Int, after: String, last: Int, before: String, since: String, author: String): CommitConnection!
+
+  # ==========================================
+  # Worker Queries
+  # ==========================================
+
+  # workers returns all workers
+  workers(first: Int, after: String, last: Int, before: String): WorkerConnection!
+
+  # workersByProject returns workers for a specific project
+  workersByProject(projectID: String!, first: Int, after: String, last: Int, before: String): WorkerConnection!
+
+  # worker returns a single worker by ID
+  worker(id: ID!): Worker
+
+  # workerProgress returns the progress subscription info
+  workerProgress(workerID: ID!): [PhaseTransition!]!
+
+  # ==========================================
+  # Agent Session Queries
+  # ==========================================
+
+  # agentSessions returns all agent sessions
+  agentSessions(first: Int, after: String, last: Int, before: String): AgentSessionConnection!
+
+  # agentSession returns a single session by ID
+  agentSession(id: ID!): AgentSession
+
+  # ==========================================
+  # Persona Queries
+  # ==========================================
+
+  # personas returns all personas
+  personas(first: Int, after: String, last: Int, before: String): PersonaConnection!
+
+  # persona returns a single persona by name
+  persona(name: String!): Persona
+
+  # personaByRole returns the persona bound to a role
+  personaByRole(role: String!): Persona
+
+  # ==========================================
+  # Execution Queries
+  # ==========================================
+
+  # execDefinitions returns all execution definitions
+  execDefinitions(first: Int, after: String, last: Int, before: String, artifactID: String): ExecutionDefinitionConnection!
+
+  # execDefinition returns a single definition by ID
+  execDefinition(id: ID!): ExecutionDefinition
+
+  # execRuns returns execution runs
+  execRuns(first: Int, after: String, last: Int, before: String, artifactID: String, definitionID: String): ExecutionRunConnection!
+
+  # execRun returns a single run by ID
+  execRun(id: ID!): ExecutionRun
+
+  # execRunLog returns the log for an execution run
+  execRunLog(runID: ID!): ExecutionRunLog!
+
+  # ==========================================
+  # Metrics Queries
+  # ==========================================
+
+  # coordinatorMetrics returns land coordinator metrics
+  coordinatorMetrics: CoordinatorMetrics!
+
+  # coordinatorMetricsByProject returns coordinator metrics for a project
+  coordinatorMetricsByProject(projectID: ID!): CoordinatorMetrics!
+
+  # metricsSummary returns a summary of metrics
+  metricsSummary: CoordinatorMetrics
+
+  # metricsCost returns cost metrics
+  metricsCost: CoordinatorMetrics
+
+  # metricsCycleTime returns cycle time metrics
+  metricsCycleTime: CoordinatorMetrics
+
+  # metricsRework returns rework metrics
+  metricsRework: CoordinatorMetrics
+
+  # ==========================================
+  # Provider Queries
+  # ==========================================
+
+  # providers returns all providers
+  providers: [Provider!]!
+
+  # provider returns a single provider by name
+  provider(name: String!): Provider
+}
+
+# Connection types for cursor-based pagination
+# ============================================
+
+# ProjectConnection represents a relay-compatible cursor connection for projects
+type ProjectConnection {
+  edges: [ProjectEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# ProjectEdge represents one edge in the ProjectConnection
+type ProjectEdge {
+  node: Project!
+  cursor: String!
+}
+
+# BeadStatusCounts holds aggregate bead counts
+type BeadStatusCounts {
+  open: Int!
+  closed: Int!
+  blocked: Int!
+  ready: Int!
+  total: Int!
+}
+
+# SearchResult represents a search result
+type SearchResult {
+  path: String!
+  type: String!
+  name: String!
+  snippet: String
+}
+
+# WorkerConnection represents a relay-compatible cursor connection for workers
+type WorkerConnection {
+  edges: [WorkerEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# WorkerEdge represents one edge in the WorkerConnection
+type WorkerEdge {
+  node: Worker!
+  cursor: String!
+}
+
+# AgentSessionConnection represents a relay-compatible cursor connection for agent sessions
+type AgentSessionConnection {
+  edges: [AgentSessionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# AgentSessionEdge represents one edge in the AgentSessionConnection
+type AgentSessionEdge {
+  node: AgentSession!
+  cursor: String!
+}
+
+# PersonaConnection represents a relay-compatible cursor connection for personas
+type PersonaConnection {
+  edges: [PersonaEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# PersonaEdge represents one edge in the PersonaConnection
+type PersonaEdge {
+  node: Persona!
+  cursor: String!
+}
+
+# DocumentConnection represents a relay-compatible cursor connection for documents
+type DocumentConnection {
+  edges: [DocumentEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# DocumentEdge represents one edge in the DocumentConnection
+type DocumentEdge {
+  node: Document!
+  cursor: String!
+}
+
+# ExecutionDefinitionConnection represents a relay-compatible cursor connection for execution definitions
+type ExecutionDefinitionConnection {
+  edges: [ExecutionDefinitionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# ExecutionDefinitionEdge represents one edge in the ExecutionDefinitionConnection
+type ExecutionDefinitionEdge {
+  node: ExecutionDefinition!
+  cursor: String!
+}
+
+# ExecutionDefinition represents an execution definition
+type ExecutionDefinition implements Node {
+  id: ID!
+  artifactIds: [String!]!
+  executor: ExecutorSpec!
+  result: ResultSpec
+  evaluation: Evaluation
+  active: Boolean!
+  required: Boolean
+  graphSource: Boolean
+  createdAt: DateTime!
+}
+
+# ExecutionRunConnection represents a relay-compatible cursor connection for execution runs
+type ExecutionRunConnection {
+  edges: [ExecutionRunEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# ExecutionRunEdge represents one edge in the ExecutionRunConnection
+type ExecutionRunEdge {
+  node: ExecutionRun!
+  cursor: String!
+}
+
+# ExecutionRunLog represents an execution run log
+type ExecutionRunLog {
+  stdout: String!
+  stderr: String!
+}
