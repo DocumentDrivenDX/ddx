@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -15,16 +16,18 @@ var validBeadID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 func (f *CommandFactory) newAgentExecuteBeadCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "execute-bead <bead-id>",
-		Short: "Run an agent on one bead in an isolated worktree, then merge or preserve the result",
+		Short: "Run an agent on one bead in an isolated worktree, then land the result",
 		Long: `execute-bead is the primitive: it runs a single agent on a single bead in
-an isolated git worktree, then merges the result back (fast-forward if clean,
-merge commit if not) or preserves it under refs/ddx/iterations/<bead-id>/...
-when --no-merge is set. Orphan worktrees from previous crashed runs are
-recovered automatically.
+an isolated git worktree (the worker step), then hands the result to the
+parent-side orchestrator which merges or preserves the commits.
 
-Planning and document-only beads are valid execution targets — the agent
-produces whatever artifacts (docs, specs, code) the bead's acceptance
-criteria call for.
+The worker classifies its outcome as one of:
+  task_succeeded  — agent exited 0 and produced commits
+  task_no_changes — agent exited 0 but made no commits
+  task_failed     — agent exited non-zero
+
+The orchestrator then applies landing logic (merge, gate evaluation, preserve)
+and the final result reflects both the worker and landing decisions.
 
 For normal queue-driven work use "ddx agent execute-loop", which claims
 ready beads, calls this command, and closes or unclaims each bead based on
@@ -80,9 +83,10 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	promptFile, _ := cmd.Flags().GetString("prompt")
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	opts := agent.ExecuteBeadOptions{
+	projectRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+
+	workerOpts := agent.ExecuteBeadOptions{
 		FromRev:    fromRev,
-		NoMerge:    noMerge,
 		Harness:    harness,
 		Model:      model,
 		Effort:     effort,
@@ -95,6 +99,11 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		gitOps = f.executeBeadGitOverride
 	}
 
+	var orchestratorGitOps agent.OrchestratorGitOps = &agent.RealOrchestratorGitOps{}
+	if f.executeBeadOrchestratorGitOverride != nil {
+		orchestratorGitOps = f.executeBeadOrchestratorGitOverride
+	}
+
 	var runner agent.AgentRunner
 	if f.AgentRunnerOverride != nil {
 		runner = f.AgentRunnerOverride
@@ -102,12 +111,34 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		runner = f.agentRunner()
 	}
 
-	res, err := agent.ExecuteBead(f.WorkingDir, beadID, opts, gitOps, runner)
+	// Recover any orphaned worktrees from previous crashed runs before
+	// spawning a new worker. This is the parent's responsibility.
+	agent.RecoverOrphans(gitOps, projectRoot, beadID)
+
+	// Worker step: run the agent in an isolated worktree.
+	res, err := agent.ExecuteBead(projectRoot, beadID, workerOpts, gitOps, runner)
 	if err != nil && res == nil {
 		return err
 	}
+
+	// Orchestrator step: land the result (merge, gate eval, preserve).
+	// Always run when we have a result — the orchestrator handles all cases
+	// including no-changes and error (agent failed with no commits).
+	if res != nil {
+		landingOpts := agent.BeadLandingOptions{
+			NoMerge: noMerge,
+			// WtPath and GovernIDs are intentionally empty: the worktree has
+			// been cleaned up by ExecuteBead. Gate evaluation is skipped; use
+			// a separate 'ddx agent check' step when post-run checks are needed.
+		}
+		if landing, landErr := agent.LandBeadResult(projectRoot, res, orchestratorGitOps, landingOpts); landErr == nil {
+			agent.ApplyLandingToResult(res, landing)
+		} else if err == nil {
+			err = landErr
+		}
+	}
+
 	if err != nil {
-		// Partial result available — display it, then return the error
 		_ = writeExecuteBeadResult(cmd, res, asJSON)
 		return err
 	}
@@ -116,6 +147,9 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 }
 
 func writeExecuteBeadResult(cmd *cobra.Command, res *agent.ExecuteBeadResult, asJSON bool) error {
+	if res == nil {
+		return nil
+	}
 	if asJSON {
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
