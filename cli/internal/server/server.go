@@ -385,6 +385,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
 	s.mux.HandleFunc("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
 
+	// Project-scoped worker endpoints (FEAT-002 §22-24)
+	s.mux.HandleFunc("GET /api/projects/{project}/workers", s.handleProjectWorkerList)
+	s.mux.HandleFunc("GET /api/projects/{project}/workers/{id}/progress", s.handleProjectWorkerProgress)
+	s.mux.HandleFunc("GET /api/projects/{project}/workers/{id}", s.handleProjectWorkerShow)
+
 	// Executions
 	s.mux.HandleFunc("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
 	s.mux.HandleFunc("GET /api/exec/definitions", s.handleExecDefinitions)
@@ -1678,6 +1683,135 @@ func (s *Server) handleAgentWorkerLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"stdout": stdout, "stderr": stderr})
+}
+
+// --- Project-Scoped Worker Endpoints (FEAT-002 §22-24) ---
+
+// resolveWorkerManager returns the WorkerManager for the given project key
+// (by ID or path). If the resolved project matches the server's own working
+// directory it returns the live s.workers; otherwise it returns a read-only
+// manager backed only by disk state.
+func (s *Server) resolveWorkerManager(projectKey string) (*WorkerManager, bool) {
+	entry, ok := s.state.GetProjectByID(projectKey)
+	if !ok {
+		entry, ok = s.state.GetProjectByPath(projectKey)
+	}
+	if !ok {
+		return nil, false
+	}
+	if entry.Path == s.WorkingDir {
+		return s.workers, true
+	}
+	// Return a read-only manager for the registered project (no live workers)
+	m := NewWorkerManager(entry.Path)
+	return m, true
+}
+
+func (s *Server) handleProjectWorkerList(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("project")
+	m, ok := s.resolveWorkerManager(key)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+		return
+	}
+	workers, err := m.List()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, workers)
+}
+
+func (s *Server) handleProjectWorkerShow(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("project")
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	m, ok := s.resolveWorkerManager(key)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+		return
+	}
+	record, err := m.Show(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, record)
+}
+
+// handleProjectWorkerProgress streams FEAT-006 progress events as Server-Sent
+// Events for the given worker. When no run is active it emits keepalive
+// comment lines at a fixed interval. The stream closes when:
+//   - the attempt reaches a terminal phase (done, preserved, failed), or
+//   - the client disconnects.
+func (s *Server) handleProjectWorkerProgress(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("project")
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+
+	m, ok := s.resolveWorkerManager(key)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+		return
+	}
+
+	// Verify the worker exists before subscribing.
+	if _, err := m.Show(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming not supported"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	ch, unsub := m.SubscribeProgress(id)
+	defer unsub()
+
+	const keepaliveInterval = 30 * time.Second
+	keepalive := time.NewTicker(keepaliveInterval)
+	defer keepalive.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case evt, open := <-ch:
+			if !open {
+				// Worker finished and channel was closed — send keepalive and return
+				_, _ = fmt.Fprintf(w, ": keepalive\n\n")
+				flusher.Flush()
+				return
+			}
+			data, err := json.Marshal(evt)
+			if err != nil {
+				continue
+			}
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+			if terminalPhases[evt.Phase] {
+				return
+			}
+		case <-keepalive.C:
+			_, _ = fmt.Fprintf(w, ": keepalive\n\n")
+			flusher.Flush()
+		}
+	}
 }
 
 // --- Agent Session Endpoints ---

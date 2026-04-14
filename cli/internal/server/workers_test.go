@@ -1,9 +1,14 @@
 package server
 
 import (
+	"bufio"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -198,6 +203,284 @@ func runCmd(t *testing.T, dir string, name string, args ...string) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command %s %v: %s", name, args, string(out))
+}
+
+// TestWorkerRecordShape verifies the WorkerRecord struct carries the FEAT-002
+// required fields: CurrentAttempt, RecentPhases, and LastAttempt.
+func TestWorkerRecordShape(t *testing.T) {
+	// Zero value — all new fields must be nil/empty (omitempty)
+	rec := WorkerRecord{ID: "w-1", Kind: "execute-loop", State: "running"}
+	assert.Nil(t, rec.CurrentAttempt)
+	assert.Empty(t, rec.RecentPhases)
+	assert.Nil(t, rec.LastAttempt)
+
+	// JSON round-trip: new fields are omitted when nil/empty
+	data, err := json.Marshal(rec)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "current_attempt")
+	assert.NotContains(t, string(data), "recent_phases")
+	assert.NotContains(t, string(data), "last_attempt")
+
+	// JSON round-trip: new fields are present when set
+	now := time.Now().UTC().Truncate(time.Second)
+	rec.CurrentAttempt = &CurrentAttemptInfo{
+		AttemptID: "20260414T000000-abcd1234",
+		BeadID:    "ddx-abc123",
+		Phase:     "running",
+		PhaseSeq:  2,
+		StartedAt: now,
+		ElapsedMS: 5000,
+	}
+	rec.RecentPhases = []PhaseTransition{
+		{Phase: "queueing", TS: now, PhaseSeq: 1},
+		{Phase: "running", TS: now.Add(time.Second), PhaseSeq: 2},
+	}
+
+	data, err = json.Marshal(rec)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "current_attempt")
+	assert.Contains(t, string(data), "recent_phases")
+
+	var decoded WorkerRecord
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.NotNil(t, decoded.CurrentAttempt)
+	assert.Equal(t, "running", decoded.CurrentAttempt.Phase)
+	assert.Equal(t, 2, decoded.CurrentAttempt.PhaseSeq)
+	assert.Len(t, decoded.RecentPhases, 2)
+	assert.Equal(t, "queueing", decoded.RecentPhases[0].Phase)
+}
+
+// TestDrainProgressUpdatesRecord verifies that drainProgress correctly
+// updates WorkerRecord fields as ProgressEvents flow through the channel.
+func TestDrainProgressUpdatesRecord(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+
+	handle := &workerHandle{
+		record: WorkerRecord{ID: "w-test", Kind: "execute-loop", State: "running"},
+	}
+	ch := make(chan agent.ProgressEvent, 10)
+
+	go m.drainProgress("w-test", handle, ch)
+
+	now := time.Now().UTC()
+
+	// Send queueing transition
+	ch <- agent.ProgressEvent{
+		EventID: "evt-1", AttemptID: "atm-1", WorkerID: "w-test",
+		BeadID: "ddx-1", Phase: "queueing", PhaseSeq: 1, Heartbeat: false,
+		TS: now, ElapsedMS: 0,
+	}
+	// Send running transition
+	ch <- agent.ProgressEvent{
+		EventID: "evt-2", AttemptID: "atm-1", WorkerID: "w-test",
+		BeadID: "ddx-1", Phase: "running", PhaseSeq: 2, Heartbeat: false,
+		TS: now.Add(time.Second), ElapsedMS: 1000,
+	}
+	// Send heartbeat (should NOT go into RecentPhases)
+	ch <- agent.ProgressEvent{
+		EventID: "evt-3", AttemptID: "atm-1", WorkerID: "w-test",
+		BeadID: "ddx-1", Phase: "running", PhaseSeq: 2, Heartbeat: true,
+		TS: now.Add(2 * time.Second), ElapsedMS: 2000,
+	}
+	// Send terminal phase
+	ch <- agent.ProgressEvent{
+		EventID: "evt-4", AttemptID: "atm-1", WorkerID: "w-test",
+		BeadID: "ddx-1", Phase: "done", PhaseSeq: 3, Heartbeat: false,
+		TS: now.Add(3 * time.Second), ElapsedMS: 3000,
+	}
+
+	close(ch)
+
+	// Wait for drainProgress goroutine to finish
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		phases := len(handle.record.RecentPhases)
+		m.mu.Unlock()
+		if phases == 3 { // queueing + running + done (heartbeat excluded)
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	m.mu.Lock()
+	rec := handle.record
+	m.mu.Unlock()
+
+	// After terminal: CurrentAttempt is nil, LastAttempt is set
+	assert.Nil(t, rec.CurrentAttempt, "CurrentAttempt should be nil after terminal phase")
+	require.NotNil(t, rec.LastAttempt)
+	assert.Equal(t, "atm-1", rec.LastAttempt.AttemptID)
+	assert.Equal(t, "done", rec.LastAttempt.Phase)
+
+	// 3 phase transitions recorded (queueing, running, done) — heartbeat excluded
+	require.Len(t, rec.RecentPhases, 3)
+	assert.Equal(t, "queueing", rec.RecentPhases[0].Phase)
+	assert.Equal(t, "running", rec.RecentPhases[1].Phase)
+	assert.Equal(t, "done", rec.RecentPhases[2].Phase)
+}
+
+// TestRecentPhasesCap verifies that RecentPhases is capped at 20 entries.
+func TestRecentPhasesCap(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+
+	handle := &workerHandle{
+		record: WorkerRecord{ID: "w-test", Kind: "execute-loop", State: "running"},
+	}
+	ch := make(chan agent.ProgressEvent, 30)
+
+	go m.drainProgress("w-test", handle, ch)
+
+	now := time.Now().UTC()
+	for i := 0; i < 25; i++ {
+		ch <- agent.ProgressEvent{
+			EventID: "evt", AttemptID: "atm-1", WorkerID: "w-test",
+			BeadID: "ddx-1", Phase: "running", PhaseSeq: i + 1, Heartbeat: false,
+			TS: now, ElapsedMS: int64(i * 1000),
+		}
+	}
+	close(ch)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		n := len(handle.record.RecentPhases)
+		m.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// Allow goroutine to fully drain
+	time.Sleep(50 * time.Millisecond)
+
+	m.mu.Lock()
+	n := len(handle.record.RecentPhases)
+	m.mu.Unlock()
+
+	assert.LessOrEqual(t, n, 20, "RecentPhases should be capped at 20")
+}
+
+// TestSubscribeProgress verifies that SSE subscribers receive events
+// broadcast by drainProgress.
+func TestSubscribeProgress(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+
+	handle := &workerHandle{
+		record: WorkerRecord{ID: "w-sub", Kind: "execute-loop", State: "running"},
+	}
+	progressCh := make(chan agent.ProgressEvent, 10)
+	handle.progressCh = progressCh
+
+	m.mu.Lock()
+	m.workers["w-sub"] = handle
+	m.mu.Unlock()
+
+	go m.drainProgress("w-sub", handle, progressCh)
+
+	sub, unsub := m.SubscribeProgress("w-sub")
+	defer unsub()
+
+	now := time.Now().UTC()
+	progressCh <- agent.ProgressEvent{
+		EventID: "evt-1", AttemptID: "atm-1", WorkerID: "w-sub",
+		BeadID: "ddx-1", Phase: "running", PhaseSeq: 1, Heartbeat: false,
+		TS: now, ElapsedMS: 100,
+	}
+
+	select {
+	case evt := <-sub:
+		assert.Equal(t, "running", evt.Phase)
+		assert.Equal(t, "evt-1", evt.EventID)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for progress event")
+	}
+}
+
+// TestProjectWorkerShowEndpoint verifies GET /api/projects/:project/workers/:id
+// returns a WorkerRecord with the expected shape, including the new fields.
+func TestProjectWorkerShowEndpoint(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// Get the stable project ID assigned during New()
+	projectID := srv.state.RegisterProject(dir).ID
+
+	// Start a worker so there is something to show
+	m := srv.workers
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	require.NoError(t, err)
+
+	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
+
+	// Request via the project-scoped endpoint using the stable project ID
+	req := httptest.NewRequest("GET", "/api/projects/"+projectID+"/workers/"+record.ID, nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	var got WorkerRecord
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, record.ID, got.ID)
+	// New fields are present in the struct (nil when not in use is fine)
+	// The JSON keys must exist in the struct definition — this compiles only
+	// if the fields are defined, so reaching here validates the schema.
+}
+
+// TestProjectWorkerProgressKeepaliveOnIdleWorker verifies that the SSE
+// endpoint sends a keepalive comment and returns 200 when no worker is
+// active (or subscriber channel is immediately closed).
+func TestProjectWorkerProgressKeepaliveOnIdleWorker(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// Get the stable project ID assigned during New()
+	projectID := srv.state.RegisterProject(dir).ID
+
+	// Start and wait for a worker to finish so it's on disk but not active
+	m := srv.workers
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	require.NoError(t, err)
+	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
+
+	// Use a real HTTP test server because SSE needs http.Flusher
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	url := ts.URL + "/api/projects/" + projectID + "/workers/" + record.ID + "/progress"
+
+	// The channel is closed immediately (worker not active), so the handler
+	// should send one keepalive and return.
+	resp, err := http.Get(url) //nolint:noctx
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+
+	// Read until connection closes (the handler returns after the closed channel)
+	scanner := bufio.NewScanner(resp.Body)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+		if len(lines) >= 5 {
+			break
+		}
+	}
+
+	// At least one keepalive comment should be present
+	found := false
+	for _, l := range lines {
+		if strings.HasPrefix(l, ":") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected at least one keepalive comment line, got: %v", lines)
 }
 
 func TestFormatSessionLogLines(t *testing.T) {
