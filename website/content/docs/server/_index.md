@@ -44,7 +44,7 @@ The beads page is a full project tracker with:
 
 - **Three-column kanban**: Open, In Progress, Closed
 - **Drag-and-drop**: Move beads between columns to update status
-- **Full-text search**: Powered by MiniSearch across all bead fields
+- **Full-text search**: Server-side search via the GraphQL schema's cursor-paginated `beads` query with a `search:` argument
 - **Create beads**: Modal form with title, type, priority, labels, description, acceptance criteria
 - **Detail panel**: Click any bead to see full details, dependencies, and execution evidence
 - **Bead actions**: Claim, unclaim, close, reopen with reason
