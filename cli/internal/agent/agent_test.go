@@ -102,7 +102,7 @@ func TestRegistryDefaultBaseArgs(t *testing.T) {
 func TestRegistryNamesPreferenceOrder(t *testing.T) {
 	r := NewRegistry()
 	names := r.Names()
-	require.Len(t, names, 9)
+	require.Len(t, names, 10)
 	assert.Equal(t, "codex", names[0])
 	assert.Equal(t, "claude", names[1])
 	assert.Equal(t, "gemini", names[2])

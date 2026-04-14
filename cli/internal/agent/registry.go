@@ -122,6 +122,14 @@ var builtinHarnesses = map[string]Harness{
 		CostClass:    "local",
 		IsLocal:      true,
 	},
+	"script": {
+		Name:       "script",
+		Binary:     "ddx-script-agent", // sentinel — never actually exec'd
+		PromptMode: "arg",
+		Surface:    "script",
+		CostClass:  "local",
+		IsLocal:    true,
+	},
 	"openrouter": {
 		Name:           "openrouter",
 		Binary:         "",
@@ -207,7 +215,7 @@ func (r *Registry) Discover() []HarnessStatus {
 			Binary: h.Binary,
 		}
 		// Embedded harnesses are always available — no binary lookup needed.
-		if name == "virtual" || name == "agent" {
+		if name == "virtual" || name == "agent" || name == "script" {
 			status.Available = true
 			status.Path = "(embedded)"
 		} else if h.IsHTTPProvider {
