@@ -505,6 +505,7 @@ func TestInitGitignoreRules(t *testing.T) {
 	// Runtime scratch must be ignored
 	assert.Contains(t, content, ".ddx/agent-logs/", ".ddx/agent-logs/ must be ignored")
 	assert.Contains(t, content, ".ddx/workers/", ".ddx/workers/ must be ignored")
+	assert.Contains(t, content, ".ddx/exec-runs.d/", ".ddx/exec-runs.d/ must be ignored")
 	assert.Contains(t, content, ".ddx/server.env", ".ddx/server.env must be ignored")
 	assert.Contains(t, content, ".ddx/server/", ".ddx/server/ must be ignored")
 	assert.Contains(t, content, ".ddx/executions/*/embedded/", "embedded runtime state must be ignored")
@@ -514,6 +515,7 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, "!.ddx/executions/*/prompt.md", "prompt.md must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/manifest.json", "manifest.json must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/result.json", "result.json must be un-ignored")
+	assert.Contains(t, content, "!.ddx/executions/*/usage.json", "usage.json must be un-ignored")
 
 	// Verify with git check-ignore that a concrete evidence file is NOT ignored
 	// Set up a minimal git repo to run check-ignore
@@ -534,6 +536,12 @@ func TestInitGitignoreRules(t *testing.T) {
 	err = checkIgnore.Run()
 	// exit code 1 means NOT ignored — that's what we want
 	assert.Error(t, err, ".ddx/executions/abc123/prompt.md must NOT be ignored by git")
+
+	checkIgnoreUsage := exec.Command("git", "check-ignore", "-q", ".ddx/executions/abc123/usage.json")
+	checkIgnoreUsage.Dir = te.Dir
+	err = checkIgnoreUsage.Run()
+	// exit code 1 means NOT ignored — that's what we want
+	assert.Error(t, err, ".ddx/executions/abc123/usage.json must NOT be ignored by git")
 }
 
 // TestInitCommand_US014_SynchronizationSetup tests US-014 synchronization initialization

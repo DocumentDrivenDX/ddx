@@ -20,6 +20,7 @@ var initGitignoreRules = []string{
 	// DDx runtime scratch — ignored
 	".ddx/agent-logs/",
 	".ddx/workers/",
+	".ddx/exec-runs.d/",
 	".ddx/.execute-bead-wt-*/",
 	".ddx/executions/*/embedded/",
 	".ddx/executions/**/scratch/",
@@ -34,6 +35,7 @@ var initGitignoreRules = []string{
 	"!.ddx/executions/*/manifest.json",
 	"!.ddx/executions/*/result.json",
 	"!.ddx/executions/*/checks.json",
+	"!.ddx/executions/*/usage.json",
 	// Skills target links — rewritten per-machine, not tracked
 	".claude/skills/*/",
 	".agents/skills/*/",
