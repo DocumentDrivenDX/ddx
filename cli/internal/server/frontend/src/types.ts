@@ -32,6 +32,10 @@ export interface Bead {
   updated_at: string
 }
 
+export interface BeadWithProject extends Bead {
+  project_id: string
+}
+
 export interface BeadStatus {
   total: number
   open: number

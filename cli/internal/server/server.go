@@ -851,18 +851,29 @@ func (s *Server) handleResolvePersona(w http.ResponseWriter, r *http.Request) {
 
 // --- Bead Endpoints ---
 
-func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
-	store := s.beadStore()
-	beads, err := store.ReadAll()
-	if err != nil {
-		writeJSON(w, http.StatusOK, []any{})
-		return
-	}
+// beadWithProject wraps a Bead with its source project ID for cross-project responses.
+type beadWithProject struct {
+	bead.Bead
+	ProjectID string `json:"project_id"`
+}
 
+func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	label := r.URL.Query().Get("label")
-	if status != "" || label != "" {
-		var filtered []bead.Bead
+	projectFilter := r.URL.Query().Get("project_id")
+
+	projects := s.state.GetProjects()
+	var result []beadWithProject
+
+	for _, proj := range projects {
+		if projectFilter != "" && proj.ID != projectFilter {
+			continue
+		}
+		store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
+		beads, err := store.ReadAll()
+		if err != nil {
+			continue
+		}
 		for _, b := range beads {
 			if status != "" && b.Status != status {
 				continue
@@ -870,15 +881,14 @@ func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
 			if label != "" && !containsString(b.Labels, label) {
 				continue
 			}
-			filtered = append(filtered, b)
+			result = append(result, beadWithProject{Bead: b, ProjectID: proj.ID})
 		}
-		beads = filtered
 	}
 
-	if beads == nil {
-		beads = []bead.Bead{}
+	if result == nil {
+		result = []beadWithProject{}
 	}
-	writeJSON(w, http.StatusOK, beads)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleShowBead(w http.ResponseWriter, r *http.Request) {

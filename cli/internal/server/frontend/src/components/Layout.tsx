@@ -28,6 +28,8 @@ export default function Layout({ children }: { children: ReactNode }) {
     const value = e.target.value
     if (value === '__all__' && nodeId) {
       navigate(`/nodes/${nodeId}/agents`)
+    } else if (value === '__all_beads__' && nodeId) {
+      navigate(`/nodes/${nodeId}/beads`)
     }
   }
 
@@ -57,6 +59,16 @@ export default function Layout({ children }: { children: ReactNode }) {
             All Agents
           </NavLink>
         )}
+        {nodeId && (
+          <NavLink
+            to={`/nodes/${nodeId}/beads`}
+            className={({ isActive }) =>
+              `px-3 py-2 rounded text-sm ${isActive ? 'bg-gray-700 text-white' : 'hover:bg-gray-800'}`
+            }
+          >
+            All Beads
+          </NavLink>
+        )}
         {projects.length > 0 && nodeId && (
           <div className="mt-4 pt-4 border-t border-gray-700">
             <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Project</label>
@@ -67,7 +79,8 @@ export default function Layout({ children }: { children: ReactNode }) {
               data-testid="project-picker"
             >
               <option value="">— pick project —</option>
-              <option value="__all__">All projects</option>
+              <option value="__all__">All Agents</option>
+              <option value="__all_beads__">All Beads</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}

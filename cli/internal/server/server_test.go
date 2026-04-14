@@ -370,6 +370,11 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 func TestListBeads(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
+	// Isolate state to only this project so the aggregating handler sees exactly 3 beads.
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	srv.state.RegisterProject(dir)
 
 	req := httptest.NewRequest("GET", "/api/beads", nil)
 	w := httptest.NewRecorder()
@@ -394,6 +399,11 @@ func TestListBeads(t *testing.T) {
 func TestListBeadsFilterByStatus(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
+	// Isolate state to only this project so the aggregating handler sees exactly 2 open beads.
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	srv.state.RegisterProject(dir)
 
 	req := httptest.NewRequest("GET", "/api/beads?status=open", nil)
 	w := httptest.NewRecorder()
@@ -543,6 +553,110 @@ func TestBeadsStatus(t *testing.T) {
 	if counts.Closed != 1 {
 		t.Errorf("expected closed=1, got %d", counts.Closed)
 	}
+}
+
+// setupProjectWithBeads creates a temp dir with a .ddx/beads.jsonl containing
+// one open, one in_progress, and one closed bead, all prefixed with beadPrefix.
+func setupProjectWithBeads(t *testing.T, beadPrefix string) string {
+	t.Helper()
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	open := fmt.Sprintf(`{"id":"%s-open","title":"Open bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`, beadPrefix)
+	inProgress := fmt.Sprintf(`{"id":"%s-ip","title":"In Progress bead","status":"in_progress","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`, beadPrefix)
+	closed := fmt.Sprintf(`{"id":"%s-closed","title":"Closed bead","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`, beadPrefix)
+	content := open + "\n" + inProgress + "\n" + closed + "\n"
+	if err := os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestListBeadsAllProjects(t *testing.T) {
+	dir1 := setupProjectWithBeads(t, "p1")
+	dir2 := setupProjectWithBeads(t, "p2")
+
+	srv := New(":0", dir1)
+	// Isolate state to only the two test projects (avoid contamination from global state).
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	p1 := srv.state.RegisterProject(dir1)
+	p2 := srv.state.RegisterProject(dir2)
+
+	t.Run("all beads from both projects", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/beads", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var beads []struct {
+			ID        string `json:"id"`
+			ProjectID string `json:"project_id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &beads); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if len(beads) != 6 {
+			t.Fatalf("expected 6 beads (3 per project), got %d", len(beads))
+		}
+		for _, b := range beads {
+			if b.ProjectID == "" {
+				t.Errorf("bead %s is missing project_id", b.ID)
+			}
+			if b.ProjectID != p1.ID && b.ProjectID != p2.ID {
+				t.Errorf("bead %s has unexpected project_id %q", b.ID, b.ProjectID)
+			}
+		}
+	})
+
+	t.Run("filter by status=open returns two beads", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/beads?status=open", nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		var beads []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &beads); err != nil {
+			t.Fatal(err)
+		}
+		if len(beads) != 2 {
+			t.Fatalf("expected 2 open beads (one per project), got %d", len(beads))
+		}
+		for _, b := range beads {
+			if b.Status != "open" {
+				t.Errorf("expected status=open, got %q for bead %s", b.Status, b.ID)
+			}
+		}
+	})
+
+	t.Run("filter by project_id returns only that project's beads", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/beads?project_id="+p1.ID, nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		var beads []struct {
+			ID        string `json:"id"`
+			ProjectID string `json:"project_id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &beads); err != nil {
+			t.Fatal(err)
+		}
+		if len(beads) != 3 {
+			t.Fatalf("expected 3 beads from project 1, got %d", len(beads))
+		}
+		for _, b := range beads {
+			if b.ProjectID != p1.ID {
+				t.Errorf("expected project_id=%s, got %q for bead %s", p1.ID, b.ProjectID, b.ID)
+			}
+		}
+	})
 }
 
 func TestBeadDepTree(t *testing.T) {

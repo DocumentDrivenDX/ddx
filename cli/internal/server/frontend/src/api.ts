@@ -1,4 +1,4 @@
-import type { AgentSessionDetail, AgentSessionSummary, NodeInfo, ProjectEntry, WorkerRecord } from './types'
+import type { AgentSessionDetail, AgentSessionSummary, BeadWithProject, NodeInfo, ProjectEntry, WorkerRecord } from './types'
 
 const BASE = '/api'
 
@@ -39,6 +39,14 @@ export const api = {
   documentContent: (path: string) => fetchText(`/documents/${path}`),
   search: (q: string) => fetchJSON<any[]>(`/search?q=${encodeURIComponent(q)}`),
   beads: () => fetchJSON<any[]>('/beads'),
+  allBeads: (params?: { status?: string; project_id?: string; label?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.status) p.set('status', params.status)
+    if (params?.project_id) p.set('project_id', params.project_id)
+    if (params?.label) p.set('label', params.label)
+    const qs = p.toString()
+    return fetchJSON<BeadWithProject[]>(`/beads${qs ? `?${qs}` : ''}`)
+  },
   beadDetail: (id: string) => fetchJSON<any>(`/beads/${id}`),
   beadsStatus: () => fetchJSON<any>('/beads/status'),
   beadsReady: () => fetchJSON<any[]>('/beads/ready'),
