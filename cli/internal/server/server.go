@@ -33,6 +33,8 @@ import (
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
+	"github.com/99designs/gqlgen/graphql/handler"
+	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 	"tailscale.com/tsnet"
 )
 
@@ -415,6 +417,10 @@ func (s *Server) routes() {
 
 	// MCP
 	s.mux.HandleFunc("POST /mcp", s.handleMCP)
+
+	// GraphQL (gqlgen)
+	s.mux.HandleFunc("POST /graphql", s.handleGraphQLQuery)
+	s.mux.HandleFunc("GET /graphiql", s.handleGraphiQL)
 
 	// Web UI (embedded SPA)
 	distFS, err := fs.Sub(frontendFiles, "frontend/dist")
@@ -3449,4 +3455,59 @@ func containsString(ss []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// --- GraphQL Endpoints ---
+
+func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
+	// Create gqlgen server with the DDX GraphQL schema
+	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
+		Resolvers:  ddxgraphql.Resolver{},
+		Schema:     nil,
+		Directives: ddxgraphql.DirectiveRoot{},
+	}))
+
+	if r.Method == http.MethodPost || r.Method == http.MethodGet {
+		gqlServer.ServeHTTP(w, r)
+		return
+	}
+
+	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+}
+
+func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	// Serve GraphiQL HTML page with inline GraphQL endpoint reference
+	graphiqlHTML := `<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>GraphiQL - DDx</title>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/graphiql@0.18.0/graphiql.min.css" />
+	<script src="https://cdn.jsdelivr.net/npm/subscriptions-transport-ws@0.11.0/browser/client.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/graphiql@0.18.0/browser graphiql.js"></script>
+</head>
+<body>
+	<div id="graphiql">Loading...</div>
+	<script>
+		var fetcher = function (fetchParams) {
+			return fetch("/graphql", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(fetchParams),
+			}).then(function (response) {
+				return response.json();
+			});
+		};
+		var graphiql = GraphiQL.createGraphiQL({ fetcher: fetcher });
+		graphiql.renderInto(document.getElementById("graphiql"));
+	</script>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(graphiqlHTML))
 }
