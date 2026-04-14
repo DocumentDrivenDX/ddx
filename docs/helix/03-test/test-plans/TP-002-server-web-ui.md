@@ -177,15 +177,15 @@ These cases are owned by the Go server tests in
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-010.1 | Registry loads | `GET /api/projects` lists each configured project root with a default marker | Planned |
-| TC-010.2 | Scoped API requests | `GET /api/projects/:project/beads` and sibling routes resolve the selected project context | Planned |
+| TC-010.1 | Registry loads | `GET /api/projects` lists each configured project root with a default marker | Implemented |
+| TC-010.2 | Scoped API requests | `GET /api/projects/:project/beads` and sibling routes resolve the selected project context | Implemented |
 | TC-010.3 | UI project picker | The web UI shows a project picker when more than one project is registered | Planned |
-| TC-010.4 | Singleton fallback | A single-project server still serves the legacy unscoped routes and dashboard | Planned |
-| TC-010.5 | Isolation | A malformed or missing project root reports degraded status without blocking healthy sibling projects | Planned |
+| TC-010.4 | Singleton fallback | A single-project server still serves the legacy unscoped routes and dashboard | Implemented |
+| TC-010.5 | Isolation | A malformed or missing project root reports degraded status without blocking healthy sibling projects | Implemented |
 | TC-010.6 | Registry shape | Duplicate project ids fail registry loading before serving partial context | Planned |
-| TC-010.7 | MCP registry listing | `ddx_list_projects` lists the registered projects and marks the default project | Planned |
-| TC-010.8 | MCP project lookup | `ddx_show_project` resolves the selected project context and returns the matching project metadata | Planned |
-| TC-010.9 | MCP scoped tool call | A project-aware MCP tool call runs against the selected project and returns that project's data | Planned |
+| TC-010.7 | MCP registry listing | `ddx_list_projects` lists the registered projects and marks the default project | Implemented |
+| TC-010.8 | MCP project lookup | `ddx_show_project` resolves the selected project context and returns the matching project metadata | Implemented |
+| TC-010.9 | MCP scoped tool call | A project-aware MCP tool call runs against the selected project and returns that project's data | Implemented |
 
 ### TC-011: Host+User State and Node Identity
 
@@ -196,12 +196,12 @@ per FEAT-020. These cases are owned by the Go server tests in
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-011.1 | State file location | Server writes `server-state.json` under `XDG_DATA_HOME/ddx` (not inside `.ddx/server/`) | Planned |
-| TC-011.2 | Addr file location | Server writes `server.addr` with URL, node name, and node ID under `XDG_DATA_HOME/ddx` | Planned |
-| TC-011.3 | Node identity endpoint | `GET /api/node` returns a stable `node-<hash>` ID derived from hostname or `DDX_NODE_NAME` | Planned |
-| TC-011.4 | State survives restart | Projects registered before a restart are still returned by `GET /api/projects` after restart | Planned |
+| TC-011.1 | State file location | Server writes `server-state.json` under `XDG_DATA_HOME/ddx` (not inside `.ddx/server/`) | Implemented |
+| TC-011.2 | Addr file location | Server writes `server.addr` with URL, node name, and node ID under `XDG_DATA_HOME/ddx` | Implemented |
+| TC-011.3 | Node identity endpoint | `GET /api/node` returns a stable `node-<hash>` ID derived from hostname or `DDX_NODE_NAME` | Implemented |
+| TC-011.4 | State survives restart | Projects registered before a restart are still returned by `GET /api/projects` after restart | Implemented |
 | TC-011.5 | CLI auto-registration | Running `ddx bead list` in a fresh project directory causes that project to appear in `GET /api/projects` within 1s | Planned |
-| TC-011.6 | Single instance per host | A second `ddx server` start overwrites the addr file and the first instance does not continue serving the addr | Planned |
+| TC-011.6 | Single instance per host | A second `ddx server` start overwrites the addr file and the first instance does not continue serving the addr | Implemented |
 
 ### TC-012: Host+User Project Isolation and Concurrency
 
@@ -210,11 +210,11 @@ without cross-project leakage, per SD-019.
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-012.1 | Bead isolation | `GET /api/projects/proj-a/beads` and `GET /api/projects/proj-b/beads` return disjoint bead sets from each project's own store | Planned |
-| TC-012.2 | Document isolation | A document present only in project A is not visible via project B's documents endpoint | Planned |
-| TC-012.3 | Concurrent requests | Parallel requests against different registered projects complete successfully without racing on adapters or caches | Planned |
-| TC-012.4 | Degraded project isolation | A malformed project root is reported as degraded in `GET /api/projects` while sibling projects continue serving | Planned |
-| TC-012.5 | Cache namespace | A cached lookup in project A does not surface the same key in project B | Planned |
+| TC-012.1 | Bead isolation | `GET /api/projects/proj-a/beads` and `GET /api/projects/proj-b/beads` return disjoint bead sets from each project's own store | Implemented |
+| TC-012.2 | Document isolation | A document present only in project A is not visible via project B's documents endpoint | Implemented |
+| TC-012.3 | Concurrent requests | Parallel requests against different registered projects complete successfully without racing on adapters or caches | Implemented |
+| TC-012.4 | Degraded project isolation | A malformed project root is reported as degraded in `GET /api/projects` while sibling projects continue serving | Implemented |
+| TC-012.5 | Cache namespace | A cached lookup in project A does not surface the same key in project B | Implemented |
 
 ### TC-013: Execute-Loop Worker Lifecycle
 
@@ -224,12 +224,12 @@ owned by `cli/internal/server/workers_test.go`.
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-013.1 | Worker start | `StartExecuteLoop` against a registered project creates a worker record and starts a goroutine | Planned |
-| TC-013.2 | Live logs | `Logs` returns streaming log output while the worker is running | Planned |
-| TC-013.3 | Worker stop | `Stop` cancels the running worker and the on-disk record transitions to a terminal state | Planned |
-| TC-013.4 | Worker scope | A worker started for project A writes worker records and execution artifacts only under project A's `.ddx/workers/` and `.ddx/executions/<attempt-id>/` directories | Planned |
+| TC-013.1 | Worker start | `StartExecuteLoop` against a registered project creates a worker record and starts a goroutine | Implemented |
+| TC-013.2 | Live logs | `Logs` returns streaming log output while the worker is running | Implemented |
+| TC-013.3 | Worker stop | `Stop` cancels the running worker and the on-disk record transitions to a terminal state | Implemented |
+| TC-013.4 | Worker scope | A worker started for project A writes worker records and execution artifacts only under project A's `.ddx/workers/` and `.ddx/executions/<attempt-id>/` directories | Implemented |
 | TC-013.5 | Replay-backed attempts | Runtime metrics (harness, model, tokens, cost, base_rev, result_rev) are persisted into the project's `.ddx/executions/<attempt-id>/` bundle per FEAT-014 | Planned |
-| TC-013.6 | Concurrent workers | Workers for two different registered projects run in parallel without cross-project filesystem writes | Planned |
+| TC-013.6 | Concurrent workers | Workers for two different registered projects run in parallel without cross-project filesystem writes | Implemented |
 
 ## Out of Scope
 

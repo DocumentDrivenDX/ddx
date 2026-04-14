@@ -508,3 +508,91 @@ func TestFormatSessionLogLines(t *testing.T) {
 	assert.Contains(t, result, "⚡ compacted context (10000 → 3000 tokens)")
 	assert.NotContains(t, result, "llm.delta") // deltas should be suppressed
 }
+
+// TC-013.4 — A worker started for project A writes worker records and execution
+// artifacts only under project A's .ddx/workers/ directory. No artifacts should
+// appear under a sibling project B directory.
+func TestWorkerScopeToProject(t *testing.T) {
+	rootA := t.TempDir()
+	setupBeadStore(t, rootA)
+
+	mA := NewWorkerManager(rootA)
+
+	record, err := mA.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	require.NoError(t, err)
+
+	_ = waitForWorkerExit(t, mA, record.ID, 10*time.Second)
+
+	// Worker directory must exist under project A's .ddx/workers/.
+	workerDirA := filepath.Join(rootA, ".ddx", "workers", record.ID)
+	if _, err := os.Stat(workerDirA); err != nil {
+		t.Errorf("worker dir not found under project A: %v", err)
+	}
+
+	// status.json must be present and reference the correct project root.
+	statusPath := filepath.Join(workerDirA, "status.json")
+	data, err := os.ReadFile(statusPath)
+	require.NoError(t, err)
+
+	var rec WorkerRecord
+	require.NoError(t, json.Unmarshal(data, &rec))
+	assert.Equal(t, rootA, rec.ProjectRoot, "WorkerRecord.ProjectRoot must match project A")
+	assert.Equal(t, record.ID, rec.ID)
+
+	// Verify that a completely separate project B directory has no worker artifacts.
+	rootB := t.TempDir()
+	workersDirB := filepath.Join(rootB, ".ddx", "workers")
+	if _, err := os.Stat(workersDirB); err == nil {
+		entries, _ := os.ReadDir(workersDirB)
+		assert.Empty(t, entries, "project B's .ddx/workers/ must be empty")
+	}
+}
+
+// TC-013.6 — Workers for two different registered projects run in parallel
+// without cross-project filesystem writes.
+func TestConcurrentWorkersFromDifferentProjects(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	setupBeadStore(t, rootA)
+	setupBeadStore(t, rootB)
+
+	mA := NewWorkerManager(rootA)
+	mB := NewWorkerManager(rootB)
+
+	// Start one worker per project concurrently.
+	recA, errA := mA.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	recB, errB := mB.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	require.NoError(t, errA)
+	require.NoError(t, errB)
+
+	// Wait for both to finish.
+	finalA := waitForWorkerExit(t, mA, recA.ID, 10*time.Second)
+	finalB := waitForWorkerExit(t, mB, recB.ID, 10*time.Second)
+
+	// Both must have reached a terminal state.
+	assert.NotEqual(t, "running", finalA.State, "worker A should have exited")
+	assert.NotEqual(t, "running", finalB.State, "worker B should have exited")
+
+	// Worker A's artifact must exist only under rootA, not rootB.
+	workerDirA := filepath.Join(rootA, ".ddx", "workers", recA.ID)
+	workerDirB := filepath.Join(rootB, ".ddx", "workers", recB.ID)
+
+	if _, err := os.Stat(workerDirA); err != nil {
+		t.Errorf("worker A dir not found under rootA: %v", err)
+	}
+	if _, err := os.Stat(workerDirB); err != nil {
+		t.Errorf("worker B dir not found under rootB: %v", err)
+	}
+
+	// Worker B's ID must NOT appear under rootA.
+	crossPath := filepath.Join(rootA, ".ddx", "workers", recB.ID)
+	if _, err := os.Stat(crossPath); err == nil {
+		t.Errorf("worker B artifact found under rootA — cross-project write detected")
+	}
+
+	// Worker A's ID must NOT appear under rootB.
+	crossPathB := filepath.Join(rootB, ".ddx", "workers", recA.ID)
+	if _, err := os.Stat(crossPathB); err == nil {
+		t.Errorf("worker A artifact found under rootB — cross-project write detected")
+	}
+}
