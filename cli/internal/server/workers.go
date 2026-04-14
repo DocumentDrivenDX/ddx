@@ -133,6 +133,10 @@ type WorkerManager struct {
 	projectRoot        string
 	rootDir            string
 	AgentRunnerFactory AgentRunnerFactory
+	// BeadWorkerFactory, when non-nil, is called by runWorker to create the
+	// ExecuteBeadWorker instead of building one from the real agent runner.
+	// Override in tests to inject a fake executor.
+	BeadWorkerFactory func(store agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker
 
 	mu      sync.Mutex
 	workers map[string]*workerHandle
@@ -236,38 +240,43 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	}
 	store := bead.NewStore(filepath.Join(m.projectRoot, ".ddx"))
 
-	// Build an executor that calls agent.ExecuteBead directly (in-process, no subprocess)
-	executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-		runner := m.buildAgentRunner(m.projectRoot)
-		gitOps := &agent.RealGitOps{}
+	var worker *agent.ExecuteBeadWorker
+	if m.BeadWorkerFactory != nil {
+		worker = m.BeadWorkerFactory(store)
+	} else {
+		// Build an executor that calls agent.ExecuteBead directly (in-process, no subprocess)
+		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			runner := m.buildAgentRunner(m.projectRoot)
+			gitOps := &agent.RealGitOps{}
 
-		res, err := agent.ExecuteBead(m.projectRoot, beadID, agent.ExecuteBeadOptions{
-			Harness: spec.Harness,
-			Model:   spec.Model,
-			Effort:  spec.Effort,
-		}, gitOps, runner)
-		if err != nil {
-			return agent.ExecuteBeadReport{}, err
+			res, err := agent.ExecuteBead(m.projectRoot, beadID, agent.ExecuteBeadOptions{
+				Harness: spec.Harness,
+				Model:   spec.Model,
+				Effort:  spec.Effort,
+			}, gitOps, runner)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
+			return agent.ExecuteBeadReport{
+				BeadID:      res.BeadID,
+				AttemptID:   res.AttemptID,
+				WorkerID:    res.WorkerID,
+				Harness:     res.Harness,
+				Provider:    res.Provider,
+				Model:       res.Model,
+				Status:      res.Status,
+				Detail:      res.Detail,
+				SessionID:   res.SessionID,
+				BaseRev:     res.BaseRev,
+				ResultRev:   res.ResultRev,
+				PreserveRef: res.PreserveRef,
+			}, nil
+		})
+
+		worker = &agent.ExecuteBeadWorker{
+			Store:    store,
+			Executor: executor,
 		}
-		return agent.ExecuteBeadReport{
-			BeadID:      res.BeadID,
-			AttemptID:   res.AttemptID,
-			WorkerID:    res.WorkerID,
-			Harness:     res.Harness,
-			Provider:    res.Provider,
-			Model:       res.Model,
-			Status:      res.Status,
-			Detail:      res.Detail,
-			SessionID:   res.SessionID,
-			BaseRev:     res.BaseRev,
-			ResultRev:   res.ResultRev,
-			PreserveRef: res.PreserveRef,
-		}, nil
-	})
-
-	worker := &agent.ExecuteBeadWorker{
-		Store:    store,
-		Executor: executor,
 	}
 
 	loopResult, err := worker.Run(ctx, agent.ExecuteBeadLoopOptions{
@@ -284,6 +293,9 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
+	// Wait for drainProgress to process all remaining events (including live
+	// counter increments) before we overwrite handle.record with the final state.
+	<-handle.progressDone
 
 	m.mu.Lock()
 	record := handle.record
@@ -514,6 +526,17 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 		}
 
 		if terminalPhases[evt.Phase] {
+			// Increment live counters so Show() reflects progress before the
+			// loop exits. runWorker will overwrite these with authoritative
+			// loopResult values after progressDone is signalled, which is the
+			// same value — so no double-counting occurs.
+			rec.Attempts++
+			if evt.Phase == "done" {
+				rec.Successes++
+			} else {
+				rec.Failures++
+			}
+
 			// Move CurrentAttempt → LastAttempt
 			if rec.CurrentAttempt != nil {
 				rec.LastAttempt = &LastAttemptInfo{
