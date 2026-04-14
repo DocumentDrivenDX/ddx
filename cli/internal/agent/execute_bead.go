@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -18,59 +17,57 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
-// GateCheckResult records the outcome of one required execution gate.
-type GateCheckResult struct {
-	DefinitionID string `json:"definition_id"`
-	Required     bool   `json:"required"`
-	ExitCode     int    `json:"exit_code"`
-	// Status is "pass", "fail", or "skipped".
-	Status string `json:"status"`
-	Stdout string `json:"stdout,omitempty"`
-	Stderr string `json:"stderr,omitempty"`
-}
-
-// ExecuteBeadResult captures the complete outcome of an execute-bead run.
+// ExecuteBeadResult captures the outcome of an execute-bead worker run.
+// The worker populates the task-level fields (BeadID through UsageFile).
+// The parent orchestrator (LandBeadResult) populates the landing fields
+// (Outcome, Status, Detail, Reason, PreserveRef, GateResults, RequiredExecSummary,
+// ChecksFile) via ApplyLandingToResult before the result is written to disk or
+// returned to a caller.
 type ExecuteBeadResult struct {
-	BeadID       string    `json:"bead_id"`
-	AttemptID    string    `json:"attempt_id,omitempty"`
-	WorkerID     string    `json:"worker_id,omitempty"`
-	BaseRev      string    `json:"base_rev"`
-	ResultRev    string    `json:"result_rev,omitempty"`
-	Outcome      string    `json:"outcome"` // merged | preserved | no-changes | error
-	Status       string    `json:"status,omitempty"`
-	Detail       string    `json:"detail,omitempty"`
-	PreserveRef  string    `json:"preserve_ref,omitempty"`
-	Reason       string    `json:"reason,omitempty"`
-	Harness      string    `json:"harness,omitempty"`
-	Provider     string    `json:"provider,omitempty"`
-	Model        string    `json:"model,omitempty"`
-	SessionID    string    `json:"session_id,omitempty"`
-	DurationMS   int       `json:"duration_ms"`
-	Tokens       int       `json:"tokens,omitempty"`
-	CostUSD      float64   `json:"cost_usd,omitempty"`
-	ExitCode     int       `json:"exit_code"`
-	Error        string    `json:"error,omitempty"`
-	ExecutionDir string    `json:"execution_dir,omitempty"`
-	PromptFile   string    `json:"prompt_file,omitempty"`
-	ManifestFile string    `json:"manifest_file,omitempty"`
-	ResultFile   string    `json:"result_file,omitempty"`
-	ChecksFile   string    `json:"checks_file,omitempty"`
-	UsageFile    string    `json:"usage_file,omitempty"`
-	StartedAt    time.Time `json:"started_at"`
-	FinishedAt   time.Time `json:"finished_at"`
-	// GateResults holds the outcome of each required execution gate evaluated
-	// after the agent run. Empty when no applicable required execution documents
-	// were found.
-	GateResults []GateCheckResult `json:"gate_results,omitempty"`
-	// RequiredExecSummary is "pass", "fail", or "skipped".
-	// "skipped" means no required execution documents were found.
-	RequiredExecSummary string `json:"required_exec_summary,omitempty"`
+	BeadID    string `json:"bead_id"`
+	AttemptID string `json:"attempt_id,omitempty"`
+	WorkerID  string `json:"worker_id,omitempty"`
+	BaseRev   string `json:"base_rev"`
+	ResultRev string `json:"result_rev,omitempty"`
+
+	// Outcome and Status are initially set by the worker to task-level values
+	// (task_succeeded / task_failed / task_no_changes), then overwritten by
+	// ApplyLandingToResult with the landing decision (merged / preserved /
+	// no-changes) so callers see a unified record.
+	Outcome string `json:"outcome"`
+	Status  string `json:"status,omitempty"`
+	Detail  string `json:"detail,omitempty"`
+
+	// Landing fields — populated by ApplyLandingToResult, not by ExecuteBead.
+	Reason              string            `json:"reason,omitempty"`
+	PreserveRef         string            `json:"preserve_ref,omitempty"`
+	GateResults         []GateCheckResult `json:"gate_results,omitempty"`
+	RequiredExecSummary string            `json:"required_exec_summary,omitempty"`
+	ChecksFile          string            `json:"checks_file,omitempty"`
+
+	Harness    string  `json:"harness,omitempty"`
+	Provider   string  `json:"provider,omitempty"`
+	Model      string  `json:"model,omitempty"`
+	SessionID  string  `json:"session_id,omitempty"`
+	DurationMS int     `json:"duration_ms"`
+	Tokens     int     `json:"tokens,omitempty"`
+	CostUSD    float64 `json:"cost_usd,omitempty"`
+	ExitCode   int     `json:"exit_code"`
+	Error      string  `json:"error,omitempty"`
+
+	ExecutionDir string `json:"execution_dir,omitempty"`
+	PromptFile   string `json:"prompt_file,omitempty"`
+	ManifestFile string `json:"manifest_file,omitempty"`
+	ResultFile   string `json:"result_file,omitempty"`
+	UsageFile    string `json:"usage_file,omitempty"`
+
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
 }
 
-// ExecuteBeadOptions holds all parameters for an execute-bead run.
+// ExecuteBeadOptions holds all parameters for an execute-bead worker run.
 type ExecuteBeadOptions struct {
 	FromRev    string // base git revision (default: HEAD)
-	NoMerge    bool   // skip merge, preserve under refs/ddx/iterations/ instead
 	Harness    string
 	Model      string
 	Effort     string
@@ -78,7 +75,9 @@ type ExecuteBeadOptions struct {
 	WorkerID   string // from DDX_WORKER_ID env or caller
 }
 
-// GitOps abstracts git operations for dependency injection.
+// GitOps abstracts the git operations required by the worker.
+// Merge and UpdateRef are intentionally excluded — those belong to the
+// parent-side orchestrator (OrchestratorGitOps).
 type GitOps interface {
 	HeadRev(dir string) (string, error)
 	ResolveRev(dir, rev string) (string, error)
@@ -86,8 +85,6 @@ type GitOps interface {
 	WorktreeRemove(dir, wtPath string) error
 	WorktreeList(dir string) ([]string, error)
 	WorktreePrune(dir string) error
-	Merge(dir, rev string) error
-	UpdateRef(dir, ref, sha string) error
 	IsDirty(dir string) (bool, error)
 	// SynthesizeCommit stages real file changes (excluding harness noise paths) and
 	// commits them. Returns (true, nil) when a commit was made, (false, nil) when
@@ -177,11 +174,7 @@ const (
 )
 
 // executeBeadWorktreePath returns the absolute path where an execute-bead
-// isolated worktree for (beadID, attemptID) should live. It respects the
-// DDX_EXEC_WT_DIR environment override (useful for tests and CI), falling
-// back to $TMPDIR/ddx-exec-wt/. The worktree basename always uses the
-// ExecuteBeadWtPrefix so orphan recovery can match it via `git worktree
-// list` regardless of parent path.
+// isolated worktree for (beadID, attemptID) should live.
 func executeBeadWorktreePath(beadID, attemptID string) string {
 	base := os.Getenv("DDX_EXEC_WT_DIR")
 	if base == "" {
@@ -236,31 +229,6 @@ func (r *RealGitOps) WorktreePrune(dir string) error {
 	return osexec.Command("git", "-C", dir, "worktree", "prune").Run()
 }
 
-// Merge merges rev into dir's working tree via git merge. It commits any
-// tracked uncommitted changes in dir first so the working tree is clean.
-func (r *RealGitOps) Merge(dir, rev string) error {
-	// Commit any uncommitted tracked changes before merging
-	if osexec.Command("git", "-C", dir, "diff-index", "--quiet", "HEAD").Run() != nil {
-		_ = osexec.Command("git", "-C", dir, "add", "-u").Run()
-		_ = osexec.Command("git", "-C", dir, "commit", "-m", "chore: checkpoint before merge").Run()
-	}
-	out, err := osexec.Command("git", "-C", dir, "merge", "--no-edit", rev).CombinedOutput()
-	if err != nil {
-		// Clean up any partial merge state
-		_ = osexec.Command("git", "-C", dir, "merge", "--abort").Run()
-		return fmt.Errorf("merge: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
-func (r *RealGitOps) UpdateRef(dir, ref, sha string) error {
-	out, err := osexec.Command("git", "-C", dir, "update-ref", ref, sha).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
 // IsDirty reports whether dir has any uncommitted changes (tracked modifications or untracked files).
 func (r *RealGitOps) IsDirty(dir string) (bool, error) {
 	out, _ := osexec.Command("git", "-C", dir, "status", "--porcelain").Output()
@@ -272,7 +240,6 @@ func (r *RealGitOps) IsDirty(dir string) (bool, error) {
 // (false, nil) when nothing real remained to commit after exclusions, and
 // (false, err) on failure.
 func (r *RealGitOps) SynthesizeCommit(dir string) (bool, error) {
-	// Stage everything except harness bookkeeping paths.
 	addArgs := []string{
 		"-C", dir, "add", "-A", "--",
 		".",
@@ -285,10 +252,8 @@ func (r *RealGitOps) SynthesizeCommit(dir string) (bool, error) {
 	if err := osexec.Command("git", addArgs...).Run(); err != nil {
 		return false, fmt.Errorf("staging changes: %w", err)
 	}
-	// Check whether anything was actually staged.
 	statusOut, _ := osexec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
 	if len(bytes.TrimSpace(statusOut)) == 0 {
-		// Nothing real to commit — all dirty files were noise.
 		return false, nil
 	}
 	out, err := osexec.Command("git", "-C", dir, "commit", "-m", "chore: execute-bead synthesized result commit").CombinedOutput()
@@ -312,141 +277,17 @@ func GenerateSessionID() string {
 	return "eb-" + hex.EncodeToString(b)
 }
 
-// NowFunc allows tests to override time.Now for deterministic PreserveRef output.
-var NowFunc = time.Now
-
-// PreserveRef builds the documented hidden ref for a preserved iteration.
-func PreserveRef(beadID, baseRev string) string {
-	shortSHA := baseRev
-	if len(shortSHA) > 12 {
-		shortSHA = shortSHA[:12]
-	}
-	timestamp := NowFunc().UTC().Format("20060102T150405Z")
-	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, timestamp, shortSHA)
-}
-
-// evaluateRequiredGates resolves graph-authored execution documents that are
-// required and linked to any of the governing artifact IDs, then runs each one.
-// It returns the per-gate results, a boolean indicating whether any required gate
-// failed, and any infrastructure error.
+// ExecuteBead is the thin worker: it creates an isolated worktree, constructs
+// the agent prompt from bead context, runs the agent harness, synthesizes a
+// commit if the agent left uncommitted changes, then cleans up the worktree
+// and returns the result. It classifies outcomes as exactly one of:
 //
-// Discovery: an execution document is applicable when its depends_on list contains
-// at least one of the governing artifact IDs, OR when its explicit artifact_ids
-// list intersects the governing set. Only documents with required=true are run.
+//   - task_succeeded: agent exited 0 and produced one or more commits
+//   - task_failed:    agent exited non-zero
+//   - task_no_changes: agent exited 0 but made no commits
 //
-// Execution documents are resolved from wtPath (the execution worktree) so
-// pre-run versions govern the current iteration's evaluation, per FEAT-006 §7.
-func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckResult, bool, error) {
-	if len(governingIDs) == 0 {
-		return nil, false, nil
-	}
-
-	graph, err := docgraph.BuildGraphWithConfig(wtPath)
-	if err != nil {
-		// Soft error: if we can't build the graph, skip gate evaluation rather than
-		// blocking all landings. The caller records RequiredExecSummary = "skipped".
-		return nil, false, nil
-	}
-
-	governingSet := make(map[string]bool, len(governingIDs))
-	for _, id := range governingIDs {
-		governingSet[id] = true
-	}
-
-	// Collect applicable required execution documents.
-	type execCandidate struct {
-		id      string
-		command []string
-		cwd     string
-	}
-	var candidates []execCandidate
-	for _, doc := range graph.Documents {
-		if doc.ExecDef == nil || !doc.ExecDef.Required {
-			continue
-		}
-		ed := doc.ExecDef
-		if ed.Kind != "command" {
-			// Only command executors are supported in execute-bead gate evaluation.
-			continue
-		}
-		if len(ed.Command) == 0 {
-			continue
-		}
-		// Check linkage: depends_on or explicit artifact_ids must intersect.
-		linked := false
-		for _, dep := range doc.DependsOn {
-			if governingSet[dep] {
-				linked = true
-				break
-			}
-		}
-		if !linked {
-			for _, artID := range ed.ArtifactIDs {
-				if governingSet[artID] {
-					linked = true
-					break
-				}
-			}
-		}
-		if !linked {
-			continue
-		}
-		candidates = append(candidates, execCandidate{
-			id:      doc.ID,
-			command: ed.Command,
-			cwd:     ed.Cwd,
-		})
-	}
-
-	if len(candidates) == 0 {
-		return nil, false, nil
-	}
-
-	anyFailed := false
-	results := make([]GateCheckResult, 0, len(candidates))
-	for _, c := range candidates {
-		cwd := wtPath
-		if c.cwd != "" {
-			if filepath.IsAbs(c.cwd) {
-				cwd = c.cwd
-			} else {
-				cwd = filepath.Join(wtPath, c.cwd)
-			}
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		cmd := osexec.CommandContext(ctx, c.command[0], c.command[1:]...)
-		cmd.Dir = cwd
-		var stdoutBuf, stderrBuf strings.Builder
-		cmd.Stdout = &stdoutBuf
-		cmd.Stderr = &stderrBuf
-		runErr := cmd.Run()
-		cancel()
-
-		gr := GateCheckResult{
-			DefinitionID: c.id,
-			Required:     true,
-			Stdout:       strings.TrimSpace(stdoutBuf.String()),
-			Stderr:       strings.TrimSpace(stderrBuf.String()),
-		}
-		if runErr != nil {
-			gr.ExitCode = 1
-			if exitErr, ok := runErr.(*osexec.ExitError); ok {
-				gr.ExitCode = exitErr.ExitCode()
-			}
-			gr.Status = "fail"
-			anyFailed = true
-		} else {
-			gr.Status = "pass"
-		}
-		results = append(results, gr)
-	}
-
-	return results, anyFailed, nil
-}
-
-// ExecuteBead runs an agent on a bead in an isolated worktree, then merges or
-// preserves the result. This is the core library function with no CLI dependencies.
+// Merge, UpdateRef, gate evaluation, preserve-ref management, and orphan
+// recovery are the parent's responsibility (see LandBeadResult, RecoverOrphans).
 func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, gitOps GitOps, runner AgentRunner) (*ExecuteBeadResult, error) {
 	attemptID := GenerateAttemptID()
 	if opts.WorkerID == "" {
@@ -454,46 +295,36 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	}
 
 	wtPath := executeBeadWorktreePath(beadID, attemptID)
-	// Ensure the parent directory exists so `git worktree add` can create the leaf.
 	if mkErr := os.MkdirAll(filepath.Dir(wtPath), 0o755); mkErr != nil {
 		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", mkErr)
 	}
 
-	// Commit beads.jsonl before spawning worktree, then resolve base so the
-	// worktree snapshot includes any bead metadata updates (e.g. spec-id).
+	// Commit beads.jsonl before spawning worktree so the worktree snapshot
+	// includes any bead metadata updates (e.g. spec-id).
 	if err := CommitTracker(projectRoot); err != nil {
 		return nil, err
 	}
 
-	// Resolve base revision after the tracker commit so the worktree includes it
+	// Resolve base revision after the tracker commit.
 	baseRev, err := resolveBase(gitOps, projectRoot, opts.FromRev)
 	if err != nil {
 		return nil, err
 	}
 
-	// Lock root, recover orphans, create worktree
-	rootLock := bead.NewStoreWithCollection(filepath.Join(projectRoot, ".ddx"), "execute-bead-root")
-	if err := rootLock.WithLock(func() error {
-		recoverOrphans(gitOps, projectRoot, beadID)
-		if addErr := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); addErr != nil {
-			return fmt.Errorf("creating isolated worktree: %w", addErr)
-		}
-		return nil
-	}); err != nil {
-		return nil, err
+	// Create the isolated worktree. Orphan recovery is the parent's responsibility
+	// (call RecoverOrphans before invoking workers).
+	if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
+		return nil, fmt.Errorf("creating isolated worktree: %w", err)
 	}
 	defer func() {
 		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
 	}()
 
 	// Repair project-local skill symlinks whose targets do not resolve inside
-	// the freshly created worktree. Git tracks these as symlinks but their
-	// recorded targets may point at build-machine-specific absolute paths
-	// (e.g. /home/demo/.ddx/plugins/...), which leaves the harness walking
-	// broken links and logging repeated "failed to stat" errors at startup.
+	// the freshly created worktree.
 	_ = materializeWorktreeSkills(wtPath)
 
-	// Prepare artifacts (context load, prompt generation)
+	// Prepare artifacts (context load, prompt generation).
 	artifacts, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, opts)
 	if err != nil {
 		res := &ExecuteBeadResult{
@@ -501,22 +332,21 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 			AttemptID: attemptID,
 			WorkerID:  opts.WorkerID,
 			BaseRev:   baseRev,
+			ResultRev: baseRev, // no commits; ResultRev == BaseRev signals no output
 			ExitCode:  1,
 			Error:     err.Error(),
-			Outcome:   "error",
-			Reason:    "context_load_failed",
+			Outcome:   ExecuteBeadOutcomeTaskFailed,
 		}
 		if abInfo, _ := os.Stat(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID)); abInfo != nil && abInfo.IsDir() {
 			res.ExecutionDir = filepath.Join(ExecuteBeadArtifactDir, attemptID)
 		}
-		populateStatus(res)
+		populateWorkerStatus(res)
 		_ = writeArtifactJSON(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID, "result.json"), res)
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
 
-	// Run the agent. Redirect any per-run session/telemetry output into a
-	// DDx-owned directory inside the execution bundle so the embedded ddx-agent
-	// harness does not accumulate runtime state at the worktree root.
+	// Redirect per-run session/telemetry output into the DDx-owned execution
+	// bundle so the embedded harness does not accumulate state at the worktree root.
 	embeddedStateDir := filepath.Join(artifacts.DirAbs, "embedded")
 	if err := os.MkdirAll(embeddedStateDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating embedded state dir: %w", err)
@@ -532,7 +362,7 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		Model:         opts.Model,
 		Effort:        opts.Effort,
 		WorkDir:       wtPath,
-		Permissions:   "unrestricted", // execute-bead runs in an isolated worktree; file writes must not require approval
+		Permissions:   "unrestricted", // isolated worktree; writes must not require approval
 		SessionLogDir: embeddedStateDir,
 		Correlation: map[string]string{
 			"bead_id":    beadID,
@@ -577,9 +407,8 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		}
 		agentErrMsg = agentErr.Error()
 	}
-	executionFailed := exitCode != 0
 
-	// Get the HEAD of the worktree after the agent ran
+	// Get the HEAD of the worktree after the agent ran.
 	resultRev, revErr := gitOps.HeadRev(wtPath)
 	if revErr != nil {
 		res := &ExecuteBeadResult{
@@ -587,6 +416,7 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 			AttemptID:    attemptID,
 			WorkerID:     opts.WorkerID,
 			BaseRev:      baseRev,
+			ResultRev:    baseRev, // no commits readable; treat as no output
 			Harness:      resultHarness,
 			Provider:     resultProvider,
 			Model:        resultModel,
@@ -596,16 +426,16 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 			CostUSD:      costUSD,
 			ExitCode:     1,
 			Error:        agentErrMsg,
+			Reason:       revErr.Error(), // HeadRev failure; orchestrator prefers this over Error for Reason
 			ExecutionDir: artifacts.DirRel,
 			PromptFile:   artifacts.PromptRel,
 			ManifestFile: artifacts.ManifestRel,
 			ResultFile:   artifacts.ResultRel,
 			StartedAt:    startedAt,
 			FinishedAt:   finishedAt,
-			Outcome:      "error",
-			Reason:       fmt.Sprintf("failed to read worktree HEAD: %v", revErr),
+			Outcome:      ExecuteBeadOutcomeTaskFailed,
 		}
-		populateStatus(res)
+		populateWorkerStatus(res)
 		_ = writeArtifactJSON(artifacts.ResultAbs, res)
 		return res, fmt.Errorf("failed to read worktree HEAD: %w", revErr)
 	}
@@ -613,7 +443,7 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	// Synthesize a commit when the agent left tracked edits without committing.
 	// Only do so for real changes — harness noise paths are excluded. If nothing
 	// real was staged (committed is false), leave resultRev == baseRev so the
-	// outcome is classified as no-changes.
+	// outcome is classified as task_no_changes.
 	if resultRev == baseRev {
 		if isDirty, _ := gitOps.IsDirty(wtPath); isDirty {
 			if committed, synthErr := gitOps.SynthesizeCommit(wtPath); synthErr == nil && committed {
@@ -664,96 +494,38 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		}
 	}
 
-	// Run required execution gates when the agent succeeded and produced changes.
-	// Gates are evaluated from the execution worktree so pre-run document versions
-	// govern the current iteration (FEAT-006 §7). This is separate from structural
-	// readiness validation which happens before the agent runs.
-	var gateResults []GateCheckResult
-	var anyGateFailed bool
-	if !executionFailed && resultRev != baseRev {
-		governingIDs := extractGoverningIDs(artifacts)
-		gateResults, anyGateFailed, _ = evaluateRequiredGates(wtPath, governingIDs)
-	}
-	res.GateResults = gateResults
-	res.RequiredExecSummary = summarizeGates(gateResults, anyGateFailed)
-
-	// Write checks.json when gate evaluation ran (results are non-empty).
-	if len(gateResults) > 0 {
-		checks := executeBeadChecks{
-			AttemptID:   attemptID,
-			EvaluatedAt: finishedAt,
-			Summary:     res.RequiredExecSummary,
-			Results:     gateResults,
-		}
-		if writeErr := writeArtifactJSON(artifacts.ChecksAbs, checks); writeErr == nil {
-			res.ChecksFile = artifacts.ChecksRel
-		}
-	}
-
-	// Determine outcome applying the merge-by-default contract:
-	// A successful run lands unless an explicit gate blocks landing or --no-merge is set.
+	// Classify worker outcome: task_succeeded / task_failed / task_no_changes.
+	// The parent orchestrator (LandBeadResult + ApplyLandingToResult) will
+	// overwrite Outcome and Status with the landing decision before output.
 	switch {
-	case executionFailed && resultRev == baseRev:
-		res.Outcome = "error"
-		if agentErrMsg != "" {
-			res.Reason = agentErrMsg
-		} else {
-			res.Reason = "agent execution failed"
-		}
-
+	case exitCode != 0:
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
 	case resultRev == baseRev:
-		res.Outcome = "no-changes"
-		res.Reason = "agent made no commits"
-
-	case executionFailed:
-		ref := PreserveRef(beadID, baseRev)
-		if updateErr := gitOps.UpdateRef(projectRoot, ref, resultRev); updateErr != nil {
-			return nil, fmt.Errorf("preserving result ref: %w", updateErr)
-		}
-		res.Outcome = "preserved"
-		res.PreserveRef = ref
-		res.Reason = "agent execution failed"
-
-	case anyGateFailed:
-		// One or more required execution gates failed: preserve rather than land.
-		ref := PreserveRef(beadID, baseRev)
-		if updateErr := gitOps.UpdateRef(projectRoot, ref, resultRev); updateErr != nil {
-			return nil, fmt.Errorf("preserving result ref: %w", updateErr)
-		}
-		res.Outcome = "preserved"
-		res.PreserveRef = ref
-		res.Reason = "post-run checks failed"
-
-	case opts.NoMerge:
-		ref := PreserveRef(beadID, baseRev)
-		if updateErr := gitOps.UpdateRef(projectRoot, ref, resultRev); updateErr != nil {
-			return nil, fmt.Errorf("preserving result ref: %w", updateErr)
-		}
-		res.Outcome = "preserved"
-		res.PreserveRef = ref
-		res.Reason = "--no-merge specified"
-
+		res.Outcome = ExecuteBeadOutcomeTaskNoChanges
 	default:
-		// Merge-by-default: successful run with no gate failures lands.
-		if mergeErr := gitOps.Merge(projectRoot, resultRev); mergeErr == nil {
-			res.Outcome = "merged"
-		} else {
-			ref := PreserveRef(beadID, baseRev)
-			if updateErr := gitOps.UpdateRef(projectRoot, ref, resultRev); updateErr != nil {
-				return nil, fmt.Errorf("preserving result ref: %w", updateErr)
-			}
-			res.Outcome = "preserved"
-			res.PreserveRef = ref
-			res.Reason = "merge failed"
-		}
+		res.Outcome = ExecuteBeadOutcomeTaskSucceeded
 	}
 
-	populateStatus(res)
+	populateWorkerStatus(res)
 	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
 	}
 
 	return res, nil
+}
+
+// populateWorkerStatus fills in the Status and Detail fields on a worker result
+// based on the task-level Outcome.
+func populateWorkerStatus(res *ExecuteBeadResult) {
+	switch res.Outcome {
+	case ExecuteBeadOutcomeTaskSucceeded:
+		res.Status = ExecuteBeadStatusSuccess
+	case ExecuteBeadOutcomeTaskNoChanges:
+		res.Status = ExecuteBeadStatusNoChanges
+	default:
+		res.Status = ExecuteBeadStatusExecutionFailed
+	}
+	res.Detail = ExecuteBeadStatusDetail(res.Status, "", res.Error)
 }
 
 // CommitTracker commits beads.jsonl if it has uncommitted changes.
@@ -814,25 +586,6 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 		return "", fmt.Errorf("resolving --from %q: %w", fromRev, err)
 	}
 	return rev, nil
-}
-
-func recoverOrphans(gitOps GitOps, workDir, beadID string) {
-	paths, err := gitOps.WorktreeList(workDir)
-	if err != nil {
-		return
-	}
-	// Match by basename prefix (not full-path prefix) so orphans are
-	// discovered regardless of whether the worktree lives in the legacy
-	// .ddx/.execute-bead-wt-* location OR the new $TMPDIR/ddx-exec-wt/
-	// location. git worktree list returns absolute paths; we compare the
-	// leaf directory name.
-	basenamePrefix := ExecuteBeadWtPrefix + beadID + "-"
-	for _, p := range paths {
-		if strings.HasPrefix(filepath.Base(p), basenamePrefix) {
-			_ = gitOps.WorktreeRemove(workDir, p)
-		}
-	}
-	_ = gitOps.WorktreePrune(workDir)
 }
 
 func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, opts ExecuteBeadOptions) (*executeBeadArtifacts, error) {
@@ -967,9 +720,7 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 }
 
 // executeBeadInstructionsText is the per-bead task instructions emitted inside
-// the <instructions> section of the synthesized execute-bead prompt. It is
-// stable text keyed from the prompt contract in FEAT-006 §"Prompt Rationalizer
-// Contract".
+// the <instructions> section of the synthesized execute-bead prompt.
 const executeBeadInstructionsText = `You are running inside DDx's isolated execution worktree for this bead.
 Your job is to make a best-effort attempt at the work described in the bead's Goals and Description, then commit the result. Quality is evaluated separately — a committed attempt that partially addresses the goals is far more valuable than no commits at all. Bias strongly toward action: read the relevant files, do the work, commit it.
 
@@ -992,18 +743,12 @@ Your job is to make a best-effort attempt at the work described in the bead's Go
 // governing references were pre-resolved for the bead.
 const executeBeadMissingGoverningText = `No governing references were pre-resolved. Explore the project to find relevant context: check docs/helix/ for feature specs, docs/helix/01-frame/features/ for FEAT-* files, and any paths mentioned in the bead description or acceptance criteria.`
 
-// xmlEscape returns the XML text escaping for the given string. It delegates
-// to encoding/xml so reserved characters (&, <, >, ', ", \t, \n, \r) are
-// rendered with the standard entity references.
 func xmlEscape(s string) string {
 	var buf bytes.Buffer
 	_ = xml.EscapeText(&buf, []byte(s))
 	return buf.String()
 }
 
-// xmlAttrEscape escapes a string for safe inclusion inside an XML attribute.
-// It replaces characters that would terminate the double-quoted attribute or
-// otherwise be misparsed. Double quotes are used for attribute delimiters.
 func xmlAttrEscape(s string) string {
 	r := strings.NewReplacer(
 		"&", "&amp;",
@@ -1034,7 +779,6 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	var sb strings.Builder
 	sb.WriteString("<execute-bead>\n")
 
-	// <bead> section — identity and metadata
 	fmt.Fprintf(&sb, "  <bead id=\"%s\">\n", xmlAttrEscape(b.ID))
 	fmt.Fprintf(&sb, "    <title>%s</title>\n", xmlEscape(strings.TrimSpace(b.Title)))
 
@@ -1058,7 +802,6 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 		sb.WriteString("    <labels/>\n")
 	}
 
-	// <metadata> — parent, spec-id, base-rev, bundle, and structured extras
 	metaAttrs := make([]string, 0, 6)
 	if b.Parent != "" {
 		metaAttrs = append(metaAttrs, fmt.Sprintf("parent=\"%s\"", xmlAttrEscape(b.Parent)))
@@ -1071,7 +814,6 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	fmt.Fprintf(&sb, "    <metadata %s/>\n", strings.Join(metaAttrs, " "))
 	sb.WriteString("  </bead>\n")
 
-	// <governing> section — resolved references
 	if len(refs) == 0 {
 		fmt.Fprintf(&sb, "  <governing>\n    <note>%s</note>\n  </governing>\n", xmlEscape(executeBeadMissingGoverningText))
 	} else {
@@ -1087,9 +829,6 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 		sb.WriteString("  </governing>\n")
 	}
 
-	// <instructions> section — per-bead task instructions.
-	// {{.AttemptDir}} is substituted with the execution bundle directory
-	// so the agent can write a no_changes rationale to a concrete path.
 	instructions := strings.ReplaceAll(executeBeadInstructionsText, "{{.AttemptDir}}", artifacts.DirRel)
 	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(instructions))
 
@@ -1107,52 +846,6 @@ func beadMetadata(b *bead.Bead) map[string]any {
 		meta[k] = v
 	}
 	return meta
-}
-
-// extractGoverningIDs returns the artifact IDs referenced by the governing docs.
-func extractGoverningIDs(artifacts *executeBeadArtifacts) []string {
-	// The manifest was already built; re-derive from the governing refs recorded there.
-	// We don't have access to the refs slice here, so we read from the manifest file.
-	type manifestShape struct {
-		Governing []struct {
-			ID string `json:"id"`
-		} `json:"governing"`
-	}
-	raw, err := os.ReadFile(artifacts.ManifestAbs)
-	if err != nil {
-		return nil
-	}
-	var m manifestShape
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil
-	}
-	ids := make([]string, 0, len(m.Governing))
-	for _, g := range m.Governing {
-		if g.ID != "" {
-			ids = append(ids, g.ID)
-		}
-	}
-	return ids
-}
-
-// summarizeGates returns the RequiredExecSummary value for the iteration commit trailer.
-func summarizeGates(results []GateCheckResult, anyFailed bool) string {
-	if len(results) == 0 {
-		return "skipped"
-	}
-	if anyFailed {
-		return "fail"
-	}
-	return "pass"
-}
-
-// executeBeadChecks is the machine-readable schema for checks.json.
-// It is written when gate evaluation ran (gate results are non-empty).
-type executeBeadChecks struct {
-	AttemptID   string            `json:"attempt_id"`
-	EvaluatedAt time.Time         `json:"evaluated_at"`
-	Summary     string            `json:"summary"`
-	Results     []GateCheckResult `json:"results"`
 }
 
 // executeBeadUsage is the machine-readable schema for usage.json.
@@ -1174,9 +867,4 @@ func writeArtifactJSON(path string, payload any) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
-}
-
-func populateStatus(res *ExecuteBeadResult) {
-	res.Status = ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-	res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 }

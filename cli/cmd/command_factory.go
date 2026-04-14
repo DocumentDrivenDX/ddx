@@ -34,8 +34,12 @@ type CommandFactory struct {
 	// AgentRunnerOverride overrides the agent runner used by execStore (for testing).
 	AgentRunnerOverride ddxexec.AgentRunner
 
-	// executeBeadGitOverride overrides git operations in execute-bead (for testing).
+	// executeBeadGitOverride overrides git operations in execute-bead worker (for testing).
 	executeBeadGitOverride agent.GitOps
+
+	// executeBeadOrchestratorGitOverride overrides git operations in the
+	// execute-bead orchestrator (LandBeadResult) for testing.
+	executeBeadOrchestratorGitOverride agent.OrchestratorGitOps
 
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper
@@ -72,15 +76,16 @@ func NewCommandFactoryWithViper(workingDir string, v *viper.Viper) *CommandFacto
 // dependencies but does not copy lock-bearing state by value.
 func (f *CommandFactory) withWorkingDir(workingDir string) *CommandFactory {
 	return &CommandFactory{
-		Version:                f.Version,
-		Commit:                 f.Commit,
-		Date:                   f.Date,
-		WorkingDir:             workingDir,
-		AgentRunnerOverride:    f.AgentRunnerOverride,
-		executeBeadGitOverride: f.executeBeadGitOverride,
-		viperInstance:          f.viperInstance,
-		updateChecker:          f.updateChecker,
-		updateDone:             f.updateDone,
+		Version:                            f.Version,
+		Commit:                             f.Commit,
+		Date:                               f.Date,
+		WorkingDir:                         workingDir,
+		AgentRunnerOverride:                f.AgentRunnerOverride,
+		executeBeadGitOverride:             f.executeBeadGitOverride,
+		executeBeadOrchestratorGitOverride: f.executeBeadOrchestratorGitOverride,
+		viperInstance:                      f.viperInstance,
+		updateChecker:                      f.updateChecker,
+		updateDone:                         f.updateDone,
 	}
 }
 

@@ -1244,17 +1244,25 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				}
 			}
 
-			res, err := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
+			res, execErr := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
 				FromRev: fromRev,
 				Harness: resolvedHarness,
 				Model:   model,
 				Effort:  effort,
 			}, gitOps, runner)
-			if err != nil {
-				return agent.ExecuteBeadReport{}, err
+			if execErr != nil && res == nil {
+				return agent.ExecuteBeadReport{}, execErr
 			}
-			if err != nil {
-				return agent.ExecuteBeadReport{}, err
+			if res != nil {
+				landingOpts := agent.BeadLandingOptions{}
+				if landing, landErr := agent.LandBeadResult(projectRoot, res, &agent.RealOrchestratorGitOps{}, landingOpts); landErr == nil {
+					agent.ApplyLandingToResult(res, landing)
+				} else if execErr == nil {
+					execErr = landErr
+				}
+			}
+			if execErr != nil {
+				return agent.ExecuteBeadReport{}, execErr
 			}
 			return agent.ExecuteBeadReport{
 				BeadID:      res.BeadID,

@@ -39,11 +39,7 @@ func (m *artifactTestGitOps) WorktreeRemove(dir, wtPath string) error { return n
 func (m *artifactTestGitOps) WorktreeList(dir string) ([]string, error) {
 	return nil, nil
 }
-func (m *artifactTestGitOps) WorktreePrune(dir string) error { return nil }
-func (m *artifactTestGitOps) Merge(dir, rev string) error    { return nil }
-func (m *artifactTestGitOps) UpdateRef(dir, ref, sha string) error {
-	return nil
-}
+func (m *artifactTestGitOps) WorktreePrune(dir string) error            { return nil }
 func (m *artifactTestGitOps) IsDirty(dir string) (bool, error)          { return false, nil }
 func (m *artifactTestGitOps) SynthesizeCommit(dir string) (bool, error) { return false, nil }
 
@@ -358,33 +354,60 @@ func TestExecuteBead_ResultShape(t *testing.T) {
 	}
 }
 
-// TestExecuteBead_ChecksArtifact verifies that checks.json is written when
-// required gates are evaluated, with the correct machine-readable shape.
+// artifactTestOrchestratorGitOps is a no-op OrchestratorGitOps for artifact tests.
+type artifactTestOrchestratorGitOps struct{}
+
+func (m *artifactTestOrchestratorGitOps) Merge(dir, rev string) error          { return nil }
+func (m *artifactTestOrchestratorGitOps) UpdateRef(dir, ref, sha string) error { return nil }
+
+// TestExecuteBead_ChecksArtifact verifies that checks.json is written by the
+// orchestrator (LandBeadResult) when required gates are evaluated.
 func TestExecuteBead_ChecksArtifact(t *testing.T) {
 	const beadID = "ddx-art-04"
 	const specID = "FEAT-ARTCHECKS"
 
 	projectRoot := setupArtifactTestProjectRoot(t)
-	gitOps := &artifactTestGitOps{
-		projectRoot: projectRoot,
-		baseRev:     "dddd000000000001",
-		resultRev:   "dddd000000000002", // agent produced commits → gates run
-		wtSetupFn: func(wtPath string) {
-			setupArtifactTestWorktree(t, wtPath, beadID, specID, true, 0)
-		},
+
+	// Create an artifact bundle so we have the checks artifact paths.
+	const attemptID = "20260101T000000-dddd000000"
+	wtPath := t.TempDir()
+	arts, err := createArtifactBundle(projectRoot, wtPath, attemptID)
+	if err != nil {
+		t.Fatalf("createArtifactBundle: %v", err)
 	}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, &artifactTestAgentRunner{})
-	if err != nil {
-		t.Fatalf("ExecuteBead: %v", err)
+	// Populate a directory with gate docs for the orchestrator to evaluate.
+	gateDir := t.TempDir()
+	writeArtifactDoc(t, gateDir, specID)
+	writeGateDoc(t, gateDir, "exec."+specID+".smoke", specID, true, []string{"sh", "-c", "exit 0"})
+
+	// Build a minimal worker result (as if ExecuteBead succeeded with commits).
+	res := &ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		BaseRev:   "dddd000000000001",
+		ResultRev: "dddd000000000002",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
 	}
+
+	orch := &artifactTestOrchestratorGitOps{}
+	landing, landErr := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		WtPath:             gateDir,
+		GovernIDs:          []string{specID},
+		ChecksArtifactPath: arts.ChecksAbs,
+		ChecksArtifactRel:  arts.ChecksRel,
+	})
+	if landErr != nil {
+		t.Fatalf("LandBeadResult: %v", landErr)
+	}
+	ApplyLandingToResult(res, landing)
 
 	if res.ChecksFile == "" {
 		t.Fatal("ExecuteBeadResult.checks_file must be set when gates ran")
 	}
 
-	checksPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "checks.json")
-	raw, err := os.ReadFile(checksPath)
+	raw, err := os.ReadFile(arts.ChecksAbs)
 	if err != nil {
 		t.Fatalf("reading checks.json: %v", err)
 	}

@@ -1,5 +1,16 @@
 package agent
 
+// Worker-level outcome constants — set by ExecuteBead() on the result.
+// The parent orchestrator (LandBeadResult + ApplyLandingToResult) then
+// overwrites Outcome and Status with the landing decision.
+const (
+	ExecuteBeadOutcomeTaskSucceeded = "task_succeeded"
+	ExecuteBeadOutcomeTaskFailed    = "task_failed"
+	ExecuteBeadOutcomeTaskNoChanges = "task_no_changes"
+)
+
+// Status constants — used by the loop and other consumers of ExecuteBeadReport.
+// These map to specific close/unclaim behaviors in ExecuteBeadWorker.
 const (
 	ExecuteBeadStatusStructuralValidationFailed = "structural_validation_failed"
 	ExecuteBeadStatusExecutionFailed            = "execution_failed"
@@ -10,9 +21,9 @@ const (
 	ExecuteBeadStatusSuccess                    = "success"
 )
 
-// ClassifyExecuteBeadStatus maps the execute-bead transport envelope to the
-// supervisor-visible status contract. This keeps worker control flow off of
-// free-form reason strings.
+// ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible
+// status contract. This is called by ApplyLandingToResult and by callers who
+// build an ExecuteBeadReport from a landing result.
 func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) string {
 	if exitCode != 0 {
 		return ExecuteBeadStatusExecutionFailed
@@ -21,8 +32,10 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 	switch outcome {
 	case "merged":
 		return ExecuteBeadStatusSuccess
-	case "no-changes":
+	case "no-changes", ExecuteBeadOutcomeTaskNoChanges:
 		return ExecuteBeadStatusNoChanges
+	case "error":
+		return ExecuteBeadStatusExecutionFailed
 	case "preserved":
 		switch reason {
 		case "rebase failed", "ff-merge not possible", "ff-merge failed after rebase", "merge failed":
@@ -34,6 +47,10 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 			// explicitly requested no merge.
 			return ExecuteBeadStatusSuccess
 		}
+	case ExecuteBeadOutcomeTaskSucceeded:
+		return ExecuteBeadStatusSuccess
+	case ExecuteBeadOutcomeTaskFailed:
+		return ExecuteBeadStatusExecutionFailed
 	default:
 		return ExecuteBeadStatusExecutionFailed
 	}
