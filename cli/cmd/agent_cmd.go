@@ -1277,18 +1277,19 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				return agent.ExecuteBeadReport{}, execErr
 			}
 			return agent.ExecuteBeadReport{
-				BeadID:      res.BeadID,
-				AttemptID:   res.AttemptID,
-				WorkerID:    res.WorkerID,
-				Harness:     res.Harness,
-				Provider:    res.Provider,
-				Model:       res.Model,
-				Status:      res.Status,
-				Detail:      res.Detail,
-				SessionID:   res.SessionID,
-				BaseRev:     res.BaseRev,
-				ResultRev:   res.ResultRev,
-				PreserveRef: res.PreserveRef,
+				BeadID:             res.BeadID,
+				AttemptID:          res.AttemptID,
+				WorkerID:           res.WorkerID,
+				Harness:            res.Harness,
+				Provider:           res.Provider,
+				Model:              res.Model,
+				Status:             res.Status,
+				Detail:             res.Detail,
+				SessionID:          res.SessionID,
+				BaseRev:            res.BaseRev,
+				ResultRev:          res.ResultRev,
+				PreserveRef:        res.PreserveRef,
+				NoChangesRationale: res.NoChangesRationale,
 			}, nil
 		}),
 	}

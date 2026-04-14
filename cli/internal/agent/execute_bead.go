@@ -45,6 +45,11 @@ type ExecuteBeadResult struct {
 	RequiredExecSummary string            `json:"required_exec_summary,omitempty"`
 	ChecksFile          string            `json:"checks_file,omitempty"`
 
+	// NoChangesRationale is populated when outcome == task_no_changes and the
+	// agent wrote a rationale file to the execution bundle dir inside the
+	// worktree. It carries the agent's explanation of why no commits were made.
+	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
+
 	Harness    string  `json:"harness,omitempty"`
 	Provider   string  `json:"provider,omitempty"`
 	Model      string  `json:"model,omitempty"`
@@ -246,6 +251,7 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 		":(exclude).ddx/agent-logs",
 		":(exclude).ddx/workers",
 		":(exclude).ddx/executions/*/embedded",
+		":(exclude).ddx/executions/*/no_changes_rationale.txt",
 		":(exclude).claude/skills",
 		":(exclude).agents/skills",
 	}
@@ -347,6 +353,11 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		_ = writeArtifactJSON(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID, "result.json"), res)
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
+
+	// Pre-create the execution bundle dir in the worktree so the agent can write
+	// artifacts (e.g. no_changes_rationale.txt) without needing to create the
+	// directory itself. Failures are non-fatal: the agent can create it on demand.
+	_ = os.MkdirAll(filepath.Join(wtPath, artifacts.DirRel), 0o755)
 
 	// Redirect per-run session/telemetry output into the DDx-owned execution
 	// bundle so the embedded harness does not accumulate state at the worktree root.
@@ -555,6 +566,17 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		res.Outcome = ExecuteBeadOutcomeTaskNoChanges
 	default:
 		res.Outcome = ExecuteBeadOutcomeTaskSucceeded
+	}
+
+	// When the outcome is no_changes, attempt to read the agent's rationale file.
+	// The agent is instructed to write this file (relative to the worktree) when it
+	// determines the bead's work is already present. We read it before the deferred
+	// worktree cleanup removes the file.
+	if res.Outcome == ExecuteBeadOutcomeTaskNoChanges {
+		rationaleFile := filepath.Join(wtPath, artifacts.DirRel, "no_changes_rationale.txt")
+		if data, readErr := os.ReadFile(rationaleFile); readErr == nil {
+			res.NoChangesRationale = strings.TrimSpace(string(data))
+		}
 	}
 
 	populateWorkerStatus(res)

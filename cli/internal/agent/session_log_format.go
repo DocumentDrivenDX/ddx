@@ -123,6 +123,7 @@ func FormatSessionLogLines(lines []string) string {
 			detail, _ := data["detail"].(string)
 			resultRev, _ := data["result_rev"].(string)
 			preserveRef, _ := data["preserve_ref"].(string)
+			rationale, _ := data["no_changes_rationale"].(string)
 			durationMs, _ := data["duration_ms"].(float64)
 			var outcome string
 			switch status {
@@ -153,6 +154,9 @@ func FormatSessionLogLines(lines []string) string {
 				durStr = fmt.Sprintf(" (%.1fs)", durationMs/1000)
 			}
 			fmt.Fprintf(&sb, "✓ %s → %s%s\n", beadID, outcome, durStr)
+			if rationale != "" {
+				fmt.Fprintf(&sb, "  rationale: %s\n", rationale)
+			}
 		case "loop.end":
 			data, _ := entry["data"].(map[string]any)
 			attempts, _ := data["attempts"].(float64)

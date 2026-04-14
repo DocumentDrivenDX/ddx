@@ -166,6 +166,9 @@ func writeExecuteBeadResult(cmd *cobra.Command, res *agent.ExecuteBeadResult, as
 	if res.Detail != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "detail:  %s\n", res.Detail)
 	}
+	if res.NoChangesRationale != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "rationale: %s\n", res.NoChangesRationale)
+	}
 	if res.PreserveRef != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "ref:     %s\n", res.PreserveRef)
 	}

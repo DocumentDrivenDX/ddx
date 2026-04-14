@@ -151,7 +151,11 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 	// No changes from the worker: nothing to land.
 	if res.ResultRev == res.BaseRev {
 		landing.Outcome = "no-changes"
-		landing.Reason = "agent made no commits"
+		if res.NoChangesRationale != "" {
+			landing.Reason = res.NoChangesRationale
+		} else {
+			landing.Reason = "agent made no commits"
+		}
 		return landing, nil
 	}
 

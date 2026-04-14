@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,8 @@ type ExecuteBeadReport struct {
 	ResultRev   string `json:"result_rev,omitempty"`
 	PreserveRef string `json:"preserve_ref,omitempty"`
 	RetryAfter  string `json:"retry_after,omitempty"`
+	// NoChangesRationale carries the agent's explanation when status == no_changes.
+	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -351,7 +354,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 				if cerr != nil {
 					return result, cerr
 				}
-				satisfied, evidence, aerr := w.adjudicateNoChanges(ctx, candidate.ID, count, maxNoChangesBeforeClose)
+				satisfied, evidence, aerr := w.adjudicateNoChanges(ctx, candidate.ID, count, maxNoChangesBeforeClose, report.NoChangesRationale)
 				if aerr != nil {
 					return result, aerr
 				}
@@ -431,14 +434,15 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		})
 
 		emit("bead.result", map[string]any{
-			"bead_id":      candidate.ID,
-			"status":       report.Status,
-			"detail":       report.Detail,
-			"session_id":   report.SessionID,
-			"result_rev":   report.ResultRev,
-			"base_rev":     report.BaseRev,
-			"preserve_ref": report.PreserveRef,
-			"duration_ms":  now().Sub(runStart).Milliseconds(),
+			"bead_id":              candidate.ID,
+			"status":               report.Status,
+			"detail":               report.Detail,
+			"session_id":           report.SessionID,
+			"result_rev":           report.ResultRev,
+			"base_rev":             report.BaseRev,
+			"preserve_ref":         report.PreserveRef,
+			"no_changes_rationale": report.NoChangesRationale,
+			"duration_ms":          now().Sub(runStart).Milliseconds(),
 		})
 
 		if opts.Log != nil {
@@ -469,6 +473,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	parts := []string{}
 	if report.Detail != "" {
 		parts = append(parts, report.Detail)
+	}
+	if report.NoChangesRationale != "" {
+		parts = append(parts, fmt.Sprintf("rationale: %s", report.NoChangesRationale))
 	}
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
@@ -536,6 +543,9 @@ func formatLoopResult(report ExecuteBeadReport) string {
 	case ExecuteBeadStatusAlreadySatisfied:
 		return "already_satisfied"
 	case ExecuteBeadStatusNoChanges:
+		if report.NoChangesRationale != "" {
+			return fmt.Sprintf("no_changes: %s", report.NoChangesRationale)
+		}
 		return "no_changes"
 	default:
 		detail := report.Detail
@@ -549,17 +559,40 @@ func formatLoopResult(report ExecuteBeadReport) string {
 	}
 }
 
+// reCommitSHA matches a 7-to-40 character lowercase hex string that looks like a
+// git commit SHA. Used to detect whether a no_changes rationale cites a prior commit.
+var reCommitSHA = regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
+
+// reTestFuncName matches a Go test function name (TestXxx or BenchmarkXxx).
+var reTestFuncName = regexp.MustCompile(`\b(?:Test|Benchmark)[A-Z]\w*\b`)
+
+// rationaleIsSpecific returns true when the rationale string contains a reference
+// specific enough to treat a no_changes outcome as already_satisfied on the first
+// attempt. Currently this means: the rationale cites a commit SHA (7+ hex chars)
+// or a Go test function name. Vague rationales ("nothing to do") return false.
+func rationaleIsSpecific(rationale string) bool {
+	if rationale == "" {
+		return false
+	}
+	return reCommitSHA.MatchString(rationale) || reTestFuncName.MatchString(rationale)
+}
+
 // adjudicateNoChanges runs the no-change adjudication step for a bead.
 // It returns (satisfied, evidence, err). When satisfied is true the bead
 // should be closed as already_satisfied with the evidence string. When false
 // retry suppression (cooldown) should be applied and the bead left open.
 //
-// If a SatisfactionChecker is configured it is called first. Otherwise the
-// default count-based rule closes the bead once noChangesCount reaches
-// maxNoChangesBeforeClose.
-func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID string, noChangesCount, maxNoChangesBeforeClose int) (bool, string, error) {
+// If a SatisfactionChecker is configured it is called first. Otherwise:
+//   - When the report carries a specific rationale (cites a commit SHA or test
+//     name), the bead is closed as already_satisfied on the first occurrence.
+//   - Otherwise the default count-based rule applies (close after maxNoChangesBeforeClose).
+func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID string, noChangesCount, maxNoChangesBeforeClose int, rationale string) (bool, string, error) {
 	if w.SatisfactionChecker != nil {
 		return w.SatisfactionChecker.CheckSatisfied(ctx, beadID, noChangesCount)
+	}
+	if rationaleIsSpecific(rationale) {
+		evidence := rationale
+		return true, evidence, nil
 	}
 	if noChangesCount >= maxNoChangesBeforeClose {
 		return true, fmt.Sprintf("no_changes on %d consecutive attempt(s); bead treated as already satisfied", noChangesCount), nil
