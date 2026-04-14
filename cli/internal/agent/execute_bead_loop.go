@@ -68,6 +68,30 @@ type ExecuteBeadLoopStore interface {
 	IncrNoChangesCount(id string) (int, error)
 }
 
+// ProgressEvent is the FEAT-006 structured progress event. It is defined
+// separately in the server package (server.ProgressEvent); this alias lets
+// the agent package emit events without importing the server package.
+// The field names and types are identical — the server package deserialises
+// these directly from the channel.
+//
+// Terminal phases: done, preserved, failed.
+type ProgressEvent struct {
+	EventID   string    `json:"event_id"`
+	AttemptID string    `json:"attempt_id"`
+	WorkerID  string    `json:"worker_id"`
+	ProjectID string    `json:"project_id"`
+	BeadID    string    `json:"bead_id"`
+	Harness   string    `json:"harness,omitempty"`
+	Model     string    `json:"model,omitempty"`
+	Profile   string    `json:"profile,omitempty"`
+	Phase     string    `json:"phase"`
+	PhaseSeq  int       `json:"phase_seq"`
+	Heartbeat bool      `json:"heartbeat"`
+	TS        time.Time `json:"ts"`
+	ElapsedMS int64     `json:"elapsed_ms"`
+	Message   string    `json:"message,omitempty"`
+}
+
 type ExecuteBeadLoopOptions struct {
 	Assignee                string
 	Once                    bool
@@ -84,6 +108,13 @@ type ExecuteBeadLoopOptions struct {
 	// When nil, no structured events are written. Log (terminal text)
 	// is independent and still emitted for human operators.
 	EventSink io.Writer
+
+	// ProgressCh, when non-nil, receives FEAT-006 ProgressEvents for each
+	// bead execution managed by this loop. The caller is responsible for
+	// draining the channel; the loop sends non-blocking (events are dropped
+	// if the channel is full). The loop does NOT close this channel; the
+	// caller (WorkerManager.runWorker) closes it after Run returns.
+	ProgressCh chan<- ProgressEvent
 
 	// Worker/session metadata included in loop.start events so log
 	// aggregators can correlate structured output with the executing
@@ -113,6 +144,40 @@ type ExecuteBeadWorker struct {
 	Executor            ExecuteBeadExecutor
 	SatisfactionChecker SatisfactionChecker // nil → count-based default
 	Now                 func() time.Time
+}
+
+// emitProgress sends a ProgressEvent to opts.ProgressCh non-blocking.
+// If ch is nil or full the event is silently dropped.
+func emitProgress(ch chan<- ProgressEvent, evt ProgressEvent) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- evt:
+	default:
+	}
+}
+
+// newProgressEvent builds a ProgressEvent with a random event_id and current timestamp.
+func newProgressEvent(workerID, projectID, beadID, attemptID, phase string, phaseSeq int, heartbeat bool, elapsedMS int64, opts ExecuteBeadLoopOptions) ProgressEvent {
+	return ProgressEvent{
+		EventID:   "evt-" + randomProgressID(),
+		AttemptID: attemptID,
+		WorkerID:  workerID,
+		ProjectID: projectID,
+		BeadID:    beadID,
+		Harness:   opts.Harness,
+		Model:     opts.Model,
+		Phase:     phase,
+		PhaseSeq:  phaseSeq,
+		Heartbeat: heartbeat,
+		TS:        time.Now().UTC(),
+		ElapsedMS: elapsedMS,
+	}
+}
+
+func randomProgressID() string {
+	return fmt.Sprintf("%x", time.Now().UnixNano())[:8]
 }
 
 func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions) (*ExecuteBeadLoopResult, error) {
@@ -214,6 +279,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			}
 		}
 
+		// Generate a provisional attempt_id for progress events.
+		// The real attempt_id is assigned inside ExecuteBead; we use this
+		// for queueing/running events and replace with the real one once known.
+		provAttemptID := time.Now().UTC().Format("20060102T150405") + "-" + randomProgressID()
+		runStart := now()
+		phaseSeq := 0
+		nextPhase := func(phase string, heartbeat bool) {
+			phaseSeq++
+			emitProgress(opts.ProgressCh, newProgressEvent(
+				opts.WorkerID, opts.ProjectRoot, candidate.ID, provAttemptID,
+				phase, phaseSeq, heartbeat, now().Sub(runStart).Milliseconds(), opts,
+			))
+		}
+
+		nextPhase("queueing", false)
+
 		hbCtx, hbCancel := context.WithCancel(ctx)
 		var hbWG sync.WaitGroup
 		hbWG.Add(1)
@@ -231,7 +312,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			}
 		}(candidate.ID)
 
-		runStart := now()
+		nextPhase("running", false)
+
 		report, err := w.Executor.Execute(ctx, candidate.ID)
 		hbCancel()
 		hbWG.Wait()
@@ -318,6 +400,35 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
 			return result, err
 		}
+
+		// Emit terminal progress phase event.
+		terminalPhase := "failed"
+		if report.Status == ExecuteBeadStatusSuccess || report.Status == ExecuteBeadStatusAlreadySatisfied {
+			terminalPhase = "done"
+		} else if report.PreserveRef != "" {
+			terminalPhase = "preserved"
+		}
+		// Use the real attempt_id from the report if available.
+		finalAttemptID := report.AttemptID
+		if finalAttemptID == "" {
+			finalAttemptID = provAttemptID
+		}
+		phaseSeq++
+		emitProgress(opts.ProgressCh, ProgressEvent{
+			EventID:   "evt-" + randomProgressID(),
+			AttemptID: finalAttemptID,
+			WorkerID:  opts.WorkerID,
+			ProjectID: opts.ProjectRoot,
+			BeadID:    candidate.ID,
+			Harness:   opts.Harness,
+			Model:     opts.Model,
+			Phase:     terminalPhase,
+			PhaseSeq:  phaseSeq,
+			Heartbeat: false,
+			TS:        now().UTC(),
+			ElapsedMS: now().Sub(runStart).Milliseconds(),
+			Message:   report.Detail,
+		})
 
 		emit("bead.result", map[string]any{
 			"bead_id":      candidate.ID,

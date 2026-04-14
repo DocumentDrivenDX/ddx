@@ -28,29 +28,72 @@ type ExecuteLoopWorkerSpec struct {
 	PollInterval time.Duration `json:"poll_interval,omitempty"`
 }
 
+// Terminal phases per FEAT-006.
+var terminalPhases = map[string]bool{
+	"done":      true,
+	"preserved": true,
+	"failed":    true,
+}
+
+// CurrentAttemptInfo is the in-flight attempt summary embedded in WorkerRecord.
+type CurrentAttemptInfo struct {
+	AttemptID string    `json:"attempt_id"`
+	BeadID    string    `json:"bead_id"`
+	BeadTitle string    `json:"bead_title,omitempty"`
+	Harness   string    `json:"harness,omitempty"`
+	Model     string    `json:"model,omitempty"`
+	Profile   string    `json:"profile,omitempty"`
+	Phase     string    `json:"phase"`
+	PhaseSeq  int       `json:"phase_seq"`
+	StartedAt time.Time `json:"started_at"`
+	ElapsedMS int64     `json:"elapsed_ms"`
+}
+
+// PhaseTransition is one phase-transition entry in WorkerRecord.RecentPhases.
+// Only phase-transition events (heartbeat=false) are stored here; heartbeats
+// are not retained.
+type PhaseTransition struct {
+	Phase    string    `json:"phase"`
+	TS       time.Time `json:"ts"`
+	PhaseSeq int       `json:"phase_seq"`
+}
+
+// LastAttemptInfo summarises the most recently completed attempt.
+type LastAttemptInfo struct {
+	AttemptID string    `json:"attempt_id"`
+	BeadID    string    `json:"bead_id"`
+	Phase     string    `json:"phase"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at"`
+	ElapsedMS int64     `json:"elapsed_ms"`
+}
+
 type WorkerRecord struct {
-	ID           string                 `json:"id"`
-	Kind         string                 `json:"kind"`
-	State        string                 `json:"state"`
-	Status       string                 `json:"status,omitempty"`
-	ProjectRoot  string                 `json:"project_root"`
-	Harness      string                 `json:"harness,omitempty"`
-	Provider     string                 `json:"provider,omitempty"`
-	Model        string                 `json:"model,omitempty"`
-	Effort       string                 `json:"effort,omitempty"`
-	Once         bool                   `json:"once,omitempty"`
-	PollInterval string                 `json:"poll_interval,omitempty"`
-	StartedAt    time.Time              `json:"started_at,omitempty"`
-	FinishedAt   time.Time              `json:"finished_at,omitempty"`
-	Error        string                 `json:"error,omitempty"`
-	StdoutPath   string                 `json:"stdout_path,omitempty"`
-	SpecPath     string                 `json:"spec_path,omitempty"`
-	Attempts     int                    `json:"attempts,omitempty"`
-	Successes    int                    `json:"successes,omitempty"`
-	Failures     int                    `json:"failures,omitempty"`
-	CurrentBead  string                 `json:"current_bead,omitempty"`
-	LastError    string                 `json:"last_error,omitempty"`
-	LastResult   *WorkerExecutionResult `json:"last_result,omitempty"`
+	ID             string                 `json:"id"`
+	Kind           string                 `json:"kind"`
+	State          string                 `json:"state"`
+	Status         string                 `json:"status,omitempty"`
+	ProjectRoot    string                 `json:"project_root"`
+	Harness        string                 `json:"harness,omitempty"`
+	Provider       string                 `json:"provider,omitempty"`
+	Model          string                 `json:"model,omitempty"`
+	Effort         string                 `json:"effort,omitempty"`
+	Once           bool                   `json:"once,omitempty"`
+	PollInterval   string                 `json:"poll_interval,omitempty"`
+	StartedAt      time.Time              `json:"started_at,omitempty"`
+	FinishedAt     time.Time              `json:"finished_at,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+	StdoutPath     string                 `json:"stdout_path,omitempty"`
+	SpecPath       string                 `json:"spec_path,omitempty"`
+	Attempts       int                    `json:"attempts,omitempty"`
+	Successes      int                    `json:"successes,omitempty"`
+	Failures       int                    `json:"failures,omitempty"`
+	CurrentBead    string                 `json:"current_bead,omitempty"`
+	LastError      string                 `json:"last_error,omitempty"`
+	LastResult     *WorkerExecutionResult `json:"last_result,omitempty"`
+	CurrentAttempt *CurrentAttemptInfo    `json:"current_attempt,omitempty"`
+	RecentPhases   []PhaseTransition      `json:"recent_phases,omitempty"`
+	LastAttempt    *LastAttemptInfo       `json:"last_attempt,omitempty"`
 }
 
 type WorkerExecutionResult struct {
@@ -73,6 +116,16 @@ type workerHandle struct {
 	cancel  context.CancelFunc
 	logBuf  *bytes.Buffer
 	logFile *os.File
+	// progressCh receives ProgressEvents from the execute-bead loop.
+	// The WorkerManager drains this channel to update WorkerRecord and
+	// broadcast to SSE subscribers.
+	progressCh chan agent.ProgressEvent
+	// progressSubs holds active SSE subscriber channels for this worker.
+	progressSubs []chan agent.ProgressEvent
+	// progressDone is closed when drainProgress exits, signalling that
+	// no further events will arrive and all new subscriptions should
+	// receive an immediately-closed channel.
+	progressDone chan struct{}
 }
 
 // WorkerManager manages in-process execute-loop workers as goroutines.
@@ -148,23 +201,27 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	logBuf := &bytes.Buffer{}
 	multiLog := io.MultiWriter(logBuf, logFile)
 
+	progressCh := make(chan agent.ProgressEvent, 64)
 	handle := &workerHandle{
-		record:  record,
-		cancel:  cancel,
-		logBuf:  logBuf,
-		logFile: logFile,
+		record:       record,
+		cancel:       cancel,
+		logBuf:       logBuf,
+		logFile:      logFile,
+		progressCh:   progressCh,
+		progressDone: make(chan struct{}),
 	}
 
 	m.mu.Lock()
 	m.workers[id] = handle
 	m.mu.Unlock()
 
-	go m.runWorker(ctx, id, dir, spec, handle, multiLog, eventsFile)
+	go m.drainProgress(id, handle, progressCh)
+	go m.runWorker(ctx, id, dir, spec, handle, multiLog, eventsFile, progressCh)
 
 	return record, nil
 }
 
-func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, handle *workerHandle, log io.Writer, eventSink io.WriteCloser) {
+func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
 	}
@@ -214,7 +271,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ProjectRoot:  m.projectRoot,
 		Harness:      spec.Harness,
 		Model:        spec.Model,
+		ProgressCh:   progressCh,
 	})
+	// Signal end of progress events so drainProgress can finish
+	close(progressCh)
 
 	m.mu.Lock()
 	record := handle.record
@@ -419,6 +479,145 @@ func (m *WorkerManager) Logs(id string) (string, string, error) {
 		return "", "", err
 	}
 	return string(data), "", nil
+}
+
+// drainProgress reads ProgressEvents from ch and:
+//  1. Updates the WorkerRecord's CurrentAttempt, RecentPhases, and LastAttempt fields.
+//  2. Broadcasts each event to all active SSE subscribers for the worker.
+//
+// It runs as a goroutine alongside runWorker; it exits when ch is closed.
+func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch <-chan agent.ProgressEvent) {
+	const maxRecentPhases = 20
+	for evt := range ch {
+		m.mu.Lock()
+		rec := handle.record
+
+		if !evt.Heartbeat {
+			// Phase-transition: record in RecentPhases (capped at maxRecentPhases)
+			rec.RecentPhases = append(rec.RecentPhases, PhaseTransition{
+				Phase:    evt.Phase,
+				TS:       evt.TS,
+				PhaseSeq: evt.PhaseSeq,
+			})
+			if len(rec.RecentPhases) > maxRecentPhases {
+				rec.RecentPhases = rec.RecentPhases[len(rec.RecentPhases)-maxRecentPhases:]
+			}
+		}
+
+		if terminalPhases[evt.Phase] {
+			// Move CurrentAttempt → LastAttempt
+			if rec.CurrentAttempt != nil {
+				rec.LastAttempt = &LastAttemptInfo{
+					AttemptID: rec.CurrentAttempt.AttemptID,
+					BeadID:    rec.CurrentAttempt.BeadID,
+					Phase:     evt.Phase,
+					StartedAt: rec.CurrentAttempt.StartedAt,
+					EndedAt:   evt.TS,
+					ElapsedMS: evt.ElapsedMS,
+				}
+			}
+			rec.CurrentAttempt = nil
+		} else {
+			// Update or initialise CurrentAttempt
+			if rec.CurrentAttempt == nil {
+				rec.CurrentAttempt = &CurrentAttemptInfo{
+					AttemptID: evt.AttemptID,
+					BeadID:    evt.BeadID,
+					StartedAt: evt.TS,
+				}
+			}
+			rec.CurrentAttempt.AttemptID = evt.AttemptID
+			rec.CurrentAttempt.BeadID = evt.BeadID
+			rec.CurrentAttempt.Phase = evt.Phase
+			rec.CurrentAttempt.PhaseSeq = evt.PhaseSeq
+			rec.CurrentAttempt.ElapsedMS = evt.ElapsedMS
+			if evt.Harness != "" {
+				rec.CurrentAttempt.Harness = evt.Harness
+			}
+			if evt.Model != "" {
+				rec.CurrentAttempt.Model = evt.Model
+			}
+			if evt.Profile != "" {
+				rec.CurrentAttempt.Profile = evt.Profile
+			}
+		}
+
+		handle.record = rec
+
+		// Broadcast to SSE subscribers (non-blocking; slow subscribers are dropped)
+		subs := handle.progressSubs
+		m.mu.Unlock()
+
+		for _, sub := range subs {
+			select {
+			case sub <- evt:
+			default:
+				// Subscriber channel full — skip rather than block
+			}
+		}
+	}
+
+	// Channel closed: clear CurrentAttempt if still set (worker exited)
+	m.mu.Lock()
+	if handle.record.CurrentAttempt != nil {
+		handle.record.CurrentAttempt = nil
+	}
+	// Close and remove all subscriber channels
+	for _, sub := range handle.progressSubs {
+		close(sub)
+	}
+	handle.progressSubs = nil
+	m.mu.Unlock()
+
+	// Signal that no further events will arrive
+	if handle.progressDone != nil {
+		close(handle.progressDone)
+	}
+}
+
+// SubscribeProgress returns a channel that receives ProgressEvents for the
+// given worker, plus an unsubscribe function. If the worker is not active or
+// has already finished, the returned channel is pre-closed so SSE handlers
+// can detect idle/done state immediately.
+func (m *WorkerManager) SubscribeProgress(workerID string) (<-chan agent.ProgressEvent, func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	handle, ok := m.workers[workerID]
+	if !ok {
+		// Worker never started or was never registered
+		ch := make(chan agent.ProgressEvent)
+		close(ch)
+		return ch, func() {}
+	}
+
+	// Check if drainProgress has already exited (worker done)
+	if handle.progressDone != nil {
+		select {
+		case <-handle.progressDone:
+			ch := make(chan agent.ProgressEvent)
+			close(ch)
+			return ch, func() {}
+		default:
+		}
+	}
+
+	ch := make(chan agent.ProgressEvent, 64)
+	handle.progressSubs = append(handle.progressSubs, ch)
+
+	unsub := func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if h, ok := m.workers[workerID]; ok {
+			for i, sub := range h.progressSubs {
+				if sub == ch {
+					h.progressSubs = append(h.progressSubs[:i], h.progressSubs[i+1:]...)
+					break
+				}
+			}
+		}
+	}
+	return ch, unsub
 }
 
 // readActiveSessionLog reads the latest session log entries for an active worker.
