@@ -69,8 +69,16 @@ func NewRunner(cfg Config) *Runner {
 	if cfg.SessionLogDir == "" {
 		cfg.SessionLogDir = DefaultLogDir
 	}
-	// Start with built-in catalog, then overlay user's model-catalog.yaml if present.
+	// Build the effective catalog in precedence order (lowest to highest priority):
+	//   1. Built-in seed (DefaultModelCatalogYAML — deterministic fallback for smart/standard/cheap)
+	//   2. Shared ddx-agent catalog (~/.config/agent/models.yaml — authoritative when installed)
+	//   3. User overrides (~/.ddx/model-catalog.yaml — user wins over shared and built-in)
 	catalog := BuiltinCatalog
+	if path := SharedCatalogPath(); path != "" {
+		if m, err := LoadSharedCatalog(path); err == nil && m != nil {
+			ApplySharedCatalog(catalog, m)
+		}
+	}
 	if path := DefaultModelCatalogPath(); path != "" {
 		if yml, err := LoadModelCatalogYAML(path); err == nil && yml != nil {
 			ApplyModelCatalogYAML(catalog, yml)
