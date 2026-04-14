@@ -7,6 +7,7 @@ import Graph from './pages/Graph'
 import Agent from './pages/Agent'
 import Personas from './pages/Personas'
 import Workers from './pages/Workers'
+import NodeAgents from './pages/NodeAgents'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/agent" element={<Agent />} />
         <Route path="/personas" element={<Personas />} />
         <Route path="/workers" element={<Workers />} />
+        <Route path="/nodes/:nodeId/agents" element={<NodeAgents />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

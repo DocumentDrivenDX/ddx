@@ -1594,12 +1594,35 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
-	workers, err := s.workers.List()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+	projects := s.state.GetProjects()
+
+	var all []WorkerRecord
+	seen := map[string]bool{}
+
+	for _, proj := range projects {
+		var m *WorkerManager
+		if proj.Path == s.WorkingDir {
+			m = s.workers
+		} else {
+			m = NewWorkerManager(proj.Path)
+		}
+		recs, err := m.List()
+		if err != nil {
+			continue
+		}
+		for _, rec := range recs {
+			if !seen[rec.ID] {
+				all = append(all, rec)
+				seen[rec.ID] = true
+			}
+		}
 	}
-	writeJSON(w, http.StatusOK, workers)
+
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].StartedAt.After(all[j].StartedAt)
+	})
+
+	writeJSON(w, http.StatusOK, all)
 }
 
 func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Request) {
