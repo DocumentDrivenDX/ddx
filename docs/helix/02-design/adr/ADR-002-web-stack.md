@@ -31,7 +31,7 @@ REST API remains unchanged for CLI/MCP compatibility; GraphQL is the preferred p
 
 **SvelteKit** is the official framework for building user interfaces with Svelte.
 
-- **Svelte 5 runes:** `$props()`, `$state()`, `derived` for reactive state
+- **Svelte 5 runes:** `$props()`, `$state()`, `derived` for state management
 - **adapter-static:** Builds to static files served by Go via `//go:embed`
 - **URL scheme:** `/nodes/:nodeId/projects/:projectId/*` — implemented fresh
 - **Houdini:** First-class GraphQL client for SvelteKit with typed `load()` functions
@@ -39,7 +39,7 @@ REST API remains unchanged for CLI/MCP compatibility; GraphQL is the preferred p
 Svelte 5 offers:
 - Compacted runtime
 - Compile-time optimizations (no virtual DOM)
-- Simpler mental model for reactivity
+- Simpler mental model to state management
 
 ### 3. Runtime: Bun
 
