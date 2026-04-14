@@ -449,6 +449,24 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 	if runCfg.MaxIterations == 0 {
 		runCfg.MaxIterations = 100
 	}
+
+	// Apply AGENT_* env vars as overrides — same precedence as the .ddx fallback path.
+	if v := os.Getenv("AGENT_PROVIDER"); v != "" {
+		runCfg.Provider = v
+	}
+	if v := os.Getenv("AGENT_BASE_URL"); v != "" {
+		runCfg.BaseURL = v
+	}
+	if v := os.Getenv("AGENT_API_KEY"); v != "" {
+		runCfg.APIKey = v
+	}
+	if v := os.Getenv("AGENT_MODEL"); v != "" {
+		runCfg.Model = v
+	}
+	if v := os.Getenv("AGENT_PRESET"); v != "" {
+		runCfg.Preset = v
+	}
+
 	if !containsString(prompt.PresetNames(), runCfg.Preset) {
 		return nil, fmt.Errorf("agent: unsupported preset %q; supported presets: %s", runCfg.Preset, strings.Join(prompt.PresetNames(), ", "))
 	}

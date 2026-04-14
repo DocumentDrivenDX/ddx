@@ -701,8 +701,7 @@ default: openrouter
 }
 
 // TestConfigPrecedenceEnvVarAppliesInDdxFallbackPath documents that AGENT_MODEL
-// env var is respected in the .ddx/config.yaml fallback path but NOT when native
-// .agent/config.yaml is present. This is a known gap — see the removal bead.
+// env var is respected in the .ddx/config.yaml fallback path.
 func TestConfigPrecedenceEnvVarAppliesInDdxFallbackPath(t *testing.T) {
 	isolateNativeAgentHome(t)
 	t.Setenv("AGENT_MODEL", "env-override-model")
@@ -728,6 +727,37 @@ func TestConfigPrecedenceEnvVarAppliesInDdxFallbackPath(t *testing.T) {
 	assert.Equal(t, "env-override-model", cfg.Model, "AGENT_MODEL env var must override .ddx agent_runner model")
 	assert.Equal(t, "http://env-endpoint:1234/v1", cfg.BaseURL, "AGENT_BASE_URL env var must override .ddx agent_runner base_url")
 	_ = wd
+}
+
+// TestConfigPrecedenceEnvVarAppliesInNativePath verifies that AGENT_* env vars
+// override values resolved from the native ~/.config/agent/config.yaml path.
+// This is the fix for bead ddx-a3b1c8d2.
+func TestConfigPrecedenceEnvVarAppliesInNativePath(t *testing.T) {
+	isolateNativeAgentHome(t)
+	t.Setenv("AGENT_MODEL", "env-override-model")
+	t.Setenv("AGENT_BASE_URL", "http://env-endpoint:1234/v1")
+
+	wd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, ".agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, ".agent", "config.yaml"), []byte(`
+providers:
+  openrouter:
+    type: openai-compat
+    base_url: https://openrouter.ai/api/v1
+    api_key: sk-native
+    model: native/config-model
+default: openrouter
+`), 0o644))
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()})
+	r.LookPath = mockLookPath
+
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	// AGENT_MODEL and AGENT_BASE_URL must override the native config values.
+	assert.Equal(t, "env-override-model", resolved.Config.Model, "AGENT_MODEL env var must override native config model")
+	assert.Equal(t, "http://env-endpoint:1234/v1", resolved.Config.BaseURL, "AGENT_BASE_URL env var must override native config base_url")
 }
 
 // TestConfigPrecedenceNativeConfigAbsentFallsToDdx verifies that when no native
