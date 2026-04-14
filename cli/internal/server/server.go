@@ -385,6 +385,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
 	s.mux.HandleFunc("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
 	s.mux.HandleFunc("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
+	s.mux.HandleFunc("GET /api/agent/coordinators", s.handleAgentCoordinators)
 
 	// Project-scoped worker endpoints (FEAT-002 §22-24)
 	s.mux.HandleFunc("GET /api/projects/{project}/workers", s.handleProjectWorkerList)
@@ -1636,6 +1637,10 @@ func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, all)
 }
 
+func (s *Server) handleAgentCoordinators(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.workers.LandCoordinators.AllMetrics())
+}
+
 func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Request) {
 	if !isTrusted(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
@@ -1685,6 +1690,13 @@ func (s *Server) handleAgentWorkerShow(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
+	}
+	// Attach coordinator land summary for this worker's project.
+	if record.ProjectRoot != "" {
+		metrics := s.workers.LandCoordinators.MetricsFor(record.ProjectRoot)
+		if metrics != nil {
+			record.LandSummary = metrics
+		}
 	}
 	writeJSON(w, http.StatusOK, record)
 }
