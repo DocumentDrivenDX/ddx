@@ -4,6 +4,7 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-002
+    - FEAT-014
 ---
 # Feature: DDx Server Web UI
 
@@ -240,7 +241,63 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    - Allows the user to inspect the final epic merge candidate and merge-gate
      results before the merge commit is created
 
-7. **Persona viewer**
+7. **Provider / Harness Dashboard**
+
+   A dedicated page — separate from the status dashboard, agent log monitor,
+   and worker progress view — that gives operators a clear picture of
+   configured providers and the routing signals DDx uses to make harness
+   decisions.
+
+   **Provider list panel (left/top):**
+   - One row per configured harness (claude, codex, opencode, gemini, …)
+   - Columns: harness name, display name, availability badge (`available` |
+     `unavailable` | `unknown`), auth state badge, quota/headroom pill
+     (`ok` | `blocked` | `unknown`), cost class, freshness timestamp
+   - Searchable by harness name, model, status, or cost class
+   - Sortable by any column; default sort by availability, then name
+   - Filter chips: availability status, auth state, quota state, signal source
+   - All data fetched from `GET /api/providers` on load; auto-refreshes on a
+     configurable interval (default 60 s)
+
+   **Provider detail panel (right/bottom, shown on row click):**
+   - Full routing signal snapshot for the selected harness
+   - Per-model quota/headroom with source attribution and `unknown` when no
+     stable live source exists
+   - Historical usage table: 7-day and 30-day windows for input/output/total
+     tokens and cost; `unknown` rendered as `—` not `0`
+   - Burn estimate row: daily token rate, subscription burn class, confidence
+     label (`high` / `medium` / `low`), freshness timestamp
+   - Performance signals: p50/p95 latency, success rate, sample count, window
+   - Signal source provenance list: which sources contributed to this snapshot
+     (e.g. `stats-cache`, `native-session-jsonl`, `ddx-metrics`, `none`)
+   - Data fetched from `GET /api/providers/:harness` on panel open
+
+   **Unknown-state semantics:**
+   - `unknown` values are rendered with an explicit `—` or "unknown" label
+     and a tooltip explaining why (e.g., "no stable non-PTY quota source
+     confirmed for Claude")
+   - Fields from provider-native sources are labeled "provider-reported"
+   - Fields derived by DDx from observed metrics are labeled "DDx-estimated"
+   - Fields that are genuinely absent carry a `?` badge, not a synthesized `0`
+
+   **Relationship to other views:**
+   - Provider dashboard is host+user global (not project-scoped); it is
+     accessible from the top-level navigation bar alongside the project picker
+   - The status dashboard worker cards link to worker detail and the agent log
+     monitor — not to the provider dashboard
+   - The agent log monitor session detail links to the provider dashboard for
+     the harness used in that invocation (via harness name)
+   - The routing diagnostics command (`ddx agent doctor --routing`) is the
+     CLI surface for the same data; the dashboard is the browser surface
+   - The provider dashboard does NOT embed worker progress, bead state, or
+     execution history; those live in their own dedicated views
+
+   **Reporting and export:**
+   - "Copy JSON" action on the detail panel copies the `GET /api/providers/:harness`
+     response verbatim — useful for bug reports and operator audits
+   - Time-window selector (7d / 30d / custom) scopes the historical usage table
+
+8. **Persona viewer**
    - Browse personas with descriptions and tags
    - See which roles each persona is bound to in project config
    - View full persona content rendered as markdown
@@ -413,6 +470,56 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 - Given I expand a worker card for a completed attempt, then I see a link to
   the execution evidence bundle for that attempt
 
+### US-087: Operator Inspects Provider Availability and Routing Signals
+**As an** operator about to queue a batch of agent work
+**I want** to see configured providers with their availability, auth state,
+  and quota/headroom at a glance
+**So that** I can choose which harnesses are viable before dispatching
+
+**Acceptance Criteria:**
+- Given providers are configured, when I open the Provider Dashboard, then I
+  see one row per harness with availability, auth state, and quota/headroom badges
+- Given a provider's quota/headroom has no stable live source, then the badge
+  shows "unknown" with a tooltip — not a fabricated `ok` or `blocked` value
+- Given I click a row, then the detail panel opens showing the full routing
+  signal snapshot with source attribution and freshness timestamp
+- Given I click the harness link in the agent log monitor for an invocation,
+  then I navigate to that harness's detail in the Provider Dashboard
+
+### US-088: Operator Reviews Provider Utilization and Burn Rate
+**As an** operator tracking subscription usage
+**I want** to see historical token consumption, burn rate, and confidence level
+  for each configured provider
+**So that** I can balance load across providers and anticipate quota pressure
+
+**Acceptance Criteria:**
+- Given a provider has DDx-observed or provider-native usage history, when I
+  view its detail panel, then I see a 7-day and 30-day usage table with
+  input/output/total tokens and cost where known
+- Given a token or cost field has no trustworthy source, then it renders as `—`
+  not `0` or a fabricated value
+- Given a burn estimate exists, then the detail panel shows the daily token rate,
+  subscription burn class, confidence label, and the timestamp of the last
+  contributing signal
+- Given I want to share a provider's signal state with a colleague, then I can
+  use "Copy JSON" to get the raw API response for the selected harness
+
+### US-088b: Operator Distinguishes Source Types in Provider Detail
+**As an** operator debugging a routing decision
+**I want** to know whether each signal field came from the provider directly,
+  DDx estimation, or is unknown
+**So that** I can trust or question the data DDx is routing on
+
+**Acceptance Criteria:**
+- Given a field came from a provider-native source (e.g. `stats-cache`), then
+  a "provider-reported" label or badge is shown
+- Given a field was derived by DDx from observed invocation metrics, then a
+  "DDx-estimated" label is shown
+- Given no source exists for a field, then a `?` badge appears — no `0` or
+  inferred value is displayed
+- Given I hover a `?` or "unknown" badge, then a tooltip explains why the
+  value is unavailable (e.g. "no stable non-PTY quota source confirmed")
+
 ### US-086: Developer Monitors Agent Activity in Real Time
 **As a** developer running agents against my project
 **I want** to see agent invocations as they happen with routing metadata and
@@ -428,6 +535,96 @@ provider logs
 - Given I filter by harness, then only invocations for that harness are shown
 - Given I look at the summary, then I see total tokens consumed by harness and
   by day where a signal source exists
+
+## Provider Dashboard: Playwright Fixture Scenarios
+
+The provider dashboard has deterministic fixture data requirements so that
+Playwright tests can cover all meaningful display states without live provider
+credentials. The fixture layer is a static JSON handler mounted at
+`/api/providers` and `/api/providers/:harness` during test runs. Each scenario
+below defines the fixture variant and the expected rendered state.
+
+### Fixture Scenarios
+
+**Scenario 1 — all-healthy (green path)**
+
+Provider list returns two harnesses, both `available` + `authenticated` +
+`quota_headroom: ok`. Detail panel shows populated 7d/30d usage, burn estimate
+with `confidence: high`, and `signal_sources: ["native-session-jsonl", "ddx-metrics"]`.
+Expected: all badges green, no `?` badges, no unknown labels.
+
+```json
+[
+  {
+    "harness": "codex", "status": "available", "auth_state": "authenticated",
+    "quota_headroom": "ok", "cost_class": "subscription",
+    "signal_sources": ["native-session-jsonl", "ddx-metrics"],
+    "freshness_ts": "2026-04-14T05:00:00Z",
+    "recent_success_rate": 0.99, "recent_latency_p50_ms": 3100
+  },
+  {
+    "harness": "claude", "status": "available", "auth_state": "authenticated",
+    "quota_headroom": "ok", "cost_class": "subscription",
+    "signal_sources": ["stats-cache", "ddx-metrics"],
+    "freshness_ts": "2026-04-14T05:00:00Z",
+    "recent_success_rate": 0.97, "recent_latency_p50_ms": 4200
+  }
+]
+```
+
+**Scenario 2 — quota unknown (common real-world state for Claude)**
+
+Claude harness has `quota_headroom: unknown` because no stable non-PTY quota
+source exists. Codex is `quota_headroom: ok`. Expected: Claude row shows an
+"unknown" pill with tooltip "no stable non-PTY quota source confirmed". All
+other state fields are populated.
+
+**Scenario 3 — provider unavailable**
+
+One harness has `status: unavailable` and `auth_state: unauthenticated`.
+Expected: row shows red "unavailable" badge and gray "unauthenticated" badge.
+Detail panel shows empty usage tables with `—` cells and a signal source list
+of `["none"]`.
+
+**Scenario 4 — stale signals / low-confidence burn**
+
+Provider is available and authenticated, but `freshness_ts` is 48 hours ago
+and `burn_estimate.confidence` is `low`. Expected: freshness timestamp renders
+with a "stale" indicator; burn estimate row shows `confidence: low` label.
+
+**Scenario 5 — all unknown (offline / fresh install)**
+
+Provider list returns one harness with `status: unknown`, `auth_state: unknown`,
+`quota_headroom: unknown`, `signal_sources: ["none"]`. Expected: every badge
+shows "unknown" or `—`; no zeros appear in usage tables; tooltip text explains
+each unknown field.
+
+**Scenario 6 — search and filter**
+
+Provider list returns five harnesses with mixed statuses. Test: entering a
+search term filters the list in real time (client-side); selecting a filter
+chip for `status: available` hides unavailable rows; clearing chips restores
+the full list.
+
+### Fixture File Layout
+
+```
+cli/internal/server/frontend/
+└── src/
+    └── testing/
+        └── fixtures/
+            └── providers/
+                ├── all-healthy.json
+                ├── quota-unknown.json
+                ├── provider-unavailable.json
+                ├── stale-signals.json
+                └── all-unknown.json
+```
+
+Playwright tests mount the appropriate fixture via MSW (Mock Service Worker)
+request handlers before each scenario. The fixture format matches the
+`/api/providers` and `/api/providers/:harness` response shapes defined in
+FEAT-002.
 
 ## Implementation Notes
 
@@ -489,18 +686,28 @@ ddx/
                 │   │   ├── Graph.tsx
                 │   │   ├── Beads.tsx
                 │   │   ├── Agent.tsx
+                │   │   ├── Providers.tsx      ← provider/harness dashboard
                 │   │   └── Personas.tsx
+                │   ├── testing/
+                │   │   └── fixtures/
+                │   │       └── providers/     ← Playwright fixture JSON
                 │   └── components/
                 └── dist/          # Build output (embedded into Go)
 ```
 
 ## Dependencies
 
-- FEAT-002 (DDx server HTTP/MCP API) — the web UI consumes the same API
+- FEAT-002 (DDx server HTTP/MCP API) — the web UI consumes the same API;
+  `/api/providers` and `/api/providers/:harness` back the provider dashboard
 - FEAT-004 (Beads) — for bead board
 - FEAT-007 (Doc graph) — for dependency graph visualization
 - FEAT-006 (Agent service) — for agent activity and invocation detail
+- FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
+  signal model, unknown-state semantics, and freshness conventions consumed
+  by the provider dashboard
 - Vite, TypeScript, React, TanStack Query, D3.js or Cytoscape.js
+- MSW (Mock Service Worker) — for Playwright fixture mounting in provider
+  dashboard tests
 - Go embed.FS, Chi or net/http, mcp-go
 
 ## Out of Scope

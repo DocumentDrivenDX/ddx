@@ -213,6 +213,97 @@ shape for the in-flight attempt, enabling a single read model across CLI and UI)
 capped at the last 20 entries. This is the shared read model for both the CLI
 `ddx agent log --worker` command and the UI status dashboard worker cards.
 
+**Provider Availability and Utilization (FEAT-014)**
+
+The provider dashboard endpoints expose the same normalized routing signal model that `ddx agent run` uses for harness selection. They are read-only; all signal data is derived from provider-native sources and DDx-observed metrics, never fabricated. Unknown values are surfaced as `unknown`, not omitted.
+
+26. `GET /api/providers` — list all configured harnesses with current routing availability, auth/health state, quota/headroom, and signal freshness; not scoped to a project (provider config is host+user global, shared across projects). Response is an array of provider summary objects.
+27. `GET /api/providers/:harness` — detail for one harness: full routing signal snapshot, per-model quota/headroom when available, historical usage summary (last 7d / 30d), recent latency/success rates, burn estimate, and freshness timestamps with source attribution.
+
+Provider summary object (list response):
+
+```json
+{
+  "harness":        "claude",
+  "display_name":   "Claude (Anthropic)",
+  "status":         "available",
+  "auth_state":     "authenticated",
+  "quota_headroom": "unknown",
+  "signal_sources": ["stats-cache"],
+  "freshness_ts":   "2026-04-14T05:00:00Z",
+  "last_checked_ts":"2026-04-14T05:00:00Z",
+  "recent_success_rate": 0.97,
+  "recent_latency_p50_ms": 4200,
+  "cost_class":     "subscription"
+}
+```
+
+Provider detail object (`/api/providers/:harness`):
+
+```json
+{
+  "harness":        "claude",
+  "display_name":   "Claude (Anthropic)",
+  "status":         "available",
+  "auth_state":     "authenticated",
+  "models": [
+    {
+      "model":          "claude-sonnet-4-6",
+      "quota_headroom": "unknown",
+      "source":         "none",
+      "source_note":    "no stable non-PTY quota source confirmed"
+    }
+  ],
+  "historical_usage": {
+    "window_7d": {
+      "input_tokens":  420000,
+      "output_tokens": 38000,
+      "total_tokens":  458000,
+      "cost_usd":      0,
+      "cost_note":     "subscription plan; per-token cost not billed"
+    },
+    "window_30d": {
+      "input_tokens":  1800000,
+      "output_tokens": 160000,
+      "total_tokens":  1960000,
+      "cost_usd":      0
+    }
+  },
+  "burn_estimate": {
+    "daily_token_rate":  65400,
+    "subscription_burn": "moderate",
+    "source":            "stats-cache+ddx-metrics",
+    "confidence":        "low",
+    "freshness_ts":      "2026-04-14T05:00:00Z"
+  },
+  "routing_signals": {
+    "availability":   "available",
+    "request_fit":    "capable",
+    "cost_estimate":  "unknown",
+    "performance": {
+      "p50_latency_ms":  4200,
+      "p95_latency_ms":  9800,
+      "success_rate":    0.97,
+      "sample_count":    34,
+      "window":          "7d"
+    }
+  },
+  "signal_sources": ["stats-cache", "ddx-metrics"],
+  "freshness_ts":   "2026-04-14T05:00:00Z"
+}
+```
+
+Field semantics:
+- `status`: `available` | `unavailable` | `unknown` — routing-level reachability
+- `auth_state`: `authenticated` | `unauthenticated` | `unknown`
+- `quota_headroom`: `ok` | `blocked` | `unknown` — never fabricated; `unknown` means no trustworthy live source
+- `signal_sources`: which sources contributed to this snapshot (`stats-cache`, `native-session-jsonl`, `ddx-metrics`, `none`)
+- `freshness_ts`: when the oldest contributing signal was last observed
+- `burn_estimate.confidence`: `high` (live source, recent) | `medium` (cached, recent) | `low` (cached, stale or inferred)
+- `cost_usd`: `-1` when unknown; `0` for local models or subscription plans where per-token billing is unavailable
+
+MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not project-scoped (provider config is per host+user, not per project).
+
 **Executions (FEAT-010)**
 22. `GET /api/projects/:project/exec/definitions` — list execution definitions with optional artifact filter
 23. `GET /api/projects/:project/exec/definitions/:id` — show one execution definition
@@ -271,7 +362,11 @@ capped at the last 20 entries. This is the shared read model for both the CLI
 - FEAT-006 (Agent Service) — agent activity endpoints read DDx invocation
   metadata and embedded telemetry references; execute-bead attempt artifacts
   live in each project's `.ddx/executions/<attempt-id>/` bundle
-- FEAT-008 (Web UI) — embedded SPA served at `/`
+- FEAT-008 (Web UI) — embedded SPA served at `/`; provider dashboard view consumes `/api/providers`
+- FEAT-014 (Agent Usage Awareness and Routing Signals) — provider availability
+  and utilization endpoints expose the same routing signal model governed by
+  FEAT-014; field semantics, unknown-state rules, and freshness conventions
+  are owned by FEAT-014
 - FEAT-020 (Server Node State) — host+user state file, addr file, and
   project auto-registration
 - FEAT-021 (Dashboard UI) — per-project beads/sessions/graph surfaced under

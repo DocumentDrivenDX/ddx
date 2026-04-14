@@ -4,6 +4,8 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-006
+    - FEAT-002
+    - FEAT-008
 ---
 # Feature: Agent Usage Awareness and Routing Signals
 
@@ -205,6 +207,104 @@ Interpretation:
   provenance, and operator visibility. It must not become a shadow transcript
   store for external providers.
 
+## Dashboard Read Model
+
+The normalized routing signal model (requirement 12) doubles as the read model
+consumed by the FEAT-008 provider dashboard and the FEAT-002 `/api/providers`
+endpoints. FEAT-014 governs field semantics, unknown-state rules, and freshness
+conventions for both the routing code path and the UI read path.
+
+### Read-Model Fields
+
+The provider summary and provider detail shapes are defined in FEAT-002
+§"Provider Availability and Utilization". FEAT-014 owns the rules that govern
+every field:
+
+**Availability and auth fields**
+
+| Field | Type | Source | Unknown condition |
+|-------|------|--------|-------------------|
+| `status` | `available` \| `unavailable` \| `unknown` | harness discovery | harness cannot be found or tested |
+| `auth_state` | `authenticated` \| `unauthenticated` \| `unknown` | per-harness auth probe | probe fails or is not implemented |
+| `quota_headroom` | `ok` \| `blocked` \| `unknown` | provider-native or `unknown` | no trustworthy live source exists |
+
+**Utilization fields**
+
+| Field | Type | Source | Unknown sentinel |
+|-------|------|--------|-----------------|
+| `historical_usage.*.input_tokens` | integer | provider-native or DDx-observed | `-1` (JSON) → rendered as `—` in UI |
+| `historical_usage.*.output_tokens` | integer | provider-native or DDx-observed | `-1` |
+| `historical_usage.*.cost_usd` | float | provider-native | `-1` |
+| `burn_estimate.daily_token_rate` | float | DDx-derived from usage deltas | `-1` |
+| `burn_estimate.subscription_burn` | `low` \| `moderate` \| `high` \| `unknown` | DDx-derived | `unknown` when no rate history |
+| `burn_estimate.confidence` | `high` \| `medium` \| `low` | DDx-derived | reflects staleness of contributing signal |
+| `routing_signals.performance.success_rate` | float 0–1 | DDx-observed | `-1` when sample_count < 3 |
+
+**Freshness fields**
+
+- `freshness_ts` — RFC 3339 timestamp of the oldest contributing signal write.
+  When no signals exist the field is omitted (not zero-time).
+- `last_checked_ts` — when DDx most recently attempted to read signals for this
+  harness. May differ from `freshness_ts` when the read attempt found no new data.
+- `signal_sources` — ordered list of source identifiers that contributed to
+  this snapshot. Defined values: `native-session-jsonl`, `stats-cache`,
+  `ddx-metrics`, `none`. `none` appears alone when no source contributed.
+
+### Source Attribution Labels (for UI display)
+
+The UI renders per-field source labels to distinguish certainty levels:
+
+| `signal_sources` entry | UI label |
+|------------------------|----------|
+| `native-session-jsonl` | provider-reported |
+| `stats-cache` | provider-reported |
+| `ddx-metrics` | DDx-estimated |
+| `none` | unknown |
+
+When multiple sources contribute, the field-level label reflects the most
+authoritative source. Fields absent from all sources carry a `?` badge in the UI
+and a tooltip drawn from `source_note` in the per-model quota object.
+
+### Unknown-State Contract
+
+**Zero fabrication.** No field may be coerced from `unknown` / `-1` to `ok` / `0`
+for display convenience. UI components must treat `-1` as `unknown` and render
+`—`, never `0`. Badge components must treat the string literal `"unknown"` as a
+distinct state with its own visual treatment, never as a fallback for `"ok"`.
+
+**Tooltips.** Every `?` badge and every "unknown" pill in the provider dashboard
+must include a tooltip populated from one of the defined tooltip strings below:
+
+| Condition | Tooltip text |
+|-----------|-------------|
+| Claude quota unknown | "No stable non-PTY quota source confirmed for Claude. DDx will route with reduced confidence rather than reject." |
+| Signal source not readable | "The signal source could not be read at the last check. DDx is using cached state." |
+| No signal history | "No signal history available. DDx will route based on request fit only." |
+| Stale signal | "Last signal observed more than 1 hour ago. Data may not reflect current provider state." |
+
+**Routing behavior.** `quota_headroom: unknown` does not block routing. It
+reduces routing confidence. `quota_headroom: blocked` rejects the candidate. The
+dashboard must not imply that `unknown` means `blocked`.
+
+### Queryable Read Model
+
+The read model supports the following query dimensions for the `/api/providers`
+list endpoint and for client-side filtering in the provider dashboard:
+
+| Dimension | Filter values |
+|-----------|--------------|
+| Provider / harness | exact match on `harness` name |
+| Model | substring or exact match on model identifier |
+| Status | `available`, `unavailable`, `unknown` |
+| Auth state | `authenticated`, `unauthenticated`, `unknown` |
+| Quota state | `ok`, `blocked`, `unknown` |
+| Signal source | presence of a named source in `signal_sources` |
+| Time window | scopes `historical_usage` window (7d, 30d) |
+
+Sorting is supported on: `harness` (alpha), `status`, `auth_state`,
+`quota_headroom`, `recent_success_rate`, `recent_latency_p50_ms`,
+`freshness_ts`. Default sort: `status` ascending, then `harness` ascending.
+
 ## CLI Interface
 
 ```bash
@@ -270,6 +370,41 @@ how fresh it is
 - Given a signal source could not be read, then doctor output reports `unknown`
   with an explanatory note instead of omitting the field
 
+### US-143: Operator Views Provider Dashboard in Browser
+**As an** operator deciding which harnesses to use for a batch of work
+**I want** to see all configured providers with routing availability, auth state,
+  quota/headroom, utilization, and burn rate in one browser view
+**So that** I can make informed dispatch decisions without running CLI commands
+
+**Acceptance Criteria:**
+- Given I open the Provider Dashboard (FEAT-008 §"Provider / Harness Dashboard"),
+  then I see one row per configured harness with status, auth, quota/headroom,
+  cost class, and freshness timestamp
+- Given a harness has `quota_headroom: unknown`, then the pill renders "unknown"
+  with a tooltip from the FEAT-014 tooltip registry — not a green "ok" badge
+- Given I click a row, then the detail panel shows the full read-model fields
+  defined in FEAT-014 §"Read-Model Fields", with source labels distinguishing
+  provider-reported from DDx-estimated values
+- Given a numeric field has no trustworthy source (sentinel `-1`), then the UI
+  renders `—`, not `0`
+- Given I look at the burn estimate row, then I see `confidence` labeled as
+  `high`, `medium`, or `low` — not omitted
+- Given I search or filter the provider list, then results update client-side
+  within 100 ms without a server round-trip
+
+### US-144: Operator Distinguishes Provider-Reported vs DDx-Estimated Signals
+**As an** operator auditing routing signal provenance
+**I want** each signal field in the provider dashboard to be labeled by its source
+**So that** I can determine how much weight to place on the value
+
+**Acceptance Criteria:**
+- Given a field came from `native-session-jsonl` or `stats-cache`, then it
+  carries a "provider-reported" label
+- Given a field was derived from DDx-observed invocation metrics, then it carries
+  a "DDx-estimated" label
+- Given the `signal_sources` list includes `none`, then the harness shows no
+  usage or burn data, only availability and auth state where detectable
+
 ### US-145: Execute-bead Runtime Metrics Are Captured Automatically
 **As** a developer reviewing bead execution history
 **I want** runtime metrics recorded for every execute-bead iteration without
@@ -288,6 +423,11 @@ manual instrumentation
 ## Dependencies
 
 - FEAT-006 (Agent Service) — harness registry, invocation activity capture
+- FEAT-002 (DDx Server) — `/api/providers` and `/api/providers/:harness`
+  expose FEAT-014's routing signal model to UI and MCP consumers
+- FEAT-008 (Web UI) — the provider dashboard view is the browser surface for
+  FEAT-014's read model; FEAT-014 governs field semantics, unknown-state
+  rules, and tooltip registry for that view
 - provider-native local stores such as `~/.codex/` and `~/.claude/`
 - embedded `ddx-agent` runtime telemetry and session references
 
