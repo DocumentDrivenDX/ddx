@@ -564,6 +564,256 @@ func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
 	assert.EqualValues(t, 0, endData["attempts"])
 }
 
+// TestExecuteBeadWorkerNoChangesAutoClosesAtThreshold verifies that the default
+// count-based adjudication closes a bead as already_satisfied once the
+// no-changes count reaches the configured threshold.
+func TestExecuteBeadWorkerNoChangesAutoClosesAtThreshold(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-nc01", Title: "Always no-changes"}
+	require.NoError(t, store.Create(b))
+
+	callCount := 0
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			callCount++
+			// No BaseRev/ResultRev so shouldSuppressNoProgress returns false
+			// and no cooldown is applied — bead stays immediately retryable.
+			return ExecuteBeadReport{
+				BeadID: beadID,
+				Status: ExecuteBeadStatusNoChanges,
+				Detail: "nothing to do",
+			}, nil
+		}),
+	}
+
+	const threshold = 2
+
+	// First pass: count=1 < threshold, bead stays open.
+	r1, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:                "worker",
+		Once:                    true,
+		MaxNoChangesBeforeClose: threshold,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, r1.Attempts)
+	assert.Equal(t, 0, r1.Successes)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, r1.LastFailureStatus)
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+
+	// Second pass: count=2 == threshold, bead is closed as already_satisfied.
+	r2, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:                "worker",
+		Once:                    true,
+		MaxNoChangesBeforeClose: threshold,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, r2.Attempts)
+	assert.Equal(t, 1, r2.Successes)
+	require.Len(t, r2.Results, 1)
+	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, r2.Results[0].Status)
+
+	got, err = store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	assert.Equal(t, 2, callCount)
+}
+
+// TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied verifies
+// that a custom SatisfactionChecker can close a bead immediately on the first
+// no_changes result without waiting for the count threshold.
+func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-sat01", Title: "Already done"}
+	require.NoError(t, store.Create(b))
+
+	checkerCalled := false
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID: beadID,
+				Status: ExecuteBeadStatusNoChanges,
+				Detail: "agent found no work",
+			}, nil
+		}),
+		SatisfactionChecker: SatisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+			checkerCalled = true
+			assert.Equal(t, b.ID, beadID)
+			assert.Equal(t, 1, noChangesCount)
+			return true, "acceptance criteria already met", nil
+		}),
+	}
+
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	require.NoError(t, err)
+	assert.True(t, checkerCalled, "SatisfactionChecker must be called")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result.Results[0].Status)
+	assert.Equal(t, "acceptance criteria already met", result.Results[0].Detail)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, events[0].Summary)
+}
+
+// TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved
+// verifies that when the SatisfactionChecker reports the bead is not yet
+// satisfied, the bead remains open and retry suppression is applied.
+func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-unr01", Title: "Not yet done"}
+	require.NoError(t, store.Create(b))
+
+	now := time.Now().UTC().Truncate(time.Second)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusNoChanges,
+				BaseRev:   "rev1",
+				ResultRev: "rev1",
+			}, nil
+		}),
+		SatisfactionChecker: SatisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+			return false, "", nil
+		}),
+		Now: func() time.Time { return now },
+	}
+
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:           "worker",
+		Once:               true,
+		NoProgressCooldown: 1 * time.Hour,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 0, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, result.LastFailureStatus)
+	require.Len(t, result.Results, 1)
+	assert.NotEmpty(t, result.Results[0].RetryAfter, "retry suppression must be recorded")
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.NotEmpty(t, got.Extra["execute-loop-retry-after"])
+}
+
+// TestExecuteBeadWorkerNoChangesDoesNotStarveQueue verifies that a bead with
+// repeated no_changes results cannot prevent other ready beads from being
+// executed across multiple queue passes. It also verifies the full adjudication
+// lifecycle: other beads run unblocked while the no-changes bead is open, and
+// the no-changes bead is eventually closed as already_satisfied at the threshold.
+func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	// Three beads: one that always returns no_changes (no cooldown), two that succeed.
+	// Not supplying BaseRev/ResultRev means shouldSuppressNoProgress returns false,
+	// so no retry-after is written and the bead stays immediately retryable between
+	// passes. This keeps the test deterministic without mocking time.
+	ncBead := &bead.Bead{ID: "ddx-nc10", Title: "Always no-changes", Priority: 0}
+	work1 := &bead.Bead{ID: "ddx-wk11", Title: "Work bead 1", Priority: 1}
+	work2 := &bead.Bead{ID: "ddx-wk12", Title: "Work bead 2", Priority: 2}
+	require.NoError(t, store.Create(ncBead))
+	require.NoError(t, store.Create(work1))
+	require.NoError(t, store.Create(work2))
+
+	var mu sync.Mutex
+	executed := []string{}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			mu.Lock()
+			executed = append(executed, beadID)
+			mu.Unlock()
+			if beadID == ncBead.ID {
+				// No BaseRev/ResultRev → shouldSuppressNoProgress returns false
+				// → no cooldown written → bead is immediately retryable.
+				return ExecuteBeadReport{
+					BeadID: beadID,
+					Status: ExecuteBeadStatusNoChanges,
+				}, nil
+			}
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-" + beadID,
+				ResultRev: "bbbb",
+			}, nil
+		}),
+	}
+
+	const threshold = 2
+	opts := ExecuteBeadLoopOptions{
+		Assignee:                "worker",
+		MaxNoChangesBeforeClose: threshold,
+	}
+
+	// Pass 1: all three beads are ready.
+	// ncBead returns no_changes (count=1 < threshold) and stays open.
+	// work1 and work2 succeed and are closed.
+	// The `attempted` map inside Run prevents ncBead from being picked up
+	// a second time within the same pass — the other beads run unblocked.
+	result1, err := worker.Run(context.Background(), opts)
+	require.NoError(t, err)
+	assert.Equal(t, 3, result1.Attempts, "all three beads must be attempted in pass 1")
+	assert.Equal(t, 2, result1.Successes)
+	assert.Equal(t, 1, result1.Failures)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, result1.LastFailureStatus)
+
+	w1, _ := store.Get(work1.ID)
+	w2, _ := store.Get(work2.ID)
+	nc, _ := store.Get(ncBead.ID)
+	assert.Equal(t, bead.StatusClosed, w1.Status)
+	assert.Equal(t, bead.StatusClosed, w2.Status)
+	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead must stay open after first no_changes")
+
+	// Pass 2: only ncBead remains; count reaches threshold → closed as already_satisfied.
+	result2, err := worker.Run(context.Background(), opts)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result2.Attempts)
+	assert.Equal(t, 1, result2.Successes, "ncBead must be closed as already_satisfied")
+	require.Len(t, result2.Results, 1)
+	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result2.Results[0].Status)
+
+	nc, _ = store.Get(ncBead.ID)
+	assert.Equal(t, bead.StatusClosed, nc.Status)
+
+	// Pass 3: queue is empty.
+	result3, err := worker.Run(context.Background(), opts)
+	require.NoError(t, err)
+	assert.True(t, result3.NoReadyWork)
+	assert.Equal(t, 0, result3.Attempts)
+
+	// ncBead was attempted exactly twice (once per pass), never a third time.
+	ncExec := 0
+	for _, id := range executed {
+		if id == ncBead.ID {
+			ncExec++
+		}
+	}
+	assert.Equal(t, 2, ncExec, "ncBead must be executed exactly twice across all passes")
+}
+
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
 	t.Helper()
 

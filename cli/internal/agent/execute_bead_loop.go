@@ -38,6 +38,25 @@ func (f ExecuteBeadExecutorFunc) Execute(ctx context.Context, beadID string) (Ex
 	return f(ctx, beadID)
 }
 
+// SatisfactionChecker evaluates whether a bead that returned no_changes is
+// already satisfied and should be closed, or is still unresolved and should
+// receive retry suppression. noChangesCount is the cumulative count including
+// the current attempt.
+//
+// When satisfied is true the caller closes the bead with the returned evidence
+// string as the detail. When false the caller applies a retry cooldown and
+// leaves the bead open.
+type SatisfactionChecker interface {
+	CheckSatisfied(ctx context.Context, beadID string, noChangesCount int) (satisfied bool, evidence string, err error)
+}
+
+// SatisfactionCheckerFunc is a functional adapter for SatisfactionChecker.
+type SatisfactionCheckerFunc func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error)
+
+func (f SatisfactionCheckerFunc) CheckSatisfied(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+	return f(ctx, beadID, noChangesCount)
+}
+
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
 	Claim(id, assignee string) error
@@ -90,9 +109,10 @@ type ExecuteBeadLoopResult struct {
 // It intentionally does not retry a failed/conflicted bead again in the same
 // process run; a later operator-driven invocation can create the next attempt.
 type ExecuteBeadWorker struct {
-	Store    ExecuteBeadLoopStore
-	Executor ExecuteBeadExecutor
-	Now      func() time.Time
+	Store               ExecuteBeadLoopStore
+	Executor            ExecuteBeadExecutor
+	SatisfactionChecker SatisfactionChecker // nil → count-based default
+	Now                 func() time.Time
 }
 
 func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions) (*ExecuteBeadLoopResult, error) {
@@ -241,17 +261,27 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 				if cerr != nil {
 					return result, cerr
 				}
-				if count >= maxNoChangesBeforeClose {
-					// Bead has returned no_changes on every attempt up to the
-					// threshold. Treat it as already-satisfied: close with the
-					// accumulated no-changes evidence so the queue can drain.
+				satisfied, evidence, aerr := w.adjudicateNoChanges(ctx, candidate.ID, count, maxNoChangesBeforeClose)
+				if aerr != nil {
+					return result, aerr
+				}
+				if satisfied {
+					// Adjudication confirmed bead is already satisfied: close
+					// with accumulated no-changes evidence so the queue drains.
 					if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); cerr != nil {
 						return result, cerr
 					}
 					report.Status = ExecuteBeadStatusAlreadySatisfied
+					if evidence != "" {
+						// Checker evidence explains why the bead is being closed;
+						// it takes precedence over the executor's attempt detail.
+						report.Detail = evidence
+					}
 					result.Successes++
 					result.LastSuccessAt = now().UTC()
 				} else {
+					// Unresolved: suppress immediate retry so the queue can
+					// move on to other beads.
 					if shouldSuppressNoProgress(report) {
 						retryAfter := now().UTC().Add(noProgressCooldown)
 						if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
@@ -398,6 +428,24 @@ func formatLoopResult(report ExecuteBeadReport) string {
 		}
 		return fmt.Sprintf("error: %s", detail)
 	}
+}
+
+// adjudicateNoChanges runs the no-change adjudication step for a bead.
+// It returns (satisfied, evidence, err). When satisfied is true the bead
+// should be closed as already_satisfied with the evidence string. When false
+// retry suppression (cooldown) should be applied and the bead left open.
+//
+// If a SatisfactionChecker is configured it is called first. Otherwise the
+// default count-based rule closes the bead once noChangesCount reaches
+// maxNoChangesBeforeClose.
+func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID string, noChangesCount, maxNoChangesBeforeClose int) (bool, string, error) {
+	if w.SatisfactionChecker != nil {
+		return w.SatisfactionChecker.CheckSatisfied(ctx, beadID, noChangesCount)
+	}
+	if noChangesCount >= maxNoChangesBeforeClose {
+		return true, fmt.Sprintf("no_changes on %d consecutive attempt(s); bead treated as already satisfied", noChangesCount), nil
+	}
+	return false, "", nil
 }
 
 func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
