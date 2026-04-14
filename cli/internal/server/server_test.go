@@ -15,6 +15,25 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 )
 
+// TestMain scrubs all GIT_* environment variables before running tests.
+// Lefthook sets GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_AUTHOR_*,
+// GIT_COMMITTER_*, GIT_CONFIG_PARAMETERS, etc. during pre-commit. If these
+// leak into subprocess git calls made by tests (e.g. `git init` in a
+// t.TempDir()), the subprocess writes to the PARENT repository's config —
+// specifically a stray `worktree = /tmp/TestXxx/NNN` line that corrupts
+// every subsequent git operation. Scrubbing at TestMain covers both raw
+// exec.Command calls AND the production code paths exercised by tests.
+func TestMain(m *testing.M) {
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "GIT_") {
+			if idx := strings.IndexByte(kv, '='); idx >= 0 {
+				_ = os.Unsetenv(kv[:idx])
+			}
+		}
+	}
+	os.Exit(m.Run())
+}
+
 // setupTestDir creates a temp directory with a library and bead store.
 func setupTestDir(t *testing.T) string {
 	t.Helper()

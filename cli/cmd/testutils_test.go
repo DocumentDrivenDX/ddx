@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -15,13 +16,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMain clears git environment variables before running tests so that tests
-// invoking git commands operate on their own temp-dir repositories rather than
-// any repository inherited from a hook invocation (e.g. GIT_DIR set by lefthook
-// during pre-commit).
+// TestMain clears all GIT_* environment variables before running tests so
+// that tests invoking git commands operate on their own temp-dir repositories
+// rather than any repository inherited from a hook invocation (e.g. GIT_DIR
+// set by lefthook during pre-commit). Prefix scrub is important — lefthook
+// sets GIT_AUTHOR_NAME, GIT_COMMITTER_EMAIL, GIT_CONFIG_PARAMETERS etc. that
+// also leak into test subprocesses and corrupt the shared repo config.
 func TestMain(m *testing.M) {
-	for _, v := range []string{"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_OBJECT_DIRECTORY"} {
-		_ = os.Unsetenv(v)
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "GIT_") {
+			if idx := strings.IndexByte(kv, '='); idx >= 0 {
+				_ = os.Unsetenv(kv[:idx])
+			}
+		}
 	}
 	os.Exit(m.Run())
 }

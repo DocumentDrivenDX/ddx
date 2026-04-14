@@ -14,6 +14,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMain scrubs all GIT_* environment variables before running tests so
+// test subprocesses (and the production code under test) don't inherit
+// lefthook's GIT_DIR/GIT_WORK_TREE and leak into the parent repo's config.
+func TestMain(m *testing.M) {
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "GIT_") {
+			if idx := strings.IndexByte(kv, '='); idx >= 0 {
+				_ = os.Unsetenv(kv[:idx])
+			}
+		}
+	}
+	os.Exit(m.Run())
+}
+
 // --- Mock executor ---
 
 type mockExecutor struct {

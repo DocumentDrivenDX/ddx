@@ -11,37 +11,72 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMain scrubs GIT_* environment variables for the whole test process.
+// When the test suite is invoked from inside a lefthook pre-commit hook,
+// lefthook sets GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_AUTHOR_*,
+// GIT_COMMITTER_*, etc. to paths inside the *parent* repository. Any git
+// subprocess these tests spawn — whether via raw exec.Command or via the
+// production code under test — would otherwise inherit those variables
+// and mutate the parent repo's config (e.g. leaking a stray
+// `worktree = /tmp/TestXxx/001` line into the shared .git/config), which
+// then corrupts every subsequent git operation in the parent repo.
+func TestMain(m *testing.M) {
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "GIT_") {
+			if idx := strings.IndexByte(kv, '='); idx >= 0 {
+				_ = os.Unsetenv(kv[:idx])
+			}
+		}
+	}
+	os.Exit(m.Run())
+}
+
+// scrubbedGitEnv returns the current environment with all GIT_* variables
+// removed. When tests run inside a lefthook pre-commit hook, lefthook sets
+// GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_AUTHOR_*, GIT_COMMITTER_*, etc.
+// to the parent repo's paths. A child `git init` in a temp dir would inherit
+// those, making the child write to the PARENT repo's config (leaking a stray
+// `worktree = /tmp/TestXxx/001` line into the shared .git/config) and
+// corrupting the parent. Always use this helper for test-local git
+// subprocesses to keep them isolated.
+func scrubbedGitEnv() []string {
+	parent := os.Environ()
+	env := make([]string, 0, len(parent))
+	for _, kv := range parent {
+		if strings.HasPrefix(kv, "GIT_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return env
+}
+
+// runGitInDir runs a git command in dir with scrubbed GIT_* env. Fails the
+// test if the command returns a non-zero exit status.
+func runGitInDir(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = scrubbedGitEnv()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
+	}
+}
+
 // Helper function to create a test git repository
 func setupTestGitRepo(t *testing.T) string {
 	tempDir := t.TempDir()
 
-	// Initialize git repo
-	cmd := exec.Command("git", "init")
-	cmd.Dir = tempDir
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Failed to init git repo: %s", string(output))
-
-	// Configure git user for commits
-	cmd = exec.Command("git", "config", "user.email", "test@example.com")
-	cmd.Dir = tempDir
-	require.NoError(t, cmd.Run())
-
-	cmd = exec.Command("git", "config", "user.name", "Test User")
-	cmd.Dir = tempDir
-	require.NoError(t, cmd.Run())
+	runGitInDir(t, tempDir, "init")
+	runGitInDir(t, tempDir, "config", "user.email", "test@example.com")
+	runGitInDir(t, tempDir, "config", "user.name", "Test User")
 
 	// Create initial commit
 	testFile := filepath.Join(tempDir, "README.md")
 	require.NoError(t, os.WriteFile(testFile, []byte("# Test Repo"), 0644))
 
-	cmd = exec.Command("git", "add", ".")
-	cmd.Dir = tempDir
-	require.NoError(t, cmd.Run())
-
-	cmd = exec.Command("git", "commit", "-m", "Initial commit")
-	cmd.Dir = tempDir
-	output, err = cmd.CombinedOutput()
-	require.NoError(t, err, "Failed to commit: %s", string(output))
+	runGitInDir(t, tempDir, "add", ".")
+	runGitInDir(t, tempDir, "commit", "-m", "Initial commit")
 
 	return tempDir
 }
