@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,7 +37,7 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	allGood := true
 	auditPlugins, _ := cmd.Flags().GetBool("plugins")
 
-	// Check 1: DDX Binary Executable
+	// Check 1: DDX Binary Executable and Install Location
 	fmt.Print("✓ Checking DDX Binary... ")
 	executable, err := os.Executable()
 	if err != nil {
@@ -42,6 +45,15 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		allGood = false
 	} else {
 		fmt.Printf("✅ DDX Binary Executable (%s)\n", executable)
+		if locationIssues := checkBinaryInstallLocation(executable); len(locationIssues) > 0 {
+			for _, issue := range locationIssues {
+				fmt.Printf("   ⚠️  %s\n", issue.Description)
+				for _, r := range issue.Remediation {
+					fmt.Printf("   💡 %s\n", r)
+				}
+			}
+			issues = append(issues, locationIssues...)
+		}
 	}
 
 	// Check 2: PATH Configuration
@@ -224,6 +236,94 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// checkBinaryInstallLocation verifies the running binary is at the canonical install
+// location ($HOME/.local/bin/ddx) and scans PATH for other ddx copies whose
+// SHA-256 differs from the running binary.
+func checkBinaryInstallLocation(executable string) []DiagnosticIssue {
+	var issues []DiagnosticIssue
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return issues
+	}
+
+	canonicalPath := filepath.Join(homeDir, ".local", "bin", "ddx")
+
+	// (2) Check whether running binary matches the canonical install location.
+	resolvedExec, _ := filepath.EvalSymlinks(executable)
+	if resolvedExec == "" {
+		resolvedExec = executable
+	}
+	resolvedCanonical, _ := filepath.EvalSymlinks(canonicalPath)
+	execMatchesCanonical := resolvedExec == canonicalPath ||
+		(resolvedCanonical != "" && resolvedExec == resolvedCanonical)
+	if !execMatchesCanonical {
+		issues = append(issues, DiagnosticIssue{
+			Type:        "binary_not_canonical",
+			Description: fmt.Sprintf("Running binary (%s) is not at canonical install location (%s)", executable, canonicalPath),
+			Remediation: []string{
+				"Re-run install.sh to reinstall to the canonical location",
+				fmt.Sprintf("Or ensure %s is earlier in your PATH", filepath.Dir(canonicalPath)),
+			},
+		})
+	}
+
+	// (3) Walk PATH and flag any ddx copy whose SHA-256 differs from the running binary.
+	runningSHA, err := computeFileSHA256(executable)
+	if err != nil {
+		return issues
+	}
+
+	seen := make(map[string]bool)
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		candidate := filepath.Join(dir, "ddx")
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+
+		info, err := os.Stat(candidate)
+		if err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+			continue
+		}
+
+		candidateSHA, err := computeFileSHA256(candidate)
+		if err != nil {
+			continue
+		}
+
+		if candidateSHA == runningSHA {
+			continue // same binary, not stale
+		}
+
+		issues = append(issues, DiagnosticIssue{
+			Type:        "binary_sha_mismatch",
+			Description: fmt.Sprintf("Stale ddx copy on PATH: %s (SHA-256 differs from running binary)", candidate),
+			Remediation: []string{
+				fmt.Sprintf("rm %s && cp %s %s", candidate, executable, candidate),
+				"Or re-run install.sh to update all copies",
+			},
+		})
+	}
+
+	return issues
+}
+
+// computeFileSHA256 returns the hex-encoded SHA-256 digest of the named file.
+func computeFileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // isInPath checks if DDX is accessible from PATH
