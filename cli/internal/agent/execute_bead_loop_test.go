@@ -814,6 +814,141 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, 2, ncExec, "ncBead must be executed exactly twice across all passes")
 }
 
+// TestRationaleIsSpecific verifies the heuristic that decides whether a
+// no_changes rationale is specific enough to close the bead immediately.
+func TestRationaleIsSpecific(t *testing.T) {
+	cases := []struct {
+		rationale string
+		want      bool
+	}{
+		{"", false},
+		{"nothing to do", false},
+		{"agent found no work", false},
+		// 7-hex commit SHA
+		{"work already present in commit 1da6495 (store.go)", true},
+		// 12-hex commit SHA
+		{"see commit 0c60abf493c7 for details", true},
+		// 40-hex commit SHA
+		{"fully present since 0c60abf493c7117a9b5f7986c1412c1d513e2ef6", true},
+		// Test function name
+		{"TestReadyExecutionExcludesEpics already exists and passes", true},
+		{"confirmed by TestEpicFilterSmoke", true},
+		// Benchmark name
+		{"BenchmarkStore already exists", true},
+		// 6-char hex (too short to qualify as SHA)
+		{"short ref abc123 is not a commit", false},
+	}
+	for _, tc := range cases {
+		got := rationaleIsSpecific(tc.rationale)
+		if got != tc.want {
+			t.Errorf("rationaleIsSpecific(%q) = %v, want %v", tc.rationale, got, tc.want)
+		}
+	}
+}
+
+// TestExecuteBeadWorkerNoChangesWithCommitSHARationaleClosesImmediately verifies
+// that when a no_changes report carries a rationale referencing a prior commit
+// SHA, the loop closes the bead as already_satisfied on the first attempt without
+// waiting for the count-based threshold.
+func TestExecuteBeadWorkerNoChangesWithCommitSHARationaleClosesImmediately(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-sha01", Title: "Already in prior commit"}
+	require.NoError(t, store.Create(b))
+
+	const rationale = "Work already present in commit 1da6495 (cli/internal/bead/store.go). " +
+		"TestReadyExecutionExcludesEpics confirms the epic filter passes."
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				Detail:             "agent made no commits",
+				BaseRev:            "aaaa1111",
+				ResultRev:          "aaaa1111",
+				NoChangesRationale: rationale,
+			}, nil
+		}),
+	}
+
+	// MaxNoChangesBeforeClose=3 to confirm the heuristic fires before threshold.
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:                "worker",
+		Once:                    true,
+		MaxNoChangesBeforeClose: 3,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes, "commit-SHA rationale must close bead on first attempt")
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result.Results[0].Status)
+	assert.Equal(t, rationale, result.Results[0].Detail)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, events[0].Summary)
+	assert.Contains(t, events[0].Body, "rationale:")
+}
+
+// TestExecuteBeadWorkerNoChangesVagueRationaleUsesCountThreshold verifies that
+// a vague rationale (no commit SHA, no test name) does not trigger early close
+// and the count-based threshold still applies.
+func TestExecuteBeadWorkerNoChangesVagueRationaleUsesCountThreshold(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-vague01", Title: "Vague rationale bead"}
+	require.NoError(t, store.Create(b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			// Non-empty but vague rationale — no commit SHA or test name.
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				Detail:             "nothing to do",
+				NoChangesRationale: "the work seems done",
+			}, nil
+		}),
+	}
+
+	const threshold = 2
+
+	// Pass 1: vague rationale → bead stays open.
+	r1, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:                "worker",
+		Once:                    true,
+		MaxNoChangesBeforeClose: threshold,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, r1.Successes)
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+
+	// Pass 2: count reaches threshold → closed as already_satisfied.
+	r2, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:                "worker",
+		Once:                    true,
+		MaxNoChangesBeforeClose: threshold,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, r2.Successes)
+	got, err = store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
 	t.Helper()
 

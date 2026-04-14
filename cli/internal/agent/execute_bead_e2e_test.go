@@ -279,3 +279,112 @@ func TestExecuteBead_RequiredGatePasses_Merges(t *testing.T) {
 		t.Errorf("expected first gate status=pass, got %q", res.GateResults[0].Status)
 	}
 }
+
+// rationaleTestRunner is a fake AgentRunner that writes a no_changes_rationale.txt
+// file into the worktree's execution bundle directory before returning exit 0.
+// The file is excluded from SynthesizeCommit, so the outcome will be task_no_changes.
+type rationaleTestRunner struct {
+	rationale string
+}
+
+func (r *rationaleTestRunner) Run(opts RunOptions) (*Result, error) {
+	attemptID := opts.Correlation["attempt_id"]
+	if attemptID == "" {
+		return &Result{ExitCode: 0}, nil
+	}
+	dir := filepath.Join(opts.WorkDir, ".ddx", "executions", attemptID)
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "no_changes_rationale.txt"), []byte(r.rationale), 0o644)
+	return &Result{ExitCode: 0}, nil
+}
+
+// TestExecuteBead_NoChangesRationalePopulated verifies that when the agent writes
+// a no_changes_rationale.txt file into the execution bundle dir inside the worktree,
+// ExecuteBead reads it and populates ExecuteBeadResult.NoChangesRationale.
+func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
+	const beadID = "ddx-rationale-01"
+	const rationale = "Work already present in commit 1da6495 (cli/internal/bead/store.go). " +
+		"TestReadyExecutionExcludesEpics confirms the epic filter passes."
+
+	projectRoot := setupGateTestProjectRoot(t)
+
+	// Both HeadRev calls return the same rev so resultRev == baseRev → task_no_changes.
+	const fixedRev = "aaaaaaaabbbbbbbb"
+	gitOps := &gateTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     fixedRev,
+		resultRev:   fixedRev,
+		wtSetupFn: func(wtPath string) {
+			// Populate a minimal bead store so prepareArtifacts succeeds.
+			ddxDir := filepath.Join(wtPath, ".ddx")
+			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			store := bead.NewStore(ddxDir)
+			if err := store.Init(); err != nil {
+				t.Fatal(err)
+			}
+			b := &bead.Bead{ID: beadID, Title: "Rationale test bead"}
+			if err := store.Create(b); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	runner := &rationaleTestRunner{rationale: rationale}
+
+	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
+	if err != nil {
+		t.Fatalf("ExecuteBead returned error: %v", err)
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskNoChanges {
+		t.Errorf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskNoChanges, res.Outcome)
+	}
+	if res.NoChangesRationale != rationale {
+		t.Errorf("NoChangesRationale mismatch\n got:  %q\nwant: %q", res.NoChangesRationale, rationale)
+	}
+}
+
+// TestExecuteBead_NoChangesRationaleAbsentWhenNotWritten verifies that
+// ExecuteBeadResult.NoChangesRationale is empty when the agent does not write
+// the rationale file (the common case for real execution failures).
+func TestExecuteBead_NoChangesRationaleAbsentWhenNotWritten(t *testing.T) {
+	const beadID = "ddx-rationale-02"
+
+	projectRoot := setupGateTestProjectRoot(t)
+
+	const fixedRev = "ccccccccdddddddd"
+	gitOps := &gateTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     fixedRev,
+		resultRev:   fixedRev,
+		wtSetupFn: func(wtPath string) {
+			ddxDir := filepath.Join(wtPath, ".ddx")
+			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			store := bead.NewStore(ddxDir)
+			if err := store.Init(); err != nil {
+				t.Fatal(err)
+			}
+			b := &bead.Bead{ID: beadID, Title: "No rationale bead"}
+			if err := store.Create(b); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	// Runner that does NOT write the rationale file.
+	runner := &gateTestAgentRunner{exitCode: 0}
+
+	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
+	if err != nil {
+		t.Fatalf("ExecuteBead returned error: %v", err)
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskNoChanges {
+		t.Errorf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskNoChanges, res.Outcome)
+	}
+	if res.NoChangesRationale != "" {
+		t.Errorf("expected empty NoChangesRationale when file absent, got %q", res.NoChangesRationale)
+	}
+}
