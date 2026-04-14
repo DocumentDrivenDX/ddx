@@ -17,10 +17,27 @@ import (
 )
 
 var initGitignoreRules = []string{
-	".ddx/.execute-bead-wt-*/",
-	".ddx/*.lock/",
+	// DDx runtime scratch — ignored
 	".ddx/agent-logs/",
 	".ddx/workers/",
+	".ddx/.execute-bead-wt-*/",
+	".ddx/executions/*/embedded/",
+	".ddx/executions/**/scratch/",
+	".ddx/*.lock",
+	".ddx/*.tmp",
+	".ddx/server.env",
+	".ddx/server/",
+	// DDx tracked evidence — explicitly un-ignored under executions/
+	"!.ddx/executions/",
+	"!.ddx/executions/*/",
+	"!.ddx/executions/*/prompt.md",
+	"!.ddx/executions/*/manifest.json",
+	"!.ddx/executions/*/result.json",
+	"!.ddx/executions/*/checks.json",
+	// Skills target links — rewritten per-machine, not tracked
+	".claude/skills/*/",
+	".agents/skills/*/",
+	// Other agent scratch
 	".codex/",
 	".agent/logs/",
 	".agent/sessions/",

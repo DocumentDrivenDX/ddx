@@ -490,6 +490,52 @@ library:
 	}
 }
 
+// TestInitGitignoreRules verifies that ddx init writes the correct .gitignore rules
+// for the tracked/ignored split: runtime scratch is ignored, execution evidence is tracked.
+func TestInitGitignoreRules(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
+
+	gitignorePath := filepath.Join(te.Dir, ".gitignore")
+	data, err := os.ReadFile(gitignorePath)
+	require.NoError(t, err)
+	content := string(data)
+
+	// Runtime scratch must be ignored
+	assert.Contains(t, content, ".ddx/agent-logs/", ".ddx/agent-logs/ must be ignored")
+	assert.Contains(t, content, ".ddx/workers/", ".ddx/workers/ must be ignored")
+	assert.Contains(t, content, ".ddx/server.env", ".ddx/server.env must be ignored")
+	assert.Contains(t, content, ".ddx/server/", ".ddx/server/ must be ignored")
+	assert.Contains(t, content, ".ddx/executions/*/embedded/", "embedded runtime state must be ignored")
+
+	// Execution evidence must be explicitly un-ignored
+	assert.Contains(t, content, "!.ddx/executions/", "executions/ directory must be un-ignored")
+	assert.Contains(t, content, "!.ddx/executions/*/prompt.md", "prompt.md must be un-ignored")
+	assert.Contains(t, content, "!.ddx/executions/*/manifest.json", "manifest.json must be un-ignored")
+	assert.Contains(t, content, "!.ddx/executions/*/result.json", "result.json must be un-ignored")
+
+	// Verify with git check-ignore that a concrete evidence file is NOT ignored
+	// Set up a minimal git repo to run check-ignore
+	gitInit := exec.Command("git", "init", "-q")
+	gitInit.Dir = te.Dir
+	require.NoError(t, gitInit.Run())
+
+	gitConfig1 := exec.Command("git", "config", "user.email", "test@test.com")
+	gitConfig1.Dir = te.Dir
+	require.NoError(t, gitConfig1.Run())
+	gitConfig2 := exec.Command("git", "config", "user.name", "Test")
+	gitConfig2.Dir = te.Dir
+	require.NoError(t, gitConfig2.Run())
+
+	// git check-ignore exits 0 if ignored, 1 if not ignored
+	checkIgnore := exec.Command("git", "check-ignore", "-q", ".ddx/executions/abc123/prompt.md")
+	checkIgnore.Dir = te.Dir
+	err = checkIgnore.Run()
+	// exit code 1 means NOT ignored — that's what we want
+	assert.Error(t, err, ".ddx/executions/abc123/prompt.md must NOT be ignored by git")
+}
+
 // TestInitCommand_US014_SynchronizationSetup tests US-014 synchronization initialization
 func TestInitCommand_US014_SynchronizationSetup(t *testing.T) {
 	tests := []struct {

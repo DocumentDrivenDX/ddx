@@ -412,19 +412,34 @@ site/
 !settings.example.*
 cli/internal/agent/.ddx/
 
-# DDx runtime artifacts (generated, not source)
+# DDx runtime scratch (ignored)
 .ddx/agent-logs/
+.ddx/workers/
+.ddx/.execute-bead-wt-*/
+.ddx/executions/*/embedded/
+.ddx/executions/**/scratch/
+.ddx/*.lock
+.ddx/*.tmp
+.ddx/server.env
+.ddx/server/
 .ddx/hooks/
 .ddx/run-state.json
 .ddx/exec-runs.d/
-.ddx/.execute-bead-wt-*/
-.ddx/*.lock/
-.ddx/workers/
 .ddx/tsnet/
 .ddx/plugins/
 .helix-logs/
 
-# Tracked execute-bead evidence bundles intentionally live under .ddx/executions/
+# DDx tracked execution evidence — explicitly un-ignored
+!.ddx/executions/
+!.ddx/executions/*/
+!.ddx/executions/*/prompt.md
+!.ddx/executions/*/manifest.json
+!.ddx/executions/*/result.json
+!.ddx/executions/*/checks.json
+
+# Skills target links (rewritten per-machine by skill materializer)
+.claude/skills/*/
+.agents/skills/*/
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/
