@@ -106,21 +106,6 @@ func (r *queryResolver) Search(ctx context.Context, query string, first *int, af
 	panic("not implemented")
 }
 
-// Personas is the resolver for the personas field.
-func (r *queryResolver) Personas(ctx context.Context, first *int, after *string, last *int, before *string) (*PersonaConnection, error) {
-	panic("not implemented")
-}
-
-// Persona is the resolver for the persona field.
-func (r *queryResolver) Persona(ctx context.Context, name string) (*Persona, error) {
-	panic("not implemented")
-}
-
-// PersonaByRole is the resolver for the personaByRole field.
-func (r *queryResolver) PersonaByRole(ctx context.Context, role string) (*Persona, error) {
-	panic("not implemented")
-}
-
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (*HealthStatus, error) {
 	panic("not implemented")
@@ -128,16 +113,6 @@ func (r *queryResolver) Health(ctx context.Context) (*HealthStatus, error) {
 
 // Ready is the resolver for the ready field.
 func (r *queryResolver) Ready(ctx context.Context) (*ReadyStatus, error) {
-	panic("not implemented")
-}
-
-// Coordinators is the resolver for the coordinators field.
-func (r *queryResolver) Coordinators(ctx context.Context) ([]*CoordinatorMetricsEntry, error) {
-	panic("not implemented")
-}
-
-// CoordinatorMetricsByProject is the resolver for the coordinatorMetricsByProject field.
-func (r *queryResolver) CoordinatorMetricsByProject(ctx context.Context, projectRoot string) (*CoordinatorMetrics, error) {
 	panic("not implemented")
 }
 

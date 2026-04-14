@@ -421,6 +421,37 @@ func landSummaryFromRecord(m *CoordinatorMetrics) *ddxgraphql.CoordinatorMetrics
 	return out
 }
 
+// ─── Coordinator queries ──────────────────────────────────────────────────────
+
+// GetCoordinatorsGraphQL implements ddxgraphql.StateProvider.
+func (s *ServerState) GetCoordinatorsGraphQL() []*ddxgraphql.CoordinatorMetricsEntry {
+	if s.coordinatorReg == nil {
+		return nil
+	}
+	all := s.coordinatorReg.AllMetrics()
+	out := make([]*ddxgraphql.CoordinatorMetricsEntry, len(all))
+	for i, e := range all {
+		e := e // copy
+		out[i] = &ddxgraphql.CoordinatorMetricsEntry{
+			ProjectRoot: e.ProjectRoot,
+			Metrics:     landSummaryFromRecord(&e.Metrics),
+		}
+	}
+	return out
+}
+
+// GetCoordinatorMetricsByProjectGraphQL implements ddxgraphql.StateProvider.
+func (s *ServerState) GetCoordinatorMetricsByProjectGraphQL(projectRoot string) *ddxgraphql.CoordinatorMetrics {
+	if s.coordinatorReg == nil {
+		return nil
+	}
+	m := s.coordinatorReg.MetricsFor(projectRoot)
+	if m == nil {
+		return nil
+	}
+	return landSummaryFromRecord(m)
+}
+
 // ─── AgentSession queries ─────────────────────────────────────────────────────
 
 // GetAgentSessionsGraphQL implements ddxgraphql.StateProvider.

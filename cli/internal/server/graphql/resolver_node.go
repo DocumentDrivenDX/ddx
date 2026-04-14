@@ -82,6 +82,10 @@ type StateProvider interface {
 	GetExecRunsGraphQL(artifactID, definitionID string) []*ExecutionRun
 	GetExecRunGraphQL(id string) (*ExecutionRun, bool)
 	GetExecRunLogGraphQL(runID string) *ExecutionRunLog
+
+	// Coordinator queries
+	GetCoordinatorsGraphQL() []*CoordinatorMetricsEntry
+	GetCoordinatorMetricsByProjectGraphQL(projectRoot string) *CoordinatorMetrics
 }
 
 // Node is the resolver for the node(id: ID!) field (Relay lookup by global ID).

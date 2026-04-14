@@ -57,14 +57,16 @@ func New(addr, workingDir string) *Server {
 	state := loadServerState(stateDir, nodeName)
 	state.workingDir = workingDir
 
+	workers := NewWorkerManager(workingDir)
 	s := &Server{
 		Addr:       addr,
 		WorkingDir: workingDir,
 		mux:        http.NewServeMux(),
 		startTime:  time.Now().UTC(),
-		workers:    NewWorkerManager(workingDir),
+		workers:    workers,
 		state:      state,
 	}
+	state.coordinatorReg = workers.LandCoordinators
 
 	// Register the server's own project immediately.
 	state.RegisterProject(workingDir)
