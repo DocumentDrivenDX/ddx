@@ -129,6 +129,7 @@ The canonical HTTP shape is:
 
 - `/api/projects` for registry operations
 - `/api/projects/:project/...` for project-scoped resources
+- `/graphql` for GraphQL queries (SvelteKit frontend queries via GraphQL)
 - `/projects/:project/...` for the web UI
 
 Legacy unscoped `/api/...` routes remain as compatibility aliases only when

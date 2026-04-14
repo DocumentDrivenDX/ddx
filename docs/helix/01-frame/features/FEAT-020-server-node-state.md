@@ -138,10 +138,12 @@ The CLI never blocks on or depends on the server being available.
 GET  /api/node                  Node identity (name, id, started_at, last_seen)
 GET  /api/projects              All registered projects
 POST /api/projects/register     Register a project by path; returns ProjectEntry
+POST /graphql                   GraphQL API (SvelteKit frontend queries via GraphQL)
 ```
 
 These are in addition to the project-scoped routes defined in SD-019
-(`/api/projects/:project/...`).
+(`/api/projects/:project/...`). The SvelteKit frontend queries project and node
+data via GraphQL rather than direct REST calls.
 
 ### One Server Per Node
 

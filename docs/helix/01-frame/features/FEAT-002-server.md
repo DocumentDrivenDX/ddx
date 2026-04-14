@@ -41,10 +41,11 @@ ddx-server binary
 ├── /projects  → Project registry / project picker
 ├── /            → Web UI (embedded SPA, FEAT-008)
 ├── /api/        → HTTP REST API (JSON)
+├── /graphql     → GraphQL API (SvelteKit frontend queries)
 └── /mcp/        → MCP tool endpoints (Streamable HTTP transport)
 ```
 
-All three surfaces share the same underlying services. The web UI calls the HTTP API. MCP tools call the same service layer.
+All four surfaces share the same underlying services. The SvelteKit frontend queries the server via GraphQL. MCP tools call the same service layer.
 
 ### Project Registry and Routing
 
@@ -359,7 +360,7 @@ MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not pr
 | HTTP routing | Chi or net/http | ADR-001 |
 | MCP transport | mcp-go (Streamable HTTP) | |
 | Embedded web UI | Go embed.FS | ADR-002 |
-| Frontend | Vite + React + Tailwind | ADR-002, FEAT-008 |
+| Frontend | SvelteKit + Tailwind | ADR-002, FEAT-008 |
 
 ## Dependencies
 
