@@ -1,0 +1,178 @@
+package graphql
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// NodeStateSnapshot holds node identity data for resolver consumption.
+type NodeStateSnapshot struct {
+	ID        string
+	Name      string
+	StartedAt time.Time
+	LastSeen  time.Time
+}
+
+// ProjectSnapshot holds project data for resolver consumption.
+type ProjectSnapshot struct {
+	ID           string
+	Name         string
+	Path         string
+	GitRemote    string
+	RegisteredAt time.Time
+	LastSeen     time.Time
+	Unreachable  bool
+	TombstonedAt *time.Time
+}
+
+// StateProvider is the minimal interface the node/projects resolvers need.
+type StateProvider interface {
+	GetNodeSnapshot() NodeStateSnapshot
+	GetProjectSnapshots(includeUnreachable bool) []ProjectSnapshot
+	GetProjectSnapshotByID(id string) (ProjectSnapshot, bool)
+}
+
+// Node is the resolver for the node(id: ID!) field (Relay lookup by global ID).
+func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
+	if r.State == nil {
+		return nil, fmt.Errorf("state provider not configured")
+	}
+	if strings.HasPrefix(id, "node-") {
+		snap := r.State.GetNodeSnapshot()
+		if snap.ID != id {
+			return nil, nil
+		}
+		return nodeInfoFromSnapshot(snap), nil
+	}
+	if strings.HasPrefix(id, "proj-") {
+		snap, ok := r.State.GetProjectSnapshotByID(id)
+		if !ok {
+			return nil, nil
+		}
+		return projectFromSnapshot(snap), nil
+	}
+	return nil, nil
+}
+
+// NodeInfo is the resolver for the nodeInfo field.
+func (r *queryResolver) NodeInfo(ctx context.Context) (*NodeInfo, error) {
+	if r.State == nil {
+		return nil, fmt.Errorf("state provider not configured")
+	}
+	snap := r.State.GetNodeSnapshot()
+	return nodeInfoFromSnapshot(snap), nil
+}
+
+// Projects is the resolver for the projects field.
+func (r *queryResolver) Projects(ctx context.Context, first *int, after *string, last *int, before *string, includeUnreachable *bool) (*ProjectConnection, error) {
+	if r.State == nil {
+		return nil, fmt.Errorf("state provider not configured")
+	}
+	showAll := includeUnreachable != nil && *includeUnreachable
+	snaps := r.State.GetProjectSnapshots(showAll)
+
+	// Build full edge list with opaque cursors.
+	all := make([]*ProjectEdge, len(snaps))
+	for i, s := range snaps {
+		all[i] = &ProjectEdge{
+			Node:   projectFromSnapshot(s),
+			Cursor: encodeCursor(i),
+		}
+	}
+
+	// Apply window: start after `after` cursor, end before `before` cursor.
+	startIdx := 0
+	if after != nil {
+		if idx, ok := decodeCursor(*after); ok {
+			startIdx = idx + 1
+		}
+	}
+	endIdx := len(all)
+	if before != nil {
+		if idx, ok := decodeCursor(*before); ok && idx < endIdx {
+			endIdx = idx
+		}
+	}
+	if startIdx > endIdx {
+		startIdx = endIdx
+	}
+
+	slice := all[startIdx:endIdx]
+	if first != nil && *first >= 0 && *first < len(slice) {
+		slice = slice[:*first]
+	}
+	if last != nil && *last >= 0 && *last < len(slice) {
+		slice = slice[len(slice)-*last:]
+	}
+
+	pageInfo := &PageInfo{
+		HasPreviousPage: startIdx > 0,
+		HasNextPage:     endIdx < len(all),
+	}
+	if len(slice) > 0 {
+		pageInfo.StartCursor = &slice[0].Cursor
+		pageInfo.EndCursor = &slice[len(slice)-1].Cursor
+	}
+
+	return &ProjectConnection{
+		Edges:      slice,
+		PageInfo:   pageInfo,
+		TotalCount: len(all),
+	}, nil
+}
+
+// encodeCursor encodes a 0-based slice index as an opaque cursor.
+func encodeCursor(idx int) string {
+	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("cursor:%d", idx)))
+}
+
+// decodeCursor decodes a cursor back to its 0-based slice index.
+func decodeCursor(cursor string) (int, bool) {
+	b, err := base64.StdEncoding.DecodeString(cursor)
+	if err != nil {
+		return 0, false
+	}
+	s := string(b)
+	if !strings.HasPrefix(s, "cursor:") {
+		return 0, false
+	}
+	var idx int
+	if _, err := fmt.Sscanf(s[7:], "%d", &idx); err != nil {
+		return 0, false
+	}
+	return idx, true
+}
+
+func nodeInfoFromSnapshot(s NodeStateSnapshot) *NodeInfo {
+	return &NodeInfo{
+		ID:        s.ID,
+		Name:      s.Name,
+		StartedAt: s.StartedAt.UTC().Format(time.RFC3339),
+		LastSeen:  s.LastSeen.UTC().Format(time.RFC3339),
+	}
+}
+
+func projectFromSnapshot(s ProjectSnapshot) *Project {
+	p := &Project{
+		ID:           s.ID,
+		Name:         s.Name,
+		Path:         s.Path,
+		RegisteredAt: s.RegisteredAt.UTC().Format(time.RFC3339),
+		LastSeen:     s.LastSeen.UTC().Format(time.RFC3339),
+	}
+	if s.GitRemote != "" {
+		p.GitRemote = &s.GitRemote
+	}
+	if s.Unreachable {
+		b := true
+		p.Unreachable = &b
+	}
+	if s.TombstonedAt != nil {
+		ts := s.TombstonedAt.UTC().Format(time.RFC3339)
+		p.TombstonedAt = &ts
+	}
+	return p
+}

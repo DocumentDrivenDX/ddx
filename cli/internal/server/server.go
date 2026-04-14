@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -3462,9 +3463,11 @@ func containsString(ss []string, s string) bool {
 func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers:  &ddxgraphql.Resolver{},
+		Resolvers:  &ddxgraphql.Resolver{State: s.state},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
+	gqlServer.AddTransport(transport.POST{})
+	gqlServer.AddTransport(transport.GET{})
 
 	if r.Method == http.MethodPost || r.Method == http.MethodGet {
 		gqlServer.ServeHTTP(w, r)

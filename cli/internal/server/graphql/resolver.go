@@ -6,7 +6,9 @@ import (
 	"context"
 )
 
-type Resolver struct{}
+type Resolver struct {
+	State StateProvider
+}
 
 // BeadCreate is the resolver for the beadCreate field.
 func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Bead, error) {
@@ -35,21 +37,6 @@ func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, er
 
 // DocumentWrite is the resolver for the documentWrite field.
 func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, content string) (*Document, error) {
-	panic("not implemented")
-}
-
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
-	panic("not implemented")
-}
-
-// NodeInfo is the resolver for the nodeInfo field.
-func (r *queryResolver) NodeInfo(ctx context.Context) (*NodeInfo, error) {
-	panic("not implemented")
-}
-
-// Projects is the resolver for the projects field.
-func (r *queryResolver) Projects(ctx context.Context, first *int, after *string, last *int, before *string, includeUnreachable *bool) (*ProjectConnection, error) {
 	panic("not implemented")
 }
 
