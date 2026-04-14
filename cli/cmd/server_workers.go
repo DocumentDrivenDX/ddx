@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"time"
 
@@ -33,7 +32,7 @@ func (f *CommandFactory) newServerWorkersListCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base := resolveServerURL(f.WorkingDir)
 
-			resp, err := http.Get(base + "/api/agent/workers")
+			resp, err := newLocalServerClient().Get(base + "/api/agent/workers")
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -97,7 +96,7 @@ func (f *CommandFactory) newServerWorkersShowCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base := resolveServerURL(f.WorkingDir)
 
-			resp, err := http.Get(base + "/api/agent/workers/" + args[0])
+			resp, err := newLocalServerClient().Get(base + "/api/agent/workers/" + args[0])
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -173,7 +172,7 @@ func (f *CommandFactory) newServerWorkersLogCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base := resolveServerURL(f.WorkingDir)
 
-			resp, err := http.Get(base + "/api/agent/workers/" + args[0] + "/log")
+			resp, err := newLocalServerClient().Get(base + "/api/agent/workers/" + args[0] + "/log")
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}

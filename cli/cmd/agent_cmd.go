@@ -3,10 +3,10 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,6 +19,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
 	"github.com/spf13/cobra"
 )
@@ -1355,7 +1356,7 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := newLocalServerClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("submit to server %s: %w\n  Hint: start the server with 'ddx server'", serverBase, err)
@@ -1415,20 +1416,58 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 }
 
 // resolveServerURL determines the base URL for the running DDx server.
-// Typically http://127.0.0.1:8080 for localhost or the tsnet hostname if configured.
-// For now it probes localhost:8080 first, then tries common ports.
+//
+// Resolution order (matches internal/serverreg):
+//  1. DDX_SERVER_URL environment variable (explicit override)
+//  2. ~/.local/share/ddx/server.addr (written by `ddx server` on startup)
+//  3. https://127.0.0.1:7743 (the canonical default — see FEAT-020)
+//
+// The addr file may record a bind-address URL like https://0.0.0.0:7743
+// (because the server binds to 0.0.0.0 for multi-interface access). Those
+// are valid listen addresses but not reachable as client targets on some
+// platforms — rewrite them to https://127.0.0.1:<port> for local clients.
+//
+// The probe-common-ports heuristic that used to live here only worked for
+// the legacy plaintext http://127.0.0.1:8080 setup and never honored the
+// TLS default that's been in place since alpha13. Clients that skipped
+// the addr file would silently get a connection refused and tell the
+// user the server wasn't running when it was listening on 7743.
 func resolveServerURL(projectRoot string) string {
-	ports := []int{8080, 9090, 3000}
-	for _, port := range ports {
-		candidate := fmt.Sprintf("http://127.0.0.1:%d", port)
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 500*time.Millisecond)
-		if err == nil {
-			_ = conn.Close()
-			return candidate
+	if u := os.Getenv("DDX_SERVER_URL"); u != "" {
+		return u
+	}
+	if u := serverpkg.ReadServerAddr(); u != "" {
+		return rewriteBindAddrForClient(u)
+	}
+	return "https://127.0.0.1:7743"
+}
+
+// rewriteBindAddrForClient converts a bind-address URL into a client-reachable
+// URL. 0.0.0.0 (and [::]) are valid listen addresses but not reachable as
+// client destinations on all platforms — substitute 127.0.0.1 so local HTTP
+// clients can always connect.
+func rewriteBindAddrForClient(u string) string {
+	for _, bind := range []string{"//0.0.0.0:", "//[::]:", "//[::0]:"} {
+		if idx := strings.Index(u, bind); idx >= 0 {
+			return u[:idx] + "//127.0.0.1:" + u[idx+len(bind):]
 		}
 	}
-	// Fallback — the caller will get a connection error with a helpful hint.
-	return "http://127.0.0.1:8080"
+	return u
+}
+
+// newLocalServerClient returns an http.Client configured to talk to the
+// local DDx server over the auto-generated self-signed TLS certificate.
+// Clients skip verification because the server's cert is a throwaway
+// localhost cert stored under ~/.ddx/server/tls/ — there's nothing useful
+// to verify, and trusting self-signed certs via the system store would
+// require root. Only use this helper for local-loopback requests.
+func newLocalServerClient() *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local self-signed cert
+		},
+	}
 }
 
 // resolveWorktree creates a git worktree at .worktrees/<name> if it does not
