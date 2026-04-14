@@ -913,8 +913,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 27 {
-		t.Fatalf("expected 27 MCP tools, got %d", len(tools))
+	if len(tools) != 29 {
+		t.Fatalf("expected 29 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
