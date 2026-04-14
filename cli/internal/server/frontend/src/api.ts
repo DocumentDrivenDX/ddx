@@ -1,4 +1,4 @@
-import type { AgentSessionDetail, AgentSessionSummary } from './types'
+import type { AgentSessionDetail, AgentSessionSummary, WorkerRecord } from './types'
 
 const BASE = '/api'
 
@@ -79,6 +79,10 @@ export const api = {
   agentSessions: (harness?: string) =>
     fetchJSON<AgentSessionSummary[]>(`/agent/sessions${harness ? `?harness=${harness}` : ''}`),
   agentSessionDetail: (id: string) => fetchJSON<AgentSessionDetail>(`/agent/sessions/${id}`),
+  agentWorkers: () => fetchJSON<WorkerRecord[]>('/agent/workers'),
+  agentWorkerDetail: (id: string) => fetchJSON<WorkerRecord>(`/agent/workers/${id}`),
+  agentWorkerLog: (id: string) => fetchJSON<{ stdout: string; stderr: string }>(`/agent/workers/${id}/log`),
+  agentWorkerPrompt: (id: string) => fetchText(`/agent/workers/${id}/prompt`),
   personas: () => fetchJSON<any[]>('/personas'),
   personaDetail: (role: string) => fetchJSON<any>(`/personas/${role}`),
   health: () => fetchJSON<any>('/health'),

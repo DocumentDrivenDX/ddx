@@ -88,3 +88,74 @@ export interface AgentSessionDetail extends AgentSessionSummary {
   prompt?: string
   response?: string
 }
+
+export interface CurrentAttemptInfo {
+  attempt_id: string
+  bead_id: string
+  bead_title?: string
+  harness?: string
+  model?: string
+  profile?: string
+  phase: string
+  phase_seq: number
+  started_at: string
+  elapsed_ms: number
+}
+
+export interface PhaseTransition {
+  phase: string
+  ts: string
+  phase_seq: number
+}
+
+export interface LastAttemptInfo {
+  attempt_id: string
+  bead_id: string
+  phase: string
+  started_at: string
+  ended_at: string
+  elapsed_ms: number
+}
+
+export interface WorkerExecutionResult {
+  bead_id?: string
+  attempt_id?: string
+  worker_id?: string
+  harness?: string
+  provider?: string
+  model?: string
+  status?: string
+  detail?: string
+  session_id?: string
+  base_rev?: string
+  result_rev?: string
+  retry_after?: string
+}
+
+export interface WorkerRecord {
+  id: string
+  kind: string
+  state: string
+  status?: string
+  project_root: string
+  harness?: string
+  provider?: string
+  model?: string
+  effort?: string
+  once?: boolean
+  poll_interval?: string
+  started_at?: string
+  finished_at?: string
+  error?: string
+  stdout_path?: string
+  spec_path?: string
+  attempts?: number
+  successes?: number
+  failures?: number
+  current_bead?: string
+  last_error?: string
+  last_result?: WorkerExecutionResult
+  current_attempt?: CurrentAttemptInfo
+  recent_phases?: PhaseTransition[]
+  last_attempt?: LastAttemptInfo
+}

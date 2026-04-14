@@ -384,6 +384,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
 	s.mux.HandleFunc("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
 	s.mux.HandleFunc("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
+	s.mux.HandleFunc("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
 
 	// Project-scoped worker endpoints (FEAT-002 §22-24)
 	s.mux.HandleFunc("GET /api/projects/{project}/workers", s.handleProjectWorkerList)
@@ -1683,6 +1684,39 @@ func (s *Server) handleAgentWorkerLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"stdout": stdout, "stderr": stderr})
+}
+
+func (s *Server) handleAgentWorkerPrompt(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	record, err := s.workers.Show(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	// Try current attempt first, fall back to last attempt
+	var attemptID string
+	if record.CurrentAttempt != nil {
+		attemptID = record.CurrentAttempt.AttemptID
+	} else if record.LastAttempt != nil {
+		attemptID = record.LastAttempt.AttemptID
+	}
+	if attemptID == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no attempt available"})
+		return
+	}
+	promptPath := filepath.Join(s.WorkingDir, ".ddx", "executions", attemptID, "prompt.md")
+	data, err := os.ReadFile(promptPath)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "prompt not found"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 // --- Project-Scoped Worker Endpoints (FEAT-002 §22-24) ---

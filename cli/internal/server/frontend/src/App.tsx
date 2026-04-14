@@ -6,6 +6,7 @@ import Beads from './pages/Beads'
 import Graph from './pages/Graph'
 import Agent from './pages/Agent'
 import Personas from './pages/Personas'
+import Workers from './pages/Workers'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/graph" element={<Graph />} />
         <Route path="/agent" element={<Agent />} />
         <Route path="/personas" element={<Personas />} />
+        <Route path="/workers" element={<Workers />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
