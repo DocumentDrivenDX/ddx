@@ -106,11 +106,6 @@ func (r *queryResolver) Search(ctx context.Context, query string, first *int, af
 	panic("not implemented")
 }
 
-// Commits is the resolver for the commits field.
-func (r *queryResolver) Commits(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) (*CommitConnection, error) {
-	panic("not implemented")
-}
-
 // Workers is the resolver for the workers field.
 func (r *queryResolver) Workers(ctx context.Context, first *int, after *string, last *int, before *string) (*WorkerConnection, error) {
 	panic("not implemented")
