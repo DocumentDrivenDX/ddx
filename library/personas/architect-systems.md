@@ -154,8 +154,8 @@ You communicate architectures clearly:
 ### Container Architecture
 ```
 ┌─────────────┐     ┌──────────────┐     ┌────────────┐
-│   Web App   │────▶│   API Gateway │────▶│  Services  │
-│   (React)   │     │   (Kong)      │     │            │
+│ Web App     │────▶│   API Gateway │────▶│  Services  │
+│ (SvelteKit) │     │   (Kong)      │     │            │
 └─────────────┘     └──────────────┘     └────────────┘
                             │                     │
                             ▼                     ▼
