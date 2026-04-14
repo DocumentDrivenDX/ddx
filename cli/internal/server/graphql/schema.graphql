@@ -6,19 +6,19 @@
 # Scalars
 # ============================================
 
-# ISO-8601 datetime string
+"""ISO-8601 datetime string"""
 scalar DateTime
 
-# Arbitrary JSON blob (used for opaque map fields)
+"""Arbitrary JSON blob (used for opaque map fields)"""
 scalar JSON
 
 # ============================================
 # Interfaces
 # ============================================
 
-# Node is the Relay global object identification interface
+"""Node is the Relay global object identification interface"""
 interface Node {
-  # Globally unique identifier
+  """Globally unique identifier"""
   id: ID!
 }
 
@@ -26,15 +26,15 @@ interface Node {
 # Pagination (Relay Cursor Connections)
 # ============================================
 
-# PageInfo carries cursor-based pagination state (Relay spec)
+"""PageInfo carries cursor-based pagination state (Relay spec)"""
 type PageInfo {
-  # True when more edges exist after the last returned edge
+  """True when more edges exist after the last returned edge"""
   hasNextPage: Boolean!
-  # True when more edges exist before the first returned edge
+  """True when more edges exist before the first returned edge"""
   hasPreviousPage: Boolean!
-  # Cursor of the first edge in the current page (null when empty)
+  """Cursor of the first edge in the current page (null when empty)"""
   startCursor: String
-  # Cursor of the last edge in the current page (null when empty)
+  """Cursor of the last edge in the current page (null when empty)"""
   endCursor: String
 }
 
@@ -42,53 +42,53 @@ type PageInfo {
 # Node & Project
 # ============================================
 
-# NodeInfo represents the running ddx-server instance
+"""NodeInfo represents the running ddx-server instance"""
 type NodeInfo implements Node {
-  # Unique node identifier (stable across restarts)
+  """Unique node identifier (stable across restarts)"""
   id: ID!
-  # Human-readable node name
+  """Human-readable node name"""
   name: String!
-  # Timestamp when the server process started
+  """Timestamp when the server process started"""
   startedAt: DateTime!
-  # Timestamp of the most recent heartbeat
+  """Timestamp of the most recent heartbeat"""
   lastSeen: DateTime!
 }
 
-# Project represents a registered ddx project on this node
+"""Project represents a registered ddx project on this node"""
 type Project implements Node {
-  # Unique project identifier
+  """Unique project identifier"""
   id: ID!
-  # Short display name
+  """Short display name"""
   name: String!
-  # Absolute filesystem path to the project root
+  """Absolute filesystem path to the project root"""
   path: String!
-  # Git remote URL, if configured
+  """Git remote URL, if configured"""
   gitRemote: String
-  # When the project was first registered with the server
+  """When the project was first registered with the server"""
   registeredAt: DateTime!
-  # Timestamp of the last successful probe
+  """Timestamp of the last successful probe"""
   lastSeen: DateTime!
-  # True when the project path is inaccessible
+  """True when the project path is inaccessible"""
   unreachable: Boolean
-  # Set when the project has been tombstoned (soft-deleted)
+  """Set when the project has been tombstoned (soft-deleted)"""
   tombstonedAt: DateTime
 }
 
-# ProjectEdge is one edge in a ProjectConnection
+"""ProjectEdge is one edge in a ProjectConnection"""
 type ProjectEdge {
-  # The project at this position
+  """The project at this position"""
   node: Project!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# ProjectConnection is a Relay cursor connection of projects
+"""ProjectConnection is a Relay cursor connection of projects"""
 type ProjectConnection {
-  # Ordered list of project edges
+  """Ordered list of project edges"""
   edges: [ProjectEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of projects matching the filter
+  """Total number of projects matching the filter"""
   totalCount: Int!
 }
 
@@ -96,85 +96,85 @@ type ProjectConnection {
 # Beads
 # ============================================
 
-# Bead is a portable work item with lifecycle metadata
+"""Bead is a portable work item with lifecycle metadata"""
 type Bead implements Node {
-  # Unique bead identifier (e.g. "ddx-a1b2c3d4")
+  """Unique bead identifier (e.g. "ddx-a1b2c3d4")"""
   id: ID!
-  # Short summary of the work
+  """Short summary of the work"""
   title: String!
-  # Lifecycle status: open, in-progress, closed, blocked
+  """Lifecycle status: open, in-progress, closed, blocked"""
   status: String!
-  # Numeric priority (lower is higher priority)
+  """Numeric priority (lower is higher priority)"""
   priority: Int!
-  # Issue classification (e.g. "task", "bug", "spike")
+  """Issue classification (e.g. "task", "bug", "spike")"""
   issueType: String!
-  # Agent or human currently responsible
+  """Agent or human currently responsible"""
   owner: String
-  # When the bead was created
+  """When the bead was created"""
   createdAt: DateTime!
-  # Who or what created the bead
+  """Who or what created the bead"""
   createdBy: String
-  # Last modification timestamp
+  """Last modification timestamp"""
   updatedAt: DateTime!
-  # Freeform labels for filtering and grouping
+  """Freeform labels for filtering and grouping"""
   labels: [String!]
-  # Parent bead ID for hierarchy
+  """Parent bead ID for hierarchy"""
   parent: String
-  # Full description / body text
+  """Full description / body text"""
   description: String
-  # Acceptance criteria text
+  """Acceptance criteria text"""
   acceptance: String
-  # Freeform notes appended during work
+  """Freeform notes appended during work"""
   notes: String
-  # Dependency edges to other beads
+  """Dependency edges to other beads"""
   dependencies: [Dependency!]
 }
 
-# Dependency is a directed edge between two beads
+"""Dependency is a directed edge between two beads"""
 type Dependency {
-  # The bead that has the dependency
+  """The bead that has the dependency"""
   issueId: String!
-  # The bead that must be completed first
+  """The bead that must be completed first"""
   dependsOnId: String!
-  # Dependency kind (e.g. "blocks", "relates-to")
+  """Dependency kind (e.g. "blocks", "relates-to")"""
   type: String!
-  # When the dependency was created
+  """When the dependency was created"""
   createdAt: String
-  # Who created the dependency
+  """Who created the dependency"""
   createdBy: String
-  # Opaque metadata attached to the link
+  """Opaque metadata attached to the link"""
   metadata: String
 }
 
-# BeadEdge is one edge in a BeadConnection
+"""BeadEdge is one edge in a BeadConnection"""
 type BeadEdge {
-  # The bead at this position
+  """The bead at this position"""
   node: Bead!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# BeadConnection is a Relay cursor connection of beads
+"""BeadConnection is a Relay cursor connection of beads"""
 type BeadConnection {
-  # Ordered list of bead edges
+  """Ordered list of bead edges"""
   edges: [BeadEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of beads matching the filter
+  """Total number of beads matching the filter"""
   totalCount: Int!
 }
 
-# BeadStatusCounts holds aggregate bead counts by status
+"""BeadStatusCounts holds aggregate bead counts by status"""
 type BeadStatusCounts {
-  # Number of beads in open status
+  """Number of beads in open status"""
   open: Int!
-  # Number of beads in closed status
+  """Number of beads in closed status"""
   closed: Int!
-  # Number of beads with unclosed dependencies
+  """Number of beads with unclosed dependencies"""
   blocked: Int!
-  # Number of open beads whose dependencies are all closed
+  """Number of open beads whose dependencies are all closed"""
   ready: Int!
-  # Total number of beads
+  """Total number of beads"""
   total: Int!
 }
 
@@ -182,123 +182,123 @@ type BeadStatusCounts {
 # Documents (library)
 # ============================================
 
-# Document represents a docgraph document with dependency tracking
+"""Document represents a docgraph document with dependency tracking"""
 type Document implements Node {
-  # Document identifier (usually the relative path)
+  """Document identifier (usually the relative path)"""
   id: ID!
-  # Filesystem path relative to the library root
+  """Filesystem path relative to the library root"""
   path: String!
-  # Human-readable title extracted from frontmatter
+  """Human-readable title extracted from frontmatter"""
   title: String!
-  # IDs of documents this document depends on
+  """IDs of documents this document depends on"""
   dependsOn: [String!]!
-  # IDs of input artifacts consumed by this document
+  """IDs of input artifacts consumed by this document"""
   inputs: [String!]!
-  # IDs of documents that depend on this document
+  """IDs of documents that depend on this document"""
   dependents: [String!]!
-  # Review state metadata (null if never reviewed)
+  """Review state metadata (null if never reviewed)"""
   review: DocumentReview
-  # True if parked (excluded from staleness checks)
+  """True if parked (excluded from staleness checks)"""
   parkingLot: Boolean!
-  # Prompt text embedded in the document frontmatter
+  """Prompt text embedded in the document frontmatter"""
   prompt: String
-  # Execution definition embedded in the document (null if none)
+  """Execution definition embedded in the document (null if none)"""
   execDef: DocumentExecDef
 }
 
-# DocumentReview holds review-state metadata for a document
+"""DocumentReview holds review-state metadata for a document"""
 type DocumentReview {
-  # Hash of the document content at review time
+  """Hash of the document content at review time"""
   selfHash: String!
-  # Map of dependency IDs to their hashes at review time
+  """Map of dependency IDs to their hashes at review time"""
   deps: JSON!
-  # ISO-8601 timestamp of the last review
+  """ISO-8601 timestamp of the last review"""
   reviewedAt: String!
 }
 
-# DocumentExecDef holds an execution definition embedded in a document
+"""DocumentExecDef holds an execution definition embedded in a document"""
 type DocumentExecDef {
-  # Definition identifier
+  """Definition identifier"""
   id: String
-  # IDs of artifacts this definition produces or consumes
+  """IDs of artifacts this definition produces or consumes"""
   artifactIds: [String!]
-  # How to invoke the execution
+  """How to invoke the execution"""
   executor: ExecutorSpec
-  # How to interpret the result
+  """How to interpret the result"""
   result: ResultSpec
-  # Evaluation criteria and thresholds
+  """Evaluation criteria and thresholds"""
   evaluation: Evaluation
-  # Whether the definition is currently active
+  """Whether the definition is currently active"""
   active: Boolean
-  # Whether the definition must pass for merge
+  """Whether the definition must pass for merge"""
   required: Boolean
-  # Whether this definition was discovered from the docgraph
+  """Whether this definition was discovered from the docgraph"""
   graphSource: Boolean
-  # When the definition was created
+  """When the definition was created"""
   createdAt: DateTime
 }
 
-# ExecutorSpec describes how to invoke an execution
+"""ExecutorSpec describes how to invoke an execution"""
 type ExecutorSpec {
-  # Execution kind (e.g. "shell", "agent")
+  """Execution kind (e.g. "shell", "agent")"""
   kind: String!
-  # Command and arguments to run
+  """Command and arguments to run"""
   command: [String!]
-  # Working directory for the command
+  """Working directory for the command"""
   cwd: String
-  # Environment variables as key-value pairs
+  """Environment variables as key-value pairs"""
   env: JSON
-  # Maximum execution time in milliseconds
+  """Maximum execution time in milliseconds"""
   timeoutMs: Int
 }
 
-# ResultSpec describes how to interpret an execution result
+"""ResultSpec describes how to interpret an execution result"""
 type ResultSpec {
-  # Metric-shaped projection (null if not metric-typed)
+  """Metric-shaped projection (null if not metric-typed)"""
   metric: MetricResultSpec
 }
 
-# MetricResultSpec defines metric extraction from execution output
+"""MetricResultSpec defines metric extraction from execution output"""
 type MetricResultSpec {
-  # Unit of measurement (e.g. "ms", "bytes")
+  """Unit of measurement (e.g. "ms", "bytes")"""
   unit: String
-  # JSONPath to the numeric value
+  """JSONPath to the numeric value"""
   valuePath: String
-  # JSONPath to the samples array
+  """JSONPath to the samples array"""
   samplesPath: String
 }
 
-# Evaluation holds interpretation rules for execution results
+"""Evaluation holds interpretation rules for execution results"""
 type Evaluation {
-  # Comparison operator (e.g. "lt", "gt", "eq")
+  """Comparison operator (e.g. "lt", "gt", "eq")"""
   comparison: String
-  # Threshold values for warn/ratchet
+  """Threshold values for warn/ratchet"""
   thresholds: Thresholds
 }
 
-# Thresholds captures the ratchet policy for metric evaluations
+"""Thresholds captures the ratchet policy for metric evaluations"""
 type Thresholds {
-  # Warn threshold in milliseconds
+  """Warn threshold in milliseconds"""
   warnMs: Float
-  # Ratchet threshold in milliseconds
+  """Ratchet threshold in milliseconds"""
   ratchetMs: Float
 }
 
-# DocumentEdge is one edge in a DocumentConnection
+"""DocumentEdge is one edge in a DocumentConnection"""
 type DocumentEdge {
-  # The document at this position
+  """The document at this position"""
   node: Document!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# DocumentConnection is a Relay cursor connection of documents
+"""DocumentConnection is a Relay cursor connection of documents"""
 type DocumentConnection {
-  # Ordered list of document edges
+  """Ordered list of document edges"""
   edges: [DocumentEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of documents matching the filter
+  """Total number of documents matching the filter"""
   totalCount: Int!
 }
 
@@ -306,27 +306,27 @@ type DocumentConnection {
 # Doc Graph
 # ============================================
 
-# DocGraph represents the full document dependency graph
+"""DocGraph represents the full document dependency graph"""
 type DocGraph {
-  # Absolute path to the docgraph root directory
+  """Absolute path to the docgraph root directory"""
   rootDir: String!
-  # All documents in the graph
+  """All documents in the graph"""
   documents: [Document!]!
-  # Map of relative paths to document IDs
+  """Map of relative paths to document IDs"""
   pathToId: JSON!
-  # Map of document IDs to lists of dependent IDs
+  """Map of document IDs to lists of dependent IDs"""
   dependents: JSON!
-  # Warnings generated during graph construction
+  """Warnings generated during graph construction"""
   warnings: [String!]!
 }
 
-# StaleReason explains why a specific document is stale
+"""StaleReason explains why a specific document is stale"""
 type StaleReason {
-  # Document identifier
+  """Document identifier"""
   id: ID!
-  # Filesystem path of the stale document
+  """Filesystem path of the stale document"""
   path: String!
-  # Human-readable explanations of why the document is stale
+  """Human-readable explanations of why the document is stale"""
   reasons: [String!]!
 }
 
@@ -334,33 +334,33 @@ type StaleReason {
 # Search
 # ============================================
 
-# SearchResult represents a single search hit from the library
+"""SearchResult represents a single search hit from the library"""
 type SearchResult {
-  # Filesystem path of the matching resource
+  """Filesystem path of the matching resource"""
   path: String!
-  # Resource type (e.g. "prompt", "template", "persona")
+  """Resource type (e.g. "prompt", "template", "persona")"""
   type: String!
-  # Display name of the resource
+  """Display name of the resource"""
   name: String!
-  # Excerpt showing the match context
+  """Excerpt showing the match context"""
   snippet: String
 }
 
-# SearchResultEdge is one edge in a SearchResultConnection
+"""SearchResultEdge is one edge in a SearchResultConnection"""
 type SearchResultEdge {
-  # The search result at this position
+  """The search result at this position"""
   node: SearchResult!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# SearchResultConnection is a Relay cursor connection of search results
+"""SearchResultConnection is a Relay cursor connection of search results"""
 type SearchResultConnection {
-  # Ordered list of search result edges
+  """Ordered list of search result edges"""
   edges: [SearchResultEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of results matching the query
+  """Total number of results matching the query"""
   totalCount: Int!
 }
 
@@ -368,39 +368,39 @@ type SearchResultConnection {
 # Commits
 # ============================================
 
-# Commit represents a git commit
+"""Commit represents a git commit"""
 type Commit {
-  # Full SHA hash
+  """Full SHA hash"""
   sha: String!
-  # Abbreviated SHA (7 characters)
+  """Abbreviated SHA (7 characters)"""
   shortSha: String!
-  # Author name and email
+  """Author name and email"""
   author: String!
-  # Commit timestamp
+  """Commit timestamp"""
   date: DateTime!
-  # First line of the commit message
+  """First line of the commit message"""
   subject: String!
-  # Remaining commit message body (null if single-line message)
+  """Remaining commit message body (null if single-line message)"""
   body: String
-  # Bead IDs referenced in the commit message
+  """Bead IDs referenced in the commit message"""
   beadRefs: [String!]
 }
 
-# CommitEdge is one edge in a CommitConnection
+"""CommitEdge is one edge in a CommitConnection"""
 type CommitEdge {
-  # The commit at this position
+  """The commit at this position"""
   node: Commit!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# CommitConnection is a Relay cursor connection of commits
+"""CommitConnection is a Relay cursor connection of commits"""
 type CommitConnection {
-  # Ordered list of commit edges
+  """Ordered list of commit edges"""
   edges: [CommitEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of commits matching the filter
+  """Total number of commits matching the filter"""
   totalCount: Int!
 }
 
@@ -408,163 +408,163 @@ type CommitConnection {
 # Workers
 # ============================================
 
-# Worker represents an execute-loop worker process
+"""Worker represents an execute-loop worker process"""
 type Worker implements Node {
-  # Unique worker identifier
+  """Unique worker identifier"""
   id: ID!
-  # Worker kind (e.g. "execute-loop")
+  """Worker kind (e.g. "execute-loop")"""
   kind: String!
-  # Current lifecycle state (e.g. "running", "idle", "stopped")
+  """Current lifecycle state (e.g. "running", "idle", "stopped")"""
   state: String!
-  # Human-readable status summary
+  """Human-readable status summary"""
   status: String
-  # Absolute path to the project this worker operates on
+  """Absolute path to the project this worker operates on"""
   projectRoot: String!
-  # Agent harness name (e.g. "claude", "codex")
+  """Agent harness name (e.g. "claude", "codex")"""
   harness: String
-  # Provider/backend name
+  """Provider/backend name"""
   provider: String
-  # Model identifier used for execution
+  """Model identifier used for execution"""
   model: String
-  # Effort level (e.g. "low", "medium", "high")
+  """Effort level (e.g. "low", "medium", "high")"""
   effort: String
-  # True if the worker should stop after one bead
+  """True if the worker should stop after one bead"""
   once: Boolean
-  # Interval between poll cycles (e.g. "30s")
+  """Interval between poll cycles (e.g. "30s")"""
   pollInterval: String
-  # When the worker was started
+  """When the worker was started"""
   startedAt: DateTime
-  # When the worker finished (null if still running)
+  """When the worker finished (null if still running)"""
   finishedAt: DateTime
-  # Fatal error that stopped the worker
+  """Fatal error that stopped the worker"""
   error: String
-  # Path to the worker's stdout log file
+  """Path to the worker's stdout log file"""
   stdoutPath: String
-  # Path to the worker's spec/config file
+  """Path to the worker's spec/config file"""
   specPath: String
-  # Total number of execution attempts
+  """Total number of execution attempts"""
   attempts: Int
-  # Number of successful executions
+  """Number of successful executions"""
   successes: Int
-  # Number of failed executions
+  """Number of failed executions"""
   failures: Int
-  # Bead ID currently being executed (null if idle)
+  """Bead ID currently being executed (null if idle)"""
   currentBead: String
-  # Most recent error message from an execution
+  """Most recent error message from an execution"""
   lastError: String
-  # Result of the most recently completed execution
+  """Result of the most recently completed execution"""
   lastResult: WorkerExecutionResult
-  # In-flight attempt summary (null if idle)
+  """In-flight attempt summary (null if idle)"""
   currentAttempt: CurrentAttemptInfo
-  # Recent phase transitions for observability
+  """Recent phase transitions for observability"""
   recentPhases: [PhaseTransition!]
-  # Summary of the most recently completed attempt
+  """Summary of the most recently completed attempt"""
   lastAttempt: LastAttemptInfo
-  # Land coordinator metrics for this worker's project
+  """Land coordinator metrics for this worker's project"""
   landSummary: CoordinatorMetrics
 }
 
-# CurrentAttemptInfo summarises the in-flight execution attempt
+"""CurrentAttemptInfo summarises the in-flight execution attempt"""
 type CurrentAttemptInfo {
-  # Unique attempt identifier
+  """Unique attempt identifier"""
   attemptId: String!
-  # Bead being executed
+  """Bead being executed"""
   beadId: String!
-  # Title of the bead being executed
+  """Title of the bead being executed"""
   beadTitle: String
-  # Harness running this attempt
+  """Harness running this attempt"""
   harness: String
-  # Model used for this attempt
+  """Model used for this attempt"""
   model: String
-  # Profile/configuration name
+  """Profile/configuration name"""
   profile: String
-  # Current execution phase
+  """Current execution phase"""
   phase: String!
-  # Sequence number of the current phase
+  """Sequence number of the current phase"""
   phaseSeq: Int!
-  # When this attempt started
+  """When this attempt started"""
   startedAt: DateTime!
-  # Milliseconds elapsed since attempt start
+  """Milliseconds elapsed since attempt start"""
   elapsedMs: Int!
 }
 
-# PhaseTransition records a single phase change event
+"""PhaseTransition records a single phase change event"""
 type PhaseTransition {
-  # Phase name entered
+  """Phase name entered"""
   phase: String!
-  # Timestamp of the transition
+  """Timestamp of the transition"""
   ts: DateTime!
-  # Sequence number of this phase
+  """Sequence number of this phase"""
   phaseSeq: Int!
 }
 
-# LastAttemptInfo summarises the most recently completed attempt
+"""LastAttemptInfo summarises the most recently completed attempt"""
 type LastAttemptInfo {
-  # Unique attempt identifier
+  """Unique attempt identifier"""
   attemptId: String!
-  # Bead that was executed
+  """Bead that was executed"""
   beadId: String!
-  # Final phase reached
+  """Final phase reached"""
   phase: String!
-  # When the attempt started
+  """When the attempt started"""
   startedAt: DateTime!
-  # When the attempt ended
+  """When the attempt ended"""
   endedAt: DateTime!
-  # Total duration in milliseconds
+  """Total duration in milliseconds"""
   elapsedMs: Int!
 }
 
-# WorkerExecutionResult captures the outcome of one execution
+"""WorkerExecutionResult captures the outcome of one execution"""
 type WorkerExecutionResult {
-  # Bead that was executed
+  """Bead that was executed"""
   beadId: String
-  # Unique attempt identifier
+  """Unique attempt identifier"""
   attemptId: String
-  # Worker that ran the execution
+  """Worker that ran the execution"""
   workerId: String
-  # Harness used
+  """Harness used"""
   harness: String
-  # Provider used
+  """Provider used"""
   provider: String
-  # Model used
+  """Model used"""
   model: String
-  # Outcome status (e.g. "success", "failure", "timeout")
+  """Outcome status (e.g. "success", "failure", "timeout")"""
   status: String
-  # Human-readable outcome detail
+  """Human-readable outcome detail"""
   detail: String
-  # Correlated agent session ID
+  """Correlated agent session ID"""
   sessionId: String
-  # Git revision the execution started from
+  """Git revision the execution started from"""
   baseRev: String
-  # Git revision produced by the execution
+  """Git revision produced by the execution"""
   resultRev: String
-  # Suggested retry delay (e.g. "30s")
+  """Suggested retry delay (e.g. "30s")"""
   retryAfter: String
 }
 
-# WorkerEdge is one edge in a WorkerConnection
+"""WorkerEdge is one edge in a WorkerConnection"""
 type WorkerEdge {
-  # The worker at this position
+  """The worker at this position"""
   node: Worker!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# WorkerConnection is a Relay cursor connection of workers
+"""WorkerConnection is a Relay cursor connection of workers"""
 type WorkerConnection {
-  # Ordered list of worker edges
+  """Ordered list of worker edges"""
   edges: [WorkerEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of workers matching the filter
+  """Total number of workers matching the filter"""
   totalCount: Int!
 }
 
-# WorkerLog holds captured output from a worker process
+"""WorkerLog holds captured output from a worker process"""
 type WorkerLog {
-  # Captured standard output
+  """Captured standard output"""
   stdout: String!
-  # Captured standard error
+  """Captured standard error"""
   stderr: String!
 }
 
@@ -572,73 +572,73 @@ type WorkerLog {
 # Agent Sessions
 # ============================================
 
-# AgentSession represents one agent execution session
+"""AgentSession represents one agent execution session"""
 type AgentSession implements Node {
-  # Unique session identifier
+  """Unique session identifier"""
   id: ID!
-  # Project this session belongs to
+  """Project this session belongs to"""
   projectId: String!
-  # Bead being worked on (null for ad-hoc runs)
+  """Bead being worked on (null for ad-hoc runs)"""
   beadId: String
-  # Agent harness used (e.g. "claude", "codex")
+  """Agent harness used (e.g. "claude", "codex")"""
   harness: String!
-  # Model identifier
+  """Model identifier"""
   model: String!
-  # Effort level applied
+  """Effort level applied"""
   effort: String!
-  # Session status (e.g. "running", "completed", "failed")
+  """Session status (e.g. "running", "completed", "failed")"""
   status: String!
-  # When the session started
+  """When the session started"""
   startedAt: DateTime!
-  # When the session ended (null if still running)
+  """When the session ended (null if still running)"""
   endedAt: DateTime
-  # Path to stdout log file
+  """Path to stdout log file"""
   stdoutPath: String
-  # Path to stderr log file
+  """Path to stderr log file"""
   stderrPath: String
-  # Total duration in milliseconds
+  """Total duration in milliseconds"""
   durationMs: Int!
-  # Estimated cost in USD (null if unknown)
+  """Estimated cost in USD (null if unknown)"""
   cost: Float
-  # Token consumption breakdown
+  """Token consumption breakdown"""
   tokens: TokenUsage
-  # Outcome classification (e.g. "success", "failure")
+  """Outcome classification (e.g. "success", "failure")"""
   outcome: String
-  # Human-readable outcome detail
+  """Human-readable outcome detail"""
   detail: String
-  # Git revision produced by this session
+  """Git revision produced by this session"""
   resultRev: String
-  # Git revision the session started from
+  """Git revision the session started from"""
   baseRev: String
 }
 
-# TokenUsage breaks down token consumption for a session
+"""TokenUsage breaks down token consumption for a session"""
 type TokenUsage {
-  # Number of prompt/input tokens consumed
+  """Number of prompt/input tokens consumed"""
   prompt: Int
-  # Number of completion/output tokens generated
+  """Number of completion/output tokens generated"""
   completion: Int
-  # Total tokens (prompt + completion)
+  """Total tokens (prompt + completion)"""
   total: Int
-  # Number of tokens served from cache
+  """Number of tokens served from cache"""
   cached: Int
 }
 
-# AgentSessionEdge is one edge in an AgentSessionConnection
+"""AgentSessionEdge is one edge in an AgentSessionConnection"""
 type AgentSessionEdge {
-  # The session at this position
+  """The session at this position"""
   node: AgentSession!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# AgentSessionConnection is a Relay cursor connection of agent sessions
+"""AgentSessionConnection is a Relay cursor connection of agent sessions"""
 type AgentSessionConnection {
-  # Ordered list of session edges
+  """Ordered list of session edges"""
   edges: [AgentSessionEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of sessions matching the filter
+  """Total number of sessions matching the filter"""
   totalCount: Int!
 }
 
@@ -646,41 +646,41 @@ type AgentSessionConnection {
 # Personas
 # ============================================
 
-# Persona represents an AI persona definition from the library
+"""Persona represents an AI persona definition from the library"""
 type Persona implements Node {
-  # Unique persona identifier
+  """Unique persona identifier"""
   id: ID!
-  # Persona name (e.g. "strict-code-reviewer")
+  """Persona name (e.g. "strict-code-reviewer")"""
   name: String!
-  # Roles this persona fulfills (e.g. ["code-reviewer"])
+  """Roles this persona fulfills (e.g. ["code-reviewer"])"""
   roles: [String!]!
-  # Short description of the persona's behaviour
+  """Short description of the persona's behaviour"""
   description: String!
-  # Freeform tags for discovery and filtering
+  """Freeform tags for discovery and filtering"""
   tags: [String!]!
-  # Full persona prompt/instruction text
+  """Full persona prompt/instruction text"""
   content: String!
-  # Filesystem path to the persona definition file
+  """Filesystem path to the persona definition file"""
   filePath: String
-  # Last modification time of the persona file
+  """Last modification time of the persona file"""
   modTime: DateTime
 }
 
-# PersonaEdge is one edge in a PersonaConnection
+"""PersonaEdge is one edge in a PersonaConnection"""
 type PersonaEdge {
-  # The persona at this position
+  """The persona at this position"""
   node: Persona!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# PersonaConnection is a Relay cursor connection of personas
+"""PersonaConnection is a Relay cursor connection of personas"""
 type PersonaConnection {
-  # Ordered list of persona edges
+  """Ordered list of persona edges"""
   edges: [PersonaEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of personas matching the filter
+  """Total number of personas matching the filter"""
   totalCount: Int!
 }
 
@@ -688,149 +688,149 @@ type PersonaConnection {
 # Executions
 # ============================================
 
-# ExecutionDefinition describes a repeatable execution (check, benchmark, etc.)
+"""ExecutionDefinition describes a repeatable execution (check, benchmark, etc.)"""
 type ExecutionDefinition implements Node {
-  # Unique definition identifier
+  """Unique definition identifier"""
   id: ID!
-  # IDs of artifacts this definition produces or consumes
+  """IDs of artifacts this definition produces or consumes"""
   artifactIds: [String!]!
-  # How to invoke the execution
+  """How to invoke the execution"""
   executor: ExecutorSpec!
-  # How to interpret the result
+  """How to interpret the result"""
   result: ResultSpec
-  # Evaluation criteria and thresholds
+  """Evaluation criteria and thresholds"""
   evaluation: Evaluation
-  # Whether the definition is currently active
+  """Whether the definition is currently active"""
   active: Boolean!
-  # Whether the definition must pass for merge
+  """Whether the definition must pass for merge"""
   required: Boolean
-  # Whether this definition was discovered from the docgraph
+  """Whether this definition was discovered from the docgraph"""
   graphSource: Boolean
-  # When the definition was created
+  """When the definition was created"""
   createdAt: DateTime!
 }
 
-# ExecutionDefinitionEdge is one edge in an ExecutionDefinitionConnection
+"""ExecutionDefinitionEdge is one edge in an ExecutionDefinitionConnection"""
 type ExecutionDefinitionEdge {
-  # The definition at this position
+  """The definition at this position"""
   node: ExecutionDefinition!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# ExecutionDefinitionConnection is a Relay cursor connection of execution definitions
+"""ExecutionDefinitionConnection is a Relay cursor connection of execution definitions"""
 type ExecutionDefinitionConnection {
-  # Ordered list of definition edges
+  """Ordered list of definition edges"""
   edges: [ExecutionDefinitionEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of definitions matching the filter
+  """Total number of definitions matching the filter"""
   totalCount: Int!
 }
 
-# ExecutionRun represents one invocation of an execution definition
+"""ExecutionRun represents one invocation of an execution definition"""
 type ExecutionRun implements Node {
-  # Unique run identifier
+  """Unique run identifier"""
   id: ID!
-  # ID of the definition that was executed
+  """ID of the definition that was executed"""
   definitionId: String!
-  # IDs of artifacts involved in this run
+  """IDs of artifacts involved in this run"""
   artifactIds: [String!]!
-  # When the run started
+  """When the run started"""
   startedAt: DateTime!
-  # When the run finished
+  """When the run finished"""
   finishedAt: DateTime!
-  # Run outcome status (e.g. "pass", "fail", "error")
+  """Run outcome status (e.g. "pass", "fail", "error")"""
   status: String!
-  # Process exit code
+  """Process exit code"""
   exitCode: Int!
-  # Whether a failure blocks merge
+  """Whether a failure blocks merge"""
   mergeBlocking: Boolean
-  # Correlated agent session ID (null if not agent-driven)
+  """Correlated agent session ID (null if not agent-driven)"""
   agentSessionId: String
-  # Opaque attachments (files, screenshots, etc.)
+  """Opaque attachments (files, screenshots, etc.)"""
   attachments: JSON
-  # Host and version metadata for reproducibility
+  """Host and version metadata for reproducibility"""
   provenance: Provenance
-  # Metric observation extracted from output (null if not metric-typed)
+  """Metric observation extracted from output (null if not metric-typed)"""
   metric: MetricObservation
-  # Captured stdout from the execution
+  """Captured stdout from the execution"""
   stdout: String
-  # Captured stderr from the execution
+  """Captured stderr from the execution"""
   stderr: String
-  # Extracted numeric value (null if not parsed)
+  """Extracted numeric value (null if not parsed)"""
   value: Float
-  # Unit of the extracted value
+  """Unit of the extracted value"""
   unit: String
-  # Whether the output was successfully parsed
+  """Whether the output was successfully parsed"""
   parsed: Boolean
 }
 
-# ExecutionRunEdge is one edge in an ExecutionRunConnection
+"""ExecutionRunEdge is one edge in an ExecutionRunConnection"""
 type ExecutionRunEdge {
-  # The run at this position
+  """The run at this position"""
   node: ExecutionRun!
-  # Opaque cursor for pagination
+  """Opaque cursor for pagination"""
   cursor: String!
 }
 
-# ExecutionRunConnection is a Relay cursor connection of execution runs
+"""ExecutionRunConnection is a Relay cursor connection of execution runs"""
 type ExecutionRunConnection {
-  # Ordered list of run edges
+  """Ordered list of run edges"""
   edges: [ExecutionRunEdge!]!
-  # Pagination metadata
+  """Pagination metadata"""
   pageInfo: PageInfo!
-  # Total number of runs matching the filter
+  """Total number of runs matching the filter"""
   totalCount: Int!
 }
 
-# ExecutionRunLog holds the captured output from an execution run
+"""ExecutionRunLog holds the captured output from an execution run"""
 type ExecutionRunLog {
-  # Captured standard output
+  """Captured standard output"""
   stdout: String!
-  # Captured standard error
+  """Captured standard error"""
   stderr: String!
 }
 
-# Provenance captures host and version metadata for reproducibility
+"""Provenance captures host and version metadata for reproducibility"""
 type Provenance {
-  # Actor that triggered the execution (agent name or "human")
+  """Actor that triggered the execution (agent name or "human")"""
   actor: String
-  # Hostname where the execution ran
+  """Hostname where the execution ran"""
   host: String
-  # Git revision at execution time
+  """Git revision at execution time"""
   gitRev: String
-  # DDx binary version
+  """DDx binary version"""
   ddxVersion: String
 }
 
-# MetricObservation records a metric-shaped measurement from an execution
+"""MetricObservation records a metric-shaped measurement from an execution"""
 type MetricObservation {
-  # Artifact ID the metric belongs to
+  """Artifact ID the metric belongs to"""
   artifactId: String!
-  # Definition ID that produced this metric
+  """Definition ID that produced this metric"""
   definitionId: String!
-  # When the observation was recorded
+  """When the observation was recorded"""
   observedAt: DateTime!
-  # Observation status (e.g. "pass", "warn", "fail")
+  """Observation status (e.g. "pass", "warn", "fail")"""
   status: String!
-  # Observed numeric value
+  """Observed numeric value"""
   value: Float!
-  # Unit of measurement
+  """Unit of measurement"""
   unit: String
-  # Raw sample values (for distribution metrics)
+  """Raw sample values (for distribution metrics)"""
   samples: [Float!]
-  # Comparison against baseline (null if no baseline)
+  """Comparison against baseline (null if no baseline)"""
   comparison: ComparisonResult
 }
 
-# ComparisonResult records a metric comparison against a baseline
+"""ComparisonResult records a metric comparison against a baseline"""
 type ComparisonResult {
-  # Baseline value being compared against
+  """Baseline value being compared against"""
   baseline: Float!
-  # Absolute difference (observed - baseline)
+  """Absolute difference (observed - baseline)"""
   delta: Float!
-  # Direction of change ("better", "worse", "neutral")
+  """Direction of change ("better", "worse", "neutral")"""
   direction: String!
 }
 
@@ -838,47 +838,47 @@ type ComparisonResult {
 # Coordinators
 # ============================================
 
-# LandOutcomeSummary is one entry in the coordinator's submission log
+"""LandOutcomeSummary is one entry in the coordinator's submission log"""
 type LandOutcomeSummary {
-  # When the submission completed
+  """When the submission completed"""
   ts: DateTime!
-  # Bead ID that was submitted (null for non-bead work)
+  """Bead ID that was submitted (null for non-bead work)"""
   beadId: String
-  # Attempt ID of the submission
+  """Attempt ID of the submission"""
   attemptId: String
-  # Outcome: landed, preserved, failed, or push_failed
+  """Outcome: landed, preserved, failed, or push_failed"""
   outcome: String!
-  # Duration of the land operation in milliseconds
+  """Duration of the land operation in milliseconds"""
   durationMs: Int!
-  # Number of commits in the submission
+  """Number of commits in the submission"""
   commitCount: Int!
 }
 
-# CoordinatorMetrics holds outcome metrics for one land coordinator
+"""CoordinatorMetrics holds outcome metrics for one land coordinator"""
 type CoordinatorMetrics {
-  # Number of submissions successfully merged
+  """Number of submissions successfully merged"""
   landed: Int!
-  # Number of submissions kept in a separate worktree
+  """Number of submissions kept in a separate worktree"""
   preserved: Int!
-  # Number of submissions that failed
+  """Number of submissions that failed"""
   failed: Int!
-  # Number of submissions that failed to push
+  """Number of submissions that failed to push"""
   pushFailed: Int!
-  # Sum of all submission durations in milliseconds
+  """Sum of all submission durations in milliseconds"""
   totalDurationMs: Int!
-  # Total commits across all submissions
+  """Total commits across all submissions"""
   totalCommits: Int!
-  # Ratio of preserved+failed to total submissions
+  """Ratio of preserved+failed to total submissions"""
   preservedRatio: Float!
-  # Up to the last 10 submission outcomes
+  """Up to the last 10 submission outcomes"""
   lastSubmissions: [LandOutcomeSummary!]
 }
 
-# CoordinatorMetricsEntry pairs a project root with its coordinator metrics
+"""CoordinatorMetricsEntry pairs a project root with its coordinator metrics"""
 type CoordinatorMetricsEntry {
-  # Absolute path to the project root
+  """Absolute path to the project root"""
   projectRoot: String!
-  # Coordinator outcome metrics for this project
+  """Coordinator outcome metrics for this project"""
   metrics: CoordinatorMetrics!
 }
 
@@ -886,27 +886,27 @@ type CoordinatorMetricsEntry {
 # Health
 # ============================================
 
-# HealthStatus represents the server health response
+"""HealthStatus represents the server health response"""
 type HealthStatus {
-  # Status string ("ok" when healthy)
+  """Status string ("ok" when healthy)"""
   status: String!
-  # When the server process started
+  """When the server process started"""
   startedAt: DateTime!
 }
 
-# ReadyCheck represents one subsystem readiness check
+"""ReadyCheck represents one subsystem readiness check"""
 type ReadyCheck {
-  # Subsystem name being checked
+  """Subsystem name being checked"""
   name: String!
-  # Check result ("ok" or a short problem description)
+  """Check result ("ok" or a short problem description)"""
   status: String!
 }
 
-# ReadyStatus represents the server readiness response
+"""ReadyStatus represents the server readiness response"""
 type ReadyStatus {
-  # True when all subsystem checks pass
+  """True when all subsystem checks pass"""
   ready: Boolean!
-  # Per-subsystem readiness state
+  """Per-subsystem readiness state"""
   checks: [ReadyCheck!]!
 }
 
@@ -914,321 +914,321 @@ type ReadyStatus {
 # Process Metrics
 # ============================================
 
-# Window captures the time window used to scope a metrics query
+"""Window captures the time window used to scope a metrics query"""
 type Window {
-  # Cutoff time for the window (null means all-time)
+  """Cutoff time for the window (null means all-time)"""
   since: DateTime
 }
 
-# SourceRef explains where a derived metric fact originated
+"""SourceRef explains where a derived metric fact originated"""
 type SourceRef {
-  # Bead ID associated with this fact
+  """Bead ID associated with this fact"""
   beadId: String
-  # Agent session ID associated with this fact
+  """Agent session ID associated with this fact"""
   sessionId: String
-  # Native (harness-specific) session identifier
+  """Native (harness-specific) session identifier"""
   nativeSessionId: String
-  # Native log reference for traceability
+  """Native log reference for traceability"""
   nativeLogRef: String
-  # SHA of the commit that closed the bead
+  """SHA of the commit that closed the bead"""
   closingCommitSha: String
-  # Timestamp of the source event
+  """Timestamp of the source event"""
   timestamp: DateTime
-  # Source system identifier
+  """Source system identifier"""
   source: String
 }
 
-# AggregateSummaryBeads holds bead-level aggregate counts
+"""AggregateSummaryBeads holds bead-level aggregate counts"""
 type AggregateSummaryBeads {
-  # Total number of beads
+  """Total number of beads"""
   total: Int!
-  # Number of beads in open status
+  """Number of beads in open status"""
   open: Int!
-  # Number of beads currently in progress
+  """Number of beads currently in progress"""
   inProgress: Int!
-  # Number of closed beads
+  """Number of closed beads"""
   closed: Int!
-  # Number of beads that have been reopened
+  """Number of beads that have been reopened"""
   reopened: Int!
-  # Beads with known cycle time data
+  """Beads with known cycle time data"""
   knownCycleTime: Int!
-  # Beads with unknown cycle time data
+  """Beads with unknown cycle time data"""
   unknownCycleTime: Int!
-  # Beads with known cost data
+  """Beads with known cost data"""
   knownCost: Int!
-  # Beads with estimated cost data
+  """Beads with estimated cost data"""
   estimatedCost: Int!
-  # Beads with unknown cost data
+  """Beads with unknown cost data"""
   unknownCost: Int!
 }
 
-# AggregateSummarySessions holds session-level aggregate counts
+"""AggregateSummarySessions holds session-level aggregate counts"""
 type AggregateSummarySessions {
-  # Total number of sessions
+  """Total number of sessions"""
   total: Int!
-  # Sessions correlated to a bead
+  """Sessions correlated to a bead"""
   correlated: Int!
-  # Sessions not correlated to any bead
+  """Sessions not correlated to any bead"""
   uncorrelated: Int!
-  # Total prompt/input tokens consumed
+  """Total prompt/input tokens consumed"""
   inputTokens: Int!
-  # Total completion/output tokens generated
+  """Total completion/output tokens generated"""
   outputTokens: Int!
-  # Total tokens (input + output)
+  """Total tokens (input + output)"""
   totalTokens: Int!
-  # Sessions with known cost data
+  """Sessions with known cost data"""
   knownCost: Int!
-  # Sessions with estimated cost data
+  """Sessions with estimated cost data"""
   estimatedCost: Int!
-  # Sessions with unknown cost data
+  """Sessions with unknown cost data"""
   unknownCost: Int!
-  # Total cost in USD
+  """Total cost in USD"""
   costUsd: Float!
 }
 
-# AggregateSummaryCost holds cost aggregates across beads and features
+"""AggregateSummaryCost holds cost aggregates across beads and features"""
 type AggregateSummaryCost {
-  # Number of beads with cost data
+  """Number of beads with cost data"""
   beads: Int!
-  # Number of features with cost data
+  """Number of features with cost data"""
   features: Int!
-  # Total known cost in USD
+  """Total known cost in USD"""
   knownCostUsd: Float!
-  # Total estimated cost in USD
+  """Total estimated cost in USD"""
   estimatedCostUsd: Float!
-  # Number of beads with no cost data
+  """Number of beads with no cost data"""
   unknownBeads: Int!
 }
 
-# AggregateSummaryCycleTime holds cycle time aggregates
+"""AggregateSummaryCycleTime holds cycle time aggregates"""
 type AggregateSummaryCycleTime {
-  # Number of beads with known cycle time
+  """Number of beads with known cycle time"""
   knownCount: Int!
-  # Number of beads with unknown cycle time
+  """Number of beads with unknown cycle time"""
   unknownCount: Int!
-  # Average cycle time in milliseconds
+  """Average cycle time in milliseconds"""
   averageMs: Int
-  # Minimum cycle time in milliseconds
+  """Minimum cycle time in milliseconds"""
   minMs: Int
-  # Maximum cycle time in milliseconds
+  """Maximum cycle time in milliseconds"""
   maxMs: Int
 }
 
-# AggregateSummaryRework holds rework/churn aggregates
+"""AggregateSummaryRework holds rework/churn aggregates"""
 type AggregateSummaryRework {
-  # Number of beads with known closure data
+  """Number of beads with known closure data"""
   knownClosed: Int!
-  # Number of beads known to have been reopened
+  """Number of beads known to have been reopened"""
   knownReopened: Int!
-  # Number of beads with unknown rework data
+  """Number of beads with unknown rework data"""
   unknownCount: Int!
-  # Ratio of reopened to total closed beads
+  """Ratio of reopened to total closed beads"""
   reopenRate: Float!
-  # Total number of post-close revisions
+  """Total number of post-close revisions"""
   revisionCount: Int!
 }
 
-# AggregateSummary is the full process-metrics summary
+"""AggregateSummary is the full process-metrics summary"""
 type AggregateSummary {
-  # Bead-level aggregate counts
+  """Bead-level aggregate counts"""
   beads: AggregateSummaryBeads!
-  # Session-level aggregate counts
+  """Session-level aggregate counts"""
   sessions: AggregateSummarySessions!
-  # Cost aggregates
+  """Cost aggregates"""
   cost: AggregateSummaryCost!
-  # Cycle time aggregates
+  """Cycle time aggregates"""
   cycleTime: AggregateSummaryCycleTime!
-  # Rework aggregates
+  """Rework aggregates"""
   rework: AggregateSummaryRework!
 }
 
-# CostSummary aggregates cost across all beads/features in a cost report
+"""CostSummary aggregates cost across all beads/features in a cost report"""
 type CostSummary {
-  # Number of beads with cost data
+  """Number of beads with cost data"""
   beads: Int!
-  # Number of features with cost data
+  """Number of features with cost data"""
   features: Int!
-  # Total known cost in USD
+  """Total known cost in USD"""
   knownCostUsd: Float!
-  # Total estimated cost in USD
+  """Total estimated cost in USD"""
   estimatedCostUsd: Float!
-  # Number of beads with no cost data
+  """Number of beads with no cost data"""
   unknownBeads: Int!
 }
 
-# BeadCostRow is one bead's cost attribution within a CostReport
+"""BeadCostRow is one bead's cost attribution within a CostReport"""
 type BeadCostRow {
-  # Bead identifier
+  """Bead identifier"""
   beadId: String!
-  # Bead title
+  """Bead title"""
   title: String!
-  # Spec/feature ID the bead belongs to
+  """Spec/feature ID the bead belongs to"""
   specId: String
-  # Current bead status
+  """Current bead status"""
   status: String!
-  # Agent sessions contributing to this bead's cost
+  """Agent sessions contributing to this bead's cost"""
   sessionIds: [String!]
-  # Total prompt/input tokens consumed
+  """Total prompt/input tokens consumed"""
   inputTokens: Int!
-  # Total completion/output tokens generated
+  """Total completion/output tokens generated"""
   outputTokens: Int!
-  # Total tokens (input + output)
+  """Total tokens (input + output)"""
   totalTokens: Int!
-  # Cost data quality: known, estimated, or unknown
+  """Cost data quality: known, estimated, or unknown"""
   costState: String!
-  # Cost in USD (null if unknown)
+  """Cost in USD (null if unknown)"""
   costUsd: Float
-  # Number of sessions with unknown cost
+  """Number of sessions with unknown cost"""
   unknownSessions: Int
-  # Source references for cost attribution
+  """Source references for cost attribution"""
   provenance: [SourceRef!]
 }
 
-# FeatureCostRow aggregates bead cost rows by spec/feature ID
+"""FeatureCostRow aggregates bead cost rows by spec/feature ID"""
 type FeatureCostRow {
-  # Spec/feature identifier
+  """Spec/feature identifier"""
   specId: String!
-  # Bead IDs contributing to this feature's cost
+  """Bead IDs contributing to this feature's cost"""
   beadIds: [String!]
-  # Total prompt/input tokens consumed
+  """Total prompt/input tokens consumed"""
   inputTokens: Int!
-  # Total completion/output tokens generated
+  """Total completion/output tokens generated"""
   outputTokens: Int!
-  # Total tokens (input + output)
+  """Total tokens (input + output)"""
   totalTokens: Int!
-  # Cost data quality: known, estimated, or unknown
+  """Cost data quality: known, estimated, or unknown"""
   costState: String!
-  # Cost in USD (null if unknown)
+  """Cost in USD (null if unknown)"""
   costUsd: Float
-  # Number of beads with unknown cost
+  """Number of beads with unknown cost"""
   unknownBeads: Int
 }
 
-# CostReport describes bead and feature cost attribution over a time window
+"""CostReport describes bead and feature cost attribution over a time window"""
 type CostReport {
-  # Report scope (e.g. "all", "bead", "feature")
+  """Report scope (e.g. "all", "bead", "feature")"""
   scope: String!
-  # Time window for the report (null means all-time)
+  """Time window for the report (null means all-time)"""
   window: Window
-  # Filter: specific bead ID (null for all beads)
+  """Filter: specific bead ID (null for all beads)"""
   beadId: String
-  # Filter: specific feature ID (null for all features)
+  """Filter: specific feature ID (null for all features)"""
   featureId: String
-  # Per-bead cost rows
+  """Per-bead cost rows"""
   beads: [BeadCostRow!]
-  # Per-feature cost rows
+  """Per-feature cost rows"""
   features: [FeatureCostRow!]
-  # Aggregate cost summary
+  """Aggregate cost summary"""
   summary: CostSummary!
 }
 
-# CycleTimeSummary aggregates lifecycle timing across all beads in a report
+"""CycleTimeSummary aggregates lifecycle timing across all beads in a report"""
 type CycleTimeSummary {
-  # Number of beads with known cycle time
+  """Number of beads with known cycle time"""
   knownCount: Int!
-  # Number of beads with unknown cycle time
+  """Number of beads with unknown cycle time"""
   unknownCount: Int!
-  # Average cycle time in milliseconds
+  """Average cycle time in milliseconds"""
   averageMs: Int
-  # Minimum cycle time in milliseconds
+  """Minimum cycle time in milliseconds"""
   minMs: Int
-  # Maximum cycle time in milliseconds
+  """Maximum cycle time in milliseconds"""
   maxMs: Int
 }
 
-# CycleTimeRow describes one bead's lifecycle timing
+"""CycleTimeRow describes one bead's lifecycle timing"""
 type CycleTimeRow {
-  # Bead identifier
+  """Bead identifier"""
   beadId: String!
-  # Bead title
+  """Bead title"""
   title: String!
-  # Spec/feature ID the bead belongs to
+  """Spec/feature ID the bead belongs to"""
   specId: String
-  # Current bead status
+  """Current bead status"""
   status: String!
-  # When the bead was created
+  """When the bead was created"""
   createdAt: DateTime!
-  # When the bead was first closed
+  """When the bead was first closed"""
   firstClosedAt: DateTime
-  # When the bead was last closed
+  """When the bead was last closed"""
   lastClosedAt: DateTime
-  # Total cycle time in milliseconds (null if still open)
+  """Total cycle time in milliseconds (null if still open)"""
   cycleTimeMs: Int
-  # Number of times the bead was reopened
+  """Number of times the bead was reopened"""
   reopenCount: Int
-  # Number of post-close revisions
+  """Number of post-close revisions"""
   revisionCount: Int
-  # Time spent in open status in milliseconds
+  """Time spent in open status in milliseconds"""
   timeInOpenMs: Int
-  # Time spent in in-progress status in milliseconds
+  """Time spent in in-progress status in milliseconds"""
   timeInProgressMs: Int
-  # Time spent in closed status in milliseconds
+  """Time spent in closed status in milliseconds"""
   timeInClosedMs: Int
-  # Cycle time data quality: known, estimated, or unknown
+  """Cycle time data quality: known, estimated, or unknown"""
   cycleState: String!
-  # Source references for timing attribution
+  """Source references for timing attribution"""
   provenance: [SourceRef!]
 }
 
-# CycleTimeReport describes lifecycle timing over a time window
+"""CycleTimeReport describes lifecycle timing over a time window"""
 type CycleTimeReport {
-  # Report scope
+  """Report scope"""
   scope: String!
-  # Time window for the report
+  """Time window for the report"""
   window: Window
-  # Per-bead cycle time rows
+  """Per-bead cycle time rows"""
   beads: [CycleTimeRow!]
-  # Aggregate cycle time summary
+  """Aggregate cycle time summary"""
   summary: CycleTimeSummary!
 }
 
-# ReworkSummary aggregates reopen and post-close churn
+"""ReworkSummary aggregates reopen and post-close churn"""
 type ReworkSummary {
-  # Number of beads with known closure data
+  """Number of beads with known closure data"""
   knownClosed: Int!
-  # Number of beads known to have been reopened
+  """Number of beads known to have been reopened"""
   knownReopened: Int!
-  # Number of beads with unknown rework data
+  """Number of beads with unknown rework data"""
   unknownCount: Int!
-  # Ratio of reopened to total closed beads
+  """Ratio of reopened to total closed beads"""
   reopenRate: Float!
-  # Total number of post-close revisions
+  """Total number of post-close revisions"""
   revisionCount: Int!
 }
 
-# ReworkRow describes reopen and revision facts for one bead
+"""ReworkRow describes reopen and revision facts for one bead"""
 type ReworkRow {
-  # Bead identifier
+  """Bead identifier"""
   beadId: String!
-  # Bead title
+  """Bead title"""
   title: String!
-  # Spec/feature ID the bead belongs to
+  """Spec/feature ID the bead belongs to"""
   specId: String
-  # Current bead status
+  """Current bead status"""
   status: String!
-  # When the bead was first closed
+  """When the bead was first closed"""
   firstClosedAt: DateTime
-  # Whether the bead has been reopened at least once
+  """Whether the bead has been reopened at least once"""
   reopened: Boolean!
-  # Number of times the bead was reopened
+  """Number of times the bead was reopened"""
   reopenCount: Int
-  # Number of post-close revisions
+  """Number of post-close revisions"""
   revisionCount: Int
-  # Rework data quality: known, estimated, or unknown
+  """Rework data quality: known, estimated, or unknown"""
   reworkState: String!
-  # Source references for rework attribution
+  """Source references for rework attribution"""
   provenance: [SourceRef!]
 }
 
-# ReworkReport describes reopen and post-close churn over a time window
+"""ReworkReport describes reopen and post-close churn over a time window"""
 type ReworkReport {
-  # Report scope
+  """Report scope"""
   scope: String!
-  # Time window for the report
+  """Time window for the report"""
   window: Window
-  # Per-bead rework rows
+  """Per-bead rework rows"""
   beads: [ReworkRow!]
-  # Aggregate rework summary
+  """Aggregate rework summary"""
   summary: ReworkSummary!
 }
 
@@ -1236,25 +1236,25 @@ type ReworkReport {
 # Providers
 # ============================================
 
-# Provider represents an agent provider/harness configuration
+"""Provider represents an agent provider/harness configuration"""
 type Provider implements Node {
-  # Unique provider identifier
+  """Unique provider identifier"""
   id: ID!
-  # Display name
+  """Display name"""
   name: String!
-  # Provider kind (e.g. "cli", "api")
+  """Provider kind (e.g. "cli", "api")"""
   kind: String!
-  # Default model for this provider
+  """Default model for this provider"""
   defaultModel: String
-  # Available model identifiers
+  """Available model identifiers"""
   models: [String!]
-  # Default effort level
+  """Default effort level"""
   defaultEffort: String
-  # Available effort levels
+  """Available effort levels"""
   effortLevels: [String!]
-  # Default execution timeout in milliseconds
+  """Default execution timeout in milliseconds"""
   timeoutMs: Int
-  # Granted permission scopes
+  """Granted permission scopes"""
   permissions: [String!]
 }
 
@@ -1262,29 +1262,29 @@ type Provider implements Node {
 # Query Root
 # ============================================
 
-# Query is the root entry point for all read operations
+"""Query is the root entry point for all read operations"""
 type Query {
-  # Fetch any entity by its globally unique ID (Relay node interface)
+  """Fetch any entity by its globally unique ID (Relay node interface)"""
   node(id: ID!): Node
 
   # ==========================================
   # Node & Project Queries
   # ==========================================
 
-  # Return the server node information (maps to GET /api/node)
+  """Return the server node information (maps to GET /api/node)"""
   nodeInfo: NodeInfo!
 
-  # List all registered projects with cursor pagination (maps to GET /api/projects)
+  """List all registered projects with cursor pagination (maps to GET /api/projects)"""
   projects(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String,
-    # Include projects whose path is unreachable
+    """Include projects whose path is unreachable"""
     includeUnreachable: Boolean
   ): ProjectConnection!
 
@@ -1292,78 +1292,78 @@ type Query {
   # Bead Queries
   # ==========================================
 
-  # List all beads with cursor pagination and optional filters (maps to GET /api/beads)
+  """List all beads with cursor pagination and optional filters (maps to GET /api/beads)"""
   beads(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String,
-    # Filter by lifecycle status
+    """Filter by lifecycle status"""
     status: String,
-    # Filter by label
+    """Filter by label"""
     label: String,
-    # Filter by project ID
+    """Filter by project ID"""
     projectID: String
   ): BeadConnection!
 
-  # List beads for a specific project (maps to GET /api/beads with project filter)
+  """List beads for a specific project (maps to GET /api/beads with project filter)"""
   beadsByProject(
-    # Project identifier to filter by
+    """Project identifier to filter by"""
     projectID: String!,
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String,
-    # Filter by lifecycle status
+    """Filter by lifecycle status"""
     status: String,
-    # Filter by label
+    """Filter by label"""
     label: String
   ): BeadConnection!
 
-  # List open beads whose dependencies are all closed (maps to GET /api/beads/ready)
+  """List open beads whose dependencies are all closed (maps to GET /api/beads/ready)"""
   beadsReady(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): BeadConnection!
 
-  # List open beads with unclosed dependencies (maps to GET /api/beads/blocked)
+  """List open beads with unclosed dependencies (maps to GET /api/beads/blocked)"""
   beadsBlocked(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): BeadConnection!
 
-  # Return aggregate bead counts by status (maps to GET /api/beads/status)
+  """Return aggregate bead counts by status (maps to GET /api/beads/status)"""
   beadsStatus: BeadStatusCounts!
 
-  # Return the dependency tree for a bead as a formatted string (maps to GET /api/beads/dep/tree/{id})
+  """Return the dependency tree for a bead as a formatted string (maps to GET /api/beads/dep/tree/{id})"""
   beadDepTree(
-    # Bead ID to compute the dependency tree for
+    """Bead ID to compute the dependency tree for"""
     beadID: ID!
   ): String!
 
-  # Fetch a single bead by ID (maps to GET /api/beads/{id})
+  """Fetch a single bead by ID (maps to GET /api/beads/{id})"""
   bead(
-    # Bead identifier
+    """Bead identifier"""
     id: ID!
   ): Bead
 
@@ -1371,83 +1371,83 @@ type Query {
   # Document Queries
   # ==========================================
 
-  # List all library documents with cursor pagination (maps to GET /api/documents)
+  """List all library documents with cursor pagination (maps to GET /api/documents)"""
   documents(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String,
-    # Filter by document type (e.g. "prompt", "template")
+    """Filter by document type (e.g. "prompt", "template")"""
     type: String
   ): DocumentConnection!
 
-  # Read a single document by path (maps to GET /api/documents/{path...})
+  """Read a single document by path (maps to GET /api/documents/{path...})"""
   documentByPath(
-    # Document path relative to the library root
+    """Document path relative to the library root"""
     path: String!
   ): Document
 
-  # Return the full document dependency graph (maps to GET /api/docs/graph)
+  """Return the full document dependency graph (maps to GET /api/docs/graph)"""
   docGraph: DocGraph!
 
-  # Return documents that are stale (maps to GET /api/docs/stale)
+  """Return documents that are stale (maps to GET /api/docs/stale)"""
   docStale: [StaleReason!]!
 
-  # Return the dependency IDs of a document (maps to GET /api/docs/{id}/deps)
+  """Return the dependency IDs of a document (maps to GET /api/docs/{id}/deps)"""
   docDeps(
-    # Document identifier
+    """Document identifier"""
     documentID: ID!
   ): [String!]!
 
-  # Return the dependent IDs of a document (maps to GET /api/docs/{id}/dependents)
+  """Return the dependent IDs of a document (maps to GET /api/docs/{id}/dependents)"""
   docDependents(
-    # Document identifier
+    """Document identifier"""
     documentID: ID!
   ): [String!]!
 
-  # Return the git history for a document with cursor pagination (maps to GET /api/docs/{id}/history)
+  """Return the git history for a document with cursor pagination (maps to GET /api/docs/{id}/history)"""
   docHistory(
-    # Document identifier
+    """Document identifier"""
     documentID: ID!,
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): CommitConnection!
 
-  # Return the diff for a document (maps to GET /api/docs/{id}/diff)
+  """Return the diff for a document (maps to GET /api/docs/{id}/diff)"""
   docDiff(
-    # Document identifier
+    """Document identifier"""
     documentID: ID!,
-    # Git ref to diff against (default: HEAD)
+    """Git ref to diff against (default: HEAD)"""
     ref: String
   ): String!
 
-  # Fetch a single document by ID (maps to GET /api/docs/{id})
+  """Fetch a single document by ID (maps to GET /api/docs/{id})"""
   doc(
-    # Document identifier
+    """Document identifier"""
     id: ID!
   ): Document
 
-  # Search library documents (maps to GET /api/search)
+  """Search library documents (maps to GET /api/search)"""
   search(
-    # Search query string
+    """Search query string"""
     query: String!,
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): SearchResultConnection!
 
@@ -1455,21 +1455,21 @@ type Query {
   # Commit Queries
   # ==========================================
 
-  # List git commits for a project with cursor pagination (maps to GET /api/projects/{project}/commits)
+  """List git commits for a project with cursor pagination (maps to GET /api/projects/{project}/commits)"""
   commits(
-    # Project identifier
+    """Project identifier"""
     projectID: ID!,
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String,
-    # Filter commits since this date (ISO-8601)
+    """Filter commits since this date (ISO-8601)"""
     since: String,
-    # Filter by author name or email
+    """Filter by author name or email"""
     author: String
   ): CommitConnection!
 
@@ -1477,53 +1477,59 @@ type Query {
   # Worker Queries
   # ==========================================
 
-  # List all workers with cursor pagination (maps to GET /api/agent/workers)
+  """List all workers with cursor pagination (maps to GET /api/agent/workers)"""
   workers(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): WorkerConnection!
 
-  # List workers for a specific project (maps to GET /api/projects/{project}/workers)
+  """List workers for a specific project (maps to GET /api/projects/{project}/workers)"""
   workersByProject(
-    # Project identifier
+    """Project identifier"""
     projectID: String!,
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): WorkerConnection!
 
-  # Fetch a single worker by ID (maps to GET /api/agent/workers/{id} and GET /api/projects/{project}/workers/{id})
+  """
+  Fetch a single worker by ID (maps to GET /api/agent/workers/{id} and GET /api/projects/{project}/workers/{id})
+  """
   worker(
-    # Worker identifier
+    """Worker identifier"""
     id: ID!
   ): Worker
 
-  # Return recent phase transitions for a worker (maps to GET /api/projects/{project}/workers/{id}/progress)
+  """
+  Return recent phase transitions for a worker (maps to GET /api/projects/{project}/workers/{id}/progress)
+  """
   workerProgress(
-    # Worker identifier
+    """Worker identifier"""
     workerID: ID!
   ): [PhaseTransition!]!
 
-  # Return captured stdout/stderr from a worker (maps to GET /api/agent/workers/{id}/log)
+  """Return captured stdout/stderr from a worker (maps to GET /api/agent/workers/{id}/log)"""
   workerLog(
-    # Worker identifier
+    """Worker identifier"""
     workerID: ID!
   ): WorkerLog!
 
-  # Return the prompt text for a worker's current or last attempt (maps to GET /api/agent/workers/{id}/prompt)
+  """
+  Return the prompt text for a worker's current or last attempt (maps to GET /api/agent/workers/{id}/prompt)
+  """
   workerPrompt(
-    # Worker identifier
+    """Worker identifier"""
     workerID: ID!
   ): String!
 
@@ -1531,21 +1537,21 @@ type Query {
   # Agent Session Queries
   # ==========================================
 
-  # List all agent sessions with cursor pagination (maps to GET /api/agent/sessions)
+  """List all agent sessions with cursor pagination (maps to GET /api/agent/sessions)"""
   agentSessions(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): AgentSessionConnection!
 
-  # Fetch a single agent session by ID (maps to GET /api/agent/sessions/{id})
+  """Fetch a single agent session by ID (maps to GET /api/agent/sessions/{id})"""
   agentSession(
-    # Session identifier
+    """Session identifier"""
     id: ID!
   ): AgentSession
 
@@ -1553,27 +1559,27 @@ type Query {
   # Persona Queries
   # ==========================================
 
-  # List all personas with cursor pagination (maps to GET /api/personas)
+  """List all personas with cursor pagination (maps to GET /api/personas)"""
   personas(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String
   ): PersonaConnection!
 
-  # Fetch a single persona by name (maps to GET /api/personas)
+  """Fetch a single persona by name (maps to GET /api/personas)"""
   persona(
-    # Persona name
+    """Persona name"""
     name: String!
   ): Persona
 
-  # Resolve the persona bound to a role (maps to GET /api/personas/{role})
+  """Resolve the persona bound to a role (maps to GET /api/personas/{role})"""
   personaByRole(
-    # Role name to resolve
+    """Role name to resolve"""
     role: String!
   ): Persona
 
@@ -1581,51 +1587,51 @@ type Query {
   # Execution Queries
   # ==========================================
 
-  # List execution definitions with cursor pagination (maps to GET /api/exec/definitions)
+  """List execution definitions with cursor pagination (maps to GET /api/exec/definitions)"""
   execDefinitions(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String,
-    # Filter by artifact ID
+    """Filter by artifact ID"""
     artifactID: String
   ): ExecutionDefinitionConnection!
 
-  # Fetch a single execution definition by ID (maps to GET /api/exec/definitions/{id})
+  """Fetch a single execution definition by ID (maps to GET /api/exec/definitions/{id})"""
   execDefinition(
-    # Definition identifier
+    """Definition identifier"""
     id: ID!
   ): ExecutionDefinition
 
-  # List execution runs with cursor pagination (maps to GET /api/exec/runs)
+  """List execution runs with cursor pagination (maps to GET /api/exec/runs)"""
   execRuns(
-    # Return the first N edges after the cursor
+    """Return the first N edges after the cursor"""
     first: Int,
-    # Cursor to start after
+    """Cursor to start after"""
     after: String,
-    # Return the last N edges before the cursor
+    """Return the last N edges before the cursor"""
     last: Int,
-    # Cursor to end before
+    """Cursor to end before"""
     before: String,
-    # Filter by artifact ID
+    """Filter by artifact ID"""
     artifactID: String,
-    # Filter by definition ID
+    """Filter by definition ID"""
     definitionID: String
   ): ExecutionRunConnection!
 
-  # Fetch a single execution run by ID (maps to GET /api/exec/runs/{id})
+  """Fetch a single execution run by ID (maps to GET /api/exec/runs/{id})"""
   execRun(
-    # Run identifier
+    """Run identifier"""
     id: ID!
   ): ExecutionRun
 
-  # Return the log for an execution run (maps to GET /api/exec/runs/{id}/log)
+  """Return the log for an execution run (maps to GET /api/exec/runs/{id}/log)"""
   execRunLog(
-    # Run identifier
+    """Run identifier"""
     runID: ID!
   ): ExecutionRunLog!
 
@@ -1633,48 +1639,58 @@ type Query {
   # Health Queries
   # ==========================================
 
-  # Return server health status (maps to GET /api/health)
+  """Return server health status (maps to GET /api/health)"""
   health: HealthStatus!
 
-  # Return per-subsystem readiness checks (maps to GET /api/ready)
+  """Return per-subsystem readiness checks (maps to GET /api/ready)"""
   ready: ReadyStatus!
 
   # ==========================================
   # Coordinator Queries
   # ==========================================
 
-  # Return metrics for every active land coordinator (maps to GET /api/agent/coordinators)
+  """Return metrics for every active land coordinator (maps to GET /api/agent/coordinators)"""
   coordinators: [CoordinatorMetricsEntry!]!
+
+  """
+  Return the coordinator metrics for a specific project root.
+  Restores the single-project variant requested by the prior review.
+  Returns null when no coordinator has been observed for the given project root.
+  """
+  coordinatorMetricsByProject(
+    """Absolute project root path (matches CoordinatorMetricsEntry.projectRoot)"""
+    projectRoot: String!
+  ): CoordinatorMetrics
 
   # ==========================================
   # Metrics Queries
   # ==========================================
 
-  # Return aggregate process metrics summary (maps to GET /api/metrics/summary)
+  """Return aggregate process metrics summary (maps to GET /api/metrics/summary)"""
   metricsSummary(
-    # ISO-8601 cutoff; only include data after this time
+    """ISO-8601 cutoff; only include data after this time"""
     since: String
   ): AggregateSummary!
 
-  # Return bead and feature cost attribution (maps to GET /api/metrics/cost)
+  """Return bead and feature cost attribution (maps to GET /api/metrics/cost)"""
   metricsCost(
-    # ISO-8601 cutoff
+    """ISO-8601 cutoff"""
     since: String,
-    # Filter to a specific bead
+    """Filter to a specific bead"""
     bead: String,
-    # Filter to a specific feature
+    """Filter to a specific feature"""
     feature: String
   ): CostReport!
 
-  # Return lifecycle timing data (maps to GET /api/metrics/cycle-time)
+  """Return lifecycle timing data (maps to GET /api/metrics/cycle-time)"""
   metricsCycleTime(
-    # ISO-8601 cutoff
+    """ISO-8601 cutoff"""
     since: String
   ): CycleTimeReport!
 
-  # Return reopen and post-close churn data (maps to GET /api/metrics/rework)
+  """Return reopen and post-close churn data (maps to GET /api/metrics/rework)"""
   metricsRework(
-    # ISO-8601 cutoff
+    """ISO-8601 cutoff"""
     since: String
   ): ReworkReport!
 
@@ -1682,12 +1698,12 @@ type Query {
   # Provider Queries
   # ==========================================
 
-  # List all agent providers (maps to GET /api/providers)
+  """List all agent providers (maps to GET /api/providers)"""
   providers: [Provider!]!
 
-  # Fetch a single provider by harness name (maps to GET /api/providers/{harness})
+  """Fetch a single provider by harness name (maps to GET /api/providers/{harness})"""
   provider(
-    # Harness/provider name
+    """Harness/provider name"""
     name: String!
   ): Provider
 }
