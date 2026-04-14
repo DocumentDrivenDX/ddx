@@ -17,7 +17,7 @@ ddx:
 
 The DDx server (`ddx-server`) serves a web UI for browsing documents, beads,
 the document dependency graph, and DDx agent invocation activity. The UI is a
-TypeScript SPA built with Vite, embedded into the Go binary via `embed.FS`,
+SvelteKit application built with Svelte 5, embedded into the Go binary via `embed.FS`,
 and served alongside the MCP and HTTP API endpoints from a single process.
 
 `ddx-server` runs as a per-user host daemon (one instance per machine, see
@@ -26,6 +26,9 @@ host+user registry knows about and binds its navigation to one selected
 project context at a time. The node-aware URL structure and combined
 cross-project dashboards are specified in FEAT-021; FEAT-008 owns the
 underlying views that those routes render.
+
+The UI consumes GraphQL operations defined in `cli/internal/server/graphql/schema.graphql`.
+Every page lists its required query or subscription by name for traceability.
 
 ## Problem Statement
 
@@ -45,12 +48,13 @@ underlying views that those routes render.
 
 ```
 ddx-server binary
-├── /            → Web UI (embedded SPA)
-├── /api/        → HTTP REST API (JSON)
-└── /mcp/        → MCP endpoints (Streamable HTTP transport)
+├── /            → Web UI (embedded SvelteKit)
+├── /api/        → HTTP REST API (JSON) — frozen
+└── /graphql     → GraphQL endpoint (gqlgen)
 ```
 
-All three surfaces share the same underlying services (document library, bead store, doc graph, agent activity). The web UI calls the HTTP API.
+The SvelteKit frontend queries the `/graphql` endpoint for all data. REST endpoints
+remain unchanged and are consumed by the CLI and MCP tools only.
 
 ### Project Context
 
@@ -60,33 +64,32 @@ The UI is rendered under the node-scoped URL structure defined in FEAT-021:
 redirects to `/nodes/:nodeId` using the ID returned by `GET /api/node`
 (FEAT-020). When more than one project is registered the navigation bar
 exposes a project picker populated from `GET /api/projects`; selecting a
-project swaps the `:projectId` segment in place. All API calls issued by the
-UI are bound to the selected project context via
-`/api/projects/:project/...`.
+project swaps the `:projectId` segment in place. All GraphQL queries issued by the
+UI are bound to the selected project context.
 
 ### Build Pipeline
 
 ```
-cli/internal/server/frontend/   → Vite + TypeScript + React
-  bun run build                 → cli/internal/server/frontend/dist/
+cli/internal/server/frontend/   → SvelteKit + TypeScript
+  bun run build                 → cli/internal/server/frontend/build/
 cli/internal/server/            → Go with embed.FS
   go build                      → ddx-server (single binary with embedded UI)
 ```
 
-During development, Vite's dev server proxies `/api/` to the running Go server.
+During development, SvelteKit's dev server proxies `/graphql` to the running Go server.
 
 ### Technology Choices
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Frontend framework | **React** | Decided in ADR-002 (Accepted 2026-04-04) |
-| Build tool | **Vite** | Industry standard, fast, good Go embed integration |
+| Frontend framework | **Svelte 5** | Compile-time optimizations, no Virtual DOM |
+| Build tool | **SvelteKit** | Router, layout, API routes, hooks, adapter-static for embedding |
 | Styling | **Tailwind CSS** | Consistent with website (Hextra uses Tailwind) |
-| Data fetching | **TanStack Query** | Caching, refetching, works with React |
+| Data fetching | **Houdini** | SvelteKit-native GraphQL client, typed queries and subscriptions |
 | Graph visualization | **D3.js** or **Cytoscape.js** | For document dependency graph rendering |
 | Embedding | **Go embed.FS** | Compile frontend into the binary — no external files needed |
 | Go HTTP | **Chi** or **net/http** | Standard library compatible routing |
-| Go MCP | **mcp-go** | Leading Go MCP SDK, supports Streamable HTTP transport |
+| Go GraphQL | **gqlgen** | Schema-first, code-generated resolvers |
 
 ### Alternatives Considered
 
@@ -116,12 +119,11 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    - Zoom/pan for large graphs
    - Layout options (hierarchical top-down, force-directed)
 
-3. **Bead views (local-first, client-side data)**
+3. **Bead views**
 
    The beads UI runs entirely in the browser. On load, the client fetches the
-   full bead set from `GET /api/projects/:project/beads` (JSONL is small — hundreds of beads,
-   not millions). All search, filter, sort, and graph traversal happens
-   client-side using an in-browser data layer (see ADR-005).
+   full bead set from the `beads` query (GraphQL). All search, filter, sort, and graph
+   traversal happens client-side using an in-browser data layer.
 
    **Master-detail list view:**
    - Searchable list: full-text across title, description, acceptance, labels
@@ -138,7 +140,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    - Cards within columns ordered by priority (P0 top, P4 bottom)
    - Dependency grouping: beads that block each other cluster visually
      (similar to Trello, Fuzz by 37signals, GitHub Projects)
-   - Drag-and-drop to change status (calls `ddx bead update` API)
+   - Drag-and-drop to change status (calls `beadUpdate` mutation)
    - Swimlanes option: group rows by label (e.g., `area:cli`, `area:web`)
    - Color coding: priority → card border, labels → chips, blocked → dimmed
    - Collapsed card shows: title, priority badge, label chips, dep count
@@ -147,7 +149,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
    **Ready queue view:**
    - Filtered view showing only beads with all dependencies satisfied
    - Sorted by priority, then by creation date
-   - One-click claim (calls `ddx bead claim` API)
+   - One-click claim (calls `beadClaim` mutation)
    - Single-ticket ready work is shown ahead of epics; open epics appear in a
      separate epic lane rather than the ordinary execute-loop queue
 
@@ -195,7 +197,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
      DDx-owned detail available for that invocation
    - Filter by harness, time range, exit code
    - Token usage summary (provider-native or DDx-observed, depending on source)
-   - Auto-refresh on configurable interval (or WebSocket push in v2)
+   - Auto-refresh on configurable interval (or subscription in v2)
 
 5. **Status dashboard**
    - Summary cards: document count by type, bead counts by status, stale document count, recent agent activity
@@ -222,16 +224,10 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
      `GET /api/projects/:project/workers/:id`. The expanded view also shows
      elapsed time, harness/model identity, cumulative token counts, and a link
      to the full execution evidence bundle for completed attempts.
-   - For in-flight workers, the card auto-refreshes using the SSE stream at
-     `GET /api/projects/:project/workers/:id/progress`. The UI updates the
-     phase badge, elapsed time, and token count from each progress event without
-     re-fetching the full worker record. When the terminal phase event arrives,
-     the stream closes and the card switches to a static completed state.
-   - The live progress feed (SSE) and the polling fallback (worker detail
-     endpoint) are the same shared read model; the UI uses SSE when available
-     and falls back to polling at the configured refresh interval otherwise.
-     No additional workflow policy is applied by the UI — it observes and
-     displays the events emitted by `execute-bead` without triggering actions.
+   - For in-flight workers, the card auto-refreshes using the `workerProgress`
+     subscription. The UI updates the phase badge, elapsed time, and token count from
+     each progress event without re-fetching the full worker record. When the terminal
+     phase event arrives, the stream closes and the card switches to a static completed state.
 
 6. **Epic execution view**
    - Lists open epics separately from single-ticket ready work
@@ -287,8 +283,6 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
      monitor — not to the provider dashboard
    - The agent log monitor session detail links to the provider dashboard for
      the harness used in that invocation (via harness name)
-   - The routing diagnostics command (`ddx agent doctor --routing`) is the
-     CLI surface for the same data; the dashboard is the browser surface
    - The provider dashboard does NOT embed worker progress, bead state, or
      execution history; those live in their own dedicated views
 
@@ -457,14 +451,11 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
   then I see a green "running" phase badge on the worker card with the elapsed
   time and current token count
 - Given the worker transitions to `post_checks`, then the badge updates to
-  yellow "post_checks" within the SSE delivery latency (no manual refresh required)
+  yellow "post_checks" within the subscription delivery latency (no manual refresh required)
 - Given I click a worker card, then I see the `recent_phases` timeline showing
   when each phase started (timestamp and elapsed since attempt began)
 - Given the worker reaches a terminal phase (`done`, `preserved`, or `failed`),
   then the card updates to the terminal badge color and stops live-updating
-- Given the SSE stream is unavailable, then the UI falls back to polling the
-  worker detail endpoint and renders the same phase information from
-  `recent_phases` without showing an error to the user
 - Given I look at a worker card, then I can see harness, model, and bead title
   without expanding the card
 - Given I expand a worker card for a completed attempt, then I see a link to
@@ -518,7 +509,7 @@ During development, Vite's dev server proxies `/api/` to the running Go server.
 - Given no source exists for a field, then a `?` badge appears — no `0` or
   inferred value is displayed
 - Given I hover a `?` or "unknown" badge, then a tooltip explains why the
-  value is unavailable (e.g. "no stable non-PTY quota source confirmed")
+  value is unavailable (e.g., "no stable non-PTY quota source confirmed")
 
 ### US-086: Developer Monitors Agent Activity in Real Time
 **As a** developer running agents against my project
@@ -621,21 +612,20 @@ cli/internal/server/frontend/
                 └── all-unknown.json
 ```
 
-Playwright tests mount the appropriate fixture via MSW (Mock Service Worker)
-request handlers before each scenario. The fixture format matches the
-`/api/providers` and `/api/providers/:harness` response shapes defined in
-FEAT-002.
+Playwright tests mount the appropriate fixture via request interceptors before
+each scenario. The fixture format matches the `/api/providers` and
+`/api/providers/:harness` response shapes defined in FEAT-002.
 
 ## Implementation Notes
 
 ### Embedding Pattern (Pocketbase-style)
 
 ```go
-//go:embed all:frontend/dist
+//go:embed all:frontend/build
 var frontendFiles embed.FS
 
 func main() {
-    distFS, _ := fs.Sub(frontendFiles, "frontend/dist") // relative to embed.go in cli/internal/server/
+    distFS, _ := fs.Sub(frontendFiles, "frontend/build") // relative to embed.go in cli/internal/server/
     
     mux := http.NewServeMux()
     mux.Handle("/api/", apiRouter)
@@ -661,9 +651,9 @@ func spaHandler(fs http.FileSystem) http.Handler {
 # Terminal 1: Go server
 cd cli/internal/server && go run . --library-path ../../../.ddx/library
 
-# Terminal 2: Vite dev server with proxy
+# Terminal 2: SvelteKit dev server with proxy
 cd cli/internal/server/frontend && bun run dev
-# vite.config.ts proxies /api/ and /mcp/ to localhost:8080
+# svelte.config.js proxies /graphql and /api to localhost:8080
 ```
 
 ### Project Structure
@@ -677,42 +667,69 @@ ddx/
             ├── embed.go           # embed.FS declaration
             └── frontend/
                 ├── package.json
-                ├── vite.config.ts
-                ├── src/
-                │   ├── App.tsx
-                │   ├── pages/
-                │   │   ├── Dashboard.tsx
-                │   │   ├── Documents.tsx
-                │   │   ├── Graph.tsx
-                │   │   ├── Beads.tsx
-                │   │   ├── Agent.tsx
-                │   │   ├── Providers.tsx      ← provider/harness dashboard
-                │   │   └── Personas.tsx
-                │   ├── testing/
-                │   │   └── fixtures/
-                │   │       └── providers/     ← Playwright fixture JSON
+                ├── svelte.config.js
+                └── src/
+                │   ├── app.html
+                │   ├── routes/
+                │   │   ├── +layout.svelte
+                │   │   ├── nodes/
+                │   │   │   └── [nodeId]/
+                │   │   │       ├── +page.svelte         # node dashboard
+                │   │   │       └── projects/
+                │   │   │           └── [projectId]/
+                │   │   │               ├── +page.svelte # project dashboard
+                │   │   │               ├── beads/
+                │   │   │               │   └── +page.svelte      # beads list (query: beads)
+                │   │   │               ├── documents/
+                │   │   │               │   └── +page.svelte      # documents list (query: documents)
+                │   │   │               └── graph/
+                │   │   │                   └── +page.svelte      # dependency graph (query: docGraph)
+                │   │   └── graphql/
+                │   │       ├── beads.gql
+                │   │       ├── documents.gql
+                │   │       └── workers.gql
                 │   └── components/
-                └── dist/          # Build output (embedded into Go)
+                └── build/         # SvelteKit output (embedded into Go)
 ```
 
 ## Dependencies
 
-- FEAT-002 (DDx server HTTP/MCP API) — the web UI consumes the same API;
-  `/api/providers` and `/api/providers/:harness` back the provider dashboard
-- FEAT-004 (Beads) — for bead board
-- FEAT-007 (Doc graph) — for dependency graph visualization
+- FEAT-002 (DDx server HTTP/MCP API) — the web UI consumes GraphQL at `/graphql`;
+  REST endpoints stay frozen for CLI/MCP compatibility
+- FEAT-004 (Beads) — for bead board; queries `beads` and mutations `beadCreate`, `beadUpdate`, `beadClaim`
+- FEAT-007 (Doc graph) — for dependency graph visualization; queries `docGraph`
 - FEAT-006 (Agent service) — for agent activity and invocation detail
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
-  signal model, unknown-state semantics, and freshness conventions consumed
-  by the provider dashboard
-- Vite, TypeScript, React, TanStack Query, D3.js or Cytoscape.js
-- MSW (Mock Service Worker) — for Playwright fixture mounting in provider
-  dashboard tests
-- Go embed.FS, Chi or net/http, mcp-go
+  signal model consumed by the provider dashboard
+- FEAT-021 (Dashboard UI) — defines URL scheme and navigation patterns
+- SvelteKit, Svelte 5, Bun, Houdini, bits-ui, lucide-svelte, Tailwind
+- Playwright for testing (no MSW)
+- Go embed.FS, Chi or net/http, gqlgen
 
 ## Out of Scope
 
 - Real-time sync / collaborative editing
 - Mobile-optimized layout
 - Authentication (localhost-only for v1; auth deferred to FEAT-002 server security)
-- Server-side search or pagination for beads (client-side only — see ADR-005)
+- Server-side search or pagination for beads (client-side only — GraphQL cursors in v2)
+
+## Test Plan
+
+### Unit Tests
+
+- Component tests for beads list, filter chips, detail panel
+- Page-level tests for documents viewer, graph page, worker detail
+- Store tests for node context, project selection, dark mode
+
+### E2E Tests (Playwright)
+
+All tests run against the built SvelteKit app served by `ddx-server`.
+
+- **navigation.spec.ts** — `/` redirect to `/nodes/:nodeId`, project picker
+- **beads.spec.ts** — list, filter, search, detail, claim/unclaim, mutations
+- **documents.spec.ts** — list, markdown render, edit-in-place, search
+- **graph.spec.ts** — graph visualization, drag/zoom, tooltip interaction
+- **workers.spec.ts** — worker list, live log via subscription, phase tracking
+- **providers.spec.ts** — provider dashboard, filter, detail panel, copy JSON
+
+Each test maps to a specific user story and acceptance criteria.
