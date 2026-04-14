@@ -72,6 +72,7 @@ Examples:
 	cmd.AddCommand(f.newAgentReplayCommand())
 	cmd.AddCommand(f.newAgentExecuteBeadCommand())
 	cmd.AddCommand(f.newAgentExecuteLoopCommand())
+	cmd.AddCommand(f.newAgentWorkersCommand())
 	cmd.AddCommand(f.newAgentCatalogCommand())
 
 	return cmd
