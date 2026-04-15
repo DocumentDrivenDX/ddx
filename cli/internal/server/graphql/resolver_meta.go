@@ -43,17 +43,11 @@ func (r *queryResolver) PersonaByRole(ctx context.Context, role string) (*Person
 
 // Coordinators is the resolver for the coordinators field.
 func (r *queryResolver) Coordinators(ctx context.Context) ([]*CoordinatorMetricsEntry, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	return r.State.GetCoordinatorsGraphQL(), nil
 }
 
 // CoordinatorMetricsByProject is the resolver for the coordinatorMetricsByProject field.
 func (r *queryResolver) CoordinatorMetricsByProject(ctx context.Context, projectRoot string) (*CoordinatorMetrics, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	return r.State.GetCoordinatorMetricsByProjectGraphQL(projectRoot), nil
 }
 

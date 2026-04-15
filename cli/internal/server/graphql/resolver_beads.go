@@ -2,15 +2,11 @@ package graphql
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
 // Beads is the resolver for the beads field.
 func (r *queryResolver) Beads(ctx context.Context, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) (*BeadConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	statusVal := ""
 	if status != nil {
 		statusVal = *status
@@ -29,9 +25,6 @@ func (r *queryResolver) Beads(ctx context.Context, first *int, after *string, la
 
 // BeadsByProject is the resolver for the beadsByProject field.
 func (r *queryResolver) BeadsByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, status *string, label *string) (*BeadConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	statusVal := ""
 	if status != nil {
 		statusVal = *status

@@ -2,7 +2,6 @@ package graphql
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -89,9 +88,6 @@ type StateProvider interface {
 
 // Node is the resolver for the node(id: ID!) field (Relay lookup by global ID).
 func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	if strings.HasPrefix(id, "node-") {
 		snap := r.State.GetNodeSnapshot()
 		if snap.ID != id {
@@ -111,18 +107,12 @@ func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
 
 // NodeInfo is the resolver for the nodeInfo field.
 func (r *queryResolver) NodeInfo(ctx context.Context) (*NodeInfo, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	snap := r.State.GetNodeSnapshot()
 	return nodeInfoFromSnapshot(snap), nil
 }
 
 // Projects is the resolver for the projects field.
 func (r *queryResolver) Projects(ctx context.Context, first *int, after *string, last *int, before *string, includeUnreachable *bool) (*ProjectConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	showAll := includeUnreachable != nil && *includeUnreachable
 	snaps := r.State.GetProjectSnapshots(showAll)
 

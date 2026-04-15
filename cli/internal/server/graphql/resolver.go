@@ -4,10 +4,27 @@ package graphql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
+
+// NewResolver constructs a Resolver with mandatory fields validated.
+// Returns an error if state is nil or workingDir is empty, ensuring callers
+// cannot construct a resolver that would panic on first use.
+func NewResolver(state StateProvider, workingDir string) (*Resolver, error) {
+	if state == nil {
+		return nil, fmt.Errorf("resolver: state provider is required")
+	}
+	if workingDir == "" {
+		return nil, fmt.Errorf("resolver: working directory is required")
+	}
+	return &Resolver{
+		State:      state,
+		WorkingDir: workingDir,
+	}, nil
+}
 
 // BeadLifecycleSubscriber can subscribe to live lifecycle events from a bead store.
 // bead.WatcherHub satisfies this interface.

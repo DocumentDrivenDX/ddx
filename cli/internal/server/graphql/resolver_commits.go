@@ -15,9 +15,6 @@ var beadRefPattern = regexp.MustCompile(`ddx-[a-f0-9]{8}`)
 
 // Commits is the resolver for the commits field.
 func (r *queryResolver) Commits(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) (*CommitConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 
 	snap, ok := r.State.GetProjectSnapshotByID(projectID)
 	if !ok {

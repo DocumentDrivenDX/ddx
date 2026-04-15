@@ -2,32 +2,22 @@ package graphql
 
 import (
 	"context"
-	"fmt"
 )
 
 // Workers is the resolver for the workers field.
 func (r *queryResolver) Workers(ctx context.Context, first *int, after *string, last *int, before *string) (*WorkerConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	workers := r.State.GetWorkersGraphQL("")
 	return workerConnectionFrom(workers, first, after, last, before), nil
 }
 
 // WorkersByProject is the resolver for the workersByProject field.
 func (r *queryResolver) WorkersByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string) (*WorkerConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	workers := r.State.GetWorkersGraphQL(projectID)
 	return workerConnectionFrom(workers, first, after, last, before), nil
 }
 
 // Worker is the resolver for the worker field.
 func (r *queryResolver) Worker(ctx context.Context, id string) (*Worker, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	w, ok := r.State.GetWorkerGraphQL(id)
 	if !ok {
 		return nil, nil
@@ -37,42 +27,27 @@ func (r *queryResolver) Worker(ctx context.Context, id string) (*Worker, error) 
 
 // WorkerProgress is the resolver for the workerProgress field.
 func (r *queryResolver) WorkerProgress(ctx context.Context, workerID string) ([]*PhaseTransition, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	return r.State.GetWorkerProgressGraphQL(workerID), nil
 }
 
 // WorkerLog is the resolver for the workerLog field.
 func (r *queryResolver) WorkerLog(ctx context.Context, workerID string) (*WorkerLog, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	return r.State.GetWorkerLogGraphQL(workerID), nil
 }
 
 // WorkerPrompt is the resolver for the workerPrompt field.
 func (r *queryResolver) WorkerPrompt(ctx context.Context, workerID string) (string, error) {
-	if r.State == nil {
-		return "", fmt.Errorf("state provider not configured")
-	}
 	return r.State.GetWorkerPromptGraphQL(workerID), nil
 }
 
 // AgentSessions is the resolver for the agentSessions field.
 func (r *queryResolver) AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string) (*AgentSessionConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	sessions := r.State.GetAgentSessionsGraphQL()
 	return agentSessionConnectionFrom(sessions, first, after, last, before), nil
 }
 
 // AgentSession is the resolver for the agentSession field.
 func (r *queryResolver) AgentSession(ctx context.Context, id string) (*AgentSession, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	s, ok := r.State.GetAgentSessionGraphQL(id)
 	if !ok {
 		return nil, nil
@@ -82,9 +57,6 @@ func (r *queryResolver) AgentSession(ctx context.Context, id string) (*AgentSess
 
 // ExecDefinitions is the resolver for the execDefinitions field.
 func (r *queryResolver) ExecDefinitions(ctx context.Context, first *int, after *string, last *int, before *string, artifactID *string) (*ExecutionDefinitionConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	artifactIDVal := ""
 	if artifactID != nil {
 		artifactIDVal = *artifactID
@@ -95,9 +67,6 @@ func (r *queryResolver) ExecDefinitions(ctx context.Context, first *int, after *
 
 // ExecDefinition is the resolver for the execDefinition field.
 func (r *queryResolver) ExecDefinition(ctx context.Context, id string) (*ExecutionDefinition, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	d, ok := r.State.GetExecDefinitionGraphQL(id)
 	if !ok {
 		return nil, nil
@@ -107,9 +76,6 @@ func (r *queryResolver) ExecDefinition(ctx context.Context, id string) (*Executi
 
 // ExecRuns is the resolver for the execRuns field.
 func (r *queryResolver) ExecRuns(ctx context.Context, first *int, after *string, last *int, before *string, artifactID *string, definitionID *string) (*ExecutionRunConnection, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	artifactIDVal := ""
 	if artifactID != nil {
 		artifactIDVal = *artifactID
@@ -124,9 +90,6 @@ func (r *queryResolver) ExecRuns(ctx context.Context, first *int, after *string,
 
 // ExecRun is the resolver for the execRun field.
 func (r *queryResolver) ExecRun(ctx context.Context, id string) (*ExecutionRun, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	run, ok := r.State.GetExecRunGraphQL(id)
 	if !ok {
 		return nil, nil
@@ -136,9 +99,6 @@ func (r *queryResolver) ExecRun(ctx context.Context, id string) (*ExecutionRun, 
 
 // ExecRunLog is the resolver for the execRunLog field.
 func (r *queryResolver) ExecRunLog(ctx context.Context, runID string) (*ExecutionRunLog, error) {
-	if r.State == nil {
-		return nil, fmt.Errorf("state provider not configured")
-	}
 	return r.State.GetExecRunLogGraphQL(runID), nil
 }
 

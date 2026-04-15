@@ -12,14 +12,6 @@ import (
 
 // Documents is the resolver for the documents field with Relay cursor pagination.
 func (r *queryResolver) Documents(ctx context.Context, first *int, after *string, last *int, before *string, typeArg *string) (*DocumentConnection, error) {
-	if r.WorkingDir == "" {
-		return &DocumentConnection{
-			Edges:      []*DocumentEdge{},
-			PageInfo:   &PageInfo{},
-			TotalCount: 0,
-		}, nil
-	}
-
 	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
 	if err != nil {
 		return nil, fmt.Errorf("building document graph: %w", err)
@@ -100,18 +92,6 @@ func (r *queryResolver) Documents(ctx context.Context, first *int, after *string
 
 // DocGraph is the resolver for the docGraph field.
 func (r *queryResolver) DocGraph(ctx context.Context) (*DocGraph, error) {
-	if r.WorkingDir == "" {
-		empty, _ := json.Marshal(map[string]string{})
-		emptyS := string(empty)
-		return &DocGraph{
-			RootDir:    "",
-			Documents:  []*Document{},
-			PathToID:   emptyS,
-			Dependents: emptyS,
-			Warnings:   []string{},
-		}, nil
-	}
-
 	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
 	if err != nil {
 		return nil, fmt.Errorf("building document graph: %w", err)
