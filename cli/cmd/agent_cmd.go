@@ -1305,6 +1305,9 @@ process.
 	cmd.Flags().Duration("poll-interval", 0, "Poll interval for continuous scanning; zero drains current ready work and exits")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Run inline in current process instead of server worker (default: submit to server)")
+	cmd.Flags().Bool("no-review", false, "Skip post-merge review (e.g. for doc-only beads or tight iteration loops)")
+	cmd.Flags().String("review-harness", "", "Harness to use for the post-merge reviewer (default: same as implementation harness)")
+	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	return cmd
 }
 
@@ -1320,10 +1323,13 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
 	asJSON, _ := cmd.Flags().GetBool("json")
 	local, _ := cmd.Flags().GetBool("local")
+	noReview, _ := cmd.Flags().GetBool("no-review")
+	reviewHarness, _ := cmd.Flags().GetString("review-harness")
+	reviewModel, _ := cmd.Flags().GetString("review-model")
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
-		return f.executeLoopWithServer(cmd, projectRoot, harness, model, provider, modelRef, effort, once, pollInterval, asJSON)
+		return f.executeLoopWithServer(cmd, projectRoot, harness, model, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel)
 	}
 
 	// Pre-flight: validate harness availability and model compatibility
@@ -1362,8 +1368,22 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
 	defer localCoord.Stop()
 
+	// Build post-merge reviewer unless --no-review is set.
+	// Reviewer is on-by-default: runs at smart tier after every successful merge.
+	var reviewer agent.BeadReviewer
+	if !noReview {
+		reviewer = &agent.DefaultBeadReviewer{
+			ProjectRoot: projectRoot,
+			BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			Runner:      f.agentRunner(),
+			Harness:     reviewHarness,
+			Model:       reviewModel,
+		}
+	}
+
 	worker := &agent.ExecuteBeadWorker{
-		Store: store,
+		Store:    store,
+		Reviewer: reviewer,
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 			runner := f.agentRunner()
 			gitOps := &agent.RealGitOps{}
@@ -1449,6 +1469,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		ModelRef:     modelRef,
 		SessionID:    loopSessionID,
 		PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		NoReview:     noReview,
 	})
 	tailCancel() // stop session log tailer
 	if err != nil {
@@ -1492,10 +1513,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 }
 
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
-
-// executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.
-func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool) error {
+func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel string) error {
 	serverBase := resolveServerURL(projectRoot)
 
 	workerSpec := map[string]any{
@@ -1518,6 +1537,15 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	}
 	if pollInterval > 0 {
 		workerSpec["poll_interval"] = pollInterval.String()
+	}
+	if noReview {
+		workerSpec["no_review"] = true
+	}
+	if reviewHarness != "" {
+		workerSpec["review_harness"] = reviewHarness
+	}
+	if reviewModel != "" {
+		workerSpec["review_model"] = reviewModel
 	}
 
 	specData, err := json.Marshal(workerSpec)

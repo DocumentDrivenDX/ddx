@@ -29,6 +29,9 @@ type ExecuteBeadReport struct {
 	RetryAfter  string `json:"retry_after,omitempty"`
 	// NoChangesRationale carries the agent's explanation when status == no_changes.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
+	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,
+	// or BLOCK) when a reviewer ran. Empty when review was skipped.
+	ReviewVerdict string `json:"review_verdict,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -69,6 +72,10 @@ type ExecuteBeadLoopStore interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 	SetExecutionCooldown(id string, until time.Time, status, detail string) error
 	IncrNoChangesCount(id string) (int, error)
+	// Reopen sets a closed bead back to open, appending notes to the bead's
+	// Notes field and recording a reopen event. Used by the post-merge review
+	// step when the reviewer returns REQUEST_CHANGES or BLOCK.
+	Reopen(id, reason, notes string) error
 }
 
 // ProgressEvent is the FEAT-006 structured progress event. It is defined
@@ -105,6 +112,10 @@ type ExecuteBeadLoopOptions struct {
 	// worker's claim heartbeat loop. Tests use this to shorten the tick.
 	HeartbeatInterval time.Duration
 	Log               io.Writer
+	// NoReview, when true, skips the post-merge review step even when
+	// ExecuteBeadWorker.Reviewer is configured. Use for doc-only beads or
+	// tight iteration loops where review latency is not acceptable.
+	NoReview bool
 
 	// EventSink receives structured JSONL progress events emitted at
 	// loop.start, bead.claimed, bead.result, and loop.end milestones.
@@ -157,6 +168,10 @@ type ExecuteBeadWorker struct {
 	Executor            ExecuteBeadExecutor
 	SatisfactionChecker SatisfactionChecker // nil → count-based default
 	Now                 func() time.Time
+	// Reviewer, when non-nil, is called after every successful merge to
+	// validate the commit against the bead's acceptance criteria. When nil,
+	// post-merge review is skipped (same behaviour as --no-review).
+	Reviewer BeadReviewer
 }
 
 // emitProgress sends a ProgressEvent to opts.ProgressCh non-blocking.
@@ -370,8 +385,63 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
 				return result, err
 			}
-			result.Successes++
-			result.LastSuccessAt = now().UTC()
+
+			// Post-merge review — on-by-default when Reviewer is configured.
+			// Skip when: --no-review flag, "review:skip" bead label, or no reviewer.
+			reviewApproved := true
+			if w.Reviewer != nil && !opts.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
+				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, report.Harness, report.Model)
+				if reviewErr != nil {
+					// Review error: log event but leave bead closed (don't block on reviewer failures).
+					_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+						Kind:      "review-error",
+						Summary:   "review agent error",
+						Body:      reviewErr.Error(),
+						Actor:     assignee,
+						Source:    "ddx agent execute-loop",
+						CreatedAt: now().UTC(),
+					})
+				} else {
+					report.ReviewVerdict = string(reviewRes.Verdict)
+					switch reviewRes.Verdict {
+					case VerdictApprove:
+						// Approved: attach evidence and leave bead closed.
+						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+							Kind:      "review",
+							Summary:   "APPROVE",
+							Body:      reviewRes.RawOutput,
+							Actor:     assignee,
+							Source:    "ddx agent execute-loop",
+							CreatedAt: now().UTC(),
+						})
+					case VerdictRequestChanges:
+						// Needs fixes: reopen with review findings in notes.
+						if reopenErr := w.Store.Reopen(candidate.ID, "review: REQUEST_CHANGES", reviewRes.RawOutput); reopenErr != nil {
+							return result, reopenErr
+						}
+						report.Status = ExecuteBeadStatusReviewRequestChanges
+						report.Detail = "post-merge review: REQUEST_CHANGES"
+						reviewApproved = false
+					case VerdictBlock:
+						// Cannot proceed: reopen and flag for human with BLOCK marker.
+						blockNotes := "REVIEW:BLOCK\n\n" + reviewRes.RawOutput
+						if reopenErr := w.Store.Reopen(candidate.ID, "review: BLOCK", blockNotes); reopenErr != nil {
+							return result, reopenErr
+						}
+						report.Status = ExecuteBeadStatusReviewBlock
+						report.Detail = "post-merge review: BLOCK (flagged for human)"
+						reviewApproved = false
+					}
+				}
+			}
+
+			if reviewApproved {
+				result.Successes++
+				result.LastSuccessAt = now().UTC()
+			} else {
+				result.Failures++
+				result.LastFailureStatus = report.Status
+			}
 		} else {
 			if err := w.Store.Unclaim(candidate.ID); err != nil {
 				return result, err

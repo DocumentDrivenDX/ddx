@@ -19,6 +19,11 @@ const (
 	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
+
+	// Post-merge review outcomes. The bead was merged, then reviewed;
+	// the review returned a non-APPROVE verdict and the bead was reopened.
+	ExecuteBeadStatusReviewRequestChanges = "review_request_changes"
+	ExecuteBeadStatusReviewBlock          = "review_block"
 )
 
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible

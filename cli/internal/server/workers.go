@@ -28,6 +28,10 @@ type ExecuteLoopWorkerSpec struct {
 	Effort       string        `json:"effort,omitempty"`
 	Once         bool          `json:"once,omitempty"`
 	PollInterval time.Duration `json:"poll_interval,omitempty"`
+	// Review options — controls the post-merge review agent.
+	NoReview      bool   `json:"no_review,omitempty"`
+	ReviewHarness string `json:"review_harness,omitempty"`
+	ReviewModel   string `json:"review_model,omitempty"`
 }
 
 // Terminal phases per FEAT-006.
@@ -318,9 +322,22 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}, nil
 		})
 
+		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.
+		var reviewer agent.BeadReviewer
+		if !spec.NoReview {
+			reviewer = &agent.DefaultBeadReviewer{
+				ProjectRoot: m.projectRoot,
+				BeadStore:   bead.NewStore(filepath.Join(m.projectRoot, ".ddx")),
+				Runner:      m.buildAgentRunner(m.projectRoot),
+				Harness:     spec.ReviewHarness,
+				Model:       spec.ReviewModel,
+			}
+		}
+
 		worker = &agent.ExecuteBeadWorker{
 			Store:    store,
 			Executor: executor,
+			Reviewer: reviewer,
 		}
 	}
 
@@ -339,6 +356,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ModelRef:     spec.ModelRef,
 		ProgressCh:   progressCh,
 		PreClaimHook: buildPreClaimHook(m.projectRoot, landingOps),
+		NoReview:     spec.NoReview,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
