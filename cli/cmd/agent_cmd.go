@@ -78,6 +78,7 @@ Examples:
 	cmd.AddCommand(f.newAgentProvidersCommand())
 	cmd.AddCommand(f.newAgentModelsCommand())
 	cmd.AddCommand(f.newAgentCheckCommand())
+	cmd.AddCommand(f.newAgentRouteStatusCommand())
 
 	return cmd
 }
