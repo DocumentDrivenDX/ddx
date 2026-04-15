@@ -77,6 +77,7 @@ Examples:
 	cmd.AddCommand(f.newAgentCatalogCommand())
 	cmd.AddCommand(f.newAgentProvidersCommand())
 	cmd.AddCommand(f.newAgentModelsCommand())
+	cmd.AddCommand(f.newAgentCheckCommand())
 
 	return cmd
 }
