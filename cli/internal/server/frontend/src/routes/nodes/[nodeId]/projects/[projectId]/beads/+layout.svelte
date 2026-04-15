@@ -6,6 +6,7 @@
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
 	import BeadForm from '$lib/components/BeadForm.svelte';
+	import { subscribeBeadLifecycle } from '$lib/gql/subscriptions';
 
 	const BEADS_QUERY = gql`
 		query BeadsByProject($projectID: String!, $first: Int, $after: String, $status: String, $label: String, $search: String) {
@@ -64,6 +65,26 @@
 	let appendedPageInfo = $state<PageInfo | null>(null);
 	let loadingMore = $state(false);
 	let showCreateForm = $state(false);
+
+	// Live status overrides from beadLifecycle subscription (beadID -> status)
+	let liveStatusOverrides = $state<Map<string, string>>(new Map());
+
+	// Subscribe to bead lifecycle events while the page is open
+	$effect(() => {
+		const pid = data.projectId;
+		liveStatusOverrides = new Map();
+		const dispose = subscribeBeadLifecycle(pid, (evt) => {
+			if (evt.kind === 'status_changed' && evt.summary) {
+				const match = evt.summary.match(/status changed from \S+ to (\S+)/);
+				if (match) {
+					const next = new Map(liveStatusOverrides);
+					next.set(evt.beadID, match[1]);
+					liveStatusOverrides = next;
+				}
+			}
+		});
+		return dispose;
+	});
 
 	// Local search input state (drives URL via debounce)
 	let searchInput = $state(data.activeSearch ?? '');
@@ -277,8 +298,8 @@
 							{edge.node.title}
 						</td>
 						<td class="px-4 py-3">
-							<span class="font-medium {statusClass(edge.node.status)}">
-								{edge.node.status}
+							<span class="font-medium {statusClass(liveStatusOverrides.get(edge.node.id) ?? edge.node.status)}">
+								{liveStatusOverrides.get(edge.node.id) ?? edge.node.status}
 							</span>
 						</td>
 						<td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">

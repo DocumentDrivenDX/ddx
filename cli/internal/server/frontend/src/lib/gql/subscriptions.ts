@@ -39,6 +39,18 @@ export function disposeSubscriptionClient(): void {
 // Typed event shapes (mirror schema.graphql subscription event types)
 // ---------------------------------------------------------------------------
 
+export interface BeadEvent {
+	eventID: string
+	beadID: string
+	/** Event kind: "created" | "status_changed" | "updated" */
+	kind: string
+	summary?: string | null
+	body?: string | null
+	actor?: string | null
+	/** ISO-8601 timestamp */
+	timestamp: string
+}
+
 export interface WorkerEvent {
 	eventID: string
 	workerID: string
@@ -48,6 +60,63 @@ export interface WorkerEvent {
 	timestamp: string
 	logLine?: string | null
 	beadID?: string | null
+}
+
+// ---------------------------------------------------------------------------
+// subscribeBeadLifecycle
+// ---------------------------------------------------------------------------
+
+const BEAD_LIFECYCLE_SUBSCRIPTION = `
+subscription BeadLifecycle($projectID: ID!) {
+  beadLifecycle(projectID: $projectID) {
+    eventID
+    beadID
+    kind
+    summary
+    timestamp
+  }
+}
+`
+
+/**
+ * Subscribe to live lifecycle events for all beads in a project.
+ *
+ * The watcher polls beads.jsonl on disk; events arrive within ~1 s of a change.
+ * Returns a dispose function — call it to unsubscribe and free resources.
+ *
+ * @example
+ * const dispose = subscribeBeadLifecycle('/path/to/project', (evt) => {
+ *   if (evt.kind === 'status_changed') updateStatus(evt.beadID, evt.summary)
+ * })
+ * onDestroy(dispose)
+ */
+export function subscribeBeadLifecycle(
+	projectID: string,
+	onEvent: (event: BeadEvent) => void,
+	onError?: (err: unknown) => void,
+	onComplete?: () => void
+): () => void {
+	const client = getSubscriptionClient()
+	return client.subscribe(
+		{ query: BEAD_LIFECYCLE_SUBSCRIPTION, variables: { projectID } },
+		{
+			next(data) {
+				const evt = (data.data as Record<string, unknown> | null | undefined)
+					?.beadLifecycle as BeadEvent | undefined
+				if (evt) onEvent(evt)
+			},
+			error(err) {
+				if (onError) {
+					onError(err)
+				} else {
+					console.error('[ddx] beadLifecycle subscription error:', err)
+				}
+			},
+			complete() {
+				onComplete?.()
+			}
+		}
+	)
 }
 
 // ---------------------------------------------------------------------------
