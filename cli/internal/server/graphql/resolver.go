@@ -4,6 +4,7 @@ package graphql
 
 import (
 	"context"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
@@ -19,6 +20,15 @@ type Resolver struct {
 	WorkingDir string
 	Workers    ProgressSubscriber
 	BeadBus    BeadLifecycleSubscriber
+	// ExecLogs provides execution run log retrieval for the executionEvidence
+	// subscription. If nil, that subscription returns an error.
+	ExecLogs ExecLogProvider
+	// CoordMetrics provides coordinator metrics snapshots for the
+	// coordinatorMetrics subscription. If nil, that subscription returns an error.
+	CoordMetrics CoordinatorMetricsProvider
+	// MetricsPollInterval controls how often CoordinatorMetrics polls for
+	// changes. Defaults to 1 second when zero.
+	MetricsPollInterval time.Duration
 }
 
 // BeadsReady is the resolver for the beadsReady field.
@@ -129,15 +139,11 @@ func (r *queryResolver) Provider(ctx context.Context, name string) (*Provider, e
 // BeadLifecycle is the resolver for the beadLifecycle subscription.
 // Implemented in resolver_sub_bead.go.
 
-// ExecutionEvidence is the resolver for the executionEvidence field.
-func (r *subscriptionResolver) ExecutionEvidence(ctx context.Context, runID string) (<-chan *ExecutionEvent, error) {
-	panic("not implemented")
-}
+// ExecutionEvidence is the resolver for the executionEvidence subscription.
+// Implemented in resolver_sub_exec.go.
 
-// CoordinatorMetrics is the resolver for the coordinatorMetrics field.
-func (r *subscriptionResolver) CoordinatorMetrics(ctx context.Context, projectRoot string) (<-chan *CoordinatorMetricsUpdate, error) {
-	panic("not implemented")
-}
+// CoordinatorMetrics is the resolver for the coordinatorMetrics subscription.
+// Implemented in resolver_sub_exec.go.
 
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }

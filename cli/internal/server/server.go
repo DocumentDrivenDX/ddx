@@ -3472,10 +3472,12 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 		Resolvers: &ddxgraphql.Resolver{
-			State:      s.state,
-			WorkingDir: s.WorkingDir,
-			Workers:    s.workers,
-			BeadBus:    s.beadHub,
+			State:        s.state,
+			WorkingDir:   s.WorkingDir,
+			Workers:      s.workers,
+			BeadBus:      s.beadHub,
+			ExecLogs:     &execLogAdapter{workingDir: s.WorkingDir},
+			CoordMetrics: &coordMetricsAdapter{reg: s.workers.LandCoordinators},
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
