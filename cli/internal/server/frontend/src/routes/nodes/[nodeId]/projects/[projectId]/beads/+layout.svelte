@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { LayoutData } from './$types';
 	import type { Snippet } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
+	import BeadForm from '$lib/components/BeadForm.svelte';
 
 	const BEADS_QUERY = gql`
 		query BeadsByProject($projectID: String!, $first: Int, $after: String, $status: String, $label: String, $search: String) {
@@ -62,6 +63,7 @@
 	let appendedEdges = $state<BeadEdge[]>([]);
 	let appendedPageInfo = $state<PageInfo | null>(null);
 	let loadingMore = $state(false);
+	let showCreateForm = $state(false);
 
 	// Local search input state (drives URL via debounce)
 	let searchInput = $state(data.activeSearch ?? '');
@@ -191,9 +193,17 @@
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
 		<h1 class="text-xl font-semibold dark:text-white">Beads</h1>
-		<span class="text-sm text-gray-500 dark:text-gray-400">
-			{edges.length} of {totalCount}
-		</span>
+		<div class="flex items-center gap-3">
+			<span class="text-sm text-gray-500 dark:text-gray-400">
+				{edges.length} of {totalCount}
+			</span>
+			<button
+				onclick={() => (showCreateForm = true)}
+				class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+			>
+				New bead
+			</button>
+		</div>
 	</div>
 
 	<!-- Search input -->
@@ -301,3 +311,39 @@
 </div>
 
 {@render children()}
+
+{#if showCreateForm}
+	<!-- Backdrop -->
+	<div
+		class="fixed inset-0 z-40 bg-black/20 dark:bg-black/40"
+		onclick={() => (showCreateForm = false)}
+		role="button"
+		tabindex="-1"
+		aria-label="Close"
+		onkeydown={(e) => e.key === 'Escape' && (showCreateForm = false)}
+	></div>
+
+	<!-- Create form panel -->
+	<div
+		class="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl dark:bg-gray-900"
+	>
+		<div
+			class="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700"
+		>
+			<h2 class="text-base font-semibold text-gray-900 dark:text-white">New bead</h2>
+		</div>
+		<div class="flex-1 overflow-auto p-6">
+			<BeadForm
+				onSuccess={async (newBead) => {
+					showCreateForm = false;
+					await invalidateAll();
+					const p = $page.params as Record<string, string>;
+					const searchStr = $page.url.searchParams.toString();
+					const beadPath = `/nodes/${p['nodeId']}/projects/${p['projectId']}/beads/${newBead.id}`;
+					goto(searchStr ? `${beadPath}?${searchStr}` : beadPath);
+				}}
+				onCancel={() => (showCreateForm = false)}
+			/>
+		</div>
+	</div>
+{/if}
