@@ -596,7 +596,7 @@ type ComplexityRoot struct {
 		BeadDepTree                 func(childComplexity int, beadID string) int
 		Beads                       func(childComplexity int, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) int
 		BeadsBlocked                func(childComplexity int, first *int, after *string, last *int, before *string) int
-		BeadsByProject              func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, status *string, label *string) int
+		BeadsByProject              func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, status *string, label *string, search *string) int
 		BeadsReady                  func(childComplexity int, first *int, after *string, last *int, before *string) int
 		BeadsStatus                 func(childComplexity int) int
 		Commits                     func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) int
@@ -821,7 +821,7 @@ type QueryResolver interface {
 	NodeInfo(ctx context.Context) (*NodeInfo, error)
 	Projects(ctx context.Context, first *int, after *string, last *int, before *string, includeUnreachable *bool) (*ProjectConnection, error)
 	Beads(ctx context.Context, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) (*BeadConnection, error)
-	BeadsByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, status *string, label *string) (*BeadConnection, error)
+	BeadsByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, status *string, label *string, search *string) (*BeadConnection, error)
 	BeadsReady(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error)
 	BeadsBlocked(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error)
 	BeadsStatus(ctx context.Context) (*BeadStatusCounts, error)
@@ -3239,7 +3239,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.BeadsByProject(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["status"].(*string), args["label"].(*string)), true
+		return e.ComplexityRoot.Query.BeadsByProject(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["status"].(*string), args["label"].(*string), args["search"].(*string)), true
 	case "Query.beadsReady":
 		if e.ComplexityRoot.Query.BeadsReady == nil {
 			break
@@ -4649,6 +4649,11 @@ func (ec *executionContext) field_Query_beadsByProject_args(ctx context.Context,
 		return nil, err
 	}
 	args["label"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg7
 	return args, nil
 }
 
@@ -17112,7 +17117,7 @@ func (ec *executionContext) _Query_beadsByProject(ctx context.Context, field gra
 		ec.fieldContext_Query_beadsByProject,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().BeadsByProject(ctx, fc.Args["projectID"].(string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["status"].(*string), fc.Args["label"].(*string))
+			return ec.Resolvers.Query().BeadsByProject(ctx, fc.Args["projectID"].(string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["status"].(*string), fc.Args["label"].(*string), fc.Args["search"].(*string))
 		},
 		nil,
 		ec.marshalNBeadConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBeadConnection,

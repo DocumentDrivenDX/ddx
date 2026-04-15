@@ -1325,7 +1325,9 @@ type Query {
     """Filter by lifecycle status"""
     status: String,
     """Filter by label"""
-    label: String
+    label: String,
+    """Search by title or ID (case-insensitive substring)"""
+    search: String
   ): BeadConnection!
 
   """List open beads whose dependencies are all closed (maps to GET /api/beads/ready)"""

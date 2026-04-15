@@ -19,12 +19,12 @@ func (r *queryResolver) Beads(ctx context.Context, first *int, after *string, la
 	if projectID != nil {
 		projectIDVal = *projectID
 	}
-	snaps := r.State.GetBeadSnapshots(statusVal, labelVal, projectIDVal)
+	snaps := r.State.GetBeadSnapshots(statusVal, labelVal, projectIDVal, "")
 	return beadConnectionFromSnapshots(snaps, first, after, last, before), nil
 }
 
 // BeadsByProject is the resolver for the beadsByProject field.
-func (r *queryResolver) BeadsByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, status *string, label *string) (*BeadConnection, error) {
+func (r *queryResolver) BeadsByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, status *string, label *string, search *string) (*BeadConnection, error) {
 	statusVal := ""
 	if status != nil {
 		statusVal = *status
@@ -33,7 +33,11 @@ func (r *queryResolver) BeadsByProject(ctx context.Context, projectID string, fi
 	if label != nil {
 		labelVal = *label
 	}
-	snaps := r.State.GetBeadSnapshots(statusVal, labelVal, projectID)
+	searchVal := ""
+	if search != nil {
+		searchVal = *search
+	}
+	snaps := r.State.GetBeadSnapshots(statusVal, labelVal, projectID, searchVal)
 	return beadConnectionFromSnapshots(snaps, first, after, last, before), nil
 }
 

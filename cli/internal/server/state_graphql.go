@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
@@ -45,7 +46,7 @@ func (s *ServerState) GetProjectSnapshotByID(id string) (*ddxgraphql.Project, bo
 }
 
 // GetBeadSnapshots implements ddxgraphql.StateProvider.
-func (s *ServerState) GetBeadSnapshots(status, label, projectID string) []ddxgraphql.BeadSnapshot {
+func (s *ServerState) GetBeadSnapshots(status, label, projectID, search string) []ddxgraphql.BeadSnapshot {
 	projects := s.GetProjects()
 	var result []ddxgraphql.BeadSnapshot
 	for _, proj := range projects {
@@ -63,6 +64,12 @@ func (s *ServerState) GetBeadSnapshots(status, label, projectID string) []ddxgra
 			}
 			if label != "" && !containsString(b.Labels, label) {
 				continue
+			}
+			if search != "" {
+				q := strings.ToLower(search)
+				if !strings.Contains(strings.ToLower(b.ID), q) && !strings.Contains(strings.ToLower(b.Title), q) {
+					continue
+				}
 			}
 			snap := ddxgraphql.BeadSnapshot{
 				ProjectID:   proj.ID,

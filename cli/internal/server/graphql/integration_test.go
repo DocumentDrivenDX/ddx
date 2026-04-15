@@ -165,7 +165,7 @@ func (p *testStateProvider) GetProjectSnapshotByID(id string) (*ddxgraphql.Proje
 	return nil, false
 }
 
-func (p *testStateProvider) GetBeadSnapshots(status, label, projectID string) []ddxgraphql.BeadSnapshot {
+func (p *testStateProvider) GetBeadSnapshots(status, label, projectID, search string) []ddxgraphql.BeadSnapshot {
 	var out []ddxgraphql.BeadSnapshot
 	for _, b := range p.beads {
 		if status != "" && b.Status != status {
