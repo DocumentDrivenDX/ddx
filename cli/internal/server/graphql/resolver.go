@@ -11,31 +11,6 @@ type Resolver struct {
 	WorkingDir string
 }
 
-// BeadCreate is the resolver for the beadCreate field.
-func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Bead, error) {
-	panic("not implemented")
-}
-
-// BeadUpdate is the resolver for the beadUpdate field.
-func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input BeadUpdateInput) (*Bead, error) {
-	panic("not implemented")
-}
-
-// BeadClaim is the resolver for the beadClaim field.
-func (r *mutationResolver) BeadClaim(ctx context.Context, id string, assignee string) (*Bead, error) {
-	panic("not implemented")
-}
-
-// BeadUnclaim is the resolver for the beadUnclaim field.
-func (r *mutationResolver) BeadUnclaim(ctx context.Context, id string) (*Bead, error) {
-	panic("not implemented")
-}
-
-// BeadReopen is the resolver for the beadReopen field.
-func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, error) {
-	panic("not implemented")
-}
-
 // DocumentWrite is the resolver for the documentWrite field.
 func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, content string) (*Document, error) {
 	panic("not implemented")
