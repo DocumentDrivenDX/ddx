@@ -468,8 +468,10 @@ cli/gendoc
 **/playwright-report/
 **/demo-output/
 
-# Keep embedded frontend build (required for go:embed)
-!cli/internal/server/frontend/dist/
+# Keep embedded frontend build (required for go:embed all:frontend/build)
+# Note: the embed target is build/, not dist/. dist/ is orphaned Vite output
+# and is ignored explicitly below.
+cli/internal/server/frontend/dist/
 
 .claude/worktrees/
 cli/internal/server/frontend/public/sql-wasm.wasm
