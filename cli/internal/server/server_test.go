@@ -1517,8 +1517,8 @@ func TestSPAServesIndexHTML(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 (UI placeholder), got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 from embedded SPA, got %d", w.Code)
 	}
 }
 
@@ -1526,13 +1526,13 @@ func TestSPAFallbackForClientRoute(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
-	req := httptest.NewRequest("GET", "/beads", nil)
+	req := httptest.NewRequest("GET", "/nodes/abc/projects/def/beads", nil)
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
-	// /beads is not a registered route; expect 404 or 405
-	if w.Code == http.StatusOK {
-		t.Fatalf("expected non-200 for unregistered route, got %d", w.Code)
+	// Deep SPA route: no static file, falls back to index.html → 200
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 (SPA fallback to index.html) for deep link, got %d", w.Code)
 	}
 }
 

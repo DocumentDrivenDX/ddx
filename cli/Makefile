@@ -17,13 +17,18 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs
+.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build
 
 # Default target
 all: clean deps test build
 
+# Build SvelteKit frontend (required before Go build for //go:embed)
+frontend-build:
+	@echo "Building SvelteKit frontend..."
+	cd internal/server/frontend && bun install --frozen-lockfile && bun run build
+
 # Build for current platform
-build:
+build: frontend-build
 	@echo "Building DDx CLI..."
 	@mkdir -p $(BUILD_DIR)
 	go build $(LDFLAGS) -o $(BUILD_DIR)/ddx .

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"net"
 	"net/http"
@@ -430,9 +431,23 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /graphql", s.handleGraphQLQuery)
 	s.mux.HandleFunc("GET /graphiql", s.handleGraphiQL)
 
-	// Web UI placeholder — SvelteKit frontend will be embedded in Stage 4
-	s.mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "UI not yet available", http.StatusNotFound)
+	// SvelteKit SPA — serve embedded frontend/build; fall back to index.html for deep links.
+	sub, err := fs.Sub(frontendFiles, "frontend/build")
+	if err != nil {
+		panic("embed: frontend/build not found: " + err.Error())
+	}
+	fileServer := http.FileServer(http.FS(sub))
+	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Attempt to serve the exact file. If not found, serve index.html so the
+		// SvelteKit client-side router can handle the URL.
+		_, statErr := fs.Stat(sub, strings.TrimPrefix(r.URL.Path, "/"))
+		if statErr != nil {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = "/"
+			fileServer.ServeHTTP(w, r2)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
 	})
 }
 
