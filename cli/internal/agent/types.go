@@ -75,13 +75,18 @@ type QuorumOptions struct {
 
 // Result holds the output of an agent invocation.
 type Result struct {
-	Harness         string          `json:"harness"`
-	Provider        string          `json:"provider,omitempty"`
-	Model           string          `json:"model,omitempty"`
-	ExitCode        int             `json:"exit_code"`
-	Output          string          `json:"output"`
-	CondensedOutput string          `json:"condensed_output,omitempty"`
-	Stderr          string          `json:"stderr,omitempty"`
+	Harness         string `json:"harness"`
+	Provider        string `json:"provider,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ExitCode        int    `json:"exit_code"`
+	Output          string `json:"output"`
+	CondensedOutput string `json:"condensed_output,omitempty"`
+	Stderr          string `json:"stderr,omitempty"`
+	// Routing evidence populated by the embedded agent harness (RunAgent) or
+	// the script harness (RunScript). Used by ExecuteBead to record kind:routing
+	// evidence on the bead.
+	RouteReason     string          `json:"route_reason,omitempty"`
+	ResolvedBaseURL string          `json:"resolved_base_url,omitempty"`
 	Tokens          int             `json:"tokens,omitempty"`
 	InputTokens     int             `json:"input_tokens,omitempty"`
 	OutputTokens    int             `json:"output_tokens,omitempty"`
