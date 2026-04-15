@@ -4,12 +4,21 @@ package graphql
 
 import (
 	"context"
+
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
+
+// BeadLifecycleSubscriber can subscribe to live lifecycle events from a bead store.
+// bead.WatcherHub satisfies this interface.
+type BeadLifecycleSubscriber interface {
+	SubscribeLifecycle(projectID string) (<-chan bead.LifecycleEvent, func())
+}
 
 type Resolver struct {
 	State      StateProvider
 	WorkingDir string
 	Workers    ProgressSubscriber
+	BeadBus    BeadLifecycleSubscriber
 }
 
 // BeadsReady is the resolver for the beadsReady field.
@@ -117,10 +126,8 @@ func (r *queryResolver) Provider(ctx context.Context, name string) (*Provider, e
 	panic("not implemented")
 }
 
-// BeadLifecycle is the resolver for the beadLifecycle field.
-func (r *subscriptionResolver) BeadLifecycle(ctx context.Context, projectID string) (<-chan *BeadEvent, error) {
-	panic("not implemented")
-}
+// BeadLifecycle is the resolver for the beadLifecycle subscription.
+// Implemented in resolver_sub_bead.go.
 
 // ExecutionEvidence is the resolver for the executionEvidence field.
 func (r *subscriptionResolver) ExecutionEvidence(ctx context.Context, runID string) (<-chan *ExecutionEvent, error) {

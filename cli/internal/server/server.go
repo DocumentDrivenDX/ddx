@@ -48,6 +48,7 @@ type Server struct {
 	mux         *http.ServeMux
 	startTime   time.Time
 	workers     *WorkerManager
+	beadHub     *bead.WatcherHub
 	state       *ServerState
 }
 
@@ -59,12 +60,14 @@ func New(addr, workingDir string) *Server {
 	state.workingDir = workingDir
 
 	workers := NewWorkerManager(workingDir)
+	beadHub := bead.NewWatcherHub(250 * time.Millisecond)
 	s := &Server{
 		Addr:       addr,
 		WorkingDir: workingDir,
 		mux:        http.NewServeMux(),
 		startTime:  time.Now().UTC(),
 		workers:    workers,
+		beadHub:    beadHub,
 		state:      state,
 	}
 	state.coordinatorReg = workers.LandCoordinators
@@ -3472,6 +3475,7 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 			State:      s.state,
 			WorkingDir: s.WorkingDir,
 			Workers:    s.workers,
+			BeadBus:    s.beadHub,
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
