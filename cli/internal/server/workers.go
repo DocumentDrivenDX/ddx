@@ -268,11 +268,12 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			gitOps := &agent.RealGitOps{}
 
 			res, err := agent.ExecuteBead(m.projectRoot, beadID, agent.ExecuteBeadOptions{
-				Harness:  spec.Harness,
-				Model:    spec.Model,
-				Provider: spec.Provider,
-				ModelRef: spec.ModelRef,
-				Effort:   spec.Effort,
+				Harness:    spec.Harness,
+				Model:      spec.Model,
+				Provider:   spec.Provider,
+				ModelRef:   spec.ModelRef,
+				Effort:     spec.Effort,
+				BeadEvents: bead.NewStore(filepath.Join(m.projectRoot, ".ddx")),
 			}, gitOps, runner)
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err

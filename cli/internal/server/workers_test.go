@@ -30,9 +30,10 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 	}
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		Harness: "agent",
-		Model:   "qwen/qwen3.6",
-		Once:    true,
+		Harness:  "agent",
+		Model:    "qwen/qwen3.6",
+		Provider: "openrouter",
+		Once:     true,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, record.ID)

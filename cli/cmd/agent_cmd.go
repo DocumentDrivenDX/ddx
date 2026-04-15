@@ -1372,12 +1372,13 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			}
 
 			res, execErr := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
-				FromRev:  fromRev,
-				Harness:  resolvedHarness,
-				Model:    model,
-				Provider: provider,
-				ModelRef: modelRef,
-				Effort:   effort,
+				FromRev:    fromRev,
+				Harness:    resolvedHarness,
+				Model:      model,
+				Provider:   provider,
+				ModelRef:   modelRef,
+				Effort:     effort,
+				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			}, gitOps, runner)
 			if execErr != nil && res == nil {
 				return agent.ExecuteBeadReport{}, execErr

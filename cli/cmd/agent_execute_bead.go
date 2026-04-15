@@ -129,6 +129,17 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		runner = f.agentRunner()
 	}
 
+	// Preflight the orphan-model check before creating a worktree. Mirrors
+	// the execute-loop preflight so `ddx agent execute-bead --model <unroutable>`
+	// errors before any git work happens rather than mid-execution.
+	if pv, ok := runner.(interface {
+		ValidateForExecuteLoop(harnessName, model, provider, modelRef string) error
+	}); ok {
+		if err := pv.ValidateForExecuteLoop(harness, model, provider, modelRef); err != nil {
+			return err
+		}
+	}
+
 	// Recover any orphaned worktrees from previous crashed runs before
 	// spawning a new worker. This is the parent's responsibility.
 	agent.RecoverOrphans(gitOps, projectRoot, beadID)
