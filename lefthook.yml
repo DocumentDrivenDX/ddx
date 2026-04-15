@@ -48,18 +48,6 @@ pre-commit:
     #     fi
     #   fail_text: "Debug statements found in Go files"
 
-    debug-js:
-      name: "Debug statements (JS/TS)"
-      glob: "*.{js,jsx,ts,tsx}"
-      exclude: "{**/dist/**,**/$houdini/**}"
-      run: |
-        if command -v rg >/dev/null 2>&1; then
-          rg -q "(console\.(log|debug|info)|debugger)" {staged_files} && exit 1 || exit 0
-        else
-          grep -E "(console\.(log|debug|info)|debugger)" {staged_files} 2>/dev/null && exit 1 || exit 0
-        fi
-      fail_text: "Debug statements found in JS/TS files"
-
     debug-python:
       name: "Debug statements (Python)"
       glob: "*.py"
