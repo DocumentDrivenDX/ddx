@@ -1,0 +1,1 @@
+# Placeholder so //go:embed all:frontend/build always has a match. The real SPA build output is produced by 'bun run build' (via 'make frontend-build') and is gitignored except for this file.

@@ -454,8 +454,13 @@ func (s *Server) routes() {
 	}
 	fileServer := http.FileServer(http.FS(sub))
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Attempt to serve the exact file. If not found, serve index.html so the
-		// SvelteKit client-side router can handle the URL.
+		// Root: let the file server resolve index.html directly.
+		if r.URL.Path == "" || r.URL.Path == "/" {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		// Attempt to serve the exact file. If not found, serve index.html so
+		// the SvelteKit client-side router can handle the URL.
 		_, statErr := fs.Stat(sub, strings.TrimPrefix(r.URL.Path, "/"))
 		if statErr != nil {
 			r2 := r.Clone(r.Context())

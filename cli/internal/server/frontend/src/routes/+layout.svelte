@@ -6,11 +6,18 @@
 	import { nodeStore } from '$lib/stores/node.svelte';
 
 	let { data, children } = $props();
-	const NodeInfo = data.NodeInfo;
+
+	// Re-derive on every data change so SvelteKit navigations and Houdini
+	// refetches both re-fire the subscription below.
+	const NodeInfoStore = $derived(data.NodeInfo);
 
 	$effect(() => {
-		const n = $NodeInfo?.data?.nodeInfo;
-		if (n) nodeStore.set(n);
+		const store = NodeInfoStore;
+		if (!store) return;
+		return store.subscribe((val) => {
+			const n = val?.data?.nodeInfo;
+			if (n) nodeStore.set(n);
+		});
 	});
 </script>
 

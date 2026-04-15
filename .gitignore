@@ -165,6 +165,11 @@ bower_components/
 # Build outputs
 dist/
 build/
+# Carve out the SvelteKit embed placeholder so //go:embed all:frontend/build
+# has at least one matching file on fresh checkouts. Real build output stays
+# gitignored via frontend/.gitignore.
+!cli/internal/server/frontend/build/
+!cli/internal/server/frontend/build/.gitkeep
 .next/
 out/
 .nuxt/
