@@ -1507,7 +1507,7 @@ func TestMCPDocTools(t *testing.T) {
 	}
 }
 
-// --- SPA handler tests ---
+// --- UI placeholder tests (Stage 3.1: React frontend removed, SvelteKit pending Stage 4) ---
 
 func TestSPAServesIndexHTML(t *testing.T) {
 	dir := setupTestDir(t)
@@ -1517,11 +1517,8 @@ func TestSPAServesIndexHTML(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "<html") {
-		t.Error("expected HTML content from SPA index")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 (UI placeholder), got %d", w.Code)
 	}
 }
 
@@ -1529,16 +1526,13 @@ func TestSPAFallbackForClientRoute(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
-	// A client-side route like /beads should serve index.html
 	req := httptest.NewRequest("GET", "/beads", nil)
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "<html") {
-		t.Error("expected HTML content from SPA index for client route")
+	// /beads is not a registered route; expect 404 or 405
+	if w.Code == http.StatusOK {
+		t.Fatalf("expected non-200 for unregistered route, got %d", w.Code)
 	}
 }
 

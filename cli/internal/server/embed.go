@@ -2,5 +2,5 @@ package server
 
 import "embed"
 
-//go:embed all:frontend/dist
+// frontendFiles is an empty placeholder until the SvelteKit frontend is embedded in Stage 4.
 var frontendFiles embed.FS

@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"io/fs"
 	"math/big"
 	"net"
 	"net/http"
@@ -431,29 +430,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /graphql", s.handleGraphQLQuery)
 	s.mux.HandleFunc("GET /graphiql", s.handleGraphiQL)
 
-	// Web UI (embedded SPA)
-	distFS, err := fs.Sub(frontendFiles, "frontend/dist")
-	if err == nil {
-		s.mux.Handle("/", spaHandler(http.FS(distFS)))
-	}
-}
-
-// spaHandler serves static files from the embedded FS, falling back to
-// index.html for client-side routes (SPA routing).
-func spaHandler(fsys http.FileSystem) http.Handler {
-	fileServer := http.FileServer(fsys)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		// Try to open the file from the embedded FS
-		f, err := fsys.Open(path)
-		if err != nil {
-			// File not found — serve index.html for SPA routing
-			r.URL.Path = "/"
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-		_ = f.Close()
-		fileServer.ServeHTTP(w, r)
+	// Web UI placeholder — SvelteKit frontend will be embedded in Stage 4
+	s.mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "UI not yet available", http.StatusNotFound)
 	})
 }
 
