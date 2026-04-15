@@ -3,8 +3,8 @@ import { createClient } from '$lib/gql/client'
 import { gql } from 'graphql-request'
 
 const BEADS_QUERY = gql`
-	query BeadsByProject($projectID: String!, $first: Int, $after: String, $status: String, $label: String) {
-		beadsByProject(projectID: $projectID, first: $first, after: $after, status: $status, label: $label) {
+	query BeadsByProject($projectID: String!, $first: Int, $after: String, $status: String, $label: String, $search: String) {
+		beadsByProject(projectID: $projectID, first: $first, after: $after, status: $status, label: $label, search: $search) {
 			edges {
 				node {
 					id
@@ -55,18 +55,21 @@ interface BeadsResult {
 export const load: PageLoad = async ({ params, url, fetch }) => {
 	const status = url.searchParams.get('status') ?? undefined
 	const label = url.searchParams.get('label') ?? undefined
+	const search = url.searchParams.get('q') ?? undefined
 
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 	const data = await client.request<BeadsResult>(BEADS_QUERY, {
 		projectID: params.projectId,
 		first: 10,
 		status,
-		label
+		label,
+		search
 	})
 	return {
 		projectId: params.projectId,
 		beads: data.beadsByProject,
 		activeStatus: status ?? null,
-		activeLabel: label ?? null
+		activeLabel: label ?? null,
+		activeSearch: search ?? null
 	}
 }

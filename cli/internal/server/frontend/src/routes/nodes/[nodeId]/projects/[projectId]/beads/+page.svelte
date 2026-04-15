@@ -6,8 +6,8 @@
 	import { gql } from 'graphql-request';
 
 	const BEADS_QUERY = gql`
-		query BeadsByProject($projectID: String!, $first: Int, $after: String, $status: String, $label: String) {
-			beadsByProject(projectID: $projectID, first: $first, after: $after, status: $status, label: $label) {
+		query BeadsByProject($projectID: String!, $first: Int, $after: String, $status: String, $label: String, $search: String) {
+			beadsByProject(projectID: $projectID, first: $first, after: $after, status: $status, label: $label, search: $search) {
 				edges {
 					node {
 						id
@@ -62,8 +62,37 @@
 	let appendedPageInfo = $state<PageInfo | null>(null);
 	let loadingMore = $state(false);
 
+	// Local search input state (drives URL via debounce)
+	let searchInput = $state(data.activeSearch ?? '');
+
+	// Debounce: update URL ?q= 200ms after user stops typing
+	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		const val = searchInput;
+		if (debounceTimer) clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(() => {
+			// Skip if the URL already reflects the current input value
+			const currentQ = $page.url.searchParams.get('q') ?? '';
+			if (val === currentQ) return;
+			const params = new URLSearchParams($page.url.searchParams);
+			if (val) {
+				params.set('q', val);
+			} else {
+				params.delete('q');
+			}
+			params.delete('after');
+			const search = params.toString();
+			goto(search ? `?${search}` : $page.url.pathname, { replaceState: true });
+		}, 200);
+	});
+
+	// Sync searchInput when URL changes (e.g. back/forward navigation)
+	$effect(() => {
+		searchInput = data.activeSearch ?? '';
+	});
+
 	// Track the active filter combo so we can reset appended pages on change
-	let filterKey = $derived(`${data.activeStatus}::${data.activeLabel}`);
+	let filterKey = $derived(`${data.activeStatus}::${data.activeLabel}::${data.activeSearch}`);
 	let prevFilterKey = $state('');
 	$effect(() => {
 		if (filterKey !== prevFilterKey) {
@@ -113,7 +142,8 @@
 				first: 10,
 				after: pageInfo.endCursor,
 				status: data.activeStatus ?? undefined,
-				label: data.activeLabel ?? undefined
+				label: data.activeLabel ?? undefined,
+				search: data.activeSearch ?? undefined
 			});
 			appendedEdges = [...appendedEdges, ...result.beadsByProject.edges];
 			appendedPageInfo = result.beadsByProject.pageInfo;
@@ -150,6 +180,16 @@
 		<span class="text-sm text-gray-500 dark:text-gray-400">
 			{edges.length} of {totalCount}
 		</span>
+	</div>
+
+	<!-- Search input -->
+	<div class="relative">
+		<input
+			type="search"
+			bind:value={searchInput}
+			placeholder="Search beads…"
+			class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400"
+		/>
 	</div>
 
 	<!-- Status filter chips -->
