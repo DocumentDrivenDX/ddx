@@ -169,6 +169,10 @@ type executeBeadGoverningRef struct {
 	Title string `json:"title,omitempty"`
 }
 
+// GoverningRef is the exported alias for executeBeadGoverningRef, for use
+// outside the agent package (e.g. cmd/bead_review.go).
+type GoverningRef = executeBeadGoverningRef
+
 type executeBeadArtifactPaths struct {
 	Dir      string `json:"dir"`
 	Prompt   string `json:"prompt"`
