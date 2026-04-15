@@ -23,6 +23,8 @@ import (
 type ExecuteLoopWorkerSpec struct {
 	Harness      string        `json:"harness,omitempty"`
 	Model        string        `json:"model,omitempty"`
+	Provider     string        `json:"provider,omitempty"`
+	ModelRef     string        `json:"model_ref,omitempty"`
 	Effort       string        `json:"effort,omitempty"`
 	Once         bool          `json:"once,omitempty"`
 	PollInterval time.Duration `json:"poll_interval,omitempty"`
@@ -164,9 +166,9 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerRecord, error) {
 	// Pre-flight: validate harness availability and model compatibility
 	// before creating the worker record or claiming any beads.
-	if spec.Harness != "" {
+	{
 		runner := m.buildAgentRunner(m.projectRoot)
-		if err := runner.ValidateForExecuteLoop(spec.Harness, spec.Model); err != nil {
+		if err := runner.ValidateForExecuteLoop(spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
 			return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
 		}
 	}
@@ -266,9 +268,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			gitOps := &agent.RealGitOps{}
 
 			res, err := agent.ExecuteBead(m.projectRoot, beadID, agent.ExecuteBeadOptions{
-				Harness: spec.Harness,
-				Model:   spec.Model,
-				Effort:  spec.Effort,
+				Harness:  spec.Harness,
+				Model:    spec.Model,
+				Provider: spec.Provider,
+				ModelRef: spec.ModelRef,
+				Effort:   spec.Effort,
 			}, gitOps, runner)
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err
@@ -330,6 +334,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ProjectRoot:  m.projectRoot,
 		Harness:      spec.Harness,
 		Model:        spec.Model,
+		Provider:     spec.Provider,
+		ModelRef:     spec.ModelRef,
 		ProgressCh:   progressCh,
 		PreClaimHook: buildPreClaimHook(m.projectRoot, landingOps),
 	})

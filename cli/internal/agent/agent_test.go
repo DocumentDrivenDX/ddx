@@ -1095,7 +1095,7 @@ func TestOSExecutor_EarlyCancel(t *testing.T) {
 // returns an error immediately so execute-loop fails before claiming any beads.
 func TestValidateForExecuteLoopUnknownHarness(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	err := r.ValidateForExecuteLoop("nonexistent", "")
+	err := r.ValidateForExecuteLoop("nonexistent", "", "", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown harness")
 }
@@ -1104,21 +1104,68 @@ func TestValidateForExecuteLoopUnknownHarness(t *testing.T) {
 // (routing will pick at bead-claim time) returns no error.
 func TestValidateForExecuteLoopEmptyHarnessIsNoop(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateForExecuteLoop("", "some-model"))
+	assert.NoError(t, r.ValidateForExecuteLoop("", "", "", ""))
 }
 
 // TestValidateForExecuteLoopValidHarnessNoModel verifies that a valid,
 // available harness passes pre-flight with no model specified.
 func TestValidateForExecuteLoopValidHarnessNoModel(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateForExecuteLoop("claude", ""))
+	assert.NoError(t, r.ValidateForExecuteLoop("claude", "", "", ""))
 }
 
 // TestValidateForExecuteLoopValidHarnessAndModel verifies that a valid harness
 // with a compatible model string passes pre-flight.
 func TestValidateForExecuteLoopValidHarnessAndModel(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateForExecuteLoop("claude", "claude-sonnet-4-6"))
+	assert.NoError(t, r.ValidateForExecuteLoop("claude", "claude-sonnet-4-6", "", ""))
+}
+
+func TestValidateOrphanModelRejectsUnroutablePin(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	err := r.ValidateOrphanModel(RunOptions{Model: "qwen/qwen3-coder-next"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not match any provider, catalog ref, or model-route")
+	assert.Contains(t, err.Error(), "qwen/qwen3-coder-next")
+}
+
+func TestValidateOrphanModelPassesWithProvider(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Model: "qwen/qwen3-coder-next", Provider: "vidar-coder"}))
+}
+
+func TestValidateOrphanModelPassesWithModelRef(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Model: "qwen/qwen3-coder-next", ModelRef: "code-medium"}))
+}
+
+func TestValidateOrphanModelPassesCatalogRef(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Model: "cheap"}))
+}
+
+func TestValidateOrphanModelSkipsSubprocessHarness(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Harness: "claude", Model: "claude-sonnet-4-6"}))
+}
+
+func TestValidateOrphanModelRejectsAgentHarnessPin(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	err := r.ValidateOrphanModel(RunOptions{Harness: "agent", Model: "qwen/qwen3-coder-next"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not match any provider")
+}
+
+func TestValidateForExecuteLoopOrphanModelErrors(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	err := r.ValidateForExecuteLoop("", "qwen/qwen3-coder-next", "", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not match any provider, catalog ref, or model-route")
+}
+
+func TestValidateForExecuteLoopOrphanModelWithProviderPasses(t *testing.T) {
+	r := newTestRunner(&mockExecutor{})
+	assert.NoError(t, r.ValidateForExecuteLoop("", "qwen/qwen3-coder-next", "vidar-coder", ""))
 }
 
 func TestOSExecutor_NormalExit(t *testing.T) {

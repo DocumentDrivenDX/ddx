@@ -75,6 +75,8 @@ unclaimed for a later attempt.`,
 	cmd.Flags().Bool("no-merge", false, "Skip merge; preserve result under refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha> instead")
 	cmd.Flags().String("harness", "", "Agent harness to use")
 	cmd.Flags().String("model", "", "Model override")
+	cmd.Flags().String("provider", "", "Provider name (e.g. vidar, openrouter); selects a named provider from config")
+	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().String("prompt", "", "Prompt file path (auto-generated from bead if omitted)")
 	cmd.Flags().Bool("json", false, "Output result as JSON")
@@ -90,6 +92,8 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	noMerge, _ := cmd.Flags().GetBool("no-merge")
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
+	provider, _ := cmd.Flags().GetString("provider")
+	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
 	promptFile, _ := cmd.Flags().GetString("prompt")
 	asJSON, _ := cmd.Flags().GetBool("json")
@@ -100,6 +104,8 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		FromRev:    fromRev,
 		Harness:    harness,
 		Model:      model,
+		Provider:   provider,
+		ModelRef:   modelRef,
 		Effort:     effort,
 		PromptFile: promptFile,
 		WorkerID:   os.Getenv("DDX_WORKER_ID"),

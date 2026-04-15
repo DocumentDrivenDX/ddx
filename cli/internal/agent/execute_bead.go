@@ -82,6 +82,8 @@ type ExecuteBeadOptions struct {
 	FromRev    string // base git revision (default: HEAD)
 	Harness    string
 	Model      string
+	Provider   string // explicit provider name; passed through to agent as -provider
+	ModelRef   string // catalog model-ref; passed through to agent as -model-ref
 	Effort     string
 	PromptFile string // override prompt file (auto-generated if empty)
 	WorkerID   string // from DDX_WORKER_ID env or caller
@@ -143,10 +145,12 @@ type executeBeadManifest struct {
 }
 
 type executeBeadRequested struct {
-	Harness string `json:"harness,omitempty"`
-	Model   string `json:"model,omitempty"`
-	Effort  string `json:"effort,omitempty"`
-	Prompt  string `json:"prompt,omitempty"`
+	Harness  string `json:"harness,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	ModelRef string `json:"model_ref,omitempty"`
+	Effort   string `json:"effort,omitempty"`
+	Prompt   string `json:"prompt,omitempty"`
 }
 
 type executeBeadManifestBead struct {
@@ -430,6 +434,8 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		Prompt:        "",
 		PromptFile:    artifacts.PromptAbs,
 		Model:         opts.Model,
+		Provider:      opts.Provider,
+		ModelRef:      opts.ModelRef,
 		Effort:        opts.Effort,
 		WorkDir:       wtPath,
 		Permissions:   "unrestricted", // isolated worktree; writes must not require approval
@@ -754,10 +760,12 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, op
 		BaseRev:   baseRev,
 		CreatedAt: time.Now().UTC(),
 		Requested: executeBeadRequested{
-			Harness: opts.Harness,
-			Model:   opts.Model,
-			Effort:  opts.Effort,
-			Prompt:  promptSource,
+			Harness:  opts.Harness,
+			Model:    opts.Model,
+			Provider: opts.Provider,
+			ModelRef: opts.ModelRef,
+			Effort:   opts.Effort,
+			Prompt:   promptSource,
 		},
 		Bead: executeBeadManifestBead{
 			ID:          b.ID,

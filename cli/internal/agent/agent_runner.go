@@ -90,7 +90,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		provider = r.AgentProvider.(agentlib.Provider)
 		runAgentRouteReason = "direct-override"
 	} else {
-		resolved, err := r.resolveEmbeddedAgentProvider(wd, model)
+		resolved, err := r.resolveEmbeddedAgentProvider(wd, model, opts.Provider, opts.ModelRef)
 		if err != nil {
 			return nil, err
 		}
@@ -426,10 +426,10 @@ func (r *Runner) resolveAgentConfig(model string) (AgentRunConfig, error) {
 	return cfg, nil
 }
 
-func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
+func (r *Runner) resolveEmbeddedAgentProvider(workDir, model, providerName, modelRef string) (*embeddedAgentProviderResolution, error) {
 	// Try native agent config first (from ~/.config/agent/config.yaml or .agent/config.yaml).
 	// This handles all provider routing including OpenRouter when configured.
-	if resolved, err := r.resolveNativeAgentProvider(workDir, model); err != nil {
+	if resolved, err := r.resolveNativeAgentProvider(workDir, model, providerName, modelRef); err != nil {
 		return nil, err
 	} else if resolved != nil {
 		return resolved, nil
@@ -455,7 +455,7 @@ func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedA
 	return &embeddedAgentProviderResolution{Config: cfg, Provider: provider, RouteReason: fallbackRouteReason}, nil
 }
 
-func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
+func (r *Runner) resolveNativeAgentProvider(workDir, model, explicitProvider, explicitModelRef string) (*embeddedAgentProviderResolution, error) {
 	cfg, err := agentconfig.Load(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: native config: %w", err)
@@ -467,22 +467,23 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 
 	overrides := agentconfig.ProviderOverrides{}
 	routeReason := "first-available"
-	if model != "" {
-		if modelRef, modelPin := BuiltinCatalog.NormalizeModelRef(model); modelRef != "" {
-			overrides.ModelRef = modelRef
+	if explicitModelRef != "" {
+		overrides.ModelRef = explicitModelRef
+		routeReason = "explicit-model-ref"
+	} else if model != "" {
+		if catalogRef, modelPin := BuiltinCatalog.NormalizeModelRef(model); catalogRef != "" {
+			overrides.ModelRef = catalogRef
 			routeReason = "catalog-match"
 		} else {
 			overrides.Model = modelPin
 			routeReason = "direct-override"
 		}
 	}
-	providerName := cfg.DefaultName()
 
-	// If the model looks like a vendor/model (e.g. "anthropic/claude-sonnet-4.6",
-	// "qwen/qwen3-coder-next"), prefer the "openrouter" provider if it exists
-	// in the config. These models are only available through OpenRouter; local
-	// providers will reject them.
-	if isOpenRouterModel(model) {
+	providerName := cfg.DefaultName()
+	if explicitProvider != "" {
+		providerName = explicitProvider
+	} else if isOpenRouterModel(model) {
 		if _, ok := cfg.GetProvider("openrouter"); ok {
 			providerName = "openrouter"
 		}

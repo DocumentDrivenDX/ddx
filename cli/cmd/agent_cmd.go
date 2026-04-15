@@ -1283,6 +1283,8 @@ process.
 	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
 	cmd.Flags().String("harness", "", "Agent harness to use")
 	cmd.Flags().String("model", "", "Model override")
+	cmd.Flags().String("provider", "", "Provider name (e.g. vidar, openrouter); selects a named provider from config")
+	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Duration("poll-interval", 0, "Poll interval for continuous scanning; zero drains current ready work and exits")
@@ -1296,6 +1298,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	fromRev, _ := cmd.Flags().GetString("from")
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
+	provider, _ := cmd.Flags().GetString("provider")
+	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
 	once, _ := cmd.Flags().GetBool("once")
 	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
@@ -1304,16 +1308,16 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
-		return f.executeLoopWithServer(cmd, projectRoot, harness, model, effort, once, pollInterval, asJSON)
+		return f.executeLoopWithServer(cmd, projectRoot, harness, model, provider, modelRef, effort, once, pollInterval, asJSON)
 	}
 
 	// Pre-flight: validate harness availability and model compatibility
 	// before claiming any beads. This surfaces errors like "claude binary
 	// not found" or "vidar is an agent preset, not a claude model" before
 	// any bead status changes hands.
-	if harness != "" {
+	{
 		preflightRunner := f.agentRunner()
-		if err := preflightRunner.ValidateForExecuteLoop(harness, model); err != nil {
+		if err := preflightRunner.ValidateForExecuteLoop(harness, model, provider, modelRef); err != nil {
 			return fmt.Errorf("execute-loop: %w", err)
 		}
 	}
@@ -1356,7 +1360,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			// (selects claude/codex over the embedded agent).
 			resolvedHarness := harness
 			if resolvedHarness == "" {
-				routeFlags := agent.RouteFlags{Model: model, Effort: effort}
+				routeFlags := agent.RouteFlags{Model: model, Provider: provider, ModelRef: modelRef, Effort: effort}
 				routingCfg := runner.Config
 				routingCfg.Harness = "" // don't constrain to config default when routing by model
 				req := agent.NormalizeRouteRequest(routeFlags, routingCfg, runner.Catalog)
@@ -1368,10 +1372,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			}
 
 			res, execErr := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
-				FromRev: fromRev,
-				Harness: resolvedHarness,
-				Model:   model,
-				Effort:  effort,
+				FromRev:  fromRev,
+				Harness:  resolvedHarness,
+				Model:    model,
+				Provider: provider,
+				ModelRef: modelRef,
+				Effort:   effort,
 			}, gitOps, runner)
 			if execErr != nil && res == nil {
 				return agent.ExecuteBeadReport{}, execErr
@@ -1423,6 +1429,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		ProjectRoot:  projectRoot,
 		Harness:      harness,
 		Model:        model,
+		Provider:     provider,
+		ModelRef:     modelRef,
 		SessionID:    loopSessionID,
 		PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps),
 	})
@@ -1471,7 +1479,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.
-func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, effort string, once bool, pollInterval time.Duration, asJSON bool) error {
+func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool) error {
 	serverBase := resolveServerURL(projectRoot)
 
 	workerSpec := map[string]any{
@@ -1482,6 +1490,12 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	}
 	if model != "" {
 		workerSpec["model"] = model
+	}
+	if provider != "" {
+		workerSpec["provider"] = provider
+	}
+	if modelRef != "" {
+		workerSpec["model_ref"] = modelRef
 	}
 	if effort != "" {
 		workerSpec["effort"] = effort

@@ -88,8 +88,36 @@ func NewRunner(cfg Config) *Runner {
 	return r
 }
 
+// ValidateOrphanModel checks whether --model is an unroutable exact pin.
+// When --model is given but is not a known catalog ref, and neither --provider
+// nor --model-ref is set, the model cannot be routed unambiguously and must be
+// rejected before dispatch. This prevents silent fallback to the default provider.
+//
+// Subprocess harnesses (claude, codex, etc.) handle model routing natively via
+// their own CLI, so this validation is skipped when a non-agent harness is
+// explicitly specified in opts.Harness.
+func (r *Runner) ValidateOrphanModel(opts RunOptions) error {
+	if opts.Model == "" || opts.Provider != "" || opts.ModelRef != "" {
+		return nil
+	}
+	if opts.Harness != "" && opts.Harness != "agent" {
+		return nil
+	}
+	cat := r.catalog()
+	if cat.KnownOnAnySurface(opts.Model) {
+		return nil
+	}
+	return fmt.Errorf("model %q did not match any provider, catalog ref, or model-route; specify --provider or --model-ref explicitly", opts.Model)
+}
+
 // Run invokes a single agent harness and returns the result.
 func (r *Runner) Run(opts RunOptions) (*Result, error) {
+	if r.AgentProvider == nil {
+		if err := r.ValidateOrphanModel(opts); err != nil {
+			return nil, err
+		}
+	}
+
 	harness, harnessName, err := r.resolveHarness(opts)
 	if err != nil {
 		return nil, err
@@ -209,7 +237,11 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 //
 // Call this in execute-loop before starting the worker so failures are
 // surfaced before any beads are claimed rather than mid-execution.
-func (r *Runner) ValidateForExecuteLoop(harnessName, model string) error {
+func (r *Runner) ValidateForExecuteLoop(harnessName, model, provider, modelRef string) error {
+	if err := r.ValidateOrphanModel(RunOptions{Harness: harnessName, Model: model, Provider: provider, ModelRef: modelRef}); err != nil {
+		return err
+	}
+
 	if harnessName == "" {
 		return nil // no explicit harness; routing will pick at claim time
 	}

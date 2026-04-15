@@ -436,7 +436,7 @@ preset: agent
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	assert.Equal(t, "openai-compat", resolved.Config.Provider)
@@ -469,7 +469,7 @@ default_provider: openrouter
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	assert.Equal(t, "https://openrouter.ai/api/v1", resolved.Config.BaseURL)
@@ -493,7 +493,7 @@ default: openrouter
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "minimax/minimax-m2.7")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "minimax/minimax-m2.7", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	assert.Equal(t, "minimax/minimax-m2.7", resolved.Config.Model)
@@ -531,7 +531,7 @@ default: openrouter
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	// Native config is used — not the built-in localhost default.
@@ -559,7 +559,7 @@ default: openrouter
 	r.LookPath = mockLookPath
 
 	// CLI-supplied model should override the native config's model.
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "override/model")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "override/model", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	assert.Equal(t, "override/model", resolved.Config.Model, "CLI --model must override native config model")
@@ -579,7 +579,7 @@ func TestConfigPrecedenceEnvVarAppliesInDefaultFallbackPath(t *testing.T) {
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	// Env vars must override built-in defaults.
@@ -610,7 +610,7 @@ default: openrouter
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	// AGENT_MODEL and AGENT_BASE_URL must override the native config values.
@@ -628,7 +628,7 @@ func TestConfigPrecedenceNativeConfigAbsentUsesBuiltinDefaults(t *testing.T) {
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	r.LookPath = mockLookPath
 
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	// Built-in defaults are used when no native config is present.
@@ -664,7 +664,7 @@ default: local
 	r.LookPath = mockLookPath
 
 	// Requesting a vendor/model format should route to openrouter provider.
-	resolved, err := r.resolveEmbeddedAgentProvider(wd, "qwen/qwen3.6")
+	resolved, err := r.resolveEmbeddedAgentProvider(wd, "qwen/qwen3.6", "", "")
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	assert.Equal(t, "https://openrouter.ai/api/v1", resolved.Config.BaseURL, "vendor/model must route to openrouter provider in native config")

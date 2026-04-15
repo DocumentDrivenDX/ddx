@@ -134,6 +134,8 @@ type ExecuteBeadLoopOptions struct {
 	ProjectRoot string
 	Harness     string
 	Model       string
+	Provider    string
+	ModelRef    string
 	SessionID   string
 }
 

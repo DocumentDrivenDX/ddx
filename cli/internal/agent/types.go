@@ -45,6 +45,8 @@ type Config struct {
 type RouteFlags struct {
 	Profile     string // --profile: cheap, standard, smart
 	Model       string // --model: logical ref or exact pin
+	Provider    string // --provider: explicit provider name
+	ModelRef    string // --model-ref: catalog model reference
 	Harness     string // --harness: forced harness override
 	Effort      string // --effort: low, medium, high
 	Permissions string // --permissions: safe, supervised, unrestricted
@@ -58,6 +60,8 @@ type RunOptions struct {
 	PromptSource  string
 	Correlation   map[string]string
 	Model         string
+	Provider      string // explicit provider name (e.g. "vidar", "openrouter"); bypasses default provider selection
+	ModelRef      string // catalog model-ref (e.g. "code-medium"); resolved via the model catalog
 	Effort        string
 	Timeout       time.Duration
 	WorkDir       string
