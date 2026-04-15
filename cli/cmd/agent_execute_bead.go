@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -101,6 +103,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		Effort:     effort,
 		PromptFile: promptFile,
 		WorkerID:   os.Getenv("DDX_WORKER_ID"),
+		BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 	}
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}

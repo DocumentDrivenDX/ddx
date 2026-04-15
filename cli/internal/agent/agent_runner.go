@@ -81,12 +81,14 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	// Use injected provider (testing) or build from resolved config.
 	var agentCfg AgentRunConfig
 	var provider agentlib.Provider
+	var runAgentRouteReason string
 	if r.AgentProvider != nil {
 		agentCfg, err = r.resolveAgentConfig(model)
 		if err != nil {
 			return nil, err
 		}
 		provider = r.AgentProvider.(agentlib.Provider)
+		runAgentRouteReason = "direct-override"
 	} else {
 		resolved, err := r.resolveEmbeddedAgentProvider(wd, model)
 		if err != nil {
@@ -94,6 +96,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		}
 		agentCfg = resolved.Config
 		provider = resolved.Provider
+		runAgentRouteReason = resolved.RouteReason
 	}
 
 	maxIter := agentCfg.MaxIterations
@@ -307,16 +310,18 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	}
 
 	result := &Result{
-		Harness:        "agent",
-		Provider:       agentResult.SelectedProvider,
-		Model:          agentResult.Model,
-		Output:         agentResult.Output,
-		InputTokens:    agentResult.Tokens.Input,
-		OutputTokens:   agentResult.Tokens.Output,
-		Tokens:         agentResult.Tokens.Total,
-		DurationMS:     int(elapsed.Milliseconds()),
-		ToolCalls:      toolCalls,
-		AgentSessionID: agentResult.SessionID,
+		Harness:         "agent",
+		Provider:        agentResult.SelectedProvider,
+		Model:           agentResult.Model,
+		Output:          agentResult.Output,
+		InputTokens:     agentResult.Tokens.Input,
+		OutputTokens:    agentResult.Tokens.Output,
+		Tokens:          agentResult.Tokens.Total,
+		DurationMS:      int(elapsed.Milliseconds()),
+		ToolCalls:       toolCalls,
+		AgentSessionID:  agentResult.SessionID,
+		RouteReason:     runAgentRouteReason,
+		ResolvedBaseURL: agentCfg.BaseURL,
 	}
 
 	if agentResult.CostUSD >= 0 {
@@ -363,8 +368,9 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 }
 
 type embeddedAgentProviderResolution struct {
-	Config   AgentRunConfig
-	Provider agentlib.Provider
+	Config      AgentRunConfig
+	Provider    agentlib.Provider
+	RouteReason string // how the provider was selected (catalog-match, direct-override, first-available)
 }
 
 func embeddedCompactionConfig(model string) compaction.Config {
@@ -438,7 +444,15 @@ func (r *Runner) resolveEmbeddedAgentProvider(workDir, model string) (*embeddedA
 	if err != nil {
 		return nil, fmt.Errorf("agent: provider: %w", err)
 	}
-	return &embeddedAgentProviderResolution{Config: cfg, Provider: provider}, nil
+	fallbackRouteReason := "first-available"
+	if model != "" {
+		if modelRef, _ := BuiltinCatalog.NormalizeModelRef(model); modelRef != "" {
+			fallbackRouteReason = "catalog-match"
+		} else {
+			fallbackRouteReason = "direct-override"
+		}
+	}
+	return &embeddedAgentProviderResolution{Config: cfg, Provider: provider, RouteReason: fallbackRouteReason}, nil
 }
 
 func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAgentProviderResolution, error) {
@@ -452,11 +466,14 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 	applyNativeDefaultProviderCompatibility(cfg, workDir)
 
 	overrides := agentconfig.ProviderOverrides{}
+	routeReason := "first-available"
 	if model != "" {
 		if modelRef, modelPin := BuiltinCatalog.NormalizeModelRef(model); modelRef != "" {
 			overrides.ModelRef = modelRef
+			routeReason = "catalog-match"
 		} else {
 			overrides.Model = modelPin
+			routeReason = "direct-override"
 		}
 	}
 	providerName := cfg.DefaultName()
@@ -512,8 +529,9 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model string) (*embeddedAge
 	}
 
 	return &embeddedAgentProviderResolution{
-		Config:   runCfg,
-		Provider: provider,
+		Config:      runCfg,
+		Provider:    provider,
+		RouteReason: routeReason,
 	}, nil
 }
 

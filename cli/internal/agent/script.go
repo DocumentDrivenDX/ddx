@@ -255,6 +255,8 @@ done:
 
 	result := &Result{
 		Harness:        "script",
+		Provider:       "script",
+		RouteReason:    "direct-override",
 		Model:          directivePath,
 		Output:         strings.Join(outputLines, "\n"),
 		ExitCode:       exitCode,

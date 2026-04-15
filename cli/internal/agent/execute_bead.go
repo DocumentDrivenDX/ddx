@@ -70,6 +70,13 @@ type ExecuteBeadResult struct {
 	FinishedAt time.Time `json:"finished_at"`
 }
 
+// BeadEventAppender records append-only evidence events on a bead.
+// Implemented by *bead.Store — kept as a minimal interface so the agent
+// package does not need to import a concrete store type in tests.
+type BeadEventAppender interface {
+	AppendEvent(id string, event bead.BeadEvent) error
+}
+
 // ExecuteBeadOptions holds all parameters for an execute-bead worker run.
 type ExecuteBeadOptions struct {
 	FromRev    string // base git revision (default: HEAD)
@@ -78,6 +85,10 @@ type ExecuteBeadOptions struct {
 	Effort     string
 	PromptFile string // override prompt file (auto-generated if empty)
 	WorkerID   string // from DDX_WORKER_ID env or caller
+	// BeadEvents, when non-nil, receives a kind:routing evidence entry after
+	// the agent run completes. This is the hook that feeds the cost-tiered
+	// routing analytics described in FEAT-routing-visibility.
+	BeadEvents BeadEventAppender
 }
 
 // GitOps abstracts the git operations required by the worker.
@@ -286,6 +297,51 @@ func GenerateSessionID() string {
 	return "eb-" + hex.EncodeToString(b)
 }
 
+// appendBeadRoutingEvidence records a kind:routing evidence entry on the bead
+// after an agent run. It is a best-effort operation — errors are silently
+// ignored so a store failure never aborts the main execute-bead flow.
+func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, provider, model, routeReason, baseURL string) {
+	if appender == nil || beadID == "" {
+		return
+	}
+	resolvedProvider := provider
+	if resolvedProvider == "" {
+		resolvedProvider = harness
+	}
+	type routingBody struct {
+		ResolvedProvider string   `json:"resolved_provider"`
+		ResolvedModel    string   `json:"resolved_model,omitempty"`
+		RouteReason      string   `json:"route_reason,omitempty"`
+		FallbackChain    []string `json:"fallback_chain"`
+		BaseURL          string   `json:"base_url,omitempty"`
+	}
+	body := routingBody{
+		ResolvedProvider: resolvedProvider,
+		ResolvedModel:    model,
+		RouteReason:      routeReason,
+		FallbackChain:    []string{},
+		BaseURL:          baseURL,
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	summary := fmt.Sprintf("provider=%s", resolvedProvider)
+	if model != "" {
+		summary += fmt.Sprintf(" model=%s", model)
+	}
+	if routeReason != "" {
+		summary += fmt.Sprintf(" reason=%s", routeReason)
+	}
+	_ = appender.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    "routing",
+		Summary: summary,
+		Body:    string(data),
+		Actor:   "ddx",
+		Source:  "ddx agent execute-bead",
+	})
+}
+
 // ExecuteBead is the thin worker: it creates an isolated worktree, constructs
 // the agent prompt from bead context, runs the agent harness, synthesizes a
 // commit if the agent left uncommitted changes, then cleans up the worktree
@@ -420,6 +476,15 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 			exitCode = 1
 		}
 		agentErrMsg = agentErr.Error()
+	}
+
+	// Capture routing evidence from the agent result. These fields are
+	// populated by RunAgent (embedded harness) and RunScript (script harness).
+	routeReason := ""
+	routeBaseURL := ""
+	if agentResult != nil {
+		routeReason = agentResult.RouteReason
+		routeBaseURL = agentResult.ResolvedBaseURL
 	}
 
 	// Get the HEAD of the worktree after the agent ran.
@@ -578,6 +643,9 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 			res.NoChangesRationale = strings.TrimSpace(string(data))
 		}
 	}
+
+	// Record routing evidence on the bead (best-effort; errors are discarded).
+	appendBeadRoutingEvidence(opts.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL)
 
 	populateWorkerStatus(res)
 	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
