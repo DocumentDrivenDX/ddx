@@ -1,2 +1,2 @@
-export * from './TestTypename'
 export * from './NodeInfo'
+export * from './TestTypename'

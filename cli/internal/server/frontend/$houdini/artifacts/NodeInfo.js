@@ -1,7 +1,7 @@
 export default {
     "name": "NodeInfo",
     "kind": "HoudiniQuery",
-    "hash": "e917120d307a10936ea51038bfd5989f947d41deba1c6cf24f8e05a2703bee9",
+    "hash": "e917120d307a10936ea51038bfd5989f947d41deba1c6cf24f8e05a2703bee94",
 
     "raw": `query NodeInfo {
   nodeInfo {
@@ -19,7 +19,7 @@ export default {
             "nodeInfo": {
                 "type": "NodeInfo",
                 "keyRaw": "nodeInfo",
-                "visible": true,
+
                 "selection": {
                     "fields": {
                         "id": {
@@ -27,13 +27,16 @@ export default {
                             "keyRaw": "id",
                             "visible": true
                         },
+
                         "name": {
                             "type": "String",
                             "keyRaw": "name",
                             "visible": true
                         }
                     }
-                }
+                },
+
+                "visible": true
             }
         }
     },
@@ -46,4 +49,4 @@ export default {
     "partial": false
 };
 
-"HoudiniHash=e917120d307a10936ea51038bfd5989f947d41deba1c6cf24f8e05a2703bee94";
+"HoudiniHash=24630227d2f53008bff2da70ee0bdd009cf6265327e88152e4873d6c7f892217";

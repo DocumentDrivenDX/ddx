@@ -7,4 +7,5 @@ export type Result<DataType> = {
 	data?: DataType | null
 	error?: Error | null
 }
+export * from './NodeInfo'
 export * from './TestTypename'

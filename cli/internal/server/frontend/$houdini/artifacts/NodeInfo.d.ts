@@ -4,8 +4,17 @@ export type NodeInfo = {
 };
 
 export type NodeInfo$result = {
+    /**
+     * Return the server node information (maps to GET /api/node)
+    */
     readonly nodeInfo: {
+        /**
+         * Unique node identifier (stable across restarts)
+        */
         readonly id: string;
+        /**
+         * Human-readable node name
+        */
         readonly name: string;
     };
 };
@@ -15,7 +24,7 @@ export type NodeInfo$input = null;
 export type NodeInfo$artifact = {
     "name": "NodeInfo";
     "kind": "HoudiniQuery";
-    "hash": "e917120d307a10936ea51038bfd5989f947d41deba1c6cf24f8e05a2703bee9";
+    "hash": "e917120d307a10936ea51038bfd5989f947d41deba1c6cf24f8e05a2703bee94";
     "raw": `query NodeInfo {
   nodeInfo {
     id
@@ -30,7 +39,6 @@ export type NodeInfo$artifact = {
             "nodeInfo": {
                 "type": "NodeInfo";
                 "keyRaw": "nodeInfo";
-                "visible": true;
                 "selection": {
                     "fields": {
                         "id": {
@@ -45,6 +53,7 @@ export type NodeInfo$artifact = {
                         };
                     };
                 };
+                "visible": true;
             };
         };
     };

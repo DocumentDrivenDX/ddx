@@ -1,4 +1,6 @@
 import type { Record } from "./public/record";
+import { NodeInfo$result, NodeInfo$input } from "../artifacts/NodeInfo";
+import { NodeInfoStore } from "../plugins/houdini-svelte/stores/NodeInfo";
 import { TestTypename$result, TestTypename$input } from "../artifacts/TestTypename";
 import { TestTypenameStore } from "../plugins/houdini-svelte/stores/TestTypename";
 
@@ -2695,5 +2697,5 @@ export declare type CacheTypeDef = {
         };
     };
     lists: {};
-    queries: [[TestTypenameStore, TestTypename$result, TestTypename$input]];
+    queries: [[TestTypenameStore, TestTypename$result, TestTypename$input], [NodeInfoStore, NodeInfo$result, NodeInfo$input]];
 };

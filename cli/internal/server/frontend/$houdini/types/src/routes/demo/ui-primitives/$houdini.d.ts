@@ -3,17 +3,14 @@ import type * as Kit from '@sveltejs/kit';
 type Expand<T> = T extends infer O ? { [K in keyof O]: O[K] } : never;
 type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 type RouteParams = {  };
-type RouteId = '/';
+type RouteId = '/demo/ui-primitives';
 type MaybeWithVoid<T> = {} extends T ? T | void : T;
 export type RequiredKeys<T> = { [K in keyof T]-?: {} extends { [P in K]: T[K] } ? never : K; }[keyof T];
 type OutputDataShape<T> = MaybeWithVoid<Omit<App.PageData, RequiredKeys<T>> & Partial<Pick<App.PageData, keyof T & keyof App.PageData>> & Record<string, any>>
 type EnsureDefined<T> = T extends null | undefined ? {} : T;
 type OptionalUnion<U extends Record<string, any>, A extends keyof U = U extends U ? keyof U : never> = U extends unknown ? { [P in Exclude<A, keyof U>]?: never } & U : never;
 export type Snapshot<T = any> = Kit.Snapshot<T>;
-type PageParentData = EnsureDefined<LayoutData>;
-type LayoutRouteId = RouteId | "/" | "/demo" | "/demo/playwright" | "/demo/ui-primitives" | "/nodes/[nodeId]" | null
-type LayoutParams = RouteParams & { nodeId?: string }
-type LayoutParentData = EnsureDefined<{}>;
+type PageParentData = EnsureDefined<import('../../$houdini').LayoutData>;
 						type MakeOptional<Target, Keys extends keyof Target> = Omit<Target, Keys> & {
 							[Key in Keys]?: Target[Key] | undefined | null
 						}
@@ -22,8 +19,3 @@ type LayoutParentData = EnsureDefined<{}>;
 export type PageServerData = null;
 export type PageData = Expand<Expand<PageParentData> & {  }>;
 export type PageProps = { params: RouteParams; data: PageData }
-export type LayoutServerData = null;
-export type LayoutLoad<OutputData extends OutputDataShape<LayoutParentData> = OutputDataShape<LayoutParentData>> = Kit.Load<LayoutParams, LayoutServerData, LayoutParentData, OutputData, LayoutRouteId>;
-export type LayoutLoadEvent = Parameters<LayoutLoad>[0];
-export type LayoutData = Expand<Expand<Omit<LayoutParentData, keyof Kit.LoadProperties<Awaited<ReturnType<typeof import('./proxy+layout.js').load>>>> & OptionalUnion<EnsureDefined<Kit.LoadProperties<Awaited<ReturnType<typeof import('./proxy+layout.js').load>>>>>> & {  }>;
-export type LayoutProps = { params: LayoutParams; data: LayoutData; children: import("svelte").Snippet }
