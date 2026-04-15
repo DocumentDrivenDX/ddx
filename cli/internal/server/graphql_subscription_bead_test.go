@@ -9,41 +9,13 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 	"github.com/gorilla/websocket"
 )
-
-// newGraphQLHandlerWithBeadBus creates an HTTP handler backed by the given
-// server state but with a custom BeadLifecycleSubscriber injected — used in
-// tests to drive fake lifecycle events without a live bead store.
-func newGraphQLHandlerWithBeadBus(srv *Server, sub ddxgraphql.BeadLifecycleSubscriber) http.Handler {
-	gqlSrv := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers: &ddxgraphql.Resolver{
-			State:      srv.state,
-			WorkingDir: srv.WorkingDir,
-			Workers:    srv.workers,
-			BeadBus:    sub,
-		},
-		Directives: ddxgraphql.DirectiveRoot{},
-	}))
-	gqlSrv.AddTransport(transport.POST{})
-	gqlSrv.AddTransport(transport.GET{})
-	gqlSrv.AddTransport(transport.Websocket{
-		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
-		},
-	})
-	return gqlSrv
-}
 
 // stubBeadLifecycleSubscriber is a fake BeadLifecycleSubscriber that returns
 // a pre-loaded channel of events.
@@ -101,17 +73,13 @@ func TestGraphQLBeadLifecycleSubscription(t *testing.T) {
 		sub: func() {},
 	}
 
-	ts := httptest.NewServer(newGraphQLHandlerWithBeadBus(srv, stub))
-	defer ts.Close()
-
-	// Connect via WebSocket using the graphql-transport-ws subprotocol.
-	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/graphql"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, map[string][]string{
-		"Sec-WebSocket-Protocol": {"graphql-transport-ws"},
+	_, dial := newGraphQLSubscriptionTestServer(t, &ddxgraphql.Resolver{
+		State:      srv.state,
+		WorkingDir: srv.WorkingDir,
+		Workers:    srv.workers,
+		BeadBus:    stub,
 	})
-	if err != nil {
-		t.Fatalf("WebSocket dial: %v", err)
-	}
+	conn := dial()
 	defer conn.Close()
 
 	send := func(msg wsMsg) {

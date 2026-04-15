@@ -10,38 +10,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 	"github.com/gorilla/websocket"
 )
-
-// newGraphQLHandlerWithExecLogs creates an HTTP handler with a custom
-// ExecLogProvider injected — used in tests to return pre-canned log data.
-func newGraphQLHandlerWithExecLogs(srv *Server, el ddxgraphql.ExecLogProvider) http.Handler {
-	gqlSrv := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers: &ddxgraphql.Resolver{
-			State:      srv.state,
-			WorkingDir: srv.WorkingDir,
-			ExecLogs:   el,
-		},
-		Directives: ddxgraphql.DirectiveRoot{},
-	}))
-	gqlSrv.AddTransport(transport.POST{})
-	gqlSrv.AddTransport(transport.GET{})
-	gqlSrv.AddTransport(transport.Websocket{
-		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
-		},
-	})
-	return gqlSrv
-}
 
 // stubExecLogProvider is a fake ExecLogProvider. It returns an error until
 // readyCh is closed, then returns the configured stdout/stderr.
@@ -82,16 +56,12 @@ func TestGraphQLExecutionEvidenceSubscription(t *testing.T) {
 	// Stub returns 2 stdout lines and 1 stderr line.
 	stub := newStubExecLogProvider("line one\nline two", "error line")
 
-	ts := httptest.NewServer(newGraphQLHandlerWithExecLogs(srv, stub))
-	defer ts.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/graphql"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, map[string][]string{
-		"Sec-WebSocket-Protocol": {"graphql-transport-ws"},
+	_, dial := newGraphQLSubscriptionTestServer(t, &ddxgraphql.Resolver{
+		State:      srv.state,
+		WorkingDir: srv.WorkingDir,
+		ExecLogs:   stub,
 	})
-	if err != nil {
-		t.Fatalf("WebSocket dial: %v", err)
-	}
+	conn := dial()
 	defer conn.Close()
 
 	send := func(msg wsMsg) {

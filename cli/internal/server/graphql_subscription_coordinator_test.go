@@ -9,41 +9,13 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 	"github.com/gorilla/websocket"
 )
-
-// newGraphQLHandlerWithCoordMetrics creates an HTTP handler with a custom
-// CoordinatorMetricsProvider injected — used in tests to inject controlled
-// metrics snapshots without a live land coordinator.
-func newGraphQLHandlerWithCoordMetrics(srv *Server, provider ddxgraphql.CoordinatorMetricsProvider, pollInterval time.Duration) http.Handler {
-	gqlSrv := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers: &ddxgraphql.Resolver{
-			State:               srv.state,
-			WorkingDir:          srv.WorkingDir,
-			CoordMetrics:        provider,
-			MetricsPollInterval: pollInterval,
-		},
-		Directives: ddxgraphql.DirectiveRoot{},
-	}))
-	gqlSrv.AddTransport(transport.POST{})
-	gqlSrv.AddTransport(transport.GET{})
-	gqlSrv.AddTransport(transport.Websocket{
-		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
-		},
-	})
-	return gqlSrv
-}
 
 // stubCoordinatorMetricsProvider is a fake CoordinatorMetricsProvider whose
 // GetCoordinatorMetrics returns the current atomic snapshot. Tests swap the
@@ -88,16 +60,13 @@ func TestGraphQLCoordinatorMetricsSubscription(t *testing.T) {
 	// Use a very short poll interval so the test runs in milliseconds.
 	pollInterval := 30 * time.Millisecond
 
-	ts := httptest.NewServer(newGraphQLHandlerWithCoordMetrics(srv, stub, pollInterval))
-	defer ts.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/graphql"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, map[string][]string{
-		"Sec-WebSocket-Protocol": {"graphql-transport-ws"},
+	_, dial := newGraphQLSubscriptionTestServer(t, &ddxgraphql.Resolver{
+		State:               srv.state,
+		WorkingDir:          srv.WorkingDir,
+		CoordMetrics:        stub,
+		MetricsPollInterval: pollInterval,
 	})
-	if err != nil {
-		t.Fatalf("WebSocket dial: %v", err)
-	}
+	conn := dial()
 	defer conn.Close()
 
 	send := func(msg wsMsg) {

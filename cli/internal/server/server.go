@@ -40,6 +40,13 @@ import (
 	"tailscale.com/tsnet"
 )
 
+// beadHubCloser is the minimal interface the Server requires from its bead
+// lifecycle hub. *bead.WatcherHub satisfies this interface.
+type beadHubCloser interface {
+	SubscribeLifecycle(projectID string) (<-chan bead.LifecycleEvent, func())
+	Close()
+}
+
 // Server is the DDx HTTP server exposing REST and MCP endpoints.
 type Server struct {
 	Addr        string
@@ -48,7 +55,7 @@ type Server struct {
 	mux         *http.ServeMux
 	startTime   time.Time
 	workers     *WorkerManager
-	beadHub     *bead.WatcherHub
+	beadHub     beadHubCloser
 	state       *ServerState
 }
 
@@ -94,6 +101,15 @@ func resolveNodeName() string {
 // Handler returns the server's HTTP handler (useful for testing).
 func (s *Server) Handler() http.Handler {
 	return s.mux
+}
+
+// Shutdown stops the server's background services: closes the bead lifecycle
+// hub and stops all land coordinators. Returns the first error encountered.
+// Both operations are idempotent and safe to call on an idle server.
+func (s *Server) Shutdown() error {
+	s.beadHub.Close()
+	s.workers.LandCoordinators.StopAll()
+	return nil
 }
 
 // ListenAndServe starts the server. If TsnetConfig.Enabled is true, a parallel
