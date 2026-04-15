@@ -75,6 +75,7 @@ Examples:
 	cmd.AddCommand(f.newAgentExecuteLoopCommand())
 	cmd.AddCommand(f.newAgentWorkersCommand())
 	cmd.AddCommand(f.newAgentCatalogCommand())
+	cmd.AddCommand(f.newAgentProvidersCommand())
 
 	return cmd
 }
