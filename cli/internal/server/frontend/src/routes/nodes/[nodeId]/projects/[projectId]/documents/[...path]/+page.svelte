@@ -3,15 +3,57 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { marked } from 'marked';
-	import { ArrowLeft } from 'lucide-svelte';
+	import { ArrowLeft, Pencil } from 'lucide-svelte';
+	import { gql } from 'graphql-request';
+	import { createClient } from '$lib/gql/client';
 
 	let { data }: { data: PageData } = $props();
 
-	let rendered = $derived(data.content ? (marked.parse(data.content) as string) : '');
+	let content = $state(data.content ?? '');
+	let editing = $state(false);
+	let editContent = $state('');
+	let saving = $state(false);
+	let saveError = $state<string | null>(null);
+
+	let rendered = $derived(content ? (marked.parse(content) as string) : '');
+
+	const DOCUMENT_WRITE = gql`
+		mutation DocumentWrite($path: String!, $content: String!) {
+			documentWrite(path: $path, content: $content) {
+				path
+			}
+		}
+	`;
 
 	function handleBack() {
 		const p = $page.params as Record<string, string>;
 		goto(`/nodes/${p['nodeId']}/projects/${p['projectId']}/documents`);
+	}
+
+	function startEdit() {
+		editContent = content;
+		saveError = null;
+		editing = true;
+	}
+
+	function cancelEdit() {
+		editing = false;
+		saveError = null;
+	}
+
+	async function handleSave() {
+		saving = true;
+		saveError = null;
+		try {
+			const client = createClient();
+			await client.request(DOCUMENT_WRITE, { path: data.path, content: editContent });
+			content = editContent;
+			editing = false;
+		} catch (e) {
+			saveError = e instanceof Error ? e.message : 'Save failed';
+		} finally {
+			saving = false;
+		}
 	}
 </script>
 
@@ -25,9 +67,46 @@
 			Documents
 		</button>
 		<span class="font-mono text-xs text-gray-400 dark:text-gray-600">{data.path}</span>
+		{#if !editing && content}
+			<button
+				onclick={startEdit}
+				class="ml-auto flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+			>
+				<Pencil class="h-4 w-4" />
+				Edit
+			</button>
+		{/if}
 	</div>
 
-	{#if data.content}
+	{#if editing}
+		<div class="space-y-2">
+			{#if saveError}
+				<div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+					{saveError}
+				</div>
+			{/if}
+			<textarea
+				bind:value={editContent}
+				rows={24}
+				class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 font-mono text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-blue-400"
+			></textarea>
+			<div class="flex justify-end gap-2">
+				<button
+					onclick={cancelEdit}
+					class="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={handleSave}
+					disabled={saving}
+					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{saving ? 'Saving…' : 'Save'}
+				</button>
+			</div>
+		</div>
+	{:else if content}
 		<div class="doc-content rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
 			{@html rendered}
 		</div>
