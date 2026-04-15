@@ -134,8 +134,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				}
 			}
 
-			// Resolve worktree if requested
-			workDir := f.WorkingDir
+			// Resolve project root (--project flag > DDX_PROJECT_ROOT > CWD git root)
+			projectFlag, _ := cmd.Flags().GetString("project")
+			workDir := resolveProjectRoot(projectFlag, f.WorkingDir)
 			if worktreeName != "" {
 				wtPath, err := resolveWorktree(workDir, worktreeName)
 				if err != nil {
@@ -405,6 +406,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().String("project", "", "Project root path (default: CWD git root). Env: DDX_PROJECT_ROOT")
 	cmd.Flags().String("prompt", "", "Path to prompt file")
 	cmd.Flags().String("text", "", "Inline prompt text")
 	cmd.Flags().String("harness", "", "Harness name (default from config); use 'agent' for the embedded DDx agent")
@@ -1248,7 +1250,7 @@ func (f *CommandFactory) newAgentExecuteLoopCommand() *cobra.Command {
 		Use:   "execute-loop",
 		Short: "Drain the single-project execution-ready bead queue",
 		Long: `execute-loop is the primary queue-driven execution surface. It scans the
-current project's execution-ready bead queue, claims the next ready bead,
+target project's execution-ready bead queue, claims the next ready bead,
 runs "ddx agent execute-bead" on it from the project root, records the
 structured result, and continues until no unattempted ready work remains.
 
@@ -1276,6 +1278,15 @@ session log is recorded under the execute-bead agent-log path.
 By default execute-loop submits to the running ddx server as a background
 worker and returns immediately. Use --local to run inline in the current
 process.
+
+Project targeting (multi-project servers):
+  --project <path>    target a specific project root (absolute path or name)
+  DDX_PROJECT_ROOT    env var fallback; used when --project is not set
+  (default)           the git root of the current working directory
+
+When submitting to a multi-project server you must ensure the target project
+is registered with the server (run "ddx server" from that directory, or use
+"ddx server projects register"). The server rejects unrecognised project paths.
 `,
 		Example: `  # Drain the current execution-ready queue once and exit (normal surface)
   ddx agent execute-loop
@@ -1295,6 +1306,7 @@ process.
 		Args: cobra.NoArgs,
 		RunE: f.runAgentExecuteLoop,
 	}
+	cmd.Flags().String("project", "", "Target project root path or name (default: CWD git root). Env: DDX_PROJECT_ROOT")
 	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
 	cmd.Flags().String("harness", "", "Agent harness to use")
 	cmd.Flags().String("model", "", "Model override")
@@ -1312,7 +1324,8 @@ process.
 }
 
 func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) error {
-	projectRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+	projectFlag, _ := cmd.Flags().GetString("project")
+	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	fromRev, _ := cmd.Flags().GetString("from")
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
@@ -1518,7 +1531,8 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	serverBase := resolveServerURL(projectRoot)
 
 	workerSpec := map[string]any{
-		"once": once,
+		"once":         once,
+		"project_root": projectRoot,
 	}
 	if harness != "" {
 		workerSpec["harness"] = harness
@@ -1617,6 +1631,21 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	fmt.Fprintf(cmd.OutOrStdout(), "Monitor progress: ddx server workers show %s\n", workerRecord.ID)
 	fmt.Fprintf(cmd.OutOrStdout(), "View logs:        ddx server workers log %s\n", workerRecord.ID)
 	return nil
+}
+
+// resolveProjectRoot returns the project root to use for execute-loop,
+// execute-bead, and agent-run commands. Resolution order:
+//  1. --project flag value (if non-empty)
+//  2. DDX_PROJECT_ROOT environment variable
+//  3. CWD-based git project root detection (gitpkg.FindProjectRoot)
+func resolveProjectRoot(projectFlag, workingDir string) string {
+	if projectFlag != "" {
+		return projectFlag
+	}
+	if env := os.Getenv("DDX_PROJECT_ROOT"); env != "" {
+		return env
+	}
+	return gitpkg.FindProjectRoot(workingDir)
 }
 
 // buildCLIPreClaimHook returns a PreClaimHook for the --local execute-loop

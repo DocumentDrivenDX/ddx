@@ -21,6 +21,12 @@ import (
 )
 
 type ExecuteLoopWorkerSpec struct {
+	// ProjectRoot overrides the manager's default project root for this worker.
+	// When set, the worker scans and executes beads from this project instead of
+	// the server's primary working directory. Must be an absolute path to a
+	// directory containing a .ddx/ folder. Validated by the server before the
+	// worker starts.
+	ProjectRoot  string        `json:"project_root,omitempty"`
 	Harness      string        `json:"harness,omitempty"`
 	Model        string        `json:"model,omitempty"`
 	Provider     string        `json:"provider,omitempty"`
@@ -168,10 +174,17 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 }
 
 func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerRecord, error) {
+	// Resolve the effective project root: spec override takes priority over the
+	// manager's default so callers can target any registered project.
+	effectiveRoot := spec.ProjectRoot
+	if effectiveRoot == "" {
+		effectiveRoot = m.projectRoot
+	}
+
 	// Pre-flight: validate harness availability and model compatibility
 	// before creating the worker record or claiming any beads.
 	{
-		runner := m.buildAgentRunner(m.projectRoot)
+		runner := m.buildAgentRunner(effectiveRoot)
 		if err := runner.ValidateForExecuteLoop(spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
 			return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
 		}
@@ -212,7 +225,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		Kind:         "execute-loop",
 		State:        "running",
 		Status:       "running",
-		ProjectRoot:  m.projectRoot,
+		ProjectRoot:  effectiveRoot,
 		Harness:      spec.Harness,
 		Model:        spec.Model,
 		Effort:       spec.Effort,
@@ -243,16 +256,16 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	m.mu.Unlock()
 
 	go m.drainProgress(id, handle, progressCh)
-	go m.runWorker(ctx, id, dir, spec, handle, multiLog, eventsFile, progressCh)
+	go m.runWorker(ctx, id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
 
 	return record, nil
 }
 
-func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
+func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
 	}
-	store := bead.NewStore(filepath.Join(m.projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 
 	var worker *agent.ExecuteBeadWorker
 	if m.BeadWorkerFactory != nil {
@@ -266,18 +279,18 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// for the rationale. Prior to this rewrite, runWorker never called
 		// LandBeadResult at all, so commits produced by server-managed
 		// workers were silently lost (ddx-e14efc58).
-		coordinator := m.LandCoordinators.Get(m.projectRoot)
+		coordinator := m.LandCoordinators.Get(projectRoot)
 		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			runner := m.buildAgentRunner(m.projectRoot)
+			runner := m.buildAgentRunner(projectRoot)
 			gitOps := &agent.RealGitOps{}
 
-			res, err := agent.ExecuteBead(m.projectRoot, beadID, agent.ExecuteBeadOptions{
+			res, err := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
 				Harness:    spec.Harness,
 				Model:      spec.Model,
 				Provider:   spec.Provider,
 				ModelRef:   spec.ModelRef,
 				Effort:     spec.Effort,
-				BeadEvents: bead.NewStore(filepath.Join(m.projectRoot, ".ddx")),
+				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			}, gitOps, runner)
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err
@@ -286,7 +299,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			// LandResult. This is the call site that used to be silently
 			// missing (ddx-e14efc58).
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-				landReq := agent.BuildLandRequestFromResult(m.projectRoot, res)
+				landReq := agent.BuildLandRequestFromResult(projectRoot, res)
 				landRes, landErr := coordinator.Submit(landReq)
 				if landErr == nil {
 					agent.ApplyLandResultToExecuteBeadResult(res, landRes)
@@ -349,13 +362,13 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Log:          log,
 		EventSink:    eventSink,
 		WorkerID:     id,
-		ProjectRoot:  m.projectRoot,
+		ProjectRoot:  projectRoot,
 		Harness:      spec.Harness,
 		Model:        spec.Model,
 		Provider:     spec.Provider,
 		ModelRef:     spec.ModelRef,
 		ProgressCh:   progressCh,
-		PreClaimHook: buildPreClaimHook(m.projectRoot, landingOps),
+		PreClaimHook: buildPreClaimHook(projectRoot, landingOps),
 		NoReview:     spec.NoReview,
 	})
 	// Signal end of progress events so drainProgress can finish

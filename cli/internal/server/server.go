@@ -1662,8 +1662,11 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req struct {
+		ProjectRoot  string `json:"project_root"`
 		Harness      string `json:"harness"`
 		Model        string `json:"model"`
+		Provider     string `json:"provider"`
+		ModelRef     string `json:"model_ref"`
 		Effort       string `json:"effort"`
 		Once         bool   `json:"once"`
 		PollInterval string `json:"poll_interval"`
@@ -1672,6 +1675,21 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
+
+	// Resolve project_root: if provided, validate it against registered projects.
+	// An empty project_root means "use the server's primary project" (default).
+	projectRoot := req.ProjectRoot
+	if projectRoot != "" {
+		resolved := s.resolveRequestedProject(projectRoot)
+		if resolved == "" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+				"error": fmt.Sprintf("no registered project matches %q; ensure the server was started from or has registered that project root", projectRoot),
+			})
+			return
+		}
+		projectRoot = resolved
+	}
+
 	var pollInterval time.Duration
 	if strings.TrimSpace(req.PollInterval) != "" {
 		d, err := time.ParseDuration(req.PollInterval)
@@ -1682,8 +1700,11 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		pollInterval = d
 	}
 	record, err := s.workers.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		ProjectRoot:  projectRoot,
 		Harness:      req.Harness,
 		Model:        req.Model,
+		Provider:     req.Provider,
+		ModelRef:     req.ModelRef,
 		Effort:       req.Effort,
 		Once:         req.Once,
 		PollInterval: pollInterval,
@@ -1693,6 +1714,28 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusCreated, record)
+}
+
+// resolveRequestedProject matches a requested project_root string against
+// registered projects. It tries exact path match first, then name (basename)
+// match. Returns the canonical path on success, or "" if no match or ambiguous.
+func (s *Server) resolveRequestedProject(requested string) string {
+	// Exact path match via the state's lookup method.
+	if entry, ok := s.state.GetProjectByPath(requested); ok {
+		return entry.Path
+	}
+	// Name (basename) match — only unambiguous if exactly one project has that name.
+	projects := s.state.GetProjects()
+	var matches []string
+	for _, p := range projects {
+		if p.Name == requested {
+			matches = append(matches, p.Path)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
 }
 
 func (s *Server) handleAgentWorkerShow(w http.ResponseWriter, r *http.Request) {

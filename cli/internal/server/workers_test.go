@@ -763,6 +763,103 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 	m.LandCoordinators.StopAll()
 }
 
+// TestStartExecuteLoopProjectRootOverride verifies that when ExecuteLoopWorkerSpec
+// carries a non-empty ProjectRoot, the worker executes against that project
+// rather than the WorkerManager's own projectRoot.
+func TestStartExecuteLoopProjectRootOverride(t *testing.T) {
+	// Project A is the server's primary working directory.
+	projectA := t.TempDir()
+	setupBeadStore(t, projectA)
+
+	// Project B is the target project — a separate directory.
+	projectB := t.TempDir()
+	setupBeadStore(t, projectB)
+
+	m := NewWorkerManager(projectA)
+
+	// Submit a worker targeting project B.
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		ProjectRoot: projectB,
+		Once:        true,
+	})
+	require.NoError(t, err)
+	// The returned record must reflect the target project, not project A.
+	assert.Equal(t, projectB, record.ProjectRoot, "worker record must carry target project root")
+
+	// Wait for the worker to finish and verify the final record.
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	assert.Equal(t, projectB, final.ProjectRoot, "final worker record must carry target project root")
+	// Worker ran against an empty bead queue → no_ready_work, not a failure.
+	assert.Equal(t, "no_ready_work", final.Status)
+}
+
+// TestExecuteLoopProjectRootViaHTTP verifies the end-to-end HTTP path:
+// submitting to POST /api/agent/workers/execute-loop with project_root set
+// routes the worker to the requested project, and an unregistered project
+// is rejected with 422.
+func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
+	// Isolate server state so this test doesn't pollute the user's state file.
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-project-root")
+
+	// Project A is the server's primary working directory.
+	projectA := setupTestDir(t)
+
+	// Project B is a separate registered project.
+	projectB := t.TempDir()
+	setupBeadStore(t, projectB)
+
+	srv := New(":0", projectA)
+	// Register project B so the server accepts it.
+	srv.state.RegisterProject(projectB)
+
+	t.Run("registered project is accepted and worker runs in target root", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]any{
+			"project_root": projectB,
+			"once":         true,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop",
+			strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		// Mark as trusted (localhost) so the handler doesn't reject it.
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+
+		var rec WorkerRecord
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rec))
+		assert.Equal(t, projectB, rec.ProjectRoot,
+			"worker must run in the requested project root, not the server's primary project")
+		assert.NotEmpty(t, rec.ID)
+
+		// Wait for the worker to finish before the test teardown.
+		_ = waitForWorkerExit(t, srv.workers, rec.ID, 10*time.Second)
+	})
+
+	t.Run("unregistered project is rejected with 422", func(t *testing.T) {
+		unregistered := t.TempDir() // valid directory, but not registered with server
+		body, _ := json.Marshal(map[string]any{
+			"project_root": unregistered,
+			"once":         true,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop",
+			strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code,
+			"server must reject unregistered project with 422: %s", w.Body.String())
+		var errResp map[string]string
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errResp))
+		assert.Contains(t, errResp["error"], "no registered project matches")
+	})
+}
+
 // TC-013.6 — Workers for two different registered projects run in parallel
 // without cross-project filesystem writes.
 func TestConcurrentWorkersFromDifferentProjects(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -71,6 +70,7 @@ unclaimed for a later attempt.`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runAgentExecuteBead,
 	}
+	cmd.Flags().String("project", "", "Project root path (default: CWD git root). Env: DDX_PROJECT_ROOT")
 	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
 	cmd.Flags().Bool("no-merge", false, "Skip merge; preserve result under refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha> instead")
 	cmd.Flags().String("harness", "", "Agent harness to use")
@@ -88,6 +88,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	if !validBeadID.MatchString(beadID) {
 		return fmt.Errorf("invalid bead ID %q: must contain only letters, digits, dots, underscores, and hyphens", beadID)
 	}
+	projectFlag, _ := cmd.Flags().GetString("project")
 	fromRev, _ := cmd.Flags().GetString("from")
 	noMerge, _ := cmd.Flags().GetBool("no-merge")
 	harness, _ := cmd.Flags().GetString("harness")
@@ -98,7 +99,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	promptFile, _ := cmd.Flags().GetString("prompt")
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	projectRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
 	workerOpts := agent.ExecuteBeadOptions{
 		FromRev:    fromRev,
