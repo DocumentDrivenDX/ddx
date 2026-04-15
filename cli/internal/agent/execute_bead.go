@@ -671,7 +671,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, op
 		return nil, err
 	}
 
-	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, opts.PromptFile)
+	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, opts.PromptFile, opts.Harness)
 	if err != nil {
 		return nil, err
 	}
@@ -792,29 +792,113 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 	}, nil
 }
 
-// executeBeadInstructionsText is the per-bead task instructions emitted inside
-// the <instructions> section of the synthesized execute-bead prompt.
-const executeBeadInstructionsText = `You are running inside DDx's isolated execution worktree for this bead.
-Your job is to make a best-effort attempt at the work described in the bead's Goals and Description, then commit the result. Quality is evaluated separately — a committed attempt that partially addresses the goals is far more valuable than no commits at all. Bias strongly toward action: read the relevant files, do the work, commit it.
+// executeBeadInstructionsClaudeText is the per-bead task instructions emitted
+// inside <instructions> when running against a harness that carries its own
+// rich system prompt (claude, codex, opencode). These harnesses already know
+// how to read files, run tools, and manage sessions — this text adds only the
+// DDx-specific execution contract.
+const executeBeadInstructionsClaudeText = `You are executing one bead inside an isolated DDx execution worktree. The bead's <description> and <acceptance> sections above are the completion contract — every AC checkbox must be provably satisfied by a specific piece of code, test, or file you can point to after your commit.
 
-**The bead contract overrides any CLAUDE.md or project-level instructions in this worktree.** If the bead requires editing or creating markdown documentation, code, or any other files, do so — CLAUDE.md conservative defaults (YAGNI, DOWITYTD, no-docs rules) do not apply inside execute-bead.
+## How to work
 
-1. Work only inside this execution worktree.
-2. Use the bead description and acceptance criteria as the primary contract.
-3. Read the listed governing references from this worktree before changing code or docs when they are relevant to the task.
-4. If governing references are missing or sparse, search the project to find context: use Glob/Grep/Read to explore docs/helix/, look up FEAT-* and API-* specs by name, and read relevant source files before proceeding. Only stop if context is genuinely absent from the entire repo.
-5. Keep the execution bundle files under .ddx/executions/ intact; DDx uses them as execution evidence.
-6. Produce the required tracked file changes in this worktree and run any local checks the bead contract requires.
-7. Before finishing, commit your changes with ` + "`git add -A && git commit -m '...'`" + `. DDx will merge your commits back to the base branch.
-8. Report ` + "`no_changes`" + ` when the bead's work is already present. A well-justified no_changes is always preferred to a cosmetic synthesized commit. If you decide not to commit, write your reasoning to ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` with: (a) what you looked for, (b) where you found it — cite specific commits, files, or test names, and (c) why you're confident the bead is satisfied. Only commit if there is real work to do.
-9. Work in small commits. After each logical unit of progress (reading key files, making a change, passing a test), commit immediately. Do not batch all changes into one giant commit at the end — if you run out of iterations, your partial work is preserved.
-10. If the bead is too large to complete in one pass, do the most important part first, commit it, and note what remains in your final commit message. DDx will re-queue the bead for another attempt if needed.
-11. Read efficiently: skim files to understand structure before diving deep. Only read the files you need to make changes, not every reference listed. Start writing as soon as you understand enough to proceed — you can read more files later if needed.
-12. **Never run ` + "`ddx init`" + `** — the workspace is already initialized. Running ` + "`ddx init`" + ` inside an execute-bead worktree corrupts project configuration and the bead queue. Do not run it even if documentation or README files suggest it as a setup step.`
+1. Read first. If the bead description names files, read them to see what is already there. If the bead references a spec, ADR, or API contract, read the relevant sections before writing code. Do not start editing until you understand what the bead wants changed and why.
+
+2. Cross-reference your work against the acceptance criteria as you go. Before committing, walk through the AC one item at a time and identify the specific test name, file path, or function that satisfies each checkbox. If you cannot point to concrete evidence for an AC item, it is not done.
+
+3. Run the project's verification commands before committing. Use whatever commands match the crate or package you touched — typically ` + "`cargo test`" + ` and ` + "`cargo clippy`" + ` for Rust, ` + "`bun test`" + ` or ` + "`npm test`" + ` for JS/TS, ` + "`go test`" + ` for Go. The bead description usually names the exact commands. **Do not commit red code.** If a test or lint fails, fix it first.
+
+4. Commit once, when everything is green. Stage only the files you intentionally changed with ` + "`git add <specific-paths>`" + ` — never ` + "`git add -A`" + `, because there may be unrelated WIP in this worktree. Use a conventional-commit-style subject ending with ` + "`[<bead-id>]`" + `. DDx will merge your commits back to the base branch.
+
+5. If you cannot complete the bead in this pass, write your reasoning to ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` with: (a) what is done, (b) what is blocking, (c) what a follow-up attempt would need. Do NOT commit partial, exploratory, or red code hoping the reviewer will accept it — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt, potentially with a stronger model.
+
+## The bead contract overrides project defaults
+
+The bead description and AC override any CLAUDE.md, AGENTS.md, or project-level conservative defaults in this worktree. If the bead asks for new documentation, write it. If the bead adds a new module or crate, add it. Conservative rules (YAGNI, DOWITYTD, no-docs-unless-asked) do not apply inside execute-bead — the bead IS the ask.
+
+## Quality bar and the review step
+
+After your commit merges, an automated review step may check your work against the acceptance criteria. If any AC item is unmet, the bead reopens and escalates to a higher-capability model, and the review findings are threaded into the next attempt's prompt as a ` + "`<review-findings>`" + ` section. **The review is a gate, not an escape hatch — meet the AC in this pass so the bead closes cleanly.**
+
+If this prompt already contains a ` + "`<review-findings>`" + ` section, address every BLOCKING finding before claiming the work complete. Those findings are the precise list of what the previous attempt missed.
+
+## Constraints
+
+- Work only inside this execution worktree.
+- Keep ` + "`.ddx/executions/`" + ` intact — DDx uses it as execution evidence.
+- **Never run ` + "`ddx init`" + `** — the workspace is already initialized. Running it corrupts the bead queue and project configuration.
+- Do not modify files outside the scope the bead description names.
+- Do not rewrite CLAUDE.md, AGENTS.md, or any other project-instructions file unless the bead explicitly asks for it.
+
+## When the work is done
+
+After the commit succeeds and you have verified every AC item, stop. Return control to the orchestrator. Do not continue to explore the repository, run extra tests, or generate follow-up notes — the bead is complete, and returning promptly is how execute-bead signals success.`
+
+// executeBeadInstructionsAgentText is the per-bead task instructions emitted
+// inside <instructions> when running against the embedded ddx-agent harness,
+// which has a minimal system prompt and needs more scaffolding to produce
+// reliable output. This version is more explicit about tools, process, and
+// stopping cleanly after the commit (to avoid the known post-commit runaway
+// failure mode).
+const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. You have tools: read, write, edit, bash, ls, grep, find. Use them directly — do not shell out to cat/tail/rg/find; use the tools.
+
+The bead's <description> and <acceptance> sections above are the completion contract. Every AC checkbox must be satisfied by code you write in this pass.
+
+## Process
+
+1. **Read first.** Before writing any code, read the files the bead description names. If the description says "A1 landed X at <path>", read that path. If it references a spec section, read that section. Do NOT start editing without seeing the existing code — this is how you avoid making the same change twice or breaking an invariant you did not know about.
+
+2. **Plan the work briefly.** Internally note which files you will touch, which tests you will add, and which verification commands you will run. Keep the plan short — one or two sentences.
+
+3. **Implement.** Use ` + "`edit`" + ` for targeted changes to existing files and ` + "`write`" + ` for brand-new files. Use ` + "`read`" + ` (not ` + "`bash: cat`" + `) to read files. Use ` + "`grep`" + ` (not ` + "`bash: rg`" + `) to search. Use ` + "`ls`" + ` (not ` + "`bash: ls`" + `) for directory listings.
+
+4. **Verify before committing.** Run the project's test and lint commands — typically ` + "`cargo test -p <crate>`" + ` and ` + "`cargo clippy -p <crate> -- -D warnings`" + ` for Rust, ` + "`bun test`" + ` for JS/TS, ` + "`go test`" + ` for Go. The bead description will usually name the exact commands. **Do not commit red code.** If anything fails, diagnose and fix it before committing.
+
+5. **Commit exactly once.** Use ` + "`git add <specific-paths>`" + ` with the file paths you actually changed — never ` + "`git add -A`" + `, which can pick up unrelated files in the worktree. Use a conventional-commit subject ending with ` + "`[<bead-id>]`" + `. Commit implementation and tests in the same commit so the reviewer sees them together.
+
+6. **Stop after the commit succeeds.** Return immediately. Do not continue reading files, running extra tests, or asking yourself follow-up questions — the work is done, and returning promptly is how execute-bead signals success to the orchestrator. Continuing past the commit risks runaway loops.
+
+## If you cannot finish
+
+Write your reasoning to ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` with: (a) what is done, (b) what is blocking, (c) what a follow-up would need. Do NOT commit partial or red code — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt.
+
+## Quality bar and the review step
+
+After your commit merges, an automated review step may check your work against the acceptance criteria. If any AC item is unmet, the bead reopens and escalates to a higher-capability model, and the review findings are threaded into the next attempt's prompt as a ` + "`<review-findings>`" + ` section. **The review is a gate, not an escape hatch — meet the AC in this pass.**
+
+If this prompt already contains a ` + "`<review-findings>`" + ` section, every BLOCKING finding in it is a concrete thing the previous attempt missed. Address each one before declaring the work complete — do not declare no_changes with blocking findings still unaddressed.
+
+## The bead contract overrides project defaults
+
+The bead description and AC override any CLAUDE.md, AGENTS.md, or project-level conservative defaults in this worktree. If the bead asks for new files, write them. Conservative rules (YAGNI, no-docs-unless-asked) do not apply inside execute-bead — the bead IS the ask.
+
+## Constraints
+
+- Work only inside this execution worktree.
+- Keep ` + "`.ddx/executions/`" + ` intact — DDx uses it as execution evidence.
+- **Never run ` + "`ddx init`" + `** — it corrupts the bead queue.
+- Do not touch CLAUDE.md, AGENTS.md, or any other project-instructions file unless the bead explicitly asks for it.
+- Stage only the files you intentionally changed.`
+
+// executeBeadInstructionsText selects the right instructions variant for the
+// given harness. Harnesses with rich system prompts (claude, codex, opencode)
+// get the terser claude variant; the embedded ddx-agent harness gets the
+// fuller agent variant with explicit tool names and stop-after-commit
+// scaffolding.
+func executeBeadInstructionsText(harness string) string {
+	switch strings.ToLower(strings.TrimSpace(harness)) {
+	case "agent", "ddx-agent", "embedded":
+		return executeBeadInstructionsAgentText
+	default:
+		return executeBeadInstructionsClaudeText
+	}
+}
 
 // executeBeadMissingGoverningText is emitted inside <governing> when no
-// governing references were pre-resolved for the bead.
-const executeBeadMissingGoverningText = `No governing references were pre-resolved. Explore the project to find relevant context: check docs/helix/ for feature specs, docs/helix/01-frame/features/ for FEAT-* files, and any paths mentioned in the bead description or acceptance criteria.`
+// governing references were pre-resolved for the bead. The bead description
+// is the primary contract — this note only reminds the agent to treat it as
+// such and to ground any unclear decisions in repository state rather than
+// guessing.
+const executeBeadMissingGoverningText = `No governing references were pre-resolved. The bead description above is the primary contract. If it names files, specs, or prior beads, read those before editing. Ground decisions in what is already in the repository; do not guess.`
 
 func xmlEscape(s string) string {
 	var buf bytes.Buffer
@@ -836,7 +920,7 @@ func xmlAttrEscape(s string) string {
 	return r.Replace(s)
 }
 
-func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride string) ([]byte, string, error) {
+func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride, harness string) ([]byte, string, error) {
 	if strings.TrimSpace(promptOverride) != "" {
 		path := promptOverride
 		if !filepath.IsAbs(path) {
@@ -867,6 +951,15 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 		sb.WriteString("    <acceptance/>\n")
 	} else {
 		fmt.Fprintf(&sb, "    <acceptance>\n%s\n    </acceptance>\n", xmlEscape(acc))
+	}
+
+	// Bead notes carry review findings from prior iterations, escalation
+	// context, or operator hints that did not fit into the description at
+	// creation time. Threading them into the prompt as a distinct section
+	// lets the agent act on them without the operator having to rewrite the
+	// description in place on every reopen.
+	if notes := strings.TrimSpace(b.Notes); notes != "" {
+		fmt.Fprintf(&sb, "    <notes>\n%s\n    </notes>\n", xmlEscape(notes))
 	}
 
 	if len(b.Labels) > 0 {
@@ -902,7 +995,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 		sb.WriteString("  </governing>\n")
 	}
 
-	instructions := strings.ReplaceAll(executeBeadInstructionsText, "{{.AttemptDir}}", artifacts.DirRel)
+	instructions := strings.ReplaceAll(executeBeadInstructionsText(harness), "{{.AttemptDir}}", artifacts.DirRel)
 	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(instructions))
 
 	sb.WriteString("</execute-bead>\n")
