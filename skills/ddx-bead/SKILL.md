@@ -97,6 +97,133 @@ ddx bead create "Implement X" \
   --parent ddx-epic-id
 ```
 
+## What Makes a Bead Execution-Ready
+
+A bead that passes required-field validation is not necessarily execution-ready.
+An automated `execute-bead` run reads the bead description cold — no prior
+conversation, no open tabs, no access to the history that led to the bead. The
+description must be self-sufficient.
+
+**Execution-ready means the description answers all of these:**
+
+1. **Which files to touch.** Exact repo-relative paths, not module names or
+   component names. `crates/axon-server/src/auth_pipeline.rs`, not "the auth
+   pipeline."
+
+2. **Which files NOT to touch.** Scope negation prevents scope creep. If the
+   bead is only about auth_pipeline, say "do not touch auth_schema.rs."
+
+3. **What cross-bead context is needed.** If this bead depends on a prior bead,
+   describe what that prior bead landed: file paths, type names, key APIs. Do
+   not assume the agent will read the prior bead's history. Each bead is read
+   cold.
+
+4. **Spec content inline, not by reference.** If the bead implements a table
+   from ADR-018 §4, paste the table into the description. Do not write "see
+   ADR-018 §4." The agent can only act on content that is present.
+
+5. **Named verification commands in AC.** `go test ./internal/bead/... passes`
+   is verifiable. "unit tests green" is not. Every AC item must name the exact
+   command or condition.
+
+**The description is the contract the agent follows.** If the description
+contains a typo (e.g., `subject` instead of `external_id`), the agent will
+implement the typo faithfully. Authors are responsible for accuracy.
+
+## Description Template
+
+Use this template as a starting point. Omit sections that are genuinely not
+applicable, but err toward inclusion — extra context costs nothing, missing
+context costs a re-run.
+
+```
+## Scope
+
+One or two sentences: what this bead does and why it exists.
+
+## Files to Touch
+
+- `path/to/file.go` — what changes and why
+- `path/to/other.rs` — what changes and why
+
+## Files NOT to Touch
+
+- `path/to/out_of_scope.go` — belongs to bead <id> or phase <x>
+
+## Cross-Bead Context
+
+*Fill this section when this bead has dependencies.*
+
+Bead <id> (<title>) landed:
+- `path/to/file.rs` — contains `TypeName { field_a, field_b }` (use field_b, not field_a)
+- `path/to/schema.sql` — adds table `credential_revocations(user_id, revoked_at)`
+
+## Spec Excerpts
+
+*Paste the relevant sections inline. Do not link to docs; the agent reads the bead, not the docs.*
+
+[paste table, struct definition, API shape, or decision text here]
+
+## Verification Commands
+
+- `<exact command>` — what it checks
+- `<exact command>` — what it checks
+```
+
+## Bead Sizing
+
+A bead should be one unit of testable work that a single agent pass can
+complete. Use this heuristic:
+
+- **Too large:** AC has more than ~12 checkboxes, or the description names more
+  than ~5 files to touch. Split into sibling beads.
+- **Too small:** The work is a one-line change or a trivial rename with no
+  independent acceptance criteria. Fold it into a related bead.
+- **Right size:** The agent can read the description, touch the named files, run
+  the named commands, and be done — in a single pass with no ambiguity.
+
+When splitting an epic into tasks, prefer splits along test boundaries: each
+task should have its own named verification command that can pass independently.
+
+## Review-Driven Reopen
+
+When a bead is reopened after a `REQUEST_CHANGES` review:
+
+1. **Update the description in place.** Add a `## Review Findings` subsection
+   (or fold corrections into the relevant sections). The next execute-bead run
+   will see the corrected description.
+2. Do not rely on the review comment history being visible to the next agent
+   run. The description is the only guaranteed source of context.
+3. If the review identified a spec ambiguity (e.g., `subject` vs
+   `external_id`), fix the spec excerpt in the description before re-queuing.
+
+```bash
+ddx bead update <id> --description "$(cat updated_description.md)"
+```
+
+## Common Anti-Patterns
+
+These mistakes were observed during execute-loop runs and consistently produce
+bad agent outputs:
+
+- **Doc ID without inline content.** Writing "per ADR-018 §4" instead of
+  pasting §4's content. The agent cannot open ADR-018; it acts on what is in
+  the description.
+- **No file paths.** Writing "update the auth module" instead of
+  `crates/axon-server/src/auth_pipeline.rs`. The agent will guess and may touch
+  the wrong file.
+- **Vague AC items.** Writing "tests pass" instead of
+  `cargo test -p axon-server`. Vague items cannot be verified and produce
+  inconsistent results.
+- **Missing cross-bead context.** Writing "depends on A1" without describing
+  what A1 landed. The agent starts each bead cold and will not read A1's
+  history.
+- **Scope described in the parent epic only.** Subtask beads must be
+  self-contained. The agent does not read the parent epic unless the bead
+  description explicitly quotes it.
+- **Typos in type names or field names.** The description is the contract. A
+  wrong field name in the description produces wrong code.
+
 ## Update Workflow
 
 To update fields on an existing bead:
