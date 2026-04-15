@@ -1507,7 +1507,7 @@ func TestMCPDocTools(t *testing.T) {
 	}
 }
 
-// --- UI placeholder tests (Stage 3.1: React frontend removed, SvelteKit pending Stage 4) ---
+// --- SvelteKit SPA embed tests (Stage 4.16: SvelteKit build output verified) ---
 
 func TestSPAServesIndexHTML(t *testing.T) {
 	dir := setupTestDir(t)
@@ -1518,7 +1518,11 @@ func TestSPAServesIndexHTML(t *testing.T) {
 	srv.Handler().ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 from embedded SPA, got %d", w.Code)
+		t.Fatalf("expected 200 from embedded SvelteKit SPA, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "data-sveltekit-preload-data") {
+		t.Errorf("expected SvelteKit shell in response body, got: %s", body)
 	}
 }
 
@@ -1530,9 +1534,13 @@ func TestSPAFallbackForClientRoute(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
-	// Deep SPA route: no static file, falls back to index.html → 200
+	// Deep SPA route: no static file, falls back to index.html (SvelteKit shell) → 200
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 (SPA fallback to index.html) for deep link, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "data-sveltekit-preload-data") {
+		t.Errorf("expected SvelteKit shell for deep link fallback, got: %s", body)
 	}
 }
 

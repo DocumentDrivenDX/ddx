@@ -160,7 +160,7 @@ jobs:
 
     - name: Install frontend dependencies
       working-directory: cli/internal/server/frontend
-      run: bun install --frozen-lockfile
+      run: bun install
 
     - name: Build frontend bundle
       working-directory: cli/internal/server/frontend
@@ -173,6 +173,10 @@ jobs:
     - name: Install Playwright browsers
       working-directory: cli/internal/server/frontend
       run: bunx playwright install --with-deps chromium
+
+    - name: Run frontend unit tests
+      working-directory: cli/internal/server/frontend
+      run: bun run test
 
     - name: Run frontend Playwright E2E tests
       working-directory: cli/internal/server/frontend
