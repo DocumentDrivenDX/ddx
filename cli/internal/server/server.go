@@ -36,6 +36,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
+	"github.com/gorilla/websocket"
 	"tailscale.com/tsnet"
 )
 
@@ -422,8 +423,9 @@ func (s *Server) routes() {
 	// MCP
 	s.mux.HandleFunc("POST /mcp", s.handleMCP)
 
-	// GraphQL (gqlgen)
+	// GraphQL (gqlgen) — POST for queries/mutations, GET for WebSocket subscriptions
 	s.mux.HandleFunc("POST /graphql", s.handleGraphQLQuery)
+	s.mux.HandleFunc("GET /graphql", s.handleGraphQLQuery)
 	s.mux.HandleFunc("GET /graphiql", s.handleGraphiQL)
 
 	// Web UI (embedded SPA)
@@ -3466,18 +3468,23 @@ func containsString(ss []string, s string) bool {
 func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers:  &ddxgraphql.Resolver{State: s.state, WorkingDir: s.WorkingDir},
+		Resolvers: &ddxgraphql.Resolver{
+			State:      s.state,
+			WorkingDir: s.WorkingDir,
+			Workers:    s.workers,
+		},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
 	gqlServer.AddTransport(transport.POST{})
 	gqlServer.AddTransport(transport.GET{})
+	gqlServer.AddTransport(transport.Websocket{
+		Upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool { return true },
+		},
+		KeepAlivePingInterval: 30 * time.Second,
+	})
 
-	if r.Method == http.MethodPost || r.Method == http.MethodGet {
-		gqlServer.ServeHTTP(w, r)
-		return
-	}
-
-	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	gqlServer.ServeHTTP(w, r)
 }
 
 func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {

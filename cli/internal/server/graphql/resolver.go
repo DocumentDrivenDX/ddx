@@ -9,6 +9,7 @@ import (
 type Resolver struct {
 	State      StateProvider
 	WorkingDir string
+	Workers    ProgressSubscriber
 }
 
 // BeadsReady is the resolver for the beadsReady field.
@@ -113,11 +114,6 @@ func (r *queryResolver) Providers(ctx context.Context) ([]*Provider, error) {
 
 // Provider is the resolver for the provider field.
 func (r *queryResolver) Provider(ctx context.Context, name string) (*Provider, error) {
-	panic("not implemented")
-}
-
-// WorkerProgress is the resolver for the workerProgress field.
-func (r *subscriptionResolver) WorkerProgress(ctx context.Context, workerID string) (<-chan *WorkerEvent, error) {
 	panic("not implemented")
 }
 
