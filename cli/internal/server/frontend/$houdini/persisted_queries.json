@@ -1,0 +1,3 @@
+{
+    "a793a984282f3bec7d0a5472a98d0d90d8987497774c34732f250b25b8729727": "query TestTypename {\n  __typename\n}\n"
+}

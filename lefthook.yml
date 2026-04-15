@@ -51,7 +51,7 @@ pre-commit:
     debug-js:
       name: "Debug statements (JS/TS)"
       glob: "*.{js,jsx,ts,tsx}"
-      exclude: "**/dist/**"
+      exclude: "{**/dist/**,**/$houdini/**}"
       run: |
         if command -v rg >/dev/null 2>&1; then
           rg -q "(console\.(log|debug|info)|debugger)" {staged_files} && exit 1 || exit 0
