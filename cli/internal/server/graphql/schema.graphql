@@ -118,6 +118,8 @@ type Bead implements Node {
   updatedAt: DateTime!
   """Freeform labels for filtering and grouping"""
   labels: [String!]
+  """Project identifier this bead belongs to"""
+  projectID: String
   """Parent bead ID for hierarchy"""
   parent: String
   """Full description / body text"""

@@ -117,6 +117,9 @@ func beadFromSnapshot(s BeadSnapshot) *Bead {
 		UpdatedAt: s.UpdatedAt.UTC().Format(time.RFC3339),
 		Labels:    s.Labels,
 	}
+	if s.ProjectID != "" {
+		b.ProjectID = &s.ProjectID
+	}
 	if s.Owner != "" {
 		b.Owner = &s.Owner
 	}

@@ -7642,6 +7642,35 @@ func (ec *executionContext) fieldContext_Bead_labels(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _Bead_projectID(ctx context.Context, field graphql.CollectedField, obj *Bead) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Bead_projectID,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Bead_projectID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Bead",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Bead_parent(ctx context.Context, field graphql.CollectedField, obj *Bead) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8320,6 +8349,8 @@ func (ec *executionContext) fieldContext_BeadEdge_node(_ context.Context, field 
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15038,6 +15069,8 @@ func (ec *executionContext) fieldContext_Mutation_beadCreate(ctx context.Context
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15111,6 +15144,8 @@ func (ec *executionContext) fieldContext_Mutation_beadUpdate(ctx context.Context
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15184,6 +15219,8 @@ func (ec *executionContext) fieldContext_Mutation_beadClaim(ctx context.Context,
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15257,6 +15294,8 @@ func (ec *executionContext) fieldContext_Mutation_beadUnclaim(ctx context.Contex
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15330,6 +15369,8 @@ func (ec *executionContext) fieldContext_Mutation_beadReopen(ctx context.Context
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -17391,6 +17432,8 @@ func (ec *executionContext) fieldContext_Query_bead(ctx context.Context, field g
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -25194,6 +25237,8 @@ func (ec *executionContext) _Bead(ctx context.Context, sel ast.SelectionSet, obj
 			out.Values[i] = ec._Bead_acceptance(ctx, field, obj)
 		case "notes":
 			out.Values[i] = ec._Bead_notes(ctx, field, obj)
+		case "projectID":
+			out.Values[i] = ec._Bead_projectID(ctx, field, obj)
 		case "dependencies":
 			out.Values[i] = ec._Bead_dependencies(ctx, field, obj)
 		default:

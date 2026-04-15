@@ -198,6 +198,8 @@ type Bead struct {
 	UpdatedAt string `json:"updatedAt"`
 	// Freeform labels for filtering and grouping
 	Labels []string `json:"labels,omitempty"`
+	// Project identifier this bead belongs to
+	ProjectID *string `json:"projectID,omitempty"`
 	// Parent bead ID for hierarchy
 	Parent *string `json:"parent,omitempty"`
 	// Full description / body text
