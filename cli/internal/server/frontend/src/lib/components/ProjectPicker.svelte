@@ -1,9 +1,72 @@
 <script lang="ts">
-	// Stub — will be wired to GraphQL `projects` query in Stage 4 (bead 35).
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { gql } from 'graphql-request';
+	import { createClient } from '$lib/gql/client';
+	import { nodeStore } from '$lib/stores/node.svelte';
+	import { projectStore } from '$lib/stores/project.svelte';
+
+	const PROJECTS_QUERY = gql`
+		query Projects {
+			projects {
+				edges {
+					node {
+						id
+						name
+						path
+					}
+				}
+			}
+		}
+	`;
+
+	interface ProjectNode {
+		id: string;
+		name: string;
+		path: string;
+	}
+
+	interface ProjectsResult {
+		projects: {
+			edges: Array<{ node: ProjectNode }>;
+		};
+	}
+
+	let projects = $state<ProjectNode[]>([]);
+	let loading = $state(true);
+
+	onMount(async () => {
+		const client = createClient();
+		const data = await client.request<ProjectsResult>(PROJECTS_QUERY);
+		projects = data.projects.edges.map((e) => e.node);
+		loading = false;
+	});
+
+	function handleChange(event: Event) {
+		const select = event.target as HTMLSelectElement;
+		const projectId = select.value;
+		if (!projectId) return;
+
+		const project = projects.find((p) => p.id === projectId);
+		if (!project) return;
+
+		projectStore.set({ id: project.id, name: project.name, path: project.path });
+
+		const nodeId = nodeStore.value?.id;
+		if (nodeId) {
+			goto(`/nodes/${nodeId}/projects/${projectId}`);
+		}
+	}
 </script>
 
-<div
-	class="flex items-center gap-2 rounded border border-gray-300 px-3 py-1 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
+<select
+	class="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600"
+	value={projectStore.value?.id ?? ''}
+	onchange={handleChange}
+	disabled={loading}
 >
-	<span>Select project…</span>
-</div>
+	<option value="">{loading ? 'Loading…' : 'Select project…'}</option>
+	{#each projects as project}
+		<option value={project.id}>{project.name}</option>
+	{/each}
+</select>
