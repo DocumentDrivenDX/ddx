@@ -16,12 +16,12 @@ var beadRefPattern = regexp.MustCompile(`ddx-[a-f0-9]{8}`)
 // Commits is the resolver for the commits field.
 func (r *queryResolver) Commits(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) (*CommitConnection, error) {
 
-	snap, ok := r.State.GetProjectSnapshotByID(projectID)
+	proj, ok := r.State.GetProjectSnapshotByID(projectID)
 	if !ok {
 		return nil, fmt.Errorf("project not found: %s", projectID)
 	}
 
-	snaps, err := gitLogCommits(snap.Path, since, author)
+	snaps, err := gitLogCommits(proj.Path, since, author)
 	if err != nil {
 		return nil, err
 	}

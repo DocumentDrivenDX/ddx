@@ -103,7 +103,7 @@ func newGQLHandler(state ddxgraphql.StateProvider, workDir string, beadBus ddxgr
 // filters them in-process to satisfy resolver queries.
 type testStateProvider struct {
 	node     ddxgraphql.NodeStateSnapshot
-	projects []ddxgraphql.ProjectSnapshot
+	projects []*ddxgraphql.Project
 	beads    []ddxgraphql.BeadSnapshot
 }
 
@@ -128,6 +128,8 @@ func newTestStateProvider(workDir string, store *bead.Store) *testStateProvider 
 		})
 	}
 
+	registeredAt := now.Add(-time.Hour).UTC().Format(time.RFC3339)
+	lastSeen := now.UTC().Format(time.RFC3339)
 	return &testStateProvider{
 		node: ddxgraphql.NodeStateSnapshot{
 			ID:        "node-integration-test",
@@ -135,13 +137,13 @@ func newTestStateProvider(workDir string, store *bead.Store) *testStateProvider 
 			StartedAt: now.Add(-time.Hour),
 			LastSeen:  now,
 		},
-		projects: []ddxgraphql.ProjectSnapshot{
+		projects: []*ddxgraphql.Project{
 			{
 				ID:           projID,
 				Name:         "integration-test-project",
 				Path:         workDir,
-				RegisteredAt: now.Add(-time.Hour),
-				LastSeen:     now,
+				RegisteredAt: registeredAt,
+				LastSeen:     lastSeen,
 			},
 		},
 		beads: snaps,
@@ -150,17 +152,17 @@ func newTestStateProvider(workDir string, store *bead.Store) *testStateProvider 
 
 func (p *testStateProvider) GetNodeSnapshot() ddxgraphql.NodeStateSnapshot { return p.node }
 
-func (p *testStateProvider) GetProjectSnapshots(_ bool) []ddxgraphql.ProjectSnapshot {
+func (p *testStateProvider) GetProjectSnapshots(_ bool) []*ddxgraphql.Project {
 	return p.projects
 }
 
-func (p *testStateProvider) GetProjectSnapshotByID(id string) (ddxgraphql.ProjectSnapshot, bool) {
+func (p *testStateProvider) GetProjectSnapshotByID(id string) (*ddxgraphql.Project, bool) {
 	for _, proj := range p.projects {
 		if proj.ID == id {
 			return proj, true
 		}
 	}
-	return ddxgraphql.ProjectSnapshot{}, false
+	return nil, false
 }
 
 func (p *testStateProvider) GetBeadSnapshots(status, label, projectID string) []ddxgraphql.BeadSnapshot {

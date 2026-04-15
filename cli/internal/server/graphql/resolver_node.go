@@ -14,18 +14,6 @@ type NodeStateSnapshot struct {
 	LastSeen  time.Time
 }
 
-// ProjectSnapshot holds project data for resolver consumption.
-type ProjectSnapshot struct {
-	ID           string
-	Name         string
-	Path         string
-	GitRemote    string
-	RegisteredAt time.Time
-	LastSeen     time.Time
-	Unreachable  bool
-	TombstonedAt *time.Time
-}
-
 // BeadDependencySnapshot holds dependency data for resolver consumption.
 type BeadDependencySnapshot struct {
 	IssueID     string
@@ -59,8 +47,8 @@ type BeadSnapshot struct {
 // StateProvider is the minimal interface the node/projects resolvers need.
 type StateProvider interface {
 	GetNodeSnapshot() NodeStateSnapshot
-	GetProjectSnapshots(includeUnreachable bool) []ProjectSnapshot
-	GetProjectSnapshotByID(id string) (ProjectSnapshot, bool)
+	GetProjectSnapshots(includeUnreachable bool) []*Project
+	GetProjectSnapshotByID(id string) (*Project, bool)
 	GetBeadSnapshots(status, label, projectID string) []BeadSnapshot
 
 	// Worker queries
@@ -96,11 +84,11 @@ func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
 		return nodeInfoFromSnapshot(snap), nil
 	}
 	if strings.HasPrefix(id, "proj-") {
-		snap, ok := r.State.GetProjectSnapshotByID(id)
+		proj, ok := r.State.GetProjectSnapshotByID(id)
 		if !ok {
 			return nil, nil
 		}
-		return projectFromSnapshot(snap), nil
+		return proj, nil
 	}
 	return nil, nil
 }
@@ -114,14 +102,14 @@ func (r *queryResolver) NodeInfo(ctx context.Context) (*NodeInfo, error) {
 // Projects is the resolver for the projects field.
 func (r *queryResolver) Projects(ctx context.Context, first *int, after *string, last *int, before *string, includeUnreachable *bool) (*ProjectConnection, error) {
 	showAll := includeUnreachable != nil && *includeUnreachable
-	snaps := r.State.GetProjectSnapshots(showAll)
+	projects := r.State.GetProjectSnapshots(showAll)
 
 	// Build full edge list with stable ID-based cursors.
-	all := make([]*ProjectEdge, len(snaps))
-	for i, s := range snaps {
+	all := make([]*ProjectEdge, len(projects))
+	for i, p := range projects {
 		all[i] = &ProjectEdge{
-			Node:   projectFromSnapshot(s),
-			Cursor: encodeStableCursor(s.ID),
+			Node:   p,
+			Cursor: encodeStableCursor(p.ID),
 		}
 	}
 
@@ -183,26 +171,4 @@ func nodeInfoFromSnapshot(s NodeStateSnapshot) *NodeInfo {
 		StartedAt: s.StartedAt.UTC().Format(time.RFC3339),
 		LastSeen:  s.LastSeen.UTC().Format(time.RFC3339),
 	}
-}
-
-func projectFromSnapshot(s ProjectSnapshot) *Project {
-	p := &Project{
-		ID:           s.ID,
-		Name:         s.Name,
-		Path:         s.Path,
-		RegisteredAt: s.RegisteredAt.UTC().Format(time.RFC3339),
-		LastSeen:     s.LastSeen.UTC().Format(time.RFC3339),
-	}
-	if s.GitRemote != "" {
-		p.GitRemote = &s.GitRemote
-	}
-	if s.Unreachable {
-		b := true
-		p.Unreachable = &b
-	}
-	if s.TombstonedAt != nil {
-		ts := s.TombstonedAt.UTC().Format(time.RFC3339)
-		p.TombstonedAt = &ts
-	}
-	return p
 }

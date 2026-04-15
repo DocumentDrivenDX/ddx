@@ -26,22 +26,22 @@ func (s *ServerState) GetNodeSnapshot() ddxgraphql.NodeStateSnapshot {
 }
 
 // GetProjectSnapshots implements ddxgraphql.StateProvider.
-func (s *ServerState) GetProjectSnapshots(includeUnreachable bool) []ddxgraphql.ProjectSnapshot {
+func (s *ServerState) GetProjectSnapshots(includeUnreachable bool) []*ddxgraphql.Project {
 	entries := s.GetProjects(includeUnreachable)
-	snaps := make([]ddxgraphql.ProjectSnapshot, len(entries))
+	out := make([]*ddxgraphql.Project, len(entries))
 	for i, e := range entries {
-		snaps[i] = projectEntryToSnapshot(e)
+		out[i] = projectEntryToGQL(e)
 	}
-	return snaps
+	return out
 }
 
 // GetProjectSnapshotByID implements ddxgraphql.StateProvider.
-func (s *ServerState) GetProjectSnapshotByID(id string) (ddxgraphql.ProjectSnapshot, bool) {
+func (s *ServerState) GetProjectSnapshotByID(id string) (*ddxgraphql.Project, bool) {
 	entry, ok := s.GetProjectByID(id)
 	if !ok {
-		return ddxgraphql.ProjectSnapshot{}, false
+		return nil, false
 	}
-	return projectEntryToSnapshot(entry), true
+	return projectEntryToGQL(entry), true
 }
 
 // GetBeadSnapshots implements ddxgraphql.StateProvider.
@@ -97,17 +97,26 @@ func (s *ServerState) GetBeadSnapshots(status, label, projectID string) []ddxgra
 	return result
 }
 
-func projectEntryToSnapshot(e ProjectEntry) ddxgraphql.ProjectSnapshot {
-	return ddxgraphql.ProjectSnapshot{
+func projectEntryToGQL(e ProjectEntry) *ddxgraphql.Project {
+	p := &ddxgraphql.Project{
 		ID:           e.ID,
 		Name:         e.Name,
 		Path:         e.Path,
-		GitRemote:    e.GitRemote,
-		RegisteredAt: e.RegisteredAt,
-		LastSeen:     e.LastSeen,
-		Unreachable:  e.Unreachable,
-		TombstonedAt: e.TombstonedAt,
+		RegisteredAt: e.RegisteredAt.UTC().Format(time.RFC3339),
+		LastSeen:     e.LastSeen.UTC().Format(time.RFC3339),
 	}
+	if e.GitRemote != "" {
+		p.GitRemote = &e.GitRemote
+	}
+	if e.Unreachable {
+		b := true
+		p.Unreachable = &b
+	}
+	if e.TombstonedAt != nil {
+		ts := e.TombstonedAt.UTC().Format(time.RFC3339)
+		p.TombstonedAt = &ts
+	}
+	return p
 }
 
 // ─── Worker queries ──────────────────────────────────────────────────────────
