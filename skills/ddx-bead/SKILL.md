@@ -285,6 +285,51 @@ When using DDx agent primitives against bead work:
 - See `docs/agent-execute.md` for the operator reference on close semantics
   and result statuses.
 
+## Branch Merge Policy
+
+execute-bead and execute-loop runs emit commits that carry durable per-attempt
+execution metrics. These commits are **not noise** — they are the audit trail.
+
+Commit shapes produced by the loop:
+
+- `chore: update tracker (execute-bead <TIMESTAMP>)` — one per attempt tracker
+  heartbeat. The TIMESTAMP is the attempt identifier. Emitted for every
+  attempt: success, `no_changes`, `land_conflict`, `post_run_check_failed`,
+  `execution_failed`, `structural_validation_failed`.
+- `Merge bead <bead-id> attempt <TIMESTAMP>- into <branch>` — the merge commit
+  that lands a successful attempt from its isolated worktree back onto the
+  working branch. Carries the bead ID and attempt timestamp in the subject.
+- Substantive `feat:` / `fix:` / `refactor:` commits tagged with `[ddx-<id>]`
+  — the actual code change for a bead.
+
+Together these let you reconstruct which beads were attempted, when, how many
+retries they took, and what the outcomes were. Cost, latency, retry-count, and
+tier-escalation reports read this trail directly from git history.
+
+**Never squash-merge** a branch containing execute-bead commits. Squashing
+collapses every attempt timestamp into a single commit message and destroys
+the per-attempt metric trail. `gh pr merge --squash` is forbidden for these
+branches.
+
+**Never rebase-drop or fixup** tracker-heartbeat commits even if they look
+like "chore noise". The timestamp in the subject line is load-bearing data.
+
+Correct merge strategies:
+
+- **Fast-forward merge** — when `main` is a strict ancestor of the branch,
+  `git push origin main` (or `gh pr merge --rebase`) advances `main` to the
+  branch HEAD, preserving every commit. This is the default choice for
+  execute-bead branches.
+- **Merge commit** (`gh pr merge --merge`) — creates a 2-parent merge commit.
+  Acceptable if you want an explicit boundary between the branch's work and
+  main; still preserves all per-attempt commits in the branch's history.
+
+Avoid:
+- `gh pr merge --squash` — destroys per-attempt audit trail.
+- `git rebase -i` with `fixup`/`drop` on `chore: update tracker` or
+  `Merge bead` commits — same.
+- `git filter-branch` / `git filter-repo` stripping tracker commits — same.
+
 ## References
 
 - Full flag list: `ddx bead --help`, `ddx bead create --help`
