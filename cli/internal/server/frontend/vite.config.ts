@@ -1,14 +1,13 @@
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
-import houdini from 'houdini/vite';
 import path from 'path';
 
 export default defineConfig({
-	plugins: [houdini(), tailwindcss(), sveltekit()],
+	plugins: [tailwindcss(), sveltekit()],
 	resolve: {
 		alias: {
-			$houdini: path.resolve(process.cwd(), '$houdini')
+			$lib: path.resolve(process.cwd(), 'src/lib')
 		}
 	},
 	test: {
