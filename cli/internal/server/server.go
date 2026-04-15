@@ -1641,14 +1641,19 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req struct {
-		ProjectRoot  string `json:"project_root"`
-		Harness      string `json:"harness"`
-		Model        string `json:"model"`
-		Provider     string `json:"provider"`
-		ModelRef     string `json:"model_ref"`
-		Effort       string `json:"effort"`
-		Once         bool   `json:"once"`
-		PollInterval string `json:"poll_interval"`
+		ProjectRoot   string `json:"project_root"`
+		Harness       string `json:"harness"`
+		Model         string `json:"model"`
+		Provider      string `json:"provider"`
+		ModelRef      string `json:"model_ref"`
+		Effort        string `json:"effort"`
+		Once          bool   `json:"once"`
+		PollInterval  string `json:"poll_interval"`
+		NoReview      bool   `json:"no_review"`
+		ReviewHarness string `json:"review_harness"`
+		ReviewModel   string `json:"review_model"`
+		MinTier       string `json:"min_tier"`
+		MaxTier       string `json:"max_tier"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -1679,14 +1684,19 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		pollInterval = d
 	}
 	record, err := s.workers.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		ProjectRoot:  projectRoot,
-		Harness:      req.Harness,
-		Model:        req.Model,
-		Provider:     req.Provider,
-		ModelRef:     req.ModelRef,
-		Effort:       req.Effort,
-		Once:         req.Once,
-		PollInterval: pollInterval,
+		ProjectRoot:   projectRoot,
+		Harness:       req.Harness,
+		Model:         req.Model,
+		Provider:      req.Provider,
+		ModelRef:      req.ModelRef,
+		Effort:        req.Effort,
+		Once:          req.Once,
+		PollInterval:  pollInterval,
+		NoReview:      req.NoReview,
+		ReviewHarness: req.ReviewHarness,
+		ReviewModel:   req.ReviewModel,
+		MinTier:       req.MinTier,
+		MaxTier:       req.MaxTier,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

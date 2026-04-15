@@ -38,6 +38,10 @@ type ExecuteLoopWorkerSpec struct {
 	NoReview      bool   `json:"no_review,omitempty"`
 	ReviewHarness string `json:"review_harness,omitempty"`
 	ReviewModel   string `json:"review_model,omitempty"`
+	// Tier escalation bounds. Empty strings use the defaults (cheap and smart).
+	// Ignored when Harness or Model is pinned (escalation disabled).
+	MinTier string `json:"min_tier,omitempty"`
+	MaxTier string `json:"max_tier,omitempty"`
 }
 
 // Terminal phases per FEAT-006.
@@ -280,13 +284,14 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// LandBeadResult at all, so commits produced by server-managed
 		// workers were silently lost (ddx-e14efc58).
 		coordinator := m.LandCoordinators.Get(projectRoot)
-		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+
+		// singleTierAttempt runs one execution at a specific harness/model.
+		singleTierAttempt := func(ctx context.Context, beadID string, tier agent.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
 			runner := m.buildAgentRunner(projectRoot)
 			gitOps := &agent.RealGitOps{}
-
 			res, err := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
-				Harness:    spec.Harness,
-				Model:      spec.Model,
+				Harness:    resolvedHarness,
+				Model:      resolvedModel,
 				Provider:   spec.Provider,
 				ModelRef:   spec.ModelRef,
 				Effort:     spec.Effort,
@@ -295,9 +300,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			// Submit the worker's result to the coordinator and block on the
-			// LandResult. This is the call site that used to be silently
-			// missing (ddx-e14efc58).
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
 				landReq := agent.BuildLandRequestFromResult(projectRoot, res)
 				landRes, landErr := coordinator.Submit(landReq)
@@ -307,41 +309,145 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 					err = landErr
 				}
 			} else if res != nil && res.ResultRev == res.BaseRev {
-				// No commits — let the classifier map this to no_changes.
 				res.Outcome = "no-changes"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			} else if res != nil && res.ExitCode != 0 {
-				// Agent failed with commits: preserve via UpdateRef rather
-				// than land. The coordinator is only for clean results.
 				res.Outcome = "preserved"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			}
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
+			tierStr := ""
+			if tier != "" {
+				tierStr = string(tier)
+			}
 			return agent.ExecuteBeadReport{
-				BeadID:      res.BeadID,
-				AttemptID:   res.AttemptID,
-				WorkerID:    res.WorkerID,
-				Harness:     res.Harness,
-				Provider:    res.Provider,
-				Model:       res.Model,
-				Status:      res.Status,
-				Detail:      res.Detail,
-				SessionID:   res.SessionID,
-				BaseRev:     res.BaseRev,
-				ResultRev:   res.ResultRev,
-				PreserveRef: res.PreserveRef,
+				BeadID:             res.BeadID,
+				AttemptID:          res.AttemptID,
+				WorkerID:           res.WorkerID,
+				Harness:            res.Harness,
+				Provider:           res.Provider,
+				Model:              res.Model,
+				Tier:               tierStr,
+				Status:             res.Status,
+				Detail:             res.Detail,
+				SessionID:          res.SessionID,
+				BaseRev:            res.BaseRev,
+				ResultRev:          res.ResultRev,
+				PreserveRef:        res.PreserveRef,
+				NoChangesRationale: res.NoChangesRationale,
 			}, nil
+		}
+
+		// escalationEnabled when neither Harness nor Model is pinned.
+		escalationEnabled := spec.Harness == "" && spec.Model == ""
+
+		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			if !escalationEnabled {
+				return singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Model)
+			}
+
+			// Tier escalation: cheap → standard → smart (bounded by MinTier/MaxTier).
+			tiers := agent.TiersInRange(agent.ModelTier(spec.MinTier), agent.ModelTier(spec.MaxTier))
+			if len(tiers) == 0 {
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusExecutionFailed,
+					Detail: "execute-loop: no tiers in range (check min_tier / max_tier)",
+				}, nil
+			}
+
+			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+			runner := m.buildAgentRunner(projectRoot)
+			var lastReport agent.ExecuteBeadReport
+
+			for _, tier := range tiers {
+				routingCfg := runner.Config
+				routingCfg.Harness = ""
+				req := agent.NormalizeRouteRequest(
+					agent.RouteFlags{Profile: string(tier), Provider: spec.Provider, Effort: spec.Effort},
+					routingCfg, runner.Catalog,
+				)
+				plans := runner.ProbeAndBuildCandidatePlans(req, 10*time.Second)
+
+				for i := range plans {
+					if plans[i].Viable && !agent.GlobalProviderHealth.IsHealthy(plans[i].Harness) {
+						plans[i].Viable = false
+						plans[i].RejectReason = "provider cooldown"
+					}
+				}
+
+				ranked := agent.RankCandidates(string(tier), plans)
+				best, pickErr := agent.SelectBestCandidate(ranked)
+				probeResult := "ok"
+				if pickErr != nil {
+					probeResult = "no viable provider"
+					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
+						Kind:      "tier-attempt",
+						Summary:   "skipped",
+						Body:      agent.FormatTierAttemptBody(string(tier), "", "", probeResult, "no viable harness found"),
+						Actor:     "ddx",
+						Source:    "ddx agent execute-loop",
+						CreatedAt: time.Now().UTC(),
+					})
+					continue
+				}
+
+				report, attemptErr := singleTierAttempt(ctx, beadID, tier, best.Harness, best.ConcreteModel)
+				if attemptErr != nil {
+					report = agent.ExecuteBeadReport{
+						BeadID:      beadID,
+						Tier:        string(tier),
+						Harness:     best.Harness,
+						Model:       best.ConcreteModel,
+						Status:      agent.ExecuteBeadStatusExecutionFailed,
+						Detail:      attemptErr.Error(),
+						ProbeResult: probeResult,
+					}
+				} else {
+					report.ProbeResult = probeResult
+				}
+				lastReport = report
+
+				_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
+					Kind:      "tier-attempt",
+					Summary:   report.Status,
+					Body:      agent.FormatTierAttemptBody(string(tier), report.Harness, report.Model, probeResult, report.Detail),
+					Actor:     "ddx",
+					Source:    "ddx agent execute-loop",
+					CreatedAt: time.Now().UTC(),
+				})
+
+				if report.Status == agent.ExecuteBeadStatusSuccess {
+					return report, nil
+				}
+				if !agent.ShouldEscalate(report.Status) {
+					return report, nil
+				}
+				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
+					agent.GlobalProviderHealth.Mark(best.Harness, time.Now().Add(agent.ProviderCooldownDuration))
+				}
+			}
+
+			if lastReport.BeadID == "" {
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusExecutionFailed,
+					Detail: "execute-loop: all tiers exhausted — no viable provider found",
+				}, nil
+			}
+			lastReport.Detail = "escalation exhausted: " + lastReport.Detail
+			return lastReport, nil
 		})
 
 		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.
 		var reviewer agent.BeadReviewer
 		if !spec.NoReview {
 			reviewer = &agent.DefaultBeadReviewer{
-				ProjectRoot: m.projectRoot,
-				BeadStore:   bead.NewStore(filepath.Join(m.projectRoot, ".ddx")),
-				Runner:      m.buildAgentRunner(m.projectRoot),
+				ProjectRoot: projectRoot,
+				BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				Runner:      m.buildAgentRunner(projectRoot),
 				Harness:     spec.ReviewHarness,
 				Model:       spec.ReviewModel,
 			}
@@ -370,6 +476,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ProgressCh:   progressCh,
 		PreClaimHook: buildPreClaimHook(projectRoot, landingOps),
 		NoReview:     spec.NoReview,
+		MinTier:      spec.MinTier,
+		MaxTier:      spec.MaxTier,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)

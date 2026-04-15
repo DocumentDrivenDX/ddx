@@ -32,6 +32,11 @@ type ExecuteBeadReport struct {
 	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,
 	// or BLOCK) when a reviewer ran. Empty when review was skipped.
 	ReviewVerdict string `json:"review_verdict,omitempty"`
+	// Tier is the model tier used for the final attempt (cheap, standard, smart).
+	// Populated by tier-escalating executors; empty for single-tier attempts.
+	Tier string `json:"tier,omitempty"`
+	// ProbeResult is a brief summary of the provider health probe at attempt time.
+	ProbeResult string `json:"probe_result,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -148,6 +153,13 @@ type ExecuteBeadLoopOptions struct {
 	Provider    string
 	ModelRef    string
 	SessionID   string
+
+	// MinTier and MaxTier bound the tier escalation range when the executor
+	// uses tier-based auto-escalation. Empty string uses the defaults (cheap
+	// and smart). Ignored when the executor has escalation disabled (e.g. an
+	// explicit --harness or --model override was specified).
+	MinTier string
+	MaxTier string
 }
 
 type ExecuteBeadLoopResult struct {
@@ -570,6 +582,12 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	parts := []string{}
 	if report.Detail != "" {
 		parts = append(parts, report.Detail)
+	}
+	if report.Tier != "" {
+		parts = append(parts, fmt.Sprintf("tier=%s", report.Tier))
+	}
+	if report.ProbeResult != "" {
+		parts = append(parts, fmt.Sprintf("probe_result=%s", report.ProbeResult))
 	}
 	if report.NoChangesRationale != "" {
 		parts = append(parts, fmt.Sprintf("rationale: %s", report.NoChangesRationale))
