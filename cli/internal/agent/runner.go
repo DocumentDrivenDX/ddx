@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	agentlib "github.com/DocumentDrivenDX/agent"
 )
 
 func containsString(slice []string, s string) bool {
@@ -32,6 +34,15 @@ type Runner struct {
 	Executor      Executor     // injected; defaults to OSExecutor
 	LookPath      LookPathFunc // injected; defaults to exec.LookPath
 	AgentProvider interface{}  // injected agentlib.Provider for testing; nil = resolve from config
+
+	// CompactionStuckThreshold overrides the default consecutive-failure limit for
+	// the compaction-stuck circuit breaker. Zero means use the default (50).
+	// Set to a small value (e.g. 3) in tests to trigger the breaker quickly.
+	CompactionStuckThreshold int
+
+	// CompactorOverride replaces the default compactor when non-nil.
+	// Used in tests to control compaction behaviour without real token budgets.
+	CompactorOverride func(ctx context.Context, messages []agentlib.Message, provider agentlib.Provider, toolCalls []agentlib.ToolCallLog) ([]agentlib.Message, *agentlib.CompactionResult, error)
 }
 
 // NewRunner creates a runner with defaults.

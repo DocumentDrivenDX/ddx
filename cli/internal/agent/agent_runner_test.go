@@ -724,6 +724,163 @@ func (p *sequenceProvider) Chat(ctx context.Context, _ []agentlib.Message, _ []a
 	return p.responses[idx], nil
 }
 
+// --- Compaction stuck detection ---
+
+// TestIsNoopCompactionEndEvent validates the helper that identifies no-op
+// compaction end events — the events that the circuit breaker tracks.
+func TestIsNoopCompactionEndEvent(t *testing.T) {
+	mustMarshal := func(v any) json.RawMessage {
+		b, _ := json.Marshal(v)
+		return b
+	}
+	cases := []struct {
+		name string
+		e    agentlib.Event
+		want bool
+	}{
+		{
+			name: "no-op compaction end (success=false, no_compaction=true)",
+			e: agentlib.Event{
+				Type: agentlib.EventCompactionEnd,
+				Data: mustMarshal(map[string]any{"success": false, "no_compaction": true}),
+			},
+			want: true,
+		},
+		{
+			name: "successful compaction end",
+			e: agentlib.Event{
+				Type: agentlib.EventCompactionEnd,
+				Data: mustMarshal(map[string]any{"success": true, "tokens_before": 1000, "tokens_after": 200}),
+			},
+			want: false,
+		},
+		{
+			name: "error compaction end (no_compaction=true but success=false from error)",
+			e: agentlib.Event{
+				Type: agentlib.EventCompactionEnd,
+				Data: mustMarshal(map[string]any{"success": false, "no_compaction": true, "error": "llm failed"}),
+			},
+			want: true,
+		},
+		{
+			name: "compaction start — never a no-op end",
+			e:    agentlib.Event{Type: agentlib.EventCompactionStart},
+			want: false,
+		},
+		{
+			name: "llm request event",
+			e:    agentlib.Event{Type: agentlib.EventLLMRequest},
+			want: false,
+		},
+		{
+			name: "tool call event",
+			e:    agentlib.Event{Type: agentlib.EventToolCall},
+			want: false,
+		},
+		{
+			name: "session end event",
+			e:    agentlib.Event{Type: agentlib.EventSessionEnd},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isNoopCompactionEndEvent(tc.e)
+			assert.Equal(t, tc.want, got, "isNoopCompactionEndEvent(%v)", tc.e.Type)
+		})
+	}
+}
+
+// TestAgentCompactionStuckCircuitBreaker verifies that the circuit breaker
+// fires and returns a structured error when compaction fails repeatedly
+// without any write-tool progress.
+//
+// Regression test for: agent stalls in post-commit compaction loop.
+// Root cause: compaction emits no-op events every iteration, which pulse the
+// inactivity timer and accumulate without bound when the agent is stuck
+// in a read-only or verification loop.
+//
+// The test uses:
+//   - A sequenceProvider returning read-only tool calls so the counter grows
+//   - CompactionStuckThreshold=3 to trigger quickly in-process
+//   - No timeout so only the circuit breaker terminates the run
+func TestAgentCompactionStuckCircuitBreaker(t *testing.T) {
+	wd := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "input.txt"), []byte("data\n"), 0o644))
+
+	// Provider returns read-only tool calls then a final response.
+	// The compaction circuit breaker fires before the third LLM call.
+	provider := &sequenceProvider{
+		delays: []time.Duration{0, 0, 0},
+		responses: []agentlib.Response{
+			// Iteration 1: returns a read tool call (read-only — does not reset counter).
+			{
+				Model: "test",
+				ToolCalls: []agentlib.ToolCall{{
+					ID:        "c1",
+					Name:      "read",
+					Arguments: json.RawMessage(`{"path":"input.txt"}`),
+				}},
+			},
+			// Iteration 2: the circuit breaker fires at pre-compaction before this
+			// LLM call is made. If somehow it is made, return a final response so
+			// the loop exits cleanly without triggering "unexpected call N".
+			{Content: "done", Model: "test"},
+			// Extra safety entry.
+			{Content: "done", Model: "test"},
+		},
+	}
+
+	r := NewRunner(Config{SessionLogDir: t.TempDir()}) // no timeout — circuit breaker only
+	r.LookPath = mockLookPath
+	r.AgentProvider = provider
+	// Trigger after 3 consecutive no-op compaction events (default is 50).
+	// With 2 events per iteration (pre + mid), this fires at the mid→pre
+	// boundary between iter 1 and iter 2.
+	r.CompactionStuckThreshold = 3
+
+	result, err := r.RunAgent(RunOptions{
+		Harness: "agent",
+		Prompt:  "verify the file",
+		WorkDir: wd,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ExitCode, "compaction stuck should set exit code 1")
+	assert.Contains(t, result.Error, "compaction stuck", "error should identify the cause")
+	assert.Contains(t, result.Error, "3", "error should report the threshold")
+}
+
+// TestAgentNoOpCompactionDoesNotPulseInactivityTimer verifies that no-op
+// compaction events do not reset the inactivity timer. Without this fix,
+// a stuck agent generating only compaction events would run until the
+// absolute 2-hour deadline instead of the per-activity timeout.
+func TestAgentNoOpCompactionDoesNotPulseInactivityTimer(t *testing.T) {
+	// Provider that sleeps longer than the timeout on every call,
+	// simulating an LLM that responds very slowly.
+	provider := &sleepProvider{
+		delay:    300 * time.Millisecond,
+		response: agentlib.Response{Content: "done", Model: "slow"},
+	}
+
+	// Timeout is 100ms. If no-op compaction events were resetting the timer,
+	// the pre-compaction event (emitted before the LLM call) would reset it
+	// to 100ms and the slow LLM would then complete at 300ms — causing a
+	// spurious pass. With the fix, compaction.start and compaction.end(no-op)
+	// do not pulse: the timer starts from session.start and fires at 100ms
+	// while the LLM is still sleeping.
+	r := NewRunner(Config{SessionLogDir: t.TempDir(), TimeoutMS: 100})
+	r.LookPath = mockLookPath
+	r.AgentProvider = provider
+
+	result, err := r.RunAgent(RunOptions{
+		Harness: "agent",
+		Prompt:  "do something",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ExitCode, "should time out")
+	assert.Contains(t, result.Error, "timeout", "error should report timeout")
+}
+
 // --- Read-only tool classification and dedicated tools ---
 
 func TestIsWriteCapableTool(t *testing.T) {
