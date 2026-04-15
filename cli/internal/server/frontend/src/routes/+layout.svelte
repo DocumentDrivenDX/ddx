@@ -2,10 +2,14 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { ModeWatcher } from 'mode-watcher';
+	import NavShell from '$lib/components/NavShell.svelte';
 
 	let { children } = $props();
 </script>
 
 <ModeWatcher />
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
-{@render children()}
+
+<NavShell>
+	{@render children()}
+</NavShell>
