@@ -26,6 +26,7 @@ func TestGraphQLCommits(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(rawBody))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -106,6 +107,7 @@ func TestGraphQLCommitsCursorPagination(t *testing.T) {
 	page1Body, _ := json.Marshal(map[string]string{"query": page1Query})
 	req1 := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(page1Body))
 	req1.Header.Set("Content-Type", "application/json")
+	req1.RemoteAddr = "127.0.0.1:12345"
 	w1 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w1, req1)
 
@@ -163,6 +165,7 @@ func TestGraphQLCommitsCursorPagination(t *testing.T) {
 	page2Body, _ := json.Marshal(map[string]string{"query": page2Query})
 	req2 := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(page2Body))
 	req2.Header.Set("Content-Type", "application/json")
+	req2.RemoteAddr = "127.0.0.1:12345"
 	w2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w2, req2)
 

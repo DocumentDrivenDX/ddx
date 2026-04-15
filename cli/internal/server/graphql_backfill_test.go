@@ -70,6 +70,7 @@ func gqlPost(t *testing.T, srv *Server, query string) []byte {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(rawBody))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

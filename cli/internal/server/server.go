@@ -3537,6 +3537,16 @@ func containsString(ss []string, s string) bool {
 // --- GraphQL Endpoints ---
 
 func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
+	// Gate /graphql on the same localhost auth that protects every /api/*
+	// handler. Without this, operators running `ddx server --addr 0.0.0.0`
+	// ship an unauthenticated GraphQL endpoint serving bead data, worker
+	// logs, mutations, and subscriptions. See opus final-gate review of
+	// ddx-02d6142d and the scope line "isTrusted() is still the gatekeeper;
+	// no auth bypass introduced".
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "graphql is localhost-only"})
+		return
+	}
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 		Resolvers: &ddxgraphql.Resolver{

@@ -62,6 +62,7 @@ func TestGraphQLDocuments(t *testing.T) {
 	body := `{"query": "{ documents { edges { node { id path title dependsOn dependents } } totalCount } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -128,6 +129,7 @@ func TestGraphQLDocGraph(t *testing.T) {
 	body := `{"query": "{ docGraph { rootDir documents { id } pathToId dependents warnings } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 

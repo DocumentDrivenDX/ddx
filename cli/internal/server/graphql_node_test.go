@@ -29,6 +29,7 @@ func TestGraphQLNodeInfo(t *testing.T) {
 	body := `{"query": "{ nodeInfo { id name } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -73,6 +74,7 @@ func TestGraphQLProjects(t *testing.T) {
 	body := `{"query": "{ projects { edges { node { id path name } } totalCount } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -143,6 +145,7 @@ func TestGraphQLNodeByProjectID(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(rawBody))
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
