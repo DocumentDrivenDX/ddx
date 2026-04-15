@@ -29,26 +29,36 @@ func (r *queryResolver) Commits(ctx context.Context, projectID string, first *in
 		return nil, err
 	}
 
-	// Build full edge list with opaque cursors.
+	// Build full edge list with stable SHA-based cursors.
 	all := make([]*CommitEdge, len(snaps))
 	for i, c := range snaps {
 		all[i] = &CommitEdge{
 			Node:   c,
-			Cursor: encodeCursor(i),
+			Cursor: encodeStableCursor(c.Sha),
 		}
 	}
 
 	// Apply window: start after `after` cursor, end before `before` cursor.
 	startIdx := 0
 	if after != nil {
-		if idx, ok := decodeCursor(*after); ok {
-			startIdx = idx + 1
+		if afterSha, ok := decodeStableCursor(*after); ok {
+			for i, e := range all {
+				if e.Node.Sha == afterSha {
+					startIdx = i + 1
+					break
+				}
+			}
 		}
 	}
 	endIdx := len(all)
 	if before != nil {
-		if idx, ok := decodeCursor(*before); ok && idx < endIdx {
-			endIdx = idx
+		if beforeSha, ok := decodeStableCursor(*before); ok {
+			for i, e := range all {
+				if e.Node.Sha == beforeSha {
+					endIdx = i
+					break
+				}
+			}
 		}
 	}
 	if startIdx > endIdx {

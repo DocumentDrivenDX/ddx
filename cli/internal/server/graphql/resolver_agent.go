@@ -144,18 +144,29 @@ func (r *queryResolver) ExecRunLog(ctx context.Context, runID string) (*Executio
 
 // ─── connection helpers ───────────────────────────────────────────────────────
 
-// pageBounds computes the [start, end) slice indices for Relay-style cursor pagination.
-func pageBounds(total int, after, before *string) (startIdx, endIdx int) {
+// stablePageBounds computes the [startIdx, endIdx) slice window using stable
+// ID-based cursors. ids must contain the stable key for each edge in order.
+func stablePageBounds(ids []string, after, before *string) (startIdx, endIdx int) {
 	startIdx = 0
-	endIdx = total
+	endIdx = len(ids)
 	if after != nil {
-		if idx, ok := decodeCursor(*after); ok {
-			startIdx = idx + 1
+		if afterID, ok := decodeStableCursor(*after); ok {
+			for i, id := range ids {
+				if id == afterID {
+					startIdx = i + 1
+					break
+				}
+			}
 		}
 	}
 	if before != nil {
-		if idx, ok := decodeCursor(*before); ok && idx < endIdx {
-			endIdx = idx
+		if beforeID, ok := decodeStableCursor(*before); ok {
+			for i, id := range ids {
+				if id == beforeID {
+					endIdx = i
+					break
+				}
+			}
 		}
 	}
 	if startIdx > endIdx {
@@ -166,10 +177,12 @@ func pageBounds(total int, after, before *string) (startIdx, endIdx int) {
 
 func workerConnectionFrom(workers []*Worker, first *int, after *string, last *int, before *string) *WorkerConnection {
 	all := make([]*WorkerEdge, len(workers))
+	ids := make([]string, len(workers))
 	for i, w := range workers {
-		all[i] = &WorkerEdge{Node: w, Cursor: encodeCursor(i)}
+		all[i] = &WorkerEdge{Node: w, Cursor: encodeStableCursor(w.ID)}
+		ids[i] = w.ID
 	}
-	startIdx, endIdx := pageBounds(len(all), after, before)
+	startIdx, endIdx := stablePageBounds(ids, after, before)
 	slice := all[startIdx:endIdx]
 	truncByFirst, truncByLast := false, false
 	if first != nil && *first >= 0 && *first < len(slice) {
@@ -193,10 +206,12 @@ func workerConnectionFrom(workers []*Worker, first *int, after *string, last *in
 
 func agentSessionConnectionFrom(sessions []*AgentSession, first *int, after *string, last *int, before *string) *AgentSessionConnection {
 	all := make([]*AgentSessionEdge, len(sessions))
+	ids := make([]string, len(sessions))
 	for i, s := range sessions {
-		all[i] = &AgentSessionEdge{Node: s, Cursor: encodeCursor(i)}
+		all[i] = &AgentSessionEdge{Node: s, Cursor: encodeStableCursor(s.ID)}
+		ids[i] = s.ID
 	}
-	startIdx, endIdx := pageBounds(len(all), after, before)
+	startIdx, endIdx := stablePageBounds(ids, after, before)
 	slice := all[startIdx:endIdx]
 	truncByFirst, truncByLast := false, false
 	if first != nil && *first >= 0 && *first < len(slice) {
@@ -220,10 +235,12 @@ func agentSessionConnectionFrom(sessions []*AgentSession, first *int, after *str
 
 func execDefinitionConnectionFrom(defs []*ExecutionDefinition, first *int, after *string, last *int, before *string) *ExecutionDefinitionConnection {
 	all := make([]*ExecutionDefinitionEdge, len(defs))
+	ids := make([]string, len(defs))
 	for i, d := range defs {
-		all[i] = &ExecutionDefinitionEdge{Node: d, Cursor: encodeCursor(i)}
+		all[i] = &ExecutionDefinitionEdge{Node: d, Cursor: encodeStableCursor(d.ID)}
+		ids[i] = d.ID
 	}
-	startIdx, endIdx := pageBounds(len(all), after, before)
+	startIdx, endIdx := stablePageBounds(ids, after, before)
 	slice := all[startIdx:endIdx]
 	truncByFirst, truncByLast := false, false
 	if first != nil && *first >= 0 && *first < len(slice) {
@@ -247,10 +264,12 @@ func execDefinitionConnectionFrom(defs []*ExecutionDefinition, first *int, after
 
 func execRunConnectionFrom(runs []*ExecutionRun, first *int, after *string, last *int, before *string) *ExecutionRunConnection {
 	all := make([]*ExecutionRunEdge, len(runs))
+	ids := make([]string, len(runs))
 	for i, r := range runs {
-		all[i] = &ExecutionRunEdge{Node: r, Cursor: encodeCursor(i)}
+		all[i] = &ExecutionRunEdge{Node: r, Cursor: encodeStableCursor(r.ID)}
+		ids[i] = r.ID
 	}
-	startIdx, endIdx := pageBounds(len(all), after, before)
+	startIdx, endIdx := stablePageBounds(ids, after, before)
 	slice := all[startIdx:endIdx]
 	truncByFirst, truncByLast := false, false
 	if first != nil && *first >= 0 && *first < len(slice) {

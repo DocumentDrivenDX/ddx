@@ -2,7 +2,6 @@ package graphql
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -127,26 +126,36 @@ func (r *queryResolver) Projects(ctx context.Context, first *int, after *string,
 	showAll := includeUnreachable != nil && *includeUnreachable
 	snaps := r.State.GetProjectSnapshots(showAll)
 
-	// Build full edge list with opaque cursors.
+	// Build full edge list with stable ID-based cursors.
 	all := make([]*ProjectEdge, len(snaps))
 	for i, s := range snaps {
 		all[i] = &ProjectEdge{
 			Node:   projectFromSnapshot(s),
-			Cursor: encodeCursor(i),
+			Cursor: encodeStableCursor(s.ID),
 		}
 	}
 
 	// Apply window: start after `after` cursor, end before `before` cursor.
 	startIdx := 0
 	if after != nil {
-		if idx, ok := decodeCursor(*after); ok {
-			startIdx = idx + 1
+		if afterID, ok := decodeStableCursor(*after); ok {
+			for i, e := range all {
+				if e.Node.ID == afterID {
+					startIdx = i + 1
+					break
+				}
+			}
 		}
 	}
 	endIdx := len(all)
 	if before != nil {
-		if idx, ok := decodeCursor(*before); ok && idx < endIdx {
-			endIdx = idx
+		if beforeID, ok := decodeStableCursor(*before); ok {
+			for i, e := range all {
+				if e.Node.ID == beforeID {
+					endIdx = i
+					break
+				}
+			}
 		}
 	}
 	if startIdx > endIdx {
@@ -175,28 +184,6 @@ func (r *queryResolver) Projects(ctx context.Context, first *int, after *string,
 		PageInfo:   pageInfo,
 		TotalCount: len(all),
 	}, nil
-}
-
-// encodeCursor encodes a 0-based slice index as an opaque cursor.
-func encodeCursor(idx int) string {
-	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("cursor:%d", idx)))
-}
-
-// decodeCursor decodes a cursor back to its 0-based slice index.
-func decodeCursor(cursor string) (int, bool) {
-	b, err := base64.StdEncoding.DecodeString(cursor)
-	if err != nil {
-		return 0, false
-	}
-	s := string(b)
-	if !strings.HasPrefix(s, "cursor:") {
-		return 0, false
-	}
-	var idx int
-	if _, err := fmt.Sscanf(s[7:], "%d", &idx); err != nil {
-		return 0, false
-	}
-	return idx, true
 }
 
 func nodeInfoFromSnapshot(s NodeStateSnapshot) *NodeInfo {

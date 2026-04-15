@@ -44,20 +44,30 @@ func (r *queryResolver) Documents(ctx context.Context, first *int, after *string
 	for i, d := range docs {
 		all[i] = &DocumentEdge{
 			Node:   docToGQL(d),
-			Cursor: encodeCursor(i),
+			Cursor: encodeStableCursor(d.ID),
 		}
 	}
 
 	startIdx := 0
 	if after != nil {
-		if idx, ok := decodeCursor(*after); ok {
-			startIdx = idx + 1
+		if afterID, ok := decodeStableCursor(*after); ok {
+			for i, e := range all {
+				if e.Node.ID == afterID {
+					startIdx = i + 1
+					break
+				}
+			}
 		}
 	}
 	endIdx := len(all)
 	if before != nil {
-		if idx, ok := decodeCursor(*before); ok && idx < endIdx {
-			endIdx = idx
+		if beforeID, ok := decodeStableCursor(*before); ok {
+			for i, e := range all {
+				if e.Node.ID == beforeID {
+					endIdx = i
+					break
+				}
+			}
 		}
 	}
 	if startIdx > endIdx {

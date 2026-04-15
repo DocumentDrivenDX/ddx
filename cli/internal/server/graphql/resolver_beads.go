@@ -45,26 +45,36 @@ func (r *queryResolver) BeadsByProject(ctx context.Context, projectID string, fi
 }
 
 func beadConnectionFromSnapshots(snaps []BeadSnapshot, first *int, after *string, last *int, before *string) *BeadConnection {
-	// Build full edge list with opaque cursors.
+	// Build full edge list with stable ID-based cursors.
 	all := make([]*BeadEdge, len(snaps))
 	for i, s := range snaps {
 		all[i] = &BeadEdge{
 			Node:   beadFromSnapshot(s),
-			Cursor: encodeCursor(i),
+			Cursor: encodeStableCursor(s.ID),
 		}
 	}
 
 	// Apply window: start after `after` cursor, end before `before` cursor.
 	startIdx := 0
 	if after != nil {
-		if idx, ok := decodeCursor(*after); ok {
-			startIdx = idx + 1
+		if afterID, ok := decodeStableCursor(*after); ok {
+			for i, e := range all {
+				if e.Node.ID == afterID {
+					startIdx = i + 1
+					break
+				}
+			}
 		}
 	}
 	endIdx := len(all)
 	if before != nil {
-		if idx, ok := decodeCursor(*before); ok && idx < endIdx {
-			endIdx = idx
+		if beforeID, ok := decodeStableCursor(*before); ok {
+			for i, e := range all {
+				if e.Node.ID == beforeID {
+					endIdx = i
+					break
+				}
+			}
 		}
 	}
 	if startIdx > endIdx {

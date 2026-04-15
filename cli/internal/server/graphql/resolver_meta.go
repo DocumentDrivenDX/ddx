@@ -72,10 +72,12 @@ func personaToGQL(p *persona.Persona) *Persona {
 
 func personaConnectionFrom(personas []*Persona, first *int, after *string, last *int, before *string) *PersonaConnection {
 	all := make([]*PersonaEdge, len(personas))
+	ids := make([]string, len(personas))
 	for i, p := range personas {
-		all[i] = &PersonaEdge{Node: p, Cursor: encodeCursor(i)}
+		all[i] = &PersonaEdge{Node: p, Cursor: encodeStableCursor(p.ID)}
+		ids[i] = p.ID
 	}
-	startIdx, endIdx := pageBounds(len(all), after, before)
+	startIdx, endIdx := stablePageBounds(ids, after, before)
 	slice := all[startIdx:endIdx]
 	truncByFirst, truncByLast := false, false
 	if first != nil && *first >= 0 && *first < len(slice) {
