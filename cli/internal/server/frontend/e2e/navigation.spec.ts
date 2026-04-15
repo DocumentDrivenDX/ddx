@@ -56,7 +56,7 @@ test('TC-002: nav chrome renders DDx brand and dark-mode toggle', async ({ page 
 test('TC-003: nav chrome shows node name', async ({ page }) => {
 	await mockGraphQL(page);
 	await page.goto('/');
-	await expect(page.getByText(/Node: Test Node/)).toBeVisible();
+	await expect(page.getByText(/Node: Test Node/).first()).toBeVisible();
 });
 
 // TC-004: Project picker populates from GraphQL Projects query

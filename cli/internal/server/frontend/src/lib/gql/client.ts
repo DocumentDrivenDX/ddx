@@ -7,5 +7,7 @@ import { GraphQLClient } from 'graphql-request'
  * respect SvelteKit's SSR/CSR fetch instrumentation.
  */
 export function createClient(fetchFn?: typeof globalThis.fetch): GraphQLClient {
-	return new GraphQLClient('/graphql', fetchFn ? { fetch: fetchFn } : undefined)
+	const url =
+		typeof window !== 'undefined' ? new URL('/graphql', window.location.href).href : '/graphql'
+	return new GraphQLClient(url, fetchFn ? { fetch: fetchFn } : undefined)
 }

@@ -551,6 +551,18 @@ type CycleTimeSummary struct {
 	MaxMs *int `json:"maxMs,omitempty"`
 }
 
+// DefaultRouteStatus shows which provider/model the default model-ref resolves to.
+type DefaultRouteStatus struct {
+	// The model-ref key (e.g. "code-medium") or empty if no default configured
+	ModelRef string `json:"modelRef"`
+	// Selected provider name, or null if no healthy candidate found
+	ResolvedProvider *string `json:"resolvedProvider,omitempty"`
+	// Selected model identifier, or null if no healthy candidate found
+	ResolvedModel *string `json:"resolvedModel,omitempty"`
+	// Routing strategy (e.g. "first-available")
+	Strategy *string `json:"strategy,omitempty"`
+}
+
 // Dependency is a directed edge between two beads
 type Dependency struct {
 	// The bead that has the dependency
@@ -1067,6 +1079,27 @@ func (Provider) IsNode() {}
 
 // Globally unique identifier
 func (this Provider) GetID() string { return this.ID }
+
+// ProviderStatus is the live connectivity status of a configured API provider,
+// mirroring the output of `ddx agent providers`.
+type ProviderStatus struct {
+	// Provider name from agent config
+	Name string `json:"name"`
+	// Provider type (e.g. "anthropic", "openai-compat")
+	ProviderType string `json:"providerType"`
+	// API base URL; "(api)" for Anthropic providers
+	BaseURL string `json:"baseURL"`
+	// Configured model identifier
+	Model string `json:"model"`
+	// Live connectivity status message
+	Status string `json:"status"`
+	// Number of models discovered via /v1/models (0 for Anthropic providers)
+	ModelCount int `json:"modelCount"`
+	// True when this is the default provider
+	IsDefault bool `json:"isDefault"`
+	// RFC3339 timestamp when health cooldown expires, if on cooldown
+	CooldownUntil *string `json:"cooldownUntil,omitempty"`
+}
 
 // Query is the root entry point for all read operations
 type Query struct {

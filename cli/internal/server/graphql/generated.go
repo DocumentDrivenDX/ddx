@@ -139,6 +139,7 @@ type ComplexityRoot struct {
 		Owner        func(childComplexity int) int
 		Parent       func(childComplexity int) int
 		Priority     func(childComplexity int) int
+		ProjectID    func(childComplexity int) int
 		Status       func(childComplexity int) int
 		Title        func(childComplexity int) int
 		UpdatedAt    func(childComplexity int) int
@@ -305,6 +306,13 @@ type ComplexityRoot struct {
 		MaxMs        func(childComplexity int) int
 		MinMs        func(childComplexity int) int
 		UnknownCount func(childComplexity int) int
+	}
+
+	DefaultRouteStatus struct {
+		ModelRef         func(childComplexity int) int
+		ResolvedModel    func(childComplexity int) int
+		ResolvedProvider func(childComplexity int) int
+		Strategy         func(childComplexity int) int
 	}
 
 	Dependency struct {
@@ -589,6 +597,17 @@ type ComplexityRoot struct {
 		TimeoutMs     func(childComplexity int) int
 	}
 
+	ProviderStatus struct {
+		BaseURL       func(childComplexity int) int
+		CooldownUntil func(childComplexity int) int
+		IsDefault     func(childComplexity int) int
+		Model         func(childComplexity int) int
+		ModelCount    func(childComplexity int) int
+		Name          func(childComplexity int) int
+		ProviderType  func(childComplexity int) int
+		Status        func(childComplexity int) int
+	}
+
 	Query struct {
 		AgentSession                func(childComplexity int, id string) int
 		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string) int
@@ -602,6 +621,7 @@ type ComplexityRoot struct {
 		Commits                     func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) int
 		CoordinatorMetricsByProject func(childComplexity int, projectRoot string) int
 		Coordinators                func(childComplexity int) int
+		DefaultRouteStatus          func(childComplexity int) int
 		Doc                         func(childComplexity int, id string) int
 		DocDependents               func(childComplexity int, documentID string) int
 		DocDeps                     func(childComplexity int, documentID string) int
@@ -628,6 +648,7 @@ type ComplexityRoot struct {
 		Personas                    func(childComplexity int, first *int, after *string, last *int, before *string) int
 		Projects                    func(childComplexity int, first *int, after *string, last *int, before *string, includeUnreachable *bool) int
 		Provider                    func(childComplexity int, name string) int
+		ProviderStatuses            func(childComplexity int) int
 		Providers                   func(childComplexity int) int
 		Ready                       func(childComplexity int) int
 		Search                      func(childComplexity int, query string, first *int, after *string, last *int, before *string) int
@@ -864,6 +885,8 @@ type QueryResolver interface {
 	MetricsRework(ctx context.Context, since *string) (*ReworkReport, error)
 	Providers(ctx context.Context) ([]*Provider, error)
 	Provider(ctx context.Context, name string) (*Provider, error)
+	ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error)
+	DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error)
 }
 type SubscriptionResolver interface {
 	WorkerProgress(ctx context.Context, workerID string) (<-chan *WorkerEvent, error)
@@ -1345,6 +1368,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Bead.Priority(childComplexity), true
+	case "Bead.projectID":
+		if e.ComplexityRoot.Bead.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Bead.ProjectID(childComplexity), true
 	case "Bead.status":
 		if e.ComplexityRoot.Bead.Status == nil {
 			break
@@ -2035,6 +2064,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.CycleTimeSummary.UnknownCount(childComplexity), true
+
+	case "DefaultRouteStatus.modelRef":
+		if e.ComplexityRoot.DefaultRouteStatus.ModelRef == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DefaultRouteStatus.ModelRef(childComplexity), true
+	case "DefaultRouteStatus.resolvedModel":
+		if e.ComplexityRoot.DefaultRouteStatus.ResolvedModel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DefaultRouteStatus.ResolvedModel(childComplexity), true
+	case "DefaultRouteStatus.resolvedProvider":
+		if e.ComplexityRoot.DefaultRouteStatus.ResolvedProvider == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DefaultRouteStatus.ResolvedProvider(childComplexity), true
+	case "DefaultRouteStatus.strategy":
+		if e.ComplexityRoot.DefaultRouteStatus.Strategy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DefaultRouteStatus.Strategy(childComplexity), true
 
 	case "Dependency.createdAt":
 		if e.ComplexityRoot.Dependency.CreatedAt == nil {
@@ -3163,6 +3217,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Provider.TimeoutMs(childComplexity), true
 
+	case "ProviderStatus.baseURL":
+		if e.ComplexityRoot.ProviderStatus.BaseURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.BaseURL(childComplexity), true
+	case "ProviderStatus.cooldownUntil":
+		if e.ComplexityRoot.ProviderStatus.CooldownUntil == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.CooldownUntil(childComplexity), true
+	case "ProviderStatus.isDefault":
+		if e.ComplexityRoot.ProviderStatus.IsDefault == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.IsDefault(childComplexity), true
+	case "ProviderStatus.model":
+		if e.ComplexityRoot.ProviderStatus.Model == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Model(childComplexity), true
+	case "ProviderStatus.modelCount":
+		if e.ComplexityRoot.ProviderStatus.ModelCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.ModelCount(childComplexity), true
+	case "ProviderStatus.name":
+		if e.ComplexityRoot.ProviderStatus.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Name(childComplexity), true
+	case "ProviderStatus.providerType":
+		if e.ComplexityRoot.ProviderStatus.ProviderType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.ProviderType(childComplexity), true
+	case "ProviderStatus.status":
+		if e.ComplexityRoot.ProviderStatus.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Status(childComplexity), true
+
 	case "Query.agentSession":
 		if e.ComplexityRoot.Query.AgentSession == nil {
 			break
@@ -3285,6 +3388,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Coordinators(childComplexity), true
+	case "Query.defaultRouteStatus":
+		if e.ComplexityRoot.Query.DefaultRouteStatus == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.DefaultRouteStatus(childComplexity), true
 	case "Query.doc":
 		if e.ComplexityRoot.Query.Doc == nil {
 			break
@@ -3552,6 +3661,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Provider(childComplexity, args["name"].(string)), true
+	case "Query.providerStatuses":
+		if e.ComplexityRoot.Query.ProviderStatuses == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.ProviderStatuses(childComplexity), true
 	case "Query.providers":
 		if e.ComplexityRoot.Query.Providers == nil {
 			break
@@ -8341,6 +8456,8 @@ func (ec *executionContext) fieldContext_BeadEdge_node(_ context.Context, field 
 				return ec.fieldContext_Bead_updatedAt(ctx, field)
 			case "labels":
 				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "parent":
 				return ec.fieldContext_Bead_parent(ctx, field)
 			case "description":
@@ -8349,8 +8466,6 @@ func (ec *executionContext) fieldContext_BeadEdge_node(_ context.Context, field 
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
-			case "projectID":
-				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -11240,6 +11355,122 @@ func (ec *executionContext) fieldContext_CycleTimeSummary_maxMs(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DefaultRouteStatus_modelRef(ctx context.Context, field graphql.CollectedField, obj *DefaultRouteStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DefaultRouteStatus_modelRef,
+		func(ctx context.Context) (any, error) {
+			return obj.ModelRef, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DefaultRouteStatus_modelRef(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DefaultRouteStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DefaultRouteStatus_resolvedProvider(ctx context.Context, field graphql.CollectedField, obj *DefaultRouteStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DefaultRouteStatus_resolvedProvider,
+		func(ctx context.Context) (any, error) {
+			return obj.ResolvedProvider, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DefaultRouteStatus_resolvedProvider(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DefaultRouteStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DefaultRouteStatus_resolvedModel(ctx context.Context, field graphql.CollectedField, obj *DefaultRouteStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DefaultRouteStatus_resolvedModel,
+		func(ctx context.Context) (any, error) {
+			return obj.ResolvedModel, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DefaultRouteStatus_resolvedModel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DefaultRouteStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DefaultRouteStatus_strategy(ctx context.Context, field graphql.CollectedField, obj *DefaultRouteStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DefaultRouteStatus_strategy,
+		func(ctx context.Context) (any, error) {
+			return obj.Strategy, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DefaultRouteStatus_strategy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DefaultRouteStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -15061,6 +15292,8 @@ func (ec *executionContext) fieldContext_Mutation_beadCreate(ctx context.Context
 				return ec.fieldContext_Bead_updatedAt(ctx, field)
 			case "labels":
 				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "parent":
 				return ec.fieldContext_Bead_parent(ctx, field)
 			case "description":
@@ -15069,8 +15302,6 @@ func (ec *executionContext) fieldContext_Mutation_beadCreate(ctx context.Context
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
-			case "projectID":
-				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15136,6 +15367,8 @@ func (ec *executionContext) fieldContext_Mutation_beadUpdate(ctx context.Context
 				return ec.fieldContext_Bead_updatedAt(ctx, field)
 			case "labels":
 				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "parent":
 				return ec.fieldContext_Bead_parent(ctx, field)
 			case "description":
@@ -15144,8 +15377,6 @@ func (ec *executionContext) fieldContext_Mutation_beadUpdate(ctx context.Context
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
-			case "projectID":
-				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15211,6 +15442,8 @@ func (ec *executionContext) fieldContext_Mutation_beadClaim(ctx context.Context,
 				return ec.fieldContext_Bead_updatedAt(ctx, field)
 			case "labels":
 				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "parent":
 				return ec.fieldContext_Bead_parent(ctx, field)
 			case "description":
@@ -15219,8 +15452,6 @@ func (ec *executionContext) fieldContext_Mutation_beadClaim(ctx context.Context,
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
-			case "projectID":
-				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15286,6 +15517,8 @@ func (ec *executionContext) fieldContext_Mutation_beadUnclaim(ctx context.Contex
 				return ec.fieldContext_Bead_updatedAt(ctx, field)
 			case "labels":
 				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "parent":
 				return ec.fieldContext_Bead_parent(ctx, field)
 			case "description":
@@ -15294,8 +15527,6 @@ func (ec *executionContext) fieldContext_Mutation_beadUnclaim(ctx context.Contex
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
-			case "projectID":
-				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -15361,6 +15592,8 @@ func (ec *executionContext) fieldContext_Mutation_beadReopen(ctx context.Context
 				return ec.fieldContext_Bead_updatedAt(ctx, field)
 			case "labels":
 				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "parent":
 				return ec.fieldContext_Bead_parent(ctx, field)
 			case "description":
@@ -15369,8 +15602,6 @@ func (ec *executionContext) fieldContext_Mutation_beadReopen(ctx context.Context
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
-			case "projectID":
-				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -16972,6 +17203,238 @@ func (ec *executionContext) fieldContext_Provider_permissions(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _ProviderStatus_name(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_providerType(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_providerType,
+		func(ctx context.Context) (any, error) {
+			return obj.ProviderType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_providerType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_baseURL(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_baseURL,
+		func(ctx context.Context) (any, error) {
+			return obj.BaseURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_baseURL(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_model(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_model,
+		func(ctx context.Context) (any, error) {
+			return obj.Model, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_model(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_status(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_modelCount(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_modelCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ModelCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_modelCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_isDefault(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_isDefault,
+		func(ctx context.Context) (any, error) {
+			return obj.IsDefault, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_isDefault(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_cooldownUntil(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_cooldownUntil,
+		func(ctx context.Context) (any, error) {
+			return obj.CooldownUntil, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_cooldownUntil(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_node(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17424,6 +17887,8 @@ func (ec *executionContext) fieldContext_Query_bead(ctx context.Context, field g
 				return ec.fieldContext_Bead_updatedAt(ctx, field)
 			case "labels":
 				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "parent":
 				return ec.fieldContext_Bead_parent(ctx, field)
 			case "description":
@@ -17432,8 +17897,6 @@ func (ec *executionContext) fieldContext_Query_bead(ctx context.Context, field g
 				return ec.fieldContext_Bead_acceptance(ctx, field)
 			case "notes":
 				return ec.fieldContext_Bead_notes(ctx, field)
-			case "projectID":
-				return ec.fieldContext_Bead_projectID(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
 			}
@@ -19367,6 +19830,92 @@ func (ec *executionContext) fieldContext_Query_provider(ctx context.Context, fie
 	if fc.Args, err = ec.field_Query_provider_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_providerStatuses(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_providerStatuses,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().ProviderStatuses(ctx)
+		},
+		nil,
+		ec.marshalNProviderStatus2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderStatusᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_providerStatuses(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_ProviderStatus_name(ctx, field)
+			case "providerType":
+				return ec.fieldContext_ProviderStatus_providerType(ctx, field)
+			case "baseURL":
+				return ec.fieldContext_ProviderStatus_baseURL(ctx, field)
+			case "model":
+				return ec.fieldContext_ProviderStatus_model(ctx, field)
+			case "status":
+				return ec.fieldContext_ProviderStatus_status(ctx, field)
+			case "modelCount":
+				return ec.fieldContext_ProviderStatus_modelCount(ctx, field)
+			case "isDefault":
+				return ec.fieldContext_ProviderStatus_isDefault(ctx, field)
+			case "cooldownUntil":
+				return ec.fieldContext_ProviderStatus_cooldownUntil(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_defaultRouteStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_defaultRouteStatus,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().DefaultRouteStatus(ctx)
+		},
+		nil,
+		ec.marshalODefaultRouteStatus2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐDefaultRouteStatus,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_defaultRouteStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "modelRef":
+				return ec.fieldContext_DefaultRouteStatus_modelRef(ctx, field)
+			case "resolvedProvider":
+				return ec.fieldContext_DefaultRouteStatus_resolvedProvider(ctx, field)
+			case "resolvedModel":
+				return ec.fieldContext_DefaultRouteStatus_resolvedModel(ctx, field)
+			case "strategy":
+				return ec.fieldContext_DefaultRouteStatus_strategy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DefaultRouteStatus", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -25229,6 +25778,8 @@ func (ec *executionContext) _Bead(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "labels":
 			out.Values[i] = ec._Bead_labels(ctx, field, obj)
+		case "projectID":
+			out.Values[i] = ec._Bead_projectID(ctx, field, obj)
 		case "parent":
 			out.Values[i] = ec._Bead_parent(ctx, field, obj)
 		case "description":
@@ -25237,8 +25788,6 @@ func (ec *executionContext) _Bead(ctx context.Context, sel ast.SelectionSet, obj
 			out.Values[i] = ec._Bead_acceptance(ctx, field, obj)
 		case "notes":
 			out.Values[i] = ec._Bead_notes(ctx, field, obj)
-		case "projectID":
-			out.Values[i] = ec._Bead_projectID(ctx, field, obj)
 		case "dependencies":
 			out.Values[i] = ec._Bead_dependencies(ctx, field, obj)
 		default:
@@ -26293,6 +26842,51 @@ func (ec *executionContext) _CycleTimeSummary(ctx context.Context, sel ast.Selec
 			out.Values[i] = ec._CycleTimeSummary_minMs(ctx, field, obj)
 		case "maxMs":
 			out.Values[i] = ec._CycleTimeSummary_maxMs(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var defaultRouteStatusImplementors = []string{"DefaultRouteStatus"}
+
+func (ec *executionContext) _DefaultRouteStatus(ctx context.Context, sel ast.SelectionSet, obj *DefaultRouteStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, defaultRouteStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DefaultRouteStatus")
+		case "modelRef":
+			out.Values[i] = ec._DefaultRouteStatus_modelRef(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "resolvedProvider":
+			out.Values[i] = ec._DefaultRouteStatus_resolvedProvider(ctx, field, obj)
+		case "resolvedModel":
+			out.Values[i] = ec._DefaultRouteStatus_resolvedModel(ctx, field, obj)
+		case "strategy":
+			out.Values[i] = ec._DefaultRouteStatus_strategy(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -28222,6 +28816,77 @@ func (ec *executionContext) _Provider(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var providerStatusImplementors = []string{"ProviderStatus"}
+
+func (ec *executionContext) _ProviderStatus(ctx context.Context, sel ast.SelectionSet, obj *ProviderStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, providerStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ProviderStatus")
+		case "name":
+			out.Values[i] = ec._ProviderStatus_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "providerType":
+			out.Values[i] = ec._ProviderStatus_providerType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "baseURL":
+			out.Values[i] = ec._ProviderStatus_baseURL(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "model":
+			out.Values[i] = ec._ProviderStatus_model(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._ProviderStatus_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "modelCount":
+			out.Values[i] = ec._ProviderStatus_modelCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isDefault":
+			out.Values[i] = ec._ProviderStatus_isDefault(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cooldownUntil":
+			out.Values[i] = ec._ProviderStatus_cooldownUntil(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var queryImplementors = []string{"Query"}
 
 func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -29230,6 +29895,47 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_provider(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "providerStatuses":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_providerStatuses(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "defaultRouteStatus":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_defaultRouteStatus(ctx, field)
 				return res
 			}
 
@@ -31551,6 +32257,32 @@ func (ec *executionContext) marshalNProvider2ᚖgithubᚗcomᚋDocumentDrivenDX�
 	return ec._Provider(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNProviderStatus2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []*ProviderStatus) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNProviderStatus2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderStatus(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNProviderStatus2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderStatus(ctx context.Context, sel ast.SelectionSet, v *ProviderStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ProviderStatus(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNReadyCheck2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReadyCheckᚄ(ctx context.Context, sel ast.SelectionSet, v []*ReadyCheck) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -32095,6 +32827,13 @@ func (ec *executionContext) marshalODateTime2ᚖstring(ctx context.Context, sel 
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) marshalODefaultRouteStatus2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐDefaultRouteStatus(ctx context.Context, sel ast.SelectionSet, v *DefaultRouteStatus) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DefaultRouteStatus(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalODependency2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐDependencyᚄ(ctx context.Context, sel ast.SelectionSet, v []*Dependency) graphql.Marshaler {

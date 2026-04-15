@@ -1260,6 +1260,39 @@ type Provider implements Node {
   permissions: [String!]
 }
 
+"""ProviderStatus is the live connectivity status of a configured API provider,
+mirroring the output of `ddx agent providers`."""
+type ProviderStatus {
+  """Provider name from agent config"""
+  name: String!
+  """Provider type (e.g. "anthropic", "openai-compat")"""
+  providerType: String!
+  """API base URL; "(api)" for Anthropic providers"""
+  baseURL: String!
+  """Configured model identifier"""
+  model: String!
+  """Live connectivity status message"""
+  status: String!
+  """Number of models discovered via /v1/models (0 for Anthropic providers)"""
+  modelCount: Int!
+  """True when this is the default provider"""
+  isDefault: Boolean!
+  """RFC3339 timestamp when health cooldown expires, if on cooldown"""
+  cooldownUntil: String
+}
+
+"""DefaultRouteStatus shows which provider/model the default model-ref resolves to."""
+type DefaultRouteStatus {
+  """The model-ref key (e.g. "code-medium") or empty if no default configured"""
+  modelRef: String!
+  """Selected provider name, or null if no healthy candidate found"""
+  resolvedProvider: String
+  """Selected model identifier, or null if no healthy candidate found"""
+  resolvedModel: String
+  """Routing strategy (e.g. "first-available")"""
+  strategy: String
+}
+
 # ============================================
 # Query Root
 # ============================================
@@ -1710,6 +1743,12 @@ type Query {
     """Harness/provider name"""
     name: String!
   ): Provider
+
+  """List configured API providers with live connectivity status (mirrors `ddx agent providers`)"""
+  providerStatuses: [ProviderStatus!]!
+
+  """Show which provider/model the default model-ref resolves to (mirrors `ddx agent route-status`)"""
+  defaultRouteStatus: DefaultRouteStatus
 }
 
 # ============================================

@@ -1,7 +1,5 @@
 package graphql
 
-// THIS CODE WILL BE UPDATED WITH SCHEMA CHANGES. PREVIOUS IMPLEMENTATION FOR SCHEMA CHANGES WILL BE KEPT IN THE COMMENT SECTION. IMPLEMENTATION FOR UNCHANGED SCHEMA WILL BE KEPT.
-
 import (
 	"context"
 	"fmt"
@@ -47,6 +45,21 @@ type Resolver struct {
 	// changes. Defaults to 1 second when zero.
 	MetricsPollInterval time.Duration
 }
+
+// Mutation returns MutationResolver implementation.
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
+
+// Query returns QueryResolver implementation.
+func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
+
+// Subscription returns SubscriptionResolver implementation.
+func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
+
+type mutationResolver struct{ *Resolver }
+type queryResolver struct{ *Resolver }
+type subscriptionResolver struct{ *Resolver }
+
+// ─── Unimplemented query stubs ─────────────────────────────────────────────
 
 // BeadsReady is the resolver for the beadsReady field.
 func (r *queryResolver) BeadsReady(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
@@ -153,6 +166,12 @@ func (r *queryResolver) Provider(ctx context.Context, name string) (*Provider, e
 	panic("not implemented")
 }
 
+// ProviderStatuses is the resolver for the providerStatuses field.
+// Implemented in resolver_providers.go.
+
+// DefaultRouteStatus is the resolver for the defaultRouteStatus field.
+// Implemented in resolver_providers.go.
+
 // BeadLifecycle is the resolver for the beadLifecycle subscription.
 // Implemented in resolver_sub_bead.go.
 
@@ -161,16 +180,3 @@ func (r *queryResolver) Provider(ctx context.Context, name string) (*Provider, e
 
 // CoordinatorMetrics is the resolver for the coordinatorMetrics subscription.
 // Implemented in resolver_sub_exec.go.
-
-// Mutation returns MutationResolver implementation.
-func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
-
-// Query returns QueryResolver implementation.
-func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
-
-// Subscription returns SubscriptionResolver implementation.
-func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
-
-type mutationResolver struct{ *Resolver }
-type queryResolver struct{ *Resolver }
-type subscriptionResolver struct{ *Resolver }

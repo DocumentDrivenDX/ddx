@@ -8,7 +8,8 @@
 		Users,
 		GitCommit,
 		Moon,
-		Sun
+		Sun,
+		Radio
 	} from 'lucide-svelte';
 	import { toggleMode, mode } from '$lib/theme';
 	import ProjectPicker from './ProjectPicker.svelte';
@@ -35,6 +36,10 @@
 				nodeId && projectId ? `/nodes/${nodeId}/projects/${projectId}/${page}` : null;
 			return { href, label, Icon };
 		})
+	);
+
+	const providersHref = $derived(
+		nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/providers` : null
 	);
 
 	const nodeName = $derived(nodeStore.value?.name ?? 'localhost');
@@ -88,6 +93,23 @@
 					</span>
 				{/if}
 			{/each}
+			<div class="my-1 border-t border-gray-100 dark:border-gray-800"></div>
+			{#if providersHref}
+				<a
+					href={providersHref}
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+				>
+					<Radio class="h-4 w-4 shrink-0" />
+					Providers
+				</a>
+			{:else}
+				<span
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-400 dark:text-gray-600"
+				>
+					<Radio class="h-4 w-4 shrink-0" />
+					Providers
+				</span>
+			{/if}
 		</nav>
 
 		<!-- Page content -->

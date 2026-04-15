@@ -223,7 +223,7 @@ test('TC-015: new bead form opens, fills, and submits BeadCreate mutation', asyn
 	await expect(page.getByRole('heading', { name: 'New bead' })).toBeVisible();
 
 	// Fill in the title field
-	const titleInput = page.locator('input[name="title"], input[placeholder*="itle"]').first();
+	const titleInput = page.getByRole('textbox', { name: /title/i }).first();
 	await titleInput.fill('New bead from test');
 
 	// Submit the form

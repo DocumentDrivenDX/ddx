@@ -2,6 +2,8 @@ import type { LayoutLoad } from './$types'
 import { createClient } from '$lib/gql/client'
 import { gql } from 'graphql-request'
 
+export const ssr = false;
+
 const NODE_INFO_QUERY = gql`
 	query NodeInfo {
 		nodeInfo {
