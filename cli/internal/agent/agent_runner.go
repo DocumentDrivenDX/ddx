@@ -33,6 +33,33 @@ type AgentRunConfig struct {
 	MaxIterations int
 }
 
+// maxConsecutiveCompactionFailures is the number of consecutive no-op compaction
+// events (success=false, no_compaction=true) with no write-tool progress that
+// triggers the compaction-stuck circuit breaker. The counter resets when a
+// write-capable tool (bash/write/edit) fires or compaction succeeds.
+// Each agent iteration emits at most 2 compaction events (pre + mid-turn), so
+// this threshold allows ~25 iterations of read-only work before bailing.
+const maxConsecutiveCompactionFailures = 50
+
+// isNoopCompactionEndEvent reports whether e is a compaction.end event that
+// indicates no compaction occurred (success=false, no_compaction=true). These
+// events fire every iteration when the context is below the compaction threshold
+// or the re-compaction guard blocks a second pass. They represent no real
+// progress and should not reset the inactivity timer or the stuck counter.
+func isNoopCompactionEndEvent(e agentlib.Event) bool {
+	if e.Type != agentlib.EventCompactionEnd {
+		return false
+	}
+	var data struct {
+		Success      bool `json:"success"`
+		NoCompaction bool `json:"no_compaction"`
+	}
+	if err := json.Unmarshal(e.Data, &data); err != nil {
+		return false
+	}
+	return !data.Success && data.NoCompaction
+}
+
 // RunAgent executes a prompt using the embedded agent library.
 // This runs in-process — no subprocess, no binary lookup.
 func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
@@ -114,6 +141,11 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	logger := session.NewLogger(logDir, sessionID)
 	defer logger.Close() //nolint:errcheck
 
+	compactor := compaction.NewCompactor(embeddedCompactionConfig(agentCfg.Model))
+	if r.CompactorOverride != nil {
+		compactor = r.CompactorOverride
+	}
+
 	req := agentlib.Request{
 		Prompt:        promptText,
 		SystemPrompt:  sysPrompt,
@@ -122,14 +154,21 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		MaxIterations: maxIter,
 		WorkDir:       wd,
 		Metadata:      opts.Correlation,
-		Compactor:     compaction.NewCompactor(embeddedCompactionConfig(agentCfg.Model)),
+		Compactor:     compactor,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var timedOut atomic.Bool
 	var stalled atomic.Bool
+	var compactionStuck atomic.Bool
 	var readOnlyCount atomic.Int32
+	var consecutiveCompFails atomic.Int32
+
+	stuckThreshold := maxConsecutiveCompactionFailures
+	if r.CompactionStuckThreshold > 0 {
+		stuckThreshold = r.CompactionStuckThreshold
+	}
 
 	// Stall detection: track write activity in the callback.
 	// If no write/edit tool calls after stallThreshold read-only calls, cancel.
@@ -156,6 +195,48 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		}
 	}
 
+	// compactionCallback implements the compaction-stuck circuit breaker.
+	//
+	// Every agentlib iteration emits compaction.start / compaction.end pairs
+	// regardless of whether compaction actually runs (the compactor is called and
+	// returns no-op when ShouldCompact is false or the re-compaction guard fires).
+	// These no-op events represent zero real progress. If they accumulate without
+	// any write-tool activity or successful compaction, the agent is stuck.
+	//
+	// Counter behaviour:
+	//   - Increment on: compaction.end with no_compaction=true, success=false
+	//   - Reset on:     write-capable tool call (bash/write/edit) OR
+	//                   compaction.end with success=true
+	//   - Fire when:    consecutive count >= stuckThreshold
+	//
+	// The counter is NOT reset by LLM events or read-only tool calls so that an
+	// agent looping with git/grep commands (write-capable bash resets it) but
+	// also an agent stuck in pure read loops is caught eventually.
+	compactionCallback := func(event agentlib.Event) {
+		if isNoopCompactionEndEvent(event) {
+			count := consecutiveCompFails.Add(1)
+			if count >= int32(stuckThreshold) {
+				compactionStuck.Store(true)
+				cancel()
+			}
+			return
+		}
+		// Reset on successful compaction.
+		if event.Type == agentlib.EventCompactionEnd {
+			consecutiveCompFails.Store(0)
+			return
+		}
+		// Reset on write-capable tool calls (same classification as stall detection).
+		if event.Type == agentlib.EventToolCall {
+			var data struct {
+				Tool string `json:"tool"`
+			}
+			if err := json.Unmarshal(event.Data, &data); err == nil && isWriteCapableTool(data.Tool) {
+				consecutiveCompFails.Store(0)
+			}
+		}
+	}
+
 	if timeout > 0 {
 		activity := make(chan struct{}, 1)
 		pulse := func() {
@@ -166,7 +247,14 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		}
 		callback := logger.Callback()
 		req.Callback = func(event agentlib.Event) {
-			pulse()
+			// No-op compaction events are not real progress: suppress the
+			// inactivity-timer pulse so the timer can fire when the agent is
+			// stuck generating only compaction events. compaction.start is also
+			// suppressed because it is always immediately followed by its end.
+			if event.Type != agentlib.EventCompactionStart && !isNoopCompactionEndEvent(event) {
+				pulse()
+			}
+			compactionCallback(event)
 			stallCallback(event)
 			callback(event)
 		}
@@ -195,6 +283,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	} else {
 		callback := logger.Callback()
 		req.Callback = func(event agentlib.Event) {
+			compactionCallback(event)
 			stallCallback(event)
 			callback(event)
 		}
@@ -236,6 +325,9 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 
 	if timedOut.Load() {
 		result.Error = fmt.Sprintf("timeout after %v", timeout.Round(time.Second))
+		result.ExitCode = 1
+	} else if compactionStuck.Load() {
+		result.Error = fmt.Sprintf("compaction stuck: %d consecutive failed compaction attempts with no write progress", stuckThreshold)
 		result.ExitCode = 1
 	} else if stalled.Load() {
 		result.Error = fmt.Sprintf("stalled: no write activity after %d consecutive read-only tool calls", stallThreshold)
