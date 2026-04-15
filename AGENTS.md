@@ -16,12 +16,52 @@ This repository uses DDx's built-in bead tracker for durable work management.
   commit, fold the tracker change into that same commit instead of leaving
   `.ddx/beads.jsonl` dirty.
 
+## Merge Policy
+
+Branches containing execute-bead or execute-loop commits carry a
+per-attempt execution audit trail in their git history. This trail is
+load-bearing data, not noise:
+
+- `chore: update tracker (execute-bead <TIMESTAMP>)` — one commit per
+  attempt; the timestamp is the attempt ID.
+- `Merge bead <bead-id> attempt <TIMESTAMP>- into <branch>` — the merge
+  commit that lands a successful attempt from its isolated worktree.
+- `feat|fix|refactor|...: ... [ddx-<id>]` — the substantive bead work,
+  tagged with the bead ID.
+
+Bead records store `closing_commit_sha` as a pointer back into git
+history; cost, latency, retry, and tier-escalation reports read these
+commits directly. Any SHA rewrite breaks the pointers and destroys the
+`output = bead(input)` accuracy the system is built on.
+
+**NO HISTORY REWRITING on execute-bead branches.** The only acceptable
+merge strategies are:
+
+1. **Plain fast-forward** — when the target is a strict ancestor of the
+   feature branch: `git merge --ff-only` + `git push`. No new commits.
+2. **Merge commit** — when divergence exists: `git merge --no-ff`.
+   Creates a 2-parent merge; the feature branch commits remain intact.
+
+Never use on an execute-bead branch:
+
+- `gh pr merge --squash` — collapses every attempt into one commit.
+- `gh pr merge --rebase` — GitHub's rebase-merge replays commits as NEW
+  SHAs, breaking `closing_commit_sha` pointers.
+- `git rebase -i` with `fixup`, `squash`, `drop`, or `reword` — rewrites
+  SHAs.
+- `git filter-branch` / `git filter-repo` stripping "chore" commits — same.
+- `git commit --amend` on any commit already in the trail — same.
+
+When in doubt, check `git log <branch> --oneline | grep -E 'execute-bead|\[ddx-'`.
+If any match, preserve history on the merge.
+
 ## Prohibited Actions
 
 - Do not edit `.ddx/beads.jsonl` manually.
 - Do not add, remove, or rewrite bead rows with `apply_patch`, editors, scripts, or ad hoc JSONL manipulation.
 - Do not invent bead IDs or prefixes such as `hx-*` or `ddx-*`.
 - Do not treat nearby tracker entries as a naming pattern to copy.
+- Do not squash, rebase, or filter branches containing execute-bead commits (see Merge Policy above).
 
 ## If The CLI Seems Insufficient
 

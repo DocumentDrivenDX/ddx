@@ -311,6 +311,65 @@ references for a recent agent invocation
 - Given execution completes, when the worktree is cleaned up, then no temporary worktree created by execute-bead remains in the filesystem.
 - Given execute-bead completes, when the run record is inspected, then it contains built-in runtime metrics as specified in FEAT-014 US-145, captured automatically for the iteration.
 
+### Execution Trail Preservation in Downstream Merges
+
+The commits emitted by `ddx agent execute-bead` and `execute-loop` form a
+per-attempt audit trail. Every commit subject encodes a distinct piece of
+execution evidence:
+
+- `chore: update tracker (execute-bead <TIMESTAMP>)` — one commit per attempt
+  tracker heartbeat. The timestamp is the attempt identifier. Emitted for every
+  attempt regardless of outcome (`success`, `no_changes`, `land_conflict`,
+  `post_run_check_failed`, `execution_failed`, `structural_validation_failed`).
+- `Merge bead <bead-id> attempt <TIMESTAMP>- into <branch>` — the merge commit
+  that lands a successful attempt from its isolated worktree back onto the
+  working branch. Carries the bead ID and attempt timestamp in the subject.
+- `<type>: <description> [ddx-<id>]` — the substantive bead work, tagged with
+  the bead ID.
+
+Bead records store `closing_commit_sha` as a pointer back into git history;
+routing, cost, latency, retry-count, and tier-escalation reports read these
+commits directly. The trail realizes the `output = bead(input)` contract the
+system is built on: every bead attempt is recoverable from git history alone.
+
+**Normative requirement:** branches containing execute-bead commits MUST be
+merged with history preserved. Acceptable strategies:
+
+1. **Plain fast-forward** (`git merge --ff-only`) when the target branch is a
+   strict ancestor of the feature branch. Advances the ref without creating
+   new commits. Preserves every SHA and every commit message verbatim.
+2. **Merge commit** (`git merge --no-ff`) when divergence exists. Creates a
+   2-parent merge commit on the target branch; the feature branch's commits
+   remain intact on their side of the merge.
+
+**Prohibited on execute-bead branches:**
+
+- Squash merges (`gh pr merge --squash`, `git merge --squash`) — collapse
+  every attempt timestamp into one commit, destroy the per-attempt trail, and
+  orphan `closing_commit_sha` pointers.
+- Rebase merges (`gh pr merge --rebase`) — GitHub's rebase-merge replays
+  commits as NEW SHAs, breaking `closing_commit_sha` pointers even though the
+  commit messages appear preserved.
+- Interactive rebase (`git rebase -i`) with `fixup`, `squash`, `drop`, or
+  `reword` on any commit in the trail — rewrites SHAs.
+- `git filter-branch` / `git filter-repo` removing tracker-heartbeat or
+  merge-bead commits as "noise" — they carry the attempt timestamps; removing
+  them destroys the trail.
+- `git commit --amend` on any commit already present in the trail — rewrites
+  its SHA.
+
+**Acceptance Criteria (execution trail preservation):**
+- Given a branch containing at least one `chore: update tracker (execute-bead`
+  commit, when the branch is merged to its target, then every commit SHA on
+  the feature branch remains reachable from the target branch HEAD after the
+  merge.
+- Given a bead has `closing_commit_sha` set, when the branch containing that
+  commit is merged to main, then `git cat-file -e <closing_commit_sha>` still
+  succeeds on main after the merge.
+- Given a merge tool, integration, or agent offers a squash, rebase, or
+  filter strategy for a branch containing execute-bead commits, the operator
+  MUST reject it in favor of FF or `--no-ff` merge commit.
+
 ### Invocation Activity and Native Session Ownership
 
 DDx stores invocation activity locally under `session_log_dir` (default

@@ -306,29 +306,35 @@ Together these let you reconstruct which beads were attempted, when, how many
 retries they took, and what the outcomes were. Cost, latency, retry-count, and
 tier-escalation reports read this trail directly from git history.
 
-**Never squash-merge** a branch containing execute-bead commits. Squashing
-collapses every attempt timestamp into a single commit message and destroys
-the per-attempt metric trail. `gh pr merge --squash` is forbidden for these
-branches.
+**NO HISTORY REWRITING.** Never squash, rebase, fixup, drop, filter, or
+otherwise rewrite branches containing execute-bead commits. Every commit and
+every SHA is part of the audit trail. Bead records store `closing_commit_sha`
+as a pointer back into git history — rewriting any SHA breaks those pointers
+and destroys the `output = bead(input)` accuracy the system is built on.
 
-**Never rebase-drop or fixup** tracker-heartbeat commits even if they look
-like "chore noise". The timestamp in the subject line is load-bearing data.
+The only acceptable merge strategies:
 
-Correct merge strategies:
+1. **Plain fast-forward** — when the target branch is a strict ancestor of
+   the feature branch: `git checkout main && git merge --ff-only <branch>`
+   and `git push origin main`. Advances the ref without creating new commits.
+   Preserves every SHA.
+2. **Merge commit** — when divergence exists: `git merge --no-ff <branch>`.
+   Creates a 2-parent merge commit on the target branch; the feature branch's
+   commits remain intact on their side of the merge.
 
-- **Fast-forward merge** — when `main` is a strict ancestor of the branch,
-  `git push origin main` (or `gh pr merge --rebase`) advances `main` to the
-  branch HEAD, preserving every commit. This is the default choice for
-  execute-bead branches.
-- **Merge commit** (`gh pr merge --merge`) — creates a 2-parent merge commit.
-  Acceptable if you want an explicit boundary between the branch's work and
-  main; still preserves all per-attempt commits in the branch's history.
+**Never use these** on a branch with execute-bead history:
 
-Avoid:
-- `gh pr merge --squash` — destroys per-attempt audit trail.
-- `git rebase -i` with `fixup`/`drop` on `chore: update tracker` or
-  `Merge bead` commits — same.
-- `git filter-branch` / `git filter-repo` stripping tracker commits — same.
+- `gh pr merge --squash` — collapses everything into one commit, destroys
+  per-attempt timestamps and `[ddx-<id>]` tags.
+- `gh pr merge --rebase` — GitHub's rebase-merge replays commits as NEW SHAs,
+  breaking `closing_commit_sha` pointers even though the commit messages
+  appear preserved.
+- `git rebase -i` with `fixup`/`squash`/`drop` — rewrites SHAs.
+- `git filter-branch` / `git filter-repo` — rewrites SHAs.
+- Any `--amend` on a pushed commit in the trail — rewrites SHAs.
+
+When in doubt, check `git log <branch> --oneline | grep -E 'execute-bead|\[ddx-'`.
+If any match, the branch carries execution trail — preserve it.
 
 ## References
 

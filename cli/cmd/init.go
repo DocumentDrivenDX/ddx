@@ -852,6 +852,27 @@ After modifying any of these paths, stage and commit them:
 - Documents with ` + "`" + `ddx:` + "`" + ` frontmatter are tracked in the document graph
 - Run ` + "`" + `ddx doctor` + "`" + ` to check project health
 - Run ` + "`" + `ddx doc stale` + "`" + ` to find documents needing review
+
+## Merge Policy
+
+Branches containing ` + "`" + `ddx agent execute-bead` + "`" + ` or ` + "`" + `execute-loop` + "`" + ` commits
+carry a per-attempt execution audit trail:
+
+- ` + "`" + `chore: update tracker (execute-bead <TIMESTAMP>)` + "`" + ` — attempt heartbeats
+- ` + "`" + `Merge bead <bead-id> attempt <TIMESTAMP>- into <branch>` + "`" + ` — successful lands
+- ` + "`" + `feat|fix|...: ... [ddx-<id>]` + "`" + ` — substantive bead work
+
+Bead records store ` + "`" + `closing_commit_sha` + "`" + ` pointers into this history. Any
+SHA rewrite breaks the trail. **Never squash, rebase, or filter** these
+branches. Use only:
+
+- ` + "`" + `git merge --ff-only` + "`" + ` when the target is a strict ancestor, or
+- ` + "`" + `git merge --no-ff` + "`" + ` when divergence exists
+
+Forbidden on execute-bead branches: ` + "`" + `gh pr merge --squash` + "`" + `,
+` + "`" + `gh pr merge --rebase` + "`" + `, ` + "`" + `git rebase -i` + "`" + ` with fixup/squash/drop,
+` + "`" + `git filter-branch` + "`" + `, ` + "`" + `git filter-repo` + "`" + `, and ` + "`" + `git commit --amend` + "`" + ` on
+any commit already in the trail.
 `
 	_ = os.WriteFile(agentsPath, []byte(content), 0644)
 }
