@@ -232,3 +232,120 @@ func TestAgentRunHarnessAgentAccepted(t *testing.T) {
 			"'agent' must be a recognized harness name")
 	}
 }
+
+// TestAgentRunOutputText verifies that --output text emits only the final
+// assistant text (no JSONL wrapping).
+func TestAgentRunOutputText(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"plain text response"}]`)
+
+	dir := agentTestDirWithHarness(t, "virtual")
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "run",
+		"--harness", "virtual",
+		"--text", "hello",
+		"--output", "text",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "plain text response", strings.TrimSpace(output))
+}
+
+// TestAgentRunOutputTextIsDefault verifies that the default output mode is text.
+func TestAgentRunOutputTextIsDefault(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"default output"}]`)
+
+	dir := agentTestDirWithHarness(t, "virtual")
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "run",
+		"--harness", "virtual",
+		"--text", "hello",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "default output", strings.TrimSpace(output))
+}
+
+// TestAgentRunOutputJSONResult verifies that --output json-result emits the
+// result struct as JSON including harness and output fields.
+func TestAgentRunOutputJSONResult(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"the answer"}]`)
+
+	dir := agentTestDirWithHarness(t, "virtual")
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "run",
+		"--harness", "virtual",
+		"--text", "hello",
+		"--output", "json-result",
+	)
+	require.NoError(t, err)
+
+	var result struct {
+		Harness  string `json:"harness"`
+		Output   string `json:"output"`
+		ExitCode int    `json:"exit_code"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(output), &result), "output must be valid JSON")
+	assert.Equal(t, "virtual", result.Harness)
+	assert.Equal(t, "the answer", result.Output)
+	assert.Equal(t, 0, result.ExitCode)
+}
+
+// TestAgentRunOutputJSONFlag verifies that --json is a backward-compatible
+// alias for --output json-result.
+func TestAgentRunOutputJSONFlag(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"json alias"}]`)
+
+	dir := agentTestDirWithHarness(t, "virtual")
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "run",
+		"--harness", "virtual",
+		"--text", "hello",
+		"--json",
+	)
+	require.NoError(t, err)
+
+	var result struct {
+		Harness string `json:"harness"`
+		Output  string `json:"output"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(output), &result))
+	assert.Equal(t, "virtual", result.Harness)
+	assert.Equal(t, "json alias", result.Output)
+}
+
+// TestAgentRunOutputSessionJSONL verifies that --output session-jsonl emits
+// the raw harness output (current/legacy behavior).
+func TestAgentRunOutputSessionJSONL(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"raw session output"}]`)
+
+	dir := agentTestDirWithHarness(t, "virtual")
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "run",
+		"--harness", "virtual",
+		"--text", "hello",
+		"--output", "session-jsonl",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "raw session output", strings.TrimSpace(output))
+}
+
+// TestAgentRunOutputInvalidValue verifies that an unknown --output value
+// returns a descriptive error.
+func TestAgentRunOutputInvalidValue(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"x"}]`)
+
+	dir := agentTestDirWithHarness(t, "virtual")
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	_, err := executeCommand(rootCmd, "agent", "run",
+		"--harness", "virtual",
+		"--text", "hello",
+		"--output", "bogus",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus")
+	assert.Contains(t, err.Error(), "valid:")
+}

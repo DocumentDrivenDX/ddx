@@ -116,6 +116,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			quorum, _ := cmd.Flags().GetString("quorum")
 			harnesses, _ := cmd.Flags().GetString("harnesses")
 			asJSON, _ := cmd.Flags().GetBool("json")
+			outputFmt, _ := cmd.Flags().GetString("output")
 			worktreeName, _ := cmd.Flags().GetString("worktree")
 			permissions, _ := cmd.Flags().GetString("permissions")
 			compare, _ := cmd.Flags().GetBool("compare")
@@ -372,17 +373,30 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				}
 			}
 
+			// --json is a backward-compatible alias for --output json-result
 			if asJSON {
+				outputFmt = "json-result"
+			}
+			switch outputFmt {
+			case "json-result":
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(result)
-			}
-
-			// Print output
-			if result.CondensedOutput != "" {
-				fmt.Fprint(cmd.OutOrStdout(), result.CondensedOutput)
-			} else if result.Output != "" {
-				fmt.Fprint(cmd.OutOrStdout(), result.Output)
+				if err := enc.Encode(result); err != nil {
+					return err
+				}
+			case "session-jsonl":
+				if result.CondensedOutput != "" {
+					fmt.Fprint(cmd.OutOrStdout(), result.CondensedOutput)
+				} else if result.Output != "" {
+					fmt.Fprint(cmd.OutOrStdout(), result.Output)
+				}
+			case "text":
+				text := agent.ExtractOutput(result.Harness, result.Output)
+				if text != "" {
+					fmt.Fprint(cmd.OutOrStdout(), text)
+				}
+			default:
+				return fmt.Errorf("unknown --output value %q (valid: text, json-result, session-jsonl)", outputFmt)
 			}
 			if result.ExitCode != 0 {
 				return fmt.Errorf("agent exited with code %d", result.ExitCode)
@@ -400,7 +414,8 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("timeout", "", "Timeout duration (e.g. 30s, 5m)")
 	cmd.Flags().String("quorum", "", "Quorum strategy: any, majority, unanimous")
 	cmd.Flags().String("harnesses", "", "Comma-separated harnesses for quorum")
-	cmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.Flags().Bool("json", false, "Output as JSON (alias for --output json-result)")
+	cmd.Flags().String("output", "text", "Output format: text (default), json-result, session-jsonl")
 	cmd.Flags().String("worktree", "", "Create/reuse a git worktree for the run")
 	cmd.Flags().String("permissions", "", "Permission level: safe, supervised, unrestricted (overrides config)")
 	cmd.Flags().Bool("record", false, "Record prompt→response pair for virtual harness replay")
