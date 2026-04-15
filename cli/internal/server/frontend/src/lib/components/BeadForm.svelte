@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
 
@@ -38,17 +39,17 @@
 		onCancel: () => void;
 	} = $props();
 
-	const isUpdate = bead != null;
+	const isUpdate = $derived(bead != null);
 
-	let title = $state(bead?.title ?? '');
-	let status = $state(bead?.status ?? 'open');
-	let priority = $state(bead?.priority ?? 2);
-	let issueType = $state(bead?.issueType ?? '');
-	let labelsInput = $state((bead?.labels ?? []).join(', '));
-	let parent = $state(bead?.parent ?? '');
-	let description = $state(bead?.description ?? '');
-	let acceptance = $state(bead?.acceptance ?? '');
-	let notes = $state(bead?.notes ?? '');
+	let title = $state(untrack(() => bead?.title ?? ''));
+	let status = $state(untrack(() => bead?.status ?? 'open'));
+	let priority = $state(untrack(() => bead?.priority ?? 2));
+	let issueType = $state(untrack(() => bead?.issueType ?? ''));
+	let labelsInput = $state(untrack(() => (bead?.labels ?? []).join(', ')));
+	let parent = $state(untrack(() => bead?.parent ?? ''));
+	let description = $state(untrack(() => bead?.description ?? ''));
+	let acceptance = $state(untrack(() => bead?.acceptance ?? ''));
+	let notes = $state(untrack(() => bead?.notes ?? ''));
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
 

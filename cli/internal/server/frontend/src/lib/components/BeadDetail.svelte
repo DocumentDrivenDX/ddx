@@ -172,14 +172,16 @@
 	<!-- Scrollable content -->
 	<div class="flex-1 overflow-auto p-6">
 		{#if editing}
-			<BeadForm
-				{bead}
-				onSuccess={(updated) => {
-					bead = updated;
-					editing = false;
-				}}
-				onCancel={() => (editing = false)}
-			/>
+			{#key bead?.id}
+				<BeadForm
+					{bead}
+					onSuccess={(updated) => {
+						bead = updated;
+						editing = false;
+					}}
+					onCancel={() => (editing = false)}
+				/>
+			{/key}
 		{:else}
 			<!-- Read mode -->
 			<h2 class="mb-5 text-xl font-semibold text-gray-900 dark:text-white">{bead.title}</h2>
