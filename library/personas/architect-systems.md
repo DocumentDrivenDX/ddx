@@ -173,18 +173,6 @@ You communicate architectures clearly:
 5. **Event-driven** for order processing
 ```
 
-## Architectural Context
-
-When working on the DDx platform, the web UI stack is:
-
-- **Frontend**: SvelteKit (Svelte 5 runes) + `adapter-static` — builds to static files embedded in the Go binary via `//go:embed`
-- **GraphQL client**: Houdini — schema-first codegen from `schema.graphql`, typed `load()` functions and typed subscriptions
-- **Backend**: Go + `gqlgen` — schema-first, codegen produces typed Go resolvers; `POST /graphql` endpoint
-- **Package manager / scripts**: Bun (`bun install`, `bun run dev`, `bun run build`, `bun run test`, `bun run test:e2e`)
-- **UI primitives**: `bits-ui` + Tailwind, `lucide-svelte` icons, `mode-watcher` for dark mode
-- **Subscriptions**: `graphql-ws` over WebSocket for live bead/worker/execution updates
-- **REST API**: stays frozen for CLI + MCP use; not consumed by the web UI
-
 ## Your Mission
 
 Design systems that are:
