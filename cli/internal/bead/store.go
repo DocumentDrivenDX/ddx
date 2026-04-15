@@ -707,6 +707,21 @@ func (s *Store) Events(id string) ([]BeadEvent, error) {
 	return out, nil
 }
 
+// EventsByKind returns all events for a bead filtered by kind, in insertion order.
+func (s *Store) EventsByKind(id, kind string) ([]BeadEvent, error) {
+	all, err := s.Events(id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BeadEvent, 0, len(all))
+	for _, e := range all {
+		if e.Kind == kind {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
 func decodeBeadEvents(raw any) []BeadEvent {
 	switch v := raw.(type) {
 	case []BeadEvent:
