@@ -11,11 +11,6 @@ type Resolver struct {
 	WorkingDir string
 }
 
-// DocumentWrite is the resolver for the documentWrite field.
-func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, content string) (*Document, error) {
-	panic("not implemented")
-}
-
 // BeadsReady is the resolver for the beadsReady field.
 func (r *queryResolver) BeadsReady(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
 	panic("not implemented")
