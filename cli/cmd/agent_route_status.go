@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/agent/observations"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
 
@@ -167,12 +168,124 @@ type routeStatusJSON struct {
 	ActiveCooldowns []routeStatusCooldownJSON `json:"active_cooldowns,omitempty"`
 }
 
+// recentRoutingDecision is a merged view of a single routing decision sourced from
+// either the RoutingMetricsStore or a kind:routing bead evidence event.
+//
+// Both RoutingMetricsStore and kind:routing bead events are intentionally kept:
+//   - RoutingMetricsStore (.ddx/agent-logs/routing-outcomes.jsonl) records
+//     harness-level analytics (latency, success rate) for every agent run.
+//   - kind:routing bead evidence records execution provenance per bead: which
+//     provider/model was selected and why, tied to a specific bead ID.
+type recentRoutingDecision struct {
+	ObservedAt   time.Time
+	Source       string // "bead-evidence" or "metrics-store"
+	BeadID       string // populated for bead-evidence entries
+	Harness      string // populated for metrics-store entries
+	Provider     string // resolved_provider (bead-evidence) or CanonicalTarget (metrics-store)
+	Model        string
+	RouteReason  string // populated for bead-evidence entries
+	Success      bool   // populated for metrics-store entries
+	SuccessKnown bool   // false for bead-evidence entries (success not recorded)
+	LatencyMS    int    // populated for metrics-store entries
+}
+
+// beadRoutingDecisionsFromStore reads kind:routing evidence events from all beads
+// in the store at workDir/.ddx and returns them as recentRoutingDecision entries.
+func beadRoutingDecisionsFromStore(workDir string) []recentRoutingDecision {
+	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
+	beads, err := store.ReadAll()
+	if err != nil {
+		return nil
+	}
+	var out []recentRoutingDecision
+	for _, b := range beads {
+		events := routingEventsFromBeadExtra(b.Extra)
+		for _, e := range events {
+			d := recentRoutingDecision{
+				ObservedAt: e.CreatedAt,
+				Source:     "bead-evidence",
+				BeadID:     b.ID,
+			}
+			if e.Body != "" {
+				var body struct {
+					ResolvedProvider string `json:"resolved_provider"`
+					ResolvedModel    string `json:"resolved_model"`
+					RouteReason      string `json:"route_reason"`
+				}
+				if jsonErr := json.Unmarshal([]byte(e.Body), &body); jsonErr == nil {
+					d.Provider = body.ResolvedProvider
+					d.Model = body.ResolvedModel
+					d.RouteReason = body.RouteReason
+				}
+			}
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// routingEventsFromBeadExtra extracts kind:routing BeadEvents from a bead's
+// Extra map without an additional store read. Extra["events"] is stored as
+// []any of map[string]any when loaded from JSONL.
+func routingEventsFromBeadExtra(extra map[string]any) []bead.BeadEvent {
+	if extra == nil {
+		return nil
+	}
+	raw, ok := extra["events"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	var out []bead.BeadEvent
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		k, _ := m["kind"].(string)
+		if k != "routing" {
+			continue
+		}
+		e := bead.BeadEvent{Kind: k}
+		if v, ok := m["summary"].(string); ok {
+			e.Summary = v
+		}
+		if v, ok := m["body"].(string); ok {
+			e.Body = v
+		}
+		if v, ok := m["actor"].(string); ok {
+			e.Actor = v
+		}
+		if v, ok := m["source"].(string); ok {
+			e.Source = v
+		}
+		if v, ok := m["created_at"].(string); ok {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				e.CreatedAt = t
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// routeStatusDecisionJSON is the JSON-serialisable form of one routing decision
+// from either the RoutingMetricsStore ("metrics-store") or kind:routing bead
+// evidence ("bead-evidence").
 type routeStatusDecisionJSON struct {
 	ObservedAt      string `json:"observed_at"`
-	Harness         string `json:"harness"`
-	CanonicalTarget string `json:"canonical_target"`
-	Success         bool   `json:"success"`
-	LatencyMs       int    `json:"latency_ms"`
+	Source          string `json:"source"`                     // "bead-evidence" or "metrics-store"
+	BeadID          string `json:"bead_id,omitempty"`          // bead-evidence only
+	Harness         string `json:"harness,omitempty"`          // metrics-store only
+	CanonicalTarget string `json:"canonical_target,omitempty"` // metrics-store only
+	Provider        string `json:"provider,omitempty"`         // bead-evidence only
+	Model           string `json:"model,omitempty"`
+	RouteReason     string `json:"route_reason,omitempty"` // bead-evidence only
+	Success         bool   `json:"success,omitempty"`
+	LatencyMs       int    `json:"latency_ms,omitempty"`
 }
 
 type routeStatusCooldownJSON struct {
@@ -270,19 +383,46 @@ Examples:
 				})
 			}
 
-			// Load recent routing decisions from DDx's own RoutingMetricsStore.
+			// Load recent routing decisions from two complementary sources:
+			//
+			//  1. RoutingMetricsStore — harness-level analytics (latency, success
+			//     rate) for every agent run, stored in routing-outcomes.jsonl.
+			//  2. kind:routing bead events — execution provenance per bead (which
+			//     provider/model was selected and why), tied to a specific bead ID.
+			//
+			// Both are kept because they serve different purposes: RoutingMetricsStore
+			// is for performance analytics across all runs; bead evidence links
+			// routing decisions to the specific work item being processed.
+			var recentDecisions []recentRoutingDecision
+
 			r := f.agentRunner()
-			var recentOutcomes []agent.RoutingOutcome
 			if r.Config.SessionLogDir != "" {
 				store := agent.NewRoutingMetricsStore(r.Config.SessionLogDir)
 				outcomes, _ := store.ReadOutcomes()
-				// Take the last N outcomes.
-				const maxRecent = 10
-				start := len(outcomes) - maxRecent
-				if start < 0 {
-					start = 0
+				for _, o := range outcomes {
+					recentDecisions = append(recentDecisions, recentRoutingDecision{
+						ObservedAt:   o.ObservedAt,
+						Source:       "metrics-store",
+						Harness:      o.Harness,
+						Provider:     o.CanonicalTarget,
+						Model:        o.Model,
+						Success:      o.Success,
+						SuccessKnown: true,
+						LatencyMS:    o.LatencyMS,
+					})
 				}
-				recentOutcomes = outcomes[start:]
+			}
+
+			// Merge kind:routing bead evidence entries.
+			recentDecisions = append(recentDecisions, beadRoutingDecisionsFromStore(f.WorkingDir)...)
+
+			// Sort by time and take the last N.
+			sort.Slice(recentDecisions, func(i, j int) bool {
+				return recentDecisions[i].ObservedAt.Before(recentDecisions[j].ObservedAt)
+			})
+			const maxRecent = 10
+			if len(recentDecisions) > maxRecent {
+				recentDecisions = recentDecisions[len(recentDecisions)-maxRecent:]
 			}
 
 			// Collect active cooldowns across all known routes.
@@ -345,14 +485,22 @@ Examples:
 					}
 					payload.Routes = append(payload.Routes, entry)
 				}
-				for _, o := range recentOutcomes {
-					payload.RecentDecisions = append(payload.RecentDecisions, routeStatusDecisionJSON{
-						ObservedAt:      o.ObservedAt.UTC().Format(time.RFC3339),
-						Harness:         o.Harness,
-						CanonicalTarget: o.CanonicalTarget,
-						Success:         o.Success,
-						LatencyMs:       o.LatencyMS,
-					})
+				for _, d := range recentDecisions {
+					jd := routeStatusDecisionJSON{
+						ObservedAt:  d.ObservedAt.UTC().Format(time.RFC3339),
+						Source:      d.Source,
+						BeadID:      d.BeadID,
+						Harness:     d.Harness,
+						Provider:    d.Provider,
+						Model:       d.Model,
+						RouteReason: d.RouteReason,
+					}
+					if d.Source == "metrics-store" {
+						jd.CanonicalTarget = d.Provider
+						jd.Success = d.Success
+						jd.LatencyMs = d.LatencyMS
+					}
+					payload.RecentDecisions = append(payload.RecentDecisions, jd)
 				}
 				for _, c := range activeCooldowns {
 					payload.ActiveCooldowns = append(payload.ActiveCooldowns, routeStatusCooldownJSON{
@@ -419,25 +567,31 @@ Examples:
 			}
 
 			// --- Section 2: Recent Routing Decisions ---
+			// Combines metrics-store outcomes (latency/success) and bead-evidence
+			// entries (provider/model/reason tied to a specific bead), sorted by time.
 			fmt.Fprintln(out)
-			fmt.Fprintf(out, "Recent Routing Decisions (last %d)\n", len(recentOutcomes))
-			fmt.Fprintf(out, "%s\n", strings.Repeat("-", 70))
-			if len(recentOutcomes) == 0 {
+			fmt.Fprintf(out, "Recent Routing Decisions (last %d)\n", len(recentDecisions))
+			fmt.Fprintf(out, "%s\n", strings.Repeat("-", 90))
+			if len(recentDecisions) == 0 {
 				fmt.Fprintln(out, "  (no recorded decisions)")
 			} else {
-				fmt.Fprintf(out, "%-22s %-12s %-32s %-6s %s\n",
-					"OBSERVED_AT", "HARNESS", "TARGET", "OK", "LATENCY_MS")
-				for _, o := range recentOutcomes {
-					ok := "no"
-					if o.Success {
-						ok = "yes"
+				fmt.Fprintf(out, "%-22s %-14s %-24s %-20s %-6s %s\n",
+					"OBSERVED_AT", "SOURCE", "PROVIDER", "MODEL", "OK", "BEAD")
+				for _, d := range recentDecisions {
+					ok := "-"
+					if d.SuccessKnown {
+						ok = "no"
+						if d.Success {
+							ok = "yes"
+						}
 					}
-					fmt.Fprintf(out, "%-22s %-12s %-32s %-6s %d\n",
-						o.ObservedAt.UTC().Format("2006-01-02T15:04:05Z"),
-						o.Harness,
-						truncateRouteStr(o.CanonicalTarget, 32),
+					fmt.Fprintf(out, "%-22s %-14s %-24s %-20s %-6s %s\n",
+						d.ObservedAt.UTC().Format("2006-01-02T15:04:05Z"),
+						d.Source,
+						truncateRouteStr(d.Provider, 24),
+						truncateRouteStr(d.Model, 20),
 						ok,
-						o.LatencyMS,
+						d.BeadID,
 					)
 				}
 			}
