@@ -1,2 +1,0 @@
-{"data":{"bead_id":"","elapsed_ms":1014,"harness":"claude","model":"claude-opus-4-6[1m]","session_id":"3f73ec4f-56e1-44a5-8cf9-2c067ddb62fb"},"seq":0,"session_id":"claude-1776201879723762513","ts":"2026-04-14T21:24:40.738066799Z","type":"session.start"}
-{"data":{"attempt":{"cost":{"raw":{"total_tokens":5}}},"bead_id":"","elapsed_ms":7003,"input_tokens":3,"latency_ms":7003,"model":"claude-opus-4-6[1m]","output_tokens":2,"tool_calls":null,"turn":1},"seq":1,"session_id":"claude-1776201879723762513","ts":"2026-04-14T21:24:46.726812598Z","type":"llm.response"}

@@ -1619,7 +1619,9 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runner := agent.NewRunner(agent.Config{})
+	runner := agent.NewRunner(agent.Config{
+		SessionLogDir: agent.ResolveLogDir(s.WorkingDir, ""),
+	})
 	opts := agent.RunOptions{
 		Harness: req.Harness,
 		Prompt:  req.Prompt,
@@ -3390,7 +3392,9 @@ func (s *Server) mcpAgentDispatch(harness, prompt, model, effort string) mcpTool
 	if prompt == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "prompt is required"}}, IsError: true}
 	}
-	runner := agent.NewRunner(agent.Config{})
+	runner := agent.NewRunner(agent.Config{
+		SessionLogDir: agent.ResolveLogDir(s.WorkingDir, ""),
+	})
 	opts := agent.RunOptions{
 		Harness: harness,
 		Prompt:  prompt,

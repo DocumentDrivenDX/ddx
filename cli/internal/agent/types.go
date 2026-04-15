@@ -1,6 +1,9 @@
 package agent
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
 // Harness defines a known agent harness.
 type Harness struct {
@@ -357,3 +360,20 @@ const (
 	DefaultTimeoutMS = 7200000 // 2 hours - long enough for any task; supervisor/agent decides termination
 	DefaultLogDir    = ".ddx/agent-logs"
 )
+
+// ResolveLogDir returns an absolute session-log directory path anchored at
+// projectRoot. Callers that construct an agent.Runner must use this to avoid
+// the Runner's relative DefaultLogDir resolving against process CWD — which
+// historically wrote logs to stray locations like cli/internal/server/.ddx/.
+func ResolveLogDir(projectRoot, configured string) string {
+	if configured == "" {
+		configured = DefaultLogDir
+	}
+	if filepath.IsAbs(configured) {
+		return configured
+	}
+	if projectRoot == "" {
+		return configured
+	}
+	return filepath.Join(projectRoot, configured)
+}

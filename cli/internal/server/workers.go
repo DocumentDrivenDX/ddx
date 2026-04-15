@@ -568,6 +568,7 @@ func (m *WorkerManager) buildAgentRunner(projectRoot string) *agent.Runner {
 		agentCfg.SessionLogDir = cfg.Agent.SessionLogDir
 		agentCfg.Permissions = cfg.Agent.Permissions
 	}
+	agentCfg.SessionLogDir = agent.ResolveLogDir(projectRoot, agentCfg.SessionLogDir)
 
 	return agent.NewRunner(agentCfg)
 }

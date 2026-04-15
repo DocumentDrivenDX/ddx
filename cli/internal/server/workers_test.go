@@ -26,7 +26,9 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 
 	m := NewWorkerManager(root)
 	m.AgentRunnerFactory = func(projectRoot string) *agent.Runner {
-		return agent.NewRunner(agent.Config{})
+		return agent.NewRunner(agent.Config{
+			SessionLogDir: agent.ResolveLogDir(projectRoot, ""),
+		})
 	}
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{

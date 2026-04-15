@@ -86,7 +86,9 @@ Examples:
 func (f *CommandFactory) agentRunner() *agent.Runner {
 	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
 	if err != nil || cfg.Agent == nil {
-		return agent.NewRunner(agent.Config{})
+		return agent.NewRunner(agent.Config{
+			SessionLogDir: agent.ResolveLogDir(f.WorkingDir, ""),
+		})
 	}
 	return agent.NewRunner(agent.Config{
 		Harness:         cfg.Agent.Harness,
@@ -94,7 +96,7 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 		Models:          cfg.Agent.Models,
 		ReasoningLevels: cfg.Agent.ReasoningLevels,
 		TimeoutMS:       cfg.Agent.TimeoutMS,
-		SessionLogDir:   cfg.Agent.SessionLogDir,
+		SessionLogDir:   agent.ResolveLogDir(f.WorkingDir, cfg.Agent.SessionLogDir),
 		Permissions:     cfg.Agent.Permissions,
 	})
 }
