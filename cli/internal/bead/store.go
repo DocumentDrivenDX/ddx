@@ -784,6 +784,84 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 	})
 }
 
+// Reopen sets a bead's status back to open, clears claim fields, optionally
+// appends notes, and records an immutable reopen event — all in one atomic
+// lock acquisition.
+func (s *Store) Reopen(id string, reason string, appendNotes string) error {
+	now := time.Now().UTC()
+	return s.WithLock(func() error {
+		beads, _, err := s.readAllLatestRaw()
+		if err != nil {
+			return err
+		}
+		found := false
+		for i := range beads {
+			if beads[i].ID != id {
+				continue
+			}
+			b := &beads[i]
+			b.Status = StatusOpen
+			b.Owner = ""
+			b.UpdatedAt = now
+			if b.Extra == nil {
+				b.Extra = make(map[string]any)
+			}
+			// Clear claim fields
+			delete(b.Extra, "claimed-at")
+			delete(b.Extra, "claimed-pid")
+			delete(b.Extra, "claimed-machine")
+			delete(b.Extra, "claimed-session")
+			delete(b.Extra, "claimed-worktree")
+			delete(b.Extra, "execute-loop-heartbeat-at")
+			// Append notes
+			if appendNotes != "" {
+				if b.Notes != "" {
+					b.Notes = b.Notes + "\n\n" + appendNotes
+				} else {
+					b.Notes = appendNotes
+				}
+			}
+			// Record reopen event
+			var events []BeadEvent
+			if raw, ok := b.Extra["events"]; ok {
+				events = decodeBeadEvents(raw)
+			}
+			evt := BeadEvent{
+				Kind:      "reopen",
+				CreatedAt: now,
+			}
+			if reason != "" {
+				evt.Summary = reason
+			}
+			events = append(events, evt)
+			encoded := make([]map[string]any, 0, len(events))
+			for _, e := range events {
+				encoded = append(encoded, map[string]any{
+					"kind":       e.Kind,
+					"summary":    e.Summary,
+					"body":       e.Body,
+					"actor":      e.Actor,
+					"created_at": e.CreatedAt,
+					"source":     e.Source,
+				})
+			}
+			b.Extra["events"] = encoded
+			if err := s.validateBead(b); err != nil {
+				return err
+			}
+			if err := s.runHook("validate-bead-update", b); err != nil {
+				return err
+			}
+			found = true
+			break
+		}
+		if !found {
+			return fmt.Errorf("bead: not found: %s", id)
+		}
+		return s.WriteAll(beads)
+	})
+}
+
 // detectCurrentCommit returns the current git HEAD SHA, or empty if not in a git repo.
 func (s *Store) detectCurrentCommit() string {
 	out, err := exec.Command("git", "rev-parse", "HEAD").Output()

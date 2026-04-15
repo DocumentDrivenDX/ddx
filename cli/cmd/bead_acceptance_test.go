@@ -979,3 +979,101 @@ func TestBeadCommandsDependencyViews(t *testing.T) {
 	assert.Equal(t, float64(1), status["ready"])
 	assert.Equal(t, float64(0), status["blocked"])
 }
+
+func TestBeadReopenSetsStatusToOpen(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Reopen me", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+	var closed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &closed))
+	assert.Equal(t, "closed", closed["status"])
+
+	_, err = executeCommand(rootCmd, "bead", "reopen", id)
+	require.NoError(t, err)
+
+	showOut, err = executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+	var reopened map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &reopened))
+	assert.Equal(t, "open", reopened["status"])
+}
+
+func TestBeadReopenRecordsEventAndAppendNotes(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Reopen with notes", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--notes", "original notes")
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "reopen", id, "--reason", "failed review", "--append-notes", "second attempt needed")
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+	var b map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &b))
+
+	assert.Equal(t, "open", b["status"])
+	assert.Contains(t, b["notes"], "original notes")
+	assert.Contains(t, b["notes"], "second attempt needed")
+
+	// Verify reopen event was recorded
+	listOut, err := executeCommand(rootCmd, "bead", "evidence", "list", id, "--json")
+	require.NoError(t, err)
+	var events []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(listOut), &events))
+	require.Len(t, events, 1)
+	assert.Equal(t, "reopen", events[0]["kind"])
+	assert.Equal(t, "failed review", events[0]["summary"])
+}
+
+func TestBeadReopenClearsClaimFields(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Claimed bead", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	// Claim it first
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--claim", "--assignee", "agent-1")
+	require.NoError(t, err)
+
+	// Close it directly via update (simulating a forced close of an in-progress bead)
+	_, err = executeCommand(rootCmd, "bead", "close", id)
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "bead", "reopen", id)
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+	var b map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &b))
+
+	assert.Equal(t, "open", b["status"])
+	assert.Empty(t, b["owner"])
+	_, hasClaimed := b["claimed-at"]
+	assert.False(t, hasClaimed, "claimed-at should be cleared on reopen")
+	_, hasClaimedPID := b["claimed-pid"]
+	assert.False(t, hasClaimedPID, "claimed-pid should be cleared on reopen")
+}

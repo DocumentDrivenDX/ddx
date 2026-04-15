@@ -49,6 +49,7 @@ Examples:
 	cmd.AddCommand(f.newBeadShowCommand())
 	cmd.AddCommand(f.newBeadUpdateCommand())
 	cmd.AddCommand(f.newBeadCloseCommand())
+	cmd.AddCommand(f.newBeadReopenCommand())
 	cmd.AddCommand(f.newBeadListCommand())
 	cmd.AddCommand(f.newBeadReadyCommand())
 	cmd.AddCommand(f.newBeadBlockedCommand())
@@ -720,6 +721,31 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 	}
 	cmd.Flags().String("session", "", "Agent session ID that completed this bead")
 	cmd.Flags().String("commit", "", "Closing commit SHA (auto-detected if not provided)")
+	return cmd
+}
+
+func (f *CommandFactory) newBeadReopenCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reopen <id>",
+		Short: "Reopen a closed bead",
+		Long: `Reopen a closed or stalled bead.
+
+Atomically sets status to open, clears claim fields, optionally appends
+notes, and records a reopen event in the bead's event log.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s := f.beadStore()
+			reason, _ := cmd.Flags().GetString("reason")
+			appendNotes, _ := cmd.Flags().GetString("append-notes")
+			if err := s.Reopen(args[0], reason, appendNotes); err != nil {
+				return err
+			}
+			f.beadAutoCommit("reopen " + args[0])
+			return nil
+		},
+	}
+	cmd.Flags().String("reason", "", "Reason for reopening (recorded as event summary)")
+	cmd.Flags().String("append-notes", "", "Text to append to the bead's notes field")
 	return cmd
 }
 
