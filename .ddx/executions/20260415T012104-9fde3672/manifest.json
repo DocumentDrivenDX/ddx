@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T012104-9fde3672",
+  "bead_id": "ddx-51de0667",
+  "base_rev": "eb4befc5fc5bf3fcb93132e03aa3fddc9c8cfe3a",
+  "created_at": "2026-04-15T01:21:05.086695732Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-51de0667",
+    "title": "Visibility 4: ddx agent models [--provider X] [--all] command",
+    "description": "Add a new DDx CLI subcommand `ddx agent models [--provider X] [--all]` mirroring ddx-agent's `cmdModels`. Default provider is the configured default. --all lists models for every configured provider. Output format matches ddx-agent's text output exactly (one model ID per line, with * for configured-model marker, \u003e for would-auto-select marker, and [catalog: X] or [pattern] annotations where applicable). No --json yet — that can be a follow-up if needed.\n\nImplementation lives in cli/cmd/agent_models.go. Uses agentconfig + modelcatalog + oaiProvider.RankModels from the Go package. Same upstream-bead rule as visibility 3: if a public helper is missing, file on ddx-agent first, don't copy-paste.",
+    "acceptance": "(1) `ddx agent models --provider vidar` output matches `ddx-agent models --provider vidar` output. (2) `ddx agent models --all` lists every configured provider's models. (3) Implementation uses Go package imports only — no shell-out, no copy-pasted probing logic. (4) `go build ./...` passes. (5) Manual: compare side-by-side against `ddx-agent models --provider vidar` and verify the 8 models on vidar appear in the same order with the same annotations.",
+    "parent": "ddx-bd0691fe",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:agent-routing",
+      "area:agent",
+      "area:cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T01:21:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T01:21:04.871407551Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T012104-9fde3672",
+    "prompt": ".ddx/executions/20260415T012104-9fde3672/prompt.md",
+    "manifest": ".ddx/executions/20260415T012104-9fde3672/manifest.json",
+    "result": ".ddx/executions/20260415T012104-9fde3672/result.json",
+    "checks": ".ddx/executions/20260415T012104-9fde3672/checks.json",
+    "usage": ".ddx/executions/20260415T012104-9fde3672/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-51de0667-20260415T012104-9fde3672"
+  }
+}

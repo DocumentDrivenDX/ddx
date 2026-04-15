@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260414T205149-4605b15c",
+  "bead_id": "ddx-83171c44",
+  "base_rev": "e50b9ec5a5ef81a1c9d0cbb21358181a47d38655",
+  "created_at": "2026-04-14T20:51:50.34909214Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-83171c44",
+    "title": "Stage 1.11: update external docs (website, personas, resources)",
+    "description": "Update docs/helix-adjacent files referencing the frontend stack: website/content/docs/server/_index.md, library/personas/architect-systems.md, any docs/resources/*.md that reference the stack. Swap to SvelteKit+GraphQL+Houdini+Bun. See docs/plan-svelte-migration.md Stage 1 bead #11.",
+    "acceptance": "(1) website/content/docs/server/_index.md has zero React references. (2) library/personas/architect-systems.md architectural context section names SvelteKit+GraphQL. (3) All files compile/render (no broken markdown).",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T20:42:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "closing_commit_sha": "5acf9bfb2277dfed3996db19ae1eaffd21aef44f",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "success\nresult_rev=5acf9bfb2277dfed3996db19ae1eaffd21aef44f\nbase_rev=1990e6c5c64e45e300143232099d023b5bd42ddd",
+          "created_at": "2026-04-14T20:46:16.873546253Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "opus-reviewer",
+          "body": "Opus review of 5acf9bf. The commit only edited library/personas/architect-systems.md (2-line React-\u003eSvelteKit swap). The bead explicitly listed website/content/docs/server/_index.md as a target, but grep shows:\n\n  website/content/docs/server/_index.md:47: **Full-text search**: Powered by MiniSearch across all bead fields\n\nThis is a current-tense feature description, NOT historical framing. MiniSearch is being replaced by GraphQL+Houdini server-side search per ADR-005 v2. The bead fails its hard grep acceptance on an explicitly-listed target.\n\nREQUIRED FIX: Edit website/content/docs/server/_index.md line 47 to describe the new GraphQL/Houdini-based search (or remove the bullet entirely and replace with a GraphQL-based feature description). Leave library/personas/architect-systems.md alone (already fixed).\n\ndocs/resources/spec-driven.md:182 has a historical framing reference — acceptable, classify as (a) in the sweep.\n\nREJECT - REOPEN bead.",
+          "created_at": "2026-04-14T20:51:31.146437783Z",
+          "kind": "review",
+          "source": "opus batch review 2",
+          "summary": "REJECT: website/content/docs/server/_index.md:47 still says \"MiniSearch\" as current feature; bead never touched that target file"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-14T20:46:10.293832048Z",
+      "session_id": "eb-fa0e26e8"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T205149-4605b15c",
+    "prompt": ".ddx/executions/20260414T205149-4605b15c/prompt.md",
+    "manifest": ".ddx/executions/20260414T205149-4605b15c/manifest.json",
+    "result": ".ddx/executions/20260414T205149-4605b15c/result.json",
+    "checks": ".ddx/executions/20260414T205149-4605b15c/checks.json",
+    "usage": ".ddx/executions/20260414T205149-4605b15c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-83171c44-20260414T205149-4605b15c"
+  }
+}

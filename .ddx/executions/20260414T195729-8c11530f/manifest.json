@@ -1,0 +1,73 @@
+{
+  "attempt_id": "20260414T195729-8c11530f",
+  "bead_id": "ddx-fe5c64aa",
+  "base_rev": "b389024ce5d6ebdb0c69064aad23b0f87f0295f6",
+  "created_at": "2026-04-14T19:57:29.271889497Z",
+  "requested": {
+    "harness": "claude",
+    "model": "opus",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fe5c64aa",
+    "title": "Stage 1.1: draft schema.graphql types + queries",
+    "description": "Draft the initial GraphQL schema covering all types and query entry points needed by the new SvelteKit UI. Create new file cli/internal/server/graphql/schema.graphql. Schema must include: Node, Project, Bead/BeadConnection/BeadEdge (Relay cursor connection), Document, DocGraph, Commit/CommitConnection, Worker, AgentSession, Persona, ExecutionRun, CoordinatorMetrics. Every field doc-commented. Every existing GET /api/* list endpoint in cli/internal/server/server.go:334-417 must have a corresponding Query. See docs/plan-svelte-migration.md Stage 1 bead #1 for full context.",
+    "acceptance": "(1) File cli/internal/server/graphql/schema.graphql exists and parses: `go run github.com/99designs/gqlgen generate --config cli/internal/server/graphql/gqlgen.yml` (or a dry-run equivalent) completes without schema errors. (2) Manual: open the file and point at each GET /api/* in server.go:334-417 — for each, name the GraphQL Query that replaces it. No REST endpoint is orphaned. (3) Every type field has a doc comment. (4) Relay cursor connections used on every list (no offset/limit).",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "agent: identical tool calls repeated, aborting loop\nresult_rev=ad0a9498b6043afe428d4e6b117cd6c2000274eb\nbase_rev=599157e8128981c299fc57b368be96799e36917e",
+          "created_at": "2026-04-14T18:48:42.267254068Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "opus-reviewer",
+          "body": "Opus review of commit f8761ba (was ad0a949 in worktree) against this bead acceptance.\n\nVerdict: APPROVE_WITH_EDITS — schema is a good draft but needs these fixes:\n\n1. ADD missing queries covering REST endpoints:\n   - health: HealthStatus! (covers GET /api/health)\n   - ready: ReadyStatus! (covers GET /api/ready)\n   - workerLog(workerID: ID!): String! (covers GET /api/agent/workers/{id}/log)\n   - workerPrompt(workerID: ID!): String! (covers GET /api/agent/workers/{id}/prompt)\n   - agentCoordinators: [CoordinatorMetrics!]! (list form for GET /api/agent/coordinators)\n   - documentByPath(path: String!): Document (covers GET /api/documents/{path...})\n\n2. ADD per-field doc comments. Only type-level comments exist today. Acceptance criterion (3) says every field needs a doc comment. Add \"\"\"...\"\"\" block above every field in every type. Biggest lift.\n\n3. CONVERT search: [SearchResult!]! to SearchResultConnection with edges/node/cursor/pageInfo per the Relay cursor rule.\n\n4. Leave existing content in cli/internal/server/graphql/schema.graphql alone where possible — this is an edit pass, not a rewrite.\n\nStarting worktree already has the file at cli/internal/server/graphql/schema.graphql (687 lines). Read it first, then apply the fixes above, then commit.",
+          "created_at": "2026-04-14T19:23:15.28315708Z",
+          "kind": "review",
+          "source": "fresh-eyes review of ad0a949 (cherry-picked as f8761ba)",
+          "summary": "APPROVE_WITH_EDITS: 38/44 endpoints covered; per-field doc comments missing; add 6 missing queries"
+        },
+        {
+          "actor": "ddx",
+          "body": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 500 Internal Server Error \nresult_rev=bac38cb665e074ad3cc4a8aa5cb92cf1bcd11978\nbase_rev=bac38cb665e074ad3cc4a8aa5cb92cf1bcd11978\nretry_after=2026-04-15T01:26:10Z",
+          "created_at": "2026-04-14T19:26:10.116792005Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "opus-reviewer",
+          "body": "Claude sonnet retry landed commit 8afaec8e (321 lines added, 20 removed to schema.graphql). Opus fresh-eyes review against prior fix list:\n\nFIXED (5 of 8):\n- health: HealthStatus! added (line 791)\n- ready: ReadyStatus! added (line 794)\n- workerLog added (returns WorkerLog! not String! — acceptable, richer)\n- workerPrompt added\n- agentCoordinators added (renamed to coordinators — semantically equivalent)\n\nNOT FIXED (3 of 8):\n1. documentByPath(path: String!): Document — STILL MISSING. GET /api/documents/{path...} remains orphaned.\n2. Per-field doc comments — STILL MOSTLY MISSING. New types added in this commit (CoordinatorMetrics, HealthStatus, ReadyCheck, ReadyStatus, WorkerLog, LandOutcomeSummary, etc.) got per-field # comments, but the original 30+ types (NodeInfo, Project, Bead, Dependency, Document, DocumentReview, DocumentExecDef, ExecutorSpec, ResultSpec, MetricResultSpec, Evaluation, Thresholds, DocGraph, StaleReason, Commit, Worker, CurrentAttemptInfo, PhaseTransition, LastAttemptInfo, WorkerExecutionResult, AgentSession, TokenUsage, Persona, ExecutionRun, ExecutionDefinition, Provenance, MetricObservation, Provider, PageInfo, SearchResult, all Edge/Connection types) are untouched. 10-field sample from those types: 0/10 have per-field comments. Additionally, gqlgen does not emit # comments as GraphQL descriptions — the spec requires \"\"\"...\"\"\" blocks. Recommend converting all to triple-quote descriptions.\n3. search: [SearchResult!]! — STILL a plain list. SearchResultConnection/SearchResultEdge do not exist in the file.\n\nREGRESSION:\n- coordinatorMetricsByProject(projectID: ID!): CoordinatorMetrics! was silently dropped. GET /api/coordinator/metrics/{projectRoot} loses direct coverage.\n\nVERDICT: REJECT. Retry with stronger model.\n\nNEXT RETRY SHOULD:\n1. Add documentByPath query\n2. Add per-field descriptions (\"\"\" blocks, not # comments) to EVERY field in EVERY type. Start from ORIGINAL types not the new ones. Biggest lift — the model needs to grind through ~35 types.\n3. Replace \"search: [SearchResult!]!\" with SearchResultConnection and add SearchResultConnection/SearchResultEdge types next to other connection types.\n4. Restore coordinatorMetricsByProject(projectID) query.\n5. Do NOT regress any of the 5 already-landed queries.",
+          "created_at": "2026-04-14T19:57:28.935532866Z",
+          "kind": "review",
+          "source": "fresh-eyes review of 8afaec8e (claude sonnet retry)",
+          "summary": "REJECT: claude sonnet retry closed 5 of 8 items; documentByPath + per-field doc comments (biggest lift) + search connection conversion still missing"
+        }
+      ],
+      "execute-loop-last-detail": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 500 Internal Server Error ",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-04-15T01:26:10Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T195729-8c11530f",
+    "prompt": ".ddx/executions/20260414T195729-8c11530f/prompt.md",
+    "manifest": ".ddx/executions/20260414T195729-8c11530f/manifest.json",
+    "result": ".ddx/executions/20260414T195729-8c11530f/result.json",
+    "checks": ".ddx/executions/20260414T195729-8c11530f/checks.json",
+    "usage": ".ddx/executions/20260414T195729-8c11530f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fe5c64aa-20260414T195729-8c11530f"
+  }
+}

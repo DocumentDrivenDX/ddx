@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260414T053633-822f2771",
+  "bead_id": "ddx-679d2fc7",
+  "base_rev": "80fca09d95131e3adde1204c718b7fac6bf220a9",
+  "created_at": "2026-04-14T05:36:34.008397663Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-679d2fc7",
+    "title": "Simplify execute-bead worker: task-only, no merge/preserve/gate logic",
+    "description": "The current execute-bead worker does WAY too much: creates a worktree, runs the agent, evaluates required gates, decides merge-by-default vs preserve vs land-conflict, writes preserve refs, synthesizes commits on IsDirty, classifies 7+ outcomes, manages heartbeats, handles claim/unclaim contention, runs recoverOrphans on stale worktrees. This surface is why (a) two concurrent workers race on the main-branch merge and the loser's good work ends up under refs/ddx/iterations/ needing manual rescue, (b) no_changes gets misclassified as synthesized-commit success, (c) the gate-enforcement path and the merge path are entangled, and (d) the worker needs special privileges (update-ref, merge, rebase) that a simple task-runner should never have.\\n\\nThe correct design is the one the operator just described: execute-bead is a thin worker. 'I have been handed a worktree and a task. I will execute that task and make commits in the worktree. I will stream progress events to ddx server. I will notify ddx server when I am done, reporting the worktree branch and the commit(s) I made. Then I exit.' That's it.\\n\\nEverything else — merge to main, conflict resolution, required-gate evaluation, preserve-under-ref, decide whether to close the bead — moves to the PARENT process (the operator, or a driver tool running interactively in the terminal). Merge conflicts are resolved interactively the same as any other merge. A human (or an outer agent with full git authority) reviews the agent's commits and decides what to do with them.\\n\\nThis simplification deletes most of ExecuteBead() in cli/internal/agent/execute_bead.go and moves:\\n- resolveBase / baseRev tracking → parent\\n- Merge() call → parent\\n- preserveRef / UpdateRef / refs/ddx/iterations/ writes → parent\\n- evaluateRequiredGates → parent (or a separate 'ddx agent check' step)\\n- outcome classification 'merged/preserved/land-conflict/error' → parent\\n- recoverOrphans → parent (cleanup runs when parent next launches workers)\\n- heartbeatIsStale reclaim logic → parent (parent tracks worker health)\\n\\nWhat the worker keeps:\\n- Take a worktree dir + task description (prompt) as input\\n- Launch the agent harness with the prompt\\n- Stream progress events to ddx server (session log + structured JSONL)\\n- On exit, emit a final event: worktree path, branch, commit shas (or empty), exit code, duration\\n- That's it\\n\\nExecute-loop likewise shrinks or goes away. In the clean design, a driver loop in the parent process picks ready beads, creates a /tmp worktree per bead, calls 'ddx agent execute-bead' (worker-only mode), waits for the worker's exit event from ddx server, reviews the result, and merges or discards. When two beads are in flight concurrently, the parent serializes the merge step — no race possible.",
+    "acceptance": "cli/internal/agent/execute_bead.go ExecuteBead() contains ONLY: worktree setup (or accept pre-made worktree), prompt construction, agent harness dispatch, progress event emission, and a final completion event. No Merge, no UpdateRef, no preserveRef, no evaluateRequiredGates, no outcome classification beyond {task_succeeded, task_failed, task_no_changes}. All merge/preserve/gate logic moved to a new parent-side orchestrator that can be run interactively. Regression test: two workers on two different beads complete in arbitrary order; parent process merges both sequentially with interactive conflict resolution if needed; no worktree-internal merge code paths are exercised.",
+    "metadata": {
+      "claimed-at": "2026-04-14T05:36:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "execute-loop-heartbeat-at": "2026-04-14T05:36:33.81431004Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T053633-822f2771",
+    "prompt": ".ddx/executions/20260414T053633-822f2771/prompt.md",
+    "manifest": ".ddx/executions/20260414T053633-822f2771/manifest.json",
+    "result": ".ddx/executions/20260414T053633-822f2771/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-679d2fc7-20260414T053633-822f2771"
+  }
+}

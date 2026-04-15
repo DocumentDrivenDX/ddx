@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260411T190456-1ec9de41",
+  "bead_id": "ddx-cadb3677",
+  "base_rev": "9cb1e29033d3afefecc98852dcac741c3c33e2cc",
+  "created_at": "2026-04-11T19:04:56.628835941Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen3.5-27b",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cadb3677",
+    "title": "Add structured progress output to execute-loop",
+    "description": "Execute-loop currently provides minimal output. Add structured progress that: 1) Names the bead being processed at loop start, 2) Reports agent output chunks/iterations as they happen, 3) Summarizes final result (merged/preserved/error), 4) All output goes to structured logging that ddx server can capture for background runs.",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:implementation",
+      "area:agent",
+      "area:cli"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260411T190456-1ec9de41",
+    "prompt": ".ddx/executions/20260411T190456-1ec9de41/prompt.md",
+    "manifest": ".ddx/executions/20260411T190456-1ec9de41/manifest.json",
+    "result": ".ddx/executions/20260411T190456-1ec9de41/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-cadb3677-20260411T190456-1ec9de41"
+  }
+}

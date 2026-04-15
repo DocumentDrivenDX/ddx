@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T085246-c2c99779",
+  "bead_id": "ddx-0f6a78fa",
+  "base_rev": "d773fc0c21c69ad2a430a40690adaa1dcc71e651",
+  "created_at": "2026-04-15T08:52:46.953447113Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0f6a78fa",
+    "title": "Stage 4.3: Beads filter chips + URL state",
+    "description": "Update src/routes/nodes/[nodeId]/projects/[projectId]/beads/+page.svelte with status and label filter chips. URL updates with ?status=open\u0026label=helix. Reloading preserves filter. See docs/plan-svelte-migration.md Stage 4 bead #37.",
+    "acceptance": "(1) MANUAL: click a status chip, URL updates, table filters to show only matching beads. (2) Reload the page, filter is preserved. (3) Clear filter, URL cleaned.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T08:52:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T08:52:46.712821473Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T085246-c2c99779",
+    "prompt": ".ddx/executions/20260415T085246-c2c99779/prompt.md",
+    "manifest": ".ddx/executions/20260415T085246-c2c99779/manifest.json",
+    "result": ".ddx/executions/20260415T085246-c2c99779/result.json",
+    "checks": ".ddx/executions/20260415T085246-c2c99779/checks.json",
+    "usage": ".ddx/executions/20260415T085246-c2c99779/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0f6a78fa-20260415T085246-c2c99779"
+  }
+}

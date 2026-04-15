@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260411T171350-b9afc859",
+  "bead_id": "ddx-063d34f0",
+  "base_rev": "df7e2d67c834a5a069c484ecbb05c149244eee81",
+  "created_at": "2026-04-11T17:13:51.178554665Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-063d34f0",
+    "title": "Define epic worker branch, worktree, and merge-gate contract",
+    "description": "\u003ccontext-digest\u003e\nReview area: epic-scoped worker behavior. Evidence covers the new single-ticket-first policy, the need for one persistent epic branch/worktree, sequential child execution, and epic-level merge gates before the final merge commit.\n\u003c/context-digest\u003e\nDefine the worker, branch, worktree, and merge-gate contract for epic execution.\n\n## Goals\n- Define epic branch naming and lifecycle\n- Define how child beads are selected and committed sequentially on the epic branch\n- Define when child beads close relative to epic-branch commits\n- Define epic merge-gate execution and the final regular merge-commit landing contract",
+    "acceptance": "FEAT-006, FEAT-012, API-001, and SD-019 define epic branch naming, persistent epic worktrees, sequential child-bead commits, child close semantics, epic merge gates, and final merge-commit landing",
+    "parent": "ddx-cf340665",
+    "labels": [
+      "ddx",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:bead",
+      "area:git",
+      "area:docs"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "agent execution failed\nresult_rev=eac4d788f27a141cc10c74fc454ace4558d6d7f4\nbase_rev=eac4d788f27a141cc10c74fc454ace4558d6d7f4\nretry_after=2026-04-11T09:21:42Z",
+          "created_at": "2026-04-11T03:21:42.656168825Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execution-eligible": true,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260411T171350-b9afc859",
+    "prompt": ".ddx/executions/20260411T171350-b9afc859/prompt.md",
+    "manifest": ".ddx/executions/20260411T171350-b9afc859/manifest.json",
+    "result": ".ddx/executions/20260411T171350-b9afc859/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-063d34f0-20260411T171350-b9afc859"
+  }
+}

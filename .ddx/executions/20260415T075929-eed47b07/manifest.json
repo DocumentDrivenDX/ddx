@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260415T075929-eed47b07",
+  "bead_id": "ddx-0b608807",
+  "base_rev": "7fc0e52c42e70e60c31ef7e46c641076858b05f7",
+  "created_at": "2026-04-15T07:59:29.649781105Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0b608807",
+    "title": "test(agent): add unit tests for providers/models/check/route-status commands with httptest /v1/models stub",
+    "description": "Opus epic review (2026-04-15): no CLI-level tests exist for providers/models/check/route-status. Unit tests cover only ValidateOrphanModel and the script-harness routing evidence path. The 4 commands are untested end-to-end.\n\nAdd cmd/agent_providers_test.go, agent_models_test.go, agent_check_test.go, agent_route_status_test.go using httptest to stub a fake /v1/models endpoint, run each command against a temp config that points at the stub, and assert the output includes the expected providers/models/status.",
+    "acceptance": "(1) 4 new test files exist, one per command. (2) Each file has at least: a success path, a provider-unreachable path, and an unexpected-error path. (3) All tests hermetic — httptest stub, no real network. (4) Coverage for the 4 commands \u003e 60%.",
+    "parent": "ddx-bd0691fe",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:test",
+      "area:agent",
+      "area:cli",
+      "source:opus-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T07:59:29Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T07:59:29.416528803Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T075929-eed47b07",
+    "prompt": ".ddx/executions/20260415T075929-eed47b07/prompt.md",
+    "manifest": ".ddx/executions/20260415T075929-eed47b07/manifest.json",
+    "result": ".ddx/executions/20260415T075929-eed47b07/result.json",
+    "checks": ".ddx/executions/20260415T075929-eed47b07/checks.json",
+    "usage": ".ddx/executions/20260415T075929-eed47b07/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0b608807-20260415T075929-eed47b07"
+  }
+}

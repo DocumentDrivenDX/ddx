@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T203413-62bccc55",
+  "bead_id": "ddx-04abdc06",
+  "base_rev": "eaef7144db2b998ac17cb7380162ec1c8b3f72fd",
+  "created_at": "2026-04-14T20:34:13.358898444Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-04abdc06",
+    "title": "Stage 1.9: update concerns.md (partial edit)",
+    "description": "Update docs/helix/01-frame/concerns.md. Swap any React/Vite/Bun-as-React/TanStack/MiniSearch references in the Web UI subsection (near line 46) to SvelteKit/Bun/GraphQL/Houdini. IMPORTANT: Auth subsection (near line 98) stays UNCHANGED — existing localhost+tsnet model is preserved as-is. See docs/plan-svelte-migration.md Stage 1 bead #9.",
+    "acceptance": "(1) `grep -iE 'react|tanstack|minisearch' docs/helix/01-frame/concerns.md` returns ZERO matches. (2) `grep -n 'isTrusted\\|localhost\\|tsnet' docs/helix/01-frame/concerns.md` shows the auth subsection UNCHANGED from its pre-bead state.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T20:34:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "execute-loop-heartbeat-at": "2026-04-14T20:34:13.132229283Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T203413-62bccc55",
+    "prompt": ".ddx/executions/20260414T203413-62bccc55/prompt.md",
+    "manifest": ".ddx/executions/20260414T203413-62bccc55/manifest.json",
+    "result": ".ddx/executions/20260414T203413-62bccc55/result.json",
+    "checks": ".ddx/executions/20260414T203413-62bccc55/checks.json",
+    "usage": ".ddx/executions/20260414T203413-62bccc55/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-04abdc06-20260414T203413-62bccc55"
+  }
+}

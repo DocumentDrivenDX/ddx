@@ -456,6 +456,10 @@ cli/.ddx/
 .forge/
 cli/.forge/
 
+# Codex agent scratch
+.codex
+.codex/
+
 # gendoc binary (built by go build, not tracked)
 cli/gendoc
 

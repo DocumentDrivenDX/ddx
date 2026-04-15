@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260415T083712-f69fc612",
+  "bead_id": "ddx-c44166f8",
+  "base_rev": "56cb36d611d1434640afe1a00a91b3410cff05d0",
+  "created_at": "2026-04-15T08:37:13.126865096Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c44166f8",
+    "title": "refactor(svelte): migrate to houdini@next or commit to STACK.md Option A/B before Stage 4.12",
+    "description": "Opus Stage 3 batch review (2026-04-15): Houdini 1.5.10 has unresolved peer-dep incompatibility with vite 8 + kit 2.57. STACK.md recommended Option A (downgrade vite) or Option B (drop Houdini for graphql-request). Stage 3.4 shipped with neither — works for now because the single NodeInfo query is trivial.\n\nStage 4.12 Workers page requires graphql-ws subscriptions (workerProgress). Houdini 1.5.10 subscription support on Vite 8 is the most likely place the peer-dep workaround falls apart.\n\nDecision required BEFORE Stage 4.12: either (a) migrate to houdini@next (removes the 'upgrade to houdini@next' noise and fixes Vite 8 support), or (b) drop Houdini entirely for graphql-request + graphql-ws (lower abstraction, no codegen).",
+    "acceptance": "(1) Decision recorded in STACK.md. (2) Either houdini@next installed and regen passes, or graphql-request + graphql-ws wired up with equivalent code paths. (3) bun run build succeeds without peer-dep warnings. (4) Stage 4.12 workerProgress subscription round-trips in a smoke test.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:refactor",
+      "area:ui",
+      "stage:3",
+      "risk:subscriptions",
+      "source:opus-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T08:37:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T08:37:12.908674834Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T083712-f69fc612",
+    "prompt": ".ddx/executions/20260415T083712-f69fc612/prompt.md",
+    "manifest": ".ddx/executions/20260415T083712-f69fc612/manifest.json",
+    "result": ".ddx/executions/20260415T083712-f69fc612/result.json",
+    "checks": ".ddx/executions/20260415T083712-f69fc612/checks.json",
+    "usage": ".ddx/executions/20260415T083712-f69fc612/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c44166f8-20260415T083712-f69fc612"
+  }
+}

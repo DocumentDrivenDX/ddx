@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260415T083630-1b069c67",
+  "bead_id": "ddx-6dc76992",
+  "base_rev": "5d272b567b95ae72a1672ceb5b66fa1ab036880f",
+  "created_at": "2026-04-15T08:36:31.104283285Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6dc76992",
+    "title": "refactor(svelte): gitignore $houdini/, run houdini:generate in bun postinstall + vite plugin",
+    "description": "Opus Stage 3 batch review (2026-04-15): $houdini/ generated artifacts are committed to git (72 files in Stage 3.4 + hand-edits in Stage 3.8 + f5d6fd5 'refresh houdini artifacts' post-fix). The f5d6fd5 commit is proof of the drift problem — artifacts diverged from schema, required manual refresh.\n\nFix: add $houdini/ to frontend/.gitignore; run houdini:generate via bun postinstall hook; also run via the vite plugin (houdiniPreprocess) so dev mode regenerates automatically on schema change. Remove all tracked $houdini/ files in this bead's commit.",
+    "acceptance": "(1) frontend/.gitignore includes $houdini/. (2) package.json has 'postinstall': 'houdini generate'. (3) $houdini/ files removed from git. (4) Fresh 'bun install \u0026\u0026 bun run check' works without any manual generate step. (5) vite dev server auto-regenerates on GraphQL file change.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:refactor",
+      "area:ui",
+      "stage:3",
+      "source:opus-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T08:36:30Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T08:36:30.810442951Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T083630-1b069c67",
+    "prompt": ".ddx/executions/20260415T083630-1b069c67/prompt.md",
+    "manifest": ".ddx/executions/20260415T083630-1b069c67/manifest.json",
+    "result": ".ddx/executions/20260415T083630-1b069c67/result.json",
+    "checks": ".ddx/executions/20260415T083630-1b069c67/checks.json",
+    "usage": ".ddx/executions/20260415T083630-1b069c67/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6dc76992-20260415T083630-1b069c67"
+  }
+}

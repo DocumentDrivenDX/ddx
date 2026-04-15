@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260414T082148-b6ff5c97",
+  "bead_id": "ddx-3c30bfa2",
+  "base_rev": "0c60abf493c7117a9b5f7986c1412c1d513e2ef6",
+  "created_at": "2026-04-14T08:21:48.872622083Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3c30bfa2",
+    "title": "no_changes reports must include a rationale the operator can act on",
+    "description": "Today when execute-bead exits with no_changes, the operator sees 'agent made no commits' and nothing else. That's useless for triage — the operator cannot tell whether:\\n- the bead is genuinely already satisfied (work present in a prior commit)\\n- the agent gave up because it couldn't find the relevant files\\n- the agent classified the task as ambiguous or too risky\\n- the agent hit a tool limit or context cap\\n- the prompt contract was unclear\\n\\nThe fix is to make no_changes a structured result that carries a short rationale from the agent itself, written at the point where the agent decided not to commit. Example of what the operator should see:\\n\\n  status:    no_changes\\n  rationale: The epic filter requested by this bead was already added in\\n             commit 1da6495 (cli/internal/bead/store.go readyFiltered). I\\n             reviewed the current code and tests, confirmed the filter\\n             excludes 'epic' beads from ReadyExecution, and verified\\n             TestReadyExecutionExcludesEpics exists and passes. Nothing\\n             to do. Ref: 1da6495, TestReadyExecutionExcludesEpics.\\n\\nThis is specifically the case that motivated this bead: a continuous-drain worker processed ddx-b44ca394 ('Prevent execute-loop from launching open epics by default') after the epic filter had already been implemented on main. The agent instead made a synthesized no-op commit that only retargeted 17 .claude/skills/helix-* symlinks, which the loop classified as 'success' because a commit was produced. Had no_changes carried a rationale pointing at the prior commit, the loop could have closed the bead as 'already_satisfied' and moved on cleanly.\\n\\nScope:\\n1. Execute-bead prompt contract must explicitly instruct the agent: if you determine the bead's work is already present or cannot be done, report that in a structured way — do NOT make a synthesized commit to 'land something'. Today the prompt says 'Making no commits (no_changes) should be rare' which actively pushes agents toward the wrong behavior.\\n2. The agent's exit mechanism needs a way to carry a rationale string back. Simplest version: the agent writes a file to the worktree like .ddx/executions/\u003cattempt-id\u003e/no_changes_rationale.txt before exiting. ExecuteBead reads it if no commits were produced and attaches the text to the result.NoChangesRationale field.\\n3. The ExecuteBeadResult struct gains a NoChangesRationale string field, populated only when outcome == no_changes. Status: success and the unused 'reason' field need not change.\\n4. execute-loop close semantics: when no_changes arrives with a non-empty rationale pointing at a prior commit, the loop can optionally close the bead as already_satisfied with the rationale recorded in the close event body (instead of waiting for MaxNoChangesBeforeClose=3 strikes). Gate this behind a 'rationale references existing commit' heuristic to avoid flapping — if the rationale is a vague 'nothing to do', keep current cooldown behavior.\\n5. ddx server worker log should render the rationale prominently, not bury it in session metadata.\\n6. The prompt contract note that no_changes should be 'rare' is replaced with: 'If the work is already present, say so and provide a reference (commit SHA, test name, file path). A well-justified no_changes is always preferred to a cosmetic synthesized commit.'",
+    "acceptance": "execute-bead prompt contract explicitly invites no_changes with a rationale. The fake-agent test harness seeds a no_changes rationale file; execute_bead_test.go asserts ExecuteBeadResult.NoChangesRationale is populated; execute-loop uses the rationale to classify 'already_satisfied' when it references a prior commit SHA or test name; the rendered log (ddx server workers log) shows the rationale on its own line; 'agent made no commits' no longer appears without context.",
+    "metadata": {
+      "claimed-at": "2026-04-14T08:21:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "execute-loop-heartbeat-at": "2026-04-14T08:21:48.666907361Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T082148-b6ff5c97",
+    "prompt": ".ddx/executions/20260414T082148-b6ff5c97/prompt.md",
+    "manifest": ".ddx/executions/20260414T082148-b6ff5c97/manifest.json",
+    "result": ".ddx/executions/20260414T082148-b6ff5c97/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3c30bfa2-20260414T082148-b6ff5c97"
+  }
+}

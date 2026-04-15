@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T091108-b5f8f3d7",
+  "bead_id": "ddx-fa380e19",
+  "base_rev": "1bc73f43e44aab84ed20fef65d67fc0693b26a7c",
+  "created_at": "2026-04-15T09:11:08.556518381Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fa380e19",
+    "title": "Stage 4.6: Beads mutations — create + claim/unclaim + update",
+    "description": "Create src/lib/components/BeadForm.svelte for create/update. Claim/unclaim buttons in BeadDetail. Uses Houdini mutation .gql files for each. See docs/plan-svelte-migration.md Stage 4 bead #40.",
+    "acceptance": "(1) MANUAL: click 'New bead', fill the form, submit — the bead appears in the list and is verifiable via `ddx bead show`. (2) Click Claim in detail panel, status changes visibly AND in `ddx bead show`. (3) Same for Unclaim. (4) Edit a field via update form, verify persisted.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T09:11:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T09:11:08.327639793Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T091108-b5f8f3d7",
+    "prompt": ".ddx/executions/20260415T091108-b5f8f3d7/prompt.md",
+    "manifest": ".ddx/executions/20260415T091108-b5f8f3d7/manifest.json",
+    "result": ".ddx/executions/20260415T091108-b5f8f3d7/result.json",
+    "checks": ".ddx/executions/20260415T091108-b5f8f3d7/checks.json",
+    "usage": ".ddx/executions/20260415T091108-b5f8f3d7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fa380e19-20260415T091108-b5f8f3d7"
+  }
+}

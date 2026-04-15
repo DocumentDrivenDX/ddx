@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260415T073932-77305af3",
+  "bead_id": "ddx-3b804e2e",
+  "base_rev": "e6bfd19ee18c4bfef923c4fc5091bd96c30e7d2b",
+  "created_at": "2026-04-15T07:39:32.99245374Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3b804e2e",
+    "title": "refactor(agent): unify providerStatus/checkResult/routeCandidateStatus into shared Probe primitive",
+    "description": "Opus epic review (2026-04-15) flagged 4 disconnected provider-status schemas across the visibility commands:\n- providerStatusEntry in cli/cmd/agent_providers.go:17\n- checkResult in cli/cmd/agent_check.go:17\n- routeCandidateStatus in cli/cmd/agent_route_status.go:69\n- inline probing in cli/cmd/agent_models.go:95\n\nEach reimplements oai.DiscoverModels + status classification with different timeouts (3s/3s/5s/5s) and different result shapes. A scripting user has to learn four schemas to read the same underlying data.\n\nIntroduce a single providerstatus.Probe(ctx, cfg, name) returning one struct that all four commands render.",
+    "acceptance": "(1) cli/internal/agent/providerstatus (or similar) package exists with a Probe function returning a unified status struct. (2) providers/models/check/route-status all render from the same underlying struct. (3) Timeout is consistent (or documented per caller). (4) Existing command output is backwards-compatible (same fields surfaced to users).",
+    "parent": "ddx-bd0691fe",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:refactor",
+      "area:agent",
+      "area:cli",
+      "source:opus-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T07:39:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T07:39:32.728276342Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T073932-77305af3",
+    "prompt": ".ddx/executions/20260415T073932-77305af3/prompt.md",
+    "manifest": ".ddx/executions/20260415T073932-77305af3/manifest.json",
+    "result": ".ddx/executions/20260415T073932-77305af3/result.json",
+    "checks": ".ddx/executions/20260415T073932-77305af3/checks.json",
+    "usage": ".ddx/executions/20260415T073932-77305af3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3b804e2e-20260415T073932-77305af3"
+  }
+}

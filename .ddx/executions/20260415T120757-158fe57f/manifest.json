@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260415T120757-158fe57f",
+  "bead_id": "ddx-3df36f27",
+  "base_rev": "f9460ffba39f91cab15ff8247450aeee77f703cc",
+  "created_at": "2026-04-15T12:07:58.180055687Z",
+  "requested": {
+    "harness": "openrouter",
+    "model": "minimax/minimax-m2.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3df36f27",
+    "title": "security(server): [audit] add isTrusted() gate assertions to every non-health handler in a single test",
+    "description": "Final gate opus review of ddx-02d6142d (2026-04-15) found that /graphql was silently missing the isTrusted() gate that every /api/* handler has. Fixed inline as commit 87472cf. Root cause: no test asserts that EVERY non-health handler returns 403 for non-loopback requests.\n\nAdd a single table-driven test that walks the mux, extracts every registered path, and asserts each returns 403 when RemoteAddr is a non-loopback IP. Whitelist /api/health and /api/ready. This catches the next time someone adds a handler and forgets the gate.",
+    "acceptance": "(1) New test TestAllNonHealthHandlersGateOnIsTrusted walks the mux and asserts 403 for non-loopback requests. (2) /api/health and /api/ready are in an explicit allowlist. (3) Any future handler added without isTrusted() fails the test.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:test",
+      "area:server",
+      "security",
+      "source:opus-final-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T12:07:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1602306",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"agent\",\"resolved_model\":\"minimax/minimax-m2.7\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-15T12:07:49.757396805Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=agent model=minimax/minimax-m2.7"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness=agent model=minimax/minimax-m2.7 probe=ok\nmodel \"minimax/minimax-m2.7\" did not match any provider, catalog ref, or model-route; specify --provider or --model-ref explicitly",
+          "created_at": "2026-04-15T12:07:49.812318207Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-15T12:07:40.822298024Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T120757-158fe57f",
+    "prompt": ".ddx/executions/20260415T120757-158fe57f/prompt.md",
+    "manifest": ".ddx/executions/20260415T120757-158fe57f/manifest.json",
+    "result": ".ddx/executions/20260415T120757-158fe57f/result.json",
+    "checks": ".ddx/executions/20260415T120757-158fe57f/checks.json",
+    "usage": ".ddx/executions/20260415T120757-158fe57f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3df36f27-20260415T120757-158fe57f"
+  }
+}

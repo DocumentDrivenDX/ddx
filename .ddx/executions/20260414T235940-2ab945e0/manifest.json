@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T235940-2ab945e0",
+  "bead_id": "ddx-d5fbcab0",
+  "base_rev": "53d61371084803a9b45858119cb8b60469be6d40",
+  "created_at": "2026-04-14T23:59:40.508768481Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d5fbcab0",
+    "title": "Stage 2.8: Mutation resolvers — bead lifecycle (5 mutations)",
+    "description": "Implement mutation resolvers for beadCreate, beadUpdate, beadClaim, beadUnclaim, beadReopen. New file cli/internal/server/graphql/resolver_mutation_beads.go. Each wraps the existing bead.Store method. See docs/plan-svelte-migration.md Stage 2 bead #21.",
+    "acceptance": "(1) Integration test for each mutation. (2) MANUAL: in GraphiQL, beadCreate a test bead, verify with `ddx bead show \u003cid\u003e`. beadClaim it, see status=in-progress in `ddx bead show`. beadUnclaim, beadReopen — each step matches between GraphQL and CLI.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:2",
+      "area:graphql",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T23:59:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-14T23:59:40.291535954Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T235940-2ab945e0",
+    "prompt": ".ddx/executions/20260414T235940-2ab945e0/prompt.md",
+    "manifest": ".ddx/executions/20260414T235940-2ab945e0/manifest.json",
+    "result": ".ddx/executions/20260414T235940-2ab945e0/result.json",
+    "checks": ".ddx/executions/20260414T235940-2ab945e0/checks.json",
+    "usage": ".ddx/executions/20260414T235940-2ab945e0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d5fbcab0-20260414T235940-2ab945e0"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260415T054253-20cd9673",
+  "bead_id": "ddx-0b9c980a",
+  "base_rev": "42866f2c5754d31c1a9560f774db07abe64c4c0e",
+  "created_at": "2026-04-15T05:42:53.901932993Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0b9c980a",
+    "title": "exec: execute-loop --project flag to target a specific project when server is multi-project",
+    "description": "'ddx agent execute-loop' help says 'execute-loop scans the current project's execution-ready bead queue.' When submitting to a multi-project server, there is no way to say 'run this loop against project X'. The server picks whichever project is the current server context, ignoring the caller's CWD.\n\n## Observed\n\nFrom CWD /Users/erik/Projects/axon:\n\n  $ ddx agent execute-loop --once --harness claude --model claude-sonnet-4-6 --json\n  {\n    \"project_root\": \"/Users/erik/Projects/ddx\",  # WRONG\n    \"state\": \"running\",\n    \"worker_id\": \"worker-20260415T011331-d0a4\"\n  }\n\nI wanted the worker to pick an axon bead. The server ran the worker against the ddx repo instead. There is no --project flag, no env var, nothing in the CLI to redirect the server's project scope.\n\nCurrently the only way to target a specific project with execute-loop is --local mode (which spawns a subprocess using the caller's CWD as the project root). This defeats the purpose of having a server in a multi-project deployment.\n\n## Scope\n\n- --project \u003cpath\u003e or --project \u003cname\u003e flag on execute-loop, execute-bead, and 'ddx agent run' that tells the server which project_root to use\n- Env var fallback: DDX_PROJECT_ROOT or similar\n- Default to CWD if unset and no flag\n- Server refuses ambiguous/unmatched project names with a clean error\n- Integration test: from CWD A, submit a loop targeting project B; assert worker runs in B's project_root\n\n## Why this matters for the user's workflow\n\nWithout this, the ONLY way to drive multi-project execution from one shell is --local, which (a) loses the server's queue visibility, (b) ties the parent process to the child, and (c) negates the 'ddx agent execute-loop submits to server by default' ergonomic that execute-loop's --help promises.\n\n## Acceptance\n\n- [ ] --project flag wired through execute-loop/execute-bead/run\n- [ ] Env var fallback documented\n- [ ] Default behavior: CWD-based project detection\n- [ ] Integration test for cross-project submission\n- [ ] execute-loop --help updated to describe project targeting",
+    "labels": [
+      "helix",
+      "area:agent",
+      "area:exec",
+      "kind:bug",
+      "gap:review-loop",
+      "tier:local"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"agent\",\"resolved_model\":\"qwen/qwen3-coder-next\",\"route_reason\":\"first-available\",\"fallback_chain\":[],\"base_url\":\"http://vidar:1234/v1\"}",
+          "created_at": "2026-04-15T05:42:26.024327243Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=agent model=qwen/qwen3-coder-next reason=first-available"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T054253-20cd9673",
+    "prompt": ".ddx/executions/20260415T054253-20cd9673/prompt.md",
+    "manifest": ".ddx/executions/20260415T054253-20cd9673/manifest.json",
+    "result": ".ddx/executions/20260415T054253-20cd9673/result.json",
+    "checks": ".ddx/executions/20260415T054253-20cd9673/checks.json",
+    "usage": ".ddx/executions/20260415T054253-20cd9673/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0b9c980a-20260415T054253-20cd9673"
+  }
+}

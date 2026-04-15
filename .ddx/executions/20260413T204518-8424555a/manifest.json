@@ -1,0 +1,74 @@
+{
+  "attempt_id": "20260413T204518-8424555a",
+  "bead_id": "ddx-4a91da5d",
+  "base_rev": "492ba592b24c5af329e462db5f77fdcf2b91af85",
+  "created_at": "2026-04-13T20:45:19.070528559Z",
+  "requested": {
+    "harness": "claude",
+    "model": "haiku-4.5",
+    "effort": "low",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4a91da5d",
+    "title": "Adopt XML-tagged execute-bead prompt template",
+    "description": "\u003ccontext-digest\u003e\nReview area: execute-bead prompt-template structure. Evidence covers the shipped synthesized prompt in cli/cmd/agent_execute_bead.go, the new tracked execution bundle under .ddx/executions/, and the need for a more deterministic machine-readable prompt contract for replay, diffing, and future autoresearch.\n\u003c/context-digest\u003e\nEvolve the synthesized execute-bead prompt from markdown-heading sections to an explicit XML-tagged structure.\n\n## Goals\n- Replace markdown section headings in the synthesized execute-bead prompt with XML-style tags for machine-significant structure\n- Preserve the current human-readable content while making the prompt easier to parse, diff, and validate deterministically\n- Define which sections are required, optional, and repeatable in the prompt template\n- Keep the prompt aligned with the tracked execution manifest and future commit-provenance rendering\n- Update the governing specs and contracts so the prompt-template contract is documented rather than only implied by code\n\n## Required spec work\n- Update FEAT-006 and any applicable execute-bead contract docs to define the prompt-template structure\n- Align the execution-evidence lane docs so prompt.md is explicitly structured, machine-readable evidence\n\n## Required implementation work\n- Update prompt synthesis in cli/cmd/agent_execute_bead.go to emit XML-tagged sections\n- Update automated coverage to assert the new tagged structure and prevent markdown-header regression",
+    "acceptance": "FEAT-006 and the execute-bead contract docs define an XML-tagged prompt template for execute-bead; cli/cmd/agent_execute_bead.go emits that tagged structure into prompt.md; and tests verify the required tags and reject regression to markdown-heading-only prompt structure",
+    "parent": "ddx-32b3008e",
+    "labels": [
+      "helix",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:exec",
+      "area:docs"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-13T20:45:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4193407",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:19:59.055445757Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "agent made no commits\nresult_rev=f9bde1fe66d6af0db7d03b5cf455359e6e948b45\nbase_rev=f9bde1fe66d6af0db7d03b5cf455359e6e948b45\nretry_after=2026-04-11T10:01:27Z",
+          "created_at": "2026-04-11T04:01:27.674709894Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "merge failed\npreserve_ref=refs/ddx/iterations/ddx-4a91da5d/20260413T024958Z-9874e596376f\nresult_rev=a542795170c0e2d7f94e538ef8e515c6addea112\nbase_rev=9874e596376f6f2ecd1de405ee6caf69a07759ac",
+          "created_at": "2026-04-13T02:49:58.11361011Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "land_conflict"
+        }
+      ],
+      "execution-eligible": true,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T204518-8424555a",
+    "prompt": ".ddx/executions/20260413T204518-8424555a/prompt.md",
+    "manifest": ".ddx/executions/20260413T204518-8424555a/manifest.json",
+    "result": ".ddx/executions/20260413T204518-8424555a/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-4a91da5d-20260413T204518-8424555a"
+  }
+}

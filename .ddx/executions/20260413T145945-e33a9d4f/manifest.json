@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260413T145945-e33a9d4f",
+  "bead_id": "ddx-d2930ee4",
+  "base_rev": "b340d0e28b259ca56d9792a6127fc0a44b7c4455",
+  "created_at": "2026-04-13T14:59:46.016839093Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d2930ee4",
+    "title": "Improve execute-loop no-progress handling and queue-drain behavior",
+    "description": "\u003ccontext-digest\u003e\nReview area: execute-loop queue-drain reliability after the no-change misclassification fix. Evidence covers repeated installed-binary `execute-loop --once` runs selecting the same execution-ready bead, the new `no_changes` status, the need to auto-close already-satisfied beads without reintroducing false-success closure, and the requirement to avoid infinite retry loops on unresolved no-progress work.\n\u003c/context-digest\u003e\nImprove execute-loop so repeated no-progress attempts are classified and handled in a way that lets the queue make forward progress without sacrificing correctness.\n\n## Goals\n- Distinguish already-satisfied no-change beads from unresolved no-progress attempts\n- Prevent immediate re-execution loops on beads that repeatedly return `no_changes`\n- Keep closure semantics machine-owned and evidence-backed rather than inferred from freeform agent output\n- Preserve queue ordering semantics while making the queue drain behavior operationally useful",
+    "acceptance": "The queue contains a concrete contract-and-build lane for execute-loop no-change disposition, satisfaction-based auto-close, and retry suppression so queue burning does not stall on one unresolved no-op bead",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:implementation",
+      "area:agent",
+      "area:bead",
+      "area:cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-13T14:59:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3842205",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "agent made no commits\nresult_rev=e938ba873a01c2767146216ca981611573974f1d\nbase_rev=e938ba873a01c2767146216ca981611573974f1d\nretry_after=2026-04-13T06:03:11Z",
+          "created_at": "2026-04-13T00:03:11.578653412Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-last-detail": "agent made no commits",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-retry-after": "2026-04-13T06:03:11Z",
+      "execution-eligible": true,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T145945-e33a9d4f",
+    "prompt": ".ddx/executions/20260413T145945-e33a9d4f/prompt.md",
+    "manifest": ".ddx/executions/20260413T145945-e33a9d4f/manifest.json",
+    "result": ".ddx/executions/20260413T145945-e33a9d4f/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-d2930ee4-20260413T145945-e33a9d4f"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T200653-08a08e4a",
+  "bead_id": "ddx-cfc0b133",
+  "base_rev": "ec4a0a678152c83679a396515803c1619d85bbc6",
+  "created_at": "2026-04-14T20:06:53.378299214Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cfc0b133",
+    "title": "Stage 1.7: rewrite FEAT-021-dashboard-ui.md (full rewrite)",
+    "description": "Full rewrite of docs/helix/01-frame/features/FEAT-021-dashboard-ui.md. URL scheme /nodes/:nodeId/projects/:projectId/* preserved (user confirmed correct for multi-node reality, not cargo-cult). Every TC-NNN identifier maps to a new Playwright spec filename. Uses Houdini query patterns in examples. Zero React references. See docs/plan-svelte-migration.md Stage 1 bead #7.",
+    "acceptance": "(1) `grep -iE 'react|tanstack|react-router' docs/helix/01-frame/features/FEAT-021-dashboard-ui.md` returns ZERO matches. (2) Every TC-NNN maps to a Playwright spec filename. (3) Examples use Houdini `.gql` files and `+page.ts` load functions.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T20:06:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "execute-loop-heartbeat-at": "2026-04-14T20:06:53.138646803Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T200653-08a08e4a",
+    "prompt": ".ddx/executions/20260414T200653-08a08e4a/prompt.md",
+    "manifest": ".ddx/executions/20260414T200653-08a08e4a/manifest.json",
+    "result": ".ddx/executions/20260414T200653-08a08e4a/result.json",
+    "checks": ".ddx/executions/20260414T200653-08a08e4a/checks.json",
+    "usage": ".ddx/executions/20260414T200653-08a08e4a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cfc0b133-20260414T200653-08a08e4a"
+  }
+}

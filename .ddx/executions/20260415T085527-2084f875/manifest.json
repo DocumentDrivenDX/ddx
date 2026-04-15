@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T085527-2084f875",
+  "bead_id": "ddx-b899d0bb",
+  "base_rev": "f1888bf6c972a35679689c0042344edf5f49d2b2",
+  "created_at": "2026-04-15T08:55:27.878078806Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b899d0bb",
+    "title": "Stage 4.4: Beads search input (server-side via GraphQL)",
+    "description": "Add search input to beads page. Debounced 200ms. Passes `search:` argument to GraphQL query. URL reflects ?q=foo. May require updating resolver_beads.go in Stage 2 to accept search. See docs/plan-svelte-migration.md Stage 4 bead #38.",
+    "acceptance": "(1) MANUAL: type a query, results narrow within ~300ms. (2) URL reflects ?q=foo. (3) Reload preserves search. (4) Clear search, back to full list.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T08:55:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T08:55:27.651912866Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T085527-2084f875",
+    "prompt": ".ddx/executions/20260415T085527-2084f875/prompt.md",
+    "manifest": ".ddx/executions/20260415T085527-2084f875/manifest.json",
+    "result": ".ddx/executions/20260415T085527-2084f875/result.json",
+    "checks": ".ddx/executions/20260415T085527-2084f875/checks.json",
+    "usage": ".ddx/executions/20260415T085527-2084f875/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b899d0bb-20260415T085527-2084f875"
+  }
+}

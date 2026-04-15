@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-0b9c980a",
+  "attempt_id": "20260415T053924-05dbebde",
+  "base_rev": "8836fb48b1ba59ad1293a4194e82d9e2a48aff71",
+  "result_rev": "8836fb48b1ba59ad1293a4194e82d9e2a48aff71",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "compaction stuck: 50 consecutive failed compaction attempts with no write progress",
+  "harness": "agent",
+  "model": "qwen/qwen3-coder-next",
+  "session_id": "eb-883e5663",
+  "duration_ms": 180914,
+  "tokens": 700942,
+  "exit_code": 1,
+  "error": "compaction stuck: 50 consecutive failed compaction attempts with no write progress",
+  "execution_dir": ".ddx/executions/20260415T053924-05dbebde",
+  "prompt_file": ".ddx/executions/20260415T053924-05dbebde/prompt.md",
+  "manifest_file": ".ddx/executions/20260415T053924-05dbebde/manifest.json",
+  "result_file": ".ddx/executions/20260415T053924-05dbebde/result.json",
+  "usage_file": ".ddx/executions/20260415T053924-05dbebde/usage.json",
+  "started_at": "2026-04-15T05:39:24.984379366Z",
+  "finished_at": "2026-04-15T05:42:25.899356693Z"
+}

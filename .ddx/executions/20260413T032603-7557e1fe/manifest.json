@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260413T032603-7557e1fe",
+  "bead_id": "ddx-7be16a5c",
+  "base_rev": "daa8c015776b60e6f9d7437d9f358e272b589aed",
+  "created_at": "2026-04-13T03:26:03.359153724Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7be16a5c",
+    "title": "Implement execute-bead required execution gate enforcement",
+    "description": "\u003ccontext-digest\u003e\nReview area: execute-bead post-run gate enforcement. Evidence covers cli/cmd/agent_execute_bead.go landing behavior, FEAT-006's required execution and ratchet language, FEAT-010 execute-bead compatibility requirements, and the need to consume authored execution documents rather than hidden workflow policy.\n\u003c/context-digest\u003e\nImplement the documented post-run merge-gate behavior in execute-bead.\n\n## Goals\n- Resolve applicable graph-authored execution documents from the governing snapshot used for the iteration\n- Run the required execution documents after the agent completes and before land\n- Preserve instead of land when a required execution fails or a ratchet gate blocks the iteration\n- Record gate outcomes in the execute-bead result/evidence surface and through the existing exec history/runtime surfaces\n- Add automated coverage for merge-by-default, required gate failure, and successful gate-passing land behavior",
+    "acceptance": "execute-bead resolves applicable graph-authored execution documents from the governing snapshot, runs required post-run gates before landing, preserves iterations when required executions or ratchets fail, records gate outcomes through existing result/evidence surfaces, and automated coverage proves merge-by-default still works when no required gates fail",
+    "parent": "ddx-91fd7e27",
+    "labels": [
+      "helix",
+      "phase:build",
+      "kind:correctness",
+      "area:agent",
+      "area:exec",
+      "area:cli"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T032603-7557e1fe",
+    "prompt": ".ddx/executions/20260413T032603-7557e1fe/prompt.md",
+    "manifest": ".ddx/executions/20260413T032603-7557e1fe/manifest.json",
+    "result": ".ddx/executions/20260413T032603-7557e1fe/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-7be16a5c-20260413T032603-7557e1fe"
+  }
+}

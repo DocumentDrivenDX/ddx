@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T100120-1ab2b684",
+  "bead_id": "ddx-d8e9284f",
+  "base_rev": "9127f23b966930d9ca35f4194549dcfc60e6a80f",
+  "created_at": "2026-04-15T10:01:20.567147544Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d8e9284f",
+    "title": "Stage 4.14: Playwright suite — navigation spec",
+    "description": "New file: cli/internal/server/frontend/e2e/navigation.spec.ts. Tests: / redirects to /nodes/:nodeId, nav chrome renders, project picker navigates. Minimum 5 test cases with TC-NNN identifiers. See docs/plan-svelte-migration.md Stage 4 bead #48.",
+    "acceptance": "(1) `bun run test:e2e -- navigation` passes locally. (2) Same test passes after `make build` + server restart. (3) Test file contains at least 5 `test(` or `test.describe(` blocks with TC-NNN identifiers.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T10:01:20Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T10:01:20.340325532Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T100120-1ab2b684",
+    "prompt": ".ddx/executions/20260415T100120-1ab2b684/prompt.md",
+    "manifest": ".ddx/executions/20260415T100120-1ab2b684/manifest.json",
+    "result": ".ddx/executions/20260415T100120-1ab2b684/result.json",
+    "checks": ".ddx/executions/20260415T100120-1ab2b684/checks.json",
+    "usage": ".ddx/executions/20260415T100120-1ab2b684/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d8e9284f-20260415T100120-1ab2b684"
+  }
+}

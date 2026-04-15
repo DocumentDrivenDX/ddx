@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T013551-60ab22d4",
+  "bead_id": "ddx-a842dccd",
+  "base_rev": "0fed132b53c8208745b76706ec0feb87914078c4",
+  "created_at": "2026-04-15T01:35:51.599659709Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a842dccd",
+    "title": "Visibility 6: ddx agent route-status command",
+    "description": "Add a new DDx CLI subcommand `ddx agent route-status`. Mirrors ddx-agent's `cmdRouteStatus`. Shows: current routing state, recent routing decisions (which provider was selected for which model-ref and why), health cooldowns currently in effect. Uses whatever public API ddx-agent exposes for its own route-status command — if the API is internal, file an upstream bead on ddx-agent to expose it before implementing the DDx wrapper.\n\nImplementation lives in cli/cmd/agent_route_status.go. Uses the Go package, not shell-out.",
+    "acceptance": "(1) `ddx agent route-status` output matches `ddx-agent route-status` output. (2) Shows current route table, recent decisions, active health cooldowns. (3) Uses Go package imports only. (4) `go build ./...` passes. (5) Manual: compare side-by-side with `ddx-agent route-status`.",
+    "parent": "ddx-bd0691fe",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:agent-routing",
+      "area:agent",
+      "area:cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T01:35:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T01:35:51.37162708Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T013551-60ab22d4",
+    "prompt": ".ddx/executions/20260415T013551-60ab22d4/prompt.md",
+    "manifest": ".ddx/executions/20260415T013551-60ab22d4/manifest.json",
+    "result": ".ddx/executions/20260415T013551-60ab22d4/result.json",
+    "checks": ".ddx/executions/20260415T013551-60ab22d4/checks.json",
+    "usage": ".ddx/executions/20260415T013551-60ab22d4/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a842dccd-20260415T013551-60ab22d4"
+  }
+}
