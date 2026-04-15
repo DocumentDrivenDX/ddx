@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	agentconfig "github.com/DocumentDrivenDX/agent/config"
-	oai "github.com/DocumentDrivenDX/agent/provider/openai"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -24,25 +23,6 @@ type providerStatusEntry struct {
 	Default       bool   `json:"default,omitempty"`
 	Status        string `json:"status"`
 	CooldownUntil string `json:"cooldown_until,omitempty"`
-}
-
-func probeProvider(pc agentconfig.ProviderConfig) string {
-	if pc.Type == "anthropic" {
-		if pc.APIKey == "" {
-			return "missing API key"
-		}
-		return "api key configured"
-	}
-	if strings.TrimSpace(pc.BaseURL) == "" {
-		return "no URL configured"
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
-	defer cancel()
-	models, err := oai.DiscoverModels(ctx, pc.BaseURL, pc.APIKey)
-	if err != nil {
-		return err.Error()
-	}
-	return fmt.Sprintf("connected (%d models)", len(models))
 }
 
 func (f *CommandFactory) newAgentProvidersCommand() *cobra.Command {
@@ -74,13 +54,16 @@ loop until the cooldown expires.`,
 					if url == "" {
 						url = "(api)"
 					}
+					ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
+					r := providerstatus.Probe(ctx, pc)
+					cancel()
 					entry := providerStatusEntry{
 						Name:    name,
 						Type:    pc.Type,
 						BaseURL: url,
 						Model:   pc.Model,
 						Default: name == defName,
-						Status:  probeProvider(pc),
+						Status:  r.Message,
 					}
 					if until, ok := healthSnap[name]; ok {
 						entry.CooldownUntil = until.UTC().Format(time.RFC3339)
@@ -95,7 +78,10 @@ loop until the cooldown expires.`,
 			fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-15s %-40s %-30s %s\n", "NAME", "TYPE", "URL", "MODEL", "STATUS")
 			for _, name := range cfg.ProviderNames() {
 				pc := cfg.Providers[name]
-				status := probeProvider(pc)
+				ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
+				r := providerstatus.Probe(ctx, pc)
+				cancel()
+				status := r.Message
 				marker := " "
 				if name == defName {
 					marker = "*"

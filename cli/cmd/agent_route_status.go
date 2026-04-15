@@ -12,8 +12,8 @@ import (
 
 	agentconfig "github.com/DocumentDrivenDX/agent/config"
 	"github.com/DocumentDrivenDX/agent/observations"
-	oai "github.com/DocumentDrivenDX/agent/provider/openai"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -112,33 +112,17 @@ func evalAgentRouteCandidate(
 	}
 
 	// Probe provider health.
-	if pc.Type == "anthropic" {
-		if pc.APIKey != "" {
-			rc.ProbeMsg = "api key configured"
-			if !rc.InCooldown {
-				rc.Healthy = true
-			}
-		} else {
-			rc.ProbeMsg = "missing API key"
-			rc.Reason = "missing API key"
+	ctx, cancel := context.WithTimeout(context.Background(), routeStatusProbeTimeout)
+	pr := providerstatus.Probe(ctx, pc)
+	cancel()
+	rc.ProbeMsg = pr.Message
+	if pr.Reachable {
+		if !rc.InCooldown {
+			rc.Healthy = true
 		}
-	} else if strings.TrimSpace(pc.BaseURL) == "" {
-		rc.ProbeMsg = "no URL configured"
-		rc.Reason = "no URL configured"
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), routeStatusProbeTimeout)
-		defer cancel()
-		models, err := oai.DiscoverModels(ctx, pc.BaseURL, pc.APIKey)
-		if err != nil {
-			rc.ProbeMsg = err.Error()
-			if !rc.InCooldown {
-				rc.Reason = err.Error()
-			}
-		} else {
-			rc.ProbeMsg = fmt.Sprintf("connected (%d models)", len(models))
-			if !rc.InCooldown {
-				rc.Healthy = true
-			}
+		if !rc.InCooldown {
+			rc.Reason = pr.Message
 		}
 	}
 

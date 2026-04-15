@@ -9,6 +9,7 @@ import (
 	agentconfig "github.com/DocumentDrivenDX/agent/config"
 	"github.com/DocumentDrivenDX/agent/modelcatalog"
 	oai "github.com/DocumentDrivenDX/agent/provider/openai"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -90,18 +91,18 @@ func printModelsForProvider(cmd *cobra.Command, pc agentconfig.ProviderConfig, c
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), modelsProbeTimeout)
-	defer cancel()
+	pr := providerstatus.Probe(ctx, pc)
+	cancel()
 
-	ids, err := oai.DiscoverModels(ctx, pc.BaseURL, pc.APIKey)
-	if err != nil || len(ids) == 0 {
+	if !pr.Reachable || len(pr.Models) == 0 {
 		fmt.Fprintln(out, "  (unavailable)")
 		return
 	}
 
-	ranked, err := oai.RankModels(ids, knownModels, pc.ModelPattern)
+	ranked, err := oai.RankModels(pr.Models, knownModels, pc.ModelPattern)
 	if err != nil {
 		// Pattern compile error — fall back to plain list.
-		for _, id := range ids {
+		for _, id := range pr.Models {
 			fmt.Fprintf(out, "  %s\n", id)
 		}
 		return

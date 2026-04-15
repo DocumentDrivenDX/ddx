@@ -4,45 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	agentconfig "github.com/DocumentDrivenDX/agent/config"
-	oai "github.com/DocumentDrivenDX/agent/provider/openai"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
 	"github.com/spf13/cobra"
 )
 
 const checkProbeTimeout = 5 * time.Second
-
-type checkResult struct {
-	name      string
-	reachable bool
-	models    int
-	msg       string
-}
-
-func checkProvider(name string, pc agentconfig.ProviderConfig) checkResult {
-	if pc.Type == "anthropic" {
-		if pc.APIKey == "" {
-			return checkResult{name: name, reachable: false, msg: "missing API key"}
-		}
-		// Anthropic doesn't expose /v1/models — treat as reachable when key is present.
-		return checkResult{name: name, reachable: true, models: -1, msg: "api key configured (model listing not supported)"}
-	}
-
-	if strings.TrimSpace(pc.BaseURL) == "" {
-		return checkResult{name: name, reachable: false, msg: "no URL configured"}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), checkProbeTimeout)
-	defer cancel()
-
-	ids, err := oai.DiscoverModels(ctx, pc.BaseURL, pc.APIKey)
-	if err != nil {
-		return checkResult{name: name, reachable: false, msg: err.Error()}
-	}
-	return checkResult{name: name, reachable: true, models: len(ids), msg: fmt.Sprintf("connected (%d models)", len(ids))}
-}
 
 func (f *CommandFactory) newAgentCheckCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -75,26 +44,31 @@ Exits 1 otherwise.`,
 				names = cfg.ProviderNames()
 			}
 
-			results := make([]checkResult, 0, len(names))
+			type namedResult struct {
+				name string
+				r    providerstatus.Result
+			}
+			results := make([]namedResult, 0, len(names))
 			for _, name := range names {
 				pc := cfg.Providers[name]
-				r := checkProvider(name, pc)
-				results = append(results, r)
+				ctx, cancel := context.WithTimeout(context.Background(), checkProbeTimeout)
+				r := providerstatus.Probe(ctx, pc)
+				cancel()
+				results = append(results, namedResult{name: name, r: r})
 			}
 
 			anyReachable := false
-			for _, r := range results {
+			for _, nr := range results {
 				status := "UNREACHABLE"
-				if r.reachable {
+				if nr.r.Reachable {
 					status = "OK"
-					if r.models > 0 {
-						anyReachable = true
-					} else if r.models < 0 {
-						// Anthropic: key configured, treat as usable.
+					// Anthropic: Models==nil means key-based (no listing endpoint),
+					// treat as usable. OAI: require at least one discovered model.
+					if nr.r.Models == nil || len(nr.r.Models) > 0 {
 						anyReachable = true
 					}
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %-12s  %s\n", r.name, status, r.msg)
+				fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %-12s  %s\n", nr.name, status, nr.r.Message)
 			}
 
 			if !anyReachable {
