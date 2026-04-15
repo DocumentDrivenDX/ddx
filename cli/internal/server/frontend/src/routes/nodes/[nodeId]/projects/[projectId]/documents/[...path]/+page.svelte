@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { marked } from 'marked';
+	import DOMPurify from 'isomorphic-dompurify';
 	import { ArrowLeft, Pencil } from 'lucide-svelte';
 	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
@@ -15,7 +16,13 @@
 	let saving = $state(false);
 	let saveError = $state<string | null>(null);
 
-	let rendered = $derived(content ? (marked.parse(content) as string) : '');
+	// Sanitize: marked dropped its built-in sanitize option, so raw <script>,
+	// onerror handlers, and javascript: URIs in a document would execute in
+	// the admin UI context. A compromised document on disk must not be able
+	// to hijack a session that has documentWrite access.
+	let rendered = $derived(
+		content ? DOMPurify.sanitize(marked.parse(content) as string) : ''
+	);
 
 	const DOCUMENT_WRITE = gql`
 		mutation DocumentWrite($path: String!, $content: String!) {
