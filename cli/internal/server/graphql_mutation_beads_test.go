@@ -8,7 +8,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -109,7 +108,7 @@ func TestGraphQLBeadCreate(t *testing.T) {
 	}
 
 	// Verify the bead can be queried back.
-	queryResp := gqlMutation(t, srv, fmt.Sprintf(`{ beads { edges { node { id title } } totalCount } }`))
+	queryResp := gqlMutation(t, srv, `{ beads { edges { node { id title } } totalCount } }`)
 	var qdata struct {
 		Beads struct {
 			TotalCount int `json:"totalCount"`
