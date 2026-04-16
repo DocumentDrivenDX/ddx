@@ -30,11 +30,11 @@ func stateDir(t *testing.T) string {
 
 // TC-011.1 — Server writes server-state.json under XDG_DATA_HOME/ddx.
 func TestStateFileLocation(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("DDX_NODE_NAME", "test-node")
 
+	// setupTestDir isolates XDG_DATA_HOME to its own temp dir.
 	workDir := setupTestDir(t)
+	xdgDir := os.Getenv("XDG_DATA_HOME")
 	srv := New(":0", workDir)
 
 	// save() is called internally by New() via RegisterProject; verify the file.
@@ -73,11 +73,10 @@ func TestStateFileLocation(t *testing.T) {
 // TC-011.2 — Server writes server.addr under XDG_DATA_HOME/ddx with URL,
 // node name, and node ID fields.
 func TestAddrFileLocation(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("DDX_NODE_NAME", "addr-test-node")
 
 	workDir := setupTestDir(t)
+	xdgDir := os.Getenv("XDG_DATA_HOME")
 	srv := New(":0", workDir)
 
 	// writeAddrFile is normally called from Serve/ListenAndServe, but we can
@@ -154,8 +153,6 @@ func TestNodeIdentityStable(t *testing.T) {
 // TC-011.4 — Projects registered before a simulated restart are returned by
 // GET /api/projects after a fresh server is created against the same state dir.
 func TestStateFileProjectsPersistAcrossRestart(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("DDX_NODE_NAME", "persist-node")
 
 	workDir := setupTestDir(t)
@@ -215,11 +212,10 @@ func TestStateFileProjectsPersistAcrossRestart(t *testing.T) {
 // TC-011.6 — A second server start overwrites server.addr (last-writer wins).
 // The first instance's addr is no longer valid after the second instance writes.
 func TestAddrFileOverwrittenBySecondInstance(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("DDX_NODE_NAME", "overwrite-test-node")
 
 	workDir := setupTestDir(t)
+	xdgDir := os.Getenv("XDG_DATA_HOME")
 	addrFile := filepath.Join(xdgDir, "ddx", "server.addr")
 
 	// First server writes addr with its Addr field.

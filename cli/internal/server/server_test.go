@@ -37,8 +37,14 @@ func TestMain(m *testing.M) {
 }
 
 // setupTestDir creates a temp directory with a library and bead store.
+// Isolates the server's persistent state (XDG_DATA_HOME) to a per-test temp
+// dir so tests don't accumulate registered projects in the user's real state
+// file. Tests that need to assert on the state file location should read
+// os.Getenv("XDG_DATA_HOME") after calling setupTestDir rather than setting
+// their own value before.
 func setupTestDir(t *testing.T) string {
 	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
 
 	// Create .ddx/config.yaml so the server can find the library
@@ -3210,6 +3216,145 @@ func TestMCPShowProject(t *testing.T) {
 	}
 }
 
+// TestMCPProjectAwareToolSelection verifies that project-local MCP tools
+// honour an optional "project" argument: with two projects registered, passing
+// project=<id> routes the tool at that project's data store; omitting project
+// returns a disambiguation error; project=<path> resolves identically to the
+// ID form; and an unknown project ID returns an error. Covers FEAT-002/SD-019
+// AC (2), (3), and the disambiguation semantics required by the bead.
+func TestMCPProjectAwareToolSelection(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("DDX_NODE_NAME", "mcp-project-aware-node")
+
+	dir1 := setupProjectWithBeads(t, "p1")
+	dir2 := setupProjectWithBeads(t, "p2")
+
+	srv := New(":0", dir1)
+	// Reset state to exactly the two test projects so we get the multi-project
+	// disambiguation codepath.
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	p1 := srv.state.RegisterProject(dir1)
+	p2 := srv.state.RegisterProject(dir2)
+
+	// Helper that unwraps the MCP tool result payload.
+	toolCall := func(t *testing.T, body string) (text string, isErr bool) {
+		t.Helper()
+		w := mcpRequest(t, srv, "tools/call", body)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp jsonRPCResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON-RPC response: %v", err)
+		}
+		result, ok := resp.Result.(map[string]any)
+		if !ok {
+			t.Fatalf("expected result map, got %T", resp.Result)
+		}
+		content, _ := result["content"].([]any)
+		if len(content) == 0 {
+			t.Fatal("expected non-empty content")
+		}
+		text, _ = content[0].(map[string]any)["text"].(string)
+		isErr, _ = result["isError"].(bool)
+		return text, isErr
+	}
+
+	t.Run("project arg selects project 1", func(t *testing.T) {
+		body := fmt.Sprintf(`{"name":"ddx_list_beads","arguments":{"project":%q}}`, p1.ID)
+		text, isErr := toolCall(t, body)
+		if isErr {
+			t.Fatalf("unexpected error: %s", text)
+		}
+		if !strings.Contains(text, "p1-open") {
+			t.Errorf("expected p1-open in project 1 beads, got: %s", text)
+		}
+		if strings.Contains(text, "p2-") {
+			t.Errorf("project 1 tool call should not leak p2 beads, got: %s", text)
+		}
+	})
+
+	t.Run("project arg selects project 2", func(t *testing.T) {
+		body := fmt.Sprintf(`{"name":"ddx_list_beads","arguments":{"project":%q}}`, p2.ID)
+		text, isErr := toolCall(t, body)
+		if isErr {
+			t.Fatalf("unexpected error: %s", text)
+		}
+		if !strings.Contains(text, "p2-open") {
+			t.Errorf("expected p2-open in project 2 beads, got: %s", text)
+		}
+		if strings.Contains(text, "p1-") {
+			t.Errorf("project 2 tool call should not leak p1 beads, got: %s", text)
+		}
+	})
+
+	t.Run("project arg accepts path form", func(t *testing.T) {
+		body := fmt.Sprintf(`{"name":"ddx_bead_status","arguments":{"project":%q}}`, dir1)
+		text, isErr := toolCall(t, body)
+		if isErr {
+			t.Fatalf("unexpected error: %s", text)
+		}
+		var counts map[string]int
+		if err := json.Unmarshal([]byte(text), &counts); err != nil {
+			t.Fatalf("expected JSON counts, got: %s", text)
+		}
+		// setupProjectWithBeads creates 1 open, 1 in_progress, 1 closed per project.
+		if counts["total"] != 3 {
+			t.Errorf("expected total=3 for project 1, got %d", counts["total"])
+		}
+	})
+
+	t.Run("show_bead scoped to project 1 cannot find project 2 beads", func(t *testing.T) {
+		// p2-closed is in project 2; asking for it scoped to project 1 must error.
+		body := fmt.Sprintf(`{"name":"ddx_show_bead","arguments":{"id":"p2-closed","project":%q}}`, p1.ID)
+		text, isErr := toolCall(t, body)
+		if !isErr {
+			t.Errorf("expected isError=true for cross-project lookup, got: %s", text)
+		}
+	})
+
+	t.Run("omitted project arg with >1 project returns disambiguation error", func(t *testing.T) {
+		body := `{"name":"ddx_list_beads","arguments":{}}`
+		text, isErr := toolCall(t, body)
+		if !isErr {
+			t.Fatalf("expected disambiguation error, got success: %s", text)
+		}
+		if !strings.Contains(text, "multiple projects") {
+			t.Errorf("expected 'multiple projects' in error, got: %s", text)
+		}
+	})
+
+	t.Run("unknown project id returns error", func(t *testing.T) {
+		body := `{"name":"ddx_list_beads","arguments":{"project":"proj-doesnotexist"}}`
+		text, isErr := toolCall(t, body)
+		if !isErr {
+			t.Fatalf("expected error for unknown project, got success: %s", text)
+		}
+		if !strings.Contains(text, "project not found") {
+			t.Errorf("expected 'project not found' in error, got: %s", text)
+		}
+	})
+
+	t.Run("singleton compat: omitted project arg works when exactly one project registered", func(t *testing.T) {
+		// Reset state to a single project and re-invoke without the project arg.
+		srv.state.mu.Lock()
+		srv.state.Projects = nil
+		srv.state.mu.Unlock()
+		srv.state.RegisterProject(dir1)
+
+		body := `{"name":"ddx_list_beads","arguments":{}}`
+		text, isErr := toolCall(t, body)
+		if isErr {
+			t.Fatalf("expected singleton compat to succeed, got error: %s", text)
+		}
+		if !strings.Contains(text, "p1-open") {
+			t.Errorf("expected p1-open in singleton call output, got: %s", text)
+		}
+	})
+}
+
 // TC-022: GET /api/agent/workers returns workers from multiple registered
 // projects in a single response array.
 func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
@@ -3495,11 +3640,10 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 // duplicate entries for the same canonical path, starts the server, and
 // asserts the post-startup state has exactly 1 entry for that path.
 func TestMigrateDeduplicatesDuplicateEntries(t *testing.T) {
-	xdgDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("DDX_NODE_NAME", "test-node")
 
 	workDir := setupTestDir(t)
+	xdgDir := os.Getenv("XDG_DATA_HOME")
 
 	// Use a real directory that exists so the reachability sweep keeps it.
 	dupPath := t.TempDir()

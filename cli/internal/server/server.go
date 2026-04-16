@@ -395,6 +395,43 @@ func (s *Server) resolveProject(key string) (ProjectEntry, bool) {
 	return s.state.GetProjectByPath(key)
 }
 
+// mcpResolveWorkingDir resolves a project argument passed to a project-local
+// MCP tool into a working directory. Semantics mirror the HTTP routing layer:
+//
+//   - project provided (ID or path): resolve via resolveProject; 400-equivalent
+//     error result if not found.
+//   - project omitted + exactly one project registered: auto-resolve (singleton
+//     compat — the common single-project deployment).
+//   - project omitted + >1 project registered: return a disambiguation error.
+//   - project omitted + 0 projects registered: fall back to s.WorkingDir.
+//
+// The error mcpToolResult (if non-nil) should be returned directly to the MCP
+// client; workingDir is empty when an error is returned.
+func (s *Server) mcpResolveWorkingDir(project string) (string, *mcpToolResult) {
+	if project != "" {
+		entry, ok := s.resolveProject(project)
+		if !ok {
+			return "", &mcpToolResult{
+				Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("project not found: %s", project)}},
+				IsError: true,
+			}
+		}
+		return entry.Path, nil
+	}
+	projects := s.state.GetProjects()
+	switch len(projects) {
+	case 0:
+		return s.WorkingDir, nil
+	case 1:
+		return projects[0].Path, nil
+	default:
+		return "", &mcpToolResult{
+			Content: []mcpContent{{Type: "text", Text: "multiple projects registered; specify 'project' argument (id or path)"}},
+			IsError: true,
+		}
+	}
+}
+
 // projectScoped is middleware for /api/projects/{project}/... routes.
 // It pulls {project} out of the path, resolves it to a registered ProjectEntry,
 // and injects the entry into the request context. Requests whose project does
@@ -2548,13 +2585,23 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) mcpTools() []mcpTool {
+	// projectProp is the schema fragment for the optional "project" argument
+	// accepted by every project-local tool. Omitted when exactly one project is
+	// registered (singleton compat). Required when more than one project is
+	// registered — otherwise the tool returns a disambiguation error.
+	projectProp := map[string]any{
+		"type":        "string",
+		"description": "Project ID (proj-...) or path. Optional when exactly one project is registered.",
+	}
 	return []mcpTool{
 		{
 			Name:        "ddx_list_documents",
 			Description: "List documents in the DDx library",
 			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
 			},
 		},
 		{
@@ -2563,7 +2610,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"path": map[string]any{"type": "string", "description": "Document path relative to library root"},
+					"path":    map[string]any{"type": "string", "description": "Document path relative to library root"},
+					"project": projectProp,
 				},
 				"required": []string{"path"},
 			},
@@ -2574,7 +2622,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"query": map[string]any{"type": "string", "description": "Search query"},
+					"query":   map[string]any{"type": "string", "description": "Search query"},
+					"project": projectProp,
 				},
 				"required": []string{"query"},
 			},
@@ -2585,7 +2634,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"role": map[string]any{"type": "string", "description": "Role name to resolve"},
+					"role":    map[string]any{"type": "string", "description": "Role name to resolve"},
+					"project": projectProp,
 				},
 				"required": []string{"role"},
 			},
@@ -2596,8 +2646,9 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"status": map[string]any{"type": "string", "description": "Filter by status (open, in_progress, closed)"},
-					"label":  map[string]any{"type": "string", "description": "Filter by label"},
+					"status":  map[string]any{"type": "string", "description": "Filter by status (open, in_progress, closed)"},
+					"label":   map[string]any{"type": "string", "description": "Filter by label"},
+					"project": projectProp,
 				},
 			},
 		},
@@ -2607,7 +2658,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id": map[string]any{"type": "string", "description": "Bead ID"},
+					"id":      map[string]any{"type": "string", "description": "Bead ID"},
+					"project": projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2616,32 +2668,40 @@ func (s *Server) mcpTools() []mcpTool {
 			Name:        "ddx_bead_ready",
 			Description: "List ready beads (open with all dependencies closed)",
 			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
 			},
 		},
 		{
 			Name:        "ddx_bead_status",
 			Description: "Get bead summary counts by status",
 			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
 			},
 		},
 		{
 			Name:        "ddx_doc_graph",
 			Description: "Get the full document dependency graph",
 			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
 			},
 		},
 		{
 			Name:        "ddx_doc_stale",
 			Description: "List stale documents",
 			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
 			},
 		},
 		{
@@ -2650,7 +2710,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id": map[string]any{"type": "string", "description": "Document ID"},
+					"id":      map[string]any{"type": "string", "description": "Document ID"},
+					"project": projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2661,7 +2722,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id": map[string]any{"type": "string", "description": "Document ID"},
+					"id":      map[string]any{"type": "string", "description": "Document ID"},
+					"project": projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2673,6 +2735,7 @@ func (s *Server) mcpTools() []mcpTool {
 				"type": "object",
 				"properties": map[string]any{
 					"harness": map[string]any{"type": "string", "description": "Filter by harness name"},
+					"project": projectProp,
 				},
 			},
 		},
@@ -2707,6 +2770,7 @@ func (s *Server) mcpTools() []mcpTool {
 					"labels":      map[string]any{"type": "string", "description": "Comma-separated labels"},
 					"description": map[string]any{"type": "string", "description": "Description"},
 					"acceptance":  map[string]any{"type": "string", "description": "Acceptance criteria"},
+					"project":     projectProp,
 				},
 				"required": []string{"title"},
 			},
@@ -2722,6 +2786,7 @@ func (s *Server) mcpTools() []mcpTool {
 					"labels":      map[string]any{"type": "string", "description": "Comma-separated labels (replaces existing)"},
 					"description": map[string]any{"type": "string", "description": "New description"},
 					"acceptance":  map[string]any{"type": "string", "description": "New acceptance criteria"},
+					"project":     projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2734,6 +2799,7 @@ func (s *Server) mcpTools() []mcpTool {
 				"properties": map[string]any{
 					"id":       map[string]any{"type": "string", "description": "Bead ID"},
 					"assignee": map[string]any{"type": "string", "description": "Assignee name"},
+					"project":  projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2745,6 +2811,7 @@ func (s *Server) mcpTools() []mcpTool {
 				"type": "object",
 				"properties": map[string]any{
 					"artifact": map[string]any{"type": "string", "description": "Filter by artifact ID"},
+					"project":  projectProp,
 				},
 			},
 		},
@@ -2754,7 +2821,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id": map[string]any{"type": "string", "description": "Definition ID"},
+					"id":      map[string]any{"type": "string", "description": "Definition ID"},
+					"project": projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2767,6 +2835,7 @@ func (s *Server) mcpTools() []mcpTool {
 				"properties": map[string]any{
 					"artifact":   map[string]any{"type": "string", "description": "Filter by artifact ID"},
 					"definition": map[string]any{"type": "string", "description": "Filter by definition ID"},
+					"project":    projectProp,
 				},
 			},
 		},
@@ -2776,7 +2845,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id": map[string]any{"type": "string", "description": "Execution definition ID"},
+					"id":      map[string]any{"type": "string", "description": "Execution definition ID"},
+					"project": projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2791,6 +2861,7 @@ func (s *Server) mcpTools() []mcpTool {
 					"prompt":  map[string]any{"type": "string", "description": "Prompt text"},
 					"model":   map[string]any{"type": "string", "description": "Model override"},
 					"effort":  map[string]any{"type": "string", "description": "Effort/reasoning level"},
+					"project": projectProp,
 				},
 				"required": []string{"harness", "prompt"},
 			},
@@ -2801,7 +2872,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"since": map[string]any{"type": "string", "description": "Git ref to compare from (default: HEAD~5)"},
+					"since":   map[string]any{"type": "string", "description": "Git ref to compare from (default: HEAD~5)"},
+					"project": projectProp,
 				},
 			},
 		},
@@ -2813,6 +2885,7 @@ func (s *Server) mcpTools() []mcpTool {
 				"properties": map[string]any{
 					"id":      map[string]any{"type": "string", "description": "Document artifact ID"},
 					"content": map[string]any{"type": "string", "description": "New document content"},
+					"project": projectProp,
 				},
 				"required": []string{"id", "content"},
 			},
@@ -2823,7 +2896,8 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id": map[string]any{"type": "string", "description": "Document artifact ID"},
+					"id":      map[string]any{"type": "string", "description": "Document artifact ID"},
+					"project": projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2834,8 +2908,9 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id":  map[string]any{"type": "string", "description": "Document artifact ID"},
-					"ref": map[string]any{"type": "string", "description": "Git ref to diff against (default: working copy vs HEAD)"},
+					"id":      map[string]any{"type": "string", "description": "Document artifact ID"},
+					"ref":     map[string]any{"type": "string", "description": "Git ref to diff against (default: working copy vs HEAD)"},
+					"project": projectProp,
 				},
 				"required": []string{"id"},
 			},
@@ -2874,47 +2949,68 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		}
 	}
 
+	// Tools that operate on project-local data resolve the optional "project"
+	// argument first; tools listed in the default branch are host/user global
+	// and ignore project scoping entirely.
+	project, _ := call.Arguments["project"].(string)
+
 	switch call.Name {
-	case "ddx_list_documents":
-		return s.mcpListDocuments()
-	case "ddx_read_document":
+	case "ddx_list_projects":
+		return s.mcpListProjects()
+	case "ddx_show_project":
+		id, _ := call.Arguments["id"].(string)
 		path, _ := call.Arguments["path"].(string)
-		return s.mcpReadDocument(path)
-	case "ddx_search":
-		query, _ := call.Arguments["query"].(string)
-		return s.mcpSearch(query)
-	case "ddx_resolve_persona":
-		role, _ := call.Arguments["role"].(string)
-		return s.mcpResolvePersona(role)
-	case "ddx_list_beads":
-		status, _ := call.Arguments["status"].(string)
-		label, _ := call.Arguments["label"].(string)
-		return s.mcpListBeads(status, label)
-	case "ddx_show_bead":
-		id, _ := call.Arguments["id"].(string)
-		return s.mcpShowBead(id)
-	case "ddx_bead_ready":
-		return s.mcpBeadReady()
-	case "ddx_bead_status":
-		return s.mcpBeadStatus()
-	case "ddx_doc_graph":
-		return s.mcpDocGraph()
-	case "ddx_doc_stale":
-		return s.mcpDocStale()
-	case "ddx_doc_show":
-		id, _ := call.Arguments["id"].(string)
-		return s.mcpDocShow(id)
-	case "ddx_doc_deps":
-		id, _ := call.Arguments["id"].(string)
-		return s.mcpDocDeps(id)
-	case "ddx_agent_sessions":
-		harness, _ := call.Arguments["harness"].(string)
-		return s.mcpAgentSessions(harness)
+		return s.mcpShowProject(id, path)
 	case "ddx_provider_list":
 		return s.mcpProviderList()
 	case "ddx_provider_show":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpProviderShow(harness)
+	}
+
+	// From here on: project-local tools. Resolve the project arg to a working
+	// directory before dispatching.
+	workingDir, errResult := s.mcpResolveWorkingDir(project)
+	if errResult != nil {
+		return *errResult
+	}
+
+	switch call.Name {
+	case "ddx_list_documents":
+		return s.mcpListDocuments(workingDir)
+	case "ddx_read_document":
+		path, _ := call.Arguments["path"].(string)
+		return s.mcpReadDocument(workingDir, path)
+	case "ddx_search":
+		query, _ := call.Arguments["query"].(string)
+		return s.mcpSearch(workingDir, query)
+	case "ddx_resolve_persona":
+		role, _ := call.Arguments["role"].(string)
+		return s.mcpResolvePersona(workingDir, role)
+	case "ddx_list_beads":
+		status, _ := call.Arguments["status"].(string)
+		label, _ := call.Arguments["label"].(string)
+		return s.mcpListBeads(workingDir, status, label)
+	case "ddx_show_bead":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpShowBead(workingDir, id)
+	case "ddx_bead_ready":
+		return s.mcpBeadReady(workingDir)
+	case "ddx_bead_status":
+		return s.mcpBeadStatus(workingDir)
+	case "ddx_doc_graph":
+		return s.mcpDocGraph(workingDir)
+	case "ddx_doc_stale":
+		return s.mcpDocStale(workingDir)
+	case "ddx_doc_show":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpDocShow(workingDir, id)
+	case "ddx_doc_deps":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpDocDeps(workingDir, id)
+	case "ddx_agent_sessions":
+		harness, _ := call.Arguments["harness"].(string)
+		return s.mcpAgentSessions(workingDir, harness)
 	case "ddx_bead_create":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
@@ -2928,7 +3024,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		if p, ok := call.Arguments["priority"].(float64); ok {
 			priority = int(p)
 		}
-		return s.mcpBeadCreate(title, issueType, priority, labelsStr, description, acceptance)
+		return s.mcpBeadCreate(workingDir, title, issueType, priority, labelsStr, description, acceptance)
 	case "ddx_bead_update":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
@@ -2938,30 +3034,30 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		labelsStr, _ := call.Arguments["labels"].(string)
 		description, _ := call.Arguments["description"].(string)
 		acceptance, _ := call.Arguments["acceptance"].(string)
-		return s.mcpBeadUpdate(id, status, labelsStr, description, acceptance)
+		return s.mcpBeadUpdate(workingDir, id, status, labelsStr, description, acceptance)
 	case "ddx_bead_claim":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
 		assignee, _ := call.Arguments["assignee"].(string)
-		return s.mcpBeadClaim(id, assignee)
+		return s.mcpBeadClaim(workingDir, id, assignee)
 	case "ddx_exec_definitions":
 		artifact, _ := call.Arguments["artifact"].(string)
-		return s.mcpExecDefinitions(artifact)
+		return s.mcpExecDefinitions(workingDir, artifact)
 	case "ddx_exec_show":
 		id, _ := call.Arguments["id"].(string)
-		return s.mcpExecShow(id)
+		return s.mcpExecShow(workingDir, id)
 	case "ddx_exec_history":
 		artifact, _ := call.Arguments["artifact"].(string)
 		definition, _ := call.Arguments["definition"].(string)
-		return s.mcpExecHistory(artifact, definition)
+		return s.mcpExecHistory(workingDir, artifact, definition)
 	case "ddx_exec_dispatch":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: dispatch tools require trusted origin"}}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
-		return s.mcpExecDispatch(id)
+		return s.mcpExecDispatch(workingDir, id)
 	case "ddx_agent_dispatch":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: dispatch tools require trusted origin"}}, IsError: true}
@@ -2970,30 +3066,24 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		prompt, _ := call.Arguments["prompt"].(string)
 		model, _ := call.Arguments["model"].(string)
 		effort, _ := call.Arguments["effort"].(string)
-		return s.mcpAgentDispatch(harness, prompt, model, effort)
+		return s.mcpAgentDispatch(workingDir, harness, prompt, model, effort)
 	case "ddx_doc_changed":
 		since, _ := call.Arguments["since"].(string)
-		return s.mcpDocChanged(since)
+		return s.mcpDocChanged(workingDir, since)
 	case "ddx_doc_write":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
 		content, _ := call.Arguments["content"].(string)
-		return s.mcpDocWrite(id, content)
+		return s.mcpDocWrite(workingDir, id, content)
 	case "ddx_doc_history":
 		id, _ := call.Arguments["id"].(string)
-		return s.mcpDocHistory(id)
+		return s.mcpDocHistory(workingDir, id)
 	case "ddx_doc_diff":
 		id, _ := call.Arguments["id"].(string)
 		ref, _ := call.Arguments["ref"].(string)
-		return s.mcpDocDiff(id, ref)
-	case "ddx_list_projects":
-		return s.mcpListProjects()
-	case "ddx_show_project":
-		id, _ := call.Arguments["id"].(string)
-		path, _ := call.Arguments["path"].(string)
-		return s.mcpShowProject(id, path)
+		return s.mcpDocDiff(workingDir, id, ref)
 	default:
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("unknown tool: %s", call.Name)}},
@@ -3004,8 +3094,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 
 // --- MCP Tool Implementations ---
 
-func (s *Server) mcpListDocuments() mcpToolResult {
-	libPath := s.libraryPath()
+func (s *Server) mcpListDocuments(workingDir string) mcpToolResult {
+	libPath := s.libraryPathFor(workingDir)
 	if libPath == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
 	}
@@ -3035,14 +3125,14 @@ func (s *Server) mcpListDocuments() mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpReadDocument(path string) mcpToolResult {
+func (s *Server) mcpReadDocument(workingDir, path string) mcpToolResult {
 	if path == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "path is required"}},
 			IsError: true,
 		}
 	}
-	libPath := s.libraryPath()
+	libPath := s.libraryPathFor(workingDir)
 	if libPath == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "library not configured"}},
@@ -3066,7 +3156,7 @@ func (s *Server) mcpReadDocument(path string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpSearch(query string) mcpToolResult {
+func (s *Server) mcpSearch(workingDir, query string) mcpToolResult {
 	if query == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "query is required"}},
@@ -3074,7 +3164,7 @@ func (s *Server) mcpSearch(query string) mcpToolResult {
 		}
 	}
 
-	libPath := s.libraryPath()
+	libPath := s.libraryPathFor(workingDir)
 	if libPath == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
 	}
@@ -3118,7 +3208,7 @@ func (s *Server) mcpSearch(query string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpResolvePersona(role string) mcpToolResult {
+func (s *Server) mcpResolvePersona(workingDir, role string) mcpToolResult {
 	if role == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "role is required"}},
@@ -3126,7 +3216,7 @@ func (s *Server) mcpResolvePersona(role string) mcpToolResult {
 		}
 	}
 
-	bm := persona.NewBindingManagerWithPath(filepath.Join(s.WorkingDir, ".ddx.yml"))
+	bm := persona.NewBindingManagerWithPath(filepath.Join(workingDir, ".ddx.yml"))
 	personaName, err := bm.GetBinding(role)
 	if err != nil {
 		return mcpToolResult{
@@ -3135,7 +3225,7 @@ func (s *Server) mcpResolvePersona(role string) mcpToolResult {
 		}
 	}
 
-	loader := persona.NewPersonaLoader(s.WorkingDir)
+	loader := persona.NewPersonaLoader(workingDir)
 	p, err := loader.LoadPersona(personaName)
 	if err != nil {
 		return mcpToolResult{
@@ -3154,8 +3244,8 @@ func (s *Server) mcpResolvePersona(role string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpListBeads(status, label string) mcpToolResult {
-	store := s.beadStore()
+func (s *Server) mcpListBeads(workingDir, status, label string) mcpToolResult {
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	beads, err := store.List(status, label, nil)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
@@ -3167,14 +3257,14 @@ func (s *Server) mcpListBeads(status, label string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpShowBead(id string) mcpToolResult {
+func (s *Server) mcpShowBead(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "id is required"}},
 			IsError: true,
 		}
 	}
-	store := s.beadStore()
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	b, err := store.Get(id)
 	if err != nil {
 		return mcpToolResult{
@@ -3222,8 +3312,8 @@ func (s *Server) mcpShowProject(id, path string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpBeadReady() mcpToolResult {
-	store := s.beadStore()
+func (s *Server) mcpBeadReady(workingDir string) mcpToolResult {
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	ready, err := store.Ready()
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
@@ -3235,8 +3325,8 @@ func (s *Server) mcpBeadReady() mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpBeadStatus() mcpToolResult {
-	store := s.beadStore()
+func (s *Server) mcpBeadStatus(workingDir string) mcpToolResult {
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	counts, err := store.Status()
 	if err != nil {
 		return mcpToolResult{
@@ -3248,8 +3338,8 @@ func (s *Server) mcpBeadStatus() mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocGraph() mcpToolResult {
-	graph, err := s.buildDocGraph()
+func (s *Server) mcpDocGraph(workingDir string) mcpToolResult {
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
@@ -3277,8 +3367,8 @@ func (s *Server) mcpDocGraph() mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocStale() mcpToolResult {
-	graph, err := s.buildDocGraph()
+func (s *Server) mcpDocStale(workingDir string) mcpToolResult {
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
@@ -3293,14 +3383,14 @@ func (s *Server) mcpDocStale() mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocShow(id string) mcpToolResult {
+func (s *Server) mcpDocShow(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "id is required"}},
 			IsError: true,
 		}
 	}
-	graph, err := s.buildDocGraph()
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
@@ -3330,14 +3420,14 @@ func (s *Server) mcpDocShow(id string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocDeps(id string) mcpToolResult {
+func (s *Server) mcpDocDeps(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "id is required"}},
 			IsError: true,
 		}
 	}
-	graph, err := s.buildDocGraph()
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
@@ -3355,8 +3445,8 @@ func (s *Server) mcpDocDeps(id string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpAgentSessions(harness string) mcpToolResult {
-	sessions, err := s.loadSessions()
+func (s *Server) mcpAgentSessions(workingDir, harness string) mcpToolResult {
+	sessions, err := s.loadSessionsFor(workingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
 	}
@@ -3379,14 +3469,14 @@ func (s *Server) mcpAgentSessions(harness string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpBeadCreate(title, issueType string, priority int, labelsStr, description, acceptance string) mcpToolResult {
+func (s *Server) mcpBeadCreate(workingDir, title, issueType string, priority int, labelsStr, description, acceptance string) mcpToolResult {
 	if title == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "title is required"}},
 			IsError: true,
 		}
 	}
-	store := s.beadStore()
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	b := &bead.Bead{
 		Title:       title,
 		IssueType:   issueType,
@@ -3407,14 +3497,14 @@ func (s *Server) mcpBeadCreate(title, issueType string, priority int, labelsStr,
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpBeadUpdate(id, status, labelsStr, description, acceptance string) mcpToolResult {
+func (s *Server) mcpBeadUpdate(workingDir, id, status, labelsStr, description, acceptance string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "id is required"}},
 			IsError: true,
 		}
 	}
-	store := s.beadStore()
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	err := store.Update(id, func(b *bead.Bead) {
 		if status != "" {
 			b.Status = status
@@ -3440,14 +3530,14 @@ func (s *Server) mcpBeadUpdate(id, status, labelsStr, description, acceptance st
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpBeadClaim(id, assignee string) mcpToolResult {
+func (s *Server) mcpBeadClaim(workingDir, id, assignee string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "id is required"}},
 			IsError: true,
 		}
 	}
-	store := s.beadStore()
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	if err := store.ClaimWithOptions(id, assignee, "", ""); err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: err.Error()}},
@@ -3457,8 +3547,8 @@ func (s *Server) mcpBeadClaim(id, assignee string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"id":"%s","status":"claimed"}`, id)}}}
 }
 
-func (s *Server) mcpExecDefinitions(artifactID string) mcpToolResult {
-	store := s.execStore()
+func (s *Server) mcpExecDefinitions(workingDir, artifactID string) mcpToolResult {
+	store := ddxexec.NewStore(workingDir)
 	defs, err := store.ListDefinitions(artifactID)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
@@ -3467,14 +3557,14 @@ func (s *Server) mcpExecDefinitions(artifactID string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpExecShow(id string) mcpToolResult {
+func (s *Server) mcpExecShow(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
 			Content: []mcpContent{{Type: "text", Text: "id is required"}},
 			IsError: true,
 		}
 	}
-	store := s.execStore()
+	store := ddxexec.NewStore(workingDir)
 	def, err := store.ShowDefinition(id)
 	if err != nil {
 		return mcpToolResult{
@@ -3486,8 +3576,8 @@ func (s *Server) mcpExecShow(id string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpExecHistory(artifactID, definitionID string) mcpToolResult {
-	store := s.execStore()
+func (s *Server) mcpExecHistory(workingDir, artifactID, definitionID string) mcpToolResult {
+	store := ddxexec.NewStore(workingDir)
 	runs, err := store.History(artifactID, definitionID)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
@@ -3496,14 +3586,14 @@ func (s *Server) mcpExecHistory(artifactID, definitionID string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocWrite(id, content string) mcpToolResult {
+func (s *Server) mcpDocWrite(workingDir, id, content string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
 	}
 	if content == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "content is required"}}, IsError: true}
 	}
-	graph, err := s.buildDocGraph()
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
@@ -3514,14 +3604,14 @@ func (s *Server) mcpDocWrite(id, content string) mcpToolResult {
 	// doc.Path is already an absolute path from the docgraph.
 	fullPath := doc.Path
 	if !filepath.IsAbs(fullPath) {
-		fullPath = filepath.Join(s.WorkingDir, fullPath)
+		fullPath = filepath.Join(workingDir, fullPath)
 	}
 	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
 	committed := false
 	var acCfg internalgit.AutoCommitConfig
-	if cfg, cfgErr := config.LoadWithWorkingDir(s.WorkingDir); cfgErr == nil && cfg.Git != nil {
+	if cfg, cfgErr := config.LoadWithWorkingDir(workingDir); cfgErr == nil && cfg.Git != nil {
 		acCfg.AutoCommit = cfg.Git.AutoCommit
 		acCfg.CommitPrefix = cfg.Git.CommitPrefix
 	}
@@ -3534,11 +3624,11 @@ func (s *Server) mcpDocWrite(id, content string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocHistory(id string) mcpToolResult {
+func (s *Server) mcpDocHistory(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
 	}
-	graph, err := s.buildDocGraph()
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
@@ -3547,7 +3637,7 @@ func (s *Server) mcpDocHistory(id string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
 	}
 	logCmd := exec.Command("git", "log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path)
-	logCmd.Dir = s.WorkingDir
+	logCmd.Dir = workingDir
 	out, gitErr := logCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git log failed"}}, IsError: true}
@@ -3582,11 +3672,11 @@ func (s *Server) mcpDocHistory(id string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocDiff(id, ref string) mcpToolResult {
+func (s *Server) mcpDocDiff(workingDir, id, ref string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
 	}
-	graph, err := s.buildDocGraph()
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
@@ -3601,7 +3691,7 @@ func (s *Server) mcpDocDiff(id, ref string) mcpToolResult {
 		gitArgs = []string{"diff", "--", doc.Path}
 	}
 	mcpDiffCmd := exec.Command("git", gitArgs...)
-	mcpDiffCmd.Dir = s.WorkingDir
+	mcpDiffCmd.Dir = workingDir
 	out, gitErr := mcpDiffCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
@@ -3610,11 +3700,11 @@ func (s *Server) mcpDocDiff(id, ref string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpExecDispatch(id string) mcpToolResult {
+func (s *Server) mcpExecDispatch(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
 	}
-	store := s.execStore()
+	store := ddxexec.NewStore(workingDir)
 	record, err := store.Run(context.Background(), id)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
@@ -3623,7 +3713,7 @@ func (s *Server) mcpExecDispatch(id string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpAgentDispatch(harness, prompt, model, effort string) mcpToolResult {
+func (s *Server) mcpAgentDispatch(workingDir, harness, prompt, model, effort string) mcpToolResult {
 	if harness == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "harness is required"}}, IsError: true}
 	}
@@ -3631,14 +3721,14 @@ func (s *Server) mcpAgentDispatch(harness, prompt, model, effort string) mcpTool
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "prompt is required"}}, IsError: true}
 	}
 	runner := agent.NewRunner(agent.Config{
-		SessionLogDir: agent.ResolveLogDir(s.WorkingDir, ""),
+		SessionLogDir: agent.ResolveLogDir(workingDir, ""),
 	})
 	opts := agent.RunOptions{
 		Harness: harness,
 		Prompt:  prompt,
 		Model:   model,
 		Effort:  effort,
-		WorkDir: s.WorkingDir,
+		WorkDir: workingDir,
 	}
 	result, err := runner.Run(opts)
 	if err != nil {
@@ -3648,24 +3738,24 @@ func (s *Server) mcpAgentDispatch(harness, prompt, model, effort string) mcpTool
 	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
 }
 
-func (s *Server) mcpDocChanged(since string) mcpToolResult {
+func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 	if since == "" {
 		since = "HEAD~5"
 	}
 	diffCmd := exec.Command("git", "diff", "--name-status", since, "HEAD")
-	diffCmd.Dir = s.WorkingDir
+	diffCmd.Dir = workingDir
 	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
 	}
 
-	graph, err := s.buildDocGraph()
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
 
 	rootCmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	rootCmd.Dir = s.WorkingDir
+	rootCmd.Dir = workingDir
 	rootOut, rootErr := rootCmd.Output()
 	if rootErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "could not determine git root"}}, IsError: true}
