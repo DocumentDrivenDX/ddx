@@ -60,6 +60,7 @@ Examples:
 	cmd.AddCommand(f.newBeadImportCommand())
 	cmd.AddCommand(f.newBeadExportCommand())
 	cmd.AddCommand(f.newBeadReviewCommand())
+	cmd.AddCommand(f.newBeadMetricsCommand())
 
 	return cmd
 }
@@ -324,10 +325,25 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				var pretty json.RawMessage = data
+				var obj map[string]any
+				if err := json.Unmarshal(data, &obj); err != nil {
+					return err
+				}
+				workspaceRoot := f.beadWorkspaceRoot()
+				if workspaceRoot == "" {
+					workspaceRoot = f.WorkingDir
+				}
+				metrics, err := beadMetricsFor(workspaceRoot, b.ID)
+				if err != nil {
+					return err
+				}
+				if metrics == nil {
+					metrics = &beadMetricsSummary{}
+				}
+				obj["metrics"] = metrics
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(pretty)
+				return enc.Encode(obj)
 			}
 
 			out := cmd.OutOrStdout()
