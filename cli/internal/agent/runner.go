@@ -123,6 +123,17 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 		return nil, err
 	}
 
+	// If the provider flag was consumed as a harness name (e.g. "agent",
+	// "local"), clear it so downstream code (RunAgent →
+	// resolveEmbeddedAgentProvider) doesn't try to look it up as a
+	// ddx-agent config provider name.
+	if opts.Provider != "" {
+		resolved := resolveHarnessAlias(opts.Provider)
+		if resolved == harnessName {
+			opts.Provider = ""
+		}
+	}
+
 	// Virtual harness: replay from dictionary instead of executing a binary.
 	if harnessName == "virtual" {
 		return r.RunVirtual(opts)
