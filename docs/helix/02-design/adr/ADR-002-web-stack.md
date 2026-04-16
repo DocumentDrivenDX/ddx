@@ -21,7 +21,7 @@ Use **SvelteKit** as the frontend framework with **gqlgen** for GraphQL backend,
 
 - **Schema-first design:** `schema.graphql` is the single source of truth for all API operations
 - **Code generation:** `go run github.com/99designs/gqlgen generate` produces strongly-typed Go resolvers
-- **Type-safe client:** Houdini generates TypeScript types from the schema for SvelteKit
+- **Type-safe client:** graphql-request with manually typed response interfaces for SvelteKit
 
 GraphQL endpoint: `POST /graphql` with GraphiQL IDE at `/graphiql`
 
@@ -34,7 +34,7 @@ REST API remains unchanged for CLI/MCP compatibility; GraphQL is the preferred p
 - **Svelte 5 runes:** `$props()`, `$state()`, `derived` for state management
 - **adapter-static:** Builds to static files served by Go via `//go:embed`
 - **URL scheme:** `/nodes/:nodeId/projects/:projectId/*` — implemented fresh
-- **Houdini:** First-class GraphQL client for SvelteKit with typed `load()` functions
+- **graphql-request + graphql-ws:** Lightweight GraphQL client with typed `load()` functions and WebSocket subscriptions
 
 Svelte 5 offers:
 - Compacted runtime
@@ -56,22 +56,26 @@ CI setup:
   with: { bun-version: latest }
 ```
 
-### 4. GraphQL Client: Houdini
+### 4. GraphQL Client: graphql-request + graphql-ws
 
-**Houdini** is the SvelteKit-native GraphQL client:
+**graphql-request** is a lightweight GraphQL client paired with **graphql-ws** for subscriptions:
 
-- **Code generation:** TypeScript types generated from `schema.graphql`
-- **Typed load():** Automatic query generation for routes
-- **Subscriptions:** First-class support for `graphql-ws` subscriptions
+- **Typed requests:** Manually typed response interfaces per query
+- **Typed load():** Queries in SvelteKit `+page.ts` load functions via `gql` tagged template
+- **Subscriptions:** `graphql-ws` provides WebSocket-based real-time updates
 
 Example query in a route:
 ```ts
 // src/routes/nodes/[nodeId]/+page.ts
-import { query } from './$houdini';
+import { gql } from 'graphql-request';
+import { createClient } from '$lib/gql/client';
 
-export function load({ params }) {
-  return query(`query { node(id: "${params.nodeId}") { id name } }`);
-}
+const NODE_QUERY = gql`query { node { id name } }`;
+
+export const load = async ({ fetch }) => {
+  const client = createClient(fetch);
+  return client.request(NODE_QUERY);
+};
 ```
 
 ### 5. UI Primitives: bits-ui + lucide-svelte
@@ -257,9 +261,9 @@ jobs:
 The following alternatives were evaluated but rejected for this migration:
 
 - **Alternative bundlers:** Larger runtime footprint; optimized for development server rather than static site generation
-- **Data fetching libraries:** Unnecessary complexity since Houdini covers both routing and data fetching concerns
+- **Data fetching libraries:** Unnecessary complexity since graphql-request covers data fetching with minimal overhead
 - **Alternative package managers:** Bun's integrated tooling is faster and simpler for all frontend operations
-- **Service mocking:** Replaced by Houdini's codegen and real GraphQL endpoint; no mocking needed
+- **Service mocking:** Replaced by typed GraphQL queries and real GraphQL endpoint; no mocking needed
 
 ## Migration Path
 
