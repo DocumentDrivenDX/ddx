@@ -60,6 +60,12 @@ type ExecuteBeadResult struct {
 	ExitCode   int     `json:"exit_code"`
 	Error      string  `json:"error,omitempty"`
 
+	// FailureMode classifies why an execution did not land cleanly. Empty
+	// when the bead was merged (task_succeeded landing outcome). Populated
+	// by the orchestrator from known patterns; see ClassifyFailureMode and
+	// the FailureMode* constants in execute_bead_status.go.
+	FailureMode string `json:"failure_mode,omitempty"`
+
 	ExecutionDir string `json:"execution_dir,omitempty"`
 	PromptFile   string `json:"prompt_file,omitempty"`
 	ManifestFile string `json:"manifest_file,omitempty"`
@@ -413,6 +419,7 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 		if abInfo, _ := os.Stat(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID)); abInfo != nil && abInfo.IsDir() {
 			res.ExecutionDir = filepath.Join(ExecuteBeadArtifactDir, attemptID)
 		}
+		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 		populateWorkerStatus(res)
 		_ = writeArtifactJSON(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID, "result.json"), res)
 		return res, fmt.Errorf("execute-bead context load: %w", err)
@@ -524,6 +531,7 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 			FinishedAt:   finishedAt,
 			Outcome:      ExecuteBeadOutcomeTaskFailed,
 		}
+		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 		populateWorkerStatus(res)
 		_ = writeArtifactJSON(artifacts.ResultAbs, res)
 		return res, fmt.Errorf("failed to read worktree HEAD: %w", revErr)
@@ -642,6 +650,11 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	default:
 		res.Outcome = ExecuteBeadOutcomeTaskSucceeded
 	}
+
+	// Classify failure mode from worker-level signals. ApplyLandingToResult
+	// may refine this with landing-level signals (merge conflict, gate
+	// failure) before the final result is output.
+	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 
 	// When the outcome is no_changes, attempt to read the agent's rationale file.
 	// The agent is instructed to write this file (relative to the worktree) when it
