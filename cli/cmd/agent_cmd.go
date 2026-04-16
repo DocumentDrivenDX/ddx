@@ -79,6 +79,7 @@ Examples:
 	cmd.AddCommand(f.newAgentModelsCommand())
 	cmd.AddCommand(f.newAgentCheckCommand())
 	cmd.AddCommand(f.newAgentRouteStatusCommand())
+	cmd.AddCommand(f.newAgentMetricsCommand())
 
 	return cmd
 }
