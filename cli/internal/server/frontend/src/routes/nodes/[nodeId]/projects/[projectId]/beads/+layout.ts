@@ -11,6 +11,8 @@ const BEADS_QUERY = gql`
 					title
 					status
 					priority
+					owner
+					updatedAt
 					labels
 				}
 				cursor
@@ -29,6 +31,8 @@ interface BeadNode {
 	title: string
 	status: string
 	priority: number
+	owner: string | null
+	updatedAt: string
 	labels: string[] | null
 }
 
