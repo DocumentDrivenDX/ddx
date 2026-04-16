@@ -25,6 +25,7 @@ func TestListProviders(t *testing.T) {
 	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	req := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -109,6 +110,7 @@ func TestShowProvider(t *testing.T) {
 	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	req := httptest.NewRequest(http.MethodGet, "/api/providers/claude", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -173,6 +175,7 @@ func TestShowProviderNotFound(t *testing.T) {
 	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	req := httptest.NewRequest(http.MethodGet, "/api/providers/nonexistent-harness", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -191,6 +194,7 @@ func TestProviderUnknownStateContract(t *testing.T) {
 	// Test each harness that will have no signal data in the test environment.
 	for _, harnessName := range []string{"claude", "codex", "gemini"} {
 		req := httptest.NewRequest(http.MethodGet, "/api/providers/"+harnessName, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -345,6 +349,7 @@ func TestMCPProviderList(t *testing.T) {
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_provider_list","arguments":{}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -389,6 +394,7 @@ func TestMCPProviderShow(t *testing.T) {
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_provider_show","arguments":{"harness":"claude"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -430,6 +436,7 @@ func TestMCPProviderShowUnknownHarness(t *testing.T) {
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_provider_show","arguments":{"harness":"nonexistent"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
