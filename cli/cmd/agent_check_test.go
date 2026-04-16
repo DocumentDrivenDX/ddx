@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -120,4 +121,91 @@ func TestAgentCheckConfigError(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "loading agent config")
+}
+
+func TestAgentCheckJSON(t *testing.T) {
+	srv := newOAIModelsStub(t, []string{"fast-model", "slow-model"})
+	dir := makeProviderTestDir(t, oaiAgentConfig(srv.URL+"/v1", "fast-model"))
+
+	out, err := executeCommand(
+		NewCommandFactory(dir).NewRootCommand(),
+		"agent", "check", "--json",
+	)
+	require.NoError(t, err)
+
+	var entries []checkResultEntry
+	require.NoError(t, json.Unmarshal([]byte(out), &entries))
+	require.Len(t, entries, 1)
+	require.Equal(t, "testprovider", entries[0].Provider)
+	require.Equal(t, "openai-compat", entries[0].Harness)
+	require.Equal(t, "ok", entries[0].Status)
+	require.GreaterOrEqual(t, entries[0].LatencyMs, int64(0))
+	require.Empty(t, entries[0].Error)
+}
+
+func TestAgentCheckJSONAnthropicWithKey(t *testing.T) {
+	cfg := `providers:
+  claude:
+    type: anthropic
+    api_key: test-api-key-xyz
+default: claude
+`
+	dir := makeProviderTestDir(t, cfg)
+
+	out, err := executeCommand(
+		NewCommandFactory(dir).NewRootCommand(),
+		"agent", "check", "--json",
+	)
+	require.NoError(t, err)
+
+	var entries []checkResultEntry
+	require.NoError(t, json.Unmarshal([]byte(out), &entries))
+	require.Len(t, entries, 1)
+	require.Equal(t, "claude", entries[0].Provider)
+	require.Equal(t, "anthropic", entries[0].Harness)
+	require.Equal(t, "ok", entries[0].Status)
+	require.Empty(t, entries[0].Error)
+}
+
+func TestAgentCheckJSONMixedReachability(t *testing.T) {
+	live := newOAIModelsStub(t, []string{"good-model"})
+	dead := newOAIModelsStub(t, nil)
+	deadURL := dead.URL
+	dead.Close()
+
+	cfg := `providers:
+  liveprov:
+    type: openai-compat
+    base_url: ` + live.URL + `/v1
+    model: good-model
+  deadprov:
+    type: openai-compat
+    base_url: ` + deadURL + `/v1
+    model: bad-model
+default: liveprov
+`
+	dir := makeProviderTestDir(t, cfg)
+
+	out, err := executeCommand(
+		NewCommandFactory(dir).NewRootCommand(),
+		"agent", "check", "--json",
+	)
+	require.NoError(t, err)
+
+	var entries []checkResultEntry
+	require.NoError(t, json.Unmarshal([]byte(out), &entries))
+	require.Len(t, entries, 2)
+
+	entryMap := make(map[string]checkResultEntry)
+	for _, e := range entries {
+		entryMap[e.Provider] = e
+	}
+
+	live_ := entryMap["liveprov"]
+	require.Equal(t, "ok", live_.Status)
+	require.Empty(t, live_.Error)
+
+	dead_ := entryMap["deadprov"]
+	require.Equal(t, "unreachable", dead_.Status)
+	require.NotEmpty(t, dead_.Error)
 }

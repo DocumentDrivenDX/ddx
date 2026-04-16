@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -12,6 +13,14 @@ import (
 )
 
 const checkProbeTimeout = 5 * time.Second
+
+type checkResultEntry struct {
+	Provider  string `json:"provider"`
+	Harness   string `json:"harness"`
+	Status    string `json:"status"`
+	LatencyMs int64  `json:"latency_ms"`
+	Error     string `json:"error"`
+}
 
 func (f *CommandFactory) newAgentCheckCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -33,6 +42,7 @@ Exits 1 otherwise.`,
 			}
 
 			providerName, _ := cmd.Flags().GetString("provider")
+			asJSON, _ := cmd.Flags().GetBool("json")
 
 			var names []string
 			if providerName != "" {
@@ -45,30 +55,63 @@ Exits 1 otherwise.`,
 			}
 
 			type namedResult struct {
-				name string
-				r    providerstatus.Result
+				name    string
+				harness string
+				r       providerstatus.Result
+				latency time.Duration
 			}
 			results := make([]namedResult, 0, len(names))
 			for _, name := range names {
 				pc := cfg.Providers[name]
 				ctx, cancel := context.WithTimeout(context.Background(), checkProbeTimeout)
+				start := time.Now()
 				r := providerstatus.Probe(ctx, pc)
+				elapsed := time.Since(start)
 				cancel()
-				results = append(results, namedResult{name: name, r: r})
+				results = append(results, namedResult{name: name, harness: pc.Type, r: r, latency: elapsed})
 			}
 
 			anyReachable := false
 			for _, nr := range results {
-				status := "UNREACHABLE"
 				if nr.r.Reachable {
-					status = "OK"
-					// Anthropic: Models==nil means key-based (no listing endpoint),
-					// treat as usable. OAI: require at least one discovered model.
 					if nr.r.Models == nil || len(nr.r.Models) > 0 {
 						anyReachable = true
 					}
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %-12s  %s\n", nr.name, status, nr.r.Message)
+			}
+
+			if asJSON {
+				entries := make([]checkResultEntry, 0, len(results))
+				for _, nr := range results {
+					status := "unreachable"
+					if nr.r.Reachable {
+						status = "ok"
+					}
+					errMsg := ""
+					if !nr.r.Reachable {
+						errMsg = nr.r.Message
+					}
+					entries = append(entries, checkResultEntry{
+						Provider:  nr.name,
+						Harness:   nr.harness,
+						Status:    status,
+						LatencyMs: nr.latency.Milliseconds(),
+						Error:     errMsg,
+					})
+				}
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(entries); err != nil {
+					return err
+				}
+			} else {
+				for _, nr := range results {
+					status := "UNREACHABLE"
+					if nr.r.Reachable {
+						status = "OK"
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %-12s  %s\n", nr.name, status, nr.r.Message)
+				}
 			}
 
 			if !anyReachable {
@@ -78,5 +121,6 @@ Exits 1 otherwise.`,
 		},
 	}
 	cmd.Flags().String("provider", "", "Check only this provider")
+	cmd.Flags().Bool("json", false, "Output as JSON array")
 	return cmd
 }
