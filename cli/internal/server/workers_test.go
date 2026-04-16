@@ -766,6 +766,115 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 	m.LandCoordinators.StopAll()
 }
 
+// TestWorkerLandsEvidenceViaCoordinator is the AC (3) test: the server-worker path
+// commits execution evidence and leaves the worktree clean after the worker exits.
+func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
+	root := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# test\n"), 0o644))
+	runCmd(t, root, "git", "init", "-b", "main")
+	runCmd(t, root, "git", "config", "user.name", "Test")
+	runCmd(t, root, "git", "config", "user.email", "test@test.local")
+	runCmd(t, root, "git", "add", "-A")
+	runCmd(t, root, "git", "commit", "-m", "init")
+
+	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
+	initialTipOut, err := initialTipCmd.Output()
+	require.NoError(t, err)
+	initialTip := strings.TrimSpace(string(initialTipOut))
+
+	ddxDir := filepath.Join(root, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        "ddx-evidence-integ",
+		Title:     "evidence integration test",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	}))
+
+	m := NewWorkerManager(root)
+
+	attemptID := "20260416T000001-evid"
+	evidenceRelDir := filepath.Join(".ddx", "executions", attemptID)
+
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				// Create evidence files in the project root (simulates ExecuteBead).
+				evidenceAbs := filepath.Join(root, evidenceRelDir)
+				require.NoError(t, os.MkdirAll(evidenceAbs, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(evidenceAbs, "manifest.json"), []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(evidenceAbs, "result.json"), []byte(`{"status":"success"}`), 0o644))
+
+				// Produce a real commit.
+				wt, wtErr := os.MkdirTemp("", "evid-wt-*")
+				require.NoError(t, wtErr)
+				_ = os.RemoveAll(wt)
+				runCmd(t, root, "git", "worktree", "add", "--detach", wt, "refs/heads/main")
+				defer func() {
+					runCmd(t, root, "git", "worktree", "remove", "--force", wt)
+				}()
+
+				require.NoError(t, os.WriteFile(filepath.Join(wt, "evidence-feature.txt"), []byte("content\n"), 0o644))
+				runCmd(t, wt, "git", "add", "-A")
+				runCmd(t, wt, "git", "-c", "user.name=Worker", "-c", "user.email=worker@test.local", "commit", "-m", "feat: worker")
+				headCmd := exec.Command("git", "-C", wt, "rev-parse", "HEAD")
+				headOut, headErr := headCmd.Output()
+				require.NoError(t, headErr)
+				resultRev := strings.TrimSpace(string(headOut))
+
+				runCmd(t, root, "git", "update-ref", "refs/ddx/evid-pins/"+beadID, resultRev)
+
+				coord := m.LandCoordinators.Get(root)
+				landRes, landErr := coord.Submit(agent.LandRequest{
+					WorktreeDir:  root,
+					BaseRev:      initialTip,
+					ResultRev:    resultRev,
+					BeadID:       beadID,
+					AttemptID:    attemptID,
+					TargetBranch: "main",
+					EvidenceDir:  filepath.ToSlash(evidenceRelDir),
+				})
+				if landErr != nil {
+					return agent.ExecuteBeadReport{}, landErr
+				}
+				return agent.ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: attemptID,
+					Status:    agent.ExecuteBeadStatusSuccess,
+					BaseRev:   initialTip,
+					ResultRev: landRes.NewTip,
+				}, nil
+			}),
+		}
+	}
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	require.NoError(t, err)
+
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	assert.Equal(t, "exited", final.State)
+
+	// AC (3): evidence dir must be clean after worker exits. Other worktree
+	// noise (.ddx/workers/, beads.jsonl) is expected in a test environment
+	// where those paths are not yet tracked.
+	statusCmd := exec.Command("git", "-C", root, "status", "--porcelain", "--", filepath.ToSlash(evidenceRelDir))
+	statusOut, err := statusCmd.Output()
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(string(statusOut)), "evidence dir should be clean after worker exits")
+
+	// Evidence files must be in a commit reachable from main.
+	logCmd := exec.Command("git", "-C", root, "log", "--all", "--oneline", "--name-only")
+	logOut, err := logCmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(logOut), filepath.ToSlash(filepath.Join(evidenceRelDir, "manifest.json")),
+		"evidence manifest.json should be in git log")
+
+	m.LandCoordinators.StopAll()
+}
+
 // TestStartExecuteLoopProjectRootOverride verifies that when ExecuteLoopWorkerSpec
 // carries a non-empty ProjectRoot, the worker executes against that project
 // rather than the WorkerManager's own projectRoot.

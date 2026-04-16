@@ -74,6 +74,14 @@ type LandRequest struct {
 	// TargetBranch is the branch to advance. When empty, Land() resolves
 	// the project's current HEAD branch and uses that.
 	TargetBranch string
+
+	// EvidenceDir is the relative path to the per-attempt execution evidence
+	// directory (e.g. ".ddx/executions/20260416T181205-b5419982"). When
+	// non-empty and the main land succeeds, Land() creates a trailing
+	// evidence commit that folds these files into the target branch. The
+	// agent's commit SHA is NOT amended — the evidence commit is a separate
+	// child commit, preserving closing_commit_sha references.
+	EvidenceDir string
 }
 
 // LandResult describes the outcome of a single Land() call.
@@ -122,6 +130,11 @@ type LandResult struct {
 	// merged in. Zero on the no-changes path. Set on both the fast-forward
 	// and merge-commit paths so metrics can compare contribution sizes.
 	MergedCommitCount int
+
+	// EvidenceCommitSHA is set when a trailing execution-evidence commit was
+	// created after the main land. When set, NewTip points at this commit
+	// (not at the original agent commit or merge commit).
+	EvidenceCommitSHA string
 }
 
 // PreClaimResult is the outcome of a FetchOriginAncestryCheck call.
@@ -212,6 +225,14 @@ type LandingGitOps interface {
 	// from base (i.e. git rev-list --count base..tip). Used to record the
 	// contribution size in land metrics. Returns 0 on error.
 	CountCommits(dir, base, tip string) int
+
+	// StageDir stages all files under relPath in dir for the next commit.
+	StageDir(dir, relPath string) error
+
+	// CommitStaged creates a commit from currently staged changes using msg
+	// as the commit message. Returns (sha, nil) when a commit was made,
+	// ("", nil) when nothing was staged, and ("", err) on failure.
+	CommitStaged(dir, msg string) (string, error)
 }
 
 // RealLandingGitOps implements LandingGitOps via os/exec git commands.
@@ -404,6 +425,34 @@ func (RealLandingGitOps) CountCommits(dir, base, tip string) int {
 	return n
 }
 
+func (RealLandingGitOps) StageDir(dir, relPath string) error {
+	out, err := osexec.Command("git", "-C", dir, "add", "--", relPath).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git add %s: %s: %w", relPath, strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
+	out, _ := osexec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
+	if len(strings.TrimSpace(string(out))) == 0 {
+		return "", nil
+	}
+	commitOut, err := osexec.Command("git", "-C", dir,
+		"-c", "user.name=ddx-land-coordinator",
+		"-c", "user.email=coordinator@ddx.local",
+		"commit", "-m", msg,
+	).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	shaOut, err := osexec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "", fmt.Errorf("rev-parse HEAD after evidence commit: %w", err)
+	}
+	return strings.TrimSpace(string(shaOut)), nil
+}
+
 // FetchOriginAncestryCheck implements LandingGitOps.FetchOriginAncestryCheck.
 func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
 	// Step 1: check for origin remote.
@@ -480,6 +529,31 @@ func landIterationRef(beadID, attemptID, tip string) string {
 	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, attempt, short)
 }
 
+// landEvidence creates a trailing commit that folds the per-attempt execution
+// evidence directory into the target branch. Called after the main land (ff or
+// merge) succeeds and before the push. The evidence commit is a normal child of
+// result.NewTip — the agent's original commit SHA is not amended.
+//
+// Best-effort: only works when HEAD is a symbolic ref to targetBranch (the
+// normal case for server workers and CLI users). When HEAD is detached or
+// points elsewhere, the evidence commit is silently skipped.
+func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps, result *LandResult) {
+	branch, err := gitOps.CurrentBranch(wd)
+	if err != nil || branch != targetBranch {
+		return
+	}
+	if err := gitOps.StageDir(wd, req.EvidenceDir); err != nil {
+		return
+	}
+	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(req.AttemptID))
+	sha, err := gitOps.CommitStaged(wd, msg)
+	if err != nil || sha == "" {
+		return
+	}
+	result.EvidenceCommitSHA = sha
+	result.NewTip = sha
+}
+
 // Land performs fetch → (ff or merge) → push for a single submission.
 // Callers MUST serialize calls per projectRoot (the server coordinator
 // goroutine provides this). Land() itself takes no internal locks.
@@ -550,7 +624,10 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 			Merged:            false,
 			MergedCommitCount: contribCount,
 		}
-		landPush(wd, targetBranch, req.ResultRev, hasOrigin, gitOps, result)
+		if req.EvidenceDir != "" {
+			landEvidence(wd, targetBranch, req, gitOps, result)
+		}
+		landPush(wd, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 		return result, nil
 	}
 
@@ -608,7 +685,10 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		Merged:            true,
 		MergedCommitCount: contribCount,
 	}
-	landPush(wd, targetBranch, mergeSHA, hasOrigin, gitOps, result)
+	if req.EvidenceDir != "" {
+		landEvidence(wd, targetBranch, req, gitOps, result)
+	}
+	landPush(wd, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 	return result, nil
 }
 
@@ -700,5 +780,6 @@ func BuildLandRequestFromResult(projectRoot string, res *ExecuteBeadResult) Land
 		BeadID:       res.BeadID,
 		AttemptID:    res.AttemptID,
 		TargetBranch: "",
+		EvidenceDir:  res.ExecutionDir,
 	}
 }

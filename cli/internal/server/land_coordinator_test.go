@@ -31,8 +31,10 @@ func (f *fakeLandingGitOps) HasRemote(_, _ string) bool           { return false
 func (f *fakeLandingGitOps) FetchBranch(_, _, _ string) error     { return nil }
 func (f *fakeLandingGitOps) SyncWorkTreeToHead(_, _ string) error { return nil }
 func (f *fakeLandingGitOps) RemoveWorktree(_, _ string) error     { return nil }
-func (f *fakeLandingGitOps) PushFFOnly(_, _, _, _ string) error   { return nil }
-func (f *fakeLandingGitOps) CountCommits(_, _, _ string) int      { return 1 }
+func (f *fakeLandingGitOps) PushFFOnly(_, _, _, _ string) error       { return nil }
+func (f *fakeLandingGitOps) CountCommits(_, _, _ string) int          { return 1 }
+func (f *fakeLandingGitOps) StageDir(_, _ string) error               { return nil }
+func (f *fakeLandingGitOps) CommitStaged(_, _ string) (string, error) { return "", nil }
 
 func (f *fakeLandingGitOps) CurrentBranch(_ string) (string, error) {
 	return "main", nil
@@ -88,7 +90,9 @@ func (o *outcomeGitOps) HeadRevAt(_ string) (string, error)     { return "merged
 func (o *outcomeGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return agent.PreClaimResult{Action: "no-origin"}, nil
 }
-func (o *outcomeGitOps) PushFFOnly(_, _, _, _ string) error { return nil }
+func (o *outcomeGitOps) PushFFOnly(_, _, _, _ string) error       { return nil }
+func (o *outcomeGitOps) StageDir(_, _ string) error               { return nil }
+func (o *outcomeGitOps) CommitStaged(_, _ string) (string, error) { return "", nil }
 
 func (o *outcomeGitOps) ResolveRef(_, ref string) (string, error) {
 	// For "preserved" and merge-path "landed" we return a tip that differs

@@ -315,6 +315,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				res.Outcome = "preserved"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			}
+			// Safety net: commit any leftover evidence files that Land()
+			// did not pick up (e.g. HEAD was detached, or no land ran).
+			if res != nil && res.AttemptID != "" {
+				_ = agent.VerifyCleanWorktree(projectRoot, res.AttemptID)
+			}
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}

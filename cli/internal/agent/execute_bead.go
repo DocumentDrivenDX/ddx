@@ -1107,6 +1107,42 @@ type executeBeadUsage struct {
 	CostUSD      float64 `json:"cost_usd,omitempty"`
 }
 
+// VerifyCleanWorktree checks that the project root's working tree has no
+// untracked execution evidence files for the given attempt. If evidence files
+// remain (e.g. because the land flow did not commit them), it stages and
+// commits them as a safety net. Returns nil when the evidence dir is clean
+// or was successfully committed.
+func VerifyCleanWorktree(projectRoot, attemptID string) error {
+	if attemptID == "" {
+		return nil
+	}
+	evidenceDir := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
+
+	out, _ := osexec.Command("git", "-C", projectRoot, "status", "--porcelain", "--", evidenceDir).Output()
+	if len(strings.TrimSpace(string(out))) == 0 {
+		return nil
+	}
+
+	addOut, addErr := osexec.Command("git", "-C", projectRoot, "add", "--", evidenceDir).CombinedOutput()
+	if addErr != nil {
+		return fmt.Errorf("staging leftover evidence: %s: %w", strings.TrimSpace(string(addOut)), addErr)
+	}
+	diffOut, _ := osexec.Command("git", "-C", projectRoot, "diff", "--cached", "--name-only", "--", evidenceDir).Output()
+	if len(strings.TrimSpace(string(diffOut))) == 0 {
+		return nil
+	}
+	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(attemptID))
+	commitOut, commitErr := osexec.Command("git", "-C", projectRoot,
+		"-c", "user.name=ddx-land-coordinator",
+		"-c", "user.email=coordinator@ddx.local",
+		"commit", "-m", msg,
+	).CombinedOutput()
+	if commitErr != nil {
+		return fmt.Errorf("committing leftover evidence: %s: %w", strings.TrimSpace(string(commitOut)), commitErr)
+	}
+	return nil
+}
+
 func writeArtifactJSON(path string, payload any) error {
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
