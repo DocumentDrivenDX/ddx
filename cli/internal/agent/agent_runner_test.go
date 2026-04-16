@@ -256,10 +256,13 @@ func TestAgentRunActivityExtendsTimeout(t *testing.T) {
 
 func TestEmbeddedCompactionConfigUsesSaneThresholds(t *testing.T) {
 	cfg := embeddedCompactionConfig("qwen/qwen3-coder-next")
-	assert.Equal(t, 32000, cfg.ContextWindow)
-	assert.Equal(t, 4000, cfg.ReserveTokens)
-	assert.Equal(t, 8000, cfg.KeepRecentTokens)
-	assert.True(t, compaction.ShouldCompact(30000, cfg.ContextWindow, cfg.EffectivePercent, cfg.ReserveTokens))
+	assert.Equal(t, 131072, cfg.ContextWindow)
+	assert.Equal(t, 131072/8, cfg.ReserveTokens)
+	assert.Equal(t, 131072/4, cfg.KeepRecentTokens)
+	// Compaction should fire when approaching the window.
+	assert.True(t, compaction.ShouldCompact(120000, cfg.ContextWindow, cfg.EffectivePercent, cfg.ReserveTokens))
+	// Should NOT fire at 30k — well within the 131k window.
+	assert.False(t, compaction.ShouldCompact(30000, cfg.ContextWindow, cfg.EffectivePercent, cfg.ReserveTokens))
 }
 
 // A-06: Session logging captures agent runs.

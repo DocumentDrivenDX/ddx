@@ -375,13 +375,15 @@ type embeddedAgentProviderResolution struct {
 
 func embeddedCompactionConfig(model string) compaction.Config {
 	cfg := compaction.DefaultConfig()
-	// DDx does not yet have reliable per-model context-window metadata for
-	// embedded providers. Use a conservative default that actually fires under
-	// long-running multi-turn planning/doc loops instead of inheriting the
-	// upstream 8k/8k defaults, which never trigger compaction.
-	cfg.ContextWindow = 32_000
-	cfg.ReserveTokens = 4_000
-	cfg.KeepRecentTokens = 8_000
+	// DefaultConfig (v0.3.9+) returns 131072. That's a safe lower bound
+	// for modern models. Per-model context_window lookup from the shared
+	// agent catalog requires v4 manifest support — tracked as future work
+	// in the ddx-agent repo.
+	//
+	// Keep reserve and recent-keep proportional to the window so compaction
+	// summaries have room to breathe.
+	cfg.ReserveTokens = cfg.ContextWindow / 8
+	cfg.KeepRecentTokens = cfg.ContextWindow / 4
 	return cfg
 }
 
