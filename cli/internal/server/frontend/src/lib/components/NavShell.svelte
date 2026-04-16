@@ -12,6 +12,7 @@
 		Radio,
 		Layers
 	} from 'lucide-svelte';
+	import { page } from '$app/stores';
 	import { toggleMode, mode } from '$lib/theme';
 	import ProjectPicker from './ProjectPicker.svelte';
 	import { nodeStore } from '$lib/stores/node.svelte';
@@ -81,9 +82,13 @@
 		>
 			{#each navLinks as { href, label, Icon }}
 				{#if href}
+					{@const active = $page.url.pathname.startsWith(href)}
 					<a
 						{href}
-						class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+						aria-current={active ? 'page' : undefined}
+						class="flex items-center gap-2 rounded px-3 py-2 text-sm {active
+							? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
+							: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}"
 					>
 						<Icon class="h-4 w-4 shrink-0" />
 						{label}
@@ -100,9 +105,13 @@
 			{/each}
 			<div class="my-1 border-t border-gray-100 dark:border-gray-800"></div>
 			{#if allBeadsHref}
+				{@const active = $page.url.pathname.startsWith(allBeadsHref)}
 				<a
 					href={allBeadsHref}
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+					aria-current={active ? 'page' : undefined}
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm {active
+						? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
+						: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}"
 				>
 					<Layers class="h-4 w-4 shrink-0" />
 					All Beads
@@ -116,9 +125,13 @@
 				</span>
 			{/if}
 			{#if providersHref}
+				{@const active = $page.url.pathname.startsWith(providersHref)}
 				<a
 					href={providersHref}
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+					aria-current={active ? 'page' : undefined}
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm {active
+						? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
+						: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}"
 				>
 					<Radio class="h-4 w-4 shrink-0" />
 					Providers
