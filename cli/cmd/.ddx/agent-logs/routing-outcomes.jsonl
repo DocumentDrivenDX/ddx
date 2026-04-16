@@ -1,0 +1,2 @@
+{"harness":"agent","surface":"embedded-openai","canonical_target":"qwen3.5-27b","observed_at":"2026-04-16T03:38:57.776290365Z","success":false,"latency_ms":3009,"native_session_id":"s-1776310733786478213"}
+{"harness":"agent","surface":"embedded-openai","canonical_target":"qwen3.5-27b","observed_at":"2026-04-16T03:39:00.800507633Z","success":false,"latency_ms":3010,"native_session_id":"s-1776310737789868271"}
