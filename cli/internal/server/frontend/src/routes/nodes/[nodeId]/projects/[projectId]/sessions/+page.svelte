@@ -18,7 +18,7 @@
 	}
 
 	// Aggregate token summary
-	const summary = $derived(() => {
+	const summary = $derived.by(() => {
 		let totalCost = 0;
 		let totalPrompt = 0;
 		let totalCompletion = 0;
@@ -86,23 +86,23 @@
 		</div>
 		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
 			<div class="text-xs text-gray-500 dark:text-gray-400">Total Cost</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{fmtCost(summary().totalCost)}</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">{fmtCost(summary.totalCost)}</div>
 		</div>
 		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
 			<div class="text-xs text-gray-500 dark:text-gray-400">Total Tokens</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary().totalTokens.toLocaleString()}</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.totalTokens.toLocaleString()}</div>
 		</div>
 		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
 			<div class="text-xs text-gray-500 dark:text-gray-400">Prompt</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary().totalPrompt.toLocaleString()}</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.totalPrompt.toLocaleString()}</div>
 		</div>
 		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
 			<div class="text-xs text-gray-500 dark:text-gray-400">Completion</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary().totalCompletion.toLocaleString()}</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.totalCompletion.toLocaleString()}</div>
 		</div>
 		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
 			<div class="text-xs text-gray-500 dark:text-gray-400">Cache Hit</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary().cacheRate}%</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.cacheRate}%</div>
 		</div>
 	</div>
 
