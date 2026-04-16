@@ -23,6 +23,6 @@
 		class="rounded border px-4 py-2 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
 		onclick={toggleMode}
 	>
-		Toggle dark mode (current: {mode})
+		Toggle dark mode (current: {mode.current})
 	</button>
 </div>
