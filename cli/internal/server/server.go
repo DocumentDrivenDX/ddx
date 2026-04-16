@@ -453,6 +453,23 @@ func (s *Server) buildDocGraphForRequest(r *http.Request) (*docgraph.Graph, erro
 	return docgraph.BuildGraphWithConfig(s.workingDirForRequest(r))
 }
 
+// execStoreForRequest returns an exec store rooted at the request's project.
+func (s *Server) execStoreForRequest(r *http.Request) *ddxexec.Store {
+	return ddxexec.NewStore(s.workingDirForRequest(r))
+}
+
+// workerManagerForRequest returns the live WorkerManager when the request
+// resolves to the server's own WorkingDir, and a read-only manager rooted at
+// the request's project otherwise. Requests with no project context fall back
+// to s.workers.
+func (s *Server) workerManagerForRequest(r *http.Request) *WorkerManager {
+	dir := s.workingDirForRequest(r)
+	if dir == s.WorkingDir {
+		return s.workers
+	}
+	return NewWorkerManager(dir)
+}
+
 // route registers a handler and records the pattern for test introspection.
 func (s *Server) route(pattern string, handler http.HandlerFunc) {
 	s.routePatterns = append(s.routePatterns, pattern)
@@ -556,38 +573,64 @@ func (s *Server) routes() {
 	scoped("POST /api/projects/{project}/beads/{id}/reopen", s.handleReopenBead)
 	scoped("POST /api/projects/{project}/beads/{id}/deps", s.handleBeadDeps)
 
-	// Execution dispatch
-	trusted("POST /api/exec/run/{id}", s.handleExecDispatch)
-	trusted("POST /api/agent/run", s.handleAgentDispatch)
-	trusted("GET /api/agent/workers", s.handleAgentWorkers)
+	// Execution dispatch — legacy
+	legacy("POST /api/exec/run/{id}", s.handleExecDispatch)
+	legacy("POST /api/agent/run", s.handleAgentDispatch)
+	legacy("GET /api/agent/workers", s.handleAgentWorkers)
 	trusted("POST /api/agent/workers/execute-loop", s.handleStartExecuteLoopWorker)
-	trusted("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
+	legacy("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
 	trusted("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
-	trusted("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
-	trusted("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
-	trusted("GET /api/agent/coordinators", s.handleAgentCoordinators)
+	legacy("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
+	legacy("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
+	legacy("GET /api/agent/coordinators", s.handleAgentCoordinators)
+
+	// Agent — project-scoped (FEAT-002: canonical)
+	scoped("POST /api/projects/{project}/agent/run", s.handleAgentDispatch)
+	scoped("GET /api/projects/{project}/agent/workers", s.handleAgentWorkers)
+	scoped("GET /api/projects/{project}/agent/workers/{id}", s.handleAgentWorkerShow)
+	scoped("GET /api/projects/{project}/agent/workers/{id}/log", s.handleAgentWorkerLog)
+	scoped("GET /api/projects/{project}/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
+	scoped("GET /api/projects/{project}/agent/coordinators", s.handleAgentCoordinators)
 
 	// Project-scoped worker endpoints (FEAT-002 §22-24)
 	trusted("GET /api/projects/{project}/workers", s.handleProjectWorkerList)
 	trusted("GET /api/projects/{project}/workers/{id}/progress", s.handleProjectWorkerProgress)
 	trusted("GET /api/projects/{project}/workers/{id}", s.handleProjectWorkerShow)
 
-	// Executions
-	trusted("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
-	trusted("GET /api/exec/definitions", s.handleExecDefinitions)
-	trusted("GET /api/exec/runs/{id}/log", s.handleExecRunLog)
-	trusted("GET /api/exec/runs/{id}", s.handleExecRunShow)
-	trusted("GET /api/exec/runs", s.handleExecRuns)
+	// Executions — legacy
+	legacy("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
+	legacy("GET /api/exec/definitions", s.handleExecDefinitions)
+	legacy("GET /api/exec/runs/{id}/log", s.handleExecRunLog)
+	legacy("GET /api/exec/runs/{id}", s.handleExecRunShow)
+	legacy("GET /api/exec/runs", s.handleExecRuns)
 
-	// Agent sessions
-	trusted("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
-	trusted("GET /api/agent/sessions", s.handleAgentSessions)
+	// Executions — project-scoped (FEAT-002: canonical)
+	scoped("POST /api/projects/{project}/exec/run/{id}", s.handleExecDispatch)
+	scoped("GET /api/projects/{project}/exec/definitions/{id}", s.handleExecDefinitionShow)
+	scoped("GET /api/projects/{project}/exec/definitions", s.handleExecDefinitions)
+	scoped("GET /api/projects/{project}/exec/runs/{id}/log", s.handleExecRunLog)
+	scoped("GET /api/projects/{project}/exec/runs/{id}", s.handleExecRunShow)
+	scoped("GET /api/projects/{project}/exec/runs", s.handleExecRuns)
 
-	// Process metrics
-	trusted("GET /api/metrics/summary", s.handleMetricsSummary)
-	trusted("GET /api/metrics/cost", s.handleMetricsCost)
-	trusted("GET /api/metrics/cycle-time", s.handleMetricsCycleTime)
-	trusted("GET /api/metrics/rework", s.handleMetricsRework)
+	// Agent sessions — legacy
+	legacy("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
+	legacy("GET /api/agent/sessions", s.handleAgentSessions)
+
+	// Agent sessions — project-scoped (FEAT-002: canonical)
+	scoped("GET /api/projects/{project}/agent/sessions/{id}", s.handleAgentSessionDetail)
+	scoped("GET /api/projects/{project}/agent/sessions", s.handleAgentSessions)
+
+	// Process metrics — legacy
+	legacy("GET /api/metrics/summary", s.handleMetricsSummary)
+	legacy("GET /api/metrics/cost", s.handleMetricsCost)
+	legacy("GET /api/metrics/cycle-time", s.handleMetricsCycleTime)
+	legacy("GET /api/metrics/rework", s.handleMetricsRework)
+
+	// Process metrics — project-scoped (FEAT-002: canonical)
+	scoped("GET /api/projects/{project}/metrics/summary", s.handleMetricsSummary)
+	scoped("GET /api/projects/{project}/metrics/cost", s.handleMetricsCost)
+	scoped("GET /api/projects/{project}/metrics/cycle-time", s.handleMetricsCycleTime)
+	scoped("GET /api/projects/{project}/metrics/rework", s.handleMetricsRework)
 
 	// Providers (FEAT-002 §26-27, host+user global — not project-scoped)
 	trusted("GET /api/providers", s.handleListProviders)
@@ -1661,7 +1704,7 @@ func (s *Server) execStore() *ddxexec.Store {
 }
 
 func (s *Server) handleExecDefinitions(w http.ResponseWriter, r *http.Request) {
-	store := s.execStore()
+	store := s.execStoreForRequest(r)
 	artifactID := r.URL.Query().Get("artifact")
 	defs, err := store.ListDefinitions(artifactID)
 	if err != nil {
@@ -1677,7 +1720,7 @@ func (s *Server) handleExecDefinitionShow(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	store := s.execStore()
+	store := s.execStoreForRequest(r)
 	def, err := store.ShowDefinition(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
@@ -1687,7 +1730,7 @@ func (s *Server) handleExecDefinitionShow(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleExecRuns(w http.ResponseWriter, r *http.Request) {
-	store := s.execStore()
+	store := s.execStoreForRequest(r)
 	artifactID := r.URL.Query().Get("artifact")
 	definitionID := r.URL.Query().Get("definition")
 	runs, err := store.History(artifactID, definitionID)
@@ -1704,7 +1747,7 @@ func (s *Server) handleExecRunShow(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	store := s.execStore()
+	store := s.execStoreForRequest(r)
 	result, err := store.Result(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
@@ -1719,7 +1762,7 @@ func (s *Server) handleExecRunLog(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	store := s.execStore()
+	store := s.execStoreForRequest(r)
 	stdout, stderr, err := store.Log(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
@@ -1746,7 +1789,7 @@ func (s *Server) handleExecDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := s.execStore()
+	store := s.execStoreForRequest(r)
 	record, err := store.Run(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1780,15 +1823,16 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	workDir := s.workingDirForRequest(r)
 	runner := agent.NewRunner(agent.Config{
-		SessionLogDir: agent.ResolveLogDir(s.WorkingDir, ""),
+		SessionLogDir: agent.ResolveLogDir(workDir, ""),
 	})
 	opts := agent.RunOptions{
 		Harness: req.Harness,
 		Prompt:  req.Prompt,
 		Model:   req.Model,
 		Effort:  req.Effort,
-		WorkDir: s.WorkingDir,
+		WorkDir: workDir,
 	}
 	result, err := runner.Run(opts)
 	if err != nil {
@@ -1799,6 +1843,21 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
+	// Scoped/singleton: return workers for just the resolved project.
+	if _, ok := projectFromContext(r.Context()); ok {
+		m := s.workerManagerForRequest(r)
+		recs, err := m.List()
+		if err != nil {
+			writeJSON(w, http.StatusOK, []WorkerRecord{})
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool {
+			return recs[i].StartedAt.After(recs[j].StartedAt)
+		})
+		writeJSON(w, http.StatusOK, recs)
+		return
+	}
+
 	projects := s.state.GetProjects()
 
 	var all []WorkerRecord
@@ -1831,6 +1890,17 @@ func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentCoordinators(w http.ResponseWriter, r *http.Request) {
+	if p, ok := projectFromContext(r.Context()); ok {
+		if m := s.workers.LandCoordinators.MetricsFor(p.Path); m != nil {
+			writeJSON(w, http.StatusOK, []CoordinatorMetricsEntry{{
+				ProjectRoot: p.Path,
+				Metrics:     *m,
+			}})
+			return
+		}
+		writeJSON(w, http.StatusOK, []CoordinatorMetricsEntry{})
+		return
+	}
 	writeJSON(w, http.StatusOK, s.workers.LandCoordinators.AllMetrics())
 }
 
@@ -1932,7 +2002,8 @@ func (s *Server) handleAgentWorkerShow(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	record, err := s.workers.Show(id)
+	m := s.workerManagerForRequest(r)
+	record, err := m.Show(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -1970,7 +2041,8 @@ func (s *Server) handleAgentWorkerLog(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	stdout, stderr, err := s.workers.Logs(id)
+	m := s.workerManagerForRequest(r)
+	stdout, stderr, err := m.Logs(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -1984,7 +2056,8 @@ func (s *Server) handleAgentWorkerPrompt(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	record, err := s.workers.Show(id)
+	m := s.workerManagerForRequest(r)
+	record, err := m.Show(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -2000,7 +2073,7 @@ func (s *Server) handleAgentWorkerPrompt(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no attempt available"})
 		return
 	}
-	promptPath := filepath.Join(s.WorkingDir, ".ddx", "executions", attemptID, "prompt.md")
+	promptPath := filepath.Join(s.workingDirForRequest(r), ".ddx", "executions", attemptID, "prompt.md")
 	data, err := os.ReadFile(promptPath)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "prompt not found"})
@@ -2178,7 +2251,7 @@ type agentSessionDetail struct {
 }
 
 func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
-	sessions, err := s.loadSessions()
+	sessions, err := s.loadSessionsFor(s.workingDirForRequest(r))
 	if err != nil {
 		writeJSON(w, http.StatusOK, []any{})
 		return
@@ -2232,7 +2305,7 @@ func (s *Server) handleAgentSessionDetail(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	sessions, err := s.loadSessions()
+	sessions, err := s.loadSessionsFor(s.workingDirForRequest(r))
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no sessions found"})
 		return
@@ -2248,7 +2321,11 @@ func (s *Server) handleAgentSessionDetail(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) loadSessions() ([]agent.SessionEntry, error) {
-	logFile := filepath.Join(s.WorkingDir, agent.DefaultLogDir, "sessions.jsonl")
+	return s.loadSessionsFor(s.WorkingDir)
+}
+
+func (s *Server) loadSessionsFor(workDir string) ([]agent.SessionEntry, error) {
+	logFile := filepath.Join(workDir, agent.DefaultLogDir, "sessions.jsonl")
 	f, err := os.Open(logFile)
 	if err != nil {
 		return nil, err
@@ -2323,7 +2400,7 @@ func (s *Server) handleMetricsSummary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	report, err := processmetrics.New(s.WorkingDir).Summary(query)
+	report, err := processmetrics.New(s.workingDirForRequest(r)).Summary(query)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -2343,7 +2420,7 @@ func (s *Server) handleMetricsCost(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "use either bead or feature, not both"})
 		return
 	}
-	report, err := processmetrics.New(s.WorkingDir).Cost(query)
+	report, err := processmetrics.New(s.workingDirForRequest(r)).Cost(query)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -2357,7 +2434,7 @@ func (s *Server) handleMetricsCycleTime(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	report, err := processmetrics.New(s.WorkingDir).CycleTime(query)
+	report, err := processmetrics.New(s.workingDirForRequest(r)).CycleTime(query)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -2371,7 +2448,7 @@ func (s *Server) handleMetricsRework(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	report, err := processmetrics.New(s.WorkingDir).Rework(query)
+	report, err := processmetrics.New(s.workingDirForRequest(r)).Rework(query)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

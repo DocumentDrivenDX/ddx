@@ -3572,3 +3572,417 @@ func TestMigrateDeduplicatesDuplicateEntries(t *testing.T) {
 		t.Errorf("expected exactly 1 entry for dupPath after migration, got %d (total projects: %d)", count, len(projects))
 	}
 }
+
+// TestProjectScopedExecRoutes verifies that /api/projects/{project}/exec/*
+// routes resolve {project} via the projectScoped middleware and serve data
+// from the scoped project's exec store — not the server's default WorkingDir.
+func TestProjectScopedExecRoutes(t *testing.T) {
+	dir1 := setupExecTestDir(t)
+	dir2 := setupTestDir(t) // no exec data
+
+	srv := New(":0", dir1)
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	p1 := srv.state.RegisterProject(dir1)
+	p2 := srv.state.RegisterProject(dir2)
+
+	t.Run("definitions list scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/exec/definitions", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var defs []struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &defs); err != nil {
+			t.Fatal(err)
+		}
+		if len(defs) != 1 || defs[0].ID != "bench-startup" {
+			t.Errorf("expected bench-startup, got %+v", defs)
+		}
+	})
+
+	t.Run("definitions list empty for project 2", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p2.ID+"/exec/definitions", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var defs []struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &defs); err != nil {
+			t.Fatal(err)
+		}
+		if len(defs) != 0 {
+			t.Errorf("expected 0 definitions for project 2, got %d", len(defs))
+		}
+	})
+
+	t.Run("definition show scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/exec/definitions/bench-startup", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("cross-project definition show returns 404", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p2.ID+"/exec/definitions/bench-startup", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("runs list scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/exec/runs", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var runs []struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &runs); err != nil {
+			t.Fatal(err)
+		}
+		if len(runs) != 1 {
+			t.Errorf("expected 1 run, got %d", len(runs))
+		}
+	})
+
+	t.Run("run show scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/exec/runs/bench-startup@2026-04-01T10:00:00Z-1", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("run log scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/exec/runs/bench-startup@2026-04-01T10:00:00Z-1/log", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var logs struct {
+			Stdout string `json:"stdout"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &logs); err != nil {
+			t.Fatal(err)
+		}
+		if logs.Stdout != "7.2 ms" {
+			t.Errorf("expected stdout=7.2 ms, got %q", logs.Stdout)
+		}
+	})
+
+	t.Run("exec dispatch 404s for unknown project", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/projects/proj-00000000/exec/run/bench-startup", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("exec dispatch forbidden from non-localhost", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/projects/"+p1.ID+"/exec/run/bench-startup", nil)
+		req.RemoteAddr = "203.0.113.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+// TestProjectScopedAgentSessionsAndMetrics verifies that scoped agent/sessions
+// and metrics routes serve data rooted at the resolved project, not the
+// server's default WorkingDir.
+func TestProjectScopedAgentSessionsAndMetrics(t *testing.T) {
+	// Project 1 has sessions; project 2 has no sessions.
+	dir1 := setupTestDir(t)
+	logDir1 := filepath.Join(dir1, ".ddx", "agent-logs")
+	if err := os.MkdirAll(logDir1, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s1 := `{"id":"as-P1-A","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"duration_ms":1000,"exit_code":0}`
+	s2 := `{"id":"as-P1-B","timestamp":"2026-01-01T11:00:00Z","harness":"claude","model":"sonnet","prompt_len":200,"duration_ms":2000,"exit_code":0}`
+	if err := os.WriteFile(filepath.Join(logDir1, "sessions.jsonl"), []byte(s1+"\n"+s2+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dir2 := setupTestDir(t)
+
+	srv := New(":0", dir1)
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	p1 := srv.state.RegisterProject(dir1)
+	p2 := srv.state.RegisterProject(dir2)
+
+	t.Run("sessions list scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/agent/sessions", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var sessions []struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &sessions); err != nil {
+			t.Fatal(err)
+		}
+		if len(sessions) != 2 {
+			t.Fatalf("expected 2 sessions, got %d", len(sessions))
+		}
+	})
+
+	t.Run("sessions list empty for project 2", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p2.ID+"/agent/sessions", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var sessions []any
+		if err := json.Unmarshal(w.Body.Bytes(), &sessions); err != nil {
+			t.Fatal(err)
+		}
+		if len(sessions) != 0 {
+			t.Errorf("expected 0 sessions for project 2, got %d", len(sessions))
+		}
+	})
+
+	t.Run("session detail scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/agent/sessions/as-P1-A", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("cross-project session detail returns 404", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p2.ID+"/agent/sessions/as-P1-A", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("metrics summary scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/metrics/summary", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("metrics cost scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/metrics/cost", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("metrics cycle-time scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/metrics/cycle-time", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("metrics rework scopes to project 1", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+p1.ID+"/metrics/rework", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("metrics summary unknown project returns 404", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/proj-00000000/metrics/summary", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+// TestProjectScopedAgentWorkerRoutes verifies that scoped worker routes
+// resolve the project via projectScoped middleware and serve records from
+// that project's worker store only.
+func TestProjectScopedAgentWorkerRoutes(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-scoped-workers")
+
+	rootA := setupTestDir(t)
+	rootB := setupTestDir(t)
+
+	writeTestWorkerRecord(t, rootA, "w-scoped-A", WorkerRecord{
+		ID:          "w-scoped-A",
+		Kind:        "execute-loop",
+		State:       "exited",
+		ProjectRoot: rootA,
+		StartedAt:   time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC),
+	})
+	writeTestWorkerRecord(t, rootB, "w-scoped-B", WorkerRecord{
+		ID:          "w-scoped-B",
+		Kind:        "execute-loop",
+		State:       "exited",
+		ProjectRoot: rootB,
+		StartedAt:   time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC),
+	})
+
+	srv := New(":0", rootA)
+	pA, _ := srv.state.GetProjectByPath(rootA)
+	pB := srv.state.RegisterProject(rootB)
+
+	t.Run("agent workers scoped to project A", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+pA.ID+"/agent/workers", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var workers []WorkerRecord
+		if err := json.Unmarshal(w.Body.Bytes(), &workers); err != nil {
+			t.Fatal(err)
+		}
+		if len(workers) != 1 || workers[0].ID != "w-scoped-A" {
+			t.Errorf("expected only w-scoped-A, got %+v", workers)
+		}
+	})
+
+	t.Run("agent workers scoped to project B", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+pB.ID+"/agent/workers", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var workers []WorkerRecord
+		if err := json.Unmarshal(w.Body.Bytes(), &workers); err != nil {
+			t.Fatal(err)
+		}
+		if len(workers) != 1 || workers[0].ID != "w-scoped-B" {
+			t.Errorf("expected only w-scoped-B, got %+v", workers)
+		}
+	})
+
+	t.Run("agent worker show scoped to project B", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+pB.ID+"/agent/workers/w-scoped-B", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var rec WorkerRecord
+		if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+			t.Fatal(err)
+		}
+		if rec.ID != "w-scoped-B" {
+			t.Errorf("expected w-scoped-B, got %s", rec.ID)
+		}
+	})
+
+	t.Run("cross-project worker show returns 404", func(t *testing.T) {
+		// w-scoped-A exists under project A, but we ask project B for it.
+		req := httptest.NewRequest("GET", "/api/projects/"+pB.ID+"/agent/workers/w-scoped-A", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("agent coordinators scoped returns array", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/"+pA.ID+"/agent/coordinators", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var entries []CoordinatorMetricsEntry
+		if err := json.Unmarshal(w.Body.Bytes(), &entries); err != nil {
+			t.Fatalf("expected JSON array of coordinator entries: %v", err)
+		}
+	})
+
+	t.Run("unknown project 404", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/proj-deadbeef/agent/workers", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
