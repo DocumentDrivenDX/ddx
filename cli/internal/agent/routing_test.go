@@ -644,3 +644,36 @@ func TestBuildCandidatePlansHarnessOverrideWithProfileResolvesConcreteModel(t *t
 	// catalog: cheap on codex surface -> gpt-5.4-mini
 	assert.Equal(t, "gpt-5.4-mini", codexPlan.ConcreteModel)
 }
+
+// TestProviderAgentPinsHarnessToAgent verifies that --provider agent (or
+// --provider local) forces HarnessOverride = "agent" so the routing engine
+// never falls through to claude/codex.
+func TestProviderAgentPinsHarnessToAgent(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		want     string
+	}{
+		{"agent provider pins agent harness", "agent", "agent"},
+		{"local alias pins agent harness", "local", "agent"},
+		{"vidar is not a harness — no override", "vidar", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := NormalizeRouteRequest(
+				RouteFlags{Provider: tt.provider},
+				Config{},
+				BuiltinCatalog,
+			)
+			assert.Equal(t, tt.want, req.HarnessOverride)
+		})
+	}
+}
+
+// TestResolveHarnessAliasLocal verifies the "local" → "agent" alias.
+func TestResolveHarnessAliasLocal(t *testing.T) {
+	assert.Equal(t, "agent", resolveHarnessAlias("local"))
+	assert.Equal(t, "agent", resolveHarnessAlias("agent"))
+	assert.Equal(t, "claude", resolveHarnessAlias("claude"))
+	assert.Equal(t, "vidar", resolveHarnessAlias("vidar"))
+}

@@ -313,6 +313,17 @@ func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 	name := opts.Harness
 	if name == "" {
+		// --provider names a harness directly (e.g. "agent", "local") →
+		// treat it as a harness override so the routing engine never
+		// falls through to a different harness.
+		if opts.Provider != "" {
+			resolved := resolveHarnessAlias(opts.Provider)
+			if r.Registry.Has(resolved) {
+				name = resolved
+			}
+		}
+	}
+	if name == "" {
 		name = r.Config.Harness
 	}
 	harness, ok := r.Registry.Get(name)

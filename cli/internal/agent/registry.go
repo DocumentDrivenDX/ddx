@@ -146,6 +146,22 @@ var builtinHarnesses = map[string]Harness{
 	},
 }
 
+// harnessAliases maps convenience names to canonical harness names.
+// "local" always routes to the embedded ddx-agent; it must never
+// fall through to a cloud harness like claude or codex.
+var harnessAliases = map[string]string{
+	"local": "agent",
+}
+
+// resolveHarnessAlias returns the canonical harness name for an alias,
+// or the input unchanged if it is not an alias.
+func resolveHarnessAlias(name string) string {
+	if canonical, ok := harnessAliases[name]; ok {
+		return canonical
+	}
+	return name
+}
+
 // Registry manages known harnesses.
 type Registry struct {
 	LookPath  LookPathFunc

@@ -209,8 +209,19 @@ func NormalizeRouteRequest(flags RouteFlags, cfg Config, catalog *Catalog) Route
 	}
 
 	// 1. Harness override constrains routing to one harness.
+	//    --provider that names a known harness (or alias like "local") also
+	//    pins the harness so the routing engine never falls through to a
+	//    different harness.
 	if flags.Harness != "" {
 		req.HarnessOverride = flags.Harness
+	} else if flags.Provider != "" {
+		resolved := resolveHarnessAlias(flags.Provider)
+		// Only treat as harness override if it names a registered harness;
+		// otherwise it's a ddx-agent provider name (e.g. "vidar") and
+		// should not constrain harness selection.
+		if _, ok := builtinHarnesses[resolved]; ok {
+			req.HarnessOverride = resolved
+		}
 	} else if cfg.Harness != "" {
 		req.HarnessOverride = cfg.Harness
 	}
