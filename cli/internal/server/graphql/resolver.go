@@ -87,9 +87,8 @@ func (r *queryResolver) Bead(ctx context.Context, id string) (*Bead, error) {
 }
 
 // DocumentByPath is the resolver for the documentByPath field.
-func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Document, error) {
-	panic("not implemented")
-}
+// Implemented in resolver_documents.go.
+
 
 // DocStale is the resolver for the docStale field.
 func (r *queryResolver) DocStale(ctx context.Context) ([]*StaleReason, error) {

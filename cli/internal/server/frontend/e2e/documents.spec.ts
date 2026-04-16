@@ -50,20 +50,25 @@ async function mockRoutes(page: import('@playwright/test').Page) {
 				contentType: 'application/json',
 				body: JSON.stringify({ data: makeDocsResponse() })
 			});
+		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
+			const vars = (route.request().postDataJSON() as { variables?: Record<string, string> })
+				.variables ?? {};
+			const path = vars.path ?? '';
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						documentByPath: {
+							path,
+							content: `# Content of ${path}\n\nThis is mock content.`
+						}
+					}
+				})
+			});
 		} else {
 			await route.continue();
 		}
-	});
-
-	// Mock the document content REST endpoint
-	await page.route('/api/documents/**', async (route) => {
-		const url = route.request().url();
-		const path = url.replace(/.*\/api\/documents\//, '');
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ path, content: `# Content of ${path}\n\nThis is mock content.` })
-		});
 	});
 }
 
@@ -119,7 +124,7 @@ test('TC-024: clicking a document row navigates to the detail page', async ({ pa
 	await expect(page).toHaveURL(/\/documents\/docs\/helix\/01-frame\/vision\.md/);
 });
 
-// TC-025: Document detail page loads content from the REST API
+// TC-025: Document detail page loads content via GraphQL documentByPath
 test('TC-025: document detail page fetches and displays document content', async ({ page }) => {
 	await mockRoutes(page);
 	await page.goto(`${BASE_URL}/docs/helix/01-frame/vision.md`);
@@ -157,20 +162,22 @@ test('TC-026: editing a document fires the DocumentWrite mutation', async ({ pag
 				contentType: 'application/json',
 				body: JSON.stringify({ data: { documentWrite: { path: 'docs/helix/01-frame/vision.md' } } })
 			});
+		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						documentByPath: {
+							path: 'docs/helix/01-frame/vision.md',
+							content: '# Vision\n\nOriginal content.'
+						}
+					}
+				})
+			});
 		} else {
 			await route.continue();
 		}
-	});
-
-	await page.route('/api/documents/**', async (route) => {
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				path: 'docs/helix/01-frame/vision.md',
-				content: '# Vision\n\nOriginal content.'
-			})
-		});
 	});
 
 	await page.goto(`${BASE_URL}/docs/helix/01-frame/vision.md`);

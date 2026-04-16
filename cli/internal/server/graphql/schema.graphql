@@ -206,6 +206,8 @@ type Document implements Node {
   prompt: String
   """Execution definition embedded in the document (null if none)"""
   execDef: DocumentExecDef
+  """Raw file content (populated only by documentByPath, null in list queries)"""
+  content: String
 }
 
 """DocumentReview holds review-state metadata for a document"""
