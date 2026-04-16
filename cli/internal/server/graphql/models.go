@@ -615,6 +615,8 @@ type Document struct {
 	Prompt *string `json:"prompt,omitempty"`
 	// Execution definition embedded in the document (null if none)
 	ExecDef *DocumentExecDef `json:"execDef,omitempty"`
+	// Raw file content (populated only by documentByPath, null in list queries)
+	Content *string `json:"content,omitempty"`
 }
 
 func (Document) IsNode() {}

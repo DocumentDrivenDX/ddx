@@ -4,11 +4,69 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
+
+// DocumentByPath is the resolver for the documentByPath field.
+// It reads the document at the given library-relative path and returns its
+// metadata (from the docgraph) plus the raw file content.
+func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Document, error) {
+	if path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+
+	cleaned := filepath.Clean(path)
+	if strings.Contains(cleaned, "..") {
+		return nil, fmt.Errorf("invalid path")
+	}
+
+	cfg, err := config.LoadWithWorkingDir(r.WorkingDir)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	if cfg.Library == nil || cfg.Library.Path == "" {
+		return nil, fmt.Errorf("library not configured")
+	}
+	libPath := cfg.Library.Path
+	if !filepath.IsAbs(libPath) {
+		libPath = filepath.Join(r.WorkingDir, libPath)
+	}
+
+	fullPath := filepath.Join(libPath, cleaned)
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, nil // not found → null
+	}
+	content := string(data)
+
+	// Try to enrich with docgraph metadata.
+	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	if err == nil {
+		if id, ok := graph.PathToID[cleaned]; ok {
+			if d, ok := graph.Documents[id]; ok {
+				doc := docToGQL(*d)
+				doc.Content = &content
+				return doc, nil
+			}
+		}
+	}
+
+	// File exists but not in the docgraph (e.g., no DDx frontmatter).
+	return &Document{
+		ID:         cleaned,
+		Path:       cleaned,
+		DependsOn:  []string{},
+		Inputs:     []string{},
+		Dependents: []string{},
+		Content:    &content,
+	}, nil
+}
 
 // Documents is the resolver for the documents field with Relay cursor pagination.
 func (r *queryResolver) Documents(ctx context.Context, first *int, after *string, last *int, before *string, typeArg *string) (*DocumentConnection, error) {

@@ -333,6 +333,7 @@ type ComplexityRoot struct {
 	}
 
 	Document struct {
+		Content    func(childComplexity int) int
 		Dependents func(childComplexity int) int
 		DependsOn  func(childComplexity int) int
 		ExecDef    func(childComplexity int) int
@@ -2158,6 +2159,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.DocGraph.Warnings(childComplexity), true
 
+	case "Document.content":
+		if e.ComplexityRoot.Document.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Document.Content(childComplexity), true
 	case "Document.dependents":
 		if e.ComplexityRoot.Document.Dependents == nil {
 			break
@@ -11723,6 +11730,8 @@ func (ec *executionContext) fieldContext_DocGraph_documents(_ context.Context, f
 				return ec.fieldContext_Document_prompt(ctx, field)
 			case "execDef":
 				return ec.fieldContext_Document_execDef(ctx, field)
+			case "content":
+				return ec.fieldContext_Document_content(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Document", field.Name)
 		},
@@ -12135,6 +12144,35 @@ func (ec *executionContext) fieldContext_Document_execDef(_ context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Document_content(ctx context.Context, field graphql.CollectedField, obj *Document) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Document_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Document_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Document",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _DocumentConnection_edges(ctx context.Context, field graphql.CollectedField, obj *DocumentConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12282,6 +12320,8 @@ func (ec *executionContext) fieldContext_DocumentEdge_node(_ context.Context, fi
 				return ec.fieldContext_Document_prompt(ctx, field)
 			case "execDef":
 				return ec.fieldContext_Document_execDef(ctx, field)
+			case "content":
+				return ec.fieldContext_Document_content(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Document", field.Name)
 		},
@@ -15667,6 +15707,8 @@ func (ec *executionContext) fieldContext_Mutation_documentWrite(ctx context.Cont
 				return ec.fieldContext_Document_prompt(ctx, field)
 			case "execDef":
 				return ec.fieldContext_Document_execDef(ctx, field)
+			case "content":
+				return ec.fieldContext_Document_content(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Document", field.Name)
 		},
@@ -18011,6 +18053,8 @@ func (ec *executionContext) fieldContext_Query_documentByPath(ctx context.Contex
 				return ec.fieldContext_Document_prompt(ctx, field)
 			case "execDef":
 				return ec.fieldContext_Document_execDef(ctx, field)
+			case "content":
+				return ec.fieldContext_Document_content(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Document", field.Name)
 		},
@@ -18324,6 +18368,8 @@ func (ec *executionContext) fieldContext_Query_doc(ctx context.Context, field gr
 				return ec.fieldContext_Document_prompt(ctx, field)
 			case "execDef":
 				return ec.fieldContext_Document_execDef(ctx, field)
+			case "content":
+				return ec.fieldContext_Document_content(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Document", field.Name)
 		},
@@ -27076,6 +27122,8 @@ func (ec *executionContext) _Document(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = ec._Document_prompt(ctx, field, obj)
 		case "execDef":
 			out.Values[i] = ec._Document_execDef(ctx, field, obj)
+		case "content":
+			out.Values[i] = ec._Document_content(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
