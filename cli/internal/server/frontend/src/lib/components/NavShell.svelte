@@ -16,6 +16,7 @@
 	import ProjectPicker from './ProjectPicker.svelte';
 	import { nodeStore } from '$lib/stores/node.svelte';
 	import { projectStore } from '$lib/stores/project.svelte';
+	import { wsConnection } from '$lib/stores/connection.svelte';
 
 	let { children } = $props();
 
@@ -73,6 +74,16 @@
 			</button>
 		</div>
 	</header>
+
+	{#if wsConnection.showBanner}
+		<div
+			data-testid="ws-disconnected-banner"
+			class="flex shrink-0 items-center gap-2 border-b border-yellow-300 bg-yellow-50 px-4 py-1 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+		>
+			<span class="inline-block h-2 w-2 rounded-full bg-yellow-500"></span>
+			{wsConnection.state === 'connecting' ? 'reconnecting\u2026' : 'disconnected'}
+		</div>
+	{/if}
 
 	<div class="flex min-h-0 flex-1">
 		<!-- Sidebar -->
