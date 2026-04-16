@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { marked } from 'marked';
 	import DOMPurify from 'isomorphic-dompurify';
@@ -10,7 +10,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let content = $state(data.content ?? '');
+	let content = $derived(data.content ?? '');
 	let editing = $state(false);
 	let editContent = $state('');
 	let saving = $state(false);
@@ -54,8 +54,8 @@
 		try {
 			const client = createClient();
 			await client.request(DOCUMENT_WRITE, { path: data.path, content: editContent });
-			content = editContent;
 			editing = false;
+			await invalidateAll();
 		} catch (e) {
 			saveError = e instanceof Error ? e.message : 'Save failed';
 		} finally {
