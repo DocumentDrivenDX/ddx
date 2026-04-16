@@ -4,9 +4,14 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let selected = $state<PersonaNode | null>(
-		data.personas.edges.length > 0 ? data.personas.edges[0].node : null
-	);
+	let selectedId = $state<string | null>(null);
+	let selected = $derived.by(() => {
+		if (selectedId !== null) {
+			const match = data.personas.edges.find((e) => e.node.id === selectedId);
+			if (match) return match.node;
+		}
+		return data.personas.edges.length > 0 ? data.personas.edges[0].node : null;
+	});
 
 	function fmtDate(iso: string | null): string {
 		if (!iso) return '—';
@@ -25,7 +30,7 @@
 			{#each data.personas.edges as edge (edge.cursor)}
 				{@const p = edge.node}
 				<button
-					onclick={() => (selected = p)}
+					onclick={() => (selectedId = p.id)}
 					class="w-full border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 {selected?.id ===
 					p.id
 						? 'bg-blue-50 dark:bg-blue-900/20'
