@@ -292,6 +292,10 @@ func ApplyLandingToResult(res *ExecuteBeadResult, landing *BeadLandingResult) {
 	// Re-classify status based on landing outcome and reason.
 	res.Status = ClassifyExecuteBeadStatus(landing.Outcome, res.ExitCode, landing.Reason)
 	res.Detail = ExecuteBeadStatusDetail(res.Status, landing.Reason, res.Error)
+	// Refine failure_mode with landing-level signals. A clean merge clears
+	// the field; merge conflict or gate failure overrides the worker-level
+	// classification; other preserved outcomes keep the worker's mode.
+	res.FailureMode = classifyLandingFailureMode(landing.Outcome, landing.Reason, landing.GateResults, res.FailureMode)
 }
 
 // ExtractGoverningIDsFromManifest reads governing artifact IDs from a manifest

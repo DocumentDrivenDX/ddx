@@ -125,3 +125,77 @@ func TestAgentMetricsTierSuccess(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(emptyOut), &emptyRows))
 	assert.Empty(t, emptyRows)
 }
+
+// TestAgentMetricsTierSuccessFailureModes verifies the failure_mode
+// breakdown is aggregated per tier and surfaced in both JSON and table
+// output. Each recorded failure_mode contributes to a count under its
+// tier's FailureModes map; successes do not contribute. This is the
+// measurement surface for FEAT-routing-visibility / failure taxonomy.
+func TestAgentMetricsTierSuccessFailureModes(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	dir := t.TempDir()
+	execRoot := filepath.Join(dir, ".ddx", "executions")
+
+	// claude/sonnet tier: mixed outcomes with distinct failure modes.
+	writeExecResult(t, execRoot, "20260401T100000-bbbb0001", map[string]any{
+		"bead_id": "ddx-1", "harness": "claude", "model": "sonnet",
+		"outcome": "task_succeeded",
+	})
+	writeExecResult(t, execRoot, "20260401T100001-bbbb0002", map[string]any{
+		"bead_id": "ddx-2", "harness": "claude", "model": "sonnet",
+		"outcome": "task_failed", "failure_mode": "context_overflow",
+	})
+	writeExecResult(t, execRoot, "20260401T100002-bbbb0003", map[string]any{
+		"bead_id": "ddx-3", "harness": "claude", "model": "sonnet",
+		"outcome": "task_failed", "failure_mode": "context_overflow",
+	})
+	writeExecResult(t, execRoot, "20260401T100003-bbbb0004", map[string]any{
+		"bead_id": "ddx-4", "harness": "claude", "model": "sonnet",
+		"outcome": "preserved", "failure_mode": "merge_conflict",
+	})
+	// agent tier: a single no_changes failure mode.
+	writeExecResult(t, execRoot, "20260401T100004-bbbb0005", map[string]any{
+		"bead_id": "ddx-5", "harness": "agent",
+		"outcome": "task_no_changes", "failure_mode": "no_changes",
+	})
+
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "metrics", "tier-success", "--json")
+	require.NoError(t, err)
+
+	var rows []tierSuccessRow
+	require.NoError(t, json.Unmarshal([]byte(output), &rows))
+
+	byTier := map[string]tierSuccessRow{}
+	for _, r := range rows {
+		byTier[r.Tier] = r
+	}
+
+	require.Contains(t, byTier, "claude/sonnet")
+	sonnet := byTier["claude/sonnet"]
+	assert.Equal(t, 4, sonnet.Attempts)
+	assert.Equal(t, 1, sonnet.Successes)
+	require.NotNil(t, sonnet.FailureModes)
+	assert.Equal(t, 2, sonnet.FailureModes["context_overflow"])
+	assert.Equal(t, 1, sonnet.FailureModes["merge_conflict"])
+	// The one success contributes no failure_mode entry.
+	assert.NotContains(t, sonnet.FailureModes, "")
+
+	require.Contains(t, byTier, "agent")
+	agentRow := byTier["agent"]
+	assert.Equal(t, 1, agentRow.Attempts)
+	require.NotNil(t, agentRow.FailureModes)
+	assert.Equal(t, 1, agentRow.FailureModes["no_changes"])
+
+	// Table output includes a FAILURE_MODES column and the per-tier
+	// mode=count breakdown is rendered stably (sorted by mode name).
+	tableCmd := NewCommandFactory(dir).NewRootCommand()
+	tableOut, err := executeCommand(tableCmd, "agent", "metrics", "tier-success")
+	require.NoError(t, err)
+	header := strings.SplitN(tableOut, "\n", 2)[0]
+	assert.Contains(t, header, "FAILURE_MODES")
+	assert.Contains(t, tableOut, "context_overflow=2")
+	assert.Contains(t, tableOut, "merge_conflict=1")
+	assert.Contains(t, tableOut, "no_changes=1")
+}
