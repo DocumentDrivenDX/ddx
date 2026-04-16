@@ -441,6 +441,7 @@ cli/internal/agent/.ddx/
 !.ddx/executions/*/manifest.json
 !.ddx/executions/*/result.json
 !.ddx/executions/*/checks.json
+!.ddx/executions/*/usage.json
 
 # Skills target links (rewritten per-machine by skill materializer)
 .claude/skills/*/
