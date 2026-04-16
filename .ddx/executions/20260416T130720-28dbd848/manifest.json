@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260416T130720-28dbd848",
+  "bead_id": "ddx-6a7621ed",
+  "base_rev": "1cb86e9c63163e04d870b23a56189f26abf8a3e9",
+  "created_at": "2026-04-16T13:07:21.283336298Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6a7621ed",
+    "title": "docs: strip Houdini references from cli/cmd/CLAUDE.md after Option B migration",
+    "description": "Final gate opus review of ddx-02d6142d (2026-04-15) noted cli/cmd/CLAUDE.md:15 still references 'bun run houdini:generate' as a dev command. Houdini was replaced with graphql-request + graphql-ws in commit 03cc694 (Option B). The docs are stale.\n\nFix: strip the houdini:generate line from CLAUDE.md (and grep for any other Houdini mentions in docs/).",
+    "acceptance": "(1) grep -r 'houdini' docs/ cli/cmd/CLAUDE.md returns nothing. (2) The SvelteKit dev commands section in CLAUDE.md describes the actual Option B tooling.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:docs",
+      "area:docs",
+      "source:opus-final-review"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260416T130720-28dbd848",
+    "prompt": ".ddx/executions/20260416T130720-28dbd848/prompt.md",
+    "manifest": ".ddx/executions/20260416T130720-28dbd848/manifest.json",
+    "result": ".ddx/executions/20260416T130720-28dbd848/result.json",
+    "checks": ".ddx/executions/20260416T130720-28dbd848/checks.json",
+    "usage": ".ddx/executions/20260416T130720-28dbd848/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6a7621ed-20260416T130720-28dbd848"
+  }
+}

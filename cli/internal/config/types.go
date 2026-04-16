@@ -52,13 +52,12 @@ type AgentConfig struct {
 // schema compatibility so existing configs with agent_runner blocks parse without error,
 // but DDx no longer reads or applies these values.
 type AgentRunnerConfig struct {
-	Provider      string                      `yaml:"provider,omitempty" json:"provider,omitempty"`
-	BaseURL       string                      `yaml:"base_url,omitempty" json:"base_url,omitempty"`
-	APIKey        string                      `yaml:"api_key,omitempty" json:"api_key,omitempty"`
-	Model         string                      `yaml:"model,omitempty" json:"model,omitempty"`
-	Preset        string                      `yaml:"preset,omitempty" json:"preset,omitempty"`
-	MaxIterations int                         `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"`
-	Models        map[string]*LLMPresetConfig `yaml:"models,omitempty" json:"models,omitempty"`
+	Provider      string `yaml:"provider,omitempty" json:"provider,omitempty"`
+	BaseURL       string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	APIKey        string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
+	Model         string `yaml:"model,omitempty" json:"model,omitempty"`
+	Preset        string `yaml:"preset,omitempty" json:"preset,omitempty"`
+	MaxIterations int    `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"`
 }
 
 // LLMPresetConfig defines a named LLM configuration with optional multi-endpoint support.

@@ -578,8 +578,8 @@ func nativeDefaultProviderAlias(workDir string) string {
 
 // isOpenRouterModel returns true if the model name looks like a vendor/model
 // format (e.g. "qwen/qwen3-coder-next", "anthropic/claude-sonnet-4.6"). These
-// should be configured in .ddx/config.yaml under agent_runner.models or the
-// native agent config (~/.config/agent/config.yaml).
+// should be configured in native ddx-agent config (~/.config/agent/config.yaml)
+// or project-local .agent/config.yaml.
 func isOpenRouterModel(model string) bool {
 	if model == "" {
 		return false

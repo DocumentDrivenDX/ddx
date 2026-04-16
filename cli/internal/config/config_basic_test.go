@@ -1,14 +1,10 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 
-	"github.com/DocumentDrivenDX/agent/prompt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -248,67 +244,6 @@ server:
 `)
 	err = validator.Validate(content)
 	assert.NoError(t, err, "config with server.addr and server.tsnet fields should pass schema validation")
-}
-
-func TestAgentRunnerPresetMetadataMatchesRuntimePresets(t *testing.T) {
-	t.Parallel()
-
-	var schema map[string]any
-	require.NoError(t, json.Unmarshal(schemaJSON, &schema))
-
-	agentProps := schema["properties"].(map[string]any)["agent"].(map[string]any)["properties"].(map[string]any)
-	runnerProps := agentProps["agent_runner"].(map[string]any)["properties"].(map[string]any)
-	preset := runnerProps["preset"].(map[string]any)
-
-	desc := preset["description"].(string)
-	require.NotContains(t, desc, "forge")
-	for _, name := range prompt.PresetNames() {
-		assert.Contains(t, desc, name)
-	}
-
-	enumValues := make([]string, 0)
-	for _, raw := range preset["enum"].([]any) {
-		enumValues = append(enumValues, raw.(string))
-	}
-	assert.Equal(t, prompt.PresetNames(), enumValues)
-
-	examples := make([]string, 0)
-	for _, raw := range preset["examples"].([]any) {
-		examples = append(examples, raw.(string))
-	}
-	require.NotContains(t, examples, "forge")
-	assert.Equal(t, "agent", preset["default"])
-
-	for _, example := range examples {
-		assert.Truef(t, slices.Contains(prompt.PresetNames(), example), "example %q must be one of the runtime presets (%s)", example, strings.Join(prompt.PresetNames(), ", "))
-	}
-}
-
-func TestLoadConfig_RejectsUnsupportedAgentRunnerPreset(t *testing.T) {
-	tempDir := t.TempDir()
-
-	content := `version: "1.0"
-library:
-  path: "./library"
-  repository:
-    url: "https://github.com/test/repo"
-    branch: "main"
-agent:
-  agent_runner:
-    preset: invalid-preset
-`
-
-	ddxDir := filepath.Join(tempDir, ".ddx")
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0o644))
-
-	cfg, err := LoadWithWorkingDir(tempDir)
-
-	require.Error(t, err)
-	assert.Nil(t, cfg)
-	assert.Contains(t, err.Error(), "configuration validation failed")
-	assert.Contains(t, err.Error(), "preset")
-	assert.Contains(t, err.Error(), "value must be one of")
 }
 
 func TestLoadConfig_BeadPrefixField(t *testing.T) {

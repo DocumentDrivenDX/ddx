@@ -246,98 +246,6 @@
             "unrestricted"
           ]
         },
-        "agent_runner": {
-          "type": "object",
-          "description": "DEPRECATED: Use native .agent/config.yaml instead. This section is no longer applied by DDx; existing configurations are silently ignored.",
-          "properties": {
-            "provider": {
-              "type": "string",
-              "description": "Provider type: openai-compat or anthropic",
-              "examples": [
-                "openai-compat",
-                "anthropic"
-              ]
-            },
-            "base_url": {
-              "type": "string",
-              "description": "Provider endpoint URL",
-              "examples": [
-                "http://localhost:1234/v1"
-              ]
-            },
-            "api_key": {
-              "type": "string",
-              "description": "API key for the provider"
-            },
-            "model": {
-              "type": "string",
-              "description": "Default model name"
-            },
-            "preset": {
-              "type": "string",
-              "default": "agent",
-              "description": "Prompt preset (agent/benchmark/minimal/claude/codex/cursor)",
-              "enum": [
-                "agent",
-                "benchmark",
-                "minimal",
-                "claude",
-                "codex",
-                "cursor"
-              ],
-              "examples": [
-                "agent",
-                "minimal"
-              ]
-            },
-            "max_iterations": {
-              "type": "integer",
-              "description": "Maximum tool-call rounds",
-              "default": 20
-            },
-            "models": {
-              "type": "object",
-              "description": "Named LLM presets with optional multi-endpoint support",
-              "additionalProperties": {
-                "type": "object",
-                "required": [
-                  "model"
-                ],
-                "properties": {
-                  "model": {
-                    "type": "string",
-                    "description": "Model name passed to the provider"
-                  },
-                  "provider": {
-                    "type": "string",
-                    "description": "Provider override"
-                  },
-                  "endpoints": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "One or more base URLs; multiple = load balanced"
-                  },
-                  "api_key": {
-                    "type": "string",
-                    "description": "API key override"
-                  },
-                  "strategy": {
-                    "type": "string",
-                    "description": "Endpoint selection strategy",
-                    "enum": [
-                      "round-robin",
-                      "first-available"
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              }
-            }
-          },
-          "additionalProperties": false
-        },
         "routing": {
           "type": "object",
           "description": "Model routing configuration",
@@ -345,7 +253,9 @@
             "profile_priority": {
               "type": "array",
               "description": "Ordered list of cost/speed profiles to prefer",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             },
             "default_harness": {
               "type": "string",
@@ -354,7 +264,9 @@
             "model_overrides": {
               "type": "object",
               "description": "Per-profile model override map",
-              "additionalProperties": { "type": "string" }
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": false
