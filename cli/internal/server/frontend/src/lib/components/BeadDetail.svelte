@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
+	import { invalidateAll } from '$app/navigation';
 	import { nodeStore } from '$lib/stores/node.svelte';
 	import { X, UserPlus, UserMinus, Pencil } from 'lucide-svelte';
 	import BeadForm from './BeadForm.svelte';
@@ -67,6 +68,7 @@
 				assignee
 			});
 			bead = result.beadClaim;
+			invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : 'Claim failed';
 		} finally {
@@ -83,6 +85,7 @@
 				id: bead.id
 			});
 			bead = result.beadUnclaim;
+			invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : 'Unclaim failed';
 		} finally {

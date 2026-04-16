@@ -17,6 +17,8 @@
 						title
 						status
 						priority
+						owner
+						updatedAt
 						labels
 					}
 					cursor
@@ -35,6 +37,8 @@
 		title: string;
 		status: string;
 		priority: number;
+		owner: string | null;
+		updatedAt: string;
 		labels: string[] | null;
 	}
 
@@ -283,6 +287,8 @@
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Title</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Status</th>
 					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Priority</th>
+					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Owner</th>
+					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Updated</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -305,11 +311,17 @@
 						<td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
 							{edge.node.priority}
 						</td>
+						<td class="px-4 py-3 text-gray-600 dark:text-gray-300">
+							{edge.node.owner ?? '—'}
+						</td>
+						<td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+							{new Date(edge.node.updatedAt).toLocaleDateString()}
+						</td>
 					</tr>
 				{/each}
 				{#if edges.length === 0}
 					<tr>
-						<td colspan="4" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+						<td colspan="6" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
 							No beads found.
 						</td>
 					</tr>
