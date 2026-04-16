@@ -85,7 +85,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 | Frontend framework | **Svelte 5** | Compile-time optimizations, no Virtual DOM |
 | Build tool | **SvelteKit** | Router, layout, API routes, hooks, adapter-static for embedding |
 | Styling | **Tailwind CSS** | Consistent with website (Hextra uses Tailwind) |
-| Data fetching | **Houdini** | SvelteKit-native GraphQL client, typed queries and subscriptions |
+| Data fetching | **graphql-request + graphql-ws** | Lightweight GraphQL client with typed queries and WebSocket subscriptions |
 | Graph visualization | **D3.js** or **Cytoscape.js** | For document dependency graph rendering |
 | Embedding | **Go embed.FS** | Compile frontend into the binary — no external files needed |
 | Go HTTP | **Chi** or **net/http** | Standard library compatible routing |
@@ -702,7 +702,7 @@ ddx/
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
   signal model consumed by the provider dashboard
 - FEAT-021 (Dashboard UI) — defines URL scheme and navigation patterns
-- SvelteKit, Svelte 5, Bun, Houdini, bits-ui, lucide-svelte, Tailwind
+- SvelteKit, Svelte 5, Bun, graphql-request, graphql-ws, bits-ui, lucide-svelte, Tailwind
 - Playwright for testing (no MSW)
 - Go embed.FS, Chi or net/http, gqlgen
 

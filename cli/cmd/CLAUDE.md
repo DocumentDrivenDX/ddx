@@ -12,9 +12,6 @@ The web UI is a SvelteKit application built with Bun:
 # Install dependencies and start dev server
 cd cli/internal/server/frontend && bun install && bun run dev
 
-# Generate GraphQL types from schema
-bun run houdini:generate
-
 # Run unit tests
 bun run test
 

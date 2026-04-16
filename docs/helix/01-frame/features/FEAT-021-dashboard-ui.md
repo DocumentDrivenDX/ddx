@@ -22,7 +22,7 @@ on a node, or narrow to a specific project for context-dependent views
 (document browser, dependency graph, commit log). Node, project, and page are
 all embedded in the URL so every view is bookmarkable and shareable.
 
-The dashboard UI is implemented as a SvelteKit application with Houdini for
+The dashboard UI is implemented as a SvelteKit application with graphql-request for
 GraphQL data fetching. Every page uses `+page.ts` load functions to fetch data
 from the `/graphql` endpoint defined in SD-022.
 
@@ -341,45 +341,45 @@ src/routes/
 
 The `[$nodeId]` and `[$projectId]` dynamic route segments capture URL parameters.
 SvelteKit's `+layout.ts` and `+page.ts` files define load functions that
-fetch data via Houdini.
+fetch data via graphql-request.
 
 ### Data Layer
 
-Houdini is the GraphQL client for SvelteKit. Every page defines queries in
-`.gql` files, and Houdini generates TypeScript types and `+page.ts` helpers.
+graphql-request is the GraphQL client for data fetching, with graphql-ws for
+subscriptions. Pages define queries inline using the `gql` tagged template
+and manually typed response interfaces in `+page.ts` load functions.
 
 Example bead list query:
 
-```gql
-# src/routes/nodes/$nodeId/beads/beads.gql
-query BeadList($projectID: ID) {
-  beads(projectID: $projectID, first: 50) {
-    edges {
-      node {
-        id
-        title
-        status
-        priority
-        projectID
+```typescript
+// src/routes/nodes/$nodeId/beads/+page.ts
+import { gql } from 'graphql-request';
+import { createClient } from '$lib/gql/client';
+
+const BEAD_LIST_QUERY = gql`
+  query BeadList($projectID: ID) {
+    beads(projectID: $projectID, first: 50) {
+      edges {
+        node {
+          id
+          title
+          status
+          priority
+          projectID
+        }
       }
     }
   }
-}
-```
+`;
 
-The generated code is imported in `+page.ts`:
-
-```typescript
-// src/routes/nodes/$nodeId/beads/+page.ts
-import { query } from '$houdini';
-import './beads.gql';
-
-export const load = query(function ({ data }) {
+export const load = async ({ fetch, params }) => {
+  const client = createClient(fetch);
+  const data = await client.request(BEAD_LIST_QUERY, { projectID: params.projectId });
   return { beads: data.beads };
-});
+};
 ```
 
-Houdini's subscription support enables real-time updates without polling.
+graphql-ws subscription support enables real-time updates without polling.
 
 ### Project Context
 

@@ -55,7 +55,7 @@ Bead-scoped work uses `area:bead` as an additive label, not a replacement for an
 - **Lockfile**: `bun.lock` committed (not `package-lock.json`).
 - **Runtime**: Frontend is browser-only (SvelteKit embedded in Go binary via
   `embed.FS`). Bun-native server APIs (`Bun.serve()`) do not apply.
-- **Data layer**: GraphQL with Houdini for client-side caching and full-text search per ADR-005 v2.
+- **Data layer**: GraphQL with graphql-request + graphql-ws for typed queries and real-time subscriptions per ADR-002 v2.
 - **Location**: `cli/internal/server/frontend/`
 
 ### e2e-playwright
@@ -177,7 +177,7 @@ If the stub passes the contract suite but the real backend fails, either the bac
 | Concern | ADR | Decision |
 |---------|-----|----------|
 | typescript-bun | ADR-002 | Web stack: Bun + SvelteKit + Tailwind |
-| typescript-bun | ADR-005 | GraphQL + Houdini client-side data layer for beads UI |
+| typescript-bun | ADR-005 | GraphQL + graphql-request client-side data layer for beads UI |
 | security-owasp | ADR-003 | Package integrity via commit SHA + tree hash |
 | security-owasp | ADR-004 | Bead-backed collections for runtime storage |
 | security-owasp | ADR-006 | ts-net for network authentication (no API keys) |

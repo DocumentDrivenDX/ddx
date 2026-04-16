@@ -12,4 +12,4 @@ ddx:
 **Date:** 2026-04-04
 **Revised:** 2026-04-07
 
-This ADR is superseded by the SvelteKit + Houdini stack decision recorded in ADR-002 (revised 2026-04-14). The client-side MiniSearch approach described here was a workaround for the absence of server-side pagination; the migration to GraphQL with Relay-style cursor connections (introduced in ADR-002 v2) solves this at the schema level, making a full client-side data load unnecessary. This file is retained as a historical record.
+This ADR is superseded by the SvelteKit + graphql-request stack decision recorded in ADR-002 (revised 2026-04-14). The client-side MiniSearch approach described here was a workaround for the absence of server-side pagination; the migration to GraphQL with Relay-style cursor connections (introduced in ADR-002 v2) solves this at the schema level, making a full client-side data load unnecessary. This file is retained as a historical record.
