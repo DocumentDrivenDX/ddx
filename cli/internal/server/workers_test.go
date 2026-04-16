@@ -423,6 +423,7 @@ func TestProjectWorkerShowEndpoint(t *testing.T) {
 
 	// Request via the project-scoped endpoint using the stable project ID
 	req := httptest.NewRequest("GET", "/api/projects/"+projectID+"/workers/"+record.ID, nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 

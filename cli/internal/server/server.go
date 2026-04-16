@@ -57,6 +57,8 @@ type Server struct {
 	workers     *WorkerManager
 	beadHub     beadHubCloser
 	state       *ServerState
+
+	routePatterns []string // every pattern registered via route(); used by gate tests
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -357,95 +359,120 @@ func isLocalhostAddr(addr string) bool {
 	return host == "localhost"
 }
 
+// requireTrusted wraps a handler so non-loopback, non-tailnet requests are
+// rejected with 403 before the handler executes.
+func requireTrusted(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isTrusted(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: trusted connection required"})
+			return
+		}
+		next(w, r)
+	}
+}
+
+// route registers a handler and records the pattern for test introspection.
+func (s *Server) route(pattern string, handler http.HandlerFunc) {
+	s.routePatterns = append(s.routePatterns, pattern)
+	s.mux.HandleFunc(pattern, handler)
+}
+
 func (s *Server) routes() {
-	// Health
-	s.mux.HandleFunc("GET /api/health", s.handleHealth)
-	s.mux.HandleFunc("GET /api/ready", s.handleReady)
+	// Health — no trust gate.
+	s.route("GET /api/health", s.handleHealth)
+	s.route("GET /api/ready", s.handleReady)
+
+	// Every other endpoint is gated on isTrusted() via the requireTrusted
+	// middleware. If you add a new route, use trusted() so the gate test
+	// (TestAllNonHealthHandlersGateOnIsTrusted) stays green.
+	trusted := func(pattern string, handler http.HandlerFunc) {
+		s.route(pattern, requireTrusted(handler))
+	}
 
 	// Node + project registry
-	s.mux.HandleFunc("GET /api/node", s.handleGetNode)
-	s.mux.HandleFunc("GET /api/projects", s.handleListProjects)
-	s.mux.HandleFunc("POST /api/projects/register", s.handleRegisterProject)
-	s.mux.HandleFunc("GET /api/projects/{project}/commits", s.handleProjectCommits)
+	trusted("GET /api/node", s.handleGetNode)
+	trusted("GET /api/projects", s.handleListProjects)
+	trusted("POST /api/projects/register", s.handleRegisterProject)
+	trusted("GET /api/projects/{project}/commits", s.handleProjectCommits)
 
 	// Documents
-	s.mux.HandleFunc("GET /api/documents", s.handleListDocuments)
-	s.mux.HandleFunc("PUT /api/documents/{path...}", s.handleWriteDocument)
-	s.mux.HandleFunc("GET /api/documents/{path...}", s.handleReadDocument)
-	s.mux.HandleFunc("GET /api/search", s.handleSearch)
-	s.mux.HandleFunc("GET /api/personas", s.handleListPersonas)
-	s.mux.HandleFunc("GET /api/personas/{role}", s.handleResolvePersona)
+	trusted("GET /api/documents", s.handleListDocuments)
+	trusted("PUT /api/documents/{path...}", s.handleWriteDocument)
+	trusted("GET /api/documents/{path...}", s.handleReadDocument)
+	trusted("GET /api/search", s.handleSearch)
+	trusted("GET /api/personas", s.handleListPersonas)
+	trusted("GET /api/personas/{role}", s.handleResolvePersona)
 
 	// Beads
-	s.mux.HandleFunc("GET /api/beads", s.handleListBeads)
-	s.mux.HandleFunc("GET /api/beads/ready", s.handleBeadsReady)
-	s.mux.HandleFunc("GET /api/beads/blocked", s.handleBeadsBlocked)
-	s.mux.HandleFunc("GET /api/beads/status", s.handleBeadsStatus)
-	s.mux.HandleFunc("GET /api/beads/dep/tree/{id}", s.handleBeadDepTree)
-	s.mux.HandleFunc("GET /api/beads/{id}", s.handleShowBead)
+	trusted("GET /api/beads", s.handleListBeads)
+	trusted("GET /api/beads/ready", s.handleBeadsReady)
+	trusted("GET /api/beads/blocked", s.handleBeadsBlocked)
+	trusted("GET /api/beads/status", s.handleBeadsStatus)
+	trusted("GET /api/beads/dep/tree/{id}", s.handleBeadDepTree)
+	trusted("GET /api/beads/{id}", s.handleShowBead)
 
 	// Doc graph
-	s.mux.HandleFunc("GET /api/docs/graph", s.handleDocGraph)
-	s.mux.HandleFunc("GET /api/docs/stale", s.handleDocStale)
-	s.mux.HandleFunc("GET /api/docs/{id}/deps", s.handleDocDeps)
-	s.mux.HandleFunc("GET /api/docs/{id}/dependents", s.handleDocDependents)
-	s.mux.HandleFunc("GET /api/docs/{id}/history", s.handleDocHistory)
-	s.mux.HandleFunc("GET /api/docs/{id}/diff", s.handleDocDiff)
-	s.mux.HandleFunc("PUT /api/docs/{id}", s.handleDocWrite)
-	s.mux.HandleFunc("GET /api/docs/{id}", s.handleDocShow)
+	trusted("GET /api/docs/graph", s.handleDocGraph)
+	trusted("GET /api/docs/stale", s.handleDocStale)
+	trusted("GET /api/docs/{id}/deps", s.handleDocDeps)
+	trusted("GET /api/docs/{id}/dependents", s.handleDocDependents)
+	trusted("GET /api/docs/{id}/history", s.handleDocHistory)
+	trusted("GET /api/docs/{id}/diff", s.handleDocDiff)
+	trusted("PUT /api/docs/{id}", s.handleDocWrite)
+	trusted("GET /api/docs/{id}", s.handleDocShow)
 
 	// Bead mutations
-	s.mux.HandleFunc("POST /api/beads", s.handleCreateBead)
-	s.mux.HandleFunc("PUT /api/beads/{id}", s.handleUpdateBead)
-	s.mux.HandleFunc("POST /api/beads/{id}/claim", s.handleClaimBead)
-	s.mux.HandleFunc("POST /api/beads/{id}/unclaim", s.handleUnclaimBead)
-	s.mux.HandleFunc("POST /api/beads/{id}/reopen", s.handleReopenBead)
-	s.mux.HandleFunc("POST /api/beads/{id}/deps", s.handleBeadDeps)
+	trusted("POST /api/beads", s.handleCreateBead)
+	trusted("PUT /api/beads/{id}", s.handleUpdateBead)
+	trusted("POST /api/beads/{id}/claim", s.handleClaimBead)
+	trusted("POST /api/beads/{id}/unclaim", s.handleUnclaimBead)
+	trusted("POST /api/beads/{id}/reopen", s.handleReopenBead)
+	trusted("POST /api/beads/{id}/deps", s.handleBeadDeps)
 
-	// Execution dispatch (localhost-only)
-	s.mux.HandleFunc("POST /api/exec/run/{id}", s.handleExecDispatch)
-	s.mux.HandleFunc("POST /api/agent/run", s.handleAgentDispatch)
-	s.mux.HandleFunc("GET /api/agent/workers", s.handleAgentWorkers)
-	s.mux.HandleFunc("POST /api/agent/workers/execute-loop", s.handleStartExecuteLoopWorker)
-	s.mux.HandleFunc("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
-	s.mux.HandleFunc("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
-	s.mux.HandleFunc("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
-	s.mux.HandleFunc("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
-	s.mux.HandleFunc("GET /api/agent/coordinators", s.handleAgentCoordinators)
+	// Execution dispatch
+	trusted("POST /api/exec/run/{id}", s.handleExecDispatch)
+	trusted("POST /api/agent/run", s.handleAgentDispatch)
+	trusted("GET /api/agent/workers", s.handleAgentWorkers)
+	trusted("POST /api/agent/workers/execute-loop", s.handleStartExecuteLoopWorker)
+	trusted("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
+	trusted("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
+	trusted("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
+	trusted("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
+	trusted("GET /api/agent/coordinators", s.handleAgentCoordinators)
 
 	// Project-scoped worker endpoints (FEAT-002 §22-24)
-	s.mux.HandleFunc("GET /api/projects/{project}/workers", s.handleProjectWorkerList)
-	s.mux.HandleFunc("GET /api/projects/{project}/workers/{id}/progress", s.handleProjectWorkerProgress)
-	s.mux.HandleFunc("GET /api/projects/{project}/workers/{id}", s.handleProjectWorkerShow)
+	trusted("GET /api/projects/{project}/workers", s.handleProjectWorkerList)
+	trusted("GET /api/projects/{project}/workers/{id}/progress", s.handleProjectWorkerProgress)
+	trusted("GET /api/projects/{project}/workers/{id}", s.handleProjectWorkerShow)
 
 	// Executions
-	s.mux.HandleFunc("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
-	s.mux.HandleFunc("GET /api/exec/definitions", s.handleExecDefinitions)
-	s.mux.HandleFunc("GET /api/exec/runs/{id}/log", s.handleExecRunLog)
-	s.mux.HandleFunc("GET /api/exec/runs/{id}", s.handleExecRunShow)
-	s.mux.HandleFunc("GET /api/exec/runs", s.handleExecRuns)
+	trusted("GET /api/exec/definitions/{id}", s.handleExecDefinitionShow)
+	trusted("GET /api/exec/definitions", s.handleExecDefinitions)
+	trusted("GET /api/exec/runs/{id}/log", s.handleExecRunLog)
+	trusted("GET /api/exec/runs/{id}", s.handleExecRunShow)
+	trusted("GET /api/exec/runs", s.handleExecRuns)
 
 	// Agent sessions
-	s.mux.HandleFunc("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
-	s.mux.HandleFunc("GET /api/agent/sessions", s.handleAgentSessions)
+	trusted("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
+	trusted("GET /api/agent/sessions", s.handleAgentSessions)
 
 	// Process metrics
-	s.mux.HandleFunc("GET /api/metrics/summary", s.handleMetricsSummary)
-	s.mux.HandleFunc("GET /api/metrics/cost", s.handleMetricsCost)
-	s.mux.HandleFunc("GET /api/metrics/cycle-time", s.handleMetricsCycleTime)
-	s.mux.HandleFunc("GET /api/metrics/rework", s.handleMetricsRework)
+	trusted("GET /api/metrics/summary", s.handleMetricsSummary)
+	trusted("GET /api/metrics/cost", s.handleMetricsCost)
+	trusted("GET /api/metrics/cycle-time", s.handleMetricsCycleTime)
+	trusted("GET /api/metrics/rework", s.handleMetricsRework)
 
 	// Providers (FEAT-002 §26-27, host+user global — not project-scoped)
-	s.mux.HandleFunc("GET /api/providers", s.handleListProviders)
-	s.mux.HandleFunc("GET /api/providers/{harness}", s.handleShowProvider)
+	trusted("GET /api/providers", s.handleListProviders)
+	trusted("GET /api/providers/{harness}", s.handleShowProvider)
 
 	// MCP
-	s.mux.HandleFunc("POST /mcp", s.handleMCP)
+	trusted("POST /mcp", s.handleMCP)
 
 	// GraphQL (gqlgen) — POST for queries/mutations, GET for WebSocket subscriptions
-	s.mux.HandleFunc("POST /graphql", s.handleGraphQLQuery)
-	s.mux.HandleFunc("GET /graphql", s.handleGraphQLQuery)
-	s.mux.HandleFunc("GET /graphiql", s.handleGraphiQL)
+	trusted("POST /graphql", s.handleGraphQLQuery)
+	trusted("GET /graphql", s.handleGraphQLQuery)
+	trusted("GET /graphiql", s.handleGraphiQL)
 
 	// SvelteKit SPA — serve embedded frontend/build; fall back to index.html for deep links.
 	sub, err := fs.Sub(frontendFiles, "frontend/build")
@@ -453,7 +480,7 @@ func (s *Server) routes() {
 		panic("embed: frontend/build not found: " + err.Error())
 	}
 	fileServer := http.FileServer(http.FS(sub))
-	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	trusted("/", func(w http.ResponseWriter, r *http.Request) {
 		// Root: let the file server resolve index.html directly.
 		if r.URL.Path == "" || r.URL.Path == "/" {
 			fileServer.ServeHTTP(w, r)

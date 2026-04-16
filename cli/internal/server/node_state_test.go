@@ -125,6 +125,7 @@ func TestNodeIdentityStable(t *testing.T) {
 
 	getNode := func() string {
 		req := httptest.NewRequest("GET", "/api/node", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -180,6 +181,7 @@ func TestStateFileProjectsPersistAcrossRestart(t *testing.T) {
 
 	// GET /api/projects on the new server must return the same projects.
 	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv2.Handler().ServeHTTP(w, req)
 

@@ -117,6 +117,7 @@ func TestListDocuments(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/documents", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -153,6 +154,7 @@ func TestListDocumentsFilterByType(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/documents?type=prompts", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -180,6 +182,7 @@ func TestReadDocument(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/documents/prompts/hello.md", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -204,6 +207,7 @@ func TestReadDocumentPathTraversal(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/documents/prompts/..%2F..%2Fetc%2Fpasswd", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -217,6 +221,7 @@ func TestReadDocumentNotFound(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/documents/nonexistent.md", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -230,6 +235,7 @@ func TestSearch(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/search?q=hello", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -257,6 +263,7 @@ func TestSearchMissingQuery(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/search", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -271,6 +278,7 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 
 	t.Run("summary", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/metrics/summary", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -292,6 +300,7 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 
 	t.Run("cost", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/metrics/cost?feature=FEAT-001", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -316,6 +325,7 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 
 	t.Run("cycle-time", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/metrics/cycle-time", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -337,6 +347,7 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 
 	t.Run("rework", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/metrics/rework", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -358,6 +369,7 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 
 	t.Run("bad query", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/metrics/cost?bead=bx-001&feature=FEAT-001", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -377,6 +389,7 @@ func TestListBeads(t *testing.T) {
 	srv.state.RegisterProject(dir)
 
 	req := httptest.NewRequest("GET", "/api/beads", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -406,6 +419,7 @@ func TestListBeadsFilterByStatus(t *testing.T) {
 	srv.state.RegisterProject(dir)
 
 	req := httptest.NewRequest("GET", "/api/beads?status=open", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -435,6 +449,7 @@ func TestShowBead(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/beads/bx-001", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -462,6 +477,7 @@ func TestShowBeadNotFound(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/beads/nonexistent", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -475,6 +491,7 @@ func TestBeadsReady(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/beads/ready", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -501,6 +518,7 @@ func TestBeadsBlocked(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/beads/blocked", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -527,6 +545,7 @@ func TestBeadsStatus(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/beads/status", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -588,6 +607,7 @@ func TestListBeadsAllProjects(t *testing.T) {
 
 	t.Run("all beads from both projects", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/beads", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -616,6 +636,7 @@ func TestListBeadsAllProjects(t *testing.T) {
 
 	t.Run("filter by status=open returns two beads", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/beads?status=open", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -638,6 +659,7 @@ func TestListBeadsAllProjects(t *testing.T) {
 
 	t.Run("filter by project_id returns only that project's beads", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/beads?project_id="+p1.ID, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
 
@@ -664,6 +686,7 @@ func TestBeadDepTree(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/beads/dep/tree/bx-003", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -691,6 +714,7 @@ func TestDocGraph(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/docs/graph", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -709,6 +733,7 @@ func TestDocStale(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/docs/stale", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -722,6 +747,7 @@ func TestHealth(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/health", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -745,6 +771,7 @@ func TestReady(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/ready", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -783,6 +810,7 @@ func TestAgentSessions(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/agent/sessions", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -828,6 +856,7 @@ func TestAgentSessionsFilterByHarness(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/agent/sessions?harness=codex", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -865,6 +894,7 @@ func TestAgentSessionDetail(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/agent/sessions/as-0001", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -924,6 +954,7 @@ func TestAgentSessionDetailUnavailableContent(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/agent/sessions/as-0002", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -954,6 +985,7 @@ func TestAgentSessionDetailNotFound(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/agent/sessions/nonexistent", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -972,6 +1004,7 @@ func mcpRequest(t *testing.T, srv *Server, method string, params string) *httpte
 	}
 	body += "}"
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -1391,6 +1424,7 @@ func TestDocHistoryEndpoint(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/docs/"+docID+"/history", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1423,6 +1457,7 @@ func TestDocDiffEndpoint(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/docs/"+docID+"/diff", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1445,6 +1480,7 @@ func TestBeadEndpoints(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/beads", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1514,6 +1550,7 @@ func TestSPAServesIndexHTML(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1531,6 +1568,7 @@ func TestSPAFallbackForClientRoute(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/nodes/abc/projects/def/beads", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1587,6 +1625,7 @@ func TestExecDefinitionsList(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/definitions", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1615,6 +1654,7 @@ func TestExecDefinitionsFilterByArtifact(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/definitions?artifact=MET-startup", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1634,6 +1674,7 @@ func TestExecDefinitionsFilterByArtifact(t *testing.T) {
 
 	// Filter with non-matching artifact
 	req = httptest.NewRequest("GET", "/api/exec/definitions?artifact=MET-nonexistent", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1650,6 +1691,7 @@ func TestExecDefinitionShow(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/definitions/bench-startup", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1679,6 +1721,7 @@ func TestExecDefinitionShowNotFound(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/definitions/nonexistent", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1692,6 +1735,7 @@ func TestExecRunsList(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/runs", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1720,6 +1764,7 @@ func TestExecRunsFilterByDefinition(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/runs?definition=bench-startup", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1743,6 +1788,7 @@ func TestExecRunShow(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/runs/bench-startup@2026-04-01T10:00:00Z-1", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1771,6 +1817,7 @@ func TestExecRunLog(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/runs/bench-startup@2026-04-01T10:00:00Z-1/log", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1795,6 +1842,7 @@ func TestExecRunNotFound(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/exec/runs/nonexistent", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -1809,6 +1857,7 @@ func TestMCPExecDefinitions(t *testing.T) {
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_definitions","arguments":{}}}`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -1841,6 +1890,7 @@ func TestMCPExecShow(t *testing.T) {
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_show","arguments":{"id":"bench-startup"}}}`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -1873,6 +1923,7 @@ func TestMCPExecHistory(t *testing.T) {
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_history","arguments":{}}}`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -2204,28 +2255,9 @@ func TestMCPExecDispatchUntrustedForbidden(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
-	}
-	var resp jsonRPCResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	result, ok := resp.Result.(map[string]any)
-	if !ok {
-		t.Fatal("expected result map")
-	}
-	isError, _ := result["isError"].(bool)
-	if !isError {
-		t.Fatal("expected isError=true for non-trusted MCP exec dispatch")
-	}
-	content, _ := result["content"].([]any)
-	if len(content) == 0 {
-		t.Fatal("expected error content")
-	}
-	text, _ := content[0].(map[string]any)["text"].(string)
-	if !strings.Contains(text, "forbidden") {
-		t.Errorf("expected forbidden message, got %q", text)
+	// Top-level requireTrusted middleware now gates the entire /mcp endpoint.
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-trusted MCP request, got %d", w.Code)
 	}
 }
 
@@ -2240,28 +2272,9 @@ func TestMCPAgentDispatchUntrustedForbidden(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
-	}
-	var resp jsonRPCResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	result, ok := resp.Result.(map[string]any)
-	if !ok {
-		t.Fatal("expected result map")
-	}
-	isError, _ := result["isError"].(bool)
-	if !isError {
-		t.Fatal("expected isError=true for non-trusted MCP agent dispatch")
-	}
-	content, _ := result["content"].([]any)
-	if len(content) == 0 {
-		t.Fatal("expected error content")
-	}
-	text, _ := content[0].(map[string]any)["text"].(string)
-	if !strings.Contains(text, "forbidden") {
-		t.Errorf("expected forbidden message, got %q", text)
+	// Top-level requireTrusted middleware now gates the entire /mcp endpoint.
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-trusted MCP request, got %d", w.Code)
 	}
 }
 
@@ -2363,28 +2376,9 @@ func TestMCPWriteToolsUntrustedForbidden(t *testing.T) {
 			w := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(w, req)
 
-			if w.Code != http.StatusOK {
-				t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
-			}
-			var resp jsonRPCResponse
-			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-				t.Fatal(err)
-			}
-			result, ok := resp.Result.(map[string]any)
-			if !ok {
-				t.Fatal("expected result map")
-			}
-			isError, _ := result["isError"].(bool)
-			if !isError {
-				t.Fatalf("expected isError=true for untrusted %s", tc.name)
-			}
-			content, _ := result["content"].([]any)
-			if len(content) == 0 {
-				t.Fatal("expected error content")
-			}
-			text, _ := content[0].(map[string]any)["text"].(string)
-			if !strings.Contains(text, "forbidden") {
-				t.Errorf("expected forbidden message, got %q", text)
+			// Top-level requireTrusted middleware gates the entire /mcp endpoint.
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("expected 403 for untrusted %s, got %d", tc.name, w.Code)
 			}
 		})
 	}
@@ -2515,12 +2509,78 @@ func TestRESTWriteEndpointsTrustedAllowed(t *testing.T) {
 	}
 }
 
+// TestAllNonHealthHandlersGateOnIsTrusted walks every route registered on the
+// mux and verifies that non-loopback requests receive 403. /api/health and
+// /api/ready are the only exceptions. If a new handler is added via the
+// trusted() helper in routes() and it somehow doesn't get the gate, this test
+// catches it. If a handler is registered outside routes() (bypassing the
+// route() helper), it won't appear in routePatterns and the test won't cover
+// it — but it also won't appear in the count, making it obvious during review.
+func TestAllNonHealthHandlersGateOnIsTrusted(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	allowlist := map[string]bool{
+		"GET /api/health": true,
+		"GET /api/ready":  true,
+	}
+
+	if len(srv.routePatterns) == 0 {
+		t.Fatal("no route patterns recorded; route() helper may have been bypassed")
+	}
+
+	for _, pattern := range srv.routePatterns {
+		if allowlist[pattern] {
+			continue
+		}
+
+		t.Run(pattern, func(t *testing.T) {
+			method, path := trustTestSplitPattern(pattern)
+			path = trustTestFillPathParams(path)
+
+			req := httptest.NewRequest(method, path, strings.NewReader("{}"))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "203.0.113.1:12345" // TEST-NET-3, guaranteed non-loopback
+			w := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(w, req)
+
+			if w.Code != http.StatusForbidden {
+				t.Errorf("%s returned %d; want 403 — is the isTrusted() gate missing?", pattern, w.Code)
+			}
+		})
+	}
+}
+
+// trustTestSplitPattern extracts method and path from a Go 1.22+ mux pattern.
+func trustTestSplitPattern(pattern string) (method, path string) {
+	if i := strings.Index(pattern, " "); i >= 0 {
+		return pattern[:i], pattern[i+1:]
+	}
+	return "GET", pattern
+}
+
+// trustTestFillPathParams replaces {name} and {name...} placeholders with
+// dummy values so the mux routes the request to the registered handler.
+func trustTestFillPathParams(path string) string {
+	path = strings.ReplaceAll(path, "{path...}", "test/dummy.md")
+	for strings.Contains(path, "{") {
+		start := strings.Index(path, "{")
+		end := strings.Index(path, "}")
+		if start < 0 || end < 0 || end < start {
+			break
+		}
+		path = path[:start] + "test-id" + path[end+1:]
+	}
+	return path
+}
+
 func TestMCPToolsListIncludesExec(t *testing.T) {
 	dir := setupExecTestDir(t)
 	srv := New(":0", dir)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`
 	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -2553,6 +2613,7 @@ func TestGetNode(t *testing.T) {
 	srv := New(":0", workDir)
 
 	req := httptest.NewRequest("GET", "/api/node", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2580,6 +2641,7 @@ func TestListProjects(t *testing.T) {
 	srv := New(":0", workDir)
 
 	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2614,6 +2676,7 @@ func TestRegisterProject(t *testing.T) {
 	// Register a second project path.
 	body := `{"path":"/tmp/other-project"}`
 	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -2638,6 +2701,7 @@ func TestRegisterProject(t *testing.T) {
 
 	// Confirm it now appears in GET /api/projects.
 	req2 := httptest.NewRequest("GET", "/api/projects", nil)
+	req2.RemoteAddr = "127.0.0.1:12345"
 	w2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w2, req2)
 
@@ -2663,6 +2727,7 @@ func TestRegisterProjectMissingPath(t *testing.T) {
 	srv := New(":0", workDir)
 
 	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(`{}`))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -2679,6 +2744,7 @@ func TestRegisterProjectIdempotent(t *testing.T) {
 	body := `{"path":"/tmp/idempotent-project"}`
 	for range 3 {
 		req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+		req.RemoteAddr = "127.0.0.1:12345"
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
@@ -2689,6 +2755,7 @@ func TestRegisterProjectIdempotent(t *testing.T) {
 
 	// Should still have exactly 2 projects: startup + idempotent.
 	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2733,6 +2800,7 @@ func TestListCommits(t *testing.T) {
 	_, srv, projID := setupCommitsTestDir(t, subjects)
 
 	req := httptest.NewRequest("GET", "/api/projects/"+projID+"/commits", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2771,6 +2839,7 @@ func TestListCommitsLimitParam(t *testing.T) {
 	_, srv, projID := setupCommitsTestDir(t, subjects)
 
 	req := httptest.NewRequest("GET", "/api/projects/"+projID+"/commits?limit=1", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2793,6 +2862,7 @@ func TestListCommitsProjectNotFound(t *testing.T) {
 	srv := New(":0", dir)
 
 	req := httptest.NewRequest("GET", "/api/projects/proj-nosuch/commits", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2821,6 +2891,7 @@ func TestListCommitsBeadRefs(t *testing.T) {
 	projID := projectID(dir)
 
 	req := httptest.NewRequest("GET", "/api/projects/"+projID+"/commits", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -2982,6 +3053,7 @@ func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
 	srv.state.RegisterProject(rootB)
 
 	req := httptest.NewRequest("GET", "/api/agent/workers", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -3058,6 +3130,7 @@ func TestRegisterProjectDeduplicate(t *testing.T) {
 	for range 5 {
 		body := fmt.Sprintf(`{"path":%q}`, workDir)
 		req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+		req.RemoteAddr = "127.0.0.1:12345"
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
@@ -3067,6 +3140,7 @@ func TestRegisterProjectDeduplicate(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -3115,6 +3189,7 @@ func TestRegisterProjectLinkedWorktree(t *testing.T) {
 	// Register the linked worktree path.
 	body := fmt.Sprintf(`{"path":%q}`, linked)
 	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -3148,6 +3223,7 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 	projDir := t.TempDir()
 	body := fmt.Sprintf(`{"path":%q}`, projDir)
 	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -3183,6 +3259,7 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 
 	// Default GET /api/projects should hide unreachable entries.
 	req2 := httptest.NewRequest("GET", "/api/projects", nil)
+	req2.RemoteAddr = "127.0.0.1:12345"
 	w2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w2, req2)
 	var defaultList []struct {
@@ -3199,6 +3276,7 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 
 	// With ?include_unreachable=true it should appear.
 	req3 := httptest.NewRequest("GET", "/api/projects?include_unreachable=true", nil)
+	req3.RemoteAddr = "127.0.0.1:12345"
 	w3 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w3, req3)
 	var fullList []struct {
@@ -3281,6 +3359,7 @@ func TestMigrateDeduplicatesDuplicateEntries(t *testing.T) {
 
 	// GET /api/projects?include_unreachable=true to see everything.
 	req := httptest.NewRequest("GET", "/api/projects?include_unreachable=true", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
