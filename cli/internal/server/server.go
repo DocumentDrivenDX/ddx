@@ -371,6 +371,88 @@ func requireTrusted(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// projectContextKey is the context key under which the resolved ProjectEntry
+// for a /api/projects/{project}/... request is stored.
+type projectContextKey struct{}
+
+// projectFromContext returns the ProjectEntry previously injected by
+// projectScoped or singletonScoped middleware, if any.
+func projectFromContext(ctx context.Context) (ProjectEntry, bool) {
+	p, ok := ctx.Value(projectContextKey{}).(ProjectEntry)
+	return p, ok
+}
+
+// withProjectContext returns a new context carrying p under projectContextKey.
+func withProjectContext(ctx context.Context, p ProjectEntry) context.Context {
+	return context.WithValue(ctx, projectContextKey{}, p)
+}
+
+// resolveProject returns the ProjectEntry matching key (by ID first, then path).
+func (s *Server) resolveProject(key string) (ProjectEntry, bool) {
+	if entry, ok := s.state.GetProjectByID(key); ok {
+		return entry, true
+	}
+	return s.state.GetProjectByPath(key)
+}
+
+// projectScoped is middleware for /api/projects/{project}/... routes.
+// It pulls {project} out of the path, resolves it to a registered ProjectEntry,
+// and injects the entry into the request context. Requests whose project does
+// not resolve get 404.
+func (s *Server) projectScoped(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		key := r.PathValue("project")
+		entry, ok := s.resolveProject(key)
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+			return
+		}
+		next(w, r.WithContext(withProjectContext(r.Context(), entry)))
+	}
+}
+
+// singletonScoped is middleware for legacy /api/... routes. When exactly one
+// project is registered, it injects that project into the request context so
+// legacy handlers behave identically to the scoped /api/projects/{id}/...
+// equivalent. When zero or more than one project is registered the request
+// passes through unchanged, preserving the historical multi-project aggregate
+// behavior of list endpoints and the server's own WorkingDir default for
+// single-item endpoints.
+func (s *Server) singletonScoped(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projects := s.state.GetProjects()
+		if len(projects) == 1 {
+			r = r.WithContext(withProjectContext(r.Context(), projects[0]))
+		}
+		next(w, r)
+	}
+}
+
+// workingDirForRequest returns the filesystem root this request should operate
+// against. Scoped routes get the resolved project's path; unscoped routes fall
+// back to the server's own WorkingDir.
+func (s *Server) workingDirForRequest(r *http.Request) string {
+	if p, ok := projectFromContext(r.Context()); ok {
+		return p.Path
+	}
+	return s.WorkingDir
+}
+
+// libraryPathForRequest returns the library path for the request's project.
+func (s *Server) libraryPathForRequest(r *http.Request) string {
+	return s.libraryPathFor(s.workingDirForRequest(r))
+}
+
+// beadStoreForRequest returns a bead store rooted at the request's project.
+func (s *Server) beadStoreForRequest(r *http.Request) *bead.Store {
+	return bead.NewStore(filepath.Join(s.workingDirForRequest(r), ".ddx"))
+}
+
+// buildDocGraphForRequest builds the docgraph from the request's project root.
+func (s *Server) buildDocGraphForRequest(r *http.Request) (*docgraph.Graph, error) {
+	return docgraph.BuildGraphWithConfig(s.workingDirForRequest(r))
+}
+
 // route registers a handler and records the pattern for test introspection.
 func (s *Server) route(pattern string, handler http.HandlerFunc) {
 	s.routePatterns = append(s.routePatterns, pattern)
@@ -388,6 +470,19 @@ func (s *Server) routes() {
 	trusted := func(pattern string, handler http.HandlerFunc) {
 		s.route(pattern, requireTrusted(handler))
 	}
+	// Legacy unscoped routes auto-resolve to the single registered project
+	// (singleton compatibility). When more than one project is registered the
+	// request passes through unchanged — list endpoints keep their
+	// cross-project aggregation behavior, single-item endpoints keep their
+	// s.WorkingDir default.
+	legacy := func(pattern string, handler http.HandlerFunc) {
+		trusted(pattern, s.singletonScoped(handler))
+	}
+	// Project-scoped routes extract {project} from the URL, resolve it, and
+	// inject the ProjectEntry into the request context.
+	scoped := func(pattern string, handler http.HandlerFunc) {
+		trusted(pattern, s.projectScoped(handler))
+	}
 
 	// Node + project registry
 	trusted("GET /api/node", s.handleGetNode)
@@ -395,39 +490,71 @@ func (s *Server) routes() {
 	trusted("POST /api/projects/register", s.handleRegisterProject)
 	trusted("GET /api/projects/{project}/commits", s.handleProjectCommits)
 
-	// Documents
-	trusted("GET /api/documents", s.handleListDocuments)
-	trusted("PUT /api/documents/{path...}", s.handleWriteDocument)
-	trusted("GET /api/documents/{path...}", s.handleReadDocument)
-	trusted("GET /api/search", s.handleSearch)
+	// Documents — legacy
+	legacy("GET /api/documents", s.handleListDocuments)
+	legacy("PUT /api/documents/{path...}", s.handleWriteDocument)
+	legacy("GET /api/documents/{path...}", s.handleReadDocument)
+	legacy("GET /api/search", s.handleSearch)
 	trusted("GET /api/personas", s.handleListPersonas)
 	trusted("GET /api/personas/{role}", s.handleResolvePersona)
 
-	// Beads
-	trusted("GET /api/beads", s.handleListBeads)
-	trusted("GET /api/beads/ready", s.handleBeadsReady)
-	trusted("GET /api/beads/blocked", s.handleBeadsBlocked)
-	trusted("GET /api/beads/status", s.handleBeadsStatus)
-	trusted("GET /api/beads/dep/tree/{id}", s.handleBeadDepTree)
-	trusted("GET /api/beads/{id}", s.handleShowBead)
+	// Documents — project-scoped (FEAT-002: canonical)
+	scoped("GET /api/projects/{project}/documents", s.handleListDocuments)
+	scoped("PUT /api/projects/{project}/documents/{path...}", s.handleWriteDocument)
+	scoped("GET /api/projects/{project}/documents/{path...}", s.handleReadDocument)
+	scoped("GET /api/projects/{project}/search", s.handleSearch)
 
-	// Doc graph
-	trusted("GET /api/docs/graph", s.handleDocGraph)
-	trusted("GET /api/docs/stale", s.handleDocStale)
-	trusted("GET /api/docs/{id}/deps", s.handleDocDeps)
-	trusted("GET /api/docs/{id}/dependents", s.handleDocDependents)
-	trusted("GET /api/docs/{id}/history", s.handleDocHistory)
-	trusted("GET /api/docs/{id}/diff", s.handleDocDiff)
-	trusted("PUT /api/docs/{id}", s.handleDocWrite)
-	trusted("GET /api/docs/{id}", s.handleDocShow)
+	// Beads — legacy
+	legacy("GET /api/beads", s.handleListBeads)
+	legacy("GET /api/beads/ready", s.handleBeadsReady)
+	legacy("GET /api/beads/blocked", s.handleBeadsBlocked)
+	legacy("GET /api/beads/status", s.handleBeadsStatus)
+	legacy("GET /api/beads/dep/tree/{id}", s.handleBeadDepTree)
+	legacy("GET /api/beads/{id}", s.handleShowBead)
 
-	// Bead mutations
-	trusted("POST /api/beads", s.handleCreateBead)
-	trusted("PUT /api/beads/{id}", s.handleUpdateBead)
-	trusted("POST /api/beads/{id}/claim", s.handleClaimBead)
-	trusted("POST /api/beads/{id}/unclaim", s.handleUnclaimBead)
-	trusted("POST /api/beads/{id}/reopen", s.handleReopenBead)
-	trusted("POST /api/beads/{id}/deps", s.handleBeadDeps)
+	// Beads — project-scoped (FEAT-002: canonical)
+	scoped("GET /api/projects/{project}/beads", s.handleListBeads)
+	scoped("GET /api/projects/{project}/beads/ready", s.handleBeadsReady)
+	scoped("GET /api/projects/{project}/beads/blocked", s.handleBeadsBlocked)
+	scoped("GET /api/projects/{project}/beads/status", s.handleBeadsStatus)
+	scoped("GET /api/projects/{project}/beads/dep/tree/{id}", s.handleBeadDepTree)
+	scoped("GET /api/projects/{project}/beads/{id}", s.handleShowBead)
+
+	// Doc graph — legacy
+	legacy("GET /api/docs/graph", s.handleDocGraph)
+	legacy("GET /api/docs/stale", s.handleDocStale)
+	legacy("GET /api/docs/{id}/deps", s.handleDocDeps)
+	legacy("GET /api/docs/{id}/dependents", s.handleDocDependents)
+	legacy("GET /api/docs/{id}/history", s.handleDocHistory)
+	legacy("GET /api/docs/{id}/diff", s.handleDocDiff)
+	legacy("PUT /api/docs/{id}", s.handleDocWrite)
+	legacy("GET /api/docs/{id}", s.handleDocShow)
+
+	// Doc graph — project-scoped (FEAT-002: canonical)
+	scoped("GET /api/projects/{project}/docs/graph", s.handleDocGraph)
+	scoped("GET /api/projects/{project}/docs/stale", s.handleDocStale)
+	scoped("GET /api/projects/{project}/docs/{id}/deps", s.handleDocDeps)
+	scoped("GET /api/projects/{project}/docs/{id}/dependents", s.handleDocDependents)
+	scoped("GET /api/projects/{project}/docs/{id}/history", s.handleDocHistory)
+	scoped("GET /api/projects/{project}/docs/{id}/diff", s.handleDocDiff)
+	scoped("PUT /api/projects/{project}/docs/{id}", s.handleDocWrite)
+	scoped("GET /api/projects/{project}/docs/{id}", s.handleDocShow)
+
+	// Bead mutations — legacy
+	legacy("POST /api/beads", s.handleCreateBead)
+	legacy("PUT /api/beads/{id}", s.handleUpdateBead)
+	legacy("POST /api/beads/{id}/claim", s.handleClaimBead)
+	legacy("POST /api/beads/{id}/unclaim", s.handleUnclaimBead)
+	legacy("POST /api/beads/{id}/reopen", s.handleReopenBead)
+	legacy("POST /api/beads/{id}/deps", s.handleBeadDeps)
+
+	// Bead mutations — project-scoped (FEAT-002: canonical)
+	scoped("POST /api/projects/{project}/beads", s.handleCreateBead)
+	scoped("PUT /api/projects/{project}/beads/{id}", s.handleUpdateBead)
+	scoped("POST /api/projects/{project}/beads/{id}/claim", s.handleClaimBead)
+	scoped("POST /api/projects/{project}/beads/{id}/unclaim", s.handleUnclaimBead)
+	scoped("POST /api/projects/{project}/beads/{id}/reopen", s.handleReopenBead)
+	scoped("POST /api/projects/{project}/beads/{id}/deps", s.handleBeadDeps)
 
 	// Execution dispatch
 	trusted("POST /api/exec/run/{id}", s.handleExecDispatch)
@@ -669,7 +796,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 // --- Document Endpoints ---
 
 func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
-	libPath := s.libraryPath()
+	libPath := s.libraryPathForRequest(r)
 	if libPath == "" {
 		writeJSON(w, http.StatusOK, []any{})
 		return
@@ -718,7 +845,7 @@ func (s *Server) handleReadDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	libPath := s.libraryPath()
+	libPath := s.libraryPathForRequest(r)
 	if libPath == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "library not configured"})
 		return
@@ -755,7 +882,7 @@ func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	libPath := s.libraryPath()
+	libPath := s.libraryPathForRequest(r)
 	if libPath == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "library not configured"})
 		return
@@ -791,7 +918,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	libPath := s.libraryPath()
+	libPath := s.libraryPathForRequest(r)
 	if libPath == "" {
 		writeJSON(w, http.StatusOK, []any{})
 		return
@@ -920,6 +1047,12 @@ func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
 	label := r.URL.Query().Get("label")
 	projectFilter := r.URL.Query().Get("project_id")
 
+	// Scoped route injects a project into context; pin the filter to it so the
+	// handler only emits beads from that project.
+	if p, ok := projectFromContext(r.Context()); ok {
+		projectFilter = p.ID
+	}
+
 	projects := s.state.GetProjects()
 	var result []beadWithProject
 
@@ -956,7 +1089,7 @@ func (s *Server) handleShowBead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	b, err := store.Get(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
@@ -966,7 +1099,7 @@ func (s *Server) handleShowBead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBeadsReady(w http.ResponseWriter, r *http.Request) {
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	ready, err := store.Ready()
 	if err != nil {
 		writeJSON(w, http.StatusOK, []any{})
@@ -979,7 +1112,7 @@ func (s *Server) handleBeadsReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBeadsBlocked(w http.ResponseWriter, r *http.Request) {
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	blocked, err := store.Blocked()
 	if err != nil {
 		writeJSON(w, http.StatusOK, []any{})
@@ -992,7 +1125,7 @@ func (s *Server) handleBeadsBlocked(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBeadsStatus(w http.ResponseWriter, r *http.Request) {
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	counts, err := store.Status()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1008,7 +1141,7 @@ func (s *Server) handleBeadDepTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	tree, err := store.DepTree(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
@@ -1042,7 +1175,7 @@ func (s *Server) handleCreateBead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	b := &bead.Bead{
 		Title:       req.Title,
 		IssueType:   req.Type,
@@ -1085,7 +1218,7 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	err := store.Update(id, func(b *bead.Bead) {
 		if req.Status != nil {
 			b.Status = *req.Status
@@ -1137,7 +1270,7 @@ func (s *Server) handleClaimBead(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	if err := store.ClaimWithOptions(id, req.Assignee, req.Session, req.Worktree); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -1156,7 +1289,7 @@ func (s *Server) handleUnclaimBead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	if err := store.Unclaim(id); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -1180,7 +1313,7 @@ func (s *Server) handleReopenBead(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	err := store.Update(id, func(b *bead.Bead) {
 		b.Status = bead.StatusOpen
 		b.Owner = ""
@@ -1221,7 +1354,7 @@ func (s *Server) handleBeadDeps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := s.beadStore()
+	store := s.beadStoreForRequest(r)
 	var err error
 	switch req.Action {
 	case "add":
@@ -1242,7 +1375,7 @@ func (s *Server) handleBeadDeps(w http.ResponseWriter, r *http.Request) {
 // --- Doc Graph Endpoints ---
 
 func (s *Server) handleDocGraph(w http.ResponseWriter, r *http.Request) {
-	graph, err := s.buildDocGraph()
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1268,7 +1401,7 @@ func (s *Server) handleDocGraph(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocStale(w http.ResponseWriter, r *http.Request) {
-	graph, err := s.buildDocGraph()
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1287,7 +1420,7 @@ func (s *Server) handleDocShow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	graph, err := s.buildDocGraph()
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1321,7 +1454,7 @@ func (s *Server) handleDocDeps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	graph, err := s.buildDocGraph()
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1342,7 +1475,7 @@ func (s *Server) handleDocDependents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	graph, err := s.buildDocGraph()
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1375,7 +1508,8 @@ func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	graph, err := s.buildDocGraph()
+	wd := s.workingDirForRequest(r)
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1390,7 +1524,7 @@ func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
 	// doc.Path is already an absolute path from the docgraph.
 	fullPath := doc.Path
 	if !filepath.IsAbs(fullPath) {
-		fullPath = filepath.Join(s.WorkingDir, fullPath)
+		fullPath = filepath.Join(wd, fullPath)
 	}
 	if err := os.WriteFile(fullPath, []byte(body.Content), 0o644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1399,7 +1533,7 @@ func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
 
 	committed := false
 	var acCfg internalgit.AutoCommitConfig
-	if cfg, cfgErr := config.LoadWithWorkingDir(s.WorkingDir); cfgErr == nil && cfg.Git != nil {
+	if cfg, cfgErr := config.LoadWithWorkingDir(wd); cfgErr == nil && cfg.Git != nil {
 		acCfg.AutoCommit = cfg.Git.AutoCommit
 		acCfg.CommitPrefix = cfg.Git.CommitPrefix
 	}
@@ -1423,7 +1557,7 @@ func (s *Server) handleDocHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	graph, err := s.buildDocGraph()
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1437,7 +1571,7 @@ func (s *Server) handleDocHistory(w http.ResponseWriter, r *http.Request) {
 
 	gitArgs := []string{"log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path}
 	gitCmd := exec.Command("git", gitArgs...)
-	gitCmd.Dir = s.WorkingDir
+	gitCmd.Dir = s.workingDirForRequest(r)
 	gitCmd.Env = scrubbedGitEnv()
 	out, gitErr := gitCmd.Output()
 	if gitErr != nil {
@@ -1488,7 +1622,7 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	graph, err := s.buildDocGraph()
+	graph, err := s.buildDocGraphForRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1509,7 +1643,7 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	diffCmd := exec.Command("git", gitArgs...)
-	diffCmd.Dir = s.WorkingDir
+	diffCmd.Dir = s.workingDirForRequest(r)
 	diffCmd.Env = scrubbedGitEnv()
 	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
@@ -3523,7 +3657,12 @@ func scrubbedGitEnv() []string {
 }
 
 func (s *Server) libraryPath() string {
-	cfg, err := config.LoadWithWorkingDir(s.WorkingDir)
+	return s.libraryPathFor(s.WorkingDir)
+}
+
+// libraryPathFor resolves the library path rooted at workingDir.
+func (s *Server) libraryPathFor(workingDir string) string {
+	cfg, err := config.LoadWithWorkingDir(workingDir)
 	if err != nil {
 		return ""
 	}
@@ -3532,7 +3671,7 @@ func (s *Server) libraryPath() string {
 	}
 	p := cfg.Library.Path
 	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.WorkingDir, p)
+		p = filepath.Join(workingDir, p)
 	}
 	if _, err := os.Stat(p); err != nil {
 		return ""

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -677,6 +678,196 @@ func TestListBeadsAllProjects(t *testing.T) {
 			if b.ProjectID != p1.ID {
 				t.Errorf("expected project_id=%s, got %q for bead %s", p1.ID, b.ProjectID, b.ID)
 			}
+		}
+	})
+}
+
+// TestProjectScopedBeadRoutes verifies that /api/projects/{project}/beads/*
+// routes resolve {project} via the projectScoped middleware and that the
+// returned data comes from the scoped project's bead store — not the server's
+// default WorkingDir and not an aggregate across projects.
+func TestProjectScopedBeadRoutes(t *testing.T) {
+	dir1 := setupProjectWithBeads(t, "p1")
+	dir2 := setupProjectWithBeads(t, "p2")
+
+	srv := New(":0", dir1)
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	p1 := srv.state.RegisterProject(dir1)
+	p2 := srv.state.RegisterProject(dir2)
+
+	t.Run("show scopes to project 1", func(t *testing.T) {
+		url := "/api/projects/" + p1.ID + "/beads/p1-open"
+		req := httptest.NewRequest("GET", url, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var b struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &b); err != nil {
+			t.Fatal(err)
+		}
+		if b.ID != "p1-open" {
+			t.Errorf("expected p1-open, got %q", b.ID)
+		}
+	})
+
+	t.Run("show scopes to project 2", func(t *testing.T) {
+		url := "/api/projects/" + p2.ID + "/beads/p2-closed"
+		req := httptest.NewRequest("GET", url, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var b struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &b); err != nil {
+			t.Fatal(err)
+		}
+		if b.ID != "p2-closed" {
+			t.Errorf("expected p2-closed, got %q", b.ID)
+		}
+	})
+
+	t.Run("cross-project lookup returns 404", func(t *testing.T) {
+		// p1-open does not exist in project 2's bead store.
+		url := "/api/projects/" + p2.ID + "/beads/p1-open"
+		req := httptest.NewRequest("GET", url, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("list scopes to project", func(t *testing.T) {
+		url := "/api/projects/" + p1.ID + "/beads"
+		req := httptest.NewRequest("GET", url, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var beads []struct {
+			ID        string `json:"id"`
+			ProjectID string `json:"project_id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &beads); err != nil {
+			t.Fatal(err)
+		}
+		if len(beads) != 3 {
+			t.Fatalf("expected 3 beads from project 1, got %d", len(beads))
+		}
+		for _, b := range beads {
+			if b.ProjectID != p1.ID {
+				t.Errorf("expected project_id=%s, got %q for bead %s", p1.ID, b.ProjectID, b.ID)
+			}
+			if !strings.HasPrefix(b.ID, "p1-") {
+				t.Errorf("expected p1- prefix, got %s", b.ID)
+			}
+		}
+	})
+
+	t.Run("status scopes to project", func(t *testing.T) {
+		url := "/api/projects/" + p2.ID + "/beads/status"
+		req := httptest.NewRequest("GET", url, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var counts map[string]int
+		if err := json.Unmarshal(w.Body.Bytes(), &counts); err != nil {
+			t.Fatal(err)
+		}
+		if counts["total"] != 3 {
+			t.Errorf("expected total=3 (project 2's beads only), got %d", counts["total"])
+		}
+	})
+
+	t.Run("unknown project returns 404", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/projects/proj-00000000/beads", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("resolves project by path too", func(t *testing.T) {
+		// Paths contain '/' which must be percent-encoded so the mux keeps them
+		// inside the {project} capture rather than promoting to path segments.
+		urlPath := "/api/projects/" + url.PathEscape(p1.Path) + "/beads/status"
+		req := httptest.NewRequest("GET", urlPath, nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+// TestProjectLegacyRoutesSingleton verifies that legacy /api/... routes
+// continue to work when exactly one project is registered (singleton
+// compatibility shim).
+func TestProjectLegacyRoutesSingleton(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// Isolate state to exactly one project so singleton middleware kicks in.
+	srv.state.mu.Lock()
+	srv.state.Projects = nil
+	srv.state.mu.Unlock()
+	srv.state.RegisterProject(dir)
+
+	t.Run("legacy beads/status", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/beads/status", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var counts map[string]int
+		if err := json.Unmarshal(w.Body.Bytes(), &counts); err != nil {
+			t.Fatal(err)
+		}
+		if counts["total"] != 3 {
+			t.Errorf("expected total=3, got %d", counts["total"])
+		}
+	})
+
+	t.Run("legacy documents list", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/documents", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 }
