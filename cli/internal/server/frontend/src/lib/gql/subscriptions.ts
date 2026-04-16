@@ -1,4 +1,5 @@
 import { createClient, type Client } from 'graphql-ws'
+import { wsConnection } from '$lib/stores/connection.svelte'
 
 // ---------------------------------------------------------------------------
 // Subscription client singleton
@@ -23,6 +24,9 @@ function resolveWsUrl(): string {
 export function getSubscriptionClient(urlOverride?: string): Client {
 	if (!_subClient) {
 		_subClient = createClient({ url: urlOverride ?? resolveWsUrl() })
+		_subClient.on('connecting', () => wsConnection._onConnecting())
+		_subClient.on('connected', () => wsConnection._onConnected())
+		_subClient.on('closed', () => wsConnection._onClosed())
 	}
 	return _subClient
 }
@@ -33,6 +37,7 @@ export function disposeSubscriptionClient(): void {
 		_subClient.dispose()
 		_subClient = null
 	}
+	wsConnection._reset()
 }
 
 // ---------------------------------------------------------------------------

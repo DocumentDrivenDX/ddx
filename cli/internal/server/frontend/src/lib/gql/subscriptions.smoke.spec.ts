@@ -39,6 +39,7 @@ vi.mock('graphql-ws', () => {
 				// Return a dispose function
 				return () => {}
 			},
+			on: vi.fn(() => () => {}),
 			dispose: vi.fn()
 		}))
 	}
