@@ -32,7 +32,7 @@ test('loads / and NavShell links exist', async ({ page }) => {
 
 	// Sidebar nav links (rendered as spans since no project selected)
 	const nav = page.locator('nav');
-	for (const label of ['Beads', 'Documents', 'Graph', 'Workers', 'Sessions', 'Personas', 'Commits']) {
+	for (const label of ['Beads', 'Documents', 'Graph', 'Workers', 'Sessions', 'Personas', 'Commits', 'All Beads']) {
 		await expect(nav.getByText(label)).toBeVisible();
 	}
 });
