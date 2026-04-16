@@ -9,7 +9,8 @@
 		GitCommit,
 		Moon,
 		Sun,
-		Radio
+		Radio,
+		Layers
 	} from 'lucide-svelte';
 	import { toggleMode, mode } from '$lib/theme';
 	import ProjectPicker from './ProjectPicker.svelte';
@@ -36,6 +37,10 @@
 				nodeId && projectId ? `/nodes/${nodeId}/projects/${projectId}/${page}` : null;
 			return { href, label, Icon };
 		})
+	);
+
+	const allBeadsHref = $derived(
+		nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/beads` : null
 	);
 
 	const providersHref = $derived(
@@ -94,6 +99,22 @@
 				{/if}
 			{/each}
 			<div class="my-1 border-t border-gray-100 dark:border-gray-800"></div>
+			{#if allBeadsHref}
+				<a
+					href={allBeadsHref}
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+				>
+					<Layers class="h-4 w-4 shrink-0" />
+					All Beads
+				</a>
+			{:else}
+				<span
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-400 dark:text-gray-600"
+				>
+					<Layers class="h-4 w-4 shrink-0" />
+					All Beads
+				</span>
+			{/if}
 			{#if providersHref}
 				<a
 					href={providersHref}
