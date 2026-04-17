@@ -1,10 +1,142 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
+
+// AdaptiveMinTierThreshold is the cheap-tier trailing success rate below which
+// AdaptiveMinTier recommends skipping the cheap tier. At 0.20, four out of
+// five cheap-tier attempts must fail before the cheap tier is suppressed.
+const AdaptiveMinTierThreshold = 0.20
+
+// AdaptiveMinTierMinSamples is the minimum number of cheap-tier attempts
+// required in the window before the cheap-tier success rate is considered
+// statistically meaningful. Below this the cheap tier is kept in-range so
+// we do not starve it on insufficient evidence.
+const AdaptiveMinTierMinSamples = 3
+
+// AdaptiveMinTierResult carries the recommendation from AdaptiveMinTier along
+// with the observed cheap-tier sample count and success rate so callers can
+// emit a log line explaining the decision.
+type AdaptiveMinTierResult struct {
+	// Tier is the recommended minimum tier: TierCheap when the cheap tier is
+	// viable, TierStandard when cheap-tier success is below the threshold.
+	Tier ModelTier
+	// CheapAttempts is the number of cheap-tier attempts observed in the
+	// window. Zero when no cheap-tier history was found.
+	CheapAttempts int
+	// CheapSuccessRate is CheapSuccesses / CheapAttempts, or 0 when
+	// CheapAttempts is 0.
+	CheapSuccessRate float64
+	// Skipped is true when the recommendation is to skip the cheap tier.
+	Skipped bool
+}
+
+// AdaptiveMinTier inspects the most recent `window` entries under
+// workingDir/.ddx/executions/*/result.json, computes the cheap-tier trailing
+// success rate, and returns a recommendation:
+//
+//   - When cheap-tier success rate < AdaptiveMinTierThreshold (and at least
+//     AdaptiveMinTierMinSamples cheap attempts were observed), returns
+//     TierStandard with Skipped=true.
+//   - Otherwise returns TierCheap with Skipped=false.
+//
+// A tier is identified by resolving (harness, model) back through
+// ResolveModelTier — attempts whose harness/model do not match any known
+// tier mapping are ignored for the purpose of this calculation. When
+// workingDir has no executions directory (e.g. a fresh project), the cheap
+// tier is kept in-range so a first run is not artificially restricted.
+func AdaptiveMinTier(workingDir string, window int) AdaptiveMinTierResult {
+	execRoot := filepath.Join(workingDir, ".ddx", "executions")
+	entries, err := os.ReadDir(execRoot)
+	if err != nil {
+		return AdaptiveMinTierResult{Tier: TierCheap}
+	}
+
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			names = append(names, entry.Name())
+		}
+	}
+	// Directory names are sortable timestamps (YYYYMMDDTHHMMSS-<hash>), so
+	// lexicographic sort is chronological.
+	sort.Strings(names)
+
+	// Collect usable attempts, then truncate to the most recent `window`.
+	type attempt struct {
+		tier    ModelTier
+		success bool
+	}
+	collected := make([]attempt, 0, len(names))
+	for _, name := range names {
+		resultPath := filepath.Join(execRoot, name, "result.json")
+		raw, err := os.ReadFile(resultPath)
+		if err != nil {
+			continue
+		}
+		var res ExecuteBeadResult
+		if err := json.Unmarshal(raw, &res); err != nil {
+			continue
+		}
+		if res.Harness == "" {
+			continue
+		}
+		tier := classifyAttemptTier(res.Harness, res.Model)
+		if tier == "" {
+			continue
+		}
+		collected = append(collected, attempt{
+			tier:    tier,
+			success: res.Outcome == "task_succeeded",
+		})
+	}
+	if window > 0 && len(collected) > window {
+		collected = collected[len(collected)-window:]
+	}
+
+	var cheapAttempts, cheapSuccesses int
+	for _, a := range collected {
+		if a.tier == TierCheap {
+			cheapAttempts++
+			if a.success {
+				cheapSuccesses++
+			}
+		}
+	}
+
+	result := AdaptiveMinTierResult{Tier: TierCheap, CheapAttempts: cheapAttempts}
+	if cheapAttempts > 0 {
+		result.CheapSuccessRate = float64(cheapSuccesses) / float64(cheapAttempts)
+	}
+	if cheapAttempts >= AdaptiveMinTierMinSamples && result.CheapSuccessRate < AdaptiveMinTierThreshold {
+		result.Tier = TierStandard
+		result.Skipped = true
+	}
+	return result
+}
+
+// classifyAttemptTier returns the ModelTier that corresponds to a (harness,
+// model) pair by reverse-lookup against ResolveModelTier. Returns "" when
+// no tier in TierOrder matches — e.g. an ad-hoc model pin not present in
+// the catalog, which should not contribute to tier-level analytics.
+func classifyAttemptTier(harness, model string) ModelTier {
+	if harness == "" {
+		return ""
+	}
+	for _, tier := range TierOrder {
+		if ResolveModelTier(harness, tier) == model {
+			return tier
+		}
+	}
+	return ""
+}
 
 // TierOrder defines the escalation sequence from cheapest to most capable.
 var TierOrder = []ModelTier{TierCheap, TierStandard, TierSmart}

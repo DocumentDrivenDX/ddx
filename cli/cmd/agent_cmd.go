@@ -1325,6 +1325,8 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	cmd.Flags().String("min-tier", "", "Minimum tier for auto-escalation: cheap, standard, or smart (default: cheap)")
 	cmd.Flags().String("max-tier", "", "Maximum tier for auto-escalation: cheap, standard, or smart (default: smart)")
+	cmd.Flags().Bool("no-adaptive-min-tier", false, "Disable adaptive min-tier promotion based on trailing cheap-tier success rate")
+	cmd.Flags().Int("adaptive-min-tier-window", 50, "Trailing window size for adaptive min-tier evaluation")
 	return cmd
 }
 
@@ -1346,6 +1348,22 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	reviewModel, _ := cmd.Flags().GetString("review-model")
 	minTier, _ := cmd.Flags().GetString("min-tier")
 	maxTier, _ := cmd.Flags().GetString("max-tier")
+	noAdaptiveMinTier, _ := cmd.Flags().GetBool("no-adaptive-min-tier")
+	adaptiveWindow, _ := cmd.Flags().GetInt("adaptive-min-tier-window")
+
+	// Adaptive min-tier: when the operator did not pin --min-tier and adaptation
+	// is not disabled, consult trailing cheap-tier success rate and promote to
+	// standard when the cheap tier has been nearly pure waste. This saves the
+	// queue from burning time and budget on attempts that almost never succeed.
+	if minTier == "" && !noAdaptiveMinTier {
+		adaptive := agent.AdaptiveMinTier(projectRoot, adaptiveWindow)
+		if adaptive.Skipped {
+			minTier = string(adaptive.Tier)
+			fmt.Fprintf(cmd.OutOrStdout(),
+				"adaptive min-tier: skipping cheap tier (trailing success rate %.2f over %d attempts; threshold %.2f) — min-tier=%s\n",
+				adaptive.CheapSuccessRate, adaptive.CheapAttempts, agent.AdaptiveMinTierThreshold, minTier)
+		}
+	}
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
