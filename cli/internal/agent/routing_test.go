@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -790,4 +791,69 @@ func TestSuccessRateBuildCandidatePlansPopulatesFromStore(t *testing.T) {
 		"codex should have 33%% success rate")
 	assert.Equal(t, float64(-1), byName["agent"].HistoricalSuccessRate,
 		"agent with < 3 samples should have -1 (insufficient data)")
+}
+
+// TestFastHarnessStateHTTPProviderViableWithoutBinary verifies that HTTP-only
+// providers (lmstudio, openrouter) are marked installed by fastHarnessState
+// even when no binary exists in PATH.
+func TestFastHarnessStateHTTPProviderViableWithoutBinary(t *testing.T) {
+	r := NewRunner(Config{SessionLogDir: ""})
+	// LookPath always fails — no binaries on PATH.
+	r.LookPath = func(file string) (string, error) {
+		return "", fmt.Errorf("%s not found", file)
+	}
+
+	for _, name := range []string{"lmstudio", "openrouter"} {
+		harness, ok := r.Registry.Get(name)
+		require.True(t, ok, "harness %s must be registered", name)
+		require.True(t, harness.IsHTTPProvider, "harness %s must be HTTP", name)
+
+		state := r.fastHarnessState(name, harness)
+		assert.True(t, state.Installed, "%s should be installed", name)
+		assert.True(t, state.Reachable, "%s should be reachable", name)
+		assert.Empty(t, state.Error, "%s should have no error", name)
+	}
+}
+
+// TestResolveHarnessHTTPProviderSkipsPathLookup verifies that resolveHarness
+// does not reject HTTP-only providers for missing binaries.
+func TestResolveHarnessHTTPProviderSkipsPathLookup(t *testing.T) {
+	r := NewRunner(Config{SessionLogDir: ""})
+	// LookPath always fails — no binaries on PATH.
+	r.LookPath = func(file string) (string, error) {
+		return "", fmt.Errorf("%s not found", file)
+	}
+
+	for _, name := range []string{"lmstudio", "openrouter"} {
+		harness, resolvedName, err := r.resolveHarness(RunOptions{Harness: name})
+		require.NoError(t, err, "resolveHarness(%s) should not fail", name)
+		assert.Equal(t, name, resolvedName)
+		assert.True(t, harness.IsHTTPProvider)
+	}
+}
+
+// TestHTTPProviderCandidateViableForCheapProfile verifies that when a catalog
+// maps cheap.embedded-openai to a model, and an HTTP provider with surface
+// embedded-openai is registered, the candidate is viable.
+func TestHTTPProviderCandidateViableForCheapProfile(t *testing.T) {
+	r := NewRunner(Config{SessionLogDir: ""})
+	// LookPath always fails — only HTTP/local harnesses should survive.
+	r.LookPath = func(file string) (string, error) {
+		return "", fmt.Errorf("%s not found", file)
+	}
+
+	plans := r.BuildCandidatePlans(RouteRequest{Profile: "cheap"}, nil)
+
+	// lmstudio should be viable — it's HTTP with surface embedded-openai
+	// and the builtin catalog maps cheap.embedded-openai.
+	var lmPlan *CandidatePlan
+	for i := range plans {
+		if plans[i].Harness == "lmstudio" {
+			lmPlan = &plans[i]
+			break
+		}
+	}
+	require.NotNil(t, lmPlan, "lmstudio candidate must exist")
+	assert.True(t, lmPlan.Viable, "lmstudio should be viable; got reject: %s", lmPlan.RejectReason)
+	assert.NotEmpty(t, lmPlan.ConcreteModel, "lmstudio should have a resolved model")
 }

@@ -341,8 +341,8 @@ func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 	if !ok {
 		return Harness{}, "", fmt.Errorf("agent: unknown harness: %s", name)
 	}
-	// Embedded harnesses don't need a binary in PATH.
-	if name != "virtual" && name != "agent" && name != "script" {
+	// Embedded and HTTP-only harnesses don't need a binary in PATH.
+	if name != "virtual" && name != "agent" && name != "script" && !harness.IsHTTPProvider {
 		if _, err := r.LookPath(harness.Binary); err != nil {
 			return Harness{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
 		}

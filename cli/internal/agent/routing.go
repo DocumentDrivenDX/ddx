@@ -324,6 +324,16 @@ func (r *Runner) fastHarnessState(name string, harness Harness) HarnessState {
 		state.QuotaOK = true
 		return state
 	}
+	// HTTP-only providers (lmstudio, openrouter) have no binary to look up.
+	// Optimistically mark as installed; full reachability is checked by
+	// ProbeHarnessState when live probing is requested.
+	if harness.IsHTTPProvider {
+		state.Installed = true
+		state.Reachable = true
+		state.Authenticated = true
+		state.QuotaOK = true
+		return state
+	}
 	if _, err := r.LookPath(harness.Binary); err == nil {
 		state.Installed = true
 		// Optimistically assume reachable/auth/quota for installed harnesses
