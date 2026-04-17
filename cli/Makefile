@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build
+.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build copy-skills eval-skill
 
 # Default target
 all: clean deps test build
@@ -38,14 +38,26 @@ frontend-rebuild:
 	@echo "Rebuilding SvelteKit frontend (forced)..."
 	cd internal/server/frontend && bun install --frozen-lockfile && bun run build
 
+# Copy the canonical top-level skills/ddx/ tree into cli/internal/skills/ddx/
+# so //go:embed (which cannot traverse upward out of the package) picks it up.
+# Runs as a prereq of build/test/dev so contributors never see stale embedded
+# skills. rsync --delete keeps the destination in exact sync.
+SKILLS_SRC := ../skills/ddx
+SKILLS_DST := internal/skills/ddx
+copy-skills:
+	@if [ ! -d "$(SKILLS_SRC)" ]; then \
+		echo "error: $(SKILLS_SRC) not found (run from cli/)"; exit 1; \
+	fi
+	@rsync -a --delete $(SKILLS_SRC)/ $(SKILLS_DST)/
+
 # Build for current platform
-build: frontend-build
+build: copy-skills frontend-build
 	@echo "Building DDx CLI..."
 	@mkdir -p $(BUILD_DIR)
 	go build $(LDFLAGS) -o $(BUILD_DIR)/ddx .
 
 # Build for all platforms
-build-all: clean deps
+build-all: clean deps copy-skills
 	@echo "Building for all platforms..."
 	@mkdir -p $(BUILD_DIR)
 	@echo "Building current platform..."
@@ -67,7 +79,7 @@ deps:
 	go mod tidy
 
 # Run tests
-test:
+test: copy-skills
 	@echo "Running tests..."
 	go test -v ./...
 
@@ -128,7 +140,7 @@ release: build-all
 	done
 
 # Development server (watches for changes)
-dev:
+dev: copy-skills
 	@echo "Starting development mode..."
 	@if command -v air >/dev/null 2>&1; then \
 		air; \

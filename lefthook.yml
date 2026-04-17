@@ -216,6 +216,21 @@ pre-commit:
         - merge
         - rebase
 
+    sync-embedded-skills:
+      name: "Sync cli/internal/skills/ddx from top-level skills/ddx"
+      root: "cli/"
+      run: |
+        if ! git diff --cached --name-only | grep -qE '^skills/ddx/'; then
+          exit 0
+        fi
+        make copy-skills
+        cd .. && git add cli/internal/skills/ddx/
+      stage_fixed: true
+      skip:
+        - merge
+        - rebase
+      fail_text: "Failed to sync cli/internal/skills/ddx from skills/ddx. Run 'cd cli && make copy-skills' manually and stage the result."
+
     test-engineer-persona-drift:
       name: "Guard test-engineer-tdd persona (ddx-482fad2f)"
       glob: "library/personas/test-engineer-tdd.md"
