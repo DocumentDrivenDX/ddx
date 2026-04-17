@@ -13,6 +13,22 @@ ddx:
 **Priority:** P0
 **Owner:** DDx Team
 
+> **Update 2026-04-17:** The skill roster referenced throughout this
+> document (ddx-bead, ddx-agent, ddx-install, ddx-status, ddx-review,
+> ddx-run, ddx-doctor) reflects the pre-consolidation layout. Per
+> FEAT-011, DDx now ships a **single portable `ddx` skill** with
+> `SKILL.md` + `reference/*.md` (progressive disclosure, agentskills.io
+> standard). The installation flow described below is still accurate
+> in structure — binary separate from library, `ddx init` copies skills
+> as real files, `ddx install <plugin>` adds plugin-scoped content —
+> but any reference to the 7-skill roster should be read as historical
+> context. Sections that specifically describe the bootstrap
+> allowlist are now ["ddx"] instead of ["ddx-doctor", "ddx-run"], and
+> the stale-skill cleanup removes all old ddx-prefixed dirs (ddx-bead,
+> ddx-run, ddx-agent, ddx-review, ddx-status, ddx-doctor, ddx-install,
+> ddx-release) on init and update. See FEAT-011 for the current skill
+> architecture.
+
 ## Overview
 
 Redesign the DDx installation architecture with a clean separation of concerns:
