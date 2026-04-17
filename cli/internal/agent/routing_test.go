@@ -677,3 +677,117 @@ func TestResolveHarnessAliasLocal(t *testing.T) {
 	assert.Equal(t, "claude", resolveHarnessAlias("claude"))
 	assert.Equal(t, "vidar", resolveHarnessAlias("vidar"))
 }
+
+// --- Historical success-rate scoring ---
+
+// TestSuccessRateHighBeatsLow verifies that a candidate with a high historical
+// success rate (>= 0.8) scores higher than one with a low rate (< 0.5) when
+// cost class is otherwise equal.
+func TestSuccessRateHighBeatsLow(t *testing.T) {
+	high := CandidatePlan{
+		Harness:               "claude",
+		CostClass:             "medium",
+		State:                 healthyState(),
+		HistoricalSuccessRate: 0.9,
+		Viable:                true,
+	}
+	low := CandidatePlan{
+		Harness:               "local-qwen",
+		CostClass:             "medium",
+		State:                 healthyState(),
+		HistoricalSuccessRate: 0.3,
+		Viable:                true,
+	}
+
+	highScore := scoreCandidate("standard", high)
+	lowScore := scoreCandidate("standard", low)
+
+	assert.Greater(t, highScore, lowScore,
+		"candidate with 90%% success should score higher than 30%% at same cost class")
+	// Verify the gap matches the spec: +20 for high, -30 for low = 50 delta.
+	assert.InDelta(t, 50.0, highScore-lowScore, 0.0001,
+		"delta between high (+20) and low (-30) should be 50")
+}
+
+// TestSuccessRateInsufficientDataNoAdjustment verifies that a candidate with
+// HistoricalSuccessRate == -1 (fewer than 3 samples) receives no bonus or
+// penalty from the success-rate adjustment.
+func TestSuccessRateInsufficientDataNoAdjustment(t *testing.T) {
+	insufficient := CandidatePlan{
+		Harness:               "new-harness",
+		CostClass:             "medium",
+		State:                 healthyState(),
+		HistoricalSuccessRate: -1,
+		Viable:                true,
+	}
+	// Same plan without the success-rate field populated (default zero value
+	// is ambiguous, so we compare against the insufficient-data case with an
+	// explicit baseline: a plan where rate is exactly the mid-band value).
+	baseline := insufficient
+	baseline.HistoricalSuccessRate = 0.65 // between 0.5 and 0.8 — no adjustment
+
+	insufficientScore := scoreCandidate("standard", insufficient)
+	baselineScore := scoreCandidate("standard", baseline)
+
+	assert.Equal(t, baselineScore, insufficientScore,
+		"insufficient data (-1) and mid-band (0.5-0.8) should both yield no adjustment")
+}
+
+// TestSuccessRateBuildCandidatePlansPopulatesFromStore verifies that
+// BuildCandidatePlans reads routing outcomes from the configured metrics store
+// and populates HistoricalSuccessRate on each plan.
+func TestSuccessRateBuildCandidatePlansPopulatesFromStore(t *testing.T) {
+	logDir := t.TempDir()
+	store := NewRoutingMetricsStore(logDir)
+
+	// claude: 3 successes, 0 failures -> rate 1.0
+	for i := 0; i < 3; i++ {
+		require.NoError(t, store.AppendOutcome(RoutingOutcome{
+			Harness:    "claude",
+			ObservedAt: time.Now().UTC(),
+			Success:    true,
+		}))
+	}
+	// codex: 1 success, 2 failures -> rate 0.33
+	require.NoError(t, store.AppendOutcome(RoutingOutcome{
+		Harness: "codex", ObservedAt: time.Now().UTC(), Success: true,
+	}))
+	for i := 0; i < 2; i++ {
+		require.NoError(t, store.AppendOutcome(RoutingOutcome{
+			Harness: "codex", ObservedAt: time.Now().UTC(), Success: false,
+		}))
+	}
+	// agent: only 2 samples — insufficient data
+	for i := 0; i < 2; i++ {
+		require.NoError(t, store.AppendOutcome(RoutingOutcome{
+			Harness: "agent", ObservedAt: time.Now().UTC(), Success: true,
+		}))
+	}
+
+	r := NewRunner(Config{SessionLogDir: logDir})
+	r.LookPath = mockLookPath
+
+	states := map[string]HarnessState{
+		"claude": healthyState(),
+		"codex":  healthyState(),
+		"agent":  healthyLocalState(),
+	}
+
+	plans := r.BuildCandidatePlans(RouteRequest{Profile: "standard"}, states)
+
+	byName := make(map[string]CandidatePlan)
+	for _, p := range plans {
+		byName[p.Harness] = p
+	}
+
+	require.Contains(t, byName, "claude")
+	require.Contains(t, byName, "codex")
+	require.Contains(t, byName, "agent")
+
+	assert.InDelta(t, 1.0, byName["claude"].HistoricalSuccessRate, 0.0001,
+		"claude should have 100%% success rate")
+	assert.InDelta(t, 1.0/3.0, byName["codex"].HistoricalSuccessRate, 0.0001,
+		"codex should have 33%% success rate")
+	assert.Equal(t, float64(-1), byName["agent"].HistoricalSuccessRate,
+		"agent with < 3 samples should have -1 (insufficient data)")
+}

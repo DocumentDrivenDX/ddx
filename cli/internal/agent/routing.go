@@ -27,6 +27,8 @@ var costClassRank = map[string]int{
 func (r *Runner) BuildCandidatePlans(req RouteRequest, stateOverride map[string]HarnessState) []CandidatePlan {
 	var plans []CandidatePlan
 
+	successRates := r.loadHistoricalSuccessRates()
+
 	names := r.Registry.Names()
 	for _, name := range names {
 		harness, ok := r.Registry.Get(name)
@@ -34,10 +36,53 @@ func (r *Runner) BuildCandidatePlans(req RouteRequest, stateOverride map[string]
 			continue
 		}
 		plan := r.evaluateCandidate(name, harness, req, stateOverride)
+		if rate, ok := successRates[name]; ok {
+			plan.HistoricalSuccessRate = rate
+		} else {
+			plan.HistoricalSuccessRate = -1
+		}
 		plans = append(plans, plan)
 	}
 
 	return plans
+}
+
+// loadHistoricalSuccessRates reads recorded routing outcomes and returns the
+// observed success rate per harness. Harnesses with fewer than 3 samples are
+// omitted (insufficient data). Returns an empty map when the metrics store is
+// not configured or unreadable.
+func (r *Runner) loadHistoricalSuccessRates() map[string]float64 {
+	rates := make(map[string]float64)
+	if r == nil || r.Config.SessionLogDir == "" {
+		return rates
+	}
+	outcomes, err := NewRoutingMetricsStore(r.Config.SessionLogDir).ReadOutcomes()
+	if err != nil || len(outcomes) == 0 {
+		return rates
+	}
+	type counts struct {
+		total   int
+		success int
+	}
+	tally := make(map[string]*counts)
+	for _, o := range outcomes {
+		c, ok := tally[o.Harness]
+		if !ok {
+			c = &counts{}
+			tally[o.Harness] = c
+		}
+		c.total++
+		if o.Success {
+			c.success++
+		}
+	}
+	for harness, c := range tally {
+		if c.total < 3 {
+			continue
+		}
+		rates[harness] = float64(c.success) / float64(c.total)
+	}
+	return rates
 }
 
 // catalog returns the catalog to use for routing. Defaults to BuiltinCatalog.
@@ -436,6 +481,17 @@ func scoreCandidate(profile string, plan CandidatePlan) float64 {
 			base -= 1
 		case "stale":
 			base -= 4
+		}
+	}
+
+	// Historical success-rate adjustment. Only applied when we have sufficient
+	// data (>= 3 samples, encoded as HistoricalSuccessRate >= 0).
+	if plan.HistoricalSuccessRate >= 0 {
+		switch {
+		case plan.HistoricalSuccessRate >= 0.8:
+			base += 20
+		case plan.HistoricalSuccessRate < 0.5:
+			base -= 30
 		}
 	}
 

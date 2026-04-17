@@ -337,21 +337,22 @@ type RouteRequest struct {
 
 // CandidatePlan is a routing evaluation result for one harness.
 type CandidatePlan struct {
-	Harness             string       `json:"harness"`
-	Surface             string       `json:"surface,omitempty"`          // catalog surface: embedded-openai, embedded-anthropic, codex, claude
-	RequestedRef        string       `json:"requested_ref,omitempty"`    // profile or model ref from the request
-	CanonicalTarget     string       `json:"canonical_target,omitempty"` // resolved catalog canonical target
-	ConcreteModel       string       `json:"concrete_model,omitempty"`   // concrete model string to pass to harness
-	SupportsEffort      bool         `json:"supports_effort"`
-	SupportsPermissions bool         `json:"supports_permissions"`
-	State               HarnessState `json:"state"`
-	CostClass           string       `json:"cost_class,omitempty"`          // local, cheap, medium, expensive
-	IsSubscription      bool         `json:"is_subscription,omitempty"`     // fixed-subscription harness; preferred over pay-per-token within quota
-	EstimatedCostUSD    float64      `json:"estimated_cost_usd,omitempty"`  // -1 = unknown
-	RejectReason        string       `json:"reject_reason,omitempty"`       // non-empty means rejected
-	DeprecationWarning  string       `json:"deprecation_warning,omitempty"` // non-empty when requested ref is deprecated
-	Score               float64      `json:"score,omitempty"`
-	Viable              bool         `json:"viable"`
+	Harness               string       `json:"harness"`
+	Surface               string       `json:"surface,omitempty"`          // catalog surface: embedded-openai, embedded-anthropic, codex, claude
+	RequestedRef          string       `json:"requested_ref,omitempty"`    // profile or model ref from the request
+	CanonicalTarget       string       `json:"canonical_target,omitempty"` // resolved catalog canonical target
+	ConcreteModel         string       `json:"concrete_model,omitempty"`   // concrete model string to pass to harness
+	SupportsEffort        bool         `json:"supports_effort"`
+	SupportsPermissions   bool         `json:"supports_permissions"`
+	State                 HarnessState `json:"state"`
+	CostClass             string       `json:"cost_class,omitempty"`          // local, cheap, medium, expensive
+	IsSubscription        bool         `json:"is_subscription,omitempty"`     // fixed-subscription harness; preferred over pay-per-token within quota
+	EstimatedCostUSD      float64      `json:"estimated_cost_usd,omitempty"`  // -1 = unknown
+	HistoricalSuccessRate float64      `json:"historical_success_rate"`       // observed success rate from routing metrics; -1 when insufficient data (< 3 samples)
+	RejectReason          string       `json:"reject_reason,omitempty"`       // non-empty means rejected
+	DeprecationWarning    string       `json:"deprecation_warning,omitempty"` // non-empty when requested ref is deprecated
+	Score                 float64      `json:"score,omitempty"`
+	Viable                bool         `json:"viable"`
 }
 
 // Default configuration values.
