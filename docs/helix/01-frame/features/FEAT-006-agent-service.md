@@ -167,6 +167,105 @@ The full routing contract — normalized request model, candidate planning,
 ranking rules, rejection criteria, and the DDx-vs-embedded boundary — is
 specified in `docs/helix/02-design/solution-designs/SD-015-agent-routing-and-catalog-resolution.md`.
 
+## Personas
+
+Personas are reusable AI personality templates — Markdown files with
+YAML frontmatter — that shape how an agent thinks, communicates, and
+applies standards for a given role. Personas are bindable to abstract
+roles (e.g., `code-reviewer`, `test-engineer`) so workflows can
+reference a role and let the project decide which concrete persona
+fills it.
+
+### Cross-harness consumption contract
+
+**Personas are consumed by DDx itself, not by the underlying harness.**
+When `ddx agent run --persona <name>` is invoked (or when a role is
+bound in `.ddx/config.yaml` and a workflow resolves that role), DDx:
+
+1. Loads the persona Markdown file from `library/personas/<name>.md`
+   (shipped) or `.ddx/plugins/<plugin>/personas/<name>.md` (installed).
+2. Strips the frontmatter.
+3. Injects the persona body as a system-prompt addendum to the agent
+   invocation.
+
+Because DDx owns this injection, personas do **not** need to match any
+harness-specific skill or system-prompt format. They inherit
+portability through `ddx agent run`: the same persona file produces
+equivalent behavior on `claude`, `codex`, `gemini`, and other
+harnesses, because the harness sees a flat system prompt, not a
+persona file.
+
+### Schema
+
+```yaml
+---
+name: code-reviewer
+roles: [code-reviewer, security-analyst]
+description: Security-first reviewer with structured verdict output
+tags: [review, quality, security]
+---
+
+# Code Reviewer
+
+(Opinionated voice, approach, anti-patterns, sources…)
+```
+
+Required frontmatter fields: `name`, `roles`, `description`, `tags`.
+Required body structure: **Philosophy / Approach / Anti-patterns /
+Sources**. The **Sources** section cites the external canon that
+shaped the persona (Anthropic Prompt Library, OpenAI Cookbook:
+Prompt Personalities, etc.) so users know what stance they're
+inheriting.
+
+### Shipped roster
+
+The default `ddx` plugin ships a small curated roster of role-focused
+personas (target set; full details and migration plan live in
+FEAT-011's Phase 3 epic):
+
+- `code-reviewer` — security-first review with structured verdicts
+- `test-engineer` — stubs-over-mocks, testing pyramid, contract tests
+- `implementer` — YAGNI/KISS, ships tests with code, no speculation
+- `architect` — opinionated on when to reach for each pattern
+- `specification-enforcer` — refuses drift from governing artifacts
+
+**Quality bar** (enforced by schema check in Phase 1 eval suite):
+opinionated voice; portable content (no repo-internal paths); a
+Sources section; `roles:` field names a role referenced by some
+shipped workflow or skill; frontmatter and body structure as above.
+
+### Role bindings
+
+Projects bind roles to personas in `.ddx/config.yaml`:
+
+```yaml
+persona_bindings:
+  code-reviewer: code-reviewer
+  test-engineer: test-engineer
+  architect: architect
+```
+
+Workflows invoke an agent against a role (e.g., the HELIX review
+workflow binds its `code-reviewer` step to whatever persona the
+project has set). `ddx persona bind <role> <persona>` sets a binding;
+`ddx persona bindings` lists them; `ddx persona list` enumerates
+available personas across shipped + installed plugins.
+
+### Migration from prior personas roster
+
+Earlier DDx versions shipped 10 personas in `library/personas/`. The
+consolidation trims to the 5 above (see FEAT-011 Phase 3). Before
+dropped personas are removed, DDx must:
+
+- Parse — not grep — `.ddx/config.yaml` `persona_bindings` to detect
+  references; grep misses YAML keys.
+- Also search workflow trees (e.g., `.ddx/plugins/helix/workflows/`)
+  for persona references.
+- Emit a deprecation warning in `ddx persona list` / `ddx persona
+  show` for any still-referenced dropped persona for one release.
+- Keep dropped personas in-tree with a doc note until the
+  deprecation window closes.
+
 ## Problem Statement
 
 **Current situation:** Both HELIX and dun independently implement agent dispatch:
@@ -1024,6 +1123,7 @@ The dun Go harness has patterns worth preserving:
 ddx agent run --profile=cheap --prompt task.md      # invoke agent via routing
 ddx agent run --model qwen3 --effort high           # exact model ref / effort
 ddx agent run --harness=codex --prompt task.md      # explicit harness override
+ddx agent run --persona code-reviewer --prompt r.md # inject persona as system-prompt addendum
 ddx agent run --quorum=majority --harnesses=a,b     # multi-agent
 ddx agent run --automation=plan                      # control autonomy
 ddx agent execute-bead <bead-id>                    # canonical bead execution workflow
@@ -1034,6 +1134,10 @@ ddx agent capabilities codex                         # inspect harness capabilit
 ddx agent doctor                                     # harness health
 ddx agent log                                        # recent DDx invocation activity
 ddx agent log <session-id>                           # metadata + native refs for one invocation
+ddx persona list                                     # enumerate shipped + installed personas
+ddx persona show <name>                              # inspect a persona definition
+ddx persona bind <role> <persona>                    # record a role→persona binding
+ddx persona bindings                                 # list current role bindings
 ```
 
 ### Configuration
@@ -1051,6 +1155,11 @@ agent:
   timeout_ms: 300000                # 5 minute default
   automation: auto                  # manual|plan|auto|yolo
   session_log_dir: .ddx/agent-logs  # DDx invocation activity location
+
+persona_bindings:                   # role → persona map (see Personas section)
+  code-reviewer: code-reviewer
+  test-engineer: test-engineer
+  architect: architect
 ```
 
 ## Migration Strategy

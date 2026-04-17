@@ -4,194 +4,283 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-001
+    - FEAT-006
     - FEAT-009
 ---
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Complete
+**Status:** Revising (consolidation in progress; see Phase 1 epic in beads)
 **Priority:** P1
 **Owner:** DDx Team
 
 ## Overview
 
-DDx ships agent-facing skills (Claude Code slash commands) that guide users
-and agents through complex DDx CLI operations. Skills provide validated,
-contextual workflows on top of raw CLI commands — they know what flags exist,
-what values are valid, and what metadata is required.
+DDx ships a single agent-facing skill (`ddx`) that makes any
+skills-compatible coding agent "ddx-aware" after `ddx init`. The skill
+is written to the [agentskills.io](https://agentskills.io) open
+standard so it works identically in Claude Code, OpenAI Codex, Gemini
+CLI, Cursor, OpenCode, and any other harness that implements the
+standard.
 
-Skills follow the same SKILL.md convention used by HELIX and install to
-`~/.agents/skills/ddx-*`.
+When the user says "do work", "review this", "what's on the queue",
+"create a bead", or any DDx concept, the harness discovers the `ddx`
+skill via its description, loads `SKILL.md`, and routes via an
+explicit intent table into `reference/*.md` files that contain the
+domain guidance.
 
 ## Problem Statement
 
-**Current situation:**
-- `ddx bead create` has 8+ flags; users forget `--labels`, `--spec-id`,
-  `--acceptance` and create beads that aren't execution-ready
-- `ddx agent run` requires knowing which harnesses are available, what models
-  they support, and what effort levels mean — none of which is obvious from
-  `--help`
-- `ddx install` (FEAT-009) introduces registry concepts users haven't seen
-- Every DDx command that agents invoke needs the agent to reverse-engineer
-  valid flag combinations from help text
+Prior iterations of FEAT-011 shipped ~7 sibling skills
+(`ddx-bead`, `ddx-agent`, `ddx-run`, `ddx-review`, `ddx-status`,
+`ddx-install`, `ddx-doctor`). Real-world usage exposed problems:
 
-**Desired outcome:** `/ddx-bead` creates a bead with all required metadata.
-`/ddx-agent` dispatches an agent with the right model and effort for the task.
-`/ddx-install` discovers and installs packages with guided search. Skills
-are the "smart" layer over the mechanical CLI.
+- **Intent ambiguity.** Users say "do work", not "/ddx-run". A flat
+  list of named slash commands forces the harness to guess between
+  `/ddx-bead` vs `/ddx-run` vs `/ddx-work` from natural-language
+  phrases.
+- **Vocabulary drift.** Each skill redefined terms (bead, queue,
+  harness, review) inline; wording diverged across files and from
+  FEAT-* specs.
+- **Workflow-opinion leakage.** `ddx-bead` mandated `helix` labels
+  and documented `phase:*` labels — HELIX methodology opinions
+  inside a core DDx skill.
+- **Skill tree drift.** Two copies of most skills
+  (`cli/internal/skills/` embedded vs top-level `/skills/`) with
+  real content divergence.
+- **Init gap.** `ddx init` copied only 2 of 7 embedded skills; the
+  rest never surfaced to Claude Code unless the user re-installed
+  manually.
+- **Portability.** Skills used Claude-Code-only frontmatter fields
+  (`argument-hint`) that are silently ignored by Codex and other
+  harnesses, and reached for Claude-Code-only patterns
+  (`context: fork`) that don't exist elsewhere.
+
+The consolidated design fixes each of these.
 
 ## Architecture
 
-### Skill Format
-
-Each skill is a directory under `~/.agents/skills/` containing a `SKILL.md`:
+### Single skill, progressive disclosure
 
 ```
-~/.agents/skills/
-├── ddx-bead/SKILL.md
-├── ddx-agent/SKILL.md
-├── ddx-install/SKILL.md
-└── ddx-status/SKILL.md
+skills/ddx/
+├── SKILL.md                # overview, vocabulary, intent-router directive
+├── reference/
+│   ├── beads.md            # writing execution-ready beads (best practices)
+│   ├── work.md             # draining the queue, execute-bead, verify + close
+│   ├── review.md           # bead-review (AC grade) + quorum code review
+│   ├── agents.md           # harness/profile dispatch, personas
+│   └── status.md           # queue state, doctor, health checks
+└── evals/
+    └── routing.jsonl       # ~15 phrase→expected-routing fixtures
 ```
 
-The `SKILL.md` frontmatter declares the skill name, description, and argument
-hints. The body provides the guidance the agent follows when the skill is
-invoked.
+At harness startup, only the skill's `name` + `description` metadata
+is pre-loaded. On activation, the harness reads `SKILL.md`. When the
+intent router matches a phrase, the harness reads the matching
+`reference/*.md`. Nothing else loads. This is the Anthropic
+"Pattern 2: Domain-specific organization" pattern and matches how
+Codex and other agentskills.io implementations progressively disclose
+skill content.
+
+### Portability contract
+
+Frontmatter is the portable-safe minimum — `name` + `description` only.
+
+```yaml
+---
+name: ddx
+description: Operates the DDx toolkit for document-driven development. Covers beads (work items), the queue, executions, agents, harnesses, personas, reviews, spec-id. Use when the user says "do work", "drain the queue", "run the next bead", "execute a bead", "review this", "check against spec", "what's on the queue", "what's ready", "create a bead", "file this as work", "run an agent", "dispatch", "use a persona", "how am I doing", "ddx doctor", or mentions any ddx CLI command.
+---
+```
+
+No `argument-hint`, `when_to_use`, `context: fork`, `allowed-tools`,
+`disable-model-invocation`, `user-invocable`, `paths`, `model`,
+`effort`, `agent`, or `hooks` fields — those are Claude-Code
+extensions that Codex and others ignore or reject. The description
+front-loads the DDx nouns (bead, queue, execution, harness, persona,
+spec-id) **and** the exact verb phrases users say verbatim, because
+implicit-invocation matchers prefer substring-ish keyword matching
+over semantic understanding.
+
+### Intent-router directive
+
+Claude does not reliably auto-chase reference links; the router in
+`SKILL.md` is stated as an **explicit directive**, not a hint:
+
+> "Before responding to any DDx-related request, read the matching
+> reference file below. The router is not optional — your answer must
+> be grounded in the reference file's guidance, not this overview
+> alone."
+
+### Subagents: ship none
+
+Subagent orchestration is harness-specific (Claude Code has
+`.claude/agents/` + `context: fork`; Codex has its own subagent
+surface; others differ). The `ddx` skill describes *actions*
+("run `ddx agent run --quorum=<policy>`") and lets each harness
+decide how to run them. Quorum review is a CLI invocation, not a
+skill-frontmatter directive.
 
 ### Installation
 
-- `ddx init` copies DDx bootstrap skills (`ddx-doctor`, `ddx-run`) as **real
-  files** from the binary's embedded resources to `.ddx/skills/`,
-  `.agents/skills/`, and `.claude/skills/`; real files (not symlinks) ensure
-  skills survive `git clone` on a fresh machine
-- During `ddx init`, any existing `ddx-*` skill directories not in the current
-  bootstrap allowlist are removed from each target directory (stale bootstrap
-  cleanup)
-- `ddx install <plugin>` creates relative symlinks for plugin skills in
-  `.agents/skills/` and `.claude/skills/`; stale symlinks from prior installs
-  (pointing into the plugin's installed root) are pruned before new links are
-  created
-- Skills can also be managed manually
+- `ddx init` copies `skills/ddx/` into `.claude/skills/ddx/`,
+  `.agents/skills/ddx/`, and `.ddx/skills/ddx/` as real files
+  (symlinks break after `git clone` on a fresh machine).
+- On init and on `ddx update`, stale ddx-prefixed skill directories
+  from prior DDx versions are removed:
+  `ddx-bead`, `ddx-run`, `ddx-agent`, `ddx-review`, `ddx-status`,
+  `ddx-doctor`, `ddx-install`, `ddx-release`. Third-party skills are
+  untouched.
+- Skills embed into the binary via `//go:embed all:ddx` against a
+  copy under `cli/internal/skills/ddx/`. Because `go:embed` cannot
+  traverse upward, a `make copy-skills` target rsyncs
+  `skills/ddx/` → `cli/internal/skills/ddx/` before every build.
 
-## Core Skills
+### AGENTS.md: merge, not clobber
 
-### `/ddx-bead` — Guided bead creation and triage
+Codex treats `AGENTS.md` as primary guidance before work, and users
+may have added content. `ddx init` uses marker-delimited injection:
 
-Wraps `ddx bead create` with:
-- Prompts for title, type, description, acceptance criteria
-- Validates required labels (checks hook configuration for label rules)
-- Suggests `--spec-id` from the document graph (nearest governing artifact)
-- Sets priority based on context
-- Runs `ddx bead create` with assembled flags
-- Also supports `ddx bead update`, `ddx bead dep add` workflows
+```markdown
+<!-- DDX-AGENTS:START -->
+This project uses DDx. Use the `ddx` skill for beads, work, review,
+agents, and status.
 
-### `/ddx-agent` — Guided agent dispatch
+(tracker/merge policy follows)
+<!-- DDX-AGENTS:END -->
+```
 
-Wraps `ddx agent run` with:
-- Lists available harnesses via `ddx agent list`
-- Shows capabilities via `ddx agent capabilities <harness>`
-- Helps select model and effort level based on task complexity
-- Assembles the full `ddx agent run` command
-- Reports results from `ddx agent log`
+Content outside the markers is preserved. The block says
+"the `ddx` skill", not "`/ddx`" (which is Claude-specific slash-
+command phrasing). Re-running `ddx init` updates the block in place.
 
-### `/ddx-install` — Guided package installation
+### Evaluation-driven validation
 
-Wraps `ddx install` with:
-- Searches registry via `ddx search`
-- Shows package details before installing
-- Confirms installation targets
-- Verifies post-install health
+Anthropic's skill-authoring guidance treats evaluations as
+load-bearing, not optional. The repo ships:
 
-### `/ddx-status` — Project health overview
-
-Wraps multiple commands into one overview:
-- `ddx status` + `ddx doctor` + `ddx bead list` summary
-- Shows stale documents, blocked beads, pending updates
-
-### `/ddx-review` — Guided quorum and fresh-eyes review
-
-Wraps `ddx agent run --quorum` for structured code review:
-- Prompts for scope (file paths, bead ID, or "all changes since <ref>")
-- Assembles the review prompt with context from governing artifacts
-- Dispatches a quorum review across multiple harnesses (e.g., codex + claude)
-- Reports consensus: agreed findings, disagreements, and recommended actions
-- Prevents "codex-style review" hallucinations by using real `ddx agent run`
-  with explicit harness selection and structured output parsing
-
-### `/ddx-run` — Execute a bead with proper agent dispatch
-
-Wraps the bead → agent → verify → close lifecycle:
-- Takes a bead ID (or picks the top ready bead)
-- Reads the bead's spec-id, acceptance criteria, and governing artifacts
-- Assembles a prompt with full context
-- Dispatches via `ddx agent run --harness <selected> --prompt <file>`
-- After agent completes: verifies tests pass, checks acceptance criteria
-- Closes the bead if acceptance met, or reports what failed
-- Prevents agents from "claiming" to have done work without verification
+- `skills/ddx/evals/routing.jsonl` — ~15 rows, each a user phrase +
+  expected reference file + expected CLI invocation, covering every
+  intent-router entry and edge phrasings.
+- `scripts/eval-skill.sh` — driver that runs each row against
+  `--harness claude` and `--harness codex` and verifies routing.
+  `--validate` mode does agentskills.io spec conformance.
+- `make eval-skill` in CI on PRs that touch `skills/ddx/`.
 
 ## Requirements
 
 ### Functional
 
-1. DDx ships at least 6 core skills: `ddx-bead`, `ddx-agent`, `ddx-install`,
-   `ddx-status`, `ddx-review`, `ddx-run`
-2. Skills install to `~/.agents/skills/ddx-*` following the SKILL.md convention
-3. `ddx init` registers DDx skills (symlink or copy)
-4. Skills call DDx CLI commands — they are guidance wrappers, not reimplementations
-5. Skills validate inputs before invoking commands (e.g., check label rules,
-   verify harness availability)
-6. Skills provide contextual suggestions (e.g., suggest spec-id from document
-   graph, suggest model from capabilities)
+1. DDx ships exactly one skill (`ddx`) in `skills/ddx/`; no sibling
+   `ddx-*` skill directories.
+2. `SKILL.md` frontmatter contains only `name` and `description`.
+3. `SKILL.md` body is under 500 lines and includes an explicit
+   intent-router directive.
+4. `reference/*.md` files are linked one level deep from `SKILL.md`.
+5. `ddx init` copies the skill, removes stale `ddx-*` dirs, and
+   merges the AGENTS.md block without clobbering user content.
+6. `ddx update` refreshes `.claude/skills/ddx/` and removes stale
+   dirs.
+7. `skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
+   passing against `claude` and `codex` harnesses via
+   `make eval-skill`.
+8. `SKILL.md` passes `scripts/eval-skill.sh --validate` (agentskills.io
+   spec conformance).
 
 ### Non-Functional
 
-- Skills are plain Markdown (SKILL.md) — no compiled code, no runtime dependencies
-- Skills work with any agent that supports the SKILL.md convention (Claude Code)
-- Skills degrade gracefully if DDx CLI is not installed (clear error message)
+- Skills work with any agent supporting the agentskills.io standard;
+  no Claude-Code-only frontmatter or directives.
+- Skills are plain Markdown — no runtime dependencies.
+- Skills degrade gracefully if DDx CLI is not installed (clear error).
+- HELIX-specific rules (`helix` label requirement, `phase:*`
+  enumeration) do not appear in the `ddx` skill; HELIX opinions ship
+  in the HELIX plugin.
 
 ## User Stories
 
-### US-110: Agent Creates a Well-Formed Bead
-**As an** AI agent creating a work item
-**I want** the `/ddx-bead` skill to guide me through required metadata
-**So that** every bead I create passes triage validation
+### US-110: Harness routes natural-language DDx intent
+**As a** user in a DDx project using Claude Code, Codex, or any other
+skills-compatible harness
+**I want** phrases like "do work", "drain the queue", "review this",
+"what's on the queue", "create a bead" to route to DDx guidance
+**So that** I don't have to remember slash-command names
 
 **Acceptance Criteria:**
-- Given I invoke `/ddx-bead "Add login feature"`, then the skill prompts for
-  type, labels, spec-id, and acceptance criteria
-- Given hook validation requires `helix` label, then the skill includes it
-  automatically
-- Given I provide all required fields, then the skill runs `ddx bead create`
-  with the correct flags
+- Running `make eval-skill` passes all rows against both `--harness claude`
+  and `--harness codex`.
+- Each intent-router entry in `SKILL.md` has at least one matching
+  row in `routing.jsonl`.
 
-### US-111: Developer Dispatches Agent with Right Config
-**As a** developer wanting to run an agent review
-**I want** `/ddx-agent` to show me available models and effort levels
-**So that** I pick the right configuration without memorizing flag names
-
-**Acceptance Criteria:**
-- Given I invoke `/ddx-agent`, then it shows available harnesses and their status
-- Given I select a harness, then it shows available models and effort levels
-- Given I confirm, then it runs `ddx agent run` with the assembled flags
-
-### US-112: Developer Installs a Package with Guidance
-**As a** developer discovering DDx packages
-**I want** `/ddx-install` to search and preview before installing
-**So that** I understand what I'm installing
+### US-111: Skill stays under the token budget
+**As a** harness loading the `ddx` skill
+**I want** `SKILL.md` body under 500 lines
+**So that** skill activation stays within the Anthropic-recommended
+token budget and doesn't compete with conversation context
 
 **Acceptance Criteria:**
-- Given I invoke `/ddx-install helix`, then it shows the package description
-  and install targets before proceeding
-- Given I confirm, then it runs `ddx install helix` and reports success
+- `wc -l skills/ddx/SKILL.md` < 500.
+- `scripts/eval-skill.sh --validate` passes.
+
+### US-112: `ddx init` handles existing projects cleanly
+**As a** user upgrading from an older DDx version with
+`.claude/skills/ddx-run/` and similar dirs already present
+**I want** `ddx init` to remove the old dirs and install only the
+new single-skill layout
+**So that** the harness doesn't see stale, conflicting skills
+
+**Acceptance Criteria:**
+- In a dir pre-seeded with
+  `.claude/skills/{ddx-run,ddx-doctor,ddx-bead}/`, running
+  `ddx init` leaves only `.claude/skills/ddx/`.
+- Third-party skills under `.claude/skills/` are untouched.
+
+### US-113: `AGENTS.md` merge preserves user content
+**As a** user who has added content to `AGENTS.md`
+**I want** `ddx init` to inject the DDx block without clobbering
+what I wrote
+**So that** my Codex / Claude / Gemini setup isn't broken
+
+**Acceptance Criteria:**
+- Given an `AGENTS.md` with user content both before and after the
+  `<!-- DDX-AGENTS:START -->` / `<!-- DDX-AGENTS:END -->` markers,
+  running `ddx init` updates the block between markers and preserves
+  everything outside.
+- Running `ddx init` a second time does not duplicate the block.
+
+### US-114: `ddx update` refreshes skills
+**As a** user who ran `ddx init` on an older DDx version
+**I want** `ddx update` to refresh `.claude/skills/ddx/` to the
+current shipped content
+**So that** I don't have to re-run `ddx init` to pick up skill
+improvements
+
+**Acceptance Criteria:**
+- After `ddx update`, `.claude/skills/ddx/` bytes match the embedded
+  skill content.
+- Stale `ddx-*` dirs are removed as in US-112.
 
 ## Dependencies
 
-- FEAT-001 (CLI commands that skills wrap)
-- FEAT-009 (registry for `ddx-install` skill)
-- Claude Code skill convention (SKILL.md format)
+- FEAT-001 (CLI commands the skill wraps)
+- FEAT-006 (agent service — harnesses, profiles, personas)
+- FEAT-009 (registry for package-install guidance inside `reference/agents.md`)
+- agentskills.io open standard
 
 ## Out of Scope
 
-- Workflow-specific skills (HELIX provides those)
-- Skills for commands that don't benefit from guidance (e.g., `ddx version`)
-- GUI or interactive TUI — skills are agent-facing, not terminal-facing
+- Workflow-specific skills (HELIX provides `helix-*` in its own plugin).
+- Claude-Code-specific skill features (`context: fork`, `allowed-tools`,
+  `paths`, subagents under `.claude/agents/`) — portability > optimization.
+- A CI-enforced vocabulary drift guard. One skill + one glossary is
+  self-policing. Revisit only if drift recurs.
+
+## Implementation Notes
+
+The migration from the 7-sibling-skills layout to the single `ddx`
+skill is sequenced into phases; see the Phase 1 / Phase 2 / Phase 3
+epic beads for the work breakdown. Phase 1 is the critical path
+(ship the new surface + eval suite + init/update changes); Phase 2
+is cleanup of old references; Phase 3 is the persona roster trim
+(FEAT-006 scope, not blocking this feature).
