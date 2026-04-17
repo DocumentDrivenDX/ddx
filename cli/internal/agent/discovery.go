@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -38,6 +39,72 @@ func (d *DiscoveryResult) ProvidersForModel(model string) []DiscoveredProvider {
 		}
 	}
 	return out
+}
+
+// AllModels returns a deduplicated list of all model IDs across all providers.
+func (d *DiscoveryResult) AllModels() []string {
+	if d == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []string
+	for _, p := range d.Providers {
+		for _, m := range p.Models {
+			if !seen[m] {
+				seen[m] = true
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
+
+// FuzzyMatchModel resolves a user-provided model string against discovered
+// models using prefix matching with shortest-suffix tiebreak. Returns the
+// resolved model ID and whether it was a fuzzy (non-exact) match. Returns
+// empty string if no match found.
+func (d *DiscoveryResult) FuzzyMatchModel(input string) (resolved string, fuzzy bool) {
+	if d == nil {
+		return "", false
+	}
+	return fuzzyMatchInPool(input, d.AllModels())
+}
+
+// fuzzyMatchInPool resolves input against a pool of model IDs.
+// Exact match wins. Otherwise, prefix match with shortest suffix wins.
+// On equal suffix length, alphabetically first wins.
+func fuzzyMatchInPool(input string, pool []string) (resolved string, fuzzy bool) {
+	// Check exact match first.
+	for _, m := range pool {
+		if m == input {
+			return m, false
+		}
+	}
+	// Collect prefix matches.
+	type candidate struct {
+		model     string
+		suffixLen int
+	}
+	var candidates []candidate
+	for _, m := range pool {
+		if len(m) > len(input) && m[:len(input)] == input {
+			candidates = append(candidates, candidate{
+				model:     m,
+				suffixLen: len(m) - len(input),
+			})
+		}
+	}
+	if len(candidates) == 0 {
+		return "", false
+	}
+	// Sort: shortest suffix first, then alphabetical.
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].suffixLen != candidates[j].suffixLen {
+			return candidates[i].suffixLen < candidates[j].suffixLen
+		}
+		return candidates[i].model < candidates[j].model
+	})
+	return candidates[0].model, true
 }
 
 // discoveryCache is a process-scoped cache for discovery results.

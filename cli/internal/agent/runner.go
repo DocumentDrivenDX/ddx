@@ -115,14 +115,19 @@ func (r *Runner) ValidateOrphanModel(opts RunOptions) error {
 	if cat.KnownOnAnySurface(opts.Model) {
 		return nil
 	}
-	// Check live provider discovery before erroring.
+	// Check live provider discovery (exact and fuzzy) before erroring.
 	if r.Discovery == nil && r.WorkDir != "" {
 		if disc, err := DiscoverProviderModels(r.WorkDir, 5*time.Second); err == nil {
 			r.Discovery = disc
 		}
 	}
 	if r.Discovery != nil {
+		// Exact match on discovered providers.
 		if providers := r.Discovery.ProvidersForModel(opts.Model); len(providers) > 0 {
+			return nil
+		}
+		// Fuzzy prefix match on discovered models.
+		if resolved, _ := r.Discovery.FuzzyMatchModel(opts.Model); resolved != "" {
 			return nil
 		}
 	}

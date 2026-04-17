@@ -487,13 +487,27 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model, explicitProvider, ex
 		providerName = explicitProvider
 	} else if model != "" && r.Discovery != nil {
 		// Discovery takes precedence over the OpenRouter vendor/model heuristic.
-		// If a local provider advertises the model, route there instead of
-		// assuming vendor/model format means OpenRouter.
+		// If a local provider advertises the model (exact or fuzzy), route there
+		// instead of assuming vendor/model format means OpenRouter.
 		cat := r.catalog()
 		if !cat.KnownOnAnySurface(model) {
-			if providers := r.Discovery.ProvidersForModel(model); len(providers) > 0 {
+			providers := r.Discovery.ProvidersForModel(model)
+			resolvedModel := model
+			if len(providers) == 0 {
+				// Try fuzzy prefix match.
+				if fuzzy, isFuzzy := r.Discovery.FuzzyMatchModel(model); isFuzzy && fuzzy != "" {
+					resolvedModel = fuzzy
+					providers = r.Discovery.ProvidersForModel(resolvedModel)
+				}
+			}
+			if len(providers) > 0 {
 				providerName = providers[0].Name
 				routeReason = "discovery"
+				// Update the model override to use the resolved name.
+				if resolvedModel != model {
+					overrides.Model = resolvedModel
+					fmt.Fprintf(os.Stderr, "model %q resolved to %q (fuzzy match)\n", model, resolvedModel)
+				}
 			} else if isOpenRouterModel(model) {
 				if _, ok := cfg.GetProvider("openrouter"); ok {
 					providerName = "openrouter"

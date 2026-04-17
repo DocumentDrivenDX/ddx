@@ -181,12 +181,20 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 			plan.Viable = false
 			return plan
 		}
-		// When discovery data is available and a discovered provider advertises
-		// this model, only harnesses backed by those providers are viable.
+		// When discovery data is available and the model is uncataloged,
+		// check if a discovered provider can serve it (exact or fuzzy).
 		// This prevents uncataloged local models from being routed to cloud
 		// harnesses that cannot serve them.
+		resolvedPin := req.ModelPin
 		if r.Discovery != nil && !cat.KnownOnAnySurface(req.ModelPin) {
+			// Try exact match first, then fuzzy prefix match.
 			providers := r.Discovery.ProvidersForModel(req.ModelPin)
+			if len(providers) == 0 {
+				if fuzzyModel, isFuzzy := r.Discovery.FuzzyMatchModel(req.ModelPin); isFuzzy && fuzzyModel != "" {
+					resolvedPin = fuzzyModel
+					providers = r.Discovery.ProvidersForModel(resolvedPin)
+				}
+			}
 			if len(providers) > 0 {
 				// Check if this harness's surface matches a discovered provider.
 				found := false
@@ -208,8 +216,8 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 			// via ValidateOrphanModel.
 		}
 		plan.RequestedRef = "pin:" + req.ModelPin
-		plan.CanonicalTarget = req.ModelPin
-		plan.ConcreteModel = req.ModelPin
+		plan.CanonicalTarget = resolvedPin
+		plan.ConcreteModel = resolvedPin
 		if dp, deprecated := cat.CheckDeprecatedPin(req.ModelPin, harness.Surface); deprecated {
 			plan.DeprecationWarning = fmt.Sprintf("model %q is deprecated; use %q instead", req.ModelPin, dp.ReplacedBy)
 		}
