@@ -199,3 +199,124 @@ func TestAgentMetricsTierSuccessFailureModes(t *testing.T) {
 	assert.Contains(t, tableOut, "merge_conflict=1")
 	assert.Contains(t, tableOut, "no_changes=1")
 }
+
+// writeBeadJSONL appends one bead JSON line to .ddx/beads.jsonl under dir.
+// Each bead is expressed as a raw JSON string so tests can write the full
+// event timeline (kind:routing, kind:review) verbatim — matching the
+// on-disk shape produced by the executor.
+func writeBeadJSONL(t *testing.T, dir string, beadJSON string) {
+	t.Helper()
+	ddx := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddx, 0o755))
+	path := filepath.Join(ddx, "beads.jsonl")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	defer f.Close()
+	_, err = f.WriteString(beadJSON + "\n")
+	require.NoError(t, err)
+}
+
+// TestAgentMetricsReviewOutcomes verifies the review-outcomes subcommand
+// aggregates kind:review verdicts per originating harness/model tier. The
+// originating tier is the most recent kind:routing event preceding each
+// review on the same bead; rows include reviews/approvals/rejections and an
+// approval_rate.
+func TestAgentMetricsReviewOutcomes(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	dir := t.TempDir()
+
+	// Bead 1 — claude/sonnet routed → APPROVE.
+	writeBeadJSONL(t, dir, `{"id":"bead-1","title":"b1","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[`+
+		`{"kind":"routing","summary":"r","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\"}","created_at":"2026-04-15T00:01:00Z"},`+
+		`{"kind":"review","summary":"APPROVE","body":"### Verdict: APPROVE","created_at":"2026-04-15T00:02:00Z"}`+
+		`]}`)
+
+	// Bead 2 — claude/sonnet routed → REQUEST_CHANGES (approve_with_edits).
+	writeBeadJSONL(t, dir, `{"id":"bead-2","title":"b2","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[`+
+		`{"kind":"routing","summary":"r","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\"}","created_at":"2026-04-15T01:00:00Z"},`+
+		`{"kind":"review","summary":"REQUEST_CHANGES","body":"needs fixes","created_at":"2026-04-15T01:30:00Z"}`+
+		`]}`)
+
+	// Bead 3 — escalation: first attempt sonnet routed then BLOCK; reopened
+	// with opus routing + APPROVE. Each review attributes to the routing
+	// that immediately precedes it.
+	writeBeadJSONL(t, dir, `{"id":"bead-3","title":"b3","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[`+
+		`{"kind":"routing","summary":"r","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\"}","created_at":"2026-04-15T02:00:00Z"},`+
+		`{"kind":"review","summary":"BLOCK","body":"reject","created_at":"2026-04-15T02:30:00Z"},`+
+		`{"kind":"routing","summary":"r","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"opus\"}","created_at":"2026-04-15T03:00:00Z"},`+
+		`{"kind":"review","summary":"APPROVE","body":"### Verdict: APPROVE","created_at":"2026-04-15T03:30:00Z"}`+
+		`]}`)
+
+	// Bead 4 — review with no preceding routing event → "unknown" tier.
+	writeBeadJSONL(t, dir, `{"id":"bead-4","title":"b4","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[`+
+		`{"kind":"review","summary":"APPROVE","body":"ok","created_at":"2026-04-15T04:00:00Z"}`+
+		`]}`)
+
+	// Bead 5 — routing without any review (must not appear in output).
+	writeBeadJSONL(t, dir, `{"id":"bead-5","title":"b5","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[`+
+		`{"kind":"routing","summary":"r","body":"{\"resolved_provider\":\"agent\",\"resolved_model\":\"\"}","created_at":"2026-04-15T05:00:00Z"}`+
+		`]}`)
+
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "metrics", "review-outcomes", "--json")
+	require.NoError(t, err)
+
+	var rows []reviewOutcomesRow
+	require.NoError(t, json.Unmarshal([]byte(output), &rows))
+
+	byTier := map[string]reviewOutcomesRow{}
+	for _, r := range rows {
+		byTier[r.Tier] = r
+	}
+
+	// claude/sonnet: 3 reviews (bead-1 APPROVE, bead-2 REQUEST_CHANGES,
+	// bead-3 BLOCK) → 1 approval, 2 rejections.
+	require.Contains(t, byTier, "claude/sonnet")
+	sonnet := byTier["claude/sonnet"]
+	assert.Equal(t, "claude", sonnet.Harness)
+	assert.Equal(t, "sonnet", sonnet.Model)
+	assert.Equal(t, 3, sonnet.Reviews)
+	assert.Equal(t, 1, sonnet.Approvals)
+	assert.Equal(t, 2, sonnet.Rejections)
+	assert.InDelta(t, 1.0/3.0, sonnet.ApprovalRate, 0.0001)
+
+	// claude/opus: 1 review, 1 approval (bead-3 second review).
+	require.Contains(t, byTier, "claude/opus")
+	opus := byTier["claude/opus"]
+	assert.Equal(t, 1, opus.Reviews)
+	assert.Equal(t, 1, opus.Approvals)
+	assert.Equal(t, 0, opus.Rejections)
+	assert.InDelta(t, 1.0, opus.ApprovalRate, 0.0001)
+
+	// unknown tier: bead-4 review with no preceding routing.
+	require.Contains(t, byTier, "unknown")
+	unk := byTier["unknown"]
+	assert.Equal(t, 1, unk.Reviews)
+	assert.Equal(t, 1, unk.Approvals)
+
+	// Bead-5 contributed routing only (no review) so it must not
+	// surface as its own tier row.
+	_, hasAgent := byTier["agent"]
+	assert.False(t, hasAgent, "tiers without any reviews must not appear")
+
+	// Table output exposes the required columns.
+	tableCmd := NewCommandFactory(dir).NewRootCommand()
+	tableOut, err := executeCommand(tableCmd, "agent", "metrics", "review-outcomes")
+	require.NoError(t, err)
+	header := strings.SplitN(tableOut, "\n", 2)[0]
+	for _, col := range []string{"TIER", "REVIEWS", "APPROVALS", "REJECTIONS", "APPROVAL_RATE"} {
+		assert.Contains(t, header, col)
+	}
+	assert.Contains(t, tableOut, "claude/sonnet")
+	assert.Contains(t, tableOut, "claude/opus")
+
+	// Empty .ddx returns no rows, not an error.
+	empty := t.TempDir()
+	emptyCmd := NewCommandFactory(empty).NewRootCommand()
+	emptyOut, err := executeCommand(emptyCmd, "agent", "metrics", "review-outcomes", "--json")
+	require.NoError(t, err)
+	var emptyRows []reviewOutcomesRow
+	require.NoError(t, json.Unmarshal([]byte(emptyOut), &emptyRows))
+	assert.Empty(t, emptyRows)
+}

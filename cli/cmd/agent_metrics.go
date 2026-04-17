@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +37,7 @@ func (f *CommandFactory) newAgentMetricsCommand() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(f.newAgentMetricsTierSuccessCommand())
+	cmd.AddCommand(f.newAgentMetricsReviewOutcomesCommand())
 	return cmd
 }
 
@@ -239,4 +242,235 @@ func truncateTier(s string, max int) string {
 		return strings.Repeat(".", max)
 	}
 	return s[:max-len(ellipsis)] + ellipsis
+}
+
+// reviewOutcomesRow is one row of the review-outcomes report, aggregating
+// post-merge review verdicts per originating execution tier.
+type reviewOutcomesRow struct {
+	Tier         string  `json:"tier"`
+	Harness      string  `json:"harness"`
+	Model        string  `json:"model,omitempty"`
+	Reviews      int     `json:"reviews"`
+	Approvals    int     `json:"approvals"`
+	Rejections   int     `json:"rejections"`
+	ApprovalRate float64 `json:"approval_rate"`
+}
+
+func (f *CommandFactory) newAgentMetricsReviewOutcomesCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "review-outcomes",
+		Short: "Report post-merge review verdicts per originating tier",
+		Long: `Scan kind:review evidence events on beads and aggregate review
+verdicts (approve, approve_with_edits, reject) per originating harness/model
+tier. The originating tier is derived from the most recent kind:routing
+evidence event that precedes each review on the same bead — that is the
+provider/model that produced the work being reviewed.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jsonOut, _ := cmd.Flags().GetBool("json")
+
+			rows, err := computeReviewOutcomes(f.WorkingDir)
+			if err != nil {
+				return err
+			}
+
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(rows)
+			}
+			return renderReviewOutcomesTable(cmd, rows)
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output JSON")
+	return cmd
+}
+
+// reviewVerdictCategory normalises a kind:review event summary into one of
+// "approve", "approve_with_edits", "reject", or "" when it cannot be
+// classified. Matching is case-insensitive and tolerates the canonical
+// verdict names used by the reviewer (APPROVE / REQUEST_CHANGES / BLOCK)
+// as well as their generic equivalents.
+func reviewVerdictCategory(summary string) string {
+	s := strings.ToUpper(strings.TrimSpace(summary))
+	switch s {
+	case "APPROVE":
+		return "approve"
+	case "APPROVE_WITH_EDITS", "REQUEST_CHANGES":
+		return "approve_with_edits"
+	case "REJECT", "BLOCK":
+		return "reject"
+	}
+	return ""
+}
+
+// computeReviewOutcomes scans every bead in workingDir/.ddx, attributes each
+// kind:review event to the most recent kind:routing event that precedes it on
+// the same bead, and aggregates per-tier counts of approvals vs rejections.
+// Reviews on beads without any preceding routing event are bucketed under an
+// "unknown" tier so they are surfaced rather than silently dropped.
+func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	beads, err := store.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("read beads: %w", err)
+	}
+
+	type agg struct {
+		harness    string
+		model      string
+		reviews    int
+		approvals  int
+		rejections int
+	}
+	byTier := map[string]*agg{}
+	order := []string{}
+
+	for _, b := range beads {
+		events := allBeadEventsFromExtra(b.Extra)
+		// Walk events in chronological order, tracking the most recent
+		// routing decision so each review is attributed to the tier that
+		// produced the work under review.
+		sort.SliceStable(events, func(i, j int) bool {
+			return events[i].CreatedAt.Before(events[j].CreatedAt)
+		})
+
+		var curHarness, curModel string
+		haveRouting := false
+		for _, e := range events {
+			switch e.Kind {
+			case "routing":
+				if h, m, ok := parseRoutingHarnessModel(e); ok {
+					curHarness = h
+					curModel = m
+					haveRouting = true
+				}
+			case "review":
+				cat := reviewVerdictCategory(e.Summary)
+				if cat == "" {
+					continue
+				}
+				harness, model := curHarness, curModel
+				if !haveRouting {
+					harness, model = "unknown", ""
+				}
+				tier := tierKey(harness, model)
+				a, ok := byTier[tier]
+				if !ok {
+					a = &agg{harness: harness, model: model}
+					byTier[tier] = a
+					order = append(order, tier)
+				}
+				a.reviews++
+				switch cat {
+				case "approve":
+					a.approvals++
+				case "approve_with_edits", "reject":
+					a.rejections++
+				}
+			}
+		}
+	}
+
+	rows := make([]reviewOutcomesRow, 0, len(order))
+	for _, tier := range order {
+		a := byTier[tier]
+		row := reviewOutcomesRow{
+			Tier:       tier,
+			Harness:    a.harness,
+			Model:      a.model,
+			Reviews:    a.reviews,
+			Approvals:  a.approvals,
+			Rejections: a.rejections,
+		}
+		if a.reviews > 0 {
+			row.ApprovalRate = float64(a.approvals) / float64(a.reviews)
+		}
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Tier < rows[j].Tier })
+	return rows, nil
+}
+
+// allBeadEventsFromExtra returns every BeadEvent stored on a bead, regardless
+// of kind. The route-status command has a routing-only extractor; here we
+// need both routing and review events so we walk Extra["events"] directly.
+func allBeadEventsFromExtra(extra map[string]any) []bead.BeadEvent {
+	if extra == nil {
+		return nil
+	}
+	raw, ok := extra["events"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]bead.BeadEvent, 0, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		e := bead.BeadEvent{}
+		if v, ok := m["kind"].(string); ok {
+			e.Kind = v
+		}
+		if v, ok := m["summary"].(string); ok {
+			e.Summary = v
+		}
+		if v, ok := m["body"].(string); ok {
+			e.Body = v
+		}
+		if v, ok := m["actor"].(string); ok {
+			e.Actor = v
+		}
+		if v, ok := m["source"].(string); ok {
+			e.Source = v
+		}
+		if v, ok := m["created_at"].(string); ok {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				e.CreatedAt = t
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// parseRoutingHarnessModel extracts (provider, model) from a kind:routing
+// event body. Returns ok=false when the body cannot be parsed or carries no
+// provider, since a tier without a provider is not a useful attribution.
+func parseRoutingHarnessModel(e bead.BeadEvent) (string, string, bool) {
+	if e.Body == "" {
+		return "", "", false
+	}
+	var body struct {
+		ResolvedProvider string `json:"resolved_provider"`
+		ResolvedModel    string `json:"resolved_model"`
+	}
+	if err := json.Unmarshal([]byte(e.Body), &body); err != nil {
+		return "", "", false
+	}
+	if body.ResolvedProvider == "" {
+		return "", "", false
+	}
+	return body.ResolvedProvider, body.ResolvedModel, true
+}
+
+func renderReviewOutcomesTable(cmd *cobra.Command, rows []reviewOutcomesRow) error {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "%-40s  %7s  %9s  %10s  %13s\n",
+		"TIER", "REVIEWS", "APPROVALS", "REJECTIONS", "APPROVAL_RATE")
+	for _, r := range rows {
+		fmt.Fprintf(out, "%-40s  %7d  %9d  %10d  %13s\n",
+			truncateTier(r.Tier, 40),
+			r.Reviews,
+			r.Approvals,
+			r.Rejections,
+			fmt.Sprintf("%.3f", r.ApprovalRate),
+		)
+	}
+	return nil
 }
