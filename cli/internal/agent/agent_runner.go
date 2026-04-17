@@ -485,19 +485,24 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model, explicitProvider, ex
 	providerName := cfg.DefaultName()
 	if explicitProvider != "" {
 		providerName = explicitProvider
-	} else if isOpenRouterModel(model) {
-		if _, ok := cfg.GetProvider("openrouter"); ok {
-			providerName = "openrouter"
-		}
 	} else if model != "" && r.Discovery != nil {
-		// When the model is uncataloged and discovery found a provider for it,
-		// route to that provider instead of the default.
+		// Discovery takes precedence over the OpenRouter vendor/model heuristic.
+		// If a local provider advertises the model, route there instead of
+		// assuming vendor/model format means OpenRouter.
 		cat := r.catalog()
 		if !cat.KnownOnAnySurface(model) {
 			if providers := r.Discovery.ProvidersForModel(model); len(providers) > 0 {
 				providerName = providers[0].Name
 				routeReason = "discovery"
+			} else if isOpenRouterModel(model) {
+				if _, ok := cfg.GetProvider("openrouter"); ok {
+					providerName = "openrouter"
+				}
 			}
+		}
+	} else if isOpenRouterModel(model) {
+		if _, ok := cfg.GetProvider("openrouter"); ok {
+			providerName = "openrouter"
 		}
 	}
 	provider, pc, _, err := cfg.BuildProviderWithOverrides(providerName, overrides)
