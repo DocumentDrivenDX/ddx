@@ -402,6 +402,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			// Skip when: --no-review flag, "review:skip" bead label, or no reviewer.
 			reviewApproved := true
 			if w.Reviewer != nil && !opts.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
+				// Record a routing evidence event so the subsequent review
+				// event can be attributed to the originating provider/model
+				// tier by review-outcomes analytics. Duplicates an event that
+				// ExecuteBead may also have written; the latest-before-review
+				// rule makes duplicates harmless.
+				appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC())
+
 				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, report.Harness, report.Model)
 				if reviewErr != nil {
 					// Review error: log event but leave bead closed (don't block on reviewer failures).
@@ -427,7 +434,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 							CreatedAt: now().UTC(),
 						})
 					case VerdictRequestChanges:
-						// Needs fixes: reopen with review findings in notes.
+						// Needs fixes: record the review verdict, then reopen
+						// with findings in notes. The review event must land
+						// even on non-approve paths so review-outcomes can
+						// attribute the rejection to the originating tier.
+						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+							Kind:      "review",
+							Summary:   "REQUEST_CHANGES",
+							Body:      reviewRes.RawOutput,
+							Actor:     assignee,
+							Source:    "ddx agent execute-loop",
+							CreatedAt: now().UTC(),
+						})
 						if reopenErr := w.Store.Reopen(candidate.ID, "review: REQUEST_CHANGES", reviewRes.RawOutput); reopenErr != nil {
 							return result, reopenErr
 						}
@@ -435,7 +453,16 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 						report.Detail = "post-merge review: REQUEST_CHANGES"
 						reviewApproved = false
 					case VerdictBlock:
-						// Cannot proceed: reopen and flag for human with BLOCK marker.
+						// Cannot proceed: record the verdict, then reopen and
+						// flag for human with BLOCK marker.
+						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+							Kind:      "review",
+							Summary:   "BLOCK",
+							Body:      reviewRes.RawOutput,
+							Actor:     assignee,
+							Source:    "ddx agent execute-loop",
+							CreatedAt: now().UTC(),
+						})
 						blockNotes := "REVIEW:BLOCK\n\n" + reviewRes.RawOutput
 						if reopenErr := w.Store.Reopen(candidate.ID, "review: BLOCK", blockNotes); reopenErr != nil {
 							return result, reopenErr
@@ -576,6 +603,43 @@ func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}) (bead.B
 		return candidate, true, nil
 	}
 	return bead.Bead{}, false, nil
+}
+
+// appendLoopRoutingEvidence records a kind:routing evidence event on the bead
+// from the executor's ExecuteBeadReport, so that review-outcomes analytics can
+// attribute a subsequent review verdict to the originating provider/model tier.
+// Best-effort: errors and missing-provider cases are silently ignored.
+func appendLoopRoutingEvidence(store ExecuteBeadLoopStore, beadID string, report ExecuteBeadReport, createdAt time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	provider := report.Provider
+	if provider == "" {
+		provider = report.Harness
+	}
+	if provider == "" {
+		return
+	}
+	body, err := json.Marshal(map[string]any{
+		"resolved_provider": provider,
+		"resolved_model":    report.Model,
+		"fallback_chain":    []string{},
+	})
+	if err != nil {
+		return
+	}
+	summary := "provider=" + provider
+	if report.Model != "" {
+		summary += " model=" + report.Model
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "routing",
+		Summary:   summary,
+		Body:      string(body),
+		Actor:     "ddx",
+		Source:    "ddx agent execute-loop",
+		CreatedAt: createdAt,
+	})
 }
 
 func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time.Time) bead.BeadEvent {
