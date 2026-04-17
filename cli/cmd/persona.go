@@ -27,6 +27,39 @@ type PersonaInfo struct {
 	FilePath    string
 }
 
+// deprecatedPersonas lists personas from the pre-consolidation roster
+// (pre-FEAT-011 Phase 3) that are scheduled for removal after one
+// release window. The value is the surviving replacement persona name,
+// or empty string for personas that have no direct replacement (dropped).
+// Deprecation warnings are emitted to stderr so they don't poison piped
+// stdout output; deprecated personas remain fully functional during the
+// window — the warning is a migration nudge, not a block.
+var deprecatedPersonas = map[string]string{
+	"strict-code-reviewer":       "code-reviewer",
+	"test-engineer-tdd":          "test-engineer",
+	"architect-systems":          "architect",
+	"pragmatic-implementer":      "implementer",
+	"reliability-guardian":       "",
+	"simplicity-architect":       "",
+	"data-driven-optimizer":      "",
+	"product-discovery-analyst":  "",
+	"product-manager-minimalist": "",
+}
+
+// deprecationNoticeFor returns a human-readable warning string (without
+// a newline) for a deprecated persona, or empty if the name is current.
+// Callers write it to stderr themselves so the caller controls framing.
+func deprecationNoticeFor(name string) string {
+	replacement, deprecated := deprecatedPersonas[name]
+	if !deprecated {
+		return ""
+	}
+	if replacement != "" {
+		return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release; use %q instead", name, replacement)
+	}
+	return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release with no direct replacement; see library/personas/README.md for the current 5-persona roster", name)
+}
+
 // PersonaMetadata represents parsed persona frontmatter
 type PersonaMetadata struct {
 	Name        string   `yaml:"name"`
@@ -164,15 +197,30 @@ func displayPersonaList(cmd *cobra.Command, personas []PersonaInfo) error {
 	_, _ = fmt.Fprintln(w, "PERSONA\tROLE\tDESCRIPTION")
 	_, _ = fmt.Fprintln(w, "-------\t----\t-----------")
 
+	var deprecatedSeen []string
 	for _, persona := range personas {
 		roleStr := "general"
 		if len(persona.Roles) > 0 {
 			roleStr = persona.Roles[0]
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", persona.Name, roleStr, persona.Description)
+		displayName := persona.Name
+		if _, deprecated := deprecatedPersonas[persona.Name]; deprecated {
+			displayName = persona.Name + " (deprecated)"
+			deprecatedSeen = append(deprecatedSeen, persona.Name)
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", displayName, roleStr, persona.Description)
 	}
 
 	_ = w.Flush()
+
+	// Emit a single aggregated deprecation notice on stderr so piped stdout
+	// stays clean. Individual notices go to stderr only when show/bind
+	// targets one deprecated persona directly.
+	for _, name := range deprecatedSeen {
+		if notice := deprecationNoticeFor(name); notice != "" {
+			_, _ = fmt.Fprintln(os.Stderr, notice)
+		}
+	}
 	return nil
 }
 
@@ -180,6 +228,12 @@ func displayPersonaList(cmd *cobra.Command, personas []PersonaInfo) error {
 func displayPersona(cmd *cobra.Command, persona *PersonaInfo) error {
 	if persona == nil {
 		return fmt.Errorf("persona not found")
+	}
+
+	// Emit the deprecation notice to stderr before the persona body so the
+	// warning is visible even when the caller pipes stdout elsewhere.
+	if notice := deprecationNoticeFor(persona.Name); notice != "" {
+		_, _ = fmt.Fprintln(os.Stderr, notice)
 	}
 
 	// Parse metadata from content
@@ -427,6 +481,13 @@ func personaBind(workingDir string, role, personaName string) error {
 	personaPath := filepath.Join(libPath, "personas", personaName+".md")
 	if _, err := os.Stat(personaPath); os.IsNotExist(err) {
 		return fmt.Errorf("persona '%s' not found at path %s", personaName, personaPath)
+	}
+
+	// Emit a stderr deprecation warning when binding a role to a deprecated
+	// persona. Non-fatal — users migrate on their own timeline during the
+	// deprecation window.
+	if notice := deprecationNoticeFor(personaName); notice != "" {
+		_, _ = fmt.Fprintln(os.Stderr, notice)
 	}
 
 	// Load only the local config file to preserve structure
