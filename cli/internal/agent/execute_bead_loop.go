@@ -37,6 +37,12 @@ type ExecuteBeadReport struct {
 	Tier string `json:"tier,omitempty"`
 	// ProbeResult is a brief summary of the provider health probe at attempt time.
 	ProbeResult string `json:"probe_result,omitempty"`
+	// CostUSD is the dollar cost of this attempt as reported by the harness.
+	// Tier-escalating executors propagate this so the escalation trace can
+	// compute wasted/effective spend.
+	CostUSD float64 `json:"cost_usd,omitempty"`
+	// DurationMS is the wall-clock duration of this attempt.
+	DurationMS int64 `json:"duration_ms,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {

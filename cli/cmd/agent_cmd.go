@@ -1481,6 +1481,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			ResultRev:          res.ResultRev,
 			PreserveRef:        res.PreserveRef,
 			NoChangesRationale: res.NoChangesRationale,
+			CostUSD:            res.CostUSD,
+			DurationMS:         int64(res.DurationMS),
 		}, nil
 	}
 
@@ -1526,6 +1528,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			assignee := resolveClaimAssignee()
 			runner := f.agentRunner()
 			var lastReport agent.ExecuteBeadReport
+			var escalationAttempts []agent.TierAttemptRecord
 
 			for _, tier := range tiers {
 				// Build a route request for this tier using the tier name as profile.
@@ -1559,6 +1562,10 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 						Source:    "ddx agent execute-loop",
 						CreatedAt: time.Now().UTC(),
 					})
+					escalationAttempts = append(escalationAttempts, agent.TierAttemptRecord{
+						Tier:   string(tier),
+						Status: "skipped",
+					})
 					continue
 				}
 
@@ -1577,6 +1584,14 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					report.ProbeResult = probeResult
 				}
 				lastReport = report
+				escalationAttempts = append(escalationAttempts, agent.TierAttemptRecord{
+					Tier:       string(tier),
+					Harness:    report.Harness,
+					Model:      report.Model,
+					Status:     report.Status,
+					CostUSD:    report.CostUSD,
+					DurationMS: report.DurationMS,
+				})
 
 				// Record a per-tier attempt event so the escalation trail is visible.
 				_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
@@ -1589,10 +1604,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				})
 
 				if report.Status == agent.ExecuteBeadStatusSuccess {
+					_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, string(tier), time.Now().UTC())
 					return report, nil
 				}
 				if !agent.ShouldEscalate(report.Status) {
 					// Structural failure — escalation cannot help.
+					_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
 					return report, nil
 				}
 
@@ -1602,6 +1619,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					agent.GlobalProviderHealth.Mark(best.Harness, time.Now().Add(agent.ProviderCooldownDuration))
 				}
 			}
+
+			_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
 
 			if lastReport.BeadID == "" {
 				return agent.ExecuteBeadReport{

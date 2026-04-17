@@ -342,6 +342,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				ResultRev:          res.ResultRev,
 				PreserveRef:        res.PreserveRef,
 				NoChangesRationale: res.NoChangesRationale,
+				CostUSD:            res.CostUSD,
+				DurationMS:         int64(res.DurationMS),
 			}, nil
 		}
 
@@ -366,6 +368,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 			runner := m.buildAgentRunner(projectRoot)
 			var lastReport agent.ExecuteBeadReport
+			var escalationAttempts []agent.TierAttemptRecord
 
 			for _, tier := range tiers {
 				routingCfg := runner.Config
@@ -396,6 +399,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 						Source:    "ddx agent execute-loop",
 						CreatedAt: time.Now().UTC(),
 					})
+					escalationAttempts = append(escalationAttempts, agent.TierAttemptRecord{
+						Tier:   string(tier),
+						Status: "skipped",
+					})
 					continue
 				}
 
@@ -414,6 +421,14 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 					report.ProbeResult = probeResult
 				}
 				lastReport = report
+				escalationAttempts = append(escalationAttempts, agent.TierAttemptRecord{
+					Tier:       string(tier),
+					Harness:    report.Harness,
+					Model:      report.Model,
+					Status:     report.Status,
+					CostUSD:    report.CostUSD,
+					DurationMS: report.DurationMS,
+				})
 
 				_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
 					Kind:      "tier-attempt",
@@ -425,15 +440,19 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				})
 
 				if report.Status == agent.ExecuteBeadStatusSuccess {
+					_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, string(tier), time.Now().UTC())
 					return report, nil
 				}
 				if !agent.ShouldEscalate(report.Status) {
+					_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
 					return report, nil
 				}
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
 					agent.GlobalProviderHealth.Mark(best.Harness, time.Now().Add(agent.ProviderCooldownDuration))
 				}
 			}
+
+			_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
 
 			if lastReport.BeadID == "" {
 				return agent.ExecuteBeadReport{

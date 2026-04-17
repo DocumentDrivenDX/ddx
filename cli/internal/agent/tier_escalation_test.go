@@ -8,9 +8,104 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// --- EscalationSummary ---
+
+// recordingAppender captures events appended by AppendEscalationSummaryEvent
+// so tests can assert on the kind, summary, and JSON body.
+type recordingAppender struct {
+	events []struct {
+		id    string
+		event bead.BeadEvent
+	}
+}
+
+func (r *recordingAppender) AppendEvent(id string, event bead.BeadEvent) error {
+	r.events = append(r.events, struct {
+		id    string
+		event bead.BeadEvent
+	}{id: id, event: event})
+	return nil
+}
+
+// TestEscalationSummary exercises the 3-tier escalation scenario from the
+// bead: cheap fails, standard fails, smart succeeds. The emitted
+// kind:escalation-summary event body must contain all three tier records
+// with correct statuses, costs, and a winning_tier/wasted_cost_usd roll-up.
+func TestEscalationSummary(t *testing.T) {
+	attempts := []TierAttemptRecord{
+		{Tier: "cheap", Harness: "agent", Model: "cheap-model", Status: ExecuteBeadStatusExecutionFailed, CostUSD: 0.02, DurationMS: 1200},
+		{Tier: "standard", Harness: "codex", Model: "standard-model", Status: ExecuteBeadStatusNoChanges, CostUSD: 0.15, DurationMS: 3400},
+		{Tier: "smart", Harness: "claude", Model: "smart-model", Status: ExecuteBeadStatusSuccess, CostUSD: 0.80, DurationMS: 9000},
+	}
+
+	summary := BuildEscalationSummary(attempts, "smart")
+	require.Equal(t, "smart", summary.WinningTier)
+	require.Len(t, summary.TiersAttempted, 3)
+	assert.InDelta(t, 0.97, summary.TotalCostUSD, 1e-9)
+	assert.InDelta(t, 0.17, summary.WastedCostUSD, 1e-9, "cheap (0.02) + standard (0.15) wasted, smart succeeded")
+	assert.Equal(t, "cheap", summary.TiersAttempted[0].Tier)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, summary.TiersAttempted[0].Status)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, summary.TiersAttempted[1].Status)
+	assert.Equal(t, ExecuteBeadStatusSuccess, summary.TiersAttempted[2].Status)
+
+	// Now wire through AppendEscalationSummaryEvent and verify the emitted
+	// event has kind:escalation-summary, a summary line, and a JSON body
+	// that round-trips to the same EscalationSummary.
+	appender := &recordingAppender{}
+	err := AppendEscalationSummaryEvent(appender, "ddx-test-1", "test-actor", attempts, "smart", time.Unix(1, 0).UTC())
+	require.NoError(t, err)
+	require.Len(t, appender.events, 1)
+
+	ev := appender.events[0]
+	assert.Equal(t, "ddx-test-1", ev.id)
+	assert.Equal(t, "escalation-summary", ev.event.Kind)
+	assert.Equal(t, "test-actor", ev.event.Actor)
+	assert.Contains(t, ev.event.Summary, "winning_tier=smart")
+	assert.Contains(t, ev.event.Summary, "attempts=3")
+
+	var decoded EscalationSummary
+	require.NoError(t, json.Unmarshal([]byte(ev.event.Body), &decoded))
+	assert.Equal(t, "smart", decoded.WinningTier)
+	require.Len(t, decoded.TiersAttempted, 3)
+	assert.Equal(t, "cheap", decoded.TiersAttempted[0].Tier)
+	assert.Equal(t, "agent", decoded.TiersAttempted[0].Harness)
+	assert.Equal(t, "cheap-model", decoded.TiersAttempted[0].Model)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, decoded.TiersAttempted[0].Status)
+	assert.InDelta(t, 0.02, decoded.TiersAttempted[0].CostUSD, 1e-9)
+	assert.Equal(t, int64(1200), decoded.TiersAttempted[0].DurationMS)
+	assert.InDelta(t, 0.97, decoded.TotalCostUSD, 1e-9)
+	assert.InDelta(t, 0.17, decoded.WastedCostUSD, 1e-9)
+}
+
+// TestEscalationSummaryExhausted verifies the exhausted case (no tier
+// succeeded): winning_tier is "exhausted" and all costs are wasted.
+func TestEscalationSummaryExhausted(t *testing.T) {
+	attempts := []TierAttemptRecord{
+		{Tier: "cheap", Harness: "agent", Model: "c", Status: ExecuteBeadStatusExecutionFailed, CostUSD: 0.01, DurationMS: 900},
+		{Tier: "smart", Harness: "claude", Model: "s", Status: ExecuteBeadStatusExecutionFailed, CostUSD: 0.50, DurationMS: 7000},
+	}
+	summary := BuildEscalationSummary(attempts, "")
+	assert.Equal(t, EscalationWinningExhausted, summary.WinningTier)
+	assert.InDelta(t, 0.51, summary.TotalCostUSD, 1e-9)
+	assert.InDelta(t, 0.51, summary.WastedCostUSD, 1e-9, "every attempt wasted when no tier succeeded")
+}
+
+// TestEscalationSummaryBuildSourceSliceIndependent verifies the attempts
+// slice in the returned summary is independent of the caller's slice —
+// mutating the caller's slice must not change the summary.
+func TestEscalationSummaryBuildSourceSliceIndependent(t *testing.T) {
+	attempts := []TierAttemptRecord{
+		{Tier: "cheap", Status: ExecuteBeadStatusSuccess, CostUSD: 0.05},
+	}
+	summary := BuildEscalationSummary(attempts, "cheap")
+	attempts[0].Tier = "mutated"
+	assert.Equal(t, "cheap", summary.TiersAttempted[0].Tier, "summary must hold an independent copy of attempts")
+}
 
 // --- TiersInRange ---
 
