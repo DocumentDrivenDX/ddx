@@ -74,11 +74,18 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 
 // performUpdate upgrades the DDx binary if a new release is available, then
 // checks GitHub for the latest version of each installed plugin and updates
-// any that are outdated (or all if --force).
+// any that are outdated (or all if --force). Always refreshes the embedded
+// `ddx` skill and the AGENTS.md block so projects that ran `ddx init` under
+// an older DDx version pick up current skill content without re-running init.
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
+	// Refresh the shipped `ddx` skill copy + AGENTS.md block first, regardless
+	// of whether any plugins are installed. This is what lets older projects
+	// pick up new SKILL.md / reference/*.md content without re-init.
+	refreshShippedSkills(workingDir)
+
 	state, err := registry.LoadState()
 	if err != nil || len(state.Installed) == 0 {
-		return &UpdateResult{Success: true, Message: "No packages installed."}, nil
+		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. No packages installed."}, nil
 	}
 
 	reg := registry.BuiltinRegistry()
@@ -122,7 +129,7 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 	}
 
 	if len(updated) == 0 {
-		return &UpdateResult{Success: true, Message: "All packages are up to date."}, nil
+		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. All packages are up to date."}, nil
 	}
 
 	return &UpdateResult{
@@ -130,6 +137,17 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		Message:      "Updated: " + strings.Join(updated, ", "),
 		UpdatedFiles: updated,
 	}, nil
+}
+
+// refreshShippedSkills re-copies the embedded `ddx` skill into the project's
+// skill directories and refreshes the AGENTS.md DDx block. Safe to call on
+// every `ddx update` because registerProjectSkills with force=true handles
+// the "existing files should be updated" case, and generateAgentsMD's
+// marker-based merge is idempotent. Stale pre-consolidation skill dirs
+// (ddx-bead, ddx-run, etc.) are swept by the cleanup logic shared with init.
+func refreshShippedSkills(workingDir string) {
+	registerProjectSkills(workingDir, true)
+	generateAgentsMD(workingDir)
 }
 
 // Helper functions for working directory-based operations

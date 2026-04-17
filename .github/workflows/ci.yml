@@ -68,6 +68,9 @@ jobs:
     - name: Validate skill metadata
       run: make skill-schema
 
+    - name: Validate ddx skill (agentskills.io conformance)
+      run: scripts/eval-skill.sh --validate
+
     - name: Run CI validation
       run: lefthook run ci
       env:

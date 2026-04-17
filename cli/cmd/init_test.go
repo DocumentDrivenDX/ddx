@@ -12,24 +12,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestInitRegistersSkills verifies that ddx init copies bootstrap skills to project-local directories.
+// TestInitRegistersSkills verifies that ddx init copies the single `ddx` skill
+// (SKILL.md + reference/*.md) to project-local directories as real files.
 func TestInitRegistersSkills(t *testing.T) {
 	te := NewTestEnvironment(t, WithGitInit(false))
 	_, err := te.RunCommand("init", "--no-git")
 	require.NoError(t, err)
 
-	// Bootstrap skills should be copied as real files to all three project directories
-	bootstrapSkills := []string{"ddx-doctor", "ddx-run"}
 	targetDirs := []string{
 		filepath.Join(te.Dir, ".ddx", "skills"),
 		filepath.Join(te.Dir, ".agents", "skills"),
 		filepath.Join(te.Dir, ".claude", "skills"),
 	}
 
+	// The single shipped skill is `ddx/`
 	for _, dir := range targetDirs {
-		for _, name := range bootstrapSkills {
-			skillFile := filepath.Join(dir, name, "SKILL.md")
-			assert.FileExists(t, skillFile, "skill file should exist at %s", skillFile)
+		skillFile := filepath.Join(dir, "ddx", "SKILL.md")
+		assert.FileExists(t, skillFile, "ddx SKILL.md should exist at %s", skillFile)
+
+		// Reference files should also be copied
+		for _, ref := range []string{"beads.md", "work.md", "review.md", "agents.md", "status.md"} {
+			refFile := filepath.Join(dir, "ddx", "reference", ref)
+			assert.FileExists(t, refFile, "ddx reference/%s should exist at %s", ref, refFile)
 		}
 	}
 }
@@ -81,48 +85,56 @@ func TestCleanupBootstrapSkills_SkipsDirsWithoutSKILLMD(t *testing.T) {
 	assert.DirExists(t, noSkillDir, "ddx-* dir without SKILL.md should not be removed")
 }
 
-// TestRegisterProjectSkills_CleansUpStaleBootstrapSkills verifies stale bootstrap skills
-// are removed when registerProjectSkills is called with an updated bootstrap list.
+// TestRegisterProjectSkills_CleansUpStaleBootstrapSkills verifies stale ddx-*
+// skills from prior DDx versions (pre-consolidation: ddx-bead, ddx-run, etc.)
+// are removed when registerProjectSkills runs, leaving only the single `ddx`
+// skill from the current shipped set.
 func TestRegisterProjectSkills_CleansUpStaleBootstrapSkills(t *testing.T) {
 	workingDir := t.TempDir()
 
-	// Manually plant a stale bootstrap skill in all three target directories
+	// Manually plant stale pre-consolidation skills in all three target dirs
+	stalePreConsolidationSkills := []string{"ddx-bead", "ddx-run", "ddx-agent", "ddx-review", "ddx-status", "ddx-doctor", "ddx-install", "ddx-release"}
 	targetDirs := []string{
 		filepath.Join(workingDir, ".ddx", "skills"),
 		filepath.Join(workingDir, ".agents", "skills"),
 		filepath.Join(workingDir, ".claude", "skills"),
 	}
 	for _, dir := range targetDirs {
-		staleDir := filepath.Join(dir, "ddx-stale-old")
-		require.NoError(t, os.MkdirAll(staleDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(staleDir, "SKILL.md"), []byte("# Old"), 0o644))
+		for _, stale := range stalePreConsolidationSkills {
+			staleDir := filepath.Join(dir, stale)
+			require.NoError(t, os.MkdirAll(staleDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(staleDir, "SKILL.md"), []byte("# Stale"), 0o644))
+		}
 	}
 
-	// registerProjectSkills uses the current bootstrap list which does not include ddx-stale-old
+	// registerProjectSkills ships only the `ddx` skill
 	registerProjectSkills(workingDir, false)
 
-	// Stale skill must be cleaned up in every target directory
+	// All stale pre-consolidation skills must be cleaned up
 	for _, dir := range targetDirs {
-		staleDir := filepath.Join(dir, "ddx-stale-old")
-		_, err := os.Stat(staleDir)
-		assert.True(t, os.IsNotExist(err), "stale skill ddx-stale-old should be removed from %s", dir)
+		for _, stale := range stalePreConsolidationSkills {
+			staleDir := filepath.Join(dir, stale)
+			_, err := os.Stat(staleDir)
+			assert.True(t, os.IsNotExist(err), "stale skill %s should be removed from %s", stale, dir)
+		}
 	}
 
-	// Current bootstrap skills must be present in every target directory
+	// The current shipped skill must be present
 	for _, dir := range targetDirs {
-		for _, skill := range []string{"ddx-doctor", "ddx-run"} {
-			skillFile := filepath.Join(dir, skill, "SKILL.md")
-			assert.FileExists(t, skillFile, "bootstrap skill %s should exist in %s", skill, dir)
-		}
+		skillFile := filepath.Join(dir, "ddx", "SKILL.md")
+		assert.FileExists(t, skillFile, "ddx SKILL.md should exist in %s", skillFile)
 	}
 }
 
-// TestInitSkillsNoOverwrite verifies that existing skill files are not overwritten.
+// TestInitSkillsNoOverwrite verifies that existing `ddx` skill files are not
+// overwritten during non-force init (user may have customized them).
+// Note: pre-consolidation dirs like ddx-doctor/ are swept by cleanup and do
+// NOT get this preservation behavior — only the current `ddx` layout does.
 func TestInitSkillsNoOverwrite(t *testing.T) {
 	te := NewTestEnvironment(t, WithGitInit(false))
 
-	// Pre-create a skill file with custom content
-	skillDir := filepath.Join(te.Dir, ".agents", "skills", "ddx-doctor")
+	// Pre-create a SKILL.md for the current `ddx` layout with custom content
+	skillDir := filepath.Join(te.Dir, ".agents", "skills", "ddx")
 	require.NoError(t, os.MkdirAll(skillDir, 0755))
 	existingContent := "# custom content"
 	skillFile := filepath.Join(skillDir, "SKILL.md")
@@ -135,6 +147,103 @@ func TestInitSkillsNoOverwrite(t *testing.T) {
 	data, err := os.ReadFile(skillFile)
 	require.NoError(t, err)
 	assert.Equal(t, existingContent, string(data), "existing skill file should not be overwritten")
+}
+
+// TestGenerateAgentsMD_MergesWithMarkers verifies AGENTS.md injection preserves
+// user content outside the DDx markers and updates content between them.
+func TestGenerateAgentsMD_MergesWithMarkers(t *testing.T) {
+	workingDir := t.TempDir()
+	agentsPath := filepath.Join(workingDir, "AGENTS.md")
+
+	// Pre-seed AGENTS.md with user content both before and after the DDx block
+	userBefore := "# My Project\n\nUser content before the DDx block.\n\n"
+	oldDdxBlock := agentsMarkerStart + "\nold ddx content\n" + agentsMarkerEnd + "\n"
+	userAfter := "\n## More User Content\n\nUser content after the DDx block.\n"
+	require.NoError(t, os.WriteFile(agentsPath, []byte(userBefore+oldDdxBlock+userAfter), 0644))
+
+	generateAgentsMD(workingDir)
+
+	data, err := os.ReadFile(agentsPath)
+	require.NoError(t, err)
+	content := string(data)
+
+	// User content outside markers must survive
+	assert.Contains(t, content, "User content before the DDx block.", "pre-block user content lost")
+	assert.Contains(t, content, "User content after the DDx block.", "post-block user content lost")
+	// New DDx block content must be present
+	assert.Contains(t, content, "This project uses [DDx]", "new DDx block content not injected")
+	// Block markers must still exist (exactly one pair)
+	assert.Equal(t, 1, countOccurrences(content, agentsMarkerStart), "should have exactly one start marker")
+	assert.Equal(t, 1, countOccurrences(content, agentsMarkerEnd), "should have exactly one end marker")
+
+	// Running generateAgentsMD again must not duplicate the block
+	generateAgentsMD(workingDir)
+	data2, err := os.ReadFile(agentsPath)
+	require.NoError(t, err)
+	content2 := string(data2)
+	assert.Equal(t, 1, countOccurrences(content2, agentsMarkerStart), "re-run duplicated start marker")
+	assert.Equal(t, 1, countOccurrences(content2, agentsMarkerEnd), "re-run duplicated end marker")
+}
+
+// TestGenerateAgentsMD_CreatesWhenMissing verifies AGENTS.md is created if absent.
+func TestGenerateAgentsMD_CreatesWhenMissing(t *testing.T) {
+	workingDir := t.TempDir()
+	agentsPath := filepath.Join(workingDir, "AGENTS.md")
+
+	generateAgentsMD(workingDir)
+
+	data, err := os.ReadFile(agentsPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, agentsMarkerStart, "start marker missing")
+	assert.Contains(t, content, agentsMarkerEnd, "end marker missing")
+	assert.Contains(t, content, "This project uses [DDx]", "DDx content missing")
+}
+
+// TestGenerateAgentsMD_AppendsWhenMarkersAbsent verifies the block is appended
+// when AGENTS.md exists but has no markers (user had AGENTS.md from another tool).
+func TestGenerateAgentsMD_AppendsWhenMarkersAbsent(t *testing.T) {
+	workingDir := t.TempDir()
+	agentsPath := filepath.Join(workingDir, "AGENTS.md")
+
+	userContent := "# My Project\n\nExisting AGENTS.md from another tool.\n"
+	require.NoError(t, os.WriteFile(agentsPath, []byte(userContent), 0644))
+
+	generateAgentsMD(workingDir)
+
+	data, err := os.ReadFile(agentsPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "Existing AGENTS.md from another tool.", "existing content lost")
+	assert.Contains(t, content, agentsMarkerStart, "start marker missing after append")
+	assert.Contains(t, content, agentsMarkerEnd, "end marker missing after append")
+}
+
+// countOccurrences is a small test helper; we avoid strings.Count import noise here.
+func countOccurrences(s, sub string) int {
+	count := 0
+	start := 0
+	for {
+		idx := indexFrom(s, sub, start)
+		if idx == -1 {
+			return count
+		}
+		count++
+		start = idx + len(sub)
+	}
+}
+
+func indexFrom(s, sub string, start int) int {
+	if start > len(s) {
+		return -1
+	}
+	rest := s[start:]
+	for i := 0; i+len(sub) <= len(rest); i++ {
+		if rest[i:i+len(sub)] == sub {
+			return start + i
+		}
+	}
+	return -1
 }
 
 // TestInitCommand tests the init command

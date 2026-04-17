@@ -467,15 +467,16 @@ func cleanupBootstrapSkills(targetDir string, keep []string) {
 	}
 }
 
-// registerProjectSkills copies embedded bootstrap skills to project directories.
-// Skills are copied as real files (not symlinks) so they're tracked by git.
+// registerProjectSkills copies the embedded `ddx` skill tree to project
+// directories as real files (not symlinks) so they are tracked by git and
+// survive clone on a fresh machine. Any stale ddx-prefixed skill directories
+// from prior DDx versions are removed so harnesses don't see drifted skills.
 // Copies to: .ddx/skills/, .agents/skills/, .claude/skills/
 // When force is true, overwrites existing files (for ddx init --force).
 func registerProjectSkills(workingDir string, force bool) {
-	// Bootstrap skill names that should be copied (these work without ddx binary)
-	bootstrapSkills := []string{"ddx-doctor", "ddx-run"}
+	// The sole ship-with skill (post-consolidation per FEAT-011).
+	shippedSkills := []string{"ddx"}
 
-	// All target directories that receive copies of bootstrap skills
 	targetDirs := []string{
 		filepath.Join(workingDir, ".ddx", "skills"),
 		filepath.Join(workingDir, ".agents", "skills"),
@@ -484,9 +485,9 @@ func registerProjectSkills(workingDir string, force bool) {
 
 	for _, targetDir := range targetDirs {
 		_ = os.MkdirAll(targetDir, 0755)
-		cleanupBootstrapSkills(targetDir, bootstrapSkills)
+		cleanupBootstrapSkills(targetDir, shippedSkills)
 
-		for _, skillName := range bootstrapSkills {
+		for _, skillName := range shippedSkills {
 			_ = os.MkdirAll(filepath.Join(targetDir, skillName), 0755)
 
 			err := fs.WalkDir(skills.SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
@@ -822,19 +823,29 @@ func gitEnvForDir() []string {
 	return filtered
 }
 
-// generateAgentsMD creates AGENTS.md with guidance for AI agents working in
-// this repo. The file tells agents which paths to commit and which DDx
-// conventions to follow. Skipped if AGENTS.md already exists.
-func generateAgentsMD(workingDir string) {
-	agentsPath := filepath.Join(workingDir, "AGENTS.md")
-	if _, err := os.Stat(agentsPath); err == nil {
-		return // already exists
-	}
+// AGENTS.md marker-delimited injection. Codex and other harnesses read
+// AGENTS.md as primary guidance before work; users (and other tools) may
+// add content of their own. We own only the content between markers —
+// everything outside is preserved across re-runs of ddx init / ddx update.
+const (
+	agentsMarkerStart = "<!-- DDX-AGENTS:START -->"
+	agentsMarkerEnd   = "<!-- DDX-AGENTS:END -->"
+)
 
-	content := `# AGENTS.md
+// ddxAgentsBlock returns the DDx-owned block that gets injected between
+// markers. Harness-neutral — says "the `ddx` skill", not "/ddx" (which
+// would only mean something to Claude Code).
+func ddxAgentsBlock() string {
+	return agentsMarkerStart + `
+<!-- Managed by ddx init / ddx update. Edit outside these markers. -->
+
+# DDx
 
 This project uses [DDx](https://github.com/DocumentDrivenDX/ddx) for
-document-driven development.
+document-driven development. Use the ` + "`" + `ddx` + "`" + ` skill for beads, work,
+review, agents, and status — every skills-compatible harness (Claude
+Code, OpenAI Codex, Gemini CLI, etc.) discovers it from
+` + "`" + `.claude/skills/ddx/` + "`" + ` and ` + "`" + `.agents/skills/ddx/` + "`" + `.
 
 ## Files to commit
 
@@ -842,16 +853,16 @@ After modifying any of these paths, stage and commit them:
 
 - ` + "`" + `.ddx/beads.jsonl` + "`" + ` — work item tracker
 - ` + "`" + `.ddx/config.yaml` + "`" + ` — project configuration
-- ` + "`" + `.agents/skills/` + "`" + ` — agent skill symlinks
-- ` + "`" + `.claude/skills/` + "`" + ` — Claude skill symlinks
+- ` + "`" + `.agents/skills/ddx/` + "`" + ` — the ddx skill (shipped by ddx init)
+- ` + "`" + `.claude/skills/ddx/` + "`" + ` — same skill, Claude Code location
 - ` + "`" + `docs/` + "`" + ` — project documentation and artifacts
 
 ## Conventions
 
-- Use ` + "`" + `ddx bead` + "`" + ` for work tracking (not custom issue files)
-- Documents with ` + "`" + `ddx:` + "`" + ` frontmatter are tracked in the document graph
-- Run ` + "`" + `ddx doctor` + "`" + ` to check project health
-- Run ` + "`" + `ddx doc stale` + "`" + ` to find documents needing review
+- Use ` + "`" + `ddx bead` + "`" + ` for work tracking (not custom issue files).
+- Documents with ` + "`" + `ddx:` + "`" + ` frontmatter are tracked in the document graph.
+- Run ` + "`" + `ddx doctor` + "`" + ` to check environment health.
+- Run ` + "`" + `ddx doc stale` + "`" + ` to find documents needing review.
 
 ## Merge Policy
 
@@ -873,8 +884,51 @@ Forbidden on execute-bead branches: ` + "`" + `gh pr merge --squash` + "`" + `,
 ` + "`" + `gh pr merge --rebase` + "`" + `, ` + "`" + `git rebase -i` + "`" + ` with fixup/squash/drop,
 ` + "`" + `git filter-branch` + "`" + `, ` + "`" + `git filter-repo` + "`" + `, and ` + "`" + `git commit --amend` + "`" + ` on
 any commit already in the trail.
-`
-	_ = os.WriteFile(agentsPath, []byte(content), 0644)
+` + agentsMarkerEnd + "\n"
+}
+
+// generateAgentsMD injects (or refreshes) the DDx-owned block in AGENTS.md.
+// If AGENTS.md does not exist, it is created containing only the block.
+// If AGENTS.md exists with markers, the content between markers is replaced
+// and everything outside is preserved. If AGENTS.md exists without markers,
+// the block is appended to the end.
+func generateAgentsMD(workingDir string) {
+	agentsPath := filepath.Join(workingDir, "AGENTS.md")
+	block := ddxAgentsBlock()
+
+	existing, err := os.ReadFile(agentsPath)
+	if err != nil {
+		// File doesn't exist — create with just the block.
+		_ = os.WriteFile(agentsPath, []byte(block), 0644)
+		return
+	}
+
+	content := string(existing)
+	startIdx := strings.Index(content, agentsMarkerStart)
+	endIdx := strings.Index(content, agentsMarkerEnd)
+
+	if startIdx == -1 || endIdx == -1 || endIdx < startIdx {
+		// Markers not present (or malformed). Append block to end.
+		separator := ""
+		if !strings.HasSuffix(content, "\n") {
+			separator = "\n"
+		}
+		if !strings.HasSuffix(content, "\n\n") {
+			separator += "\n"
+		}
+		updated := content + separator + block
+		_ = os.WriteFile(agentsPath, []byte(updated), 0644)
+		return
+	}
+
+	// Markers present — replace the block between them.
+	endOfEndMarker := endIdx + len(agentsMarkerEnd)
+	// Include trailing newline after the end marker if present.
+	if endOfEndMarker < len(content) && content[endOfEndMarker] == '\n' {
+		endOfEndMarker++
+	}
+	updated := content[:startIdx] + block + content[endOfEndMarker:]
+	_ = os.WriteFile(agentsPath, []byte(updated), 0644)
 }
 
 // injectInitialMetaPrompt injects the configured meta-prompt into CLAUDE.md

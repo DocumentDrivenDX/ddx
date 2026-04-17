@@ -218,3 +218,9 @@ help:
 	@echo "  COMMIT      - Commit hash (default: git rev-parse)"
 	@echo "  DATE        - Build date (default: current UTC time)"
 	@echo "  ARGS        - Arguments to pass to 'run' target"
+
+# Run the ddx skill eval suite (validation + routing checks)
+# Use `make eval-skill` for the full suite, or invoke the script directly
+# with `--validate` for structural conformance only (no harness calls).
+eval-skill: copy-skills
+	@cd .. && scripts/eval-skill.sh
