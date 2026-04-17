@@ -116,8 +116,13 @@ func (r *Runner) ValidateOrphanModel(opts RunOptions) error {
 		return nil
 	}
 	// Check live provider discovery before erroring.
-	if discovery := r.Discovery; discovery != nil {
-		if providers := discovery.ProvidersForModel(opts.Model); len(providers) > 0 {
+	if r.Discovery == nil && r.WorkDir != "" {
+		if disc, err := DiscoverProviderModels(r.WorkDir, 5*time.Second); err == nil {
+			r.Discovery = disc
+		}
+	}
+	if r.Discovery != nil {
+		if providers := r.Discovery.ProvidersForModel(opts.Model); len(providers) > 0 {
 			return nil
 		}
 	}
