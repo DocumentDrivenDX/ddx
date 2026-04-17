@@ -89,6 +89,9 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 40. `ddx installed` — list installed packages
 41. `ddx verify` — check integrity of installed packages
 
+**Queue Work (not started — FEAT-006)**
+48. `ddx work` — top-level alias for `ddx agent execute-loop`. All execute-loop flags pass through unchanged. "Work the queue" becomes `ddx work`. This is the primary operator-facing surface for draining the bead execution queue; `ddx agent execute-loop` remains available for scripts and backward compatibility.
+
 **Embedded Utilities**
 47. `ddx jq <filter> [file...]` — embedded jq processor (powered by gojq), eliminating external jq dependency for HELIX and other workflow tools. Supports standard jq flags: `-r`, `-c`, `-s`, `-n`, `-R`, `-e`, `-j`, `-S`, `--tab`, `--indent`, `--arg`, `--argjson`, `--slurpfile`. Reads from stdin or file arguments. Pure Go, no CGo.
 

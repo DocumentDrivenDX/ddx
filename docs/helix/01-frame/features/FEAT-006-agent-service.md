@@ -426,6 +426,11 @@ canonical agent-driven bead execution workflow. It is an agent workflow mode
 layered on top of the existing harness/session machinery — not a separate
 provenance system.
 
+`ddx work` is the top-level alias for `ddx agent execute-loop` — the primary
+operator-facing surface for draining the bead execution queue. All
+execute-loop flags pass through unchanged. `ddx agent execute-loop` remains
+available for scripts and backward compatibility.
+
 The single-project supervision contract for this workflow is documented in
 `docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md`.
 It keeps readiness validation, queue scanning, and worker lifecycle scoped to

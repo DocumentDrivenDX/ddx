@@ -544,6 +544,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newOutdatedCommand())
 	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
+	rootCmd.AddCommand(f.newWorkCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{

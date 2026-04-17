@@ -165,10 +165,14 @@ The CLI follows a noun-verb command structure for clarity and consistency:
 - `ddx bead dep add/remove/tree` - Dependency DAG management
 - `ddx bead import/export` - JSONL interchange with bd/br
 
+**Queue Work:**
+- `ddx work` - Drain the bead execution queue (alias for `ddx agent execute-loop`; all flags pass through)
+
 **Agent Service:**
 - `ddx agent run --harness=<name> --prompt <file>` - Invoke an AI agent
 - `ddx agent run --quorum=majority --harnesses=a,b` - Multi-agent consensus
 - `ddx agent execute-bead <id> [--from <rev>] [--no-merge]` - Run agent in isolated worktree, merge or preserve result
+- `ddx agent execute-loop` - Drain bead queue (prefer `ddx work`)
 - `ddx agent list` - Show available harnesses
 - `ddx agent doctor` - Harness health check
 - `ddx agent log` - Session history
