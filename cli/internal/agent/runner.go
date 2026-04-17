@@ -173,6 +173,25 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 		return r.RunScript(opts)
 	}
 
+	// HTTP-provider harnesses (lmstudio, openrouter, and any other harness
+	// registered with IsHTTPProvider=true and no Binary) have no CLI binary
+	// to exec. They MUST route through the embedded agent runtime, which
+	// speaks OpenAI-compatible APIs and can be pointed at any provider via
+	// --provider. Without this dispatch, the exec path below would call
+	// ExecuteInDir with harness.Binary="", producing a zero-duration
+	// "exec: no command" error (see ddx-501e87ef: cheap-tier attempts on
+	// lmstudio were burning <1s and escalating straight to smart tier).
+	if harness.IsHTTPProvider && harness.Binary == "" {
+		agentOpts := opts
+		// Surface the harness name as the provider so the embedded runtime
+		// knows which .agent/config.yaml provider block to use. If the caller
+		// already specified --provider, preserve their choice.
+		if agentOpts.Provider == "" {
+			agentOpts.Provider = harnessName
+		}
+		return r.RunAgent(agentOpts)
+	}
+
 	prompt, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err

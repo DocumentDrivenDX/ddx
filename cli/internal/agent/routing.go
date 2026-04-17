@@ -35,6 +35,15 @@ func (r *Runner) BuildCandidatePlans(req RouteRequest, stateOverride map[string]
 		if !ok {
 			continue
 		}
+		// TestOnly harnesses (script, virtual) are sentinels for test infrastructure
+		// and must never be selected by production tier routing. They remain reachable
+		// via explicit --harness <name> override so existing script tests continue to
+		// work. See ddx-869848ec: script leaked into the standard-tier fallback chain
+		// because it registered as IsLocal=true and scored a +25/+40 bonus in
+		// scoreCandidate, with no filter excluding it from profile-based selection.
+		if harness.TestOnly && req.HarnessOverride != name {
+			continue
+		}
 		plan := r.evaluateCandidate(name, harness, req, stateOverride)
 		if rate, ok := successRates[name]; ok {
 			plan.HistoricalSuccessRate = rate

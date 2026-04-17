@@ -857,3 +857,55 @@ func TestHTTPProviderCandidateViableForCheapProfile(t *testing.T) {
 	assert.True(t, lmPlan.Viable, "lmstudio should be viable; got reject: %s", lmPlan.RejectReason)
 	assert.NotEmpty(t, lmPlan.ConcreteModel, "lmstudio should have a resolved model")
 }
+
+// TestAgentRoutingExcludesTestOnlyHarnessesFromTierRouting verifies that
+// TestOnly harnesses (script, virtual) are filtered out of production tier
+// routing — they must never be selected by --profile cheap/standard/smart,
+// even when real harnesses are unavailable. Explicit --harness <name>
+// override remains the only way to reach them. Regression for ddx-869848ec:
+// `script` showed up in a standard-tier fallback chain because it registered
+// as IsLocal=true and scored a +25/+40 bonus in scoreCandidate.
+func TestAgentRoutingExcludesTestOnlyHarnessesFromTierRouting(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	// script and virtual are "healthy" as far as state is concerned —
+	// this mimics the failure scenario (they're always "available" because
+	// they don't need an LLM or network). Real harnesses unavailable.
+	states := map[string]HarnessState{
+		"script":  healthyLocalState(),
+		"virtual": healthyLocalState(),
+	}
+
+	for _, profile := range []string{"cheap", "standard", "smart"} {
+		plans := r.BuildCandidatePlans(RouteRequest{Profile: profile}, states)
+		for _, p := range plans {
+			if p.Harness == "script" || p.Harness == "virtual" {
+				t.Errorf("profile=%s: TestOnly harness %s leaked into candidate list (should have been filtered)", profile, p.Harness)
+			}
+		}
+	}
+}
+
+// TestAgentRoutingAllowsExplicitTestOnlyHarness verifies that an explicit
+// --harness override still reaches TestOnly harnesses (script is heavily
+// used by the integration test suite via `--harness script`). The filter
+// must apply only to profile-based selection, not to explicit overrides.
+func TestAgentRoutingAllowsExplicitTestOnlyHarness(t *testing.T) {
+	r := newTestRunnerForRouting()
+
+	states := map[string]HarnessState{
+		"script":  healthyLocalState(),
+		"virtual": healthyLocalState(),
+	}
+
+	// Request with HarnessOverride=script should surface the script candidate.
+	req := RouteRequest{Profile: "cheap", HarnessOverride: "script"}
+	plans := r.BuildCandidatePlans(req, states)
+	var scriptFound bool
+	for _, p := range plans {
+		if p.Harness == "script" {
+			scriptFound = true
+		}
+	}
+	assert.True(t, scriptFound, "explicit --harness script must surface the script candidate")
+}

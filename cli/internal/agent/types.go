@@ -29,6 +29,7 @@ type Harness struct {
 	TUIQuotaCommand string              // Slash command to send as a prompt when native quota signal is unavailable (e.g. "/usage", "/status"). Invoked with the binary's non-interactive print mode.
 	IsHTTPProvider  bool                // true for API-only providers (openrouter, lmstudio) that have no CLI binary.
 	IsSubscription  bool                // true for fixed-subscription harnesses (codex, claude) — preferred over pay-per-token when within quota.
+	TestOnly        bool                // true for sentinel/test harnesses (script, virtual) that must never be selected by production tier routing. Explicit --harness override still works.
 }
 
 // Config holds agent service configuration.
