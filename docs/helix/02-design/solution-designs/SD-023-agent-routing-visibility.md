@@ -102,6 +102,13 @@ These beads collectively implement the routing visibility epic
 All beads except Visibility 1 are blocked on Visibility 2 (the version bump),
 which in turn is blocked on this design document.
 
+**Note on `--model-ref`**: Visibility 7's title references `--model-ref` as a
+separate flag. Per the updated SD-015 resolution order, `--model` now handles
+both catalog refs and exact model names via the unified pool — the user always
+specifies `--model`. The `--model-ref` flag remains available as an explicit
+catalog-only override for scripts that want to bypass fuzzy matching and live
+discovery, but it is not the primary user-facing surface.
+
 ## Implementation Constraints
 
 ### No shell-out, no copy-paste
@@ -117,14 +124,22 @@ registry, missing API keys. `ddx agent check` answers "what agents can I use
 right now?" — runtime liveness, which providers respond, which models are
 available at this moment. Both commands coexist; their scopes must not blur.
 
-### Orphan `--model` must error, not fall back
+### `--model` must discover or error, not fall back
 
 The silent fallback that routed `--model qwen/qwen3-coder-next` to OpenRouter
 when vidar was the intended provider is the root bug this epic fixes. After
-Visibility 7, if `--model` is given but no catalog alias matches and no
-`--provider` or `--model-ref` is set, DDx must error before dispatching:
-`model 'X' did not match any provider, catalog ref, or model-route; specify
---provider or --model-ref explicitly`.
+Visibility 7, `--model X` follows the three-step explicit-model resolution
+defined in SD-015 §"Resolution Order" mode 2:
+
+1. **Resolve**: build a unified model pool from the catalog and live provider
+   discovery, match X (exact or fuzzy prefix with shortest-suffix tiebreak).
+2. **Find providers**: identify all providers that can serve the resolved model.
+3. **Pick the best**: rank by standard scoring; `--provider P` is a soft
+   preference, not a constraint.
+
+If no match is found at step 1, or no provider can serve the resolved model
+at step 2, DDx must error before dispatching. DDx must never silently route
+an explicit `--model` request to a harness that cannot serve it.
 
 ### Evidence is structured JSON
 

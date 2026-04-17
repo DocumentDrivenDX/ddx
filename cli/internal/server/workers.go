@@ -594,7 +594,9 @@ func (m *WorkerManager) buildAgentRunner(projectRoot string) *agent.Runner {
 	}
 	agentCfg.SessionLogDir = agent.ResolveLogDir(projectRoot, agentCfg.SessionLogDir)
 
-	return agent.NewRunner(agentCfg)
+	r := agent.NewRunner(agentCfg)
+	r.WorkDir = projectRoot
+	return r
 }
 
 func (m *WorkerManager) List() ([]WorkerRecord, error) {

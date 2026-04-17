@@ -35,6 +35,14 @@ type Runner struct {
 	LookPath      LookPathFunc // injected; defaults to exec.LookPath
 	AgentProvider interface{}  // injected agentlib.Provider for testing; nil = resolve from config
 
+	// WorkDir is the project root used for loading native agent config during
+	// provider discovery. Set by callers that need discovery-aware routing.
+	WorkDir string
+
+	// Discovery holds cached live provider discovery results. When non-nil,
+	// routing consults discovered models to resolve uncataloged model pins.
+	Discovery *DiscoveryResult
+
 	// CompactionStuckThreshold overrides the default consecutive-failure limit for
 	// the compaction-stuck circuit breaker. Zero means use the default (50).
 	// Set to a small value (e.g. 3) in tests to trigger the breaker quickly.
@@ -107,7 +115,13 @@ func (r *Runner) ValidateOrphanModel(opts RunOptions) error {
 	if cat.KnownOnAnySurface(opts.Model) {
 		return nil
 	}
-	return fmt.Errorf("model %q did not match any provider, catalog ref, or model-route; specify --provider or --model-ref explicitly", opts.Model)
+	// Check live provider discovery before erroring.
+	if discovery := r.Discovery; discovery != nil {
+		if providers := discovery.ProvidersForModel(opts.Model); len(providers) > 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("model %q is not in the catalog and no discovered provider serves it", opts.Model)
 }
 
 // Run invokes a single agent harness and returns the result.

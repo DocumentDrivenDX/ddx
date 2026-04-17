@@ -345,6 +345,7 @@ type CandidatePlan struct {
 	SupportsEffort        bool         `json:"supports_effort"`
 	SupportsPermissions   bool         `json:"supports_permissions"`
 	State                 HarnessState `json:"state"`
+	Provider              string       `json:"provider,omitempty"`            // discovered provider endpoint name (e.g. vidar, bragi)
 	CostClass             string       `json:"cost_class,omitempty"`          // local, cheap, medium, expensive
 	IsSubscription        bool         `json:"is_subscription,omitempty"`     // fixed-subscription harness; preferred over pay-per-token within quota
 	EstimatedCostUSD      float64      `json:"estimated_cost_usd,omitempty"`  // -1 = unknown

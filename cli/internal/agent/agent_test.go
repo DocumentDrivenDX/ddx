@@ -1125,7 +1125,7 @@ func TestValidateOrphanModelRejectsUnroutablePin(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
 	err := r.ValidateOrphanModel(RunOptions{Model: "qwen/qwen3-coder-next"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "did not match any provider, catalog ref, or model-route")
+	assert.Contains(t, err.Error(), "not in the catalog and no discovered provider")
 	assert.Contains(t, err.Error(), "qwen/qwen3-coder-next")
 }
 
@@ -1153,14 +1153,14 @@ func TestValidateOrphanModelRejectsAgentHarnessPin(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
 	err := r.ValidateOrphanModel(RunOptions{Harness: "agent", Model: "qwen/qwen3-coder-next"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "did not match any provider")
+	assert.Contains(t, err.Error(), "not in the catalog and no discovered provider")
 }
 
 func TestValidateForExecuteLoopOrphanModelErrors(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
 	err := r.ValidateForExecuteLoop("", "qwen/qwen3-coder-next", "", "")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "did not match any provider, catalog ref, or model-route")
+	assert.Contains(t, err.Error(), "not in the catalog and no discovered provider")
 }
 
 func TestValidateForExecuteLoopOrphanModelWithProviderPasses(t *testing.T) {

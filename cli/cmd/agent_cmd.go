@@ -87,11 +87,13 @@ Examples:
 func (f *CommandFactory) agentRunner() *agent.Runner {
 	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
 	if err != nil || cfg.Agent == nil {
-		return agent.NewRunner(agent.Config{
+		r := agent.NewRunner(agent.Config{
 			SessionLogDir: agent.ResolveLogDir(f.WorkingDir, ""),
 		})
+		r.WorkDir = f.WorkingDir
+		return r
 	}
-	return agent.NewRunner(agent.Config{
+	r := agent.NewRunner(agent.Config{
 		Harness:         cfg.Agent.Harness,
 		Model:           cfg.Agent.Model,
 		Models:          cfg.Agent.Models,
@@ -100,6 +102,8 @@ func (f *CommandFactory) agentRunner() *agent.Runner {
 		SessionLogDir:   agent.ResolveLogDir(f.WorkingDir, cfg.Agent.SessionLogDir),
 		Permissions:     cfg.Agent.Permissions,
 	})
+	r.WorkDir = f.WorkingDir
+	return r
 }
 
 func (f *CommandFactory) newAgentRunCommand() *cobra.Command {

@@ -181,6 +181,32 @@ func (r *Runner) evaluateCandidate(name string, harness Harness, req RouteReques
 			plan.Viable = false
 			return plan
 		}
+		// When discovery data is available and a discovered provider advertises
+		// this model, only harnesses backed by those providers are viable.
+		// This prevents uncataloged local models from being routed to cloud
+		// harnesses that cannot serve them.
+		if r.Discovery != nil && !cat.KnownOnAnySurface(req.ModelPin) {
+			providers := r.Discovery.ProvidersForModel(req.ModelPin)
+			if len(providers) > 0 {
+				// Check if this harness's surface matches a discovered provider.
+				found := false
+				for _, dp := range providers {
+					if harness.Surface == "embedded-openai" && (name == "agent" || name == "lmstudio") {
+						plan.Provider = dp.Name
+						found = true
+						break
+					}
+				}
+				if !found {
+					plan.RejectReason = fmt.Sprintf("model %q discovered on other providers, not available via %s", req.ModelPin, name)
+					plan.Viable = false
+					return plan
+				}
+			}
+			// If no providers discovered the model and it's not in catalog,
+			// let it through — the error will surface at dispatch time or
+			// via ValidateOrphanModel.
+		}
 		plan.RequestedRef = "pin:" + req.ModelPin
 		plan.CanonicalTarget = req.ModelPin
 		plan.ConcreteModel = req.ModelPin
@@ -519,12 +545,22 @@ func SelectBestCandidate(plans []CandidatePlan) (*CandidatePlan, error) {
 	return nil, fmt.Errorf("no viable harness candidate: all harnesses rejected")
 }
 
-// ProbeAndBuildCandidatePlans probes live harness state before building plans.
-// This is the full routing path for actual dispatch.
+// ProbeAndBuildCandidatePlans probes live harness state and runs provider
+// discovery before building plans. This is the full routing path for actual dispatch.
 func (r *Runner) ProbeAndBuildCandidatePlans(req RouteRequest, timeout time.Duration) []CandidatePlan {
 	states := make(map[string]HarnessState)
 	for _, name := range r.Registry.Names() {
 		states[name] = r.ProbeHarnessState(name, timeout)
 	}
+
+	// Run live provider discovery when routing a ModelPin that isn't in the
+	// catalog. Discovery results are cached on the Runner for downstream use
+	// (e.g. ValidateOrphanModel, resolveNativeAgentProvider).
+	if req.ModelPin != "" && req.ModelRef == "" && r.Discovery == nil && r.WorkDir != "" {
+		if disc, err := DiscoverProviderModels(r.WorkDir, timeout); err == nil {
+			r.Discovery = disc
+		}
+	}
+
 	return r.BuildCandidatePlans(req, states)
 }
