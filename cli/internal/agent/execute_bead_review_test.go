@@ -2,12 +2,26 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type reviewRunnerStub struct {
+	result *Result
+	err    error
+}
+
+func (r *reviewRunnerStub) Run(opts RunOptions) (*Result, error) {
+	return r.result, r.err
+}
 
 // ---------------------------------------------------------------------------
 // ParseReviewVerdict
@@ -183,7 +197,13 @@ func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
 				ResultRev: "deadbeef",
 			}, nil
 		}),
-		Reviewer: makeReviewer(VerdictBlock, "### Verdict: BLOCK\n\nAC item 3 not implemented."),
+		Reviewer: BeadReviewerFunc(func(_ context.Context, _, _, _, _ string) (*ReviewResult, error) {
+			return &ReviewResult{
+				Verdict:   VerdictBlock,
+				Rationale: "AC#3 regression test missing",
+				RawOutput: "### Verdict: BLOCK\n\n### Findings\n- AC#3 regression test missing",
+			}, nil
+		}),
 	}
 
 	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
@@ -197,10 +217,119 @@ func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Contains(t, got.Notes, "REVIEW:BLOCK")
+	assert.Contains(t, got.Notes, "AC#3 regression test missing")
 
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, "BLOCK", result.Results[0].ReviewVerdict)
 	assert.Equal(t, ExecuteBeadStatusReviewBlock, result.Results[0].Status)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	found := false
+	for _, ev := range events {
+		if ev.Kind == "execute-bead" && ev.Summary == ExecuteBeadStatusReviewBlock {
+			assert.Contains(t, ev.Body, "AC#3 regression test missing")
+			found = true
+		}
+	}
+	assert.True(t, found, "expected execute-bead review_block event with rationale")
+}
+
+func TestExecuteBeadWorkerReviewBlockWithoutRationaleIsMalfunction(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-review-4",
+				ResultRev: "cafed00d",
+			}, nil
+		}),
+		Reviewer: makeReviewer(VerdictBlock, "### Verdict: BLOCK"),
+	}
+
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.LastFailureStatus)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status, "malformed BLOCK should not reopen bead")
+	assert.NotContains(t, got.Notes, "REVIEW:BLOCK")
+
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.Results[0].Status)
+	assert.Empty(t, result.Results[0].ReviewRationale)
+}
+
+func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
+	projectRoot := t.TempDir()
+	cmd := exec.Command("git", "init", projectRoot)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# review test\n"), 0o644))
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:          "ddx-review-artifacts",
+		Title:       "Review bundle test",
+		Description: "Ensure review evidence is persisted.",
+		Acceptance:  "1. AC one\n2. AC two\n3. AC three",
+	}))
+	out, err = exec.Command("git", "-C", projectRoot, "add", "README.md", ".ddx/beads.jsonl").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", projectRoot, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "init").CombinedOutput()
+	require.NoError(t, err, string(out))
+	headRaw, err := exec.Command("git", "-C", projectRoot, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headRaw))
+
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Runner: &reviewRunnerStub{result: &Result{
+			Harness:        "claude",
+			Model:          "claude-opus-4-6",
+			Output:         "### Verdict: BLOCK\n\n### Findings\n- AC#3 regression test missing",
+			DurationMS:     42,
+			AgentSessionID: "native-review-1",
+		}},
+	}
+
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-review-artifacts", head, "claude", "claude-sonnet")
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, VerdictBlock, res.Verdict)
+	assert.Equal(t, "AC#3 regression test missing", res.Rationale)
+	require.NotEmpty(t, res.ExecutionDir)
+
+	promptPath := filepath.Join(projectRoot, filepath.FromSlash(res.ExecutionDir), "prompt.md")
+	manifestPath := filepath.Join(projectRoot, filepath.FromSlash(res.ExecutionDir), "manifest.json")
+	resultPath := filepath.Join(projectRoot, filepath.FromSlash(res.ExecutionDir), "result.json")
+	for _, path := range []string{promptPath, manifestPath, resultPath} {
+		_, err := os.Stat(path)
+		require.NoError(t, err, "expected review artifact %s", path)
+	}
+
+	artifactResult, err := ReadReviewArtifactResult(resultPath)
+	require.NoError(t, err)
+	assert.Equal(t, VerdictBlock, artifactResult.Verdict)
+	assert.Equal(t, "AC#3 regression test missing", artifactResult.Rationale)
+	require.Len(t, artifactResult.PerAC, 1)
+	assert.Equal(t, 3, artifactResult.PerAC[0].Number)
+
+	var manifest reviewArtifactManifest
+	rawManifest, err := os.ReadFile(manifestPath)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(rawManifest, &manifest))
+	assert.Equal(t, "native-review-1", manifest.SessionID)
+	assert.Equal(t, strings.TrimSpace(head), manifest.ResultRev)
 }
 
 func TestExecuteBeadWorkerNoReviewSkipsReviewer(t *testing.T) {

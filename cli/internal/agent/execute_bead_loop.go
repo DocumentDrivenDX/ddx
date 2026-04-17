@@ -32,6 +32,9 @@ type ExecuteBeadReport struct {
 	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,
 	// or BLOCK) when a reviewer ran. Empty when review was skipped.
 	ReviewVerdict string `json:"review_verdict,omitempty"`
+	// ReviewRationale carries the actionable reviewer-authored findings for
+	// non-APPROVE review outcomes.
+	ReviewRationale string `json:"review_rationale,omitempty"`
 	// Tier is the model tier used for the final attempt (cheap, standard, smart).
 	// Populated by tier-escalating executors; empty for single-tier attempts.
 	Tier string `json:"tier,omitempty"`
@@ -428,6 +431,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 					})
 				} else {
 					report.ReviewVerdict = string(reviewRes.Verdict)
+					report.ReviewRationale = reviewRes.Rationale
 					switch reviewRes.Verdict {
 					case VerdictApprove:
 						// Approved: attach evidence and leave bead closed.
@@ -452,24 +456,44 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
 						})
-						if reopenErr := w.Store.Reopen(candidate.ID, "review: REQUEST_CHANGES", reviewRes.RawOutput); reopenErr != nil {
+						reopenNotes := reviewRes.Rationale
+						if reopenNotes == "" {
+							reopenNotes = reviewRes.RawOutput
+						}
+						if reopenErr := w.Store.Reopen(candidate.ID, "review: REQUEST_CHANGES", reopenNotes); reopenErr != nil {
 							return result, reopenErr
 						}
 						report.Status = ExecuteBeadStatusReviewRequestChanges
 						report.Detail = "post-merge review: REQUEST_CHANGES"
 						reviewApproved = false
 					case VerdictBlock:
+						rationale := strings.TrimSpace(reviewRes.Rationale)
+						if rationale == "" {
+							_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+								Kind:      "review-malfunction",
+								Summary:   "BLOCK without rationale",
+								Body:      reviewRes.RawOutput,
+								Actor:     assignee,
+								Source:    "ddx agent execute-loop",
+								CreatedAt: now().UTC(),
+							})
+							report.Status = ExecuteBeadStatusReviewMalfunction
+							report.Detail = "post-merge review: malformed BLOCK verdict (missing rationale)"
+							report.ReviewRationale = ""
+							reviewApproved = false
+							break
+						}
 						// Cannot proceed: record the verdict, then reopen and
-						// flag for human with BLOCK marker.
+						// flag for human with BLOCK marker plus actionable rationale.
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review",
 							Summary:   "BLOCK",
-							Body:      reviewRes.RawOutput,
+							Body:      rationale,
 							Actor:     assignee,
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
 						})
-						blockNotes := "REVIEW:BLOCK\n\n" + reviewRes.RawOutput
+						blockNotes := "REVIEW:BLOCK\n\n" + rationale
 						if reopenErr := w.Store.Reopen(candidate.ID, "review: BLOCK", blockNotes); reopenErr != nil {
 							return result, reopenErr
 						}
@@ -661,6 +685,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	}
 	if report.NoChangesRationale != "" {
 		parts = append(parts, fmt.Sprintf("rationale: %s", report.NoChangesRationale))
+	}
+	if report.ReviewRationale != "" {
+		parts = append(parts, report.ReviewRationale)
 	}
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))

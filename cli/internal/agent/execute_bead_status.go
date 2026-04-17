@@ -207,6 +207,7 @@ const (
 	// the review returned a non-APPROVE verdict and the bead was reopened.
 	ExecuteBeadStatusReviewRequestChanges = "review_request_changes"
 	ExecuteBeadStatusReviewBlock          = "review_block"
+	ExecuteBeadStatusReviewMalfunction    = "review_malfunction"
 )
 
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible
