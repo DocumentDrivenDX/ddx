@@ -200,6 +200,71 @@ func TestAgentMetricsTierSuccessFailureModes(t *testing.T) {
 	assert.Contains(t, tableOut, "no_changes=1")
 }
 
+// TestWastedCost verifies the tier-success command sums cost_usd separately
+// for failed attempts (wasted_cost_usd) and successful attempts
+// (effective_cost_usd), surfaces both fields in JSON, and renders both
+// columns in the table header. Scenario: 3 attempts on one tier — 1 success
+// at $1.00, 2 failures at $0.50 each → wasted=1.0, effective=1.0.
+func TestWastedCost(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	dir := t.TempDir()
+	execRoot := filepath.Join(dir, ".ddx", "executions")
+
+	writeExecResult(t, execRoot, "20260401T100000-dddd0001", map[string]any{
+		"bead_id":  "ddx-w1",
+		"harness":  "claude",
+		"model":    "sonnet",
+		"outcome":  "task_succeeded",
+		"cost_usd": 1.00,
+	})
+	writeExecResult(t, execRoot, "20260401T110000-dddd0002", map[string]any{
+		"bead_id":  "ddx-w2",
+		"harness":  "claude",
+		"model":    "sonnet",
+		"outcome":  "task_failed",
+		"cost_usd": 0.50,
+	})
+	writeExecResult(t, execRoot, "20260401T120000-dddd0003", map[string]any{
+		"bead_id":  "ddx-w3",
+		"harness":  "claude",
+		"model":    "sonnet",
+		"outcome":  "error",
+		"cost_usd": 0.50,
+	})
+
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "metrics", "tier-success", "--json")
+	require.NoError(t, err)
+
+	var rows []tierSuccessRow
+	require.NoError(t, json.Unmarshal([]byte(output), &rows))
+
+	byTier := map[string]tierSuccessRow{}
+	for _, r := range rows {
+		byTier[r.Tier] = r
+	}
+
+	require.Contains(t, byTier, "claude/sonnet")
+	r := byTier["claude/sonnet"]
+	assert.Equal(t, 3, r.Attempts)
+	assert.Equal(t, 1, r.Successes)
+	assert.InDelta(t, 1.0, r.WastedCostUSD, 0.0001)
+	assert.InDelta(t, 1.0, r.EffectiveCostUSD, 0.0001)
+
+	// JSON keys exist with the expected names.
+	assert.Contains(t, output, `"wasted_cost_usd"`)
+	assert.Contains(t, output, `"effective_cost_usd"`)
+
+	// Table header includes WASTED_COST and EFFECTIVE_COST columns.
+	tableCmd := NewCommandFactory(dir).NewRootCommand()
+	tableOut, err := executeCommand(tableCmd, "agent", "metrics", "tier-success")
+	require.NoError(t, err)
+	header := strings.SplitN(tableOut, "\n", 2)[0]
+	assert.Contains(t, header, "WASTED_COST")
+	assert.Contains(t, header, "EFFECTIVE_COST")
+}
+
 // writeBeadJSONL appends one bead JSON line to .ddx/beads.jsonl under dir.
 // Each bead is expressed as a raw JSON string so tests can write the full
 // event timeline (kind:routing, kind:review) verbatim — matching the

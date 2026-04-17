@@ -16,15 +16,17 @@ import (
 
 // tierSuccessRow is one row of the tier-success report.
 type tierSuccessRow struct {
-	Tier          string         `json:"tier"`
-	Harness       string         `json:"harness"`
-	Model         string         `json:"model,omitempty"`
-	Attempts      int            `json:"attempts"`
-	Successes     int            `json:"successes"`
-	SuccessRate   float64        `json:"success_rate"`
-	AvgCostUSD    float64        `json:"avg_cost_usd"`
-	AvgDurationMS float64        `json:"avg_duration_ms"`
-	FailureModes  map[string]int `json:"failure_modes,omitempty"`
+	Tier             string         `json:"tier"`
+	Harness          string         `json:"harness"`
+	Model            string         `json:"model,omitempty"`
+	Attempts         int            `json:"attempts"`
+	Successes        int            `json:"successes"`
+	SuccessRate      float64        `json:"success_rate"`
+	AvgCostUSD       float64        `json:"avg_cost_usd"`
+	WastedCostUSD    float64        `json:"wasted_cost_usd"`
+	EffectiveCostUSD float64        `json:"effective_cost_usd"`
+	AvgDurationMS    float64        `json:"avg_duration_ms"`
+	FailureModes     map[string]int `json:"failure_modes,omitempty"`
 }
 
 func (f *CommandFactory) newAgentMetricsCommand() *cobra.Command {
@@ -136,13 +138,15 @@ func computeTierSuccess(workingDir string, lastN int) ([]tierSuccessRow, error) 
 	}
 
 	type agg struct {
-		harness      string
-		model        string
-		attempts     int
-		successes    int
-		totalCostUSD float64
-		totalDurMS   float64
-		failureModes map[string]int
+		harness          string
+		model            string
+		attempts         int
+		successes        int
+		totalCostUSD     float64
+		wastedCostUSD    float64
+		effectiveCostUSD float64
+		totalDurMS       float64
+		failureModes     map[string]int
 	}
 	byTier := map[string]*agg{}
 	order := []string{}
@@ -158,6 +162,9 @@ func computeTierSuccess(workingDir string, lastN int) ([]tierSuccessRow, error) 
 		a.attempts++
 		if res.outcome == "task_succeeded" {
 			a.successes++
+			a.effectiveCostUSD += res.costUSD
+		} else {
+			a.wastedCostUSD += res.costUSD
 		}
 		if res.failureMode != "" {
 			a.failureModes[res.failureMode]++
@@ -170,11 +177,13 @@ func computeTierSuccess(workingDir string, lastN int) ([]tierSuccessRow, error) 
 	for _, tier := range order {
 		a := byTier[tier]
 		row := tierSuccessRow{
-			Tier:      tier,
-			Harness:   a.harness,
-			Model:     a.model,
-			Attempts:  a.attempts,
-			Successes: a.successes,
+			Tier:             tier,
+			Harness:          a.harness,
+			Model:            a.model,
+			Attempts:         a.attempts,
+			Successes:        a.successes,
+			WastedCostUSD:    a.wastedCostUSD,
+			EffectiveCostUSD: a.effectiveCostUSD,
 		}
 		if a.attempts > 0 {
 			row.SuccessRate = float64(a.successes) / float64(a.attempts)
@@ -199,15 +208,17 @@ func tierKey(harness, model string) string {
 
 func renderTierSuccessTable(cmd *cobra.Command, rows []tierSuccessRow) error {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%-40s  %8s  %9s  %12s  %12s  %14s  %s\n",
-		"TIER", "ATTEMPTS", "SUCCESSES", "SUCCESS_RATE", "AVG_COST_USD", "AVG_DURATION_MS", "FAILURE_MODES")
+	fmt.Fprintf(out, "%-40s  %8s  %9s  %12s  %12s  %14s  %14s  %14s  %s\n",
+		"TIER", "ATTEMPTS", "SUCCESSES", "SUCCESS_RATE", "AVG_COST_USD", "WASTED_COST", "EFFECTIVE_COST", "AVG_DURATION_MS", "FAILURE_MODES")
 	for _, r := range rows {
-		fmt.Fprintf(out, "%-40s  %8d  %9d  %12s  %12s  %14.1f  %s\n",
+		fmt.Fprintf(out, "%-40s  %8d  %9d  %12s  %12s  %14s  %14s  %14.1f  %s\n",
 			truncateTier(r.Tier, 40),
 			r.Attempts,
 			r.Successes,
 			fmt.Sprintf("%.3f", r.SuccessRate),
 			fmt.Sprintf("%.4f", r.AvgCostUSD),
+			fmt.Sprintf("%.4f", r.WastedCostUSD),
+			fmt.Sprintf("%.4f", r.EffectiveCostUSD),
 			r.AvgDurationMS,
 			formatFailureModes(r.FailureModes),
 		)
