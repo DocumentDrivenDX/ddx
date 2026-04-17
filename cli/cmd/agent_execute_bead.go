@@ -78,6 +78,7 @@ unclaimed for a later attempt.`,
 	cmd.Flags().String("provider", "", "Provider name (e.g. vidar, openrouter); selects a named provider from config")
 	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
+	cmd.Flags().String("context-budget", "", "Context budget for prompt: empty (full), minimal (omit large governing docs for cheap-tier)")
 	cmd.Flags().String("prompt", "", "Prompt file path (auto-generated from bead if omitted)")
 	cmd.Flags().Bool("json", false, "Output result as JSON")
 	return cmd
@@ -96,21 +97,23 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	provider, _ := cmd.Flags().GetString("provider")
 	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
+	contextBudget, _ := cmd.Flags().GetString("context-budget")
 	promptFile, _ := cmd.Flags().GetString("prompt")
 	asJSON, _ := cmd.Flags().GetBool("json")
 
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
 	workerOpts := agent.ExecuteBeadOptions{
-		FromRev:    fromRev,
-		Harness:    harness,
-		Model:      model,
-		Provider:   provider,
-		ModelRef:   modelRef,
-		Effort:     effort,
-		PromptFile: promptFile,
-		WorkerID:   os.Getenv("DDX_WORKER_ID"),
-		BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+		FromRev:       fromRev,
+		Harness:       harness,
+		Model:         model,
+		Provider:      provider,
+		ModelRef:      modelRef,
+		Effort:        effort,
+		ContextBudget: contextBudget,
+		PromptFile:    promptFile,
+		WorkerID:      os.Getenv("DDX_WORKER_ID"),
+		BeadEvents:    bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 	}
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}

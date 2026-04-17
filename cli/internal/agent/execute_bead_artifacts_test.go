@@ -600,11 +600,11 @@ func TestExecuteBead_DeterministicPromptContent(t *testing.T) {
 	}
 
 	const baseRev = "1234abcd"
-	prompt1, src1, err := buildPrompt(root, b, refs, arts1, baseRev, "", "claude")
+	prompt1, src1, err := buildPrompt(root, b, refs, arts1, baseRev, "", "claude", "")
 	if err != nil {
 		t.Fatalf("buildPrompt (1): %v", err)
 	}
-	prompt2, src2, err := buildPrompt(root, b, refs, arts2, baseRev, "", "claude")
+	prompt2, src2, err := buildPrompt(root, b, refs, arts2, baseRev, "", "claude", "")
 	if err != nil {
 		t.Fatalf("buildPrompt (2): %v", err)
 	}

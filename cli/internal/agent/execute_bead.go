@@ -85,14 +85,15 @@ type BeadEventAppender interface {
 
 // ExecuteBeadOptions holds all parameters for an execute-bead worker run.
 type ExecuteBeadOptions struct {
-	FromRev    string // base git revision (default: HEAD)
-	Harness    string
-	Model      string
-	Provider   string // explicit provider name; passed through to agent as -provider
-	ModelRef   string // catalog model-ref; passed through to agent as -model-ref
-	Effort     string
-	PromptFile string // override prompt file (auto-generated if empty)
-	WorkerID   string // from DDX_WORKER_ID env or caller
+	FromRev       string // base git revision (default: HEAD)
+	Harness       string
+	Model         string
+	Provider      string // explicit provider name; passed through to agent as -provider
+	ModelRef      string // catalog model-ref; passed through to agent as -model-ref
+	Effort        string
+	ContextBudget string // prompt budget: "", "minimal" (omits large governing docs for cheap-tier)
+	PromptFile    string // override prompt file (auto-generated if empty)
+	WorkerID      string // from DDX_WORKER_ID env or caller
 	// BeadEvents, when non-nil, receives a kind:routing evidence entry after
 	// the agent run completes. This is the hook that feeds the cost-tiered
 	// routing analytics described in FEAT-routing-visibility.
@@ -762,7 +763,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, op
 		return nil, err
 	}
 
-	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, opts.PromptFile, opts.Harness)
+	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, opts.PromptFile, opts.Harness, opts.ContextBudget)
 	if err != nil {
 		return nil, err
 	}
@@ -1013,7 +1014,7 @@ func xmlAttrEscape(s string) string {
 	return r.Replace(s)
 }
 
-func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride, harness string) ([]byte, string, error) {
+func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, artifacts *executeBeadArtifacts, baseRev, promptOverride, harness string, contextBudget string) ([]byte, string, error) {
 	if strings.TrimSpace(promptOverride) != "" {
 		path := promptOverride
 		if !filepath.IsAbs(path) {
@@ -1073,19 +1074,25 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	fmt.Fprintf(&sb, "    <metadata %s/>\n", strings.Join(metaAttrs, " "))
 	sb.WriteString("  </bead>\n")
 
-	if len(refs) == 0 {
-		fmt.Fprintf(&sb, "  <governing>\n    <note>%s</note>\n  </governing>\n", xmlEscape(executeBeadMissingGoverningText))
+	// For minimal budget, omit full governing refs and only include bead metadata.
+	// This significantly reduces prompt size for cheap-tier attempts on local models.
+	if contextBudget == "minimal" {
+		sb.WriteString("  <governing>\n    <note>No governing references.</note>\n  </governing>\n")
 	} else {
-		sb.WriteString("  <governing>\n")
-		for _, ref := range refs {
-			attrs := fmt.Sprintf("id=\"%s\" path=\"%s\"", xmlAttrEscape(ref.ID), xmlAttrEscape(ref.Path))
-			if strings.TrimSpace(ref.Title) == "" {
-				fmt.Fprintf(&sb, "    <ref %s/>\n", attrs)
-			} else {
-				fmt.Fprintf(&sb, "    <ref %s>%s</ref>\n", attrs, xmlEscape(strings.TrimSpace(ref.Title)))
+		if len(refs) == 0 {
+			fmt.Fprintf(&sb, "  <governing>\n    <note>%s</note>\n  </governing>\n", xmlEscape(executeBeadMissingGoverningText))
+		} else {
+			sb.WriteString("  <governing>\n")
+			for _, ref := range refs {
+				attrs := fmt.Sprintf("id=\"%s\" path=\"%s\"", xmlAttrEscape(ref.ID), xmlAttrEscape(ref.Path))
+				if strings.TrimSpace(ref.Title) == "" {
+					fmt.Fprintf(&sb, "    <ref %s/>\n", attrs)
+				} else {
+					fmt.Fprintf(&sb, "    <ref %s>%s</ref>\n", attrs, xmlEscape(strings.TrimSpace(ref.Title)))
+				}
 			}
+			sb.WriteString("  </governing>\n")
 		}
-		sb.WriteString("  </governing>\n")
 	}
 
 	instructions := strings.ReplaceAll(executeBeadInstructionsText(harness), "{{.AttemptDir}}", artifacts.DirRel)
