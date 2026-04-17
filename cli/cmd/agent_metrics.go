@@ -38,6 +38,7 @@ func (f *CommandFactory) newAgentMetricsCommand() *cobra.Command {
 	}
 	cmd.AddCommand(f.newAgentMetricsTierSuccessCommand())
 	cmd.AddCommand(f.newAgentMetricsReviewOutcomesCommand())
+	cmd.AddCommand(f.newAgentMetricsCostEfficiencyCommand())
 	return cmd
 }
 
@@ -470,6 +471,190 @@ func renderReviewOutcomesTable(cmd *cobra.Command, rows []reviewOutcomesRow) err
 			r.Approvals,
 			r.Rejections,
 			fmt.Sprintf("%.3f", r.ApprovalRate),
+		)
+	}
+	return nil
+}
+
+// costEfficiencyRow is one row of the cost-efficiency report — total spend
+// to close a single bead, with successful vs wasted (failed-attempt) cost
+// broken out so escalation overhead is visible.
+type costEfficiencyRow struct {
+	BeadID            string  `json:"bead_id"`
+	TotalAttempts     int     `json:"total_attempts"`
+	TotalCostUSD      float64 `json:"total_cost_usd"`
+	SuccessfulCostUSD float64 `json:"successful_cost_usd"`
+	WastedCostUSD     float64 `json:"wasted_cost_usd"`
+	FinalTier         string  `json:"final_tier"`
+	FinalHarness      string  `json:"final_harness"`
+}
+
+func (f *CommandFactory) newAgentMetricsCostEfficiencyCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cost-efficiency",
+		Short: "Report total cost to close each bead, including failed escalation attempts",
+		Long: `Scan .ddx/executions/*/result.json and aggregate cost per bead across
+all attempts. The successful_cost_usd column sums attempts where outcome ==
+"task_succeeded"; wasted_cost_usd sums attempts where outcome != "task_succeeded"
+(failed runs that still consumed budget). final_tier and final_harness reflect
+the most recent attempt for each bead, which is the tier that ultimately
+closed it (or the last tier tried if it remains open).`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lastN, _ := cmd.Flags().GetInt("last")
+			jsonOut, _ := cmd.Flags().GetBool("json")
+
+			rows, err := computeCostEfficiency(f.WorkingDir, lastN)
+			if err != nil {
+				return err
+			}
+
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(rows)
+			}
+			return renderCostEfficiencyTable(cmd, rows)
+		},
+	}
+	cmd.Flags().Int("last", 0, "Limit to beads touched in the most recent N executions (0 = all)")
+	cmd.Flags().Bool("json", false, "Output JSON")
+	return cmd
+}
+
+// computeCostEfficiency scans .ddx/executions/*/result.json under workingDir
+// and aggregates per-bead cost totals. When lastN > 0, the set of beads in
+// the output is restricted to those with at least one attempt in the most
+// recent N executions; for those beads, *all* historical attempts contribute
+// to the totals so escalation chains are not artificially truncated.
+func computeCostEfficiency(workingDir string, lastN int) ([]costEfficiencyRow, error) {
+	execRoot := filepath.Join(workingDir, ".ddx", "executions")
+	entries, err := os.ReadDir(execRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []costEfficiencyRow{}, nil
+		}
+		return nil, fmt.Errorf("read executions dir: %w", err)
+	}
+
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names)
+
+	type loadedAttempt struct {
+		beadID  string
+		harness string
+		model   string
+		outcome string
+		costUSD float64
+	}
+	loaded := make([]loadedAttempt, 0, len(names))
+	for _, name := range names {
+		resultPath := filepath.Join(execRoot, name, "result.json")
+		raw, err := os.ReadFile(resultPath)
+		if err != nil {
+			continue
+		}
+		var res agent.ExecuteBeadResult
+		if err := json.Unmarshal(raw, &res); err != nil {
+			continue
+		}
+		if res.BeadID == "" {
+			continue
+		}
+		loaded = append(loaded, loadedAttempt{
+			beadID:  res.BeadID,
+			harness: res.Harness,
+			model:   res.Model,
+			outcome: res.Outcome,
+			costUSD: res.CostUSD,
+		})
+	}
+
+	// --last N: restrict the output set to beads touched by the most recent
+	// N usable attempts. All historical attempts for those beads still
+	// contribute to totals so escalation cost is visible.
+	var includeBead map[string]bool
+	if lastN > 0 && len(loaded) > 0 {
+		includeBead = map[string]bool{}
+		start := len(loaded) - lastN
+		if start < 0 {
+			start = 0
+		}
+		for _, a := range loaded[start:] {
+			includeBead[a.beadID] = true
+		}
+	}
+
+	type agg struct {
+		beadID            string
+		totalAttempts     int
+		totalCostUSD      float64
+		successfulCostUSD float64
+		wastedCostUSD     float64
+		finalHarness      string
+		finalModel        string
+	}
+	byBead := map[string]*agg{}
+	order := []string{}
+
+	for _, a := range loaded {
+		if includeBead != nil && !includeBead[a.beadID] {
+			continue
+		}
+		g, ok := byBead[a.beadID]
+		if !ok {
+			g = &agg{beadID: a.beadID}
+			byBead[a.beadID] = g
+			order = append(order, a.beadID)
+		}
+		g.totalAttempts++
+		g.totalCostUSD += a.costUSD
+		if a.outcome == "task_succeeded" {
+			g.successfulCostUSD += a.costUSD
+		} else {
+			g.wastedCostUSD += a.costUSD
+		}
+		// Attempts iterate in chronological order, so the last assignment
+		// wins — that is the most recent tier tried on this bead.
+		g.finalHarness = a.harness
+		g.finalModel = a.model
+	}
+
+	rows := make([]costEfficiencyRow, 0, len(order))
+	for _, id := range order {
+		g := byBead[id]
+		rows = append(rows, costEfficiencyRow{
+			BeadID:            g.beadID,
+			TotalAttempts:     g.totalAttempts,
+			TotalCostUSD:      g.totalCostUSD,
+			SuccessfulCostUSD: g.successfulCostUSD,
+			WastedCostUSD:     g.wastedCostUSD,
+			FinalTier:         tierKey(g.finalHarness, g.finalModel),
+			FinalHarness:      g.finalHarness,
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].BeadID < rows[j].BeadID })
+	return rows, nil
+}
+
+func renderCostEfficiencyTable(cmd *cobra.Command, rows []costEfficiencyRow) error {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "%-24s  %14s  %14s  %18s  %14s  %-30s  %s\n",
+		"BEAD_ID", "TOTAL_ATTEMPTS", "TOTAL_COST_USD", "SUCCESSFUL_COST_USD", "WASTED_COST_USD", "FINAL_TIER", "FINAL_HARNESS")
+	for _, r := range rows {
+		fmt.Fprintf(out, "%-24s  %14d  %14s  %18s  %14s  %-30s  %s\n",
+			r.BeadID,
+			r.TotalAttempts,
+			fmt.Sprintf("%.4f", r.TotalCostUSD),
+			fmt.Sprintf("%.4f", r.SuccessfulCostUSD),
+			fmt.Sprintf("%.4f", r.WastedCostUSD),
+			truncateTier(r.FinalTier, 30),
+			r.FinalHarness,
 		)
 	}
 	return nil

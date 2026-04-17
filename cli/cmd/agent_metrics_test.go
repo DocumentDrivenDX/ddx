@@ -320,3 +320,134 @@ func TestAgentMetricsReviewOutcomes(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(emptyOut), &emptyRows))
 	assert.Empty(t, emptyRows)
 }
+
+// TestCostEfficiency verifies the cost-efficiency subcommand aggregates
+// per-bead spend across all attempts: single-attempt success, an escalation
+// chain (two failures + one success), and an all-failure bead. Wasted cost
+// is the sum of cost_usd for attempts where outcome != task_succeeded; the
+// final tier reflects the most recent attempt for the bead.
+func TestCostEfficiency(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	dir := t.TempDir()
+	execRoot := filepath.Join(dir, ".ddx", "executions")
+
+	// bead-success: one attempt, succeeded on claude/sonnet.
+	writeExecResult(t, execRoot, "20260401T100000-cccc0001", map[string]any{
+		"bead_id":  "bead-success",
+		"harness":  "claude",
+		"model":    "sonnet",
+		"outcome":  "task_succeeded",
+		"cost_usd": 1.50,
+	})
+
+	// bead-escalated: sonnet failed, sonnet failed again, opus succeeded.
+	writeExecResult(t, execRoot, "20260401T110000-cccc0002", map[string]any{
+		"bead_id":  "bead-escalated",
+		"harness":  "claude",
+		"model":    "sonnet",
+		"outcome":  "task_failed",
+		"cost_usd": 0.75,
+	})
+	writeExecResult(t, execRoot, "20260401T120000-cccc0003", map[string]any{
+		"bead_id":  "bead-escalated",
+		"harness":  "claude",
+		"model":    "sonnet",
+		"outcome":  "preserved",
+		"cost_usd": 0.80,
+	})
+	writeExecResult(t, execRoot, "20260401T130000-cccc0004", map[string]any{
+		"bead_id":  "bead-escalated",
+		"harness":  "claude",
+		"model":    "opus",
+		"outcome":  "task_succeeded",
+		"cost_usd": 4.00,
+	})
+
+	// bead-stuck: every attempt failed.
+	writeExecResult(t, execRoot, "20260401T140000-cccc0005", map[string]any{
+		"bead_id":  "bead-stuck",
+		"harness":  "claude",
+		"model":    "sonnet",
+		"outcome":  "task_failed",
+		"cost_usd": 1.00,
+	})
+	writeExecResult(t, execRoot, "20260401T150000-cccc0006", map[string]any{
+		"bead_id":  "bead-stuck",
+		"harness":  "claude",
+		"model":    "opus",
+		"outcome":  "error",
+		"cost_usd": 3.00,
+	})
+
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "metrics", "cost-efficiency", "--json")
+	require.NoError(t, err)
+
+	var rows []costEfficiencyRow
+	require.NoError(t, json.Unmarshal([]byte(output), &rows))
+
+	byBead := map[string]costEfficiencyRow{}
+	for _, r := range rows {
+		byBead[r.BeadID] = r
+	}
+
+	require.Contains(t, byBead, "bead-success")
+	s := byBead["bead-success"]
+	assert.Equal(t, 1, s.TotalAttempts)
+	assert.InDelta(t, 1.50, s.TotalCostUSD, 0.0001)
+	assert.InDelta(t, 1.50, s.SuccessfulCostUSD, 0.0001)
+	assert.InDelta(t, 0.0, s.WastedCostUSD, 0.0001)
+	assert.Equal(t, "claude/sonnet", s.FinalTier)
+	assert.Equal(t, "claude", s.FinalHarness)
+
+	require.Contains(t, byBead, "bead-escalated")
+	e := byBead["bead-escalated"]
+	assert.Equal(t, 3, e.TotalAttempts)
+	assert.InDelta(t, 5.55, e.TotalCostUSD, 0.0001)
+	assert.InDelta(t, 4.00, e.SuccessfulCostUSD, 0.0001)
+	assert.InDelta(t, 1.55, e.WastedCostUSD, 0.0001)
+	assert.Equal(t, "claude/opus", e.FinalTier)
+	assert.Equal(t, "claude", e.FinalHarness)
+
+	require.Contains(t, byBead, "bead-stuck")
+	x := byBead["bead-stuck"]
+	assert.Equal(t, 2, x.TotalAttempts)
+	assert.InDelta(t, 4.00, x.TotalCostUSD, 0.0001)
+	assert.InDelta(t, 0.0, x.SuccessfulCostUSD, 0.0001)
+	assert.InDelta(t, 4.00, x.WastedCostUSD, 0.0001)
+	assert.Equal(t, "claude/opus", x.FinalTier)
+
+	// Table output contains the required column headers.
+	tableCmd := NewCommandFactory(dir).NewRootCommand()
+	tableOut, err := executeCommand(tableCmd, "agent", "metrics", "cost-efficiency")
+	require.NoError(t, err)
+	header := strings.SplitN(tableOut, "\n", 2)[0]
+	for _, col := range []string{"BEAD_ID", "TOTAL_ATTEMPTS", "TOTAL_COST_USD", "SUCCESSFUL_COST_USD", "WASTED_COST_USD", "FINAL_TIER", "FINAL_HARNESS"} {
+		assert.Contains(t, header, col)
+	}
+	assert.Contains(t, tableOut, "bead-success")
+	assert.Contains(t, tableOut, "bead-escalated")
+	assert.Contains(t, tableOut, "bead-stuck")
+
+	// --last 1: only the most recent attempt's bead (bead-stuck @ opus error)
+	// is included; its escalation chain (both attempts) still contributes.
+	lastCmd := NewCommandFactory(dir).NewRootCommand()
+	lastOut, err := executeCommand(lastCmd, "agent", "metrics", "cost-efficiency", "--last", "1", "--json")
+	require.NoError(t, err)
+	var lastRows []costEfficiencyRow
+	require.NoError(t, json.Unmarshal([]byte(lastOut), &lastRows))
+	require.Len(t, lastRows, 1)
+	assert.Equal(t, "bead-stuck", lastRows[0].BeadID)
+	assert.Equal(t, 2, lastRows[0].TotalAttempts)
+	assert.InDelta(t, 4.00, lastRows[0].TotalCostUSD, 0.0001)
+
+	// Empty executions dir returns an empty list, not an error.
+	empty := t.TempDir()
+	emptyCmd := NewCommandFactory(empty).NewRootCommand()
+	emptyOut, err := executeCommand(emptyCmd, "agent", "metrics", "cost-efficiency", "--json")
+	require.NoError(t, err)
+	var emptyRows []costEfficiencyRow
+	require.NoError(t, json.Unmarshal([]byte(emptyOut), &emptyRows))
+	assert.Empty(t, emptyRows)
+}
