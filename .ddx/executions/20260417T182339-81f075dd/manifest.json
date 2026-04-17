@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260417T182339-81f075dd",
+  "bead_id": "ddx-a97b10cd",
+  "base_rev": "c179c1badaeca388e31d3a7ee2c15e1ddd5810da",
+  "created_at": "2026-04-17T18:23:39.961285614Z",
+  "requested": {
+    "model": "qwen3.6-35b-a3b",
+    "provider": "vidar",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a97b10cd",
+    "title": "claude harness: write per-iteration trace into execution bundle's embedded/ dir",
+    "description": "The embedded ddx-agent harness honors the per-run SessionLogDir override (agent_runner.go:136-138: `logDir := opts.SessionLogDir; if empty fall back to r.Config.SessionLogDir`) so that execute-bead runs drop their JSONL trace inside the bundle at .ddx/executions/\u003cattempt\u003e/embedded/agent-*.jsonl.\n\nThe claude harness does NOT honor that override. claude_stream.go:327 reads only r.Config.SessionLogDir, so every claude execute-bead run writes its trace into the runner-wide default (`.ddx/agent-logs/`) and the bundle's embedded/ dir stays empty. execute_bead.go:446 already passes SessionLogDir: embeddedStateDir through RunOptions; it just isn't used by the claude path.\n\nEmpirical evidence from axon's 2026-04-15 ADR-018 session: 2 runs with `harness: agent` produced 34-51 MB traces in embedded/; 23 runs with `harness: claude` left embedded/ empty while `.ddx/agent-logs/` grew to 162 MB.\n\nFix: plumb opts.SessionLogDir into runClaudeStreaming (either accept it as a parameter or read it off resolvedOpts) and prefer it over r.Config.SessionLogDir when non-empty. Matches the embedded harness behavior exactly.\n\nParity matters: users want per-run forensic traces attached to the bundle regardless of which harness ran the bead.",
+    "acceptance": "- [ ] claude_stream.go:runClaudeStreaming uses opts.SessionLogDir when non-empty, falling back to r.Config.SessionLogDir (matches agent_runner.go:136-138 pattern)\n- [ ] A claude-harness execute-bead run writes agent-\u003csessionID\u003e.jsonl into the bundle's embedded/ dir, not .ddx/agent-logs/\n- [ ] Unit test covers the override precedence for the claude path\n- [ ] Regression test: existing claude runs without execute-bead context still write to DefaultLogDir\n- [ ] Any other harnesses that emit JSONL traces (gemini, codex, etc.) audited and brought to the same override-respecting behavior",
+    "labels": [
+      "ddx",
+      "area:agent",
+      "area:observability",
+      "kind:parity"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-17T18:23:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1348942",
+      "execute-loop-heartbeat-at": "2026-04-17T18:23:39.607327725Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260417T182339-81f075dd",
+    "prompt": ".ddx/executions/20260417T182339-81f075dd/prompt.md",
+    "manifest": ".ddx/executions/20260417T182339-81f075dd/manifest.json",
+    "result": ".ddx/executions/20260417T182339-81f075dd/result.json",
+    "checks": ".ddx/executions/20260417T182339-81f075dd/checks.json",
+    "usage": ".ddx/executions/20260417T182339-81f075dd/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a97b10cd-20260417T182339-81f075dd"
+  }
+}
