@@ -22,9 +22,20 @@ PLATFORMS = \
 # Default target
 all: clean deps test build
 
-# Build SvelteKit frontend (required before Go build for //go:embed)
-frontend-build:
+# Build SvelteKit frontend (required before Go build for //go:embed).
+# Skip rebuild when no source file is newer than the last build output.
+FRONTEND_SRC := $(shell find internal/server/frontend/src internal/server/frontend/static -type f 2>/dev/null)
+FRONTEND_STAMP := internal/server/frontend/build/index.html
+
+frontend-build: $(FRONTEND_STAMP)
+
+$(FRONTEND_STAMP): $(FRONTEND_SRC) internal/server/frontend/package.json internal/server/frontend/svelte.config.js internal/server/frontend/vite.config.ts
 	@echo "Building SvelteKit frontend..."
+	cd internal/server/frontend && bun install --frozen-lockfile && bun run build
+
+# Force a frontend rebuild regardless of timestamps
+frontend-rebuild:
+	@echo "Rebuilding SvelteKit frontend (forced)..."
 	cd internal/server/frontend && bun install --frozen-lockfile && bun run build
 
 # Build for current platform
