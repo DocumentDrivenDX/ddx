@@ -127,15 +127,81 @@ phases:
 
 When the workflow runs, DDX automatically uses the persona bound to that role.
 
-## Available Personas
+## Cross-Harness Consumption Contract
 
-### Core Personas
+**Personas are consumed by DDx itself, not by the underlying harness.**
+When `ddx agent run --persona <name>` is invoked (or when a role is
+bound in `.ddx/config.yaml` and a workflow resolves it), DDx loads the
+persona Markdown file, strips the frontmatter, and injects the body as
+a system-prompt addendum to the agent invocation. The harness sees a
+flat system prompt, not a persona file — so the same persona file
+produces equivalent behavior across Claude, Codex, Gemini, and any
+other harness behind `ddx agent run`. Personas do not need per-harness
+portability markers. See `docs/helix/01-frame/features/FEAT-006-agent-service.md`
+(Personas section) for the authoritative contract.
+
+## Quality Bar (for shipped personas)
+
+Every persona in this directory must meet five criteria. The schema
+check in `scripts/eval-skill.sh --validate` (Phase 4) and the
+lefthook `test-engineer-persona-drift` pre-commit hook enforce parts
+of this; reviewers enforce the rest:
+
+1. **Opinionated voice.** A persona must take positions. Generic
+   tutorial summaries of patterns ("you can use monoliths,
+   microservices, CQRS, SAGA, event sourcing...") have no value
+   over a default system prompt. Pick sides.
+2. **Portable content.** No references to paths or files that only
+   exist in the DDx repo (e.g., `cli/internal/agent/script.go`,
+   `docs/helix/01-frame/concerns.md`). Downstream projects must be
+   able to use the persona as-is.
+3. **Traceable lineage.** Every persona ends with a **Sources**
+   section in the body (not in frontmatter) citing the external
+   canon that shaped it — Anthropic Prompt Library entries, OpenAI
+   Cookbook Prompt Personalities, a named community skill, or a
+   canonical paper. Frontmatter stays lean; lineage lives in prose.
+4. **Role binding verified.** The `roles:` field names roles
+   actually referenced by some shipped workflow or skill.
+5. **Schema conformance.** YAML frontmatter contains `name`, `roles`,
+   `description`, `tags`. Body structure follows **Philosophy /
+   Approach / Anti-patterns / Sources**.
+
+## External Canon
+
+Primary sources for grounding new personas:
+
+- **[Anthropic Prompt Library](https://docs.anthropic.com/en/resources/prompt-library/)** — official curated prompts; cite entries that inspired a persona.
+- **[OpenAI Cookbook: Prompt Personalities](https://developers.openai.com/cookbook/examples/gpt-5/prompt_personalities)** — GPT-5 persona examples worth mining for structure.
+
+Specific-use sources (cite when a persona draws from one):
+
+- **[Superpowers](https://openclawapi.org/en/blog/2026-03-14-superpowers)** — two-stage review (conformance → quality) pattern.
+- **fspec** — spec-driven agent discipline; primary canon for `specification-enforcer`.
+
+Inspiration catalogs (not canon, but useful browsing):
+
+- **[awesome-claude-skills](https://github.com/travisvn/awesome-claude-skills)** — community catalog.
+
+## Available Personas (shipped roster)
 
 | Persona | Roles | Description |
 |---------|-------|-------------|
-| `strict-code-reviewer` | code-reviewer, security-analyst | Uncompromising quality enforcer |
-| `test-engineer-tdd` | test-engineer, quality-analyst | TDD specialist |
-| `architect-systems` | architect, technical-lead | Systems design expert |
+| `code-reviewer` | code-reviewer, security-analyst | Security-first reviewer with structured verdict output |
+| `test-engineer` | test-engineer, quality-analyst | Stubs-over-mocks, real e2e, baselined performance |
+| `implementer` | implementer, software-engineer | YAGNI / KISS / DOWITYTD, ships tests with code |
+| `architect` | architect, technical-lead | Opinionated on when to reach for each pattern |
+| `specification-enforcer` | specification-enforcer, compliance-analyst | Refuses drift from governing artifacts |
+
+Deprecated (scheduled for removal after one release):
+`strict-code-reviewer` → `code-reviewer`;
+`test-engineer-tdd` → `test-engineer`;
+`architect-systems` → `architect`;
+`pragmatic-implementer` → `implementer`.
+
+Dropped (no replacement, use the 5 above or ship your own):
+`reliability-guardian`, `simplicity-architect`,
+`data-driven-optimizer`, `product-discovery-analyst`,
+`product-manager-minimalist`.
 
 ### Contributing Personas
 
