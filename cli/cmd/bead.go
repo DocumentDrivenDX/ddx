@@ -876,33 +876,39 @@ func (f *CommandFactory) newBeadReadyCommand() *cobra.Command {
 func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "blocked",
-		Short: "List beads blocked by unclosed deps",
+		Short: "List beads blocked by deps or retry cooldowns",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			beads, err := s.Blocked()
+			entries, err := s.BlockedAll()
 			if err != nil {
 				return err
 			}
-			if beads == nil {
-				beads = []bead.Bead{}
+			if entries == nil {
+				entries = []bead.BlockedBead{}
 			}
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(beads)
+				return enc.Encode(entries)
 			}
 
-			if len(beads) == 0 {
+			if len(entries) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No blocked beads.")
 				return nil
 			}
 
-			for _, b := range beads {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  deps: %s\n",
-					b.ID, b.Priority, b.Title, strings.Join(b.DepIDs(), ", "))
+			for _, e := range entries {
+				switch e.Blocker.Kind {
+				case bead.BlockerKindRetryCooldown:
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  retry-after: %s\n",
+						e.ID, e.Priority, e.Title, e.Blocker.NextEligibleAt)
+				default:
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  deps: %s\n",
+						e.ID, e.Priority, e.Title, strings.Join(e.DepIDs(), ", "))
+				}
 			}
 			return nil
 		},

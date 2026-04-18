@@ -1055,6 +1055,90 @@ func (s *Store) Blocked() ([]Bead, error) {
 	return blocked, nil
 }
 
+// BlockedAll returns open beads that are currently not runnable, classified
+// by blocker kind. Dependency-blocked beads are emitted first (any unclosed
+// dep in their DAG); retry-parked beads whose execute-loop-retry-after is in
+// the future are emitted with blocker kind BlockerKindRetryCooldown. A bead
+// that is both dep-blocked and cooldown-parked is reported as dependency-
+// blocked, because deps are the stronger blocker.
+func (s *Store) BlockedAll() ([]BlockedBead, error) {
+	beads, err := s.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	statusMap := make(map[string]string)
+	for _, b := range beads {
+		statusMap[b.ID] = b.Status
+	}
+
+	now := time.Now().UTC()
+	var entries []BlockedBead
+	for _, b := range beads {
+		if b.Status != StatusOpen {
+			continue
+		}
+
+		var unclosed []string
+		for _, depID := range b.DepIDs() {
+			if statusMap[depID] != StatusClosed {
+				unclosed = append(unclosed, depID)
+			}
+		}
+		if len(unclosed) > 0 {
+			entries = append(entries, BlockedBead{
+				Bead: b,
+				Blocker: Blocker{
+					Kind:           BlockerKindDependency,
+					UnclosedDepIDs: unclosed,
+				},
+			})
+			continue
+		}
+
+		retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]
+		if !ok {
+			continue
+		}
+		retryAfterStr, isStr := retryAfterRaw.(string)
+		if !isStr || retryAfterStr == "" {
+			continue
+		}
+		retryAfter, err := time.Parse(time.RFC3339, retryAfterStr)
+		if err != nil || !retryAfter.After(now) {
+			continue
+		}
+		blocker := Blocker{
+			Kind:           BlockerKindRetryCooldown,
+			NextEligibleAt: retryAfter.UTC().Format(time.RFC3339),
+		}
+		if v, ok := b.Extra["execute-loop-last-status"]; ok {
+			if s, ok := v.(string); ok {
+				blocker.LastStatus = s
+			}
+		}
+		if v, ok := b.Extra["execute-loop-last-detail"]; ok {
+			if s, ok := v.(string); ok {
+				blocker.LastDetail = s
+			}
+		}
+		entries = append(entries, BlockedBead{
+			Bead:    b,
+			Blocker: blocker,
+		})
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].Priority != entries[j].Priority {
+			return entries[i].Priority < entries[j].Priority
+		}
+		if !entries[i].CreatedAt.Equal(entries[j].CreatedAt) {
+			return entries[i].CreatedAt.Before(entries[j].CreatedAt)
+		}
+		return entries[i].ID < entries[j].ID
+	})
+	return entries, nil
+}
+
 func sortBeadsForQueue(beads []Bead) {
 	sort.SliceStable(beads, func(i, j int) bool {
 		if beads[i].Priority != beads[j].Priority {

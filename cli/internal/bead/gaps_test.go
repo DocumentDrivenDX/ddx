@@ -95,6 +95,80 @@ func TestReadyExecutionSkipsRetrySuppressedBeads(t *testing.T) {
 	assert.Equal(t, b.ID, exec[0].ID)
 }
 
+func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{Title: "Dep root", Priority: 1}
+	blockedByDep := &Bead{Title: "Blocked by dep", Priority: 2}
+	parked := &Bead{Title: "Retry parked", Priority: 0}
+	require.NoError(t, s.Create(dep))
+	require.NoError(t, s.Create(blockedByDep))
+	require.NoError(t, s.Create(parked))
+	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
+
+	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
+	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits"))
+
+	// ReadyExecution still excludes the parked bead and the dep-blocked bead.
+	exec, err := s.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, exec, 1)
+	assert.Equal(t, dep.ID, exec[0].ID)
+
+	entries, err := s.BlockedAll()
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	byID := map[string]BlockedBead{}
+	for _, e := range entries {
+		byID[e.ID] = e
+	}
+
+	depEntry, ok := byID[blockedByDep.ID]
+	require.True(t, ok, "expected dep-blocked bead surfaced")
+	assert.Equal(t, BlockerKindDependency, depEntry.Blocker.Kind)
+	assert.Equal(t, []string{dep.ID}, depEntry.Blocker.UnclosedDepIDs)
+	assert.Empty(t, depEntry.Blocker.NextEligibleAt)
+
+	parkedEntry, ok := byID[parked.ID]
+	require.True(t, ok, "expected retry-parked bead surfaced")
+	assert.Equal(t, BlockerKindRetryCooldown, parkedEntry.Blocker.Kind)
+	assert.Equal(t, until.Format(time.RFC3339), parkedEntry.Blocker.NextEligibleAt)
+	assert.Equal(t, "no_changes", parkedEntry.Blocker.LastStatus)
+	assert.Equal(t, "agent made no commits", parkedEntry.Blocker.LastDetail)
+	assert.Empty(t, parkedEntry.Blocker.UnclosedDepIDs)
+}
+
+func TestBlockedAllOmitsExpiredCooldown(t *testing.T) {
+	s := newTestStore(t)
+
+	a := &Bead{Title: "Cooldown expired"}
+	require.NoError(t, s.Create(a))
+	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(-1*time.Hour), "no_changes", "stale"))
+
+	entries, err := s.BlockedAll()
+	require.NoError(t, err)
+	assert.Empty(t, entries, "expired cooldown should not be surfaced as blocker")
+}
+
+func TestBlockedAllPrefersDependencyOverCooldown(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{Title: "Dep root"}
+	both := &Bead{Title: "Dep blocked + parked"}
+	require.NoError(t, s.Create(dep))
+	require.NoError(t, s.Create(both))
+	require.NoError(t, s.DepAdd(both.ID, dep.ID))
+	require.NoError(t, s.SetExecutionCooldown(both.ID, time.Now().UTC().Add(2*time.Hour), "no_changes", "also parked"))
+
+	entries, err := s.BlockedAll()
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, both.ID, entries[0].ID)
+	assert.Equal(t, BlockerKindDependency, entries[0].Blocker.Kind)
+	assert.Equal(t, []string{dep.ID}, entries[0].Blocker.UnclosedDepIDs)
+}
+
 // ── Validation hooks ──────────────────────────────────────────────
 
 func TestValidationHookBlocks(t *testing.T) {

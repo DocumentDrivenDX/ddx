@@ -78,6 +78,30 @@ type StatusCounts struct {
 	Total   int `json:"total"`
 }
 
+// Blocker kinds surfaced through BlockedAll. These strings are part of the
+// external DDx contract (HELIX reads them to decide how to handle a blocker).
+const (
+	BlockerKindDependency    = "dependency"
+	BlockerKindRetryCooldown = "retry-cooldown"
+)
+
+// Blocker describes why an open bead is currently not runnable. Either
+// unclosed dependencies exist, or an execute-loop cooldown has parked the
+// bead until NextEligibleAt.
+type Blocker struct {
+	Kind           string   `json:"kind"`
+	NextEligibleAt string   `json:"next_eligible_at,omitempty"`
+	UnclosedDepIDs []string `json:"unclosed_dep_ids,omitempty"`
+	LastStatus     string   `json:"last_status,omitempty"`
+	LastDetail     string   `json:"last_detail,omitempty"`
+}
+
+// BlockedBead pairs a bead with its blocker classification.
+type BlockedBead struct {
+	Bead
+	Blocker Blocker `json:"blocker"`
+}
+
 // DepIDs returns a flat list of dependency IDs for this bead.
 func (b *Bead) DepIDs() []string {
 	var ids []string

@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -978,6 +980,85 @@ func TestBeadCommandsDependencyViews(t *testing.T) {
 	assert.Equal(t, float64(1), status["closed"])
 	assert.Equal(t, float64(1), status["ready"])
 	assert.Equal(t, float64(0), status["blocked"])
+}
+
+func TestBeadBlockedSurfacesRetryParkedBeads(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	depRootOut, err := executeCommand(rootCmd, "bead", "create", "Dep root", "--priority", "1")
+	require.NoError(t, err)
+	depRootID := strings.TrimSpace(depRootOut)
+
+	depBlockedOut, err := executeCommand(rootCmd, "bead", "create", "Dep blocked child", "--priority", "2")
+	require.NoError(t, err)
+	depBlockedID := strings.TrimSpace(depBlockedOut)
+
+	parkedOut, err := executeCommand(rootCmd, "bead", "create", "Retry parked", "--priority", "0")
+	require.NoError(t, err)
+	parkedID := strings.TrimSpace(parkedOut)
+
+	_, err = executeCommand(rootCmd, "bead", "dep", "add", depBlockedID, depRootID)
+	require.NoError(t, err)
+
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	until := time.Now().UTC().Add(3 * time.Hour).Truncate(time.Second)
+	require.NoError(t, store.SetExecutionCooldown(parkedID, until, "no_changes", "agent made no commits"))
+
+	blockedJSON, err := executeCommand(rootCmd, "bead", "blocked", "--json")
+	require.NoError(t, err)
+
+	var entries []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(blockedJSON), &entries))
+	require.Len(t, entries, 2, "dep-blocked and retry-parked beads must both surface")
+
+	byID := map[string]map[string]any{}
+	for _, e := range entries {
+		id, _ := e["id"].(string)
+		byID[id] = e
+	}
+
+	depEntry, ok := byID[depBlockedID]
+	require.True(t, ok, "dep-blocked entry missing from JSON: %s", blockedJSON)
+	require.Equal(t, "Dep blocked child", depEntry["title"])
+	depBlocker, ok := depEntry["blocker"].(map[string]any)
+	require.True(t, ok, "dep entry missing blocker object: %#v", depEntry)
+	assert.Equal(t, "dependency", depBlocker["kind"])
+	depIDs, _ := depBlocker["unclosed_dep_ids"].([]any)
+	require.Len(t, depIDs, 1)
+	assert.Equal(t, depRootID, depIDs[0])
+	_, hasNextEligible := depBlocker["next_eligible_at"]
+	assert.False(t, hasNextEligible, "dependency blocker must not emit next_eligible_at")
+
+	parkedEntry, ok := byID[parkedID]
+	require.True(t, ok, "retry-parked entry missing from JSON: %s", blockedJSON)
+	require.Equal(t, "Retry parked", parkedEntry["title"])
+	parkedBlocker, ok := parkedEntry["blocker"].(map[string]any)
+	require.True(t, ok, "parked entry missing blocker object: %#v", parkedEntry)
+	assert.Equal(t, "retry-cooldown", parkedBlocker["kind"])
+	assert.Equal(t, until.Format(time.RFC3339), parkedBlocker["next_eligible_at"])
+	assert.Equal(t, "no_changes", parkedBlocker["last_status"])
+	assert.Equal(t, "agent made no commits", parkedBlocker["last_detail"])
+	_, hasDepField := parkedBlocker["unclosed_dep_ids"]
+	assert.False(t, hasDepField, "cooldown blocker must not emit unclosed_dep_ids")
+
+	// Non-JSON output must distinguish blocker kinds without dropping the existing dep line.
+	// Rebuild the root command so the --json flag state does not leak across invocations.
+	textCmd := factory.NewRootCommand()
+	textOut, err := executeCommand(textCmd, "bead", "blocked")
+	require.NoError(t, err)
+	assert.Contains(t, textOut, depBlockedID+"  P2  Dep blocked child  deps: "+depRootID,
+		"dep-blocked line missing or malformed: %s", textOut)
+	assert.Contains(t, textOut, parkedID+"  P0  Retry parked  retry-after: "+until.Format(time.RFC3339),
+		"retry-parked line missing or malformed: %s", textOut)
+
+	// ReadyExecution filtering must be unchanged: parked bead stays suppressed.
+	execReady, err := store.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, execReady, 1)
+	assert.Equal(t, depRootID, execReady[0].ID,
+		"parked bead must remain suppressed from ReadyExecution")
 }
 
 func TestBeadReopenSetsStatusToOpen(t *testing.T) {
