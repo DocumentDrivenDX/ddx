@@ -62,7 +62,16 @@ func isNoopCompactionEndEvent(e agentlib.Event) bool {
 
 // RunAgent executes a prompt using the embedded agent library.
 // This runs in-process — no subprocess, no binary lookup.
+//
+// Dispatch: when UseNewAgentPath is set on the Runner OR the env var
+// DDX_USE_NEW_AGENT_PATH=1 is present, the request is routed through the
+// new agentlib.DdxAgent.Execute service path (see runAgentViaService).
+// Otherwise the legacy in-package loop below is used. Default is legacy
+// so production behaviour is unchanged. Tracks ddx-e49dbf60.
 func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
+	if r.useNewAgentPath() {
+		return r.runAgentViaService(opts)
+	}
 	promptText, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err
