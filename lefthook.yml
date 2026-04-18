@@ -26,12 +26,23 @@ pre-commit:
   parallel: true
 
   commands:
-    # Conflict detection using grep on staged files only
+    # Conflict detection using grep on staged files only.
+    # Uses git diff --cached directly to avoid {staged_files} tty/expansion issues
+    # when running detached (e.g. ddx work --local, no controlling tty).
     conflicts:
       name: "Check merge conflicts"
-      run: 'grep -E "^<<<<<<<[ \t]|^=======$|^>>>>>>>[ \t]|^\|\|\|\|\|\|\|[ \t]" {staged_files} 2>/dev/null && exit 1 || exit 0'
-      glob: "*"
-      exclude: "lefthook.yml"
+      run: |
+        files=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)
+        [ -z "$files" ] && exit 0
+        conflict_file=$(printf '%s\n' "$files" | while IFS= read -r f; do
+          [ -f "$f" ] || continue
+          grep -lE "^<<<<<<<[ 	]|^=======$|^>>>>>>>[ 	]|^\|{7}[ 	]" "$f" 2>/dev/null && break
+        done | head -1)
+        if [ -n "$conflict_file" ]; then
+          echo "Conflict markers found in: $conflict_file"
+          exit 1
+        fi
+        exit 0
       fail_text: "Merge conflict markers found. Resolve conflicts before committing."
 
     # Debug statements - using ripgrep if available, fallback to grep
