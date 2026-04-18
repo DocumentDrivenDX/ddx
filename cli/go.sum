@@ -8,8 +8,8 @@ github.com/99designs/gqlgen v0.17.89 h1:KzEcxPiMgQoMw3m/E85atUEHyZyt0PbAflMia5Kw
 github.com/99designs/gqlgen v0.17.89/go.mod h1:GFqruTVGB7ZTdrf1uzOagpXbY7DrEt1pIxnTdhIbWvQ=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/DocumentDrivenDX/agent v0.3.12 h1:6XZPx/JcNLHi32ytYdeg7UZIZktdkMtUzOLEVins0dc=
-github.com/DocumentDrivenDX/agent v0.3.12/go.mod h1:tTZSeU/V+X3en5sEmS7TJRhIMQgDDkxP1kXfYcTdYQ4=
+github.com/DocumentDrivenDX/agent v0.3.13 h1:YRend/P3iIdxJ1th8C+OVLqDgEll2CT8XZPYmniqyMA=
+github.com/DocumentDrivenDX/agent v0.3.13/go.mod h1:tTZSeU/V+X3en5sEmS7TJRhIMQgDDkxP1kXfYcTdYQ4=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
