@@ -45,7 +45,7 @@ func TestEvaluateRequiredGates_NoGates(t *testing.T) {
 	dir := t.TempDir()
 	writeArtifactDoc(t, dir, "FEAT-TEST")
 
-	results, anyFailed, err := evaluateRequiredGates(dir, []string{"FEAT-TEST"})
+	results, anyFailed, _, err := evaluateRequiredGates(dir, []string{"FEAT-TEST"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestEvaluateRequiredGates_PassingGate(t *testing.T) {
 	writeArtifactDoc(t, dir, "FEAT-PASS")
 	writeGateDoc(t, dir, "exec.FEAT-PASS.smoke", "FEAT-PASS", true, []string{"sh", "-c", "exit 0"})
 
-	results, anyFailed, err := evaluateRequiredGates(dir, []string{"FEAT-PASS"})
+	results, anyFailed, _, err := evaluateRequiredGates(dir, []string{"FEAT-PASS"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestEvaluateRequiredGates_FailingGate(t *testing.T) {
 	writeArtifactDoc(t, dir, "FEAT-FAIL")
 	writeGateDoc(t, dir, "exec.FEAT-FAIL.smoke", "FEAT-FAIL", true, []string{"sh", "-c", "exit 1"})
 
-	results, anyFailed, err := evaluateRequiredGates(dir, []string{"FEAT-FAIL"})
+	results, anyFailed, _, err := evaluateRequiredGates(dir, []string{"FEAT-FAIL"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestEvaluateRequiredGates_OptionalGateNotRun(t *testing.T) {
 	// required=false gate — should not be included in results
 	writeGateDoc(t, dir, "exec.FEAT-OPT.optional", "FEAT-OPT", false, []string{"sh", "-c", "exit 1"})
 
-	results, anyFailed, err := evaluateRequiredGates(dir, []string{"FEAT-OPT"})
+	results, anyFailed, _, err := evaluateRequiredGates(dir, []string{"FEAT-OPT"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestEvaluateRequiredGates_UnrelatedGateIgnored(t *testing.T) {
 	// Gate linked to FEAT-B only — should not run for FEAT-A
 	writeGateDoc(t, dir, "exec.FEAT-B.smoke", "FEAT-B", true, []string{"sh", "-c", "exit 1"})
 
-	results, anyFailed, err := evaluateRequiredGates(dir, []string{"FEAT-A"})
+	results, anyFailed, _, err := evaluateRequiredGates(dir, []string{"FEAT-A"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestEvaluateRequiredGates_UnrelatedGateIgnored(t *testing.T) {
 
 func TestEvaluateRequiredGates_EmptyGoverningIDs(t *testing.T) {
 	dir := t.TempDir()
-	results, anyFailed, err := evaluateRequiredGates(dir, nil)
+	results, anyFailed, _, err := evaluateRequiredGates(dir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -166,4 +166,3 @@ func TestSummarizeGates(t *testing.T) {
 		})
 	}
 }
-

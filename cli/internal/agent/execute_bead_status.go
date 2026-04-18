@@ -14,6 +14,7 @@ const (
 	FailureModeTimeout         = "timeout"
 	FailureModeAuthError       = "auth_error"
 	FailureModeNoChanges       = "no_changes"
+	FailureModeRatchetMiss     = "ratchet_miss"
 	FailureModeUnknown         = "unknown"
 )
 
@@ -142,6 +143,8 @@ func classifyLandingFailureMode(landingOutcome, landingReason string, gateResult
 			return FailureModeMergeConflict
 		case "post-run checks failed":
 			return classifyGateFailure(gateResults)
+		case RatchetPreserveReason:
+			return FailureModeRatchetMiss
 		}
 		// Other preserved reasons (e.g. "agent execution failed",
 		// "--no-merge specified") defer to the worker's classification.
@@ -198,6 +201,7 @@ const (
 	ExecuteBeadStatusStructuralValidationFailed = "structural_validation_failed"
 	ExecuteBeadStatusExecutionFailed            = "execution_failed"
 	ExecuteBeadStatusPostRunCheckFailed         = "post_run_check_failed"
+	ExecuteBeadStatusRatchetFailed              = "ratchet_failed"
 	ExecuteBeadStatusLandConflict               = "land_conflict"
 	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
@@ -231,6 +235,8 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 			return ExecuteBeadStatusLandConflict
 		case "post-run checks failed":
 			return ExecuteBeadStatusPostRunCheckFailed
+		case RatchetPreserveReason:
+			return ExecuteBeadStatusRatchetFailed
 		default:
 			// Preserved iterations may still be success when the caller
 			// explicitly requested no merge.

@@ -7,6 +7,8 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,15 +37,42 @@ type GateCheckResult struct {
 	Status string `json:"status"`
 	Stdout string `json:"stdout,omitempty"`
 	Stderr string `json:"stderr,omitempty"`
+	// Ratchet captures the ratchet evaluation when the gate declared
+	// thresholds. Populated for both pass and fail decisions so HELIX can
+	// distinguish ratchet outcomes from generic command failures.
+	Ratchet *RatchetEvidence `json:"ratchet,omitempty"`
 }
+
+// RatchetEvidence is the machine-readable record of one ratchet evaluation
+// performed before landing. Threshold/Observed carry the authored ratchet
+// and the observed value; Decision is "pass" or "fail"; Reason provides a
+// short explanation of what was compared ("observed 310 ms > ratchet 250 ms").
+type RatchetEvidence struct {
+	DefinitionID string  `json:"definition_id"`
+	MetricID     string  `json:"metric_id,omitempty"`
+	Comparison   string  `json:"comparison,omitempty"`
+	Threshold    float64 `json:"threshold"`
+	Observed     float64 `json:"observed"`
+	Unit         string  `json:"unit,omitempty"`
+	Decision     string  `json:"decision"`
+	Reason       string  `json:"reason,omitempty"`
+}
+
+// RatchetPreserveReason marks a landing that was preserved because a declared
+// ratchet was not met. Callers match on this exact string (via the landing
+// result's Reason field) to bucket ratchet-preserved attempts apart from
+// generic gate failures.
+const RatchetPreserveReason = "ratchet miss"
 
 // executeBeadChecks is the machine-readable schema for checks.json.
 // Written by the orchestrator when gate evaluation runs.
 type executeBeadChecks struct {
-	AttemptID   string            `json:"attempt_id"`
-	EvaluatedAt time.Time         `json:"evaluated_at"`
-	Summary     string            `json:"summary"`
-	Results     []GateCheckResult `json:"results"`
+	AttemptID       string            `json:"attempt_id"`
+	EvaluatedAt     time.Time         `json:"evaluated_at"`
+	Summary         string            `json:"summary"`
+	Results         []GateCheckResult `json:"results"`
+	RatchetSummary  string            `json:"ratchet_summary,omitempty"`
+	RatchetEvidence []RatchetEvidence `json:"ratchet_evidence,omitempty"`
 }
 
 // OrchestratorGitOps abstracts the git operations needed by the parent-side
@@ -124,6 +153,12 @@ type BeadLandingResult struct {
 	RequiredExecSummary string `json:"required_exec_summary,omitempty"`
 	// ChecksFile is the relative path to checks.json when gate results were written.
 	ChecksFile string `json:"checks_file,omitempty"`
+	// RatchetEvidence aggregates every ratchet-evaluated gate's evidence for
+	// the attempt. Surfaced separately from GateResults so HELIX and other
+	// consumers can tell apart ratchet outcomes from generic gate failures.
+	RatchetEvidence []RatchetEvidence `json:"ratchet_evidence,omitempty"`
+	// RatchetSummary is "pass", "fail", or "" (no ratchets evaluated).
+	RatchetSummary string `json:"ratchet_summary,omitempty"`
 }
 
 // LandBeadResult is the parent-side orchestrator. It receives a completed worker
@@ -181,31 +216,37 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 
 	// Evaluate required gates when a worktree path and governing IDs are provided.
 	var gateResults []GateCheckResult
-	var anyGateFailed bool
+	var anyGateFailed, anyRatchetFailed bool
 	if opts.WtPath != "" && len(opts.GovernIDs) > 0 {
 		var err error
-		gateResults, anyGateFailed, err = evaluateRequiredGates(opts.WtPath, opts.GovernIDs)
+		gateResults, anyGateFailed, anyRatchetFailed, err = evaluateRequiredGates(opts.WtPath, opts.GovernIDs)
 		if err != nil {
 			return nil, fmt.Errorf("evaluating required gates: %w", err)
 		}
 	}
 	landing.GateResults = gateResults
 	landing.RequiredExecSummary = summarizeGates(gateResults, anyGateFailed)
+	landing.RatchetEvidence = collectRatchetEvidence(gateResults)
+	landing.RatchetSummary = summarizeRatchets(landing.RatchetEvidence)
 
 	// Write checks.json when gate evaluation ran and a path is provided.
 	if len(gateResults) > 0 && opts.ChecksArtifactPath != "" {
 		checks := executeBeadChecks{
-			AttemptID:   res.AttemptID,
-			EvaluatedAt: time.Now().UTC(),
-			Summary:     landing.RequiredExecSummary,
-			Results:     gateResults,
+			AttemptID:       res.AttemptID,
+			EvaluatedAt:     time.Now().UTC(),
+			Summary:         landing.RequiredExecSummary,
+			Results:         gateResults,
+			RatchetSummary:  landing.RatchetSummary,
+			RatchetEvidence: landing.RatchetEvidence,
 		}
 		if writeErr := writeArtifactJSON(opts.ChecksArtifactPath, checks); writeErr == nil {
 			landing.ChecksFile = opts.ChecksArtifactRel
 		}
 	}
 
-	// Gate failed: preserve instead of merging.
+	// Gate failed: preserve instead of merging. Ratchet misses get a
+	// dedicated reason so status/failure_mode classifiers can distinguish
+	// them from generic command failures.
 	if anyGateFailed {
 		ref := PreserveRef(res.BeadID, res.BaseRev)
 		if err := gitOps.UpdateRef(projectRoot, ref, res.ResultRev); err != nil {
@@ -213,7 +254,11 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 		}
 		landing.Outcome = "preserved"
 		landing.PreserveRef = ref
-		landing.Reason = "post-run checks failed"
+		if anyRatchetFailed {
+			landing.Reason = RatchetPreserveReason
+		} else {
+			landing.Reason = "post-run checks failed"
+		}
 		return landing, nil
 	}
 
@@ -289,6 +334,8 @@ func ApplyLandingToResult(res *ExecuteBeadResult, landing *BeadLandingResult) {
 	res.GateResults = landing.GateResults
 	res.RequiredExecSummary = landing.RequiredExecSummary
 	res.ChecksFile = landing.ChecksFile
+	res.RatchetEvidence = landing.RatchetEvidence
+	res.RatchetSummary = landing.RatchetSummary
 	// Re-classify status based on landing outcome and reason.
 	res.Status = ClassifyExecuteBeadStatus(landing.Outcome, res.ExitCode, landing.Reason)
 	res.Detail = ExecuteBeadStatusDetail(res.Status, landing.Reason, res.Error)
@@ -347,16 +394,25 @@ func RecoverOrphans(gitOps GitOps, workDir, beadID string) {
 }
 
 // evaluateRequiredGates resolves graph-authored execution documents that are
-// required and linked to any of the governing artifact IDs, then runs each one.
-func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckResult, bool, error) {
+// required and linked to any of the governing artifact IDs, then runs each
+// one. When a gate declares a ratchet threshold, the command's numeric output
+// is compared against the threshold after a successful exit; a ratchet miss
+// demotes the gate status to "fail" and records the evidence the orchestrator
+// surfaces as part of its landing decision.
+//
+// Returns: gate results (one per candidate), anyFailed (true if any gate's
+// final status is "fail"), anyRatchetFailed (true if any failure was caused
+// by a ratchet miss rather than a non-zero exit), and any fatal error from
+// walking the graph (soft errors are swallowed).
+func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckResult, bool, bool, error) {
 	if len(governingIDs) == 0 {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 
 	graph, err := docgraph.BuildGraphWithConfig(wtPath)
 	if err != nil {
 		// Soft error: skip gate evaluation rather than blocking all landings.
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 
 	governingSet := make(map[string]bool, len(governingIDs))
@@ -365,9 +421,12 @@ func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckRes
 	}
 
 	type execCandidate struct {
-		id      string
-		command []string
-		cwd     string
+		id         string
+		command    []string
+		cwd        string
+		comparison string
+		thresholds *docgraph.DocThresholds
+		metric     *docgraph.DocMetricSpec
 	}
 	var candidates []execCandidate
 	for _, doc := range graph.Documents {
@@ -400,17 +459,21 @@ func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckRes
 			continue
 		}
 		candidates = append(candidates, execCandidate{
-			id:      doc.ID,
-			command: ed.Command,
-			cwd:     ed.Cwd,
+			id:         doc.ID,
+			command:    ed.Command,
+			cwd:        ed.Cwd,
+			comparison: ed.Comparison,
+			thresholds: ed.Thresholds,
+			metric:     ed.Metric,
 		})
 	}
 
 	if len(candidates) == 0 {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 
 	anyFailed := false
+	anyRatchetFailed := false
 	results := make([]GateCheckResult, 0, len(candidates))
 	for _, c := range candidates {
 		cwd := wtPath
@@ -431,11 +494,13 @@ func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckRes
 		runErr := cmd.Run()
 		cancel()
 
+		stdoutStr := strings.TrimSpace(stdoutBuf.String())
+		stderrStr := strings.TrimSpace(stderrBuf.String())
 		gr := GateCheckResult{
 			DefinitionID: c.id,
 			Required:     true,
-			Stdout:       strings.TrimSpace(stdoutBuf.String()),
-			Stderr:       strings.TrimSpace(stderrBuf.String()),
+			Stdout:       stdoutStr,
+			Stderr:       stderrStr,
 		}
 		if runErr != nil {
 			gr.ExitCode = 1
@@ -447,10 +512,183 @@ func evaluateRequiredGates(wtPath string, governingIDs []string) ([]GateCheckRes
 		} else {
 			gr.Status = "pass"
 		}
+
+		// Apply ratchet evaluation when thresholds are declared. Only runs
+		// when the command exited cleanly — a non-zero exit already failed
+		// the gate and there's no point parsing unreliable output.
+		if c.thresholds != nil && gr.Status == "pass" {
+			evidence := evaluateRatchet(c.id, c.comparison, c.thresholds, c.metric, stdoutStr, stderrStr)
+			gr.Ratchet = evidence
+			if evidence.Decision == "fail" {
+				gr.Status = "fail"
+				anyFailed = true
+				anyRatchetFailed = true
+			}
+		}
 		results = append(results, gr)
 	}
 
-	return results, anyFailed, nil
+	return results, anyFailed, anyRatchetFailed, nil
+}
+
+// evaluateRatchet parses the gate's observed value from stdout and compares it
+// against the declared ratchet threshold. Always returns a non-nil evidence
+// record so pass/fail results both carry machine-readable provenance.
+func evaluateRatchet(definitionID, comparison string, thresholds *docgraph.DocThresholds, metric *docgraph.DocMetricSpec, stdout, stderr string) *RatchetEvidence {
+	if comparison == "" {
+		comparison = "lower-is-better"
+	}
+	unit := ""
+	metricID := ""
+	if metric != nil {
+		unit = metric.Unit
+		metricID = metric.MetricID
+	}
+	if unit == "" {
+		unit = thresholds.Unit
+	}
+	observed, parsedUnit, parsed := parseGateValue(stdout)
+	if !parsed {
+		// Fall back to stderr for tools that report numbers there.
+		observed, parsedUnit, parsed = parseGateValue(stderr)
+	}
+	if unit == "" {
+		unit = parsedUnit
+	}
+	evidence := &RatchetEvidence{
+		DefinitionID: definitionID,
+		MetricID:     metricID,
+		Comparison:   comparison,
+		Threshold:    thresholds.Ratchet,
+		Observed:     observed,
+		Unit:         unit,
+	}
+	if !parsed {
+		evidence.Decision = "fail"
+		evidence.Reason = "gate did not emit a parseable numeric value"
+		return evidence
+	}
+	passed := ratchetPasses(comparison, thresholds.Ratchet, observed)
+	if passed {
+		evidence.Decision = "pass"
+		evidence.Reason = formatRatchetReason(comparison, thresholds.Ratchet, observed, unit, true)
+	} else {
+		evidence.Decision = "fail"
+		evidence.Reason = formatRatchetReason(comparison, thresholds.Ratchet, observed, unit, false)
+	}
+	return evidence
+}
+
+// ratchetPasses returns true when observed satisfies the ratchet constraint.
+// lower-is-better: observed must be <= threshold. higher-is-better: observed
+// must be >= threshold. Any other comparison string defaults to lower-is-better.
+func ratchetPasses(comparison string, threshold, observed float64) bool {
+	if comparison == "higher-is-better" {
+		return observed >= threshold
+	}
+	return observed <= threshold
+}
+
+func formatRatchetReason(comparison string, threshold, observed float64, unit string, passed bool) string {
+	cmpOp := "<="
+	if comparison == "higher-is-better" {
+		cmpOp = ">="
+	}
+	state := "pass"
+	if !passed {
+		state = "fail"
+		// flip operator for failures so the message reads like "observed 310 > ratchet 250"
+		if comparison == "higher-is-better" {
+			cmpOp = "<"
+		} else {
+			cmpOp = ">"
+		}
+	}
+	if unit != "" {
+		return fmt.Sprintf("%s: observed %g %s %s ratchet %g %s", state, observed, unit, cmpOp, threshold, unit)
+	}
+	return fmt.Sprintf("%s: observed %g %s ratchet %g", state, observed, cmpOp, threshold)
+}
+
+// parseGateValue extracts a numeric observation from gate output. Accepts
+// either a JSON object with a "value" (and optional "unit") field, or a
+// trailing number with an optional unit suffix. Returns the value, the parsed
+// unit (may be ""), and whether parsing succeeded.
+func parseGateValue(text string) (float64, string, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, "", false
+	}
+	if v, u, ok := parseGateJSON(text); ok {
+		return v, u, true
+	}
+	return parseGateText(text)
+}
+
+var gateMeasurementPattern = regexp.MustCompile(`(-?\d+(?:\.\d+)?)(?:\s*)([a-zA-Z%/]+)?`)
+
+func parseGateJSON(text string) (float64, string, bool) {
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(text), &obj); err != nil {
+		return 0, "", false
+	}
+	raw, ok := obj["value"]
+	if !ok {
+		return 0, "", false
+	}
+	unit, _ := obj["unit"].(string)
+	switch v := raw.(type) {
+	case float64:
+		return v, unit, true
+	case string:
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			return parsed, unit, true
+		}
+	}
+	return 0, "", false
+}
+
+func parseGateText(text string) (float64, string, bool) {
+	// Take the last matching measurement so "result: 310 ms" still parses.
+	matches := gateMeasurementPattern.FindAllStringSubmatch(text, -1)
+	if len(matches) == 0 {
+		return 0, "", false
+	}
+	m := matches[len(matches)-1]
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		return 0, "", false
+	}
+	unit := ""
+	if len(m) >= 3 {
+		unit = strings.TrimSpace(m[2])
+	}
+	return v, unit, true
+}
+
+// collectRatchetEvidence flattens the ratchet evidence from each gate result
+// into a single slice the orchestrator stores on the landing record.
+func collectRatchetEvidence(gateResults []GateCheckResult) []RatchetEvidence {
+	var out []RatchetEvidence
+	for _, gr := range gateResults {
+		if gr.Ratchet != nil {
+			out = append(out, *gr.Ratchet)
+		}
+	}
+	return out
+}
+
+// summarizeRatchets returns "pass", "fail", or "" (no ratchets evaluated).
+func summarizeRatchets(evidence []RatchetEvidence) string {
+	if len(evidence) == 0 {
+		return ""
+	}
+	for _, e := range evidence {
+		if e.Decision == "fail" {
+			return "fail"
+		}
+	}
+	return "pass"
 }
 
 // summarizeGates returns the RequiredExecSummary string for the landing result.

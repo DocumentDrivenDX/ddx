@@ -107,6 +107,20 @@ func (s *Store) loadGraphDefinitions() (*docgraph.Graph, []Definition, error) {
 			Active:      ed.Active,
 			GraphSource: true,
 		}
+		if ed.Comparison != "" || ed.Thresholds != nil {
+			def.Evaluation = Evaluation{Comparison: ed.Comparison}
+			if ed.Thresholds != nil {
+				def.Evaluation.Thresholds = Thresholds{
+					WarnMS:    ed.Thresholds.Warn,
+					RatchetMS: ed.Thresholds.Ratchet,
+				}
+			}
+		}
+		if ed.Metric != nil {
+			def.Result.Metric = &MetricResultSpec{
+				Unit: ed.Metric.Unit,
+			}
+		}
 		defs = append(defs, def)
 	}
 	return graph, defs, nil

@@ -31,9 +31,19 @@ type DocFrontmatter struct {
 //	    command: ["make", "test"]
 //	    cwd: cli
 //	    timeout_ms: 120000
+//	    comparison: lower-is-better
+//	    thresholds:
+//	      ratchet: 250
+//	      unit: ms
+//	    metric:
+//	      metric_id: MET-API-LATENCY
 //
 // ArtifactIDs is optional; when absent, the document's depends_on list is used
-// to determine which artifacts this execution is linked to.
+// to determine which artifacts this execution is linked to. Comparison,
+// Thresholds, and Metric declare the ratchet evaluation applied by the
+// landing gate when the command exits 0: the gate parses a numeric observed
+// value out of stdout and compares it against the ratchet threshold before
+// allowing the attempt to merge.
 type DocExecDef struct {
 	Kind        string            `yaml:"kind"`
 	Command     []string          `yaml:"command"`
@@ -43,6 +53,26 @@ type DocExecDef struct {
 	ArtifactIDs []string          `yaml:"artifact_ids"`
 	Required    bool              `yaml:"required"`
 	Active      bool              `yaml:"active"`
+	Comparison  string            `yaml:"comparison"`
+	Thresholds  *DocThresholds    `yaml:"thresholds"`
+	Metric      *DocMetricSpec    `yaml:"metric"`
+}
+
+// DocThresholds captures the ratchet policy declared alongside an execution
+// definition. Ratchet is the value the landing gate enforces; unit is only
+// used for evidence reporting.
+type DocThresholds struct {
+	Ratchet float64 `yaml:"ratchet"`
+	Warn    float64 `yaml:"warn"`
+	Unit    string  `yaml:"unit"`
+}
+
+// DocMetricSpec names the metric artifact a gate observes. Optional — a gate
+// without a metric can still declare thresholds, in which case the definition
+// ID is used as the metric identifier on ratchet evidence.
+type DocMetricSpec struct {
+	MetricID string `yaml:"metric_id"`
+	Unit     string `yaml:"unit"`
 }
 
 // DocReview holds staleness tracking metadata.

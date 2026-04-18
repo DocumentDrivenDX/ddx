@@ -44,6 +44,12 @@ type ExecuteBeadResult struct {
 	GateResults         []GateCheckResult `json:"gate_results,omitempty"`
 	RequiredExecSummary string            `json:"required_exec_summary,omitempty"`
 	ChecksFile          string            `json:"checks_file,omitempty"`
+	// Ratchet fields — populated by ApplyLandingToResult when declarative
+	// ratchet thresholds were evaluated during landing. HELIX and other
+	// consumers use these to distinguish ratchet-preserved attempts from
+	// generic execution failures.
+	RatchetEvidence []RatchetEvidence `json:"ratchet_evidence,omitempty"`
+	RatchetSummary  string            `json:"ratchet_summary,omitempty"`
 
 	// NoChangesRationale is populated when outcome == task_no_changes and the
 	// agent wrote a rationale file to the execution bundle dir inside the
