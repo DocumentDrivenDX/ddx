@@ -157,6 +157,11 @@ type workerHandle struct {
 	// reaped is set true once the watchdog has escalated this worker. It is
 	// checked under m.mu to make reaping idempotent.
 	reaped bool
+	// stopped is set true once an operator-driven Stop has started the
+	// graceful termination path. Checked under m.mu so a second Stop is a
+	// no-op and runWorker can preserve the "stopped" state across its final
+	// record write.
+	stopped bool
 }
 
 // WorkerManager manages in-process execute-loop workers as goroutines.
@@ -591,6 +596,13 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 
 	m.mu.Lock()
 	record := handle.record
+	// Preserve terminal state set by Stop() or the watchdog so the final
+	// writeRecord below does not overwrite "stopped" / "reaped" with
+	// "exited" / "failed".
+	preservedState := ""
+	if record.State == "stopped" || record.State == "reaped" {
+		preservedState = record.State
+	}
 	record.FinishedAt = time.Now().UTC()
 	_ = handle.logFile.Close()
 
@@ -649,6 +661,12 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				record.Provider = last.Provider
 			}
 		}
+	}
+	// Terminal-state override: if Stop() or the watchdog already marked
+	// this worker, keep that label so external consumers see the reason.
+	if preservedState != "" {
+		record.State = preservedState
+		record.Status = preservedState
 	}
 	_ = m.writeRecord(dir, record)
 	handle.record = record
@@ -725,14 +743,107 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 	return m.readRecord(filepath.Join(m.rootDir, id))
 }
 
+// Stop performs a graceful termination of the worker:
+//  1. Mark state=stopping and persist so observers see the transition.
+//  2. Emit bead.stopped event + release the bead claim (if one is held).
+//  3. Send SIGTERM to the worker's process group; escalate to SIGKILL
+//     after WatchdogKillGrace if the leader is still alive. Pure-goroutine
+//     workers have no PID — ctx cancellation below is the only lever.
+//  4. Cancel the worker's context so the loop and in-flight executor exit.
+//  5. Mark state=stopped and persist. runWorker preserves this terminal
+//     state when it writes its final record.
+//
+// Stop is idempotent: a second call is a no-op. It returns an error only
+// when the worker is unknown to the manager (already exited / never existed).
 func (m *WorkerManager) Stop(id string) error {
 	m.mu.Lock()
 	handle := m.workers[id]
-	m.mu.Unlock()
 	if handle == nil || handle.cancel == nil {
+		m.mu.Unlock()
 		return fmt.Errorf("worker not running")
 	}
-	handle.cancel()
+	if handle.stopped {
+		m.mu.Unlock()
+		return nil
+	}
+	handle.stopped = true
+
+	now := time.Now().UTC()
+	projectRoot := handle.record.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = m.projectRoot
+	}
+	pid := handle.record.PID
+	beadID := ""
+	if handle.record.CurrentAttempt != nil {
+		beadID = handle.record.CurrentAttempt.BeadID
+	}
+	if beadID == "" {
+		beadID = handle.record.CurrentBead
+	}
+	startedAt := handle.record.StartedAt
+	handle.record.State = "stopping"
+	handle.record.Status = "stopping"
+	dir := filepath.Join(m.rootDir, id)
+	transitionSnapshot := handle.record
+	cancel := handle.cancel
+	m.mu.Unlock()
+
+	_ = m.writeRecord(dir, transitionSnapshot)
+
+	// Release the bead claim first — this is durable and must not be
+	// leaked even if the SIGKILL path blocks for the full grace window.
+	if beadID != "" {
+		store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+		runtime := time.Duration(0)
+		if !startedAt.IsZero() {
+			runtime = now.Sub(startedAt)
+		}
+		body := fmt.Sprintf(
+			"worker=%s runtime=%s pid=%d reason=stop",
+			id, runtime.Round(time.Second), pid,
+		)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "stop",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
+	}
+
+	// Escalate to the process group if we know the PID.
+	_, _, _, grace := m.watchdogDeadlines()
+	if pid > 0 {
+		terminateProcessGroup(pid, grace)
+	}
+
+	// Cancel the worker goroutine so any in-process code sees context.Canceled.
+	cancel()
+
+	// Flip in-memory state to the terminal "stopped" label. For real
+	// workers, runWorker's final writeRecord (with preservedState) will
+	// persist this to disk — we deliberately do not writeRecord here a
+	// second time because runWorker may still be mid-finalization and a
+	// double-write races the test cleanup. Idle handles (no runWorker)
+	// have their state observable in-memory; callers that need disk
+	// persistence for those can call writeRecord directly.
+	m.mu.Lock()
+	handle.record.State = "stopped"
+	handle.record.Status = "stopped"
+	// Only stamp FinishedAt for handles with no attached runWorker
+	// goroutine (logFile is the tell — StartExecuteLoop always sets it).
+	// For real workers, runWorker sets FinishedAt after its own cleanup.
+	if handle.logFile == nil && handle.record.FinishedAt.IsZero() {
+		handle.record.FinishedAt = time.Now().UTC()
+		finalSnapshot := handle.record
+		m.mu.Unlock()
+		_ = m.writeRecord(dir, finalSnapshot)
+		return nil
+	}
+	m.mu.Unlock()
 	return nil
 }
 

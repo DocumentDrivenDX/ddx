@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,6 +46,7 @@ type agentWorkerServerRecord struct {
 	LastResult     *struct {
 		BeadID string `json:"bead_id,omitempty"`
 	} `json:"last_result,omitempty"`
+	PID int `json:"pid,omitempty"`
 }
 
 // agentWorkerDisplay is the unified display record for table output and JSON.
@@ -61,6 +63,11 @@ type agentWorkerDisplay struct {
 	Attempts  int       `json:"attempts,omitempty"`
 	Successes int       `json:"successes,omitempty"`
 	Failures  int       `json:"failures,omitempty"`
+	// PID is the operating-system process id of the worker, when a
+	// subprocess is registered. Surfaced so external tooling can target
+	// the process directly (e.g. `kill -TERM <pid>`) when the CLI stop
+	// path is unavailable.
+	PID int `json:"pid,omitempty"`
 }
 
 func (f *CommandFactory) newAgentWorkersCommand() *cobra.Command {
@@ -84,7 +91,155 @@ Examples:
 	cmd.Flags().Bool("json", false, "Emit raw JSON array")
 	cmd.Flags().Bool("watch", false, "Re-render every 2s until Ctrl-C")
 	cmd.Flags().String("project", "", "Project root to query (default: detected from CWD)")
+
+	cmd.AddCommand(f.newAgentWorkersStopCommand())
 	return cmd
+}
+
+// newAgentWorkersStopCommand wires the `ddx agent workers stop` subcommand.
+// Targeting modes are mutually exclusive:
+//
+//	ddx agent workers stop <worker-id>     — one worker by id
+//	ddx agent workers stop --all-over <d>  — every running worker older than <d>
+//	ddx agent workers stop --state <state> — every worker in <state>
+//	ddx agent workers stop --bead <id>     — the worker assigned to <bead-id>
+//
+// Each match POSTs /api/agent/workers/{id}/stop on the running ddx server,
+// which triggers the graceful SIGTERM → grace → SIGKILL path in
+// WorkerManager.Stop. Returns a non-zero exit code if any target fails.
+func (f *CommandFactory) newAgentWorkersStopCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stop [worker-id]",
+		Short: "Gracefully stop running agent workers",
+		Long: `Gracefully terminate one or more running agent workers.
+
+The server sends SIGTERM to the worker's process group, waits for the configured
+grace window, and escalates to SIGKILL if the leader is still alive. The worker's
+bead claim is released and a bead.stopped event is appended to the tracker before
+the kill, so claims are not leaked even when the full grace elapses.
+
+Examples:
+  ddx agent workers stop worker-20260418T100000-abcd
+  ddx agent workers stop --all-over 1h
+  ddx agent workers stop --state running
+  ddx agent workers stop --bead ddx-abc12345`,
+		RunE: f.runAgentWorkersStop,
+	}
+	cmd.Flags().Duration("all-over", 0, "Stop every running worker older than this duration")
+	cmd.Flags().String("state", "", "Stop every worker in the given state (e.g. running)")
+	cmd.Flags().String("bead", "", "Stop the worker assigned to the given bead id")
+	cmd.Flags().String("project", "", "Project root to query (default: detected from CWD)")
+	cmd.Flags().Bool("json", false, "Emit one JSON object per worker acted on")
+	return cmd
+}
+
+func (f *CommandFactory) runAgentWorkersStop(cmd *cobra.Command, args []string) error {
+	allOver, _ := cmd.Flags().GetDuration("all-over")
+	stateFilter, _ := cmd.Flags().GetString("state")
+	beadFilter, _ := cmd.Flags().GetString("bead")
+	projectFlag, _ := cmd.Flags().GetString("project")
+	asJSON, _ := cmd.Flags().GetBool("json")
+
+	// Enforce that the operator picks exactly one targeting mode.
+	modes := 0
+	if len(args) > 0 {
+		modes++
+	}
+	if allOver > 0 {
+		modes++
+	}
+	if stateFilter != "" {
+		modes++
+	}
+	if beadFilter != "" {
+		modes++
+	}
+	if modes == 0 {
+		return fmt.Errorf("specify a worker id or one of --all-over, --state, --bead")
+	}
+	if modes > 1 {
+		return fmt.Errorf("specify exactly one of: <worker-id>, --all-over, --state, --bead")
+	}
+
+	projectRoot := projectFlag
+	if projectRoot == "" {
+		projectRoot = gitpkg.FindProjectRoot(f.WorkingDir)
+	}
+
+	var targets []string
+	if len(args) > 0 {
+		targets = []string{args[0]}
+	} else {
+		workers := collectAgentWorkers(projectRoot)
+		now := time.Now()
+		for _, wk := range workers {
+			if wk.Kind == "local" {
+				// Local (execute-bead) workers are not reachable through the
+				// server stop endpoint. Skip them here — operators must stop
+				// them via the worktree's own lifecycle.
+				continue
+			}
+			if allOver > 0 {
+				if wk.State != "running" || wk.StartedAt.IsZero() {
+					continue
+				}
+				if now.Sub(wk.StartedAt) <= allOver {
+					continue
+				}
+			}
+			if stateFilter != "" && wk.State != stateFilter {
+				continue
+			}
+			if beadFilter != "" && wk.BeadID != beadFilter {
+				continue
+			}
+			targets = append(targets, wk.ID)
+		}
+	}
+
+	if len(targets) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "no matching workers")
+		return nil
+	}
+
+	base := resolveServerURL(projectRoot)
+	client := newLocalServerClient()
+
+	var firstErr error
+	for _, id := range targets {
+		reqURL := base + "/api/agent/workers/" + id + "/stop"
+		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, reqURL, nil)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "stop %s: %v\n", id, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			msg := strings.TrimSpace(string(body))
+			fmt.Fprintf(cmd.ErrOrStderr(), "stop %s: server error (%d): %s\n", id, resp.StatusCode, msg)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("server error (%d) for %s", resp.StatusCode, id)
+			}
+			continue
+		}
+		if asJSON {
+			fmt.Fprintln(cmd.OutOrStdout(), strings.TrimSpace(string(body)))
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "stopping %s\n", id)
+		}
+	}
+	return firstErr
 }
 
 func (f *CommandFactory) runAgentWorkers(cmd *cobra.Command, _ []string) error {
@@ -171,6 +326,7 @@ func fetchServerAgentWorkers(projectRoot string) ([]agentWorkerDisplay, map[stri
 			Attempts:  r.Attempts,
 			Successes: r.Successes,
 			Failures:  r.Failures,
+			PID:       r.PID,
 		}
 		if d.Kind == "" {
 			d.Kind = "server"
