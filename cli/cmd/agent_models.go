@@ -3,13 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	agentconfig "github.com/DocumentDrivenDX/agent/config"
-	"github.com/DocumentDrivenDX/agent/modelcatalog"
-	oai "github.com/DocumentDrivenDX/agent/provider/openai"
-	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
+	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/cobra"
 )
 
@@ -21,21 +18,35 @@ func (f *CommandFactory) newAgentModelsCommand() *cobra.Command {
 		Short: "List models for a configured provider",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := agentconfig.Load(f.WorkingDir)
+			svc, err := agent.NewServiceFromWorkDir(f.WorkingDir)
 			if err != nil {
 				return fmt.Errorf("loading agent config: %w", err)
 			}
 
-			cat, _ := modelcatalog.Default()
+			ctx, cancel := context.WithTimeout(context.Background(), modelsProbeTimeout*2)
+			defer cancel()
 
 			showAll, _ := cmd.Flags().GetBool("all")
 			providerName, _ := cmd.Flags().GetString("provider")
 
+			providers, err := svc.ListProviders(ctx)
+			if err != nil {
+				return fmt.Errorf("listing providers: %w", err)
+			}
+
+			// Build a provider-type lookup for the anthropic special case.
+			providerType := make(map[string]string, len(providers))
+			providerDefault := make(map[string]string, len(providers))
+			for _, p := range providers {
+				providerType[p.Name] = p.Type
+				providerDefault[p.Name] = p.DefaultModel
+			}
+
 			if showAll {
-				for _, name := range cfg.ProviderNames() {
-					pc := cfg.Providers[name]
-					fmt.Fprintf(cmd.OutOrStdout(), "[%s]\n", name)
-					printModelsForProvider(cmd, pc, cat)
+				for _, p := range providers {
+					fmt.Fprintf(cmd.OutOrStdout(), "[%s]\n", p.Name)
+					models, _ := svc.ListModels(ctx, agentlib.ModelFilter{Provider: p.Name})
+					printModels(cmd, p.Name, p.Type, p.DefaultModel, models)
 					fmt.Fprintln(cmd.OutOrStdout())
 				}
 				return nil
@@ -43,22 +54,36 @@ func (f *CommandFactory) newAgentModelsCommand() *cobra.Command {
 
 			name := providerName
 			if name == "" {
-				name = cfg.DefaultName()
+				// Find the default provider.
+				for _, p := range providers {
+					if p.IsDefault {
+						name = p.Name
+						break
+					}
+				}
 			}
-			pc, ok := cfg.GetProvider(name)
+			if name == "" && len(providers) > 0 {
+				name = providers[0].Name
+			}
+
+			pType, ok := providerType[name]
 			if !ok {
 				return fmt.Errorf("unknown provider %q", name)
 			}
 
-			if pc.Type == "anthropic" {
+			if pType == "anthropic" {
 				fmt.Fprintln(cmd.OutOrStdout(), "Anthropic does not support model listing.")
-				if pc.Model != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "Configured model: %s\n", pc.Model)
+				if m := providerDefault[name]; m != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Configured model: %s\n", m)
 				}
 				return nil
 			}
 
-			printModelsForProvider(cmd, pc, cat)
+			models, err := svc.ListModels(ctx, agentlib.ModelFilter{Provider: name})
+			if err != nil {
+				return fmt.Errorf("listing models: %w", err)
+			}
+			printModels(cmd, name, pType, providerDefault[name], models)
 			return nil
 		},
 	}
@@ -67,68 +92,50 @@ func (f *CommandFactory) newAgentModelsCommand() *cobra.Command {
 	return cmd
 }
 
-// printModelsForProvider probes a provider's /v1/models endpoint and prints the
-// full ranked list. The configured model is marked with "*". The auto-selected
-// model (when no static model is set) is marked with ">". Catalog-recognized
-// models show their catalog target ID in brackets; pattern-matched models show
-// [pattern].
-func printModelsForProvider(cmd *cobra.Command, pc agentconfig.ProviderConfig, cat *modelcatalog.Catalog) {
+// printModels renders the model list for one provider.
+// The configured model is marked with "*". The auto-selected model (when no
+// static model is set and rank 0 is available) is marked with ">".
+// Catalog-recognized models show their catalog reference in brackets.
+func printModels(cmd *cobra.Command, providerName, providerTyp, configuredModel string, models []agentlib.ModelInfo) {
 	out := cmd.OutOrStdout()
 
-	if pc.Type == "anthropic" {
+	if providerTyp == "anthropic" {
 		fmt.Fprintln(out, "  (anthropic — no model listing endpoint)")
 		return
 	}
 
-	var knownModels map[string]string
-	if cat != nil {
-		knownModels = cat.AllConcreteModels(modelcatalog.SurfaceAgentOpenAI)
-	}
-
-	if strings.TrimSpace(pc.BaseURL) == "" {
+	if len(models) == 0 {
 		fmt.Fprintln(out, "  (unavailable)")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), modelsProbeTimeout)
-	pr := providerstatus.Probe(ctx, pc)
-	cancel()
-
-	if !pr.Reachable || len(pr.Models) == 0 {
-		fmt.Fprintln(out, "  (unavailable)")
-		return
-	}
-
-	ranked, err := oai.RankModels(pr.Models, knownModels, pc.ModelPattern)
-	if err != nil {
-		// Pattern compile error — fall back to plain list.
-		for _, id := range pr.Models {
-			fmt.Fprintf(out, "  %s\n", id)
-		}
-		return
-	}
-
+	// Determine auto-selected model: first by rank when no model is configured.
 	autoSelected := ""
-	if pc.Model == "" && len(ranked) > 0 {
-		autoSelected = ranked[0].ID
+	if configuredModel == "" {
+		// Find the model with the lowest RankPosition.
+		best := -1
+		for _, m := range models {
+			if best < 0 || m.RankPosition < best {
+				best = m.RankPosition
+				autoSelected = m.ID
+			}
+		}
 	}
 
-	for _, sm := range ranked {
+	for _, m := range models {
 		marker := "  "
-		if sm.ID == pc.Model {
+		if m.ID == configuredModel {
 			marker = "* "
-		} else if sm.ID == autoSelected {
+		} else if m.ID == autoSelected {
 			marker = "> "
 		}
 		annotation := ""
-		if sm.CatalogRef != "" {
-			annotation = "  [catalog: " + sm.CatalogRef + "]"
-		} else if sm.PatternMatch {
-			annotation = "  [pattern]"
+		if m.CatalogRef != "" {
+			annotation = "  [catalog: " + m.CatalogRef + "]"
 		}
-		fmt.Fprintf(out, "%s%s%s\n", marker, sm.ID, annotation)
+		fmt.Fprintf(out, "%s%s%s\n", marker, m.ID, annotation)
 	}
-	if pc.Model == "" {
+	if configuredModel == "" {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "  * = configured  > = would auto-select")
 	}
