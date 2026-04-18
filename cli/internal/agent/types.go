@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"path/filepath"
 	"time"
 )
@@ -58,6 +59,11 @@ type RouteFlags struct {
 
 // RunOptions holds options for a single agent invocation.
 type RunOptions struct {
+	// Context is the caller's context. When non-nil, the Runner derives its
+	// internal cancel context from this so upstream cancellation (e.g.
+	// server.WorkerManager.Stop) propagates into the provider HTTP call.
+	// Nil defaults to context.Background().
+	Context       context.Context
 	Harness       string
 	Prompt        string // prompt text (or path to file)
 	PromptFile    string // explicit file path

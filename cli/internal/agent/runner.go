@@ -236,7 +236,11 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 
 	// Execute
 	start := time.Now()
-	ctx, cancel := context.WithCancel(context.Background())
+	parentCtx := opts.Context
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 	ctx = withExecutionTimeout(ctx, timeout)
 

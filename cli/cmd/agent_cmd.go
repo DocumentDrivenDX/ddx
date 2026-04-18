@@ -1436,7 +1436,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		runner := f.agentRunner()
 		gitOps := &agent.RealGitOps{}
 
-		res, execErr := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
+		res, execErr := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
 			FromRev:    fromRev,
 			Harness:    resolvedHarness,
 			Model:      resolvedModel,

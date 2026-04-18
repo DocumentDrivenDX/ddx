@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -348,7 +349,7 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 
 	runner := &rationaleTestRunner{rationale: rationale}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
 	if err != nil {
 		t.Fatalf("ExecuteBead returned error: %v", err)
 	}
@@ -392,7 +393,7 @@ func TestExecuteBead_NoChangesRationaleAbsentWhenNotWritten(t *testing.T) {
 	// Runner that does NOT write the rationale file.
 	runner := &gateTestAgentRunner{exitCode: 0}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
 	if err != nil {
 		t.Fatalf("ExecuteBead returned error: %v", err)
 	}

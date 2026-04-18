@@ -160,7 +160,11 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		Compactor:     compactor,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	parentCtx := opts.Context
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 	var timedOut atomic.Bool
 	var stalled atomic.Bool

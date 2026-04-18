@@ -149,7 +149,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	agent.RecoverOrphans(gitOps, projectRoot, beadID)
 
 	// Worker step: run the agent in an isolated worktree.
-	res, err := agent.ExecuteBead(projectRoot, beadID, workerOpts, gitOps, runner)
+	res, err := agent.ExecuteBead(cmd.Context(), projectRoot, beadID, workerOpts, gitOps, runner)
 	if err != nil && res == nil {
 		return err
 	}

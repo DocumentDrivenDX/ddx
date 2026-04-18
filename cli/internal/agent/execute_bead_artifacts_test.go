@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -148,7 +149,7 @@ func TestExecuteBead_ArtifactsCreated(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, &artifactTestAgentRunner{})
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{}, gitOps, &artifactTestAgentRunner{})
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -178,7 +179,7 @@ func TestExecuteBead_ManifestShape(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
 		Harness: "test-harness",
 		Model:   "test-model",
 	}, gitOps, &artifactTestAgentRunner{})
@@ -291,7 +292,7 @@ func TestExecuteBead_ResultShape(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, &artifactTestAgentRunner{})
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{}, gitOps, &artifactTestAgentRunner{})
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -453,7 +454,7 @@ func TestExecuteBead_NoChecksArtifactWhenNoGates(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, &artifactTestAgentRunner{})
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{}, gitOps, &artifactTestAgentRunner{})
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -494,7 +495,7 @@ func TestExecuteBead_UsageArtifact(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -559,7 +560,7 @@ func TestExecuteBead_NoUsageArtifactWhenNoTokens(t *testing.T) {
 		result: &Result{ExitCode: 0, Tokens: 0, CostUSD: 0},
 	}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{}, gitOps, runner)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}

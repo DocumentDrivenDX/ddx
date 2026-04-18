@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -412,7 +413,10 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 //
 // Merge, UpdateRef, gate evaluation, preserve-ref management, and orphan
 // recovery are the parent's responsibility (see LandBeadResult, RecoverOrphans).
-func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, gitOps GitOps, runner AgentRunner) (*ExecuteBeadResult, error) {
+func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts ExecuteBeadOptions, gitOps GitOps, runner AgentRunner) (*ExecuteBeadResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	attemptID := GenerateAttemptID()
 	if opts.WorkerID == "" {
 		opts.WorkerID = os.Getenv("DDX_WORKER_ID")
@@ -486,6 +490,7 @@ func ExecuteBead(projectRoot string, beadID string, opts ExecuteBeadOptions, git
 	startedAt := time.Now().UTC()
 
 	agentResult, agentErr := runner.Run(RunOptions{
+		Context:       ctx,
 		Harness:       opts.Harness,
 		Prompt:        "",
 		PromptFile:    artifacts.PromptAbs,

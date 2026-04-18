@@ -289,7 +289,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		singleTierAttempt := func(ctx context.Context, beadID string, tier agent.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
 			runner := m.buildAgentRunner(projectRoot)
 			gitOps := &agent.RealGitOps{}
-			res, err := agent.ExecuteBead(projectRoot, beadID, agent.ExecuteBeadOptions{
+			res, err := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
 				Harness:    resolvedHarness,
 				Model:      resolvedModel,
 				Provider:   spec.Provider,

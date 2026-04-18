@@ -173,7 +173,7 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 		repoMu.Lock()
 		defer repoMu.Unlock()
 
-		res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{
+		res, err := ExecuteBead(ctx, projectRoot, beadID, ExecuteBeadOptions{
 			Harness: "script",
 			Model:   directivePath,
 		}, gitOps, runner)

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -278,7 +279,7 @@ func TestSynthesizeCommitMessage_InExecuteBead(t *testing.T) {
 		},
 	}
 
-	_, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{
+	_, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
 		Harness: "test-harness",
 		Model:   "test-model",
 	}, gitOps, &artifactTestAgentRunner{})

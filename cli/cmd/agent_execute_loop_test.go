@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -65,7 +66,7 @@ func TestInvokeExecuteBeadFromLoopParsesJSONAmidWarnings(t *testing.T) {
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
 
-	res, err := agent.ExecuteBead(workDir, "my-bead", agent.ExecuteBeadOptions{}, git, runner)
+	res, err := agent.ExecuteBead(context.Background(), workDir, "my-bead", agent.ExecuteBeadOptions{}, git, runner)
 	require.NoError(t, err)
 	assert.Equal(t, "my-bead", res.BeadID)
 	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)

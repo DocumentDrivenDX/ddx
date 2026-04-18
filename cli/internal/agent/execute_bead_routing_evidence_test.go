@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -22,7 +23,7 @@ func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
 		Harness:    "script",
 		Model:      dirFile,
 		BeadEvents: beadStore,
@@ -68,7 +69,7 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
 		Harness:    "script",
 		Model:      dirFile,
 		BeadEvents: nil,
@@ -95,7 +96,7 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealOrchestratorGitOps{}
 
-	res, err := ExecuteBead(projectRoot, beadID, ExecuteBeadOptions{
+	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
 		Harness:    "script",
 		Model:      dirFile,
 		BeadEvents: beadStore,
