@@ -16,6 +16,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -301,34 +302,29 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 
 			// Single harness mode.
 			// When no explicit --harness is given but --profile (or --model) is set,
-			// route through NormalizeRouteRequest → BuildCandidatePlans → RankCandidates
-			// to select the best available harness for the request. This allows workflow
-			// tools to pass stage intent (cheap/fast/smart) without choosing a harness.
+			// route through service.ResolveRoute to select the best available harness.
+			// This allows workflow tools to pass stage intent (cheap/fast/smart) without
+			// choosing a harness.
 			resolvedHarness := harness
 			resolvedModel := model
 			if harness == "" && (profile != "" || model != "") {
-				flags := agent.RouteFlags{
-					Profile:     profile,
+				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+				if svcErr != nil {
+					return fmt.Errorf("agent: failed to initialize routing service: %w", svcErr)
+				}
+				routeReq := agentlib.RouteRequest{
 					Model:       model,
 					Effort:      effort,
 					Permissions: permissions,
-					// Harness intentionally empty — routing selects across all candidates.
+					ModelRef:    profile,
 				}
-				// Don't constrain routing to the config-default harness when profile/model
-				// drives selection; clear Harness so all registered harnesses are evaluated.
-				routingCfg := r.Config
-				routingCfg.Harness = ""
-				req := agent.NormalizeRouteRequest(flags, routingCfg, r.Catalog)
-				plans := r.ProbeAndBuildCandidatePlans(req, timeout)
-				ranked := agent.RankCandidates(req.Profile, plans)
-				for _, plan := range ranked {
-					if plan.Viable {
-						resolvedHarness = plan.Harness
-						if model == "" && plan.ConcreteModel != "" {
-							resolvedModel = plan.ConcreteModel
-						}
-						break
-					}
+				dec, routeErr := svc.ResolveRoute(cmd.Context(), routeReq)
+				if routeErr != nil {
+					return fmt.Errorf("agent: no viable harness found for profile %q: %w", profile, routeErr)
+				}
+				resolvedHarness = dec.Harness
+				if model == "" && dec.Model != "" {
+					resolvedModel = dec.Model
 				}
 				if resolvedHarness == "" {
 					return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
@@ -1498,18 +1494,20 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 			if !escalationEnabled {
 				// Single-attempt path: --harness or --model was specified.
-				// Route dynamically when no harness is pinned (legacy behaviour).
-				runner := f.agentRunner()
+				// Route dynamically when no harness is pinned.
 				resolvedHarness := harness
 				if resolvedHarness == "" {
-					routeFlags := agent.RouteFlags{Model: model, Provider: provider, ModelRef: modelRef, Effort: effort}
-					routingCfg := runner.Config
-					routingCfg.Harness = ""
-					req := agent.NormalizeRouteRequest(routeFlags, routingCfg, runner.Catalog)
-					plans := runner.ProbeAndBuildCandidatePlans(req, 10*time.Second)
-					ranked := agent.RankCandidates("", plans)
-					if best, err := agent.SelectBestCandidate(ranked); err == nil {
-						resolvedHarness = best.Harness
+					svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+					if svcErr == nil {
+						dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
+							Model:    model,
+							Provider: provider,
+							ModelRef: modelRef,
+							Effort:   effort,
+						})
+						if routeErr == nil {
+							resolvedHarness = dec.Harness
+						}
 					}
 				}
 				return singleTierAttempt(ctx, beadID, "", resolvedHarness, model)
@@ -1532,32 +1530,30 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 			assignee := resolveClaimAssignee()
-			runner := f.agentRunner()
+			svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+			if svcErr != nil {
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusExecutionFailed,
+					Detail: "execute-loop: failed to initialize routing service: " + svcErr.Error(),
+				}, nil
+			}
 			var lastReport agent.ExecuteBeadReport
 			var escalationAttempts []agent.TierAttemptRecord
 
 			for _, tier := range tiers {
-				// Build a route request for this tier using the tier name as profile.
-				routingCfg := runner.Config
-				routingCfg.Harness = ""
-				req := agent.NormalizeRouteRequest(
-					agent.RouteFlags{Profile: string(tier), Provider: provider, Effort: effort},
-					routingCfg, runner.Catalog,
-				)
-				plans := runner.ProbeAndBuildCandidatePlans(req, 10*time.Second)
-
-				// Filter out harnesses on cooldown from a previous tier attempt.
-				for i := range plans {
-					if plans[i].Viable && !agent.GlobalProviderHealth.IsHealthy(plans[i].Harness) {
-						plans[i].Viable = false
-						plans[i].RejectReason = "provider cooldown"
-					}
-				}
-
-				ranked := agent.RankCandidates(string(tier), plans)
-				best, pickErr := agent.SelectBestCandidate(ranked)
+				// Resolve the best harness for this tier via service.ResolveRoute.
+				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
+					ModelRef: string(tier),
+					Provider: provider,
+					Effort:   effort,
+				})
 				probeResult := "ok"
-				if pickErr != nil {
+				// Treat cooldown-marked harnesses as unavailable for this tier.
+				if routeErr == nil && !agent.GlobalProviderHealth.IsHealthy(dec.Harness) {
+					routeErr = fmt.Errorf("provider cooldown")
+				}
+				if routeErr != nil {
 					probeResult = "no viable provider"
 					// No viable harness for this tier; skip and escalate.
 					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
@@ -1575,13 +1571,13 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					continue
 				}
 
-				report, attemptErr := singleTierAttempt(ctx, beadID, tier, best.Harness, best.ConcreteModel)
+				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Model)
 				if attemptErr != nil {
 					report = agent.ExecuteBeadReport{
 						BeadID:      beadID,
 						Tier:        string(tier),
-						Harness:     best.Harness,
-						Model:       best.ConcreteModel,
+						Harness:     dec.Harness,
+						Model:       dec.Model,
 						Status:      agent.ExecuteBeadStatusExecutionFailed,
 						Detail:      attemptErr.Error(),
 						ProbeResult: probeResult,
@@ -1622,7 +1618,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				// Execution-level failure: mark harness unhealthy so the next
 				// tier attempt (and parallel workers) skip it during cooldown.
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
-					agent.GlobalProviderHealth.Mark(best.Harness, time.Now().Add(agent.ProviderCooldownDuration))
+					agent.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(agent.ProviderCooldownDuration))
 				}
 			}
 

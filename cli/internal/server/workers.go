@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -451,30 +452,30 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 
 			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-			runner := m.buildAgentRunner(projectRoot)
+			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
+			if svcErr != nil {
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusExecutionFailed,
+					Detail: "execute-loop: failed to initialize routing service: " + svcErr.Error(),
+				}, nil
+			}
 			var lastReport agent.ExecuteBeadReport
 			var escalationAttempts []agent.TierAttemptRecord
 
 			for _, tier := range tiers {
-				routingCfg := runner.Config
-				routingCfg.Harness = ""
-				req := agent.NormalizeRouteRequest(
-					agent.RouteFlags{Profile: string(tier), Provider: spec.Provider, Effort: spec.Effort},
-					routingCfg, runner.Catalog,
-				)
-				plans := runner.ProbeAndBuildCandidatePlans(req, 10*time.Second)
-
-				for i := range plans {
-					if plans[i].Viable && !agent.GlobalProviderHealth.IsHealthy(plans[i].Harness) {
-						plans[i].Viable = false
-						plans[i].RejectReason = "provider cooldown"
-					}
-				}
-
-				ranked := agent.RankCandidates(string(tier), plans)
-				best, pickErr := agent.SelectBestCandidate(ranked)
+				// Resolve the best harness for this tier via service.ResolveRoute.
+				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
+					ModelRef: string(tier),
+					Provider: spec.Provider,
+					Effort:   spec.Effort,
+				})
 				probeResult := "ok"
-				if pickErr != nil {
+				// Treat cooldown-marked harnesses as unavailable for this tier.
+				if routeErr == nil && !agent.GlobalProviderHealth.IsHealthy(dec.Harness) {
+					routeErr = fmt.Errorf("provider cooldown")
+				}
+				if routeErr != nil {
 					probeResult = "no viable provider"
 					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
 						Kind:      "tier-attempt",
@@ -491,13 +492,13 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 					continue
 				}
 
-				report, attemptErr := singleTierAttempt(ctx, beadID, tier, best.Harness, best.ConcreteModel)
+				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Model)
 				if attemptErr != nil {
 					report = agent.ExecuteBeadReport{
 						BeadID:      beadID,
 						Tier:        string(tier),
-						Harness:     best.Harness,
-						Model:       best.ConcreteModel,
+						Harness:     dec.Harness,
+						Model:       dec.Model,
 						Status:      agent.ExecuteBeadStatusExecutionFailed,
 						Detail:      attemptErr.Error(),
 						ProbeResult: probeResult,
@@ -533,7 +534,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 					return report, nil
 				}
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
-					agent.GlobalProviderHealth.Mark(best.Harness, time.Now().Add(agent.ProviderCooldownDuration))
+					agent.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(agent.ProviderCooldownDuration))
 				}
 			}
 
