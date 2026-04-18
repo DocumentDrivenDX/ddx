@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
-	agentconfig "github.com/DocumentDrivenDX/agent/config"
-	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
+	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,7 @@ Exits 0 if at least one provider is reachable and has at least one usable model.
 Exits 1 otherwise.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := agentconfig.Load(f.WorkingDir)
+			svc, err := agent.NewServiceFromWorkDir(f.WorkingDir)
 			if err != nil {
 				return fmt.Errorf("loading agent config: %w", err)
 			}
@@ -44,58 +45,60 @@ Exits 1 otherwise.`,
 			providerName, _ := cmd.Flags().GetString("provider")
 			asJSON, _ := cmd.Flags().GetBool("json")
 
-			var names []string
-			if providerName != "" {
-				if _, ok := cfg.GetProvider(providerName); !ok {
-					return fmt.Errorf("unknown provider %q", providerName)
-				}
-				names = []string{providerName}
-			} else {
-				names = cfg.ProviderNames()
+			ctx, cancel := context.WithTimeout(context.Background(), checkProbeTimeout*2)
+			defer cancel()
+
+			providers, err := svc.ListProviders(ctx)
+			if err != nil {
+				return fmt.Errorf("loading agent config: %w", err)
 			}
 
-			type namedResult struct {
-				name    string
-				harness string
-				r       providerstatus.Result
-				latency time.Duration
-			}
-			results := make([]namedResult, 0, len(names))
-			for _, name := range names {
-				pc := cfg.Providers[name]
-				ctx, cancel := context.WithTimeout(context.Background(), checkProbeTimeout)
-				start := time.Now()
-				r := providerstatus.Probe(ctx, pc)
-				elapsed := time.Since(start)
-				cancel()
-				results = append(results, namedResult{name: name, harness: pc.Type, r: r, latency: elapsed})
+			// Filter to named provider if requested.
+			if providerName != "" {
+				found := false
+				for _, p := range providers {
+					if p.Name == providerName {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("unknown provider %q", providerName)
+				}
+				filtered := make([]agentlib.ProviderInfo, 0, 1)
+				for _, p := range providers {
+					if p.Name == providerName {
+						filtered = append(filtered, p)
+					}
+				}
+				providers = filtered
 			}
 
 			anyReachable := false
-			for _, nr := range results {
-				if nr.r.Reachable {
-					if nr.r.Models == nil || len(nr.r.Models) > 0 {
-						anyReachable = true
-					}
+			for _, p := range providers {
+				if p.Status == "connected" {
+					anyReachable = true
+					break
 				}
 			}
 
 			if asJSON {
-				entries := make([]checkResultEntry, 0, len(results))
-				for _, nr := range results {
+				entries := make([]checkResultEntry, 0, len(providers))
+				for _, p := range providers {
 					status := "unreachable"
-					if nr.r.Reachable {
-						status = "ok"
-					}
 					errMsg := ""
-					if !nr.r.Reachable {
-						errMsg = nr.r.Message
+					if p.Status == "connected" {
+						status = "ok"
+					} else {
+						errMsg = p.Status
+						// Strip "error: " prefix for cleaner error messages.
+						errMsg = strings.TrimPrefix(errMsg, "error: ")
 					}
 					entries = append(entries, checkResultEntry{
-						Provider:  nr.name,
-						Harness:   nr.harness,
+						Provider:  p.Name,
+						Harness:   p.Type,
 						Status:    status,
-						LatencyMs: nr.latency.Milliseconds(),
+						LatencyMs: 0, // latency not tracked by service layer
 						Error:     errMsg,
 					})
 				}
@@ -105,12 +108,12 @@ Exits 1 otherwise.`,
 					return err
 				}
 			} else {
-				for _, nr := range results {
+				for _, p := range providers {
 					status := "UNREACHABLE"
-					if nr.r.Reachable {
+					if p.Status == "connected" {
 						status = "OK"
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %-12s  %s\n", nr.name, status, nr.r.Message)
+					fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %-12s  %s\n", p.Name, status, p.Status)
 				}
 			}
 
