@@ -51,6 +51,19 @@ type Runner struct {
 	// CompactorOverride replaces the default compactor when non-nil.
 	// Used in tests to control compaction behaviour without real token budgets.
 	CompactorOverride func(ctx context.Context, messages []agentlib.Message, provider agentlib.Provider, toolCalls []agentlib.ToolCallLog) ([]agentlib.Message, *agentlib.CompactionResult, error)
+
+	// UseNewAgentPath, when true, routes RunAgent through the new
+	// agentlib.DdxAgent.Execute service path instead of the legacy
+	// in-package agentlib.Run loop with local circuit breakers. The default
+	// is false so production behaviour is unchanged. The env var
+	// DDX_USE_NEW_AGENT_PATH=1 forces this on globally; tests can also set
+	// the field directly.
+	//
+	// Tracks ddx-e49dbf60. The legacy code paths (buildAgentProvider,
+	// embeddedCompactionConfig, findTool, wrapProviderWithDeadlines, the
+	// stall + compaction-stuck circuit breakers) remain in place until
+	// follow-up bead ddx-d224671d removes them.
+	UseNewAgentPath bool
 }
 
 // NewRunner creates a runner with defaults.
@@ -523,7 +536,6 @@ func (r *Runner) processResult(harnessName, model string, harness Harness, execR
 
 	if execResult != nil {
 		result.Output = execResult.Stdout
-		result.CondensedOutput = CondenseOutput(result.Output, "")
 		result.Stderr = execResult.Stderr
 		result.ExitCode = execResult.ExitCode
 	}
