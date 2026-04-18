@@ -274,12 +274,26 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 	return res, nil
 }
 
+// resolveClaudeProgressLogDir picks the directory for the per-run claude
+// progress JSONL trace. The per-run override (opts.SessionLogDir) takes
+// precedence over the runner-wide Config.SessionLogDir so managed
+// execute-bead invocations can redirect the trace into the DDx-owned
+// execution bundle's embedded/ dir instead of the runner's default
+// .ddx/agent-logs. Matches the agent_runner.go precedence pattern so the
+// two harnesses behave identically under execute-bead.
+func resolveClaudeProgressLogDir(opts RunOptions, cfg Config) string {
+	if opts.SessionLogDir != "" {
+		return opts.SessionLogDir
+	}
+	return cfg.SessionLogDir
+}
+
 // runClaudeStreaming is the streaming execution path for the claude harness.
 // It launches the claude binary directly (bypassing the standard Executor
 // abstraction so it can pipe stdout line-by-line), parses stream-json events
 // as they arrive, and writes per-tool progress entries to a ddx-agent-style
-// JSONL file in r.Config.SessionLogDir so `ddx server workers log` sees
-// real-time activity.
+// JSONL file in opts.SessionLogDir (when set) or r.Config.SessionLogDir so
+// `ddx server workers log` sees real-time activity.
 //
 // On success it returns a *Result shaped exactly like the non-streaming
 // path, so callers downstream (processResult, session logging) are unchanged.
@@ -324,9 +338,10 @@ func (r *Runner) runClaudeStreaming(ctx context.Context, harness Harness, harnes
 		beadID = resolvedOpts.Correlation["bead_id"]
 	}
 	var progressLog *os.File
-	if r.Config.SessionLogDir != "" {
-		if err := os.MkdirAll(r.Config.SessionLogDir, 0o755); err == nil {
-			logPath := filepath.Join(r.Config.SessionLogDir, "agent-"+sessionID+".jsonl")
+	progressLogDir := resolveClaudeProgressLogDir(resolvedOpts, r.Config)
+	if progressLogDir != "" {
+		if err := os.MkdirAll(progressLogDir, 0o755); err == nil {
+			logPath := filepath.Join(progressLogDir, "agent-"+sessionID+".jsonl")
 			if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
 				progressLog = f
 				defer progressLog.Close()
