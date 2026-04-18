@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260418T053050-a607d6d5",
+  "bead_id": ".execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-3e3913a0",
+  "base_rev": "fc199a6f6f8a17dbb9b38df858e90a11e2bf7358",
+  "created_at": "2026-04-18T05:30:50.428593539Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-3e3913a0",
+    "title": "execute-bead: audit and enforce per-request HTTP deadlines on agent provider calls",
+    "description": "## Root cause RC4 from ddx-0a651925\n\nAfter RC1 is fixed (caller ctx propagates), provider HTTP calls still need per-request deadlines. A stalled TCP socket that delivers headers and then stops sending body bytes — particularly during streaming token reads — can hang a goroutine for days.\n\nGrepping the `DocumentDrivenDX/agent@v0.3.14` module cache shows short timeouts only on discovery probes (`provider/openai/discovery.go:46,174`, `openai.go:123`). The main `Run` call path inside agent providers appears to inherit whatever ctx DDx passes — which today is `context.Background()` (see RC1).\n\n## Scope\n\n1. Audit `openai`, `anthropic`, `virtual` providers in the agent library for per-request deadline usage.\n2. Install a per-request deadline (default ~10-15 min) on each provider call; separate from the wall-clock bound in RC2.\n3. For streaming bodies, enforce an **idle-read limit** on the response body so a mid-stream stall cannot hold a goroutine indefinitely (e.g. `http.Transport.ResponseHeaderTimeout` + periodic `SetReadDeadline` on the underlying conn).\n4. Surface provider-timeout failures as a distinct status in `ExecuteBeadResult.Detail`.\n\n## Non-goals\n\n- Rewriting providers; minimally invasive change only.\n- Changing DDx-side timeout defaults (RC2 covers outer bound).\n\n## Prerequisite\n\nSibling RC1 bead must be resolved first, otherwise adding deadlines inside providers is useless while DDx still feeds them `context.Background()`.",
+    "acceptance": "- [ ] Audit report (checked-in .md or bead-comment) lists every `http.Client.Do`-equivalent call in agent providers with its current deadline semantics\n- [ ] Each main provider call path installs a per-request deadline (default 15m or catalog-configurable)\n- [ ] Streaming body reads terminate within a bounded idle period (ReadDeadline or equivalent)\n- [ ] Integration test: fake HTTP server accepts the connection, sends headers, then stops responding. Provider call returns within deadline with a distinct error",
+    "parent": "ddx-0a651925",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:bug",
+      "area:agent",
+      "area:providers",
+      "root-cause:rc4"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-18T05:30:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1833233",
+      "execute-loop-heartbeat-at": "2026-04-18T05:30:50.083349789Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260418T053050-a607d6d5",
+    "prompt": ".ddx/executions/20260418T053050-a607d6d5/prompt.md",
+    "manifest": ".ddx/executions/20260418T053050-a607d6d5/manifest.json",
+    "result": ".ddx/executions/20260418T053050-a607d6d5/result.json",
+    "checks": ".ddx/executions/20260418T053050-a607d6d5/checks.json",
+    "usage": ".ddx/executions/20260418T053050-a607d6d5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-3e3913a0-20260418T053050-a607d6d5"
+  }
+}
