@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260418T015654-977ef255",
+  "bead_id": "ddx-6a5dfe35",
+  "base_rev": "c7dd757481984745a0f5ceda010d0ff5d8bbedb8",
+  "created_at": "2026-04-18T01:56:55.232278408Z",
+  "requested": {
+    "harness": "agent",
+    "model": "Qwen3.6-35B-A3B-4bit",
+    "provider": "vidar-omlx",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6a5dfe35",
+    "title": "agent: v0.3.11 omlx dispatch returns 'unexpected end of JSON input' under execute-bead prompts (direct curl works)",
+    "description": "## Problem (re-scoped per fresh-eyes review 2026-04-17)\n\nRunning 'ddx work --once --local --provider vidar-omlx --model Qwen3.6-35B-A3B-4bit --max-tier cheap' against an execute-bead prompt fails with:\n\n    agent: provider error: unexpected end of JSON input\n\nafter 14.65s. No tokens consumed (input=0, output=0). The session log at .ddx/executions/20260418T005052-3aad2cfa/embedded/*.jsonl shows llm.delta err={Offset: 0} — parser read an empty/malformed first chunk.\n\n## What the bead originally claimed (now disputed)\n\nOriginal framing declared this an upstream ddx-agent v0.3.11 defect based on 'direct curl against the same endpoint works for non-streaming, tools, and SSE'. Both codex and opus fresh-eyes reviews pushed back that this attribution is not supported by the evidence:\n\n- 'unexpected end of JSON input after 14s is exactly what you'd see if (a) the server closed the stream on an unsupported field, (b) DDx sent stream=true to an omlx flavor that returns a non-SSE 200 with empty body, or (c) the tool schema tripped server-side validation and the server returned {} + close.' — opus\n- 'Routing and dispatch still have split control paths... That means malformed provider/model pairing is still possible before the request ever reaches the parser. unexpected end of JSON input is consistent with a broken upstream parser, but also with DDx sending a request shape or streaming mode the omlx server does not fully support.' — codex\n\n## Fix — evidence first, attribution second\n\nThis bead now produces wire-level evidence BEFORE concluding where the defect lives. Acceptance criteria are scoped to that.\n\n### Step 1: Capture the wire payload\n\nReproduce the failure on a host with vidar-omlx reachable and capture the exact HTTP request DDx sends and the exact HTTP response the server returns. Options in ascending order of preference:\n\na) Run with HTTPS_PROXY pointing at a local mitmproxy or a simple Go tcp-dump proxy that logs request/response bodies + headers to a file.\nb) Add a temporary debug flag in ddx-agent (or ddx-side wrapper) to dump the request body + response headers + raw response bytes before parsing.\nc) tcpdump/wireshark on the vidar host capturing port 1235, filtering to the DDx attempt's source IP and time window.\n\n### Step 2: Classify the defect\n\nWith the wire payload in hand, determine which layer is at fault:\n\n- **DDx bug**: request shape is inconsistent with what omlx (flavor-specific) accepts — e.g., stream=true on a server that returns non-SSE, tool schema shape mismatched, missing/extra header, etc. Fix in DDx (ddx-agent config or ddx-agent library usage).\n- **ddx-agent bug**: request is valid and server returned valid SSE/JSON, but agent-lib's parser errored. Fix upstream; bump version when fixed.\n- **omlx server bug**: request is valid and ddx-agent parser is correct, but server returned empty body or malformed SSE frames. Fix upstream at ml-explore/mlx_lm; work around in ddx-agent by detecting and retrying with different flags.\n\n### Step 3: File and fix\n\nWhichever of the three paths the evidence points to, file follow-up as needed (a targeted DDx fix, an agent-lib bump, or a workaround). This bead closes when the root cause is identified AND addressed AND a regression test or reproducer exists.\n\n## Evidence captured on eitri 2026-04-17 (pre-scope)\n\n- Host: eitri, DDx binary v0.6.0-alpha22 (commit 93854d30, agent-lib v0.3.11)\n- Provider: vidar-omlx (http://vidar:1235/v1)\n- Model: Qwen3.6-35B-A3B-4bit (loaded=true, max_context_window=262144, max_tokens=32768)\n- Evidence: .ddx/executions/20260418T005052-3aad2cfa/\n- Direct curl WORKS for: non-streaming completion, tools, streaming SSE (session shows all three shapes returned valid responses).\n\nThe curl-works isolation is not strong enough to pin the defect upstream — the full execute-bead prompt (system + AGENTS.md + CLAUDE.md + META-PROMPT + bead XML + 6 tool schemas, ~50-100KB wire size) exercises a different code path through ddx-agent than the 3-line curl tests.\n\n## Related catalog-mapping observation (separate issue)\n\nFirst attempt's escalation hit a catalog-missing model on vidar-omlx (minimax/minimax-m2.7 -\u003e 404). That is covered by ddx-3c5ba7cc (tier-affinity) + ddx-8610020e (RouteRequest.Provider field) + ddx-0486e601 (fuzzy normalization). Not this bead.\n\n## Files likely touched (unknown until step 2)\n\nDepends on classification. Possible surfaces:\n- cli/internal/agent/ (if DDx sends a malformed request)\n- upstream DocumentDrivenDX/agent (if library parser is broken)\n- ml-explore/mlx_lm / omlx server (if server returns empty body)",
+    "acceptance": "1. Wire-level evidence exists: either a captured HTTP request body + response body/headers for the failing attempt, OR a minimal reproducer (not execute-bead prompt, just the same request shape) that hits the same 'unexpected end of JSON input' symptom.\n\n2. Root cause classified as one of {DDx malformed request, ddx-agent parser defect, omlx server defect} — with the evidence cited in the bead's event trail.\n\n3. Classification-appropriate fix landed OR a follow-up bead filed with the classified scope and this bead closes as 'evidence-gathered, scope-handed-off'.\n\n4. Regression test or reproducer exists so this failure mode is detected in CI or in the routing eval suite.",
+    "parent": "ddx-2d974641",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:bug",
+      "area:agent",
+      "area:routing",
+      "area:omlx",
+      "goal:throughput-per-dollar"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-18T01:56:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1697331",
+      "execute-loop-heartbeat-at": "2026-04-18T01:56:41.480166619Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260418T015654-977ef255",
+    "prompt": ".ddx/executions/20260418T015654-977ef255/prompt.md",
+    "manifest": ".ddx/executions/20260418T015654-977ef255/manifest.json",
+    "result": ".ddx/executions/20260418T015654-977ef255/result.json",
+    "checks": ".ddx/executions/20260418T015654-977ef255/checks.json",
+    "usage": ".ddx/executions/20260418T015654-977ef255/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6a5dfe35-20260418T015654-977ef255"
+  }
+}

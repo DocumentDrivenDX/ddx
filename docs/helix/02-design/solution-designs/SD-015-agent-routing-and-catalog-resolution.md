@@ -13,9 +13,16 @@ DDx should route ordinary agent requests by intent and normalized routing
 signals, not by harness name alone.
 Users primarily express:
 
-- a profile such as `cheap`, `standard`, or `smart`
+- a profile such as `cheap`, `default`, `fast`, or `smart`
 - a model such as `qwen3.6` or `claude-sonnet-4-20250514`
 - an effort level such as `high`
+
+The four profiles are escalation ladders, not single-tier selectors. Per
+FEAT-006 §"Profile Semantics": `default` = local first, escalate to cloud;
+`cheap` = local only; `fast` = cloud-fast, skip local; `smart` = cloud-
+high-quality, no escalation. This SD specifies how the routing layer
+evaluates candidates within one tier; tier escalation itself is a
+control-loop concern layered on top (see FEAT-006 requirement 3c).
 
 DDx then decides which harness should execute the request. Once DDx chooses
 the embedded harness, the embedded `ddx-agent` runtime chooses its own
@@ -33,7 +40,11 @@ Users express intent through CLI flags. DDx normalizes these into a
 `RouteRequest` for internal processing:
 
 - `Model` — the user's requested model string (may be exact or a prefix)
-- `Profile` — a routing profile (`cheap`, `standard`, `smart`)
+- `Profile` — a routing profile (`cheap`, `default`, `fast`, `smart`)
+- `Tier` — the currently-evaluated tier within the profile's ladder
+  (`cheap`, `standard`, `fast`, `smart`). For single-tier profiles (`cheap`,
+  `smart`), Tier equals Profile. For ladder profiles (`default`, `fast`),
+  Tier advances on escalation (see FEAT-006 §"Profile Semantics").
 - `Provider` — a provider preference or target
 - `Effort` — effort level
 - `Permissions` — permission mode
@@ -132,9 +143,11 @@ that want deterministic catalog resolution without discovery variability.
 `--model-ref` follows mode 2's steps 2-3 (find providers, pick best) but
 replaces step 1 with strict catalog lookup.
 
-### 3. Profile (`--profile cheap|standard|smart`)
+### 3. Profile (`--profile cheap|default|fast|smart`)
 
-Catalog-driven autopilot. Resolve the profile through the shared catalog for
+Catalog-driven autopilot with tier escalation. The profile names a ladder
+(see FEAT-006 §"Profile Semantics"); routing walks the ladder tier by tier.
+Within each tier, resolve the tier's model ref through the shared catalog for
 each harness surface and evaluate all harnesses that can satisfy it. This is
 the primary path for automated execution (execute-loop, cost-tiered
 escalation).

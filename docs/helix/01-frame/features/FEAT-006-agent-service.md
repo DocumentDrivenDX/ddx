@@ -139,16 +139,78 @@ agent:
   session_log_dir: ...     # where DDx writes invocation metadata
   permissions: safe        # automation level for subprocess harnesses
   routing:                 # cross-harness routing policy
-    profile_priority: [cheap]
-    default_harness: agent
-    model_overrides:
-      cheap: qwen/qwen3.6
+    profile_ladders:       # per-profile tier escalation ladder (see Profile Semantics)
+      default: [cheap, standard, smart]
+      cheap:   [cheap]
+      fast:    [fast, smart]
+      smart:   [smart]
+    model_overrides:       # canonical model ref per tier; fuzzy-matches to provider-native IDs
+      cheap:    qwen/qwen3.6          # local (omlx/lmstudio via embedded agent)
+      standard: codex/gpt-5.4         # cloud subscription — mid-quality, within-quota
+      fast:     kimi/k2.5             # cloud — low-latency, variable quality
+      smart:    minimax/minimax-m2.7  # cloud — high-quality, higher cost/latency
 ```
+
+The legacy `profile_priority` field (a flat list) is a deprecated alias for
+`profile_ladders.default`; projects configured with the old field emit a
+startup warning and continue to work.
 
 The `agent_runner` sub-section is a **deprecated lossy mirror** of native
 `.agent/config.yaml` fields. New deployments should use `.agent/config.yaml`
 instead. The `agent_runner` section will be removed once all known usages have
 migrated.
+
+### Profile Semantics
+
+The four shipped profiles map intent to a **tier escalation ladder**. Each tier
+is a labelled slot (`cheap`, `standard`, `fast`, `smart`) with a concrete model
+ref configured in `model_overrides`. Routing walks the profile's ladder in
+order, trying the next tier when the current tier fails with an
+escalation-triggering outcome: `execution_failed`, `land_conflict`,
+`post_run_check_failed`, `structural_validation_failed`. `no_changes` keeps
+the existing cooldown path; `success` / `already_satisfied` close the bead
+without escalation.
+
+| Profile | Ladder | Intent |
+|---|---|---|
+| `cheap`  | `[cheap]`                    | Local-only. Never escalates. High-volume exploratory work where cost dominates. |
+| `default` | `[cheap, standard, smart]` | **Common case.** Local first; escalate to cloud only on genuine failure. Throughput-per-dollar optimised. |
+| `fast`   | `[fast, smart]`              | Cloud-fast. Skip local entirely — 9s reasoning warmup is unacceptable for latency-critical/interactive work. |
+| `smart`  | `[smart]`                    | Cloud high-quality from the start. Bead-review, adversarial checks, beads whose AC demands high-quality reasoning. No escalation — if smart fails, the work fails meaningfully. |
+
+**Provider affinity.** When `--provider P` is pinned, each tier's model ref
+must resolve on `P` (via catalog + discovery fuzzy match). Tiers whose model
+doesn't resolve on `P` are filtered out of the effective ladder with a routing
+event naming the skip reason; escalation caps at the last resolvable tier
+rather than escalating to a different provider unless the user explicitly
+unpins. This is the "soft preference" semantic from SD-015 §"Provider as
+Modifier".
+
+**Capability gating.** Each candidate is filtered against the bead's
+requirements before scoring: context window (estimated prompt tokens ≤
+candidate's context), tool-calling support, structured-output support,
+effort level honoured. A candidate that can't serve the bead is rejected
+at route-plan time, not at dispatch.
+
+**Telemetry.** Every execution event records `requested_profile`,
+`requested_tier`, `resolved_tier`, `escalation_count`, `final_tier`, and
+the model/provider of each attempt. Downstream metrics (FEAT-016 / FEAT-014)
+report per-profile throughput and per-tier cost — the data the
+`default` profile's local-first design needs to justify itself.
+
+**CLI**:
+
+```bash
+ddx work --profile default            # common case — local first, escalate if needed
+ddx work --profile cheap              # local only, no escalation
+ddx work --profile fast               # cloud-fast, skip local
+ddx work --profile smart              # cloud-smart, no escalation
+ddx work --profile default --max-tier standard  # explicit cap below the ladder's top
+ddx agent run --profile smart --prompt task.md  # per-invocation
+```
+
+`--max-tier` is an explicit operator override that caps escalation even when
+the profile's ladder would go higher. Useful for cost-limited debugging runs.
 
 ### Migration
 
@@ -293,7 +355,8 @@ support.
 
 1. **Harness registry** — built-in support for codex, claude, gemini, opencode, embedded agent/ddx-agent, pi, cursor. Extensible via config. Codex, claude, and opencode are at full subprocess parity. The embedded harness is the in-process agent runtime (see below).
 2. **Harness discovery and state** — detect which harnesses are available on the system and model their routing-relevant state: installed, reachable, authenticated, quota/headroom state (`ok`, `blocked`, or `unknown`), policy-restricted, healthy/degraded, and signal freshness. Embedded harnesses are always installed, but may still be unroutable if their provider/backend configuration cannot satisfy the request. DDx may cache these checks with explicit freshness/TTL rules.
-3. **Intent-first agent invocation** — `ddx agent run --profile=<cheap|fast|smart>` or `ddx agent run --model <ref-or-exact>` sends a prompt through the DDx routing planner, which selects the best viable harness for the request and captures the output.
+3. **Intent-first agent invocation** — `ddx agent run --profile=<cheap|default|fast|smart>` or `ddx agent run --model <ref-or-exact>` sends a prompt through the DDx routing planner, which selects the best viable harness for the request and captures the output. The four profiles map to tier escalation ladders — see the Profile Semantics section above for the ladder table and escalation rules.
+3c. **Profile-driven tier escalation** — when a profile's current tier fails with an escalation-triggering outcome (`execution_failed`, `land_conflict`, `post_run_check_failed`, `structural_validation_failed`), routing automatically retries at the next tier in the profile's ladder. `--max-tier <tier>` caps the ladder as an operator override. `no_changes` uses the existing cooldown path; `success` / `already_satisfied` close without escalation.
 3a. **Explicit harness override** — `ddx agent run --harness=<name>` bypasses automatic harness selection and forces one harness. This remains the correct path for debugging, replay, and comparisons.
 3b. **Embedded DDx Agent** — `ddx agent run --harness=agent` runs the [DDx Agent](https://github.com/DocumentDrivenDX/agent) loop in-process via the agent library. No subprocess, no binary lookup. The agent library provides a tool-calling LLM loop with read/write/edit/bash tools, supporting any OpenAI-compatible endpoint (LM Studio, Ollama, OpenAI) or Anthropic. Local models run at zero cost. Configuration via the embedded runtime config and its provider/backend settings.
 4. **Prompt delivery** — accept prompt from stdin, file, or inline argument. Support prompt envelope format.

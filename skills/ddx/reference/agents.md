@@ -10,23 +10,33 @@ harness, which model, which effort level) should flow from
 Default to profile:
 
 ```bash
-ddx agent run --profile smart --prompt task.md
+ddx agent run --profile default --prompt task.md
 ```
 
-The three profiles:
+Each profile names a **tier escalation ladder**. Routing tries the first
+tier; if it fails with an escalation-triggering outcome, it retries at
+the next tier. The four shipped profiles:
 
-- `cheap` — low-cost routing. Picks the smallest capable model for
-  the task. Use for high-volume work, exploratory prompts, and
-  anywhere cost matters more than latency or accuracy.
-- `fast` — low-latency routing. Picks the fastest capable model.
-  Use for interactive loops, code reviews that block other work.
-- `smart` (default) — balanced. Picks a model that's generally
-  capable across tasks; the right default when you don't have a
-  specific reason to override.
+- `cheap` — **local only**. Ladder: `[cheap]`. Never escalates. High-
+  volume exploratory work where cost dominates and adequate quality
+  suffices.
+- `default` — **local first, escalate on failure**. Ladder:
+  `[cheap, standard, smart]`. The common case. Tries the local model
+  first; escalates to cloud only when the local path genuinely fails
+  (execution_failed, land_conflict, post_run_check_failed,
+  structural_validation_failed). Throughput-per-dollar optimized.
+- `fast` — **cloud-fast, skip local**. Ladder: `[fast, smart]`. For
+  latency-critical or interactive work where the local model's 9s
+  reasoning warmup is unacceptable. Escalates fast→smart on failure.
+- `smart` — **cloud high-quality, no escalation**. Ladder: `[smart]`.
+  For bead review, adversarial checks, beads whose AC demands high-
+  quality reasoning. If smart fails, the work fails meaningfully — no
+  silent fallback.
 
-Profiles are the portable intent signal. DDx resolves them to a
-concrete harness + model + effort level per the project's
-`.ddx/config.yaml` and the model catalog.
+Profiles are the portable intent signal. DDx resolves each ladder tier's
+model ref to a concrete (harness, model, effort) tuple per the project's
+`.ddx/config.yaml` `routing.profile_ladders` + `model_overrides` and the
+shared catalog. See FEAT-006 §"Profile Semantics" for the full contract.
 
 ## Explicit overrides
 
