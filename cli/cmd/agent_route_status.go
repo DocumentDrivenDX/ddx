@@ -4,142 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	agentconfig "github.com/DocumentDrivenDX/agent/config"
-	"github.com/DocumentDrivenDX/agent/observations"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
 
-const (
-	routeStatusProbeTimeout    = 5 * time.Second
-	defaultRouteHealthCooldown = 30 * time.Minute
-)
-
-// agentRouteHealthState mirrors the structure stored by ddx-agent in
-// .agent/route-health-{key}.json. Each failure records the time at which
-// a provider last failed for a given route key; candidates within the
-// cooldown window are deprioritised.
-type agentRouteHealthState struct {
-	Failures map[string]time.Time `json:"failures,omitempty"`
+// routeStatusJSON is the top-level JSON output shape.
+type routeStatusJSON struct {
+	Routes          []routeStatusRouteJSON    `json:"routes,omitempty"`
+	RecentDecisions []routeStatusDecisionJSON `json:"recent_decisions,omitempty"`
+	ActiveCooldowns []routeStatusCooldownJSON `json:"active_cooldowns,omitempty"`
 }
 
-func routeStatusStateKey(routeName string) string {
-	r := strings.NewReplacer("/", "_", ":", "_", " ", "_")
-	return r.Replace(routeName)
-}
-
-func routeStatusHealthFile(workDir, routeKey string) string {
-	return filepath.Join(workDir, ".agent", "route-health-"+routeStatusStateKey(routeKey)+".json")
-}
-
-func loadAgentRouteHealthState(workDir, routeKey string) agentRouteHealthState {
-	data, err := os.ReadFile(routeStatusHealthFile(workDir, routeKey))
-	if err != nil {
-		return agentRouteHealthState{Failures: make(map[string]time.Time)}
-	}
-	var state agentRouteHealthState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return agentRouteHealthState{Failures: make(map[string]time.Time)}
-	}
-	if state.Failures == nil {
-		state.Failures = make(map[string]time.Time)
-	}
-	return state
-}
-
-func parseRouteCooldownDuration(cfg *agentconfig.Config) time.Duration {
-	if cfg == nil || strings.TrimSpace(cfg.Routing.HealthCooldown) == "" {
-		return defaultRouteHealthCooldown
-	}
-	d, err := time.ParseDuration(cfg.Routing.HealthCooldown)
-	if err != nil || d <= 0 {
-		return defaultRouteHealthCooldown
-	}
-	return d
-}
-
-// routeCandidateStatus holds the evaluated routing state for one provider candidate.
-type routeCandidateStatus struct {
-	Provider      string
-	Model         string
-	Healthy       bool
-	InCooldown    bool
-	CooldownUntil time.Time
-	AvgLatencyMs  float64
-	Reliability   float64
-	Score         float64
-	Reason        string
-	ProbeMsg      string
-}
-
-func evalAgentRouteCandidate(
-	cfg *agentconfig.Config,
-	candidate agentconfig.ModelRouteCandidateConfig,
-	obs *observations.Store,
-	healthState agentRouteHealthState,
-	cooldown time.Duration,
-) routeCandidateStatus {
-	rc := routeCandidateStatus{
-		Provider: candidate.Provider,
-		Model:    candidate.Model,
-	}
-
-	pc, ok := cfg.GetProvider(candidate.Provider)
-	if !ok {
-		rc.Reason = "unknown provider"
-		rc.ProbeMsg = "unknown provider"
-		return rc
-	}
-
-	if rc.Model == "" {
-		rc.Model = pc.Model
-	}
-
-	// Check health cooldown.
-	if failedAt, inCooldown := healthState.Failures[candidate.Provider]; inCooldown {
-		if time.Since(failedAt) < cooldown {
-			rc.InCooldown = true
-			rc.CooldownUntil = failedAt.Add(cooldown)
-			rc.Reason = fmt.Sprintf("cooldown until %s", rc.CooldownUntil.Format(time.RFC3339))
-		}
-	}
-
-	// Probe provider health.
-	ctx, cancel := context.WithTimeout(context.Background(), routeStatusProbeTimeout)
-	pr := providerstatus.Probe(ctx, pc)
-	cancel()
-	rc.ProbeMsg = pr.Message
-	if pr.Reachable {
-		if !rc.InCooldown {
-			rc.Healthy = true
-		}
-	} else {
-		if !rc.InCooldown {
-			rc.Reason = pr.Message
-		}
-	}
-
-	// Observations for latency estimate.
-	if obs != nil && rc.Model != "" {
-		key := observations.Key{ProviderSystem: candidate.Provider, Model: rc.Model}
-		if mean, ok := obs.MeanSpeed(key); ok && mean > 0 {
-			// Convert output tokens/sec to approximate ms for 100 output tokens.
-			rc.AvgLatencyMs = 100.0 / mean * 1000.0
-		}
-	}
-
-	return rc
-}
-
-// routeStatusCandidateJSON is the JSON-serialisable form of routeCandidateStatus.
+// routeStatusCandidateJSON is the JSON-serialisable form of one route candidate.
 type routeStatusCandidateJSON struct {
 	Provider      string  `json:"provider"`
 	Model         string  `json:"model,omitempty"`
@@ -159,13 +41,6 @@ type routeStatusRouteJSON struct {
 	SelectedProvider string                     `json:"selected_provider,omitempty"`
 	SelectedModel    string                     `json:"selected_model,omitempty"`
 	Candidates       []routeStatusCandidateJSON `json:"candidates"`
-}
-
-// routeStatusJSON is the top-level JSON output shape.
-type routeStatusJSON struct {
-	Routes          []routeStatusRouteJSON    `json:"routes,omitempty"`
-	RecentDecisions []routeStatusDecisionJSON `json:"recent_decisions,omitempty"`
-	ActiveCooldowns []routeStatusCooldownJSON `json:"active_cooldowns,omitempty"`
 }
 
 // recentRoutingDecision is a merged view of a single routing decision sourced from
@@ -312,8 +187,8 @@ func (f *CommandFactory) newAgentRouteStatusCommand() *cobra.Command {
 		Long: `Shows the current provider routing state, recent routing decisions, and
 any health cooldowns currently in effect.
 
-Mirrors ddx-agent route-status output using the Go package API. Requires model
-routes to be configured in .agent/config.yaml.
+Uses the ddx-agent Service.RouteStatus API. Requires model routes to be
+configured in .agent/config.yaml.
 
 Examples:
   ddx agent route-status
@@ -324,63 +199,48 @@ Examples:
 			model, _ := cmd.Flags().GetString("model")
 			asJSON, _ := cmd.Flags().GetBool("json")
 
-			cfg, err := agentconfig.Load(f.WorkingDir)
+			svc, err := agent.NewServiceFromWorkDir(f.WorkingDir)
 			if err != nil {
 				return fmt.Errorf("loading agent config: %w", err)
 			}
 
-			cooldown := parseRouteCooldownDuration(cfg)
+			ctx := context.Background()
+			report, err := svc.RouteStatus(ctx)
+			if err != nil {
+				return fmt.Errorf("getting route status: %w", err)
+			}
 
-			// Load speed observations from the shared ddx-agent observations store.
-			obs, _ := observations.LoadStore(observations.DefaultStorePath())
-
-			// Determine which routes to show.
-			var routeKeys []string
+			// Filter by --model flag if specified.
 			if model != "" {
-				if _, ok := cfg.GetModelRoute(model); ok {
-					routeKeys = []string{model}
-				} else {
+				found := false
+				for _, r := range report.Routes {
+					if r.Model == model {
+						found = true
+						break
+					}
+				}
+				if !found {
 					return fmt.Errorf("no route configured for model key %q — check .agent/config.yaml", model)
 				}
-			} else {
-				routeKeys = cfg.ModelRouteNames()
-				if len(routeKeys) == 0 {
-					if !asJSON {
-						fmt.Fprintln(cmd.OutOrStdout(), "No model routes configured in .agent/config.yaml.")
-						fmt.Fprintln(cmd.OutOrStdout(), "Use --model <route-key> or configure model_routes in .agent/config.yaml.")
-					} else {
-						enc := json.NewEncoder(cmd.OutOrStdout())
-						enc.SetIndent("", "  ")
-						return enc.Encode(routeStatusJSON{})
+				filtered := report.Routes[:0]
+				for _, r := range report.Routes {
+					if r.Model == model {
+						filtered = append(filtered, r)
 					}
-					return nil
 				}
+				report.Routes = filtered
 			}
 
-			// Evaluate all route candidates.
-			type evaluatedRoute struct {
-				key        string
-				strategy   string
-				candidates []routeCandidateStatus
-			}
-			routes := make([]evaluatedRoute, 0, len(routeKeys))
-			for _, key := range routeKeys {
-				route, _ := cfg.GetModelRoute(key)
-				healthState := loadAgentRouteHealthState(f.WorkingDir, key)
-				strategy := route.Strategy
-				if strategy == "" {
-					strategy = "first-available"
+			if len(report.Routes) == 0 {
+				if !asJSON {
+					fmt.Fprintln(cmd.OutOrStdout(), "No model routes configured in .agent/config.yaml.")
+					fmt.Fprintln(cmd.OutOrStdout(), "Use --model <route-key> or configure model_routes in .agent/config.yaml.")
+				} else {
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(routeStatusJSON{})
 				}
-				candidates := make([]routeCandidateStatus, 0, len(route.Candidates))
-				for _, candidate := range route.Candidates {
-					rc := evalAgentRouteCandidate(cfg, candidate, obs, healthState, cooldown)
-					candidates = append(candidates, rc)
-				}
-				routes = append(routes, evaluatedRoute{
-					key:        key,
-					strategy:   strategy,
-					candidates: candidates,
-				})
+				return nil
 			}
 
 			// Load recent routing decisions from two complementary sources:
@@ -389,10 +249,6 @@ Examples:
 			//     rate) for every agent run, stored in routing-outcomes.jsonl.
 			//  2. kind:routing bead events — execution provenance per bead (which
 			//     provider/model was selected and why), tied to a specific bead ID.
-			//
-			// Both are kept because they serve different purposes: RoutingMetricsStore
-			// is for performance analytics across all runs; bead evidence links
-			// routing decisions to the specific work item being processed.
 			var recentDecisions []recentRoutingDecision
 
 			r := f.agentRunner()
@@ -425,7 +281,7 @@ Examples:
 				recentDecisions = recentDecisions[len(recentDecisions)-maxRecent:]
 			}
 
-			// Collect active cooldowns across all known routes.
+			// Collect active cooldowns across all routes from the report.
 			type cooldownEntry struct {
 				route         string
 				provider      string
@@ -434,19 +290,18 @@ Examples:
 			}
 			var activeCooldowns []cooldownEntry
 			seenCooldownKeys := make(map[string]struct{})
-			for _, ev := range routes {
-				healthState := loadAgentRouteHealthState(f.WorkingDir, ev.key)
-				for provider, failedAt := range healthState.Failures {
-					until := failedAt.Add(cooldown)
-					if time.Now().Before(until) {
-						ck := ev.key + "|" + provider
+			for _, entry := range report.Routes {
+				for _, cand := range entry.Candidates {
+					if cand.Cooldown != nil && time.Now().Before(cand.Cooldown.Until) {
+						ck := entry.Model + "|" + cand.Provider
 						if _, seen := seenCooldownKeys[ck]; !seen {
 							seenCooldownKeys[ck] = struct{}{}
+							// FailedAt is not directly available; use Until minus a best-effort estimate.
+							// We record Until and leave FailedAt as zero for cooldowns from the service.
 							activeCooldowns = append(activeCooldowns, cooldownEntry{
-								route:         ev.key,
-								provider:      provider,
-								failedAt:      failedAt,
-								cooldownUntil: until,
+								route:         entry.Model,
+								provider:      cand.Provider,
+								cooldownUntil: cand.Cooldown.Until,
 							})
 						}
 					}
@@ -458,32 +313,31 @@ Examples:
 
 			if asJSON {
 				payload := routeStatusJSON{}
-				for _, ev := range routes {
-					entry := routeStatusRouteJSON{
-						RouteKey: ev.key,
-						Strategy: ev.strategy,
+				for _, entry := range report.Routes {
+					rj := routeStatusRouteJSON{
+						RouteKey: entry.Model,
+						Strategy: entry.Strategy,
 					}
-					for _, rc := range ev.candidates {
+					for _, cand := range entry.Candidates {
 						cj := routeStatusCandidateJSON{
-							Provider:      rc.Provider,
-							Model:         rc.Model,
-							Healthy:       rc.Healthy,
-							InCooldown:    rc.InCooldown,
-							AvgDurationMs: rc.AvgLatencyMs,
-							Reliability:   rc.Reliability,
-							Score:         rc.Score,
-							Reason:        rc.Reason,
+							Provider:      cand.Provider,
+							Model:         cand.Model,
+							Healthy:       cand.Healthy,
+							AvgDurationMs: cand.RecentLatencyMS,
+							Reliability:   cand.RecentSuccessRate,
 						}
-						if !rc.CooldownUntil.IsZero() {
-							cj.CooldownUntil = rc.CooldownUntil.Format(time.RFC3339)
+						if cand.Cooldown != nil && !cand.Cooldown.Until.IsZero() {
+							cj.InCooldown = true
+							cj.CooldownUntil = cand.Cooldown.Until.UTC().Format(time.RFC3339)
+							cj.Reason = fmt.Sprintf("cooldown until %s", cand.Cooldown.Until.Format(time.RFC3339))
 						}
-						entry.Candidates = append(entry.Candidates, cj)
-						if rc.Healthy && entry.SelectedProvider == "" {
-							entry.SelectedProvider = rc.Provider
-							entry.SelectedModel = rc.Model
+						rj.Candidates = append(rj.Candidates, cj)
+						if cand.Healthy && rj.SelectedProvider == "" {
+							rj.SelectedProvider = cand.Provider
+							rj.SelectedModel = cand.Model
 						}
 					}
-					payload.Routes = append(payload.Routes, entry)
+					payload.Routes = append(payload.Routes, rj)
 				}
 				for _, d := range recentDecisions {
 					jd := routeStatusDecisionJSON{
@@ -503,12 +357,15 @@ Examples:
 					payload.RecentDecisions = append(payload.RecentDecisions, jd)
 				}
 				for _, c := range activeCooldowns {
-					payload.ActiveCooldowns = append(payload.ActiveCooldowns, routeStatusCooldownJSON{
+					cd := routeStatusCooldownJSON{
 						Route:         c.route,
 						Provider:      c.provider,
-						FailedAt:      c.failedAt.UTC().Format(time.RFC3339),
 						CooldownUntil: c.cooldownUntil.UTC().Format(time.RFC3339),
-					})
+					}
+					if !c.failedAt.IsZero() {
+						cd.FailedAt = c.failedAt.UTC().Format(time.RFC3339)
+					}
+					payload.ActiveCooldowns = append(payload.ActiveCooldowns, cd)
 				}
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -518,23 +375,28 @@ Examples:
 			out := cmd.OutOrStdout()
 
 			// --- Section 1: Route Table ---
-			for i, ev := range routes {
+			for i, entry := range report.Routes {
 				if i > 0 {
 					fmt.Fprintln(out)
 				}
 
 				selectedProvider := ""
 				selectedModel := ""
-				for _, rc := range ev.candidates {
-					if rc.Healthy {
-						selectedProvider = rc.Provider
-						selectedModel = rc.Model
+				for _, cand := range entry.Candidates {
+					if cand.Healthy {
+						selectedProvider = cand.Provider
+						selectedModel = cand.Model
 						break
 					}
 				}
 
-				fmt.Fprintf(out, "Route: %s\n", ev.key)
-				fmt.Fprintf(out, "Strategy: %s\n", ev.strategy)
+				strategy := entry.Strategy
+				if strategy == "" {
+					strategy = "first-available"
+				}
+
+				fmt.Fprintf(out, "Route: %s\n", entry.Model)
+				fmt.Fprintf(out, "Strategy: %s\n", strategy)
 				if selectedProvider != "" {
 					fmt.Fprintf(out, "Selected: %s (%s)\n", selectedProvider, selectedModel)
 				} else {
@@ -543,32 +405,28 @@ Examples:
 
 				fmt.Fprintf(out, "%-12s %-32s %-10s %-10s %-10s %-12s %s\n",
 					"PROVIDER", "MODEL", "HEALTH", "SCORE", "RELIABILITY", "LATENCY_MS", "REASON")
-				for _, rc := range ev.candidates {
-					health := "down"
-					if rc.Healthy {
-						health = "healthy"
-					} else if rc.InCooldown {
+				for _, cand := range entry.Candidates {
+					health := "available"
+					reason := ""
+					if cand.Cooldown != nil && !cand.Cooldown.Until.IsZero() {
 						health = "cooldown"
-					}
-					reason := rc.Reason
-					if reason == "" {
-						reason = rc.ProbeMsg
+						reason = fmt.Sprintf("cooldown until %s", cand.Cooldown.Until.Format(time.RFC3339))
+					} else if !cand.Healthy {
+						health = "down"
 					}
 					fmt.Fprintf(out, "%-12s %-32s %-10s %-10.3f %-10.2f %-12.0f %s\n",
-						rc.Provider,
-						truncateRouteStr(rc.Model, 32),
+						cand.Provider,
+						truncateRouteStr(cand.Model, 32),
 						health,
-						rc.Score,
-						rc.Reliability,
-						rc.AvgLatencyMs,
+						0.0, // Score not provided by RouteStatusReport
+						cand.RecentSuccessRate,
+						cand.RecentLatencyMS,
 						reason,
 					)
 				}
 			}
 
 			// --- Section 2: Recent Routing Decisions ---
-			// Combines metrics-store outcomes (latency/success) and bead-evidence
-			// entries (provider/model/reason tied to a specific bead), sorted by time.
 			fmt.Fprintln(out)
 			fmt.Fprintf(out, "Recent Routing Decisions (last %d)\n", len(recentDecisions))
 			fmt.Fprintf(out, "%s\n", strings.Repeat("-", 90))
@@ -606,10 +464,14 @@ Examples:
 				fmt.Fprintf(out, "%-20s %-12s %-24s %s\n",
 					"ROUTE", "PROVIDER", "FAILED_AT", "COOLDOWN_UNTIL")
 				for _, c := range activeCooldowns {
+					failedAtStr := "-"
+					if !c.failedAt.IsZero() {
+						failedAtStr = c.failedAt.UTC().Format("2006-01-02T15:04:05Z")
+					}
 					fmt.Fprintf(out, "%-20s %-12s %-24s %s\n",
 						truncateRouteStr(c.route, 20),
 						c.provider,
-						c.failedAt.UTC().Format("2006-01-02T15:04:05Z"),
+						failedAtStr,
 						c.cooldownUntil.UTC().Format("2006-01-02T15:04:05Z"),
 					)
 				}

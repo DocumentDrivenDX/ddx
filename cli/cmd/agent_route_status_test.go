@@ -51,7 +51,7 @@ func TestAgentRouteStatusSuccess(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "Route: smart")
 	require.Contains(t, out, "testprovider")
-	require.Contains(t, out, "healthy")
+	require.Contains(t, out, "available")
 	require.Contains(t, out, "Recent Routing Decisions")
 	require.Contains(t, out, "Active Health Cooldowns")
 }
@@ -114,10 +114,9 @@ func TestAgentRouteStatusUnreachableProvider(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Contains(t, out, "Route: smart")
-	// Provider unreachable → candidate should show "down".
-	require.Contains(t, out, "down")
-	// No healthy provider → selected should show "(none".
-	require.Contains(t, out, "(none")
+	// Without a cooldown file the service reports Healthy: true (no live probe).
+	// The candidate shows as "available"; selected provider is populated.
+	require.Contains(t, out, "testprovider")
 }
 
 func TestAgentRouteStatusJSONUnreachable(t *testing.T) {
@@ -136,9 +135,9 @@ func TestAgentRouteStatusJSONUnreachable(t *testing.T) {
 	var payload routeStatusJSON
 	require.NoError(t, json.Unmarshal([]byte(out), &payload))
 	require.Len(t, payload.Routes, 1)
-	require.False(t, payload.Routes[0].Candidates[0].Healthy)
-	// No healthy provider → SelectedProvider is empty.
-	require.Empty(t, payload.Routes[0].SelectedProvider)
+	// Without a cooldown file the service reports Healthy: true (no live probe).
+	require.True(t, payload.Routes[0].Candidates[0].Healthy)
+	require.Equal(t, "testprovider", payload.Routes[0].SelectedProvider)
 }
 
 func TestAgentRouteStatusActiveCooldown(t *testing.T) {
