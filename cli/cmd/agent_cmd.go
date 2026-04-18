@@ -408,7 +408,20 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				return fmt.Errorf("unknown --output value %q (valid: text, json-result, session-jsonl)", outputFmt)
 			}
 			if result.ExitCode != 0 {
-				return fmt.Errorf("agent exited with code %d", result.ExitCode)
+				msg := fmt.Sprintf("agent exited with code %d", result.ExitCode)
+				if result.Error != "" {
+					msg += "\n  error: " + result.Error
+				}
+				if result.Stderr != "" && result.Stderr != result.Error {
+					// Show at most 5 stderr lines to surface auth/rate-limit diagnostics
+					// without flooding the terminal with full agent output.
+					lines := strings.SplitN(strings.TrimSpace(result.Stderr), "\n", 6)
+					if len(lines) > 5 {
+						lines = append(lines[:5], "  ...")
+					}
+					msg += "\n  stderr:\n    " + strings.Join(lines, "\n    ")
+				}
+				return fmt.Errorf("%s", msg)
 			}
 			return nil
 		},
