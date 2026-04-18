@@ -166,7 +166,10 @@ func TestAgentProvidersConfigError(t *testing.T) {
 		"agent", "providers",
 	)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "loading agent config")
+	// After CONTRACT-003 migration the error wrapper changed from
+	// "loading agent config" to "constructing agent service" (the agentlib.New
+	// constructor wraps the underlying agentconfig.Load error).
+	require.Contains(t, err.Error(), "constructing agent service")
 }
 
 func TestAgentProvidersAnthropicWithKey(t *testing.T) {
@@ -184,5 +187,8 @@ default: claude
 	)
 	require.NoError(t, err)
 	require.Contains(t, out, "claude")
-	require.Contains(t, out, "api key configured")
+	// After CONTRACT-003 migration the anthropic probe returns "connected"
+	// when an API key is present (no /v1/models endpoint to probe; key-presence
+	// is the connectivity signal). Old wording was "api key configured".
+	require.Contains(t, out, "connected")
 }

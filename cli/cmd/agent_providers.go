@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"time"
 
-	agentconfig "github.com/DocumentDrivenDX/agent/config"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -31,42 +28,42 @@ func (f *CommandFactory) newAgentProvidersCommand() *cobra.Command {
 		Short: "List configured providers with live status",
 		Long: `List configured providers with live connectivity status.
 
-Also shows process-local provider health cooldowns set by tier-based
-auto-escalation (ddx agent execute-loop). A provider on cooldown was
-recently found to be unreachable and will be skipped by the escalation
-loop until the cooldown expires.`,
+Also shows routing-cooldown state for providers recently demoted by
+the routing engine. A provider on cooldown was found unreachable and
+will be skipped by escalation/failover until the cooldown expires.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := agentconfig.Load(f.WorkingDir)
+			svc, err := agent.NewServiceFromWorkDir(f.WorkingDir)
 			if err != nil {
-				return fmt.Errorf("loading agent config: %w", err)
+				return fmt.Errorf("constructing agent service: %w", err)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout*time.Duration(2))
+			defer cancel()
+
+			providers, err := svc.ListProviders(ctx)
+			if err != nil {
+				return fmt.Errorf("listing providers: %w", err)
 			}
 
 			asJSON, _ := cmd.Flags().GetBool("json")
-			defName := cfg.DefaultName()
-			healthSnap := agent.GlobalProviderHealth.Snapshot()
-
 			if asJSON {
-				entries := make([]providerStatusEntry, 0, len(cfg.Providers))
-				for _, name := range cfg.ProviderNames() {
-					pc := cfg.Providers[name]
-					url := pc.BaseURL
+				entries := make([]providerStatusEntry, 0, len(providers))
+				for _, p := range providers {
+					url := p.BaseURL
 					if url == "" {
 						url = "(api)"
 					}
-					ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
-					r := providerstatus.Probe(ctx, pc)
-					cancel()
 					entry := providerStatusEntry{
-						Name:    name,
-						Type:    pc.Type,
+						Name:    p.Name,
+						Type:    p.Type,
 						BaseURL: url,
-						Model:   pc.Model,
-						Default: name == defName,
-						Status:  r.Message,
+						Model:   p.DefaultModel,
+						Default: p.IsDefault,
+						Status:  p.Status,
 					}
-					if until, ok := healthSnap[name]; ok {
-						entry.CooldownUntil = until.UTC().Format(time.RFC3339)
+					if p.CooldownState != nil && !p.CooldownState.Until.IsZero() {
+						entry.CooldownUntil = p.CooldownState.Until.UTC().Format(time.RFC3339)
 					}
 					entries = append(entries, entry)
 				}
@@ -76,54 +73,25 @@ loop until the cooldown expires.`,
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-15s %-40s %-30s %s\n", "NAME", "TYPE", "URL", "MODEL", "STATUS")
-			for _, name := range cfg.ProviderNames() {
-				pc := cfg.Providers[name]
-				ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
-				r := providerstatus.Probe(ctx, pc)
-				cancel()
-				status := r.Message
+			for _, p := range providers {
 				marker := " "
-				if name == defName {
+				if p.IsDefault {
 					marker = "*"
 				}
-				url := pc.BaseURL
+				url := p.BaseURL
 				if url == "" {
 					url = "(api)"
 				}
 				if len(url) > 38 {
 					url = url[:38] + ".."
 				}
-				modelStr := pc.Model
+				modelStr := p.DefaultModel
 				if len(modelStr) > 28 {
 					modelStr = modelStr[:28] + ".."
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s%-11s %-15s %-40s %-30s %s\n", marker, name, pc.Type, url, modelStr, status)
-				if until, ok := healthSnap[name]; ok {
-					fmt.Fprintf(cmd.OutOrStdout(), "  ⚠ cooldown active until %s\n", until.UTC().Format(time.RFC3339))
-				}
-			}
-
-			// Show any harnesses on cooldown that aren't in the provider config
-			// (e.g. binary harnesses like "claude" or "codex").
-			if len(healthSnap) > 0 {
-				names := cfg.ProviderNames()
-				providerSet := make(map[string]bool, len(names))
-				for _, n := range names {
-					providerSet[n] = true
-				}
-				var extra []string
-				for name := range healthSnap {
-					if !providerSet[name] {
-						extra = append(extra, name)
-					}
-				}
-				if len(extra) > 0 {
-					sort.Strings(extra)
-					fmt.Fprintln(cmd.OutOrStdout(), "\nHarness cooldowns (set by execute-loop escalation):")
-					for _, name := range extra {
-						until := healthSnap[name]
-						fmt.Fprintf(cmd.OutOrStdout(), "  %-20s cooldown until %s\n", name, until.UTC().Format(time.RFC3339))
-					}
+				fmt.Fprintf(cmd.OutOrStdout(), "%s%-11s %-15s %-40s %-30s %s\n", marker, p.Name, p.Type, url, modelStr, p.Status)
+				if p.CooldownState != nil && !p.CooldownState.Until.IsZero() {
+					fmt.Fprintf(cmd.OutOrStdout(), "  ⚠ cooldown active until %s\n", p.CooldownState.Until.UTC().Format(time.RFC3339))
 				}
 			}
 
