@@ -106,7 +106,7 @@ jobs:
           go build -v -o ../bin/ddx-${{ matrix.os }}-${{ matrix.arch }} .
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ddx-${{ matrix.os }}-${{ matrix.arch }}
         path: bin/ddx-${{ matrix.os }}-${{ matrix.arch }}
@@ -137,7 +137,7 @@ jobs:
 
     - name: Upload E2E test output
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: e2e-test-output
         path: e2e-test-output.txt
