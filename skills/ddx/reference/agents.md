@@ -1,6 +1,6 @@
 # Agents — Harness, Profile, Persona Dispatch
 
-> **Debugging routing?** See [SD-015 Resolution Path Trace](../../../docs/helix/02-design/solution-designs/SD-015-resolution-path-trace.md) for the end-to-end file:line trace from CLI flag to HTTP dispatch.
+> **Debugging routing?** Routing lives entirely in ddx-agent. See `CONTRACT-003-ddx-agent-service` (in the agent repo, `docs/helix/02-design/contracts/`) for the public surface; routing internals are inside that module.
 
 `ddx agent run` is the unified interface for invoking an AI coding
 agent through any of DDx's harnesses. Routing decisions (which

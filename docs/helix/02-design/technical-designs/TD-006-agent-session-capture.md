@@ -3,7 +3,6 @@ ddx:
   id: TD-006
   depends_on:
     - FEAT-006
-    - SD-015
 ---
 # Technical Design: Agent Invocation Activity and Native Session References
 

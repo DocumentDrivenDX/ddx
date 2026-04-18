@@ -4,7 +4,6 @@ ddx:
   depends_on:
     - FEAT-014
     - FEAT-006
-    - SD-015
     - TD-006
 ---
 # Test Plan: Agent Usage Awareness and Routing Signals

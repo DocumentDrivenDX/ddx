@@ -4,7 +4,6 @@ ddx:
   depends_on:
     - FEAT-001
     - FEAT-006
-    - SD-015
 ---
 # Test Plan: Agent Routing and Catalog Resolution
 

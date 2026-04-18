@@ -435,8 +435,8 @@ manual instrumentation
 
 ### Phase 1 — Signal-source spikes
 - Inventory provider-native signal sources and freshness semantics
-- Define the minimal DDx-owned routing metrics schema and retention rules in
-  SD-015
+- Define the minimal routing metrics schema and retention rules
+  (now part of ddx-agent's internal routing per CONTRACT-003-ddx-agent-service)
 - Resolve whether Claude has a stable non-PTY current-quota source
 
 ### Phase 2 — Preserve native persistence and add adapters
