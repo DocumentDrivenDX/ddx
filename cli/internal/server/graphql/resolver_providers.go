@@ -2,7 +2,7 @@ package graphql
 
 import (
 	"context"
-	"sync"
+	"fmt"
 	"time"
 
 	agentconfig "github.com/DocumentDrivenDX/agent/config"
@@ -18,55 +18,38 @@ const (
 // It mirrors the output of `ddx agent providers`, probing each configured
 // provider for live connectivity and returning their status.
 func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error) {
-	cfg, err := agentconfig.Load(r.WorkingDir)
+	svc, err := agent.NewServiceFromWorkDir(r.WorkingDir)
 	if err != nil {
 		// If agent config is missing, return empty list rather than an error.
 		return []*ProviderStatus{}, nil //nolint:nilerr
 	}
 
-	names := cfg.ProviderNames()
-	if len(names) == 0 {
-		return []*ProviderStatus{}, nil
+	providers, err := svc.ListProviders(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing providers: %w", err)
 	}
 
-	defName := cfg.DefaultName()
-	healthSnap := agent.GlobalProviderHealth.Snapshot()
-
-	// Probe all providers in parallel.
-	results := make([]*ProviderStatus, len(names))
-	var wg sync.WaitGroup
-	for i, name := range names {
-		wg.Add(1)
-		go func(idx int, provName string) {
-			defer wg.Done()
-			pc := cfg.Providers[provName]
-
-			probeCtx, cancel := context.WithTimeout(ctx, gqlProviderProbeTimeout)
-			probeResult := providerstatus.Probe(probeCtx, pc)
-			cancel()
-
-			url := pc.BaseURL
-			if url == "" {
-				url = "(api)"
-			}
-
-			ps := &ProviderStatus{
-				Name:         provName,
-				ProviderType: pc.Type,
-				BaseURL:      url,
-				Model:        pc.Model,
-				Status:       probeResult.Message,
-				ModelCount:   len(probeResult.Models),
-				IsDefault:    provName == defName,
-			}
-			if until, ok := healthSnap[provName]; ok {
-				s := until.UTC().Format(time.RFC3339)
-				ps.CooldownUntil = &s
-			}
-			results[idx] = ps
-		}(i, name)
+	results := make([]*ProviderStatus, 0, len(providers))
+	for _, p := range providers {
+		url := p.BaseURL
+		if url == "" {
+			url = "(api)"
+		}
+		ps := &ProviderStatus{
+			Name:         p.Name,
+			ProviderType: p.Type,
+			BaseURL:      url,
+			Model:        p.DefaultModel,
+			Status:       p.Status,
+			ModelCount:   p.ModelCount,
+			IsDefault:    p.IsDefault,
+		}
+		if p.CooldownState != nil && !p.CooldownState.Until.IsZero() {
+			s := p.CooldownState.Until.UTC().Format(time.RFC3339)
+			ps.CooldownUntil = &s
+		}
+		results = append(results, ps)
 	}
-	wg.Wait()
 
 	return results, nil
 }
