@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260418T045141-e59897a9",
+  "bead_id": ".execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-526efaf1",
+  "base_rev": "cea3a244ffbe2e921a1338365f9c262f8ba6d10d",
+  "created_at": "2026-04-18T04:51:41.94301397Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-526efaf1",
+    "title": "execute-bead: propagate caller context through Runner.Run and RunAgent",
+    "description": "## Root cause RC1 from ddx-0a651925\n\n`cli/internal/agent/runner.go:239` (Runner.Run) and `cli/internal/agent/agent_runner.go:163` (Runner.RunAgent) both call `context.WithCancel(context.Background())`, discarding any context from the caller. `RunOptions` exposes no ctx field. `agent.ExecuteBead` likewise takes no ctx, so `server.WorkerManager.runWorker`'s ctx never reaches the agent call.\n\nAs a result, `WorkerManager.Stop(id)` (server/workers.go:648) cancels only the worker goroutine; the embedded `agentlib.Run` call (and any subprocess it launched) keeps running until SIGKILL. This is the structural defect behind 33–142h hung workers.\n\n## Scope\n\n1. Add `Context context.Context` to `RunOptions` (or change signatures to `Run(ctx, opts)`). Default to `context.Background()` when nil.\n2. Derive the internal ctx from the caller's rather than `context.Background()`.\n3. Thread ctx through `agent.ExecuteBead` → `runner.Run` → `agentlib.Run` → provider HTTP.\n4. Update `server.WorkerManager.runWorker`'s `singleTierAttempt` closure to pass `ctx` into `agent.ExecuteBead`.\n\n## Non-goals\n\n- New wall-clock timeout logic (covered by sibling RC2 bead)\n- Operator-facing stop command (covered by ddx-b808df39)\n",
+    "acceptance": "- [ ] `RunOptions` accepts a caller ctx, or `Runner.Run`/`Runner.RunAgent` accept ctx explicitly\n- [ ] The internal cancel is derived from the caller ctx (no `context.Background()` seeds inside Run/RunAgent)\n- [ ] `agent.ExecuteBead` takes ctx and passes it down\n- [ ] `server.WorkerManager.Stop(id)` cancels the running agent provider call within 2s in a unit test (fake provider blocks on ctx)\n- [ ] Regression test: runner with a canceled ctx returns promptly (\u003c500ms) regardless of mocked provider latency",
+    "parent": "ddx-0a651925",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:bug",
+      "area:agent",
+      "area:workers",
+      "root-cause:rc1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-18T04:51:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1833233",
+      "execute-loop-heartbeat-at": "2026-04-18T04:51:41.61349631Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260418T045141-e59897a9",
+    "prompt": ".ddx/executions/20260418T045141-e59897a9/prompt.md",
+    "manifest": ".ddx/executions/20260418T045141-e59897a9/manifest.json",
+    "result": ".ddx/executions/20260418T045141-e59897a9/result.json",
+    "checks": ".ddx/executions/20260418T045141-e59897a9/checks.json",
+    "usage": ".ddx/executions/20260418T045141-e59897a9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-526efaf1-20260418T045141-e59897a9"
+  }
+}
