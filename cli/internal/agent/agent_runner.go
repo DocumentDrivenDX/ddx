@@ -365,9 +365,15 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		result.Error = fmt.Sprintf("stalled: no write activity after %d consecutive read-only tool calls", stallThreshold)
 		result.ExitCode = 1
 	} else if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
+		switch {
+		case errors.Is(err, ErrProviderRequestTimeout):
+			// RC4: distinct from outer idle/wall-clock so supervisors can tell
+			// a per-request provider hang (stalled socket, half-open TCP)
+			// from a slow agent or a canceled run.
+			result.Error = err.Error()
+		case errors.Is(err, context.DeadlineExceeded):
 			result.Error = fmt.Sprintf("timeout after %v", timeout.Round(time.Second))
-		} else {
+		default:
 			result.Error = err.Error()
 		}
 		result.ExitCode = 1
@@ -550,6 +556,7 @@ func (r *Runner) resolveNativeAgentProvider(workDir, model, explicitProvider, ex
 	if err != nil {
 		return nil, fmt.Errorf("agent: native config provider %q: %w", providerName, err)
 	}
+	provider = wrapProviderWithDeadlines(provider)
 
 	runCfg := AgentRunConfig{
 		Provider:      pc.Type,
@@ -679,22 +686,24 @@ func (t *findTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 // buildAgentProvider creates an agentlib.Provider from resolved config.
 func buildAgentProvider(cfg AgentRunConfig) (agentlib.Provider, error) {
+	var inner agentlib.Provider
 	switch cfg.Provider {
 	case "openai-compat", "openai":
-		return oai.New(oai.Config{
+		inner = oai.New(oai.Config{
 			BaseURL: cfg.BaseURL,
 			APIKey:  cfg.APIKey,
 			Model:   cfg.Model,
-		}), nil
+		})
 	case "anthropic":
-		return anthropic.New(anthropic.Config{
+		inner = anthropic.New(anthropic.Config{
 			APIKey: cfg.APIKey,
 			Model:  cfg.Model,
-		}), nil
+		})
 	case "virtual":
 		dictDir := filepath.Join(".ddx", "agent", "dictionary")
-		return virtual.New(virtual.Config{DictDir: dictDir}), nil
+		inner = virtual.New(virtual.Config{DictDir: dictDir})
 	default:
 		return nil, fmt.Errorf("unknown agent provider %q (use openai-compat, anthropic, or virtual)", cfg.Provider)
 	}
+	return wrapProviderWithDeadlines(inner), nil
 }
