@@ -61,6 +61,9 @@ func NewRunner(cfg Config) *Runner {
 	if cfg.TimeoutMS == 0 {
 		cfg.TimeoutMS = DefaultTimeoutMS
 	}
+	if cfg.WallClockMS == 0 {
+		cfg.WallClockMS = DefaultWallClockMS
+	}
 	if cfg.SessionLogDir == "" {
 		cfg.SessionLogDir = DefaultLogDir
 	}
@@ -223,6 +226,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	}
 
 	timeout := r.resolveTimeout(opts)
+	wallClock := r.resolveWallClock(opts)
 
 	// Build args with the resolved prompt (may have come from file)
 	resolvedOpts := opts
@@ -243,6 +247,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 	ctx = withExecutionTimeout(ctx, timeout)
+	ctx = withExecutionWallClock(ctx, wallClock)
 
 	// Use ExecuteInDir when WorkDir is set — this handles harnesses like
 	// claude that have no --cwd flag by setting cmd.Dir on the subprocess.
@@ -439,12 +444,22 @@ func (r *Runner) resolveReasoningLevels(harnessName string, harness Harness) []s
 	return []string{}
 }
 
-// resolveTimeout picks the timeout from opts or config.
+// resolveTimeout picks the idle (inactivity) timeout from opts or config.
 func (r *Runner) resolveTimeout(opts RunOptions) time.Duration {
 	if opts.Timeout > 0 {
 		return opts.Timeout
 	}
 	return time.Duration(r.Config.TimeoutMS) * time.Millisecond
+}
+
+// resolveWallClock picks the absolute wall-clock cap from opts or config.
+// This bound fires regardless of stream/event activity so a provider that
+// emits heartbeats cannot pin the worker past the configured duration.
+func (r *Runner) resolveWallClock(opts RunOptions) time.Duration {
+	if opts.WallClock > 0 {
+		return opts.WallClock
+	}
+	return time.Duration(r.Config.WallClockMS) * time.Millisecond
 }
 
 // resolvePermissions returns the effective permission level, defaulting to "safe".
@@ -515,6 +530,16 @@ func (r *Runner) processResult(harnessName, model string, harness Harness, execR
 
 	if execResult != nil && execResult.EarlyCancel {
 		result.Error = fmt.Sprintf("cancelled: auth/rate-limit detected (%s)", execResult.CancelReason)
+		result.ExitCode = -1
+	} else if execResult != nil && execResult.WallClockTimeout {
+		// Wall-clock cap fired regardless of stream activity; distinguish
+		// this from the resettable idle timer so operators can tell the two
+		// failure modes apart in result.json and session logs.
+		reportedElapsed := execResult.WallClockElapsed
+		if reportedElapsed == 0 {
+			reportedElapsed = elapsed
+		}
+		result.Error = fmt.Sprintf("wall-clock deadline exceeded after %v", reportedElapsed.Round(time.Second))
 		result.ExitCode = -1
 	} else if execErr != nil {
 		if errors.Is(execErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {

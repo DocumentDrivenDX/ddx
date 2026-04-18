@@ -40,7 +40,8 @@ type Config struct {
 	Model           string              `yaml:"model"`            // optional default model ref or exact pin
 	Models          map[string]string   `yaml:"models"`           // per-harness model overrides
 	ReasoningLevels map[string][]string `yaml:"reasoning_levels"` // per-harness reasoning-level options
-	TimeoutMS       int                 `yaml:"timeout_ms"`       // default timeout in ms
+	TimeoutMS       int                 `yaml:"timeout_ms"`       // idle (inactivity) timeout in ms — resets on every stream/event
+	WallClockMS     int                 `yaml:"wall_clock_ms"`    // absolute wall-clock cap in ms — fires regardless of activity
 	SessionLogDir   string              `yaml:"session_log_dir"`  // log directory
 	Permissions     string              `yaml:"permissions"`      // permission level: safe, supervised, unrestricted
 }
@@ -73,7 +74,8 @@ type RunOptions struct {
 	Provider      string // explicit provider name (e.g. "vidar", "openrouter"); bypasses default provider selection
 	ModelRef      string // catalog model-ref (e.g. "code-medium"); resolved via the model catalog
 	Effort        string
-	Timeout       time.Duration
+	Timeout       time.Duration // idle (inactivity) timeout; nonzero overrides Config.TimeoutMS
+	WallClock     time.Duration // absolute wall-clock cap; nonzero overrides Config.WallClockMS
 	WorkDir       string
 	Permissions   string // permission level override: safe, supervised, unrestricted
 	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
@@ -365,9 +367,20 @@ type CandidatePlan struct {
 
 // Default configuration values.
 const (
-	DefaultHarness   = "codex"
-	DefaultTimeoutMS = 7200000 // 2 hours - long enough for any task; supervisor/agent decides termination
-	DefaultLogDir    = ".ddx/agent-logs"
+	DefaultHarness = "codex"
+	// DefaultTimeoutMS is the default idle (inactivity) timeout — resets on
+	// every stdout/stderr byte or agent event. 2 hours is long enough for any
+	// task where the provider streams progress; a stuck provider still needs
+	// DefaultWallClockMS to guarantee termination.
+	DefaultTimeoutMS = 7200000 // 2 hours
+	// DefaultWallClockMS is the absolute wall-clock cap applied in addition to
+	// the idle timeout. It fires regardless of stream/event activity, so a
+	// provider that emits heartbeats forever cannot pin a worker indefinitely.
+	// Sized at 3h — roughly 1.5x the idle timeout — so normal long tasks still
+	// complete while genuinely hung workers free themselves. See
+	// RC2 of ddx-0a651925 for the incident that motivated this bound.
+	DefaultWallClockMS = 10800000 // 3 hours
+	DefaultLogDir      = ".ddx/agent-logs"
 )
 
 // ResolveLogDir returns an absolute session-log directory path anchored at

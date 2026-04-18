@@ -254,6 +254,80 @@ func TestAgentRunActivityExtendsTimeout(t *testing.T) {
 	assert.GreaterOrEqual(t, elapsed, 120*time.Millisecond)
 }
 
+// TestAgentRunWallClockTimeout verifies that the absolute wall-clock bound
+// fires even when the idle (inactivity) timer is continuously reset by
+// agent events. This is the RC2 ddx-0a651925 regression guard: a provider
+// that emits pulses forever must not be able to pin a worker indefinitely.
+func TestAgentRunWallClockTimeout(t *testing.T) {
+	wd := t.TempDir()
+
+	// pulseProvider keeps emitting a fresh read tool-call every delay ms.
+	// Each response produces llm-request + tool-call events that would
+	// otherwise reset the idle-timer forever.
+	provider := &pulseProvider{
+		delay:    50 * time.Millisecond,
+		pathBase: "missing",
+	}
+
+	r := NewRunner(Config{
+		SessionLogDir: t.TempDir(),
+		TimeoutMS:     5000, // idle timer is generous — should never fire in this test
+		WallClockMS:   300,  // wall-clock cap is short — must fire
+	})
+	r.LookPath = mockLookPath
+	r.AgentProvider = provider
+
+	start := time.Now()
+	result, err := r.RunAgent(RunOptions{
+		Harness: "agent",
+		Prompt:  "loop forever",
+		WorkDir: wd,
+	})
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ExitCode)
+	assert.Contains(t, result.Error, "wall-clock deadline exceeded",
+		"expected wall-clock error, got %q", result.Error)
+	assert.GreaterOrEqual(t, elapsed, 250*time.Millisecond,
+		"wall-clock should not fire before its deadline")
+	assert.Less(t, elapsed, 2*time.Second,
+		"wall-clock should fire promptly after its deadline")
+	// Sanity check: the provider must have actually emitted events during
+	// the wait, proving we defeated the idle timer rather than sitting idle.
+	assert.Greater(t, provider.calls.Load(), int32(1),
+		"pulse provider should have emitted multiple events during the wait")
+}
+
+// TestAgentRunIdleTimeoutPreserved ensures the existing idle-timeout path
+// still fires when the provider sits silent. The wall-clock addition must
+// not regress this behaviour.
+func TestAgentRunIdleTimeoutPreserved(t *testing.T) {
+	provider := &sleepProvider{
+		delay: 500 * time.Millisecond, // longer than idle timeout, so idle fires first
+		response: agentlib.Response{
+			Content: "too late",
+			Model:   "idle-model",
+		},
+	}
+
+	r := NewRunner(Config{
+		SessionLogDir: t.TempDir(),
+		TimeoutMS:     100,  // idle fires first
+		WallClockMS:   5000, // wall-clock generous — should NOT fire
+	})
+	r.LookPath = mockLookPath
+	r.AgentProvider = provider
+
+	result, err := r.RunAgent(RunOptions{Harness: "agent", Prompt: "silent"})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ExitCode)
+	// Idle path uses "timeout after" — distinct from the wall-clock phrasing.
+	assert.Contains(t, result.Error, "timeout after")
+	assert.NotContains(t, result.Error, "wall-clock",
+		"idle-timeout error must not be mislabelled as wall-clock")
+}
+
 func TestEmbeddedCompactionConfigUsesSaneThresholds(t *testing.T) {
 	cfg := embeddedCompactionConfig("qwen/qwen3-coder-next")
 	assert.Equal(t, 131072, cfg.ContextWindow)
@@ -725,6 +799,39 @@ func (p *sequenceProvider) Chat(ctx context.Context, _ []agentlib.Message, _ []a
 		}
 	}
 	return p.responses[idx], nil
+}
+
+// pulseProvider returns a tool-call response after a fixed delay, varying
+// the tool-call arguments on every invocation so it is not tripped by the
+// agentlib duplicate-tool-call circuit breaker. Used to verify that the
+// wall-clock deadline fires even when the idle timer is continuously
+// reset by a steady stream of agent events.
+type pulseProvider struct {
+	delay    time.Duration
+	pathBase string
+	calls    atomic.Int32
+}
+
+func (p *pulseProvider) Chat(ctx context.Context, _ []agentlib.Message, _ []agentlib.ToolDef, _ agentlib.Options) (agentlib.Response, error) {
+	n := p.calls.Add(1)
+	if p.delay > 0 {
+		select {
+		case <-time.After(p.delay):
+		case <-ctx.Done():
+			return agentlib.Response{}, ctx.Err()
+		}
+	}
+	// Distinct arguments per turn so the identical-call loop guard in
+	// agentlib does not abort the run before the wall-clock timer fires.
+	args := fmt.Sprintf(`{"path":"%s-%d.txt"}`, p.pathBase, n)
+	return agentlib.Response{
+		Model: "pulse-model",
+		ToolCalls: []agentlib.ToolCall{{
+			ID:        fmt.Sprintf("pulse-%d", n),
+			Name:      "read",
+			Arguments: json.RawMessage(args),
+		}},
+	}, nil
 }
 
 // --- Compaction stuck detection ---

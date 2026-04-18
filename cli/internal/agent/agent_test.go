@@ -1198,3 +1198,55 @@ func TestOSExecutor_OutputExtendsTimeout(t *testing.T) {
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Contains(t, result.Stdout, "tick")
 }
+
+// TestOSExecutor_WallClockFiresDespiteStreamingActivity verifies that the
+// wall-clock deadline fires even when stdout is streaming continuously.
+// This is the RC2 ddx-0a651925 guard for subprocess harnesses: chatty
+// output must not be able to defeat the absolute bound by resetting the
+// idle timer on every write.
+func TestOSExecutor_WallClockFiresDespiteStreamingActivity(t *testing.T) {
+	ex := &OSExecutor{}
+	// Idle timer is generous; only the wall-clock bound can terminate this run.
+	ctx := withExecutionTimeout(context.Background(), 5*time.Second)
+	ctx = withExecutionWallClock(ctx, 300*time.Millisecond)
+
+	start := time.Now()
+	result, err := ex.ExecuteInDir(
+		ctx,
+		"sh",
+		[]string{"-c", `while true; do echo tick; sleep 0.05; done`},
+		"",
+		"",
+	)
+	elapsed := time.Since(start)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotNil(t, result)
+	assert.True(t, result.WallClockTimeout,
+		"ExecResult must flag wall-clock timeout to distinguish from idle")
+	assert.False(t, result.EarlyCancel)
+	assert.Equal(t, -1, result.ExitCode)
+	assert.GreaterOrEqual(t, elapsed, 250*time.Millisecond,
+		"wall-clock should not fire before its deadline")
+	assert.Less(t, elapsed, 2*time.Second,
+		"wall-clock should fire within ~1s of its deadline")
+	assert.Contains(t, result.Stdout, "tick",
+		"streaming must actually have been occurring during the wait")
+}
+
+// TestOSExecutor_IdleTimeoutNotFlaggedAsWallClock confirms that the plain
+// idle-timeout path does NOT mark ExecResult.WallClockTimeout, so callers
+// can reliably tell the two failure modes apart in result.json.
+func TestOSExecutor_IdleTimeoutNotFlaggedAsWallClock(t *testing.T) {
+	ex := &OSExecutor{}
+	ctx := withExecutionTimeout(context.Background(), 100*time.Millisecond)
+	// Wall-clock is very long; idle must fire first.
+	ctx = withExecutionWallClock(ctx, 5*time.Second)
+
+	result, err := ex.ExecuteInDir(ctx, "sh", []string{"-c", `sleep 1`}, "", "")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotNil(t, result)
+	assert.False(t, result.WallClockTimeout,
+		"idle-timeout path must not be mislabelled as wall-clock timeout")
+	assert.Equal(t, -1, result.ExitCode)
+}

@@ -70,6 +70,7 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 
 	model := r.resolveModel(opts, "agent")
 	timeout := r.resolveTimeout(opts)
+	wallClock := r.resolveWallClock(opts)
 
 	// Resolve working directory
 	wd := opts.WorkDir
@@ -167,10 +168,29 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 	var timedOut atomic.Bool
+	var wallClockTimedOut atomic.Bool
 	var stalled atomic.Bool
 	var compactionStuck atomic.Bool
 	var readOnlyCount atomic.Int32
 	var consecutiveCompFails atomic.Int32
+
+	// Wall-clock watchdog: fires at an absolute deadline regardless of
+	// agent events. Idle-timer resets on every event callback below, so
+	// a provider emitting perpetual heartbeats would otherwise defeat the
+	// bound. See RC2 of ddx-0a651925.
+	if wallClock > 0 {
+		go func() {
+			timer := time.NewTimer(wallClock)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				wallClockTimedOut.Store(true)
+				cancel()
+			}
+		}()
+	}
 
 	stuckThreshold := maxConsecutiveCompactionFailures
 	if r.CompactionStuckThreshold > 0 {
@@ -332,7 +352,10 @@ func (r *Runner) RunAgent(opts RunOptions) (*Result, error) {
 		result.CostUSD = agentResult.CostUSD
 	}
 
-	if timedOut.Load() {
+	if wallClockTimedOut.Load() {
+		result.Error = fmt.Sprintf("wall-clock deadline exceeded after %v", elapsed.Round(time.Second))
+		result.ExitCode = 1
+	} else if timedOut.Load() {
 		result.Error = fmt.Sprintf("timeout after %v", timeout.Round(time.Second))
 		result.ExitCode = 1
 	} else if compactionStuck.Load() {

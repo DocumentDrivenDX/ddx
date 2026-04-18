@@ -15,11 +15,13 @@ import (
 
 // ExecResult holds the raw output of a command execution.
 type ExecResult struct {
-	Stdout       string
-	Stderr       string
-	ExitCode     int
-	EarlyCancel  bool   // true if execution was cancelled due to detected auth/rate-limit error
-	CancelReason string // the matched pattern that caused early cancellation
+	Stdout           string
+	Stderr           string
+	ExitCode         int
+	EarlyCancel      bool          // true if execution was cancelled due to detected auth/rate-limit error
+	CancelReason     string        // the matched pattern that caused early cancellation
+	WallClockTimeout bool          // true if the absolute wall-clock deadline fired (vs the resettable idle timer)
+	WallClockElapsed time.Duration // how long the process ran before the wall-clock timer fired; zero when WallClockTimeout is false
 }
 
 // Executor abstracts command execution for testability.
@@ -45,6 +47,29 @@ func executionTimeoutFromContext(ctx context.Context) time.Duration {
 	}
 	if timeout, ok := ctx.Value(executionTimeoutKey{}).(time.Duration); ok {
 		return timeout
+	}
+	return 0
+}
+
+type executionWallClockKey struct{}
+
+// withExecutionWallClock attaches an absolute wall-clock deadline to ctx.
+// Unlike withExecutionTimeout — which is an idle (inactivity) timer that
+// resets on every stream byte or event — this bound fires regardless of
+// activity so a chatty provider cannot pin the worker indefinitely.
+func withExecutionWallClock(ctx context.Context, wallClock time.Duration) context.Context {
+	if wallClock <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, executionWallClockKey{}, wallClock)
+}
+
+func executionWallClockFromContext(ctx context.Context) time.Duration {
+	if ctx == nil {
+		return 0
+	}
+	if wallClock, ok := ctx.Value(executionWallClockKey{}).(time.Duration); ok {
+		return wallClock
 	}
 	return 0
 }
@@ -128,11 +153,13 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	}
 
 	var (
-		stdoutBuf    bytes.Buffer
-		stderrBuf    bytes.Buffer
-		cancelReason string
-		timedOut     bool
-		killOnce     sync.Once
+		stdoutBuf         bytes.Buffer
+		stderrBuf         bytes.Buffer
+		cancelReason      string
+		timedOut          bool
+		wallClockTimedOut bool
+		wallClockElapsed  time.Duration
+		killOnce          sync.Once
 	)
 
 	stopProcess := func() {
@@ -183,6 +210,28 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		}()
 	}
 
+	// Wall-clock watchdog: fires at an absolute deadline regardless of
+	// stream activity. Runs alongside the idle watchdog so a provider that
+	// emits heartbeats cannot defeat the overall bound. See RC2 of
+	// ddx-0a651925 for the incident that motivated this timer.
+	wallClock := executionWallClockFromContext(ctx)
+	if wallClock > 0 {
+		wallClockStart := time.Now()
+		go func() {
+			timer := time.NewTimer(wallClock)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				wallClockTimedOut = true
+				wallClockElapsed = time.Since(wallClockStart)
+				cancel()
+				stopProcess()
+			}
+		}()
+	}
+
 	// Stream stdout to collect it and count any write as progress.
 	stdoutDone := make(chan struct{})
 	go func() {
@@ -217,10 +266,12 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	runErr := cmd.Wait()
 
 	result := &ExecResult{
-		Stdout:       stdoutBuf.String(),
-		Stderr:       stderrBuf.String(),
-		EarlyCancel:  cancelReason != "",
-		CancelReason: cancelReason,
+		Stdout:           stdoutBuf.String(),
+		Stderr:           stderrBuf.String(),
+		EarlyCancel:      cancelReason != "",
+		CancelReason:     cancelReason,
+		WallClockTimeout: wallClockTimedOut,
+		WallClockElapsed: wallClockElapsed,
 	}
 
 	if runErr != nil {
@@ -228,6 +279,10 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 			// We triggered the cancel; report as early-cancel rather than timeout.
 			result.ExitCode = -1
 			return result, nil
+		}
+		if wallClockTimedOut {
+			result.ExitCode = -1
+			return result, context.DeadlineExceeded
 		}
 		if timedOut {
 			result.ExitCode = -1
