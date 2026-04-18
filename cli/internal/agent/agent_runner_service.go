@@ -66,15 +66,12 @@ type serviceToolResultData struct {
 }
 
 // useNewAgentPath reports whether RunAgent should dispatch to the new
-// agentlib.DdxAgent.Execute path. Honors both the Runner field
-// (UseNewAgentPath) and the env var DDX_USE_NEW_AGENT_PATH (any non-empty
-// value other than "0" / "false" enables the new path). Default off.
+// agentlib.DdxAgent.Execute path. Default is on. Set the env var
+// DDX_USE_NEW_AGENT_PATH=0 (or "false") to disable as an emergency escape
+// hatch.
 func (r *Runner) useNewAgentPath() bool {
-	if r.UseNewAgentPath {
-		return true
-	}
 	switch os.Getenv("DDX_USE_NEW_AGENT_PATH") {
-	case "", "0", "false", "FALSE", "False":
+	case "0", "false", "FALSE", "False":
 		return false
 	default:
 		return true
@@ -146,9 +143,14 @@ func (r *Runner) runAgentViaService(opts RunOptions) (*Result, error) {
 	// Test injection: forward the runner's pre-built AgentProvider as the
 	// native-path provider override. Production flows leave AgentProvider
 	// nil and let the service resolve providers itself.
+	// When injecting a test provider, clear ProviderTimeout so the service
+	// does not wrap the test provider with an extra deadline layer — some test
+	// providers (e.g. the OMLX SSE fixture provider) are sensitive to the
+	// presence of an HTTP deadline context.
 	if r.AgentProvider != nil {
 		if p, ok := r.AgentProvider.(agentlib.Provider); ok {
 			req.NativeProvider = p
+			req.ProviderTimeout = 0
 		}
 	}
 

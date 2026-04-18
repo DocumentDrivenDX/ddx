@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	agentlib "github.com/DocumentDrivenDX/agent"
 )
 
 func containsString(slice []string, s string) bool {
@@ -42,28 +40,6 @@ type Runner struct {
 	// Discovery holds cached live provider discovery results. When non-nil,
 	// routing consults discovered models to resolve uncataloged model pins.
 	Discovery *DiscoveryResult
-
-	// CompactionStuckThreshold overrides the default consecutive-failure limit for
-	// the compaction-stuck circuit breaker. Zero means use the default (50).
-	// Set to a small value (e.g. 3) in tests to trigger the breaker quickly.
-	CompactionStuckThreshold int
-
-	// CompactorOverride replaces the default compactor when non-nil.
-	// Used in tests to control compaction behaviour without real token budgets.
-	CompactorOverride func(ctx context.Context, messages []agentlib.Message, provider agentlib.Provider, toolCalls []agentlib.ToolCallLog) ([]agentlib.Message, *agentlib.CompactionResult, error)
-
-	// UseNewAgentPath, when true, routes RunAgent through the new
-	// agentlib.DdxAgent.Execute service path instead of the legacy
-	// in-package agentlib.Run loop with local circuit breakers. The default
-	// is false so production behaviour is unchanged. The env var
-	// DDX_USE_NEW_AGENT_PATH=1 forces this on globally; tests can also set
-	// the field directly.
-	//
-	// Tracks ddx-e49dbf60. The legacy code paths (buildAgentProvider,
-	// embeddedCompactionConfig, findTool, wrapProviderWithDeadlines, the
-	// stall + compaction-stuck circuit breakers) remain in place until
-	// follow-up bead ddx-d224671d removes them.
-	UseNewAgentPath bool
 }
 
 // NewRunner creates a runner with defaults.
