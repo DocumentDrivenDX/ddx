@@ -12,6 +12,23 @@ type NewConfig struct {
 	Agent           *AgentConfig       `yaml:"agent,omitempty" json:"agent,omitempty"`
 	Git             *GitConfig         `yaml:"git,omitempty" json:"git,omitempty"`
 	Server          *ServerConfig      `yaml:"server,omitempty" json:"server,omitempty"`
+	Executions      *ExecutionsConfig  `yaml:"executions,omitempty" json:"executions,omitempty"`
+}
+
+// ExecutionsConfig configures the execute-bead bundle archive (mirror).
+type ExecutionsConfig struct {
+	Mirror     *ExecutionsMirrorConfig `yaml:"mirror,omitempty" json:"mirror,omitempty"`
+	RetainDays int                     `yaml:"retain_days,omitempty" json:"retain_days,omitempty"`
+}
+
+// ExecutionsMirrorConfig describes the out-of-band archive target for
+// .ddx/executions/<attempt>/ bundles. A configured kind plus path is enough
+// to enable mirroring; missing entries leave mirroring disabled.
+type ExecutionsMirrorConfig struct {
+	Kind    string   `yaml:"kind,omitempty" json:"kind,omitempty"`
+	Path    string   `yaml:"path,omitempty" json:"path,omitempty"`
+	Include []string `yaml:"include,omitempty" json:"include,omitempty"`
+	Async   *bool    `yaml:"async,omitempty" json:"async,omitempty"`
 }
 
 // ServerConfig represents server configuration settings.

@@ -73,6 +73,7 @@ Examples:
 	cmd.AddCommand(f.newAgentReplayCommand())
 	cmd.AddCommand(f.newAgentExecuteBeadCommand())
 	cmd.AddCommand(f.newAgentExecuteLoopCommand())
+	cmd.AddCommand(f.newAgentExecutionsCommand())
 	cmd.AddCommand(f.newAgentWorkersCommand())
 	cmd.AddCommand(f.newAgentCatalogCommand())
 	cmd.AddCommand(f.newAgentProvidersCommand())
@@ -1444,6 +1445,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			ModelRef:   modelRef,
 			Effort:     effort,
 			BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			MirrorCfg:  loadExecutionsMirrorConfig(projectRoot),
 		}, gitOps, runner)
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr

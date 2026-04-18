@@ -348,6 +348,50 @@
         }
       },
       "additionalProperties": false
+    },
+    "executions": {
+      "type": "object",
+      "description": "Configuration for the execute-bead execution bundle archive (mirror).",
+      "properties": {
+        "mirror": {
+          "type": "object",
+          "description": "Out-of-band mirror target for .ddx/executions/<attempt>/ bundles.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Mirror backend kind. Currently 'local' (more backends planned).",
+              "enum": ["local"]
+            },
+            "path": {
+              "type": "string",
+              "description": "Mirror destination. Templates support {project}, {attempt_id}, {date}, {bead_id}.",
+              "examples": [
+                "/var/lib/ddx-mirror/{project}/{attempt_id}",
+                "/mnt/archive/{date}/{bead_id}/{attempt_id}"
+              ]
+            },
+            "include": {
+              "type": "array",
+              "description": "Bundle parts to upload. Defaults to manifest, prompt, result, usage, checks, embedded.",
+              "items": {
+                "type": "string",
+                "enum": ["manifest", "prompt", "result", "usage", "checks", "embedded"]
+              }
+            },
+            "async": {
+              "type": "boolean",
+              "description": "Upload in a background goroutine (default true) so execute-bead never blocks on the mirror."
+            }
+          },
+          "additionalProperties": false
+        },
+        "retain_days": {
+          "type": "integer",
+          "description": "Optional local retention policy. Bundles older than this are subject to local pruning while the mirror keeps full history.",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

@@ -311,3 +311,105 @@ preserving the same run/attachment model.
 - malformed collection record: the reader reports the concrete collection and
   record ID
 - corrupt legacy run bundle: the reader reports the concrete bundle path
+
+## Execution Bundle Archive (Mirror)
+
+`exec-runs` / `exec-runs.d/` (above) own the generic exec substrate. The
+parallel `.ddx/executions/<attempt-id>/` tree owns one `execute-bead` attempt
+bundle. The bundle's most valuable component — the per-iteration agent trace at
+`embedded/agent-*.jsonl` — cannot reasonably be checked in: a single trace can
+exceed 50 MB and a busy automation day produces hundreds of MB. axon hit the
+GitHub 50 MB warning on 2026-04-15, and `embedded/` is now gitignored
+per-repo.
+
+To preserve forensic detail without inflating git history, DDx supports an
+out-of-band mirror of the full bundle.
+
+### Configuration
+
+Configured under `.ddx/config.yaml`:
+
+```yaml
+executions:
+  mirror:
+    kind: local                                  # local | s3 | gcs | http
+    path: /var/lib/ddx-mirror/{project}/{attempt_id}
+    include: [manifest, prompt, result, usage, checks, embedded]
+    async: true
+  retain_days: 30
+```
+
+`path` supports the placeholders `{project}`, `{attempt_id}`, `{date}`,
+`{bead_id}`. Unknown placeholders pass through unchanged. `{date}` resolves
+to the bundle's UTC date as `YYYY-MM-DD`, derived from the attempt id when
+the id begins with the standard `YYYYMMDDTHHMMSS-` prefix and falling back
+to the current UTC date otherwise.
+
+`include` defaults to the full bundle when absent. Operators may exclude
+`embedded` for bandwidth-sensitive setups while keeping the small
+checked-in artifacts mirrored.
+
+`async` defaults to `true`. The mirror runs in a background goroutine after
+result.json is written so it never blocks the bead's hot path.
+
+Currently only `kind: local` is implemented. Other kinds (s3, gcs, http) are
+defined in the config schema but the backend constructor returns a clear
+"unsupported mirror kind" error when selected. Adding a new backend means
+implementing `agent.MirrorBackend` and wiring it into `agent.NewMirrorBackend`.
+
+### When mirroring runs
+
+The hook fires inside `agent.ExecuteBead` immediately after the worker writes
+the final `result.json`. At that point the bundle directory contains
+`manifest.json`, `prompt.md`, `result.json`, optionally `usage.json`,
+optionally `checks.json`, and the entire `embedded/` directory of agent
+traces.
+
+Mirror failures **never** affect the bead outcome:
+
+- failures are recorded one line per attempt to `.ddx/agent-logs/mirror.log`
+- the bead's `result.json` is unchanged
+- async mode swallows the error inside the goroutine; sync mode logs and
+  returns
+
+### Mirror index
+
+Each successful upload appends one JSON object per line to
+`.ddx/executions/mirror-index.jsonl`:
+
+```json
+{"attempt_id":"20260418T061717-1993d293","bead_id":"ddx-5930ed71","mirror_uri":"/var/lib/ddx-mirror/ddx/20260418T061717-1993d293","uploaded_at":"2026-04-18T06:17:18Z","byte_size":54123890,"kind":"local"}
+```
+
+The index is local-only — the mirror itself is the durable store. The index
+exists so analysts can locate a bundle's mirror URI with one `jq` filter
+without walking the remote backend.
+
+### Retrieval
+
+`ddx agent executions fetch <attempt-id>` resolves the index entry, dispatches
+to the matching backend's `Fetch`, and rehydrates the bundle into
+`.ddx/executions/<attempt-id>/` (or `--dest` when given). Subsequent local
+inspection (replay, review) works unchanged because the on-disk layout matches
+the original execute-bead write.
+
+### Local retention
+
+`executions.retain_days` is an optional local-only retention policy. When set,
+operators may prune local bundles older than the threshold while the mirror
+keeps the full history. The setting is recorded in config now; the GC
+implementation is left to a follow-up bead. The mirror itself has no DDx-side
+retention — operators manage retention on the mirror backend.
+
+### Operator runbook
+
+1. Configure `.ddx/config.yaml` with an `executions.mirror` block pointing at
+   a writable directory or bucket.
+2. Run a normal `ddx work` / `ddx agent execute-bead` cycle. Confirm one new
+   row in `.ddx/executions/mirror-index.jsonl` per finalized attempt.
+3. To inspect an old bundle locally:
+   `ddx agent executions fetch <attempt-id>`
+4. To diagnose a mirror failure:
+   `tail -F .ddx/agent-logs/mirror.log`
+5. To exclude the per-iteration trace (large): set
+   `include: [manifest, prompt, result, usage, checks]` and re-run.

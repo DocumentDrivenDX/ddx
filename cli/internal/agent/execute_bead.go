@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
@@ -105,6 +106,11 @@ type ExecuteBeadOptions struct {
 	// the agent run completes. This is the hook that feeds the cost-tiered
 	// routing analytics described in FEAT-routing-visibility.
 	BeadEvents BeadEventAppender
+	// MirrorCfg, when non-nil and configured, enables mirroring the
+	// finalized .ddx/executions/<attempt>/ bundle to an out-of-band archive
+	// after the worker writes the result. Failures never affect the bead
+	// outcome — see executions_mirror.go.
+	MirrorCfg *config.ExecutionsMirrorConfig
 }
 
 // GitOps abstracts the git operations required by the worker.
@@ -724,6 +730,18 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
 	}
+
+	// Optional out-of-band mirror of the bundle. Wired here so the whole
+	// per-attempt directory (manifest, prompt, result, usage, checks,
+	// embedded/) is on disk before the upload starts. Failures never affect
+	// the bead outcome — see executions_mirror.go.
+	MirrorOrLog(MirrorRequest{
+		ProjectRoot: projectRoot,
+		AttemptID:   attemptID,
+		BeadID:      beadID,
+		BundleDir:   artifacts.DirAbs,
+		Cfg:         opts.MirrorCfg,
+	})
 
 	return res, nil
 }
