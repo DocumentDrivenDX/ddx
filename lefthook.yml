@@ -245,6 +245,17 @@ pre-commit:
         fi
       fail_text: "test-engineer-tdd persona contains forbidden mock-promotion phrases"
 
+    resolution-path-citations:
+      name: "Verify SD-015 resolution-path citations resolve (ddx-e3493010)"
+      run: |
+        # Fire when the resolution-path doc, the verifier script, or any of the
+        # cited source files are staged. This catches doc edits and code moves.
+        if ! git diff --cached --name-only | grep -qE '(^docs/helix/02-design/solution-designs/SD-015-resolution-path-trace\.md$|^scripts/verify-resolution-path-citations\.sh$|^cli/cmd/(work|agent_cmd)\.go$|^cli/internal/agent/(routing|discovery|agent_runner|runner|types|execute_bead)\.go$)'; then
+          exit 0
+        fi
+        ./scripts/verify-resolution-path-citations.sh
+      fail_text: "SD-015-resolution-path-trace.md citations are broken. Update the doc or run: ./scripts/verify-resolution-path-citations.sh"
+
 # ====================
 # CI/CD - Full validation (all files)
 # ====================
@@ -286,6 +297,11 @@ ci:
       <<: *go_checks
       name: "Bead Schema Guard"
       run: 'make bead-schema'
+
+    resolution-path-citations-all:
+      name: "Verify SD-015 resolution-path citations (full)"
+      run: './scripts/verify-resolution-path-citations.sh'
+      fail_text: "SD-015-resolution-path-trace.md citations are broken. Update the doc or run: ./scripts/verify-resolution-path-citations.sh"
 
     skill-schema:
       <<: *go_checks

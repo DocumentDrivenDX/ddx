@@ -13,6 +13,8 @@ ddx:
 
 ## Overview
 
+> **See also:** [SD-015 Resolution Path Trace](../../02-design/solution-designs/SD-015-resolution-path-trace.md) — end-to-end file:line trace from CLI flag to HTTP dispatch, with the current gap table.
+
 The DDx agent service is the unified interface for dispatching work to AI coding agents (codex, claude, gemini, opencode, cursor, etc.). It handles harness discovery, prompt delivery, output capture, routing-signal normalization, minimal DDx invocation activity capture, and multi-agent quorum. Workflow tools and check runners call `ddx agent` instead of implementing their own harness abstraction.
 
 For ordinary users, the primary UX is intent-first rather than harness-first:
