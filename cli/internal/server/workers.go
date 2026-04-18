@@ -111,6 +111,14 @@ type WorkerRecord struct {
 	RecentPhases   []PhaseTransition      `json:"recent_phases,omitempty"`
 	LastAttempt    *LastAttemptInfo       `json:"last_attempt,omitempty"`
 	LandSummary    *CoordinatorMetrics    `json:"land_summary,omitempty"`
+	// PID is the OS process id of an external worker subprocess, if any.
+	// Zero for purely in-process (goroutine-only) workers. Surfaced so the
+	// autonomous watchdog can send SIGTERM/SIGKILL to the process group when
+	// cancelling the context is not enough.
+	PID int `json:"pid,omitempty"`
+	// ReapReason is populated when the watchdog forcibly terminates a worker;
+	// set to "watchdog" today.
+	ReapReason string `json:"reap_reason,omitempty"`
 }
 
 type WorkerExecutionResult struct {
@@ -143,6 +151,12 @@ type workerHandle struct {
 	// no further events will arrive and all new subscriptions should
 	// receive an immediately-closed channel.
 	progressDone chan struct{}
+	// lastPhaseTS is the wall-clock time of the most recent non-heartbeat
+	// ProgressEvent. The watchdog uses this to detect stalled attempts.
+	lastPhaseTS time.Time
+	// reaped is set true once the watchdog has escalated this worker. It is
+	// checked under m.mu to make reaping idempotent.
+	reaped bool
 }
 
 // WorkerManager manages in-process execute-loop workers as goroutines.
@@ -161,20 +175,83 @@ type WorkerManager struct {
 	// LandCoordinators.gitOpsOverride.
 	LandCoordinators *coordinatorRegistry
 
+	// Watchdog parameters. Zero values fall back to defaults:
+	//   WatchdogDeadline      = 6h  (total worker runtime budget)
+	//   StallDeadline         = 1h  (max phase-transition gap before reap)
+	//   WatchdogCheckInterval = 1m  (how often the supervisor sweeps)
+	//   WatchdogKillGrace     = 30s (SIGTERM → SIGKILL grace window)
+	// Tests override these to run the watchdog on millisecond scales.
+	WatchdogDeadline      time.Duration
+	StallDeadline         time.Duration
+	WatchdogCheckInterval time.Duration
+	WatchdogKillGrace     time.Duration
+
 	mu      sync.Mutex
 	workers map[string]*workerHandle
+
+	watchdogOnce sync.Once
+	watchdogStop chan struct{}
 }
 
 // AgentRunnerFactory creates an agent.Runner for a project. Override for testing.
 type AgentRunnerFactory func(projectRoot string) *agent.Runner
 
+const (
+	defaultWatchdogDeadline      = 6 * time.Hour
+	defaultStallDeadline         = 1 * time.Hour
+	defaultWatchdogCheckInterval = 1 * time.Minute
+	defaultWatchdogKillGrace     = 30 * time.Second
+)
+
 func NewWorkerManager(projectRoot string) *WorkerManager {
-	return &WorkerManager{
+	m := &WorkerManager{
 		projectRoot:      projectRoot,
 		rootDir:          filepath.Join(projectRoot, ".ddx", "workers"),
 		workers:          map[string]*workerHandle{},
 		LandCoordinators: newCoordinatorRegistry(),
+		watchdogStop:     make(chan struct{}),
 	}
+	m.applyServerWatchdogConfig(projectRoot)
+	return m
+}
+
+// applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies
+// any server.watchdog_deadline / server.stall_deadline overrides. Invalid or
+// missing values are silently ignored — defaults are filled in by the
+// watchdog loop at runtime.
+func (m *WorkerManager) applyServerWatchdogConfig(projectRoot string) {
+	cfg, err := config.LoadWithWorkingDir(projectRoot)
+	if err != nil || cfg == nil || cfg.Server == nil {
+		return
+	}
+	if d, err := time.ParseDuration(cfg.Server.WatchdogDeadline); err == nil && d > 0 {
+		m.WatchdogDeadline = d
+	}
+	if d, err := time.ParseDuration(cfg.Server.StallDeadline); err == nil && d > 0 {
+		m.StallDeadline = d
+	}
+}
+
+// watchdogDeadlines returns the effective deadlines, applying defaults for
+// any zero-valued fields.
+func (m *WorkerManager) watchdogDeadlines() (watchdog, stall, check, grace time.Duration) {
+	watchdog = m.WatchdogDeadline
+	if watchdog <= 0 {
+		watchdog = defaultWatchdogDeadline
+	}
+	stall = m.StallDeadline
+	if stall <= 0 {
+		stall = defaultStallDeadline
+	}
+	check = m.WatchdogCheckInterval
+	if check <= 0 {
+		check = defaultWatchdogCheckInterval
+	}
+	grace = m.WatchdogKillGrace
+	if grace <= 0 {
+		grace = defaultWatchdogKillGrace
+	}
+	return
 }
 
 func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerRecord, error) {
@@ -253,11 +330,14 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		logFile:      logFile,
 		progressCh:   progressCh,
 		progressDone: make(chan struct{}),
+		lastPhaseTS:  time.Now().UTC(),
 	}
 
 	m.mu.Lock()
 	m.workers[id] = handle
 	m.mu.Unlock()
+
+	m.ensureWatchdog()
 
 	go m.drainProgress(id, handle, progressCh)
 	go m.runWorker(ctx, id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
@@ -656,6 +736,176 @@ func (m *WorkerManager) Stop(id string) error {
 	return nil
 }
 
+// ensureWatchdog starts the supervisor goroutine exactly once per manager.
+// The goroutine runs until StopWatchdog() is called (or the process exits).
+func (m *WorkerManager) ensureWatchdog() {
+	m.watchdogOnce.Do(func() {
+		go m.watchdogLoop()
+	})
+}
+
+// StopWatchdog halts the supervisor goroutine. Idempotent; used by tests.
+func (m *WorkerManager) StopWatchdog() {
+	defer func() { _ = recover() }() // tolerate double-close
+	close(m.watchdogStop)
+}
+
+// watchdogLoop periodically inspects every registered workerHandle and reaps
+// those that have outlived WatchdogDeadline with no phase transition in
+// StallDeadline.
+func (m *WorkerManager) watchdogLoop() {
+	_, _, check, _ := m.watchdogDeadlines()
+	ticker := time.NewTicker(check)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.watchdogStop:
+			return
+		case <-ticker.C:
+			m.watchdogSweep(time.Now().UTC())
+		}
+	}
+}
+
+// watchdogSweep inspects every handle once. Split out from watchdogLoop so
+// tests can drive the check deterministically without relying on tickers.
+func (m *WorkerManager) watchdogSweep(now time.Time) {
+	watchdogDL, stallDL, _, _ := m.watchdogDeadlines()
+
+	type candidate struct {
+		id      string
+		handle  *workerHandle
+		runtime time.Duration
+		stalled time.Duration
+		beadID  string
+		pid     int
+	}
+
+	m.mu.Lock()
+	var picks []candidate
+	for id, h := range m.workers {
+		if h == nil || h.reaped {
+			continue
+		}
+		rec := h.record
+		if !rec.FinishedAt.IsZero() {
+			continue
+		}
+		if rec.StartedAt.IsZero() {
+			continue
+		}
+		runtime := now.Sub(rec.StartedAt)
+		if runtime <= watchdogDL {
+			continue
+		}
+		// Stall check — require an in-flight attempt; a worker that is
+		// between beads (CurrentAttempt == nil) has no phase to wedge on.
+		if rec.CurrentAttempt == nil {
+			continue
+		}
+		lastPhase := h.lastPhaseTS
+		if lastPhase.IsZero() {
+			lastPhase = rec.StartedAt
+		}
+		stalled := now.Sub(lastPhase)
+		if stalled <= stallDL {
+			continue
+		}
+
+		beadID := ""
+		if rec.CurrentAttempt != nil {
+			beadID = rec.CurrentAttempt.BeadID
+		}
+		if beadID == "" {
+			beadID = rec.CurrentBead
+		}
+
+		h.reaped = true
+		picks = append(picks, candidate{
+			id:      id,
+			handle:  h,
+			runtime: runtime,
+			stalled: stalled,
+			beadID:  beadID,
+			pid:     rec.PID,
+		})
+	}
+	m.mu.Unlock()
+
+	for _, c := range picks {
+		m.reapWorker(c.id, c.handle, c.pid, c.beadID, c.runtime, c.stalled, "watchdog")
+	}
+}
+
+// reapWorker performs the escalation for a stalled worker:
+//  1. Emit bead.reaped event on the bead tracker (if a bead is claimed).
+//  2. Release the bead claim (Unclaim → status=open).
+//  3. SIGTERM → grace → SIGKILL the worker's process group, if a PID is
+//     registered. Fall back to ctx cancellation for pure-goroutine workers.
+//  4. Mark the WorkerRecord state=reaped and persist it.
+func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, beadID string, runtime, stalled time.Duration, reason string) {
+	now := time.Now().UTC()
+
+	m.mu.Lock()
+	rec := handle.record
+	projectRoot := rec.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = m.projectRoot
+	}
+	m.mu.Unlock()
+
+	// 1. Emit the reap event and release the bead claim before killing, so
+	//    the claim is not leaked even if the kill blocks for the full grace.
+	if beadID != "" {
+		store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+		body := fmt.Sprintf(
+			"worker=%s runtime=%s stalled=%s pid=%d reason=%s",
+			id, runtime.Round(time.Second), stalled.Round(time.Second), pid, reason,
+		)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.reaped",
+			Summary:   reason,
+			Body:      body,
+			Actor:     "ddx-watchdog",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
+	}
+
+	// 2. Escalate to the worker process group if we know the PID.
+	_, _, _, grace := m.watchdogDeadlines()
+	if pid > 0 {
+		terminateProcessGroup(pid, grace)
+	}
+
+	// 3. Cancel the goroutine so any in-process code sees context.Canceled.
+	if handle.cancel != nil {
+		handle.cancel()
+	}
+
+	// 4. Flip state=reaped and persist. runWorker may still race to
+	//    overwrite this with "exited" when it returns; that's fine — the
+	//    bead.reaped event plus released claim are the durable record.
+	m.mu.Lock()
+	handle.record.State = "reaped"
+	handle.record.Status = "reaped"
+	handle.record.ReapReason = reason
+	if handle.record.FinishedAt.IsZero() {
+		handle.record.FinishedAt = now
+	}
+	if handle.record.LastError == "" {
+		handle.record.LastError = fmt.Sprintf("watchdog reaped worker after runtime=%s stalled=%s",
+			runtime.Round(time.Second), stalled.Round(time.Second))
+	}
+	dir := filepath.Join(m.rootDir, id)
+	snapshot := handle.record
+	m.mu.Unlock()
+
+	_ = m.writeRecord(dir, snapshot)
+}
+
 func (m *WorkerManager) Logs(id string) (string, string, error) {
 	m.mu.Lock()
 	if handle, ok := m.workers[id]; ok {
@@ -705,6 +955,8 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 			if len(rec.RecentPhases) > maxRecentPhases {
 				rec.RecentPhases = rec.RecentPhases[len(rec.RecentPhases)-maxRecentPhases:]
 			}
+			// Stamp lastPhaseTS so the watchdog can detect stalled attempts.
+			handle.lastPhaseTS = evt.TS
 		}
 
 		if terminalPhases[evt.Phase] {

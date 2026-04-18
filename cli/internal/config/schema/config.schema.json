@@ -337,6 +337,14 @@
             }
           },
           "additionalProperties": false
+        },
+        "watchdog_deadline": {
+          "type": "string",
+          "description": "Total worker runtime budget before the autonomous watchdog considers reaping (time.ParseDuration, e.g. '6h'). Empty uses the built-in default."
+        },
+        "stall_deadline": {
+          "type": "string",
+          "description": "Max time the current attempt may sit without a phase transition before the watchdog treats it as stalled (time.ParseDuration, e.g. '1h'). Empty uses the built-in default."
         }
       },
       "additionalProperties": false

@@ -18,6 +18,14 @@ type NewConfig struct {
 type ServerConfig struct {
 	Addr  string       `yaml:"addr,omitempty" json:"addr,omitempty"`
 	Tsnet *TsnetConfig `yaml:"tsnet,omitempty" json:"tsnet,omitempty"`
+	// WatchdogDeadline bounds total worker lifetime before the autonomous
+	// watchdog considers reaping it. Parsed via time.ParseDuration (e.g. "6h").
+	// Empty string uses the built-in default (6h).
+	WatchdogDeadline string `yaml:"watchdog_deadline,omitempty" json:"watchdog_deadline,omitempty"`
+	// StallDeadline is the max time the current attempt may sit without a
+	// phase transition before the watchdog considers it stalled. Parsed via
+	// time.ParseDuration (e.g. "1h"). Empty string uses the built-in default (1h).
+	StallDeadline string `yaml:"stall_deadline,omitempty" json:"stall_deadline,omitempty"`
 }
 
 // TsnetConfig represents Tailscale ts-net listener configuration (ADR-006).
