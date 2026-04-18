@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -489,4 +490,84 @@ func TestBuildReviewPrompt_ContainsRequiredSections(t *testing.T) {
 	assert.Contains(t, prompt, "<instructions>")
 	assert.Contains(t, prompt, "APPROVE")
 	assert.Contains(t, prompt, "</bead-review>")
+}
+
+// TestGitShowExcludesEvidenceNoiseFromReviewDiff is the regression for
+// ddx-39e27896. A prior attempt that tracked a multi-thousand-line
+// session log (.ddx/executions/<attempt>/embedded/agent-*.jsonl) in git
+// history would cause DefaultBeadReviewer.gitShow to emit a <diff>
+// section sized O(session log), pushing retry prompts past 2M tokens
+// and crashing every provider with n_keep > n_ctx.
+//
+// This test creates a synthetic repo matching the failure scenario —
+// a commit that adds a 10k-line embedded session log — then runs
+// gitShow and asserts the output excludes the embedded file content
+// and stays bounded.
+func TestGitShowExcludesEvidenceNoiseFromReviewDiff(t *testing.T) {
+	root := t.TempDir()
+	runGitInteg(t, root, "init", "-b", "main")
+	runGitInteg(t, root, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, root, "config", "user.name", "DDx Test")
+
+	// Seed commit so we have a base rev.
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	runGitInteg(t, root, "add", "README.md")
+	runGitInteg(t, root, "commit", "-m", "seed")
+
+	// Synthetic evidence commit that adds a multi-thousand-line session log
+	// PLUS a legitimate implementation change. The fix must exclude the
+	// session log from the diff while keeping the implementation change.
+	evidenceDir := filepath.Join(root, ".ddx", "executions", "20260417T000000-testattempt", "embedded")
+	if err := os.MkdirAll(evidenceDir, 0o755); err != nil {
+		t.Fatalf("mkdir evidence: %v", err)
+	}
+	var bigLog strings.Builder
+	for i := 0; i < 10000; i++ {
+		fmt.Fprintf(&bigLog, "{\"seq\":%d,\"event\":\"tool_call\",\"payload\":\"lorem ipsum dolor sit amet consectetur adipiscing elit\"}\n", i)
+	}
+	sessionLogPath := filepath.Join(evidenceDir, "agent-123.jsonl")
+	if err := os.WriteFile(sessionLogPath, []byte(bigLog.String()), 0o644); err != nil {
+		t.Fatalf("write session log: %v", err)
+	}
+
+	// Legitimate implementation change that MUST survive in the diff.
+	if err := os.WriteFile(filepath.Join(root, "implementation.go"), []byte("package main\n\nfunc Added() {}\n"), 0o644); err != nil {
+		t.Fatalf("write implementation: %v", err)
+	}
+
+	// Force-add the evidence (the pre-fix landEvidence behavior) plus the real change.
+	runGitInteg(t, root, "add", "-f", ".ddx/executions/")
+	runGitInteg(t, root, "add", "implementation.go")
+	runGitInteg(t, root, "commit", "-m", "chore: add execution evidence [testattempt] + impl")
+
+	// Get the HEAD sha (the evidence commit).
+	headSha := strings.TrimSpace(runGitInteg(t, root, "rev-parse", "HEAD"))
+
+	// Call the gitShow method with the fix in place.
+	reviewer := &DefaultBeadReviewer{ProjectRoot: root}
+	out, err := reviewer.gitShow(headSha)
+	if err != nil {
+		t.Fatalf("gitShow: %v", err)
+	}
+
+	// Must NOT include the session log content.
+	if strings.Contains(out, "lorem ipsum dolor sit amet") {
+		t.Errorf("gitShow output includes embedded session log content (pathspec exclusion not applied)")
+	}
+
+	// Must include the legitimate implementation change.
+	if !strings.Contains(out, "implementation.go") {
+		t.Errorf("gitShow output missing the legitimate implementation file (pathspec too aggressive)")
+	}
+	if !strings.Contains(out, "func Added()") {
+		t.Errorf("gitShow output missing the implementation change body")
+	}
+
+	// Must be bounded in size. The raw session log was ~1MB; fixed diff
+	// should be under 50KB easily (seed + impl.go + evidence metadata).
+	if len(out) > 150_000 {
+		t.Errorf("gitShow output size %d exceeds 150KB budget — pathspec exclusion did not bound the diff", len(out))
+	}
 }

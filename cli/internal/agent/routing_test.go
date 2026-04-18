@@ -61,8 +61,12 @@ func stateFixtures() map[string]HarnessState {
 }
 
 // newTestRunnerForRouting returns a minimal runner for routing tests (no real exec).
+// SessionLogDir points at a non-existent path so loadHistoricalSuccessRates
+// returns no data — otherwise tests running on a developer machine with real
+// agent-logs (e.g. from a ddx work session) would see contaminated historical
+// success rates and the scoring-based assertions would become flaky.
 func newTestRunnerForRouting() *Runner {
-	r := NewRunner(Config{SessionLogDir: ""})
+	r := NewRunner(Config{SessionLogDir: "/nonexistent-ddx-test-routing-log-dir"})
 	r.LookPath = mockLookPath // all binaries "found"
 	return r
 }

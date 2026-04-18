@@ -426,7 +426,14 @@ func (RealLandingGitOps) CountCommits(dir, base, tip string) int {
 }
 
 func (RealLandingGitOps) StageDir(dir, relPath string) error {
-	out, err := osexec.Command("git", "-C", dir, "add", "--", relPath).CombinedOutput()
+	// Exclude embedded session logs from the evidence commit — tracking
+	// multi-thousand-line .jsonl files caused retry review prompts to
+	// balloon past 2M tokens and crash every provider with n_keep > n_ctx
+	// (ddx-39e27896). manifest.json, result.json, prompt.md, and
+	// usage.json remain tracked for audit; the raw session log lives on
+	// disk, not in git history.
+	args := append([]string{"-C", dir, "add", "--", relPath}, EvidenceLandExcludePathspecs()...)
+	out, err := osexec.Command("git", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git add %s: %s: %w", relPath, strings.TrimSpace(string(out)), err)
 	}

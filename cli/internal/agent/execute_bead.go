@@ -266,6 +266,44 @@ func (r *RealGitOps) IsDirty(dir string) (bool, error) {
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
+// EvidenceLandExcludePathspecs returns git pathspec-exclusion fragments
+// applied when landEvidence / VerifyCleanWorktree stage the evidence
+// directory. Only excludes the multi-thousand-line embedded session log
+// (the single file that actually explodes past provider context
+// limits). prompt.md, usage.json, manifest.json, and result.json remain
+// tracked — they are small and serve the audit-trail contract. The
+// gitignore written by `ddx init` already treats .ddx/executions/*/
+// embedded as ignored; this pathspec is defence-in-depth for force-add
+// paths.
+//
+// Regression anchor: ddx-39e27896 — session logs landed as tracked
+// evidence caused retry prompts to balloon past 2M+ tokens and crash
+// every provider with n_keep > n_ctx.
+func EvidenceLandExcludePathspecs() []string {
+	return []string{
+		":(exclude,glob).ddx/executions/*/embedded/**",
+	}
+}
+
+// EvidenceReviewExcludePathspecs returns git pathspec-exclusion fragments
+// applied when review-prompt synthesis runs `git show <rev>` over the
+// evidence commit. Broader than EvidenceLandExcludePathspecs: excludes
+// prompt.md and usage.json too, because even though they're tracked for
+// audit, they're execution-artifact noise from the reviewer's
+// perspective — the reviewer wants to see the implementation diff, not
+// the prior attempt's prompt or token counters. This also protects
+// against old commits (pre-fix) that committed the session log
+// directly.
+//
+// Regression anchor: ddx-39e27896.
+func EvidenceReviewExcludePathspecs() []string {
+	return []string{
+		":(exclude,glob).ddx/executions/*/embedded/**",
+		":(exclude,glob).ddx/executions/*/prompt.md",
+		":(exclude,glob).ddx/executions/*/usage.json",
+	}
+}
+
 // SynthesizeCommit stages real file changes, explicitly excluding harness noise
 // paths, and creates a commit with msg as the commit message. Returns (true, nil)
 // when a commit was made, (false, nil) when nothing real remained to commit
@@ -1143,7 +1181,14 @@ func VerifyCleanWorktree(projectRoot, attemptID string) error {
 		return nil
 	}
 
-	addOut, addErr := osexec.Command("git", "-C", projectRoot, "add", "--", evidenceDir).CombinedOutput()
+	// Exclude embedded session logs from the evidence commit; they stay
+	// on disk for post-hoc inspection but must NOT be tracked — the
+	// multi-thousand-line .jsonl files are what caused ddx-39e27896
+	// (retry prompts ballooning past provider context limits).
+	// manifest.json, result.json, prompt.md, usage.json remain tracked
+	// per the existing audit-trail contract (gitignore un-ignores them).
+	addArgs := append([]string{"-C", projectRoot, "add", "--", evidenceDir}, EvidenceLandExcludePathspecs()...)
+	addOut, addErr := osexec.Command("git", addArgs...).CombinedOutput()
 	if addErr != nil {
 		return fmt.Errorf("staging leftover evidence: %s: %w", strings.TrimSpace(string(addOut)), addErr)
 	}

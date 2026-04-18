@@ -549,11 +549,15 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	return reviewRes, nil
 }
 
-// gitShow runs `git show <rev>` and returns the output.
+// gitShow runs `git show <rev>` with pathspec exclusions for execution-
+// evidence noise so the review prompt's <diff> section stays bounded even
+// when an old commit tracked a multi-thousand-line session log. See
+// EvidenceReviewExcludePathspecs and ddx-39e27896 for the regression.
 func (r *DefaultBeadReviewer) gitShow(rev string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	out, err := osexec.CommandContext(ctx, "git", "-C", r.ProjectRoot, "show", rev).Output()
+	args := append([]string{"-C", r.ProjectRoot, "show", rev, "--", "."}, EvidenceReviewExcludePathspecs()...)
+	out, err := osexec.CommandContext(ctx, "git", args...).Output()
 	if err != nil {
 		return "", err
 	}
