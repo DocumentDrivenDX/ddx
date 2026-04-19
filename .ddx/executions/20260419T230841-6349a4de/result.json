@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-bfff4bc7",
+  "attempt_id": "20260419T230841-6349a4de",
+  "base_rev": "37c38ecc1c5cf8a4c7b9d86531cf8d3a44a2c113",
+  "result_rev": "37c38ecc1c5cf8a4c7b9d86531cf8d3a44a2c113",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: native config provider \"lmstudio\": config: unknown provider \"lmstudio\"",
+  "harness": "lmstudio",
+  "model": "qwen3.5-27b",
+  "session_id": "eb-6ef9aefc",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "agent: native config provider \"lmstudio\": config: unknown provider \"lmstudio\"",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260419T230841-6349a4de",
+  "prompt_file": ".ddx/executions/20260419T230841-6349a4de/prompt.md",
+  "manifest_file": ".ddx/executions/20260419T230841-6349a4de/manifest.json",
+  "result_file": ".ddx/executions/20260419T230841-6349a4de/result.json",
+  "started_at": "2026-04-19T23:08:42.277670756Z",
+  "finished_at": "2026-04-19T23:08:42.277911506Z"
+}
