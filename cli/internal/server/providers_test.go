@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -35,10 +36,17 @@ func TestListProviders(t *testing.T) {
 	}
 
 	// Verify required fields are present and not fabricated as "ok"/"0" when unknown.
-	registry := agent.NewRegistry()
+	svc, err := agent.NewServiceFromWorkDir(dir)
+	if err != nil {
+		t.Fatalf("NewServiceFromWorkDir: %v", err)
+	}
+	infos, err := svc.ListHarnesses(context.Background())
+	if err != nil {
+		t.Fatalf("ListHarnesses: %v", err)
+	}
 	harnessNames := map[string]bool{}
-	for _, name := range registry.Names() {
-		harnessNames[name] = true
+	for _, info := range infos {
+		harnessNames[info.Name] = true
 	}
 
 	for _, item := range items {
