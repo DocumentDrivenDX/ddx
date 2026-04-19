@@ -5,10 +5,13 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
-	// Import the config package for its init() side-effect: it registers the
-	// config loader into agentlib so that agentlib.New(ServiceOptions{ConfigPath:…})
-	// can resolve provider configuration without a separate adapter.
-	_ "github.com/DocumentDrivenDX/agent/config"
+	// Import the configinit package for its init() side-effect: it triggers
+	// agent's internal/config init which registers the config loader into
+	// agentlib so that agentlib.New(ServiceOptions{ConfigPath:…}) can resolve
+	// provider configuration without a separate adapter. configinit is the
+	// public marker package exposed for this purpose after agent v0.5.0
+	// moved internal/config out of the public surface.
+	_ "github.com/DocumentDrivenDX/agent/configinit"
 )
 
 // DefaultProviderRequestTimeout bounds a single Chat / ChatStream call.
