@@ -16,11 +16,18 @@ import (
 // package (which is module-private).
 const (
 	serviceEventRoutingDecision = "routing_decision"
+	serviceEventTextDelta       = "text_delta"
 	serviceEventToolCall        = "tool_call"
 	serviceEventToolResult      = "tool_result"
 	serviceEventStall           = "stall"
 	serviceEventFinal           = "final"
 	serviceEventCompaction      = "compaction"
+	serviceEventCompactionEnd   = "compaction.end"
+)
+
+const (
+	serviceNoopCompactionWallClockLimit  = 15 * time.Minute
+	serviceNoopCompactionWallClockReason = "compaction_stuck_wall_clock_timeout"
 )
 
 // serviceFinalData mirrors the JSON shape of a CONTRACT-003 type=final
@@ -243,60 +250,197 @@ func (r *Runner) runAgentViaService(opts RunOptions) (*Result, error) {
 	return result, nil
 }
 
-// drainServiceEvents reads from a service event channel until close and
-// returns the final-event payload, the accumulated tool-call log, and the
-// routing decision (when present in the routing_decision start event).
+// drainServiceEvents reads service events and returns the final-event payload,
+// the accumulated tool-call log, and the routing decision (when present in the
+// routing_decision start event). A sustained run of no-op compaction telemetry
+// is converted into a synthetic stalled final so execute-bead result details
+// identify the time-based breaker instead of waiting for the outer wall clock.
 func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, []ToolCallEntry, *serviceRoutingActual) {
 	var final *serviceFinalData
 	var routing *serviceRoutingActual
 	var toolCalls []ToolCallEntry
 	pending := make(map[string]*ToolCallEntry) // call_id -> entry awaiting result
+	var noopCompactions serviceNoopCompactionStreak
+	var noopTimer *time.Timer
+	var noopTimerC <-chan time.Time
+	defer func() { stopNoopCompactionTimer(noopTimer) }()
 
-	for ev := range events {
-		switch string(ev.Type) {
-		case serviceEventRoutingDecision:
-			var payload struct {
-				Harness  string `json:"harness"`
-				Provider string `json:"provider"`
-				Model    string `json:"model"`
+	for {
+		select {
+		case <-noopTimerC:
+			detail := noopCompactions.detail(serviceNoopCompactionWallClockLimit, serviceNoopCompactionWallClockLimit)
+			return &serviceFinalData{
+				Status: "stalled",
+				Error:  detail,
+			}, toolCallsWithPending(toolCalls, pending), routing
+		case ev, ok := <-events:
+			if !ok {
+				// Any tool_call without a matching tool_result still gets recorded.
+				return final, toolCallsWithPending(toolCalls, pending), routing
 			}
-			if err := json.Unmarshal(ev.Data, &payload); err == nil {
-				routing = &serviceRoutingActual{
-					Harness:  payload.Harness,
-					Provider: payload.Provider,
-					Model:    payload.Model,
+			if isNoopCompactionEvent(ev) {
+				detail, started := noopCompactions.record(eventTimestamp(ev), serviceNoopCompactionWallClockLimit)
+				if started {
+					noopTimer, noopTimerC = resetNoopCompactionTimer(noopTimer, serviceNoopCompactionWallClockLimit)
 				}
-			}
-		case serviceEventToolCall:
-			var data serviceToolCallData
-			if err := json.Unmarshal(ev.Data, &data); err == nil {
-				entry := &ToolCallEntry{
-					Tool:  data.Name,
-					Input: string(data.Input),
+				if detail != "" {
+					return &serviceFinalData{
+						Status: "stalled",
+						Error:  detail,
+					}, toolCallsWithPending(toolCalls, pending), routing
 				}
-				pending[data.ID] = entry
+				continue
 			}
-		case serviceEventToolResult:
-			var data serviceToolResultData
-			if err := json.Unmarshal(ev.Data, &data); err == nil {
-				if entry, ok := pending[data.ID]; ok {
-					entry.Output = data.Output
-					entry.Error = data.Error
-					entry.Duration = int(data.DurationMS)
-					toolCalls = append(toolCalls, *entry)
-					delete(pending, data.ID)
+			if isServiceProgressEvent(ev) {
+				noopCompactions.reset()
+				stopNoopCompactionTimer(noopTimer)
+				noopTimerC = nil
+			}
+
+			switch string(ev.Type) {
+			case serviceEventRoutingDecision:
+				var payload struct {
+					Harness  string `json:"harness"`
+					Provider string `json:"provider"`
+					Model    string `json:"model"`
 				}
-			}
-		case serviceEventFinal:
-			var data serviceFinalData
-			if err := json.Unmarshal(ev.Data, &data); err == nil {
-				final = &data
+				if err := json.Unmarshal(ev.Data, &payload); err == nil {
+					routing = &serviceRoutingActual{
+						Harness:  payload.Harness,
+						Provider: payload.Provider,
+						Model:    payload.Model,
+					}
+				}
+			case serviceEventToolCall:
+				var data serviceToolCallData
+				if err := json.Unmarshal(ev.Data, &data); err == nil {
+					entry := &ToolCallEntry{
+						Tool:  data.Name,
+						Input: string(data.Input),
+					}
+					pending[data.ID] = entry
+				}
+			case serviceEventToolResult:
+				var data serviceToolResultData
+				if err := json.Unmarshal(ev.Data, &data); err == nil {
+					if entry, ok := pending[data.ID]; ok {
+						entry.Output = data.Output
+						entry.Error = data.Error
+						entry.Duration = int(data.DurationMS)
+						toolCalls = append(toolCalls, *entry)
+						delete(pending, data.ID)
+					}
+				}
+			case serviceEventFinal:
+				var data serviceFinalData
+				if err := json.Unmarshal(ev.Data, &data); err == nil {
+					final = &data
+				}
 			}
 		}
 	}
-	// Any tool_call without a matching tool_result still gets recorded.
+}
+
+func resetNoopCompactionTimer(timer *time.Timer, limit time.Duration) (*time.Timer, <-chan time.Time) {
+	if limit <= 0 {
+		return timer, nil
+	}
+	if timer == nil {
+		timer = time.NewTimer(limit)
+		return timer, timer.C
+	}
+	stopNoopCompactionTimer(timer)
+	timer.Reset(limit)
+	return timer, timer.C
+}
+
+func stopNoopCompactionTimer(timer *time.Timer) {
+	if timer == nil {
+		return
+	}
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+}
+
+type serviceNoopCompactionStreak struct {
+	start time.Time
+	count int
+}
+
+func (s *serviceNoopCompactionStreak) record(ts time.Time, limit time.Duration) (string, bool) {
+	if limit <= 0 {
+		return "", false
+	}
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+	started := false
+	if s.count == 0 {
+		s.start = ts
+		started = true
+	}
+	s.count++
+	elapsed := ts.Sub(s.start)
+	if elapsed < limit {
+		return "", started
+	}
+	return s.detail(elapsed, limit), started
+}
+
+func (s *serviceNoopCompactionStreak) detail(elapsed, limit time.Duration) string {
+	if elapsed < limit {
+		elapsed = limit
+	}
+	return fmt.Sprintf("%s: time-based breaker fired after %s of consecutive no-op compaction events (limit %s, count %d)",
+		serviceNoopCompactionWallClockReason,
+		elapsed.Round(time.Second),
+		limit.Round(time.Second),
+		s.count)
+}
+
+func (s *serviceNoopCompactionStreak) reset() {
+	s.start = time.Time{}
+	s.count = 0
+}
+
+func eventTimestamp(ev agentlib.ServiceEvent) time.Time {
+	if !ev.Time.IsZero() {
+		return ev.Time
+	}
+	return time.Now().UTC()
+}
+
+func isNoopCompactionEvent(ev agentlib.ServiceEvent) bool {
+	switch string(ev.Type) {
+	case serviceEventCompaction, serviceEventCompactionEnd:
+	default:
+		return false
+	}
+	var payload struct {
+		NoCompaction bool `json:"no_compaction"`
+	}
+	if err := json.Unmarshal(ev.Data, &payload); err != nil {
+		return false
+	}
+	return payload.NoCompaction
+}
+
+func isServiceProgressEvent(ev agentlib.ServiceEvent) bool {
+	switch string(ev.Type) {
+	case serviceEventTextDelta, serviceEventToolCall, serviceEventToolResult, serviceEventCompaction, serviceEventCompactionEnd:
+		return true
+	default:
+		return false
+	}
+}
+
+func toolCallsWithPending(toolCalls []ToolCallEntry, pending map[string]*ToolCallEntry) []ToolCallEntry {
 	for _, entry := range pending {
 		toolCalls = append(toolCalls, *entry)
 	}
-	return final, toolCalls, routing
+	return toolCalls
 }
