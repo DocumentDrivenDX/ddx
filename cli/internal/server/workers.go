@@ -380,11 +380,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				return agent.ExecuteBeadReport{}, err
 			}
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-				landReq := agent.BuildLandRequestFromResult(projectRoot, res)
-				landRes, landErr := coordinator.Submit(landReq)
-				if landErr == nil {
-					agent.ApplyLandResultToExecuteBeadResult(res, landRes)
-				} else if err == nil {
+				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, log); landErr != nil && err == nil {
 					err = landErr
 				}
 			} else if res != nil && res.ResultRev == res.BaseRev {
@@ -1266,6 +1262,83 @@ func (m *WorkerManager) readRecord(dir string) (WorkerRecord, error) {
 		record.Status = record.State
 	}
 	return record, nil
+}
+
+// gateLandSubmitter is the subset of *LandCoordinator that
+// evaluateGatesAndSubmit needs. Defined here so tests can drive the gate
+// landing path against either a real coordinator or a fake.
+type gateLandSubmitter interface {
+	Submit(req agent.LandRequest) (*agent.LandResult, error)
+}
+
+// evaluateGatesAndSubmit runs the required-gate evaluation BEFORE submitting
+// res to the coordinator. When a required gate fails (or a ratchet misses),
+// it preserves the result directly via update-ref and skips coordinator
+// submission entirely — Land() stays a pure ref-advance contract; gate
+// enforcement happens upstream. When gates pass (or no governing IDs are
+// declared in the manifest), it submits the LandRequest to the coordinator
+// and applies the LandResult onto res.
+//
+// Mirrors the interactive path in cmd/agent_execute_bead.go. The preserve
+// reason/status fields are set the same way ApplyLandingToResult would set
+// them on the same scenario, so server and interactive paths produce
+// identical preserve evidence.
+//
+// Returns the coordinator submit error when one occurs; gate-context and
+// gate-eval errors are soft-logged and treated as no-eval (the existing
+// submit path continues).
+func evaluateGatesAndSubmit(
+	projectRoot string,
+	res *agent.ExecuteBeadResult,
+	gitOps agent.GitOps,
+	coordinator gateLandSubmitter,
+	log io.Writer,
+) error {
+	wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps)
+	if ctxErr != nil {
+		// Soft-fail: log and skip gate eval rather than abort the land.
+		_, _ = fmt.Fprintf(log, "ddx: warning: gate-context setup failed: %v (skipping required-gate eval)\n", ctxErr)
+	}
+	defer cleanup()
+
+	if wt != "" {
+		checksAbs := filepath.Join(projectRoot, res.ExecutionDir, "checks.json")
+		checksRel := filepath.Join(res.ExecutionDir, "checks.json")
+		anyFailed, ratchetFailed, evalErr := agent.EvaluateRequiredGatesForResult(wt, ids, res, projectRoot, checksAbs, checksRel)
+		if evalErr != nil {
+			// Log and treat as no-eval; existing path continues.
+			_, _ = fmt.Fprintf(log, "ddx: warning: gate evaluation failed: %v (skipping)\n", evalErr)
+		} else if anyFailed || ratchetFailed {
+			// Preserve directly. Mirror LandBeadResult's preserve path so the
+			// server produces identical evidence to the interactive path.
+			// PreserveRef helper produces refs/ddx/iterations/<bead>/<ts>-<shortSHA>;
+			// using it keeps server- and interactive-managed evidence indistinguishable.
+			preserveRef := agent.PreserveRef(res.BeadID, res.BaseRev)
+			if upErr := gitOps.UpdateRef(projectRoot, preserveRef, res.ResultRev); upErr != nil {
+				_, _ = fmt.Fprintf(log, "ddx: warning: preserving result ref %s failed: %v\n", preserveRef, upErr)
+			} else {
+				res.PreserveRef = preserveRef
+			}
+			res.Outcome = "preserved"
+			if ratchetFailed {
+				res.Reason = agent.RatchetPreserveReason
+			} else {
+				res.Reason = "post-run checks failed"
+			}
+			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+			res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
+			return nil
+		}
+	}
+
+	// Gates passed (or no governing IDs / soft-failure): submit to coordinator.
+	landReq := agent.BuildLandRequestFromResult(projectRoot, res)
+	landRes, landErr := coordinator.Submit(landReq)
+	if landErr != nil {
+		return landErr
+	}
+	agent.ApplyLandResultToExecuteBeadResult(res, landRes)
+	return nil
 }
 
 func relToProject(projectRoot, path string) string {
