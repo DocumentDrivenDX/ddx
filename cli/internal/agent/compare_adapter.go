@@ -1,12 +1,17 @@
 package agent
 
-// compare_adapter.go provides DDx Runner-method wrappers for comparison,
-// quorum, benchmark, and output condensation. The canonical implementations
-// live in github.com/DocumentDrivenDX/agent/internal/comparison (moved via
-// ddx-1d2c2e7f). These wrappers remain in DDx until a follow-up bead exposes
-// a public service.Compare API surface from the agent module.
+// compare_adapter.go provides comparison, quorum, and benchmark execution
+// helpers for DDx. The compare/quorum/benchmark execution logic accepts a
+// run-function closure so production callers can drive arms via the agent
+// service (RunViaService) while legacy Runner-bound tests can keep using
+// Runner.Run.
+//
+// The Runner.RunCompare/Runner.RunQuorum/Runner.RunBenchmark wrappers below
+// remain in place for test scaffolding only; production code should call
+// RunCompareViaService, RunQuorumViaService, and RunBenchmarkViaService.
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -69,13 +74,23 @@ type BenchmarkSummary struct {
 	Arms         []BenchmarkArmSummary `json:"arms"`
 }
 
-// RunCompare dispatches the same prompt to multiple harnesses and returns a ComparisonRecord.
-func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
+// RunFunc executes a single agent invocation and returns the Result. Used by
+// the comparison helpers so the same orchestration logic can be driven by
+// either the legacy Runner or the agent service.
+type RunFunc func(opts RunOptions) (*Result, error)
+
+// RunCompareWith dispatches the same prompt to multiple harnesses, executing
+// each arm via run, and returns a ComparisonRecord. Production callers should
+// use RunCompareViaService; tests may pass Runner.Run as the closure.
+func RunCompareWith(run RunFunc, opts CompareOptions, resolvePrompt func(RunOptions) (string, error), cleanupSandbox func(repoDir, compareID string)) (*ComparisonRecord, error) {
 	if len(opts.Harnesses) == 0 {
 		return nil, fmt.Errorf("agent: compare requires at least one harness")
 	}
+	if resolvePrompt == nil {
+		resolvePrompt = defaultResolvePromptForCompare
+	}
 
-	prompt, err := r.resolvePrompt(opts.RunOptions)
+	prompt, err := resolvePrompt(opts.RunOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -121,19 +136,55 @@ func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
 		wg.Add(1)
 		go func(idx int, harnessName string) {
 			defer wg.Done()
-			record.Arms[idx] = r.runCompareArm(opts, idx, harnessName, baseDir, id, prompt, worktrees[idx])
+			record.Arms[idx] = runCompareArmWith(run, opts, idx, harnessName, baseDir, prompt, worktrees[idx])
 		}(i, harness)
 	}
 	wg.Wait()
 
 	if opts.Sandbox && !opts.KeepSandbox {
-		r.cleanupCompareWorktrees(baseDir, id)
+		if cleanupSandbox != nil {
+			cleanupSandbox(baseDir, id)
+		} else {
+			cleanupCompareWorktrees(baseDir, id)
+		}
 	}
 
 	return record, nil
 }
 
-func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, baseDir, compareID, prompt, worktreePath string) ComparisonArm {
+// RunCompareViaService is the production replacement for Runner.RunCompare.
+// It resolves prompts from inline text or PromptFile and drives each arm
+// through the agent service (RunViaService).
+func RunCompareViaService(ctx context.Context, workDir string, opts CompareOptions) (*ComparisonRecord, error) {
+	run := func(runOpts RunOptions) (*Result, error) {
+		return RunViaService(ctx, workDir, runOpts)
+	}
+	return RunCompareWith(run, opts, defaultResolvePromptForCompare, cleanupCompareWorktrees)
+}
+
+// RunCompare keeps backward-compat for Runner-driven tests; production code
+// should call RunCompareViaService instead.
+func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
+	return RunCompareWith(r.Run, opts, r.resolvePrompt, r.cleanupCompareWorktrees)
+}
+
+// defaultResolvePromptForCompare reads inline Prompt or PromptFile.
+func defaultResolvePromptForCompare(opts RunOptions) (string, error) {
+	prompt := opts.Prompt
+	if opts.PromptFile != "" {
+		data, err := os.ReadFile(opts.PromptFile)
+		if err != nil {
+			return "", fmt.Errorf("agent: read prompt file: %w", err)
+		}
+		prompt = string(data)
+	}
+	if prompt == "" {
+		return "", fmt.Errorf("agent: prompt is required")
+	}
+	return prompt, nil
+}
+
+func runCompareArmWith(run RunFunc, opts CompareOptions, armIdx int, harnessName, baseDir, prompt, worktreePath string) ComparisonArm {
 	label := harnessName
 	if l, ok := opts.ArmLabels[armIdx]; ok {
 		label = l
@@ -161,7 +212,7 @@ func (r *Runner) runCompareArm(opts CompareOptions, armIdx int, harnessName, bas
 		Correlation: opts.Correlation,
 	}
 
-	result, err := r.Run(runOpts)
+	result, err := run(runOpts)
 	if err != nil {
 		arm.ExitCode = 1
 		arm.Error = err.Error()
@@ -283,7 +334,10 @@ func runPostCommand(dir, command string) (string, bool) {
 	return string(out), err == nil
 }
 
-func (r *Runner) cleanupCompareWorktrees(repoDir, compareID string) {
+// cleanupCompareWorktrees removes the worktrees created for a compare run.
+// Free function; both Runner.RunCompare and RunCompareViaService route through
+// this helper.
+func cleanupCompareWorktrees(repoDir, compareID string) {
 	if root, err := resolveGitRoot(repoDir); err == nil {
 		repoDir = root
 	}
@@ -307,14 +361,21 @@ func (r *Runner) cleanupCompareWorktrees(repoDir, compareID string) {
 	_ = cmd.Run()
 }
 
+// cleanupCompareWorktrees method shim for Runner.RunCompare backward compat.
+func (r *Runner) cleanupCompareWorktrees(repoDir, compareID string) {
+	cleanupCompareWorktrees(repoDir, compareID)
+}
+
 func genCompareID() string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return "cmp-" + hex.EncodeToString(b)
 }
 
-// RunQuorum invokes multiple harnesses and evaluates consensus.
-func (r *Runner) RunQuorum(opts QuorumOptions) ([]*Result, error) {
+// RunQuorumWith invokes multiple harnesses concurrently and returns each
+// result. Production callers should use RunQuorumViaService; tests may pass
+// Runner.Run.
+func RunQuorumWith(run RunFunc, opts QuorumOptions) ([]*Result, error) {
 	if len(opts.Harnesses) == 0 {
 		return nil, fmt.Errorf("agent: quorum requires at least one harness")
 	}
@@ -335,7 +396,7 @@ func (r *Runner) RunQuorum(opts QuorumOptions) ([]*Result, error) {
 			defer wg.Done()
 			runOpts := opts.RunOptions
 			runOpts.Harness = harness
-			result, err := r.Run(runOpts)
+			result, err := run(runOpts)
 			mu.Lock()
 			if err != nil && firstErr == nil {
 				firstErr = err
@@ -347,6 +408,20 @@ func (r *Runner) RunQuorum(opts QuorumOptions) ([]*Result, error) {
 	wg.Wait()
 
 	return results, firstErr
+}
+
+// RunQuorumViaService is the production replacement for Runner.RunQuorum.
+func RunQuorumViaService(ctx context.Context, workDir string, opts QuorumOptions) ([]*Result, error) {
+	run := func(runOpts RunOptions) (*Result, error) {
+		return RunViaService(ctx, workDir, runOpts)
+	}
+	return RunQuorumWith(run, opts)
+}
+
+// RunQuorum keeps backward-compat for Runner-driven tests; production code
+// should call RunQuorumViaService instead.
+func (r *Runner) RunQuorum(opts QuorumOptions) ([]*Result, error) {
+	return RunQuorumWith(r.Run, opts)
 }
 
 // QuorumMet returns true if enough results succeeded.
@@ -511,9 +586,9 @@ func LoadBenchmarkSuite(path string) (*BenchmarkSuite, error) {
 	return &suite, nil
 }
 
-// RunBenchmark executes all prompts in a suite against all arms.
-// The canonical implementation lives in agent/internal/comparison.
-func (r *Runner) RunBenchmark(suite *BenchmarkSuite) (*BenchmarkResult, error) {
+// RunBenchmarkWith executes all prompts in a suite against all arms via the
+// runCompare closure. Production callers should use RunBenchmarkViaService.
+func RunBenchmarkWith(runCompare func(CompareOptions) (*ComparisonRecord, error), suite *BenchmarkSuite) (*BenchmarkResult, error) {
 	result := &BenchmarkResult{
 		Suite:     suite.Name,
 		Version:   suite.Version,
@@ -549,7 +624,7 @@ func (r *Runner) RunBenchmark(suite *BenchmarkSuite) (*BenchmarkResult, error) {
 		compareOpts.Sandbox = suite.Sandbox
 		compareOpts.PostRun = suite.PostRun
 
-		record, err := r.RunCompare(compareOpts)
+		record, err := runCompare(compareOpts)
 		if err != nil {
 			return nil, fmt.Errorf("prompt %s: %w", prompt.ID, err)
 		}
@@ -559,6 +634,18 @@ func (r *Runner) RunBenchmark(suite *BenchmarkSuite) (*BenchmarkResult, error) {
 
 	result.Summary = benchSummarize(result)
 	return result, nil
+}
+
+// RunBenchmarkViaService is the production replacement for Runner.RunBenchmark.
+func RunBenchmarkViaService(ctx context.Context, workDir string, suite *BenchmarkSuite) (*BenchmarkResult, error) {
+	return RunBenchmarkWith(func(opts CompareOptions) (*ComparisonRecord, error) {
+		return RunCompareViaService(ctx, workDir, opts)
+	}, suite)
+}
+
+// RunBenchmark keeps backward-compat for Runner-driven tests.
+func (r *Runner) RunBenchmark(suite *BenchmarkSuite) (*BenchmarkResult, error) {
+	return RunBenchmarkWith(r.RunCompare, suite)
 }
 
 func benchSummarize(result *BenchmarkResult) BenchmarkSummary {

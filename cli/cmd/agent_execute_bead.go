@@ -149,11 +149,11 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 
 	// Preflight the orphan-model check before creating a worktree. Mirrors
 	// the execute-loop preflight so `ddx agent execute-bead --model <unroutable>`
-	// errors before any git work happens rather than mid-execution.
-	if pv, ok := runner.(interface {
-		ValidateForExecuteLoop(harnessName, model, provider, modelRef string) error
-	}); ok {
-		if err := pv.ValidateForExecuteLoop(harness, model, provider, modelRef); err != nil {
+	// errors before any git work happens rather than mid-execution. Skip the
+	// preflight when a test runner override is in use — overrides may be
+	// fakes that bypass routing entirely.
+	if f.AgentRunnerOverride == nil {
+		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider, modelRef); err != nil {
 			return err
 		}
 	}

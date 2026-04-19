@@ -1861,9 +1861,6 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workDir := s.workingDirForRequest(r)
-	runner := agent.NewRunner(agent.Config{
-		SessionLogDir: agent.ResolveLogDir(workDir, ""),
-	})
 	opts := agent.RunOptions{
 		Harness: req.Harness,
 		Prompt:  req.Prompt,
@@ -1871,7 +1868,7 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 		Effort:  req.Effort,
 		WorkDir: workDir,
 	}
-	result, err := runner.Run(opts)
+	result, err := agent.RunViaService(r.Context(), workDir, opts)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -3720,9 +3717,6 @@ func (s *Server) mcpAgentDispatch(workingDir, harness, prompt, model, effort str
 	if prompt == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "prompt is required"}}, IsError: true}
 	}
-	runner := agent.NewRunner(agent.Config{
-		SessionLogDir: agent.ResolveLogDir(workingDir, ""),
-	})
 	opts := agent.RunOptions{
 		Harness: harness,
 		Prompt:  prompt,
@@ -3730,7 +3724,7 @@ func (s *Server) mcpAgentDispatch(workingDir, harness, prompt, model, effort str
 		Effort:  effort,
 		WorkDir: workingDir,
 	}
-	result, err := runner.Run(opts)
+	result, err := agent.RunViaService(context.Background(), workingDir, opts)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}

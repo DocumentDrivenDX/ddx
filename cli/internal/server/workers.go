@@ -270,11 +270,8 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	// Pre-flight: validate harness availability and model compatibility
 	// before creating the worker record or claiming any beads.
-	{
-		runner := m.buildAgentRunner(effectiveRoot)
-		if err := runner.ValidateForExecuteLoop(spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
-			return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
-		}
+	if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
+		return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
 	}
 
 	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {

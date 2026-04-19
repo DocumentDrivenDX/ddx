@@ -113,8 +113,6 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 		Use:   "run",
 		Short: "Invoke an agent with a prompt",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := f.agentRunner()
-
 			promptFile, _ := cmd.Flags().GetString("prompt")
 			promptText, _ := cmd.Flags().GetString("text")
 			harness, _ := cmd.Flags().GetString("harness")
@@ -216,7 +214,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 					KeepSandbox: keepSandbox,
 					PostRun:     postRun,
 				}
-				record, err := r.RunCompare(opts)
+				record, err := agent.RunCompareViaService(cmd.Context(), f.WorkingDir, opts)
 				if err != nil {
 					return err
 				}
@@ -265,7 +263,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 					Harnesses: harnessNames,
 					Strategy:  quorum,
 				}
-				results, err := r.RunQuorum(opts)
+				results, err := agent.RunQuorumViaService(cmd.Context(), f.WorkingDir, opts)
 				if err != nil {
 					return err
 				}
@@ -342,7 +340,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				WorkDir:      workDir,
 				Permissions:  permissions,
 			}
-			result, err := r.Run(opts)
+			result, err := agent.RunViaService(cmd.Context(), f.WorkingDir, opts)
 			if err != nil {
 				return err
 			}
@@ -499,17 +497,24 @@ func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 		Short: "Show agent model and reasoning-level capabilities",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := f.agentRunner()
-
 			harness, _ := cmd.Flags().GetString("harness")
 			if harness == "" && len(args) > 0 {
 				harness = args[0]
 			}
+			// Load config to determine default harness + detect model overrides.
+			cfg, _ := config.LoadWithWorkingDir(f.WorkingDir)
+			var configHarness, configModel string
+			var configModels map[string]string
+			if cfg != nil && cfg.Agent != nil {
+				configHarness = cfg.Agent.Harness
+				configModel = cfg.Agent.Model
+				configModels = cfg.Agent.Models
+			}
 			if harness == "" {
-				harness = r.Config.Harness
+				harness = configHarness
 			}
 
-			caps, err := r.Capabilities(harness)
+			caps, err := agent.CapabilitiesViaService(cmd.Context(), f.WorkingDir, harness)
 			if err != nil {
 				return err
 			}
@@ -537,7 +542,7 @@ func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 			}
 			if caps.Model != "" {
 				modelSource := "default"
-				if r.Config.Models[harness] != "" || r.Config.Model != "" {
+				if configModels[harness] != "" || configModel != "" {
 					modelSource = "config override"
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Model: %s (%s)\n", caps.Model, modelSource)
@@ -716,7 +721,7 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 
 					// Optionally test provider connectivity
 					if checkConnectivity {
-						providerStatus := r.TestProviderConnectivity(s.Name, probeTimeout)
+						providerStatus := agent.TestProviderConnectivityViaService(cmd.Context(), f.WorkingDir, s.Name, probeTimeout)
 						statuses[i].Provider = &providerStatus
 
 						if providerStatus.Reachable && providerStatus.CreditsOK {
@@ -979,8 +984,7 @@ Examples:
 				return fmt.Errorf("loading benchmark suite: %w", err)
 			}
 
-			runner := f.agentRunner()
-			result, err := runner.RunBenchmark(suite)
+			result, err := agent.RunBenchmarkViaService(cmd.Context(), f.WorkingDir, suite)
 			if err != nil {
 				return fmt.Errorf("running benchmark: %w", err)
 			}
@@ -1200,8 +1204,7 @@ Examples:
 			fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 50))
 
 			// Run the agent
-			runner := f.agentRunner()
-			result, err := runner.Run(agent.RunOptions{
+			result, err := agent.RunViaService(cmd.Context(), f.WorkingDir, agent.RunOptions{
 				Harness: harness,
 				Model:   model,
 				Prompt:  prompt,
@@ -1375,11 +1378,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// before claiming any beads. This surfaces errors like "claude binary
 	// not found" or "vidar is an agent preset, not a claude model" before
 	// any bead status changes hands.
-	{
-		preflightRunner := f.agentRunner()
-		if err := preflightRunner.ValidateForExecuteLoop(harness, model, provider, modelRef); err != nil {
-			return fmt.Errorf("execute-loop: %w", err)
-		}
+	if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider, modelRef); err != nil {
+		return fmt.Errorf("execute-loop: %w", err)
 	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
