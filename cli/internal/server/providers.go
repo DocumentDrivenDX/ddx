@@ -5,12 +5,14 @@ package server
 // governed by FEAT-014 (dashboard read model).
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"path/filepath"
 	"sort"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 )
 
@@ -103,23 +105,19 @@ type ProviderDetail struct {
 // Not project-scoped; provider config is host+user global.
 func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
-	registry := agent.NewRegistry()
-
-	statuses := registry.Discover()
-	statusByName := make(map[string]agent.HarnessStatus, len(statuses))
-	for _, st := range statuses {
-		statusByName[st.Name] = st
+	infos, err := listHarnessInfos(r.Context(), s.WorkingDir)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
 
 	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 
-	result := make([]ProviderSummary, 0, len(registry.Names()))
-	for _, name := range registry.Names() {
-		harness, _ := registry.Get(name)
-		st := statusByName[name]
-		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, name, now)
-		result = append(result, buildProviderSummary(name, harness, st, signal, outcomes, now))
+	result := make([]ProviderSummary, 0, len(infos))
+	for _, info := range infos {
+		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, info.Name, now)
+		result = append(result, buildProviderSummary(info, signal, outcomes, now))
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -132,30 +130,24 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "harness required"})
 		return
 	}
-	registry := agent.NewRegistry()
-	harness, ok := registry.Get(harnessName)
+	infos, err := listHarnessInfos(r.Context(), s.WorkingDir)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	info, ok := findHarnessInfo(infos, harnessName)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "harness not found"})
 		return
 	}
 
 	now := time.Now().UTC()
-
-	statuses := registry.Discover()
-	var harnessStatus agent.HarnessStatus
-	for _, st := range statuses {
-		if st.Name == harnessName {
-			harnessStatus = st
-			break
-		}
-	}
-
 	signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, harnessName, now)
 	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 	burnSummaries, _ := metricsStore.ReadBurnSummaries()
 
-	detail := buildProviderDetail(harnessName, harness, harnessStatus, signal, outcomes, burnSummaries, now)
+	detail := buildProviderDetail(info, signal, outcomes, burnSummaries, now)
 	writeJSON(w, http.StatusOK, detail)
 }
 
@@ -163,23 +155,18 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) mcpProviderList() mcpToolResult {
 	now := time.Now().UTC()
-	registry := agent.NewRegistry()
-
-	statuses := registry.Discover()
-	statusByName := make(map[string]agent.HarnessStatus, len(statuses))
-	for _, st := range statuses {
-		statusByName[st.Name] = st
+	infos, err := listHarnessInfos(context.Background(), s.WorkingDir)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
 
 	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 
-	result := make([]ProviderSummary, 0, len(registry.Names()))
-	for _, name := range registry.Names() {
-		harness, _ := registry.Get(name)
-		st := statusByName[name]
-		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, name, now)
-		result = append(result, buildProviderSummary(name, harness, st, signal, outcomes, now))
+	result := make([]ProviderSummary, 0, len(infos))
+	for _, info := range infos {
+		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, info.Name, now)
+		result = append(result, buildProviderSummary(info, signal, outcomes, now))
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
@@ -192,29 +179,22 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	if harnessName == "" {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "harness required"}}, IsError: true}
 	}
-	registry := agent.NewRegistry()
-	harness, ok := registry.Get(harnessName)
+	infos, err := listHarnessInfos(context.Background(), s.WorkingDir)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+	}
+	info, ok := findHarnessInfo(infos, harnessName)
 	if !ok {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "harness not found: " + harnessName}}, IsError: true}
 	}
 
 	now := time.Now().UTC()
-
-	statuses := registry.Discover()
-	var harnessStatus agent.HarnessStatus
-	for _, st := range statuses {
-		if st.Name == harnessName {
-			harnessStatus = st
-			break
-		}
-	}
-
 	signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, harnessName, now)
 	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 	burnSummaries, _ := metricsStore.ReadBurnSummaries()
 
-	detail := buildProviderDetail(harnessName, harness, harnessStatus, signal, outcomes, burnSummaries, now)
+	detail := buildProviderDetail(info, signal, outcomes, burnSummaries, now)
 	data, err := json.Marshal(detail)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "{}"}}}
@@ -225,14 +205,12 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 // ---- Build helpers ----
 
 func buildProviderSummary(
-	name string,
-	harness agent.Harness,
-	st agent.HarnessStatus,
+	info agentlib.HarnessInfo,
 	signal agent.RoutingSignalSnapshot,
 	outcomes []agent.RoutingOutcome,
 	now time.Time,
 ) ProviderSummary {
-	harnessOutcomes := filterProviderOutcomes(outcomes, name, now, 7)
+	harnessOutcomes := filterProviderOutcomes(outcomes, info.Name, now, 7)
 	perf := computeProviderPerformance(harnessOutcomes)
 	sources := collectProviderSignalSources(signal, len(harnessOutcomes) > 0)
 
@@ -242,9 +220,9 @@ func buildProviderSummary(
 	}
 
 	return ProviderSummary{
-		Harness:            name,
-		DisplayName:        harnessDisplayName(name),
-		Status:             providerStatusStr(st),
+		Harness:            info.Name,
+		DisplayName:        harnessDisplayName(info.Name),
+		Status:             providerStatusStrInfo(info),
 		AuthState:          providerAuthStateStr(signal),
 		QuotaHeadroom:      providerQuotaHeadroomStr(signal),
 		SignalSources:      sources,
@@ -252,21 +230,19 @@ func buildProviderSummary(
 		LastCheckedTS:      now.UTC().Format(time.RFC3339),
 		RecentSuccessRate:  perf.SuccessRate,
 		RecentLatencyP50MS: perf.P50LatencyMS,
-		CostClass:          harnessCosCostClassStr(harness),
+		CostClass:          harnessCosCostClassStr(info),
 	}
 }
 
 func buildProviderDetail(
-	name string,
-	harness agent.Harness,
-	st agent.HarnessStatus,
+	info agentlib.HarnessInfo,
 	signal agent.RoutingSignalSnapshot,
 	outcomes []agent.RoutingOutcome,
 	burnSummaries []agent.BurnSummary,
 	now time.Time,
 ) ProviderDetail {
-	outcomes7d := filterProviderOutcomes(outcomes, name, now, 7)
-	outcomes30d := filterProviderOutcomes(outcomes, name, now, 30)
+	outcomes7d := filterProviderOutcomes(outcomes, info.Name, now, 7)
+	outcomes30d := filterProviderOutcomes(outcomes, info.Name, now, 30)
 	perf := computeProviderPerformance(outcomes7d)
 	sources := collectProviderSignalSources(signal, len(outcomes7d) > 0)
 
@@ -275,14 +251,14 @@ func buildProviderDetail(
 		freshnessTS = ts.UTC().Format(time.RFC3339)
 	}
 
-	models := buildModelQuotaList(harness, signal)
-	historicalUsage := computeProviderHistoricalUsage(harness, signal, outcomes7d, outcomes30d)
-	burnEstimate := computeProviderBurnEstimate(name, harness, burnSummaries, historicalUsage, signal)
+	models := buildModelQuotaList(info, signal)
+	historicalUsage := computeProviderHistoricalUsage(info, signal, outcomes7d, outcomes30d)
+	burnEstimate := computeProviderBurnEstimate(info, burnSummaries, historicalUsage, signal)
 
-	statusStr := providerStatusStr(st)
+	statusStr := providerStatusStrInfo(info)
 	return ProviderDetail{
-		Harness:         name,
-		DisplayName:     harnessDisplayName(name),
+		Harness:         info.Name,
+		DisplayName:     harnessDisplayName(info.Name),
 		Status:          statusStr,
 		AuthState:       providerAuthStateStr(signal),
 		Models:          models,
@@ -290,7 +266,7 @@ func buildProviderDetail(
 		BurnEstimate:    burnEstimate,
 		RoutingSignals: ProviderRoutingSignals{
 			Availability: statusStr,
-			RequestFit:   providerRequestFitStr(st),
+			RequestFit:   providerRequestFitStrInfo(info),
 			CostEstimate: "unknown",
 			Performance:  perf,
 		},
@@ -299,11 +275,8 @@ func buildProviderDetail(
 	}
 }
 
-func buildModelQuotaList(harness agent.Harness, signal agent.RoutingSignalSnapshot) []ProviderModelQuota {
-	models := harness.Models
-	if len(models) == 0 && harness.DefaultModel != "" {
-		models = []string{harness.DefaultModel}
-	}
+func buildModelQuotaList(info agentlib.HarnessInfo, signal agent.RoutingSignalSnapshot) []ProviderModelQuota {
+	models := harnessDefaultModels(info.Name)
 	if len(models) == 0 {
 		return []ProviderModelQuota{}
 	}
@@ -311,7 +284,7 @@ func buildModelQuotaList(harness agent.Harness, signal agent.RoutingSignalSnapsh
 	quotaState := providerQuotaHeadroomStr(signal)
 	sourceEnum := signalSourceAPIEnum(signal.Source.Kind)
 	var sourceNote string
-	if quotaState == "unknown" && harness.Name == "claude" {
+	if quotaState == "unknown" && info.Name == "claude" {
 		sourceNote = "no stable non-PTY quota source confirmed"
 	}
 
@@ -328,13 +301,13 @@ func buildModelQuotaList(harness agent.Harness, signal agent.RoutingSignalSnapsh
 }
 
 func computeProviderHistoricalUsage(
-	harness agent.Harness,
+	info agentlib.HarnessInfo,
 	signal agent.RoutingSignalSnapshot,
 	outcomes7d []agent.RoutingOutcome,
 	outcomes30d []agent.RoutingOutcome,
 ) *ProviderHistoricalUsage {
-	window7d := usageWindowFromSignalOrOutcomes(harness, signal, outcomes7d)
-	window30d := usageWindowFromOutcomes(harness, outcomes30d)
+	window7d := usageWindowFromSignalOrOutcomes(info, signal, outcomes7d)
+	window30d := usageWindowFromOutcomes(info, outcomes30d)
 	if window7d == nil && window30d == nil {
 		return nil
 	}
@@ -345,7 +318,7 @@ func computeProviderHistoricalUsage(
 }
 
 func usageWindowFromSignalOrOutcomes(
-	harness agent.Harness,
+	info agentlib.HarnessInfo,
 	signal agent.RoutingSignalSnapshot,
 	outcomes []agent.RoutingOutcome,
 ) *ProviderUsageWindow {
@@ -356,9 +329,9 @@ func usageWindowFromSignalOrOutcomes(
 			OutputTokens: signal.HistoricalUsage.OutputTokens,
 			TotalTokens:  signal.HistoricalUsage.TotalTokens,
 		}
-		if harness.IsSubscription || harness.IsLocal {
+		if info.IsSubscription || info.IsLocal {
 			w.CostUSD = 0
-			if harness.IsSubscription {
+			if info.IsSubscription {
 				w.CostNote = "subscription plan; per-token cost not billed"
 			}
 		} else {
@@ -366,10 +339,10 @@ func usageWindowFromSignalOrOutcomes(
 		}
 		return w
 	}
-	return usageWindowFromOutcomes(harness, outcomes)
+	return usageWindowFromOutcomes(info, outcomes)
 }
 
-func usageWindowFromOutcomes(harness agent.Harness, outcomes []agent.RoutingOutcome) *ProviderUsageWindow {
+func usageWindowFromOutcomes(info agentlib.HarnessInfo, outcomes []agent.RoutingOutcome) *ProviderUsageWindow {
 	if len(outcomes) == 0 {
 		return nil
 	}
@@ -392,9 +365,9 @@ func usageWindowFromOutcomes(harness agent.Harness, outcomes []agent.RoutingOutc
 		OutputTokens: outTok,
 		TotalTokens:  inTok + outTok,
 	}
-	if harness.IsSubscription || harness.IsLocal {
+	if info.IsSubscription || info.IsLocal {
 		w.CostUSD = 0
-		if harness.IsSubscription {
+		if info.IsSubscription {
 			w.CostNote = "subscription plan; per-token cost not billed"
 		}
 	} else if hasCost {
@@ -406,20 +379,19 @@ func usageWindowFromOutcomes(harness agent.Harness, outcomes []agent.RoutingOutc
 }
 
 func computeProviderBurnEstimate(
-	name string,
-	harness agent.Harness,
+	info agentlib.HarnessInfo,
 	burnSummaries []agent.BurnSummary,
 	usage *ProviderHistoricalUsage,
 	signal agent.RoutingSignalSnapshot,
 ) *ProviderBurnEstimate {
-	if !harness.IsSubscription {
+	if !info.IsSubscription {
 		return nil
 	}
 
 	// Find the most recent burn summary for this harness.
 	var latestBurn *agent.BurnSummary
 	for i := range burnSummaries {
-		if burnSummaries[i].Harness == name {
+		if burnSummaries[i].Harness == info.Name {
 			if latestBurn == nil || burnSummaries[i].ObservedAt.After(latestBurn.ObservedAt) {
 				latestBurn = &burnSummaries[i]
 			}
@@ -490,6 +462,45 @@ func computeProviderBurnEstimate(
 }
 
 // ---- Utility functions ----
+
+// listHarnessInfos returns the harness inventory via the agent service.
+// Replaces direct use of agent.NewRegistry().
+func listHarnessInfos(ctx context.Context, workDir string) ([]agentlib.HarnessInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	svc, err := agent.NewServiceFromWorkDir(workDir)
+	if err != nil {
+		return nil, err
+	}
+	return svc.ListHarnesses(ctx)
+}
+
+// findHarnessInfo locates a HarnessInfo in the slice by name.
+func findHarnessInfo(infos []agentlib.HarnessInfo, name string) (agentlib.HarnessInfo, bool) {
+	for i := range infos {
+		if infos[i].Name == name {
+			return infos[i], true
+		}
+	}
+	return agentlib.HarnessInfo{}, false
+}
+
+// harnessDefaultModels returns the well-known default model(s) for a harness.
+// Mirrors the historical agent.Harness.{Models,DefaultModel} fields used by
+// the provider detail endpoint. Empty slice means "no default model published".
+func harnessDefaultModels(name string) []string {
+	switch name {
+	case "codex":
+		return []string{"gpt-5.4"}
+	case "claude":
+		return []string{"claude-sonnet-4-6"}
+	case "virtual":
+		return []string{"recorded"}
+	default:
+		return nil
+	}
+}
 
 // metricsStoreForWorkDir returns a RoutingMetricsStore using the project's
 // configured session log dir resolved against workingDir.
@@ -581,20 +592,20 @@ func providerFreshnessTS(signal agent.RoutingSignalSnapshot, outcomes []agent.Ro
 	return oldest
 }
 
-// providerStatusStr maps a HarnessStatus to the API status string.
-func providerStatusStr(st agent.HarnessStatus) string {
-	if st.Name == "" {
+// providerStatusStrInfo maps a HarnessInfo to the API status string.
+func providerStatusStrInfo(info agentlib.HarnessInfo) string {
+	if info.Name == "" {
 		return "unknown"
 	}
-	if st.Available {
+	if info.Available {
 		return "available"
 	}
 	return "unavailable"
 }
 
-// providerRequestFitStr returns request_fit from harness availability.
-func providerRequestFitStr(st agent.HarnessStatus) string {
-	if st.Available {
+// providerRequestFitStrInfo returns request_fit from harness availability.
+func providerRequestFitStrInfo(info agentlib.HarnessInfo) string {
+	if info.Available {
 		return "capable"
 	}
 	return "unknown"
@@ -629,16 +640,16 @@ func providerQuotaHeadroomStr(signal agent.RoutingSignalSnapshot) string {
 	}
 }
 
-// harnessCosCostClassStr maps a Harness to the API cost_class string.
-func harnessCosCostClassStr(harness agent.Harness) string {
-	if harness.IsSubscription {
+// harnessCosCostClassStr maps a HarnessInfo to the API cost_class string.
+func harnessCosCostClassStr(info agentlib.HarnessInfo) string {
+	if info.IsSubscription {
 		return "subscription"
 	}
-	if harness.IsLocal {
+	if info.IsLocal {
 		return "local"
 	}
-	if harness.CostClass != "" {
-		return harness.CostClass
+	if info.CostClass != "" {
+		return info.CostClass
 	}
 	return "unknown"
 }
