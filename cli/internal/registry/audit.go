@@ -51,7 +51,14 @@ func ValidatePackageStructure(root string, pkg *Package) []ValidationIssue {
 func loadPackageDefinitionForAudit(root string, fallback *Package) (*Package, bool, []ValidationIssue) {
 	manifest, manifestMissing, issues, err := LoadPackageManifestWithFallback(root, fallback)
 	if err == nil || os.IsNotExist(err) {
-		return manifest, manifestMissing, nil
+		// Report validation issues even when package is valid, so audit shows schema problems.
+		return manifest, manifestMissing, issues
+	}
+
+	// If a partial package was returned (YAML parsed but validation issues exist),
+	// return it with the issues so structural audits can proceed.
+	if manifest != nil {
+		return manifest, false, issues
 	}
 
 	if len(issues) == 0 {

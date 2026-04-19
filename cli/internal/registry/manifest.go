@@ -53,10 +53,17 @@ func LoadPackageManifest(root string) (*Package, []ValidationIssue, error) {
 	}
 
 	pkg, issues := validatePackageManifest(manifestPath, raw)
-	if len(issues) > 0 {
+	if len(issues) > 0 && pkg == nil {
 		return nil, issues, fmt.Errorf("%s: %s", manifestPath, JoinValidationIssues(issues))
 	}
-	return pkg, nil, nil
+	// Even when validation issues exist, return the partial package so callers
+	// can perform structural audits (symlinks, SKILL.md files) independently.
+	// However, if no package was returned at all, return an error so callers
+	// know something is fundamentally wrong.
+	if pkg == nil {
+		return nil, issues, fmt.Errorf("%s: %s", manifestPath, JoinValidationIssues(issues))
+	}
+	return pkg, issues, nil
 }
 
 // LoadPackageManifestWithFallback reads package.yaml and falls back to the
@@ -64,7 +71,18 @@ func LoadPackageManifest(root string) (*Package, []ValidationIssue, error) {
 func LoadPackageManifestWithFallback(root string, fallback *Package) (*Package, bool, []ValidationIssue, error) {
 	pkg, issues, err := LoadPackageManifest(root)
 	if err == nil {
+		// Return issues separately even when package is valid, so callers can
+		// detect schema problems while still using the package for structural audits.
+		if len(issues) > 0 {
+			return pkg, false, issues, nil
+		}
 		return pkg, false, nil, nil
+	}
+
+	// If a partial package was returned (YAML parsed but validation issues exist),
+	// return it with the issues so callers can still use its structure.
+	if pkg != nil {
+		return pkg, false, issues, nil
 	}
 
 	if os.IsNotExist(err) {
@@ -77,6 +95,9 @@ func LoadPackageManifestWithFallback(root string, fallback *Package) (*Package, 
 	return nil, false, issues, err
 }
 
+// validatePackageManifest validates required fields and returns a partial package
+// even when validation issues are found. This ensures that structural audits
+// (symlinks, SKILL.md files) can proceed independently of manifest schema issues.
 func validatePackageManifest(path string, raw packageManifestRaw) (*Package, []ValidationIssue) {
 	var issues []ValidationIssue
 
@@ -106,10 +127,8 @@ func validatePackageManifest(path string, raw packageManifestRaw) (*Package, []V
 		issues = append(issues, ValidationIssue{Path: path, Message: apiIssue})
 	}
 
-	if len(issues) > 0 {
-		return nil, issues
-	}
-
+	// Always construct a partial package so structural audits can proceed.
+	// Validation issues are still collected and returned separately.
 	pkg := &Package{
 		Name:        name,
 		Version:     version,
@@ -120,7 +139,7 @@ func validatePackageManifest(path string, raw packageManifestRaw) (*Package, []V
 		Install:     raw.Install,
 		Keywords:    append([]string(nil), raw.Keywords...),
 	}
-	return pkg, nil
+	return pkg, issues
 }
 
 func parseManifestPackageType(rawType string) (PackageType, bool) {

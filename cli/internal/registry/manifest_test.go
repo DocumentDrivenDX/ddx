@@ -49,7 +49,7 @@ keywords:
 	assert.Equal(t, ".agents/skills/", pkg.Install.Skills[0].Target)
 }
 
-func TestLoadPackageManifestRejectsUnsupportedAPIVersion(t *testing.T) {
+func TestLoadPackageManifestReportsUnsupportedAPIVersion(t *testing.T) {
 	dir := t.TempDir()
 	manifest := `name: sample-plugin
 version: 1.2.3
@@ -61,10 +61,10 @@ api_version: 2
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yaml"), []byte(manifest), 0o644))
 
 	pkg, issues, err := LoadPackageManifest(dir)
-	require.Error(t, err)
-	assert.Nil(t, pkg)
+	require.NoError(t, err)
+	require.NotNil(t, pkg)
 	require.NotEmpty(t, issues)
-	assert.True(t, strings.Contains(err.Error(), "unsupported `api_version`"))
+	assert.True(t, strings.Contains(issues[0].Error(), "unsupported `api_version`"))
 }
 
 func TestLoadPackageManifestWithFallbackUsesFallbackWhenManifestMissing(t *testing.T) {

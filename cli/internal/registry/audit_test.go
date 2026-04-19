@@ -153,6 +153,53 @@ func TestAuditInstalledEntryReportsBrokenPluginRootSymlinkAndManifestSchemaIssue
 	assert.True(t, sawMissingManifest, "expected missing manifest issue, got: %+v", issues)
 }
 
+func TestAuditInstalledEntryReportsBothManifestSchemaAndStructuralIssues(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "skills", "missing-skill"), 0o755))
+	require.NoError(t, os.Symlink("does-not-exist", filepath.Join(root, "broken-link")))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "package.yaml"), []byte(`name: broken-plugin
+version: 1.0.0
+type: plugin
+source: https://example.com/broken-plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/broken-plugin
+  skills:
+    - source: skills
+      target: .agents/skills
+`), 0o644))
+
+	entry := InstalledEntry{
+		Name:    "broken-plugin",
+		Version: "1.0.0",
+		Type:    PackageTypePlugin,
+		Source:  root,
+		Files:   []string{root},
+	}
+
+	issues := AuditInstalledEntry(entry, nil)
+	require.NotEmpty(t, issues)
+
+	var sawMissingDescription, sawMissingSkillMD, sawBrokenSymlink bool
+	for _, issue := range issues {
+		if strings.Contains(issue.Error(), "missing required field `description`") {
+			sawMissingDescription = true
+		}
+		if strings.Contains(issue.Error(), "missing SKILL.md") {
+			sawMissingSkillMD = true
+		}
+		if strings.Contains(issue.Error(), "broken symlink") {
+			sawBrokenSymlink = true
+		}
+	}
+
+	assert.True(t, sawMissingDescription, "expected manifest schema issue (missing description), got: %+v", issues)
+	assert.True(t, sawMissingSkillMD, "expected structural issue (missing SKILL.md), got: %+v", issues)
+	assert.True(t, sawBrokenSymlink, "expected structural issue (broken symlink), got: %+v", issues)
+}
+
 func TestValidatePackageStructure_AllowsRecoverableBrokenSkillSymlinks(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "skills", "helix-align"), 0o755))
