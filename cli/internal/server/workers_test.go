@@ -25,11 +25,6 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 	setupBeadStore(t, root)
 
 	m := NewWorkerManager(root)
-	m.AgentRunnerFactory = func(projectRoot string) *agent.Runner {
-		return agent.NewRunner(agent.Config{
-			SessionLogDir: agent.ResolveLogDir(projectRoot, ""),
-		})
-	}
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		Harness:  "agent",

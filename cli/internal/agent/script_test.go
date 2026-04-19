@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,11 +105,11 @@ func writeDirectives(t *testing.T, content string) string {
 	return f.Name()
 }
 
-// runScript is a convenience wrapper that calls RunScript via a fresh Runner.
+// runScript is a convenience wrapper that calls RunViaService with the script harness.
 func runScript(t *testing.T, workDir, directivePath string, corr map[string]string) (*Result, error) {
 	t.Helper()
-	runner := NewRunner(Config{Harness: "script", SessionLogDir: t.TempDir()})
-	return runner.RunScript(RunOptions{
+	return RunViaService(context.Background(), workDir, RunOptions{
+		Harness:     "script",
 		WorkDir:     workDir,
 		Model:       directivePath,
 		Correlation: corr,

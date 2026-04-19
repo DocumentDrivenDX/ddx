@@ -11,18 +11,11 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 )
 
-// noProbeRunnerFactory returns a runner with no lmstudio endpoints configured
-// to avoid live HTTP probes in tests.
-func noProbeRunnerFactory(projectRoot string) *agent.Runner {
-	return agent.NewRunner(agent.Config{SessionLogDir: projectRoot})
-}
-
 // TestListProviders verifies GET /api/providers returns a JSON array containing
 // all known harnesses.
 func TestListProviders(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	req := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -107,7 +100,6 @@ func TestListProviders(t *testing.T) {
 func TestShowProvider(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	req := httptest.NewRequest(http.MethodGet, "/api/providers/claude", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -172,7 +164,6 @@ func TestShowProvider(t *testing.T) {
 func TestShowProviderNotFound(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	req := httptest.NewRequest(http.MethodGet, "/api/providers/nonexistent-harness", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -189,7 +180,6 @@ func TestShowProviderNotFound(t *testing.T) {
 func TestProviderUnknownStateContract(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	// Test each harness that will have no signal data in the test environment.
 	for _, harnessName := range []string{"claude", "codex", "gemini"} {
@@ -345,7 +335,6 @@ func TestSignalSourceAPIEnum(t *testing.T) {
 func TestMCPProviderList(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_provider_list","arguments":{}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
@@ -390,7 +379,6 @@ func TestMCPProviderList(t *testing.T) {
 func TestMCPProviderShow(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_provider_show","arguments":{"harness":"claude"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
@@ -432,7 +420,6 @@ func TestMCPProviderShow(t *testing.T) {
 func TestMCPProviderShowUnknownHarness(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	srv.workers.AgentRunnerFactory = noProbeRunnerFactory
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_provider_show","arguments":{"harness":"nonexistent"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
