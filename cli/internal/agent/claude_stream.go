@@ -300,8 +300,8 @@ func resolveClaudeProgressLogDir(opts RunOptions, cfg Config) string {
 //
 // If the claude CLI rejects the stream-json flags (older build, unsupported
 // option), the caller falls back to the non-streaming path via
-// runClaudeNonStreaming — see Runner.runClaudeWithFallback.
-func (r *Runner) runClaudeStreaming(ctx context.Context, harness Harness, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
+// runClaudeWithFallbackFn.
+func runClaudeStreamingFn(r *Runner, ctx context.Context, harness Harness, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
 	args := BuildArgs(harness, resolvedOpts, model)
 
 	start := time.Now()
@@ -474,8 +474,8 @@ func claudeStreamArgsUnsupported(stderr string) bool {
 // CLI rejects the stream-json flags, retries with the legacy buffered
 // --print/-p/--output-format=json invocation so existing non-streaming
 // contracts remain intact.
-func (r *Runner) runClaudeWithFallback(ctx context.Context, harness Harness, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
-	result, err := r.runClaudeStreaming(ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
+func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness Harness, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
+	result, err := runClaudeStreamingFn(r, ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +504,7 @@ func (r *Runner) runClaudeWithFallback(ctx context.Context, harness Harness, har
 
 // finalizeClaudeResult writes the session log entry and records the routing
 // outcome, mirroring the tail end of Runner.Run for the non-streaming path.
-func (r *Runner) finalizeClaudeResult(result *Result, opts RunOptions, prompt string, elapsed time.Duration) {
+func finalizeClaudeResult(r *Runner, result *Result, opts RunOptions, prompt string, elapsed time.Duration) {
 	promptSource := opts.PromptSource
 	if promptSource == "" {
 		if opts.PromptFile != "" {

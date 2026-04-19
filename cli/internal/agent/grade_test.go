@@ -24,7 +24,7 @@ func TestGradeConstructsPrompt(t *testing.T) {
 		},
 	}
 
-	_, err := r.Grade(record, GradeOptions{Grader: "codex"})
+	_, err := GradeFn(r, record, GradeOptions{Grader: "codex"})
 	require.NoError(t, err)
 
 	// The grading prompt sent to the harness should contain the task and arm data
@@ -50,7 +50,7 @@ func TestGradeParsesResponse(t *testing.T) {
 		},
 	}
 
-	grades, err := r.Grade(record, GradeOptions{Grader: "codex"})
+	grades, err := GradeFn(r, record, GradeOptions{Grader: "codex"})
 	require.NoError(t, err)
 	require.Len(t, grades, 2)
 	assert.Equal(t, "agent", grades[0].Arm)
@@ -72,7 +72,7 @@ func TestGradeAttachesToRecord(t *testing.T) {
 		Arms:   []ComparisonArm{{Harness: "agent", Output: "ok"}},
 	}
 
-	grades, err := r.Grade(record, GradeOptions{Grader: "codex"})
+	grades, err := GradeFn(r, record, GradeOptions{Grader: "codex"})
 	require.NoError(t, err)
 
 	record.Grades = grades
@@ -93,7 +93,7 @@ func TestGradeCustomRubric(t *testing.T) {
 	}
 
 	customRubric := "Grade ONLY on security. Ignore functionality."
-	_, err := r.Grade(record, GradeOptions{Grader: "codex", Rubric: customRubric})
+	_, err := GradeFn(r, record, GradeOptions{Grader: "codex", Rubric: customRubric})
 	require.NoError(t, err)
 
 	sentPrompt := mock.lastArgs[len(mock.lastArgs)-1]
@@ -111,7 +111,7 @@ func TestGradeMalformedResponse(t *testing.T) {
 		Arms:   []ComparisonArm{{Harness: "agent", Output: "ok"}},
 	}
 
-	_, err := r.Grade(record, GradeOptions{Grader: "codex"})
+	_, err := GradeFn(r, record, GradeOptions{Grader: "codex"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse")
 }
@@ -127,7 +127,7 @@ func TestGradeGraderFailure(t *testing.T) {
 		Arms:   []ComparisonArm{{Harness: "agent", Output: "ok"}},
 	}
 
-	_, err := r.Grade(record, GradeOptions{Grader: "codex"})
+	_, err := GradeFn(r, record, GradeOptions{Grader: "codex"})
 	assert.Error(t, err)
 }
 

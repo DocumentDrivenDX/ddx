@@ -23,9 +23,9 @@ For each arm, provide a JSON grade with:
 
 Respond with ONLY a JSON object: {"arms": [<grade>, ...]}`
 
-// Grade sends a comparison record to a grading harness and returns
+// GradeFn sends a comparison record to a grading harness and returns
 // structured grades per arm.
-func (r *Runner) Grade(record *ComparisonRecord, opts GradeOptions) ([]ComparisonGrade, error) {
+func GradeFn(r *Runner, record *ComparisonRecord, opts GradeOptions) ([]ComparisonGrade, error) {
 	if opts.Grader == "" {
 		return nil, fmt.Errorf("agent: grader harness is required")
 	}

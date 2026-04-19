@@ -138,8 +138,8 @@ func LookupEntry(dictDir, prompt string, patterns ...config.NormalizePattern) (*
 	return &entry, nil
 }
 
-// RunVirtual replays a recorded response from the dictionary or inline responses.
-func (r *Runner) RunVirtual(opts RunOptions) (*Result, error) {
+// runVirtualFn replays a recorded response from the dictionary or inline responses.
+func runVirtualFn(r *Runner, opts RunOptions) (*Result, error) {
 	prompt, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (r *Runner) RunVirtual(opts RunOptions) (*Result, error) {
 			return nil, fmt.Errorf("parsing DDX_VIRTUAL_RESPONSES: %w", err)
 		}
 		if ir, ok := LookupInline(responses, prompt); ok {
-			return r.buildVirtualResult(ir.Response, ir.ExitCode, ir.Model, ir.DelayMS, 0, 0, 0, prompt, opts), nil
+			return buildVirtualResultFn(r, ir.Response, ir.ExitCode, ir.Model, ir.DelayMS, 0, 0, 0, prompt, opts), nil
 		}
 	}
 
@@ -172,11 +172,11 @@ func (r *Runner) RunVirtual(opts RunOptions) (*Result, error) {
 		return nil, err
 	}
 
-	return r.buildVirtualResult(entry.Response, entry.ExitCode, entry.Model, entry.DelayMS,
+	return buildVirtualResultFn(r, entry.Response, entry.ExitCode, entry.Model, entry.DelayMS,
 		entry.InputTokens, entry.OutputTokens, entry.CostUSD, prompt, opts), nil
 }
 
-func (r *Runner) buildVirtualResult(response string, exitCode int, model string, delayMS int,
+func buildVirtualResultFn(r *Runner, response string, exitCode int, model string, delayMS int,
 	inputTokens, outputTokens int, costUSD float64, prompt string, opts RunOptions) *Result {
 
 	if delayMS > 0 {

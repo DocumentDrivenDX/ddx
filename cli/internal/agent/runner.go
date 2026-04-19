@@ -101,9 +101,9 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 		}
 	}
 
-	// Virtual harness: replay from dictionary instead of executing a binary.
+	// virtual harness: replay from dictionary instead of executing a binary.
 	if harnessName == "virtual" {
-		return r.RunVirtual(opts)
+		return runVirtualFn(r, opts)
 	}
 
 	// Agent harness: run in-process via the embedded agent library.
@@ -113,7 +113,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 
 	// Script harness: execute directives against the real filesystem and git.
 	if harnessName == "script" {
-		return r.RunScript(opts)
+		return runScriptFn(r, opts)
 	}
 
 	// HTTP-provider harnesses (lmstudio, openrouter, and any other harness
@@ -204,9 +204,9 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	// the CLI rejects the stream-json flags.
 	if harnessName == "claude" {
 		if _, isOS := r.Executor.(*OSExecutor); isOS {
-			result, err := r.runClaudeWithFallback(ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
+			result, err := runClaudeWithFallbackFn(r, ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
 			if err == nil && result != nil {
-				r.finalizeClaudeResult(result, opts, prompt, time.Since(start))
+				finalizeClaudeResult(r, result, opts, prompt, time.Since(start))
 				return result, nil
 			}
 			// If the streaming path failed outright (not just claude exit != 0),

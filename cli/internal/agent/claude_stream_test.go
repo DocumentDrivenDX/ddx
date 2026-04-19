@@ -294,7 +294,7 @@ func TestRunClaudeStreaming_OptsSessionLogDirOverridesConfig(t *testing.T) {
 		SessionLogDir: bundleEmbeddedDir,
 	}
 
-	result, err := r.runClaudeStreaming(context.Background(), harness, "claude", "", opts, "hi", "", 10*time.Second)
+	result, err := runClaudeStreamingFn(r, context.Background(), harness, "claude", "", opts, "hi", "", 10*time.Second)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -327,7 +327,7 @@ func TestRunClaudeStreaming_FallsBackToConfigLogDir(t *testing.T) {
 		// SessionLogDir deliberately left empty — must fall back to config.
 	}
 
-	result, err := r.runClaudeStreaming(context.Background(), harness, "claude", "", opts, "hi", "", 10*time.Second)
+	result, err := runClaudeStreamingFn(r, context.Background(), harness, "claude", "", opts, "hi", "", 10*time.Second)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 

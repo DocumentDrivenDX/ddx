@@ -76,7 +76,7 @@ type serviceToolResultData struct {
 // agentlib.DdxAgent.Execute path. Default is on. Set the env var
 // DDX_USE_NEW_AGENT_PATH=0 (or "false") to disable as an emergency escape
 // hatch.
-func (r *Runner) useNewAgentPath() bool {
+func useNewAgentPath() bool {
 	switch os.Getenv("DDX_USE_NEW_AGENT_PATH") {
 	case "0", "false", "FALSE", "False":
 		return false
@@ -98,7 +98,7 @@ func (r *Runner) useNewAgentPath() bool {
 // Test injection: when r.AgentProvider is non-nil it is forwarded as
 // ServiceExecuteRequest.NativeProvider so tests can run end-to-end against
 // a virtual or fake provider without spinning up a real one.
-func (r *Runner) runAgentViaService(opts RunOptions) (*Result, error) {
+func runAgentViaService(r *Runner, opts RunOptions) (*Result, error) {
 	promptText, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err
