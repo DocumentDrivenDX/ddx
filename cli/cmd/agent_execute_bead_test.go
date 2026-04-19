@@ -160,6 +160,15 @@ func (f *fakeExecuteBeadGit) UpdateRef(dir, ref, sha string) error {
 	return nil
 }
 
+func (f *fakeExecuteBeadGit) DeleteRef(dir, ref string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.refs != nil {
+		delete(f.refs, ref)
+	}
+	return nil
+}
+
 // fakeAgentRunner is a minimal mock agent runner for execute-bead tests.
 type fakeAgentRunner struct {
 	result *agent.Result
@@ -1039,10 +1048,9 @@ func seedGateDocs(t *testing.T, workDir string, gateCommand []string) {
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "exec-gate-test.md"), []byte(gateDoc), 0o644))
 }
 
-// TestExecuteBeadGatePass verifies that execute-bead merges successfully even
-// when gate docs exist. Gate evaluation is skipped by execute-bead (WtPath is
-// intentionally empty — worktree is cleaned up before the orchestrator runs).
-// Gate evaluation is exercised at the orchestrator level in execute_bead_e2e_test.go.
+// TestExecuteBeadGatePass verifies that execute-bead evaluates required gates
+// against an ephemeral worktree at ResultRev and merges when all gates pass.
+// Wired by ddx-14c0e790 (interactive execute-bead gate eval).
 func TestExecuteBeadGatePass(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
@@ -1062,16 +1070,14 @@ func TestExecuteBeadGatePass(t *testing.T) {
 
 	res := runExecuteBead(t, f, git, "gate-bead")
 
-	// Gate eval is skipped in execute-bead — worktree is cleaned up before landing.
 	assert.Equal(t, "merged", res.Outcome)
-	assert.Empty(t, res.GateResults, "execute-bead skips gate evaluation (no WtPath)")
+	require.Len(t, res.GateResults, 1, "required gate must be evaluated")
+	assert.Equal(t, "pass", res.GateResults[0].Status)
 }
 
-// TestExecuteBeadGateBlocksLanding verifies that execute-bead merges even when
-// a failing gate doc exists, because gate evaluation is skipped (WtPath is
-// intentionally empty in BeadLandingOptions). A separate 'ddx agent check'
-// step is required for post-run gate enforcement.
-// Gate blocking behavior is exercised at the orchestrator level in execute_bead_e2e_test.go.
+// TestExecuteBeadGateBlocksLanding verifies that execute-bead preserves the
+// result instead of merging when a required gate fails.
+// Wired by ddx-14c0e790 (interactive execute-bead gate eval).
 func TestExecuteBeadGateBlocksLanding(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
@@ -1091,10 +1097,10 @@ func TestExecuteBeadGateBlocksLanding(t *testing.T) {
 
 	res := runExecuteBead(t, f, git, "gate-bead-fail")
 
-	// Gate eval is skipped — merge proceeds regardless of gate doc content.
-	assert.Equal(t, "merged", res.Outcome, "execute-bead does not evaluate gates")
-	assert.Empty(t, res.GateResults, "execute-bead skips gate evaluation (no WtPath)")
-	assert.Empty(t, res.PreserveRef, "no preserve ref when gate eval is skipped")
+	assert.Equal(t, "preserved", res.Outcome, "failing required gate must preserve")
+	require.Len(t, res.GateResults, 1)
+	assert.Equal(t, "fail", res.GateResults[0].Status)
+	assert.NotEmpty(t, res.PreserveRef, "failed-gate landing must preserve under refs/ddx/iterations")
 }
 
 // TestExecuteBeadNoGatesWhenNoChanges verifies that gates are not evaluated

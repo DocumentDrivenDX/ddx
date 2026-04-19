@@ -188,12 +188,30 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 			}
 		}
 		landingOpts := agent.BeadLandingOptions{
-			NoMerge: noMerge,
-			// WtPath and GovernIDs are intentionally empty: the worktree has
-			// been cleaned up by ExecuteBead. Gate evaluation is skipped; use
-			// a separate 'ddx agent check' step when post-run checks are needed.
+			NoMerge:         noMerge,
 			LandingAdvancer: advancer,
 		}
+
+		// Wire required execution gates: when the worker manifest declares
+		// governing IDs, gate-eval them in an ephemeral worktree at ResultRev
+		// before LandBeadResult decides merge vs preserve. The original
+		// worker worktree was cleaned up by ExecuteBead, so we pin ResultRev
+		// to a transient ref and check it out into a temp worktree for the
+		// duration of gate evaluation.
+		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
+			wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps)
+			if ctxErr != nil {
+				// Soft-fail: log and skip gate eval rather than abort the land.
+				fmt.Fprintf(os.Stderr, "ddx: warning: gate-context setup failed: %v (skipping required-gate eval)\n", ctxErr)
+			} else if wt != "" {
+				defer cleanup()
+				landingOpts.WtPath = wt
+				landingOpts.GovernIDs = ids
+				landingOpts.ChecksArtifactPath = filepath.Join(projectRoot, res.ExecutionDir, "checks.json")
+				landingOpts.ChecksArtifactRel = filepath.Join(res.ExecutionDir, "checks.json")
+			}
+		}
+
 		if landing, landErr := agent.LandBeadResult(projectRoot, res, orchestratorGitOps, landingOpts); landErr == nil {
 			agent.ApplyLandingToResult(res, landing)
 		} else if err == nil {
