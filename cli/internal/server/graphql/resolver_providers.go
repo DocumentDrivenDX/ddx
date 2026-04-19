@@ -5,13 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	agentconfig "github.com/DocumentDrivenDX/agent/config"
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/agent/providerstatus"
-)
-
-const (
-	gqlProviderProbeTimeout = 3 * time.Second
 )
 
 // ProviderStatuses is the resolver for the providerStatuses field.
@@ -58,63 +53,27 @@ func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus
 // It shows which provider/model the default model-ref resolves to, mirroring
 // the Visibility 6 route-status data for the default profile.
 func (r *queryResolver) DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error) {
-	cfg, err := agentconfig.Load(r.WorkingDir)
+	svc, err := agent.NewServiceFromWorkDir(r.WorkingDir)
 	if err != nil {
 		return nil, nil //nolint:nilerr
 	}
 
-	// Determine the default model-ref key. Prefer DefaultModelRef; fall back to DefaultModel.
-	modelRef := cfg.Routing.DefaultModelRef
-	if modelRef == "" {
-		modelRef = cfg.Routing.DefaultModel
-	}
-	if modelRef == "" {
-		// No default configured — return a minimal status with empty modelRef.
-		return &DefaultRouteStatus{ModelRef: ""}, nil
+	dec, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{})
+	if err != nil {
+		// No healthy candidate — return empty status rather than an error.
+		return &DefaultRouteStatus{}, nil //nolint:nilerr
 	}
 
-	route, ok := cfg.GetModelRoute(modelRef)
-	if !ok {
-		return &DefaultRouteStatus{ModelRef: modelRef}, nil
+	result := &DefaultRouteStatus{
+		ModelRef: dec.Model,
 	}
-
-	strategy := route.Strategy
-	if strategy == "" {
-		strategy = "first-available"
+	if dec.Provider != "" {
+		p := dec.Provider
+		result.ResolvedProvider = &p
 	}
-
-	// Evaluate candidates to find the first healthy one.
-	// We probe in order and take the first reachable candidate.
-	var resolvedProvider, resolvedModel *string
-	for _, candidate := range route.Candidates {
-		pc, exists := cfg.GetProvider(candidate.Provider)
-		if !exists {
-			continue
-		}
-
-		model := candidate.Model
-		if model == "" {
-			model = pc.Model
-		}
-
-		probeCtx, cancel := context.WithTimeout(ctx, gqlProviderProbeTimeout)
-		result := providerstatus.Probe(probeCtx, pc)
-		cancel()
-
-		if result.Reachable {
-			p := candidate.Provider
-			m := model
-			resolvedProvider = &p
-			resolvedModel = &m
-			break
-		}
+	if dec.Model != "" {
+		m := dec.Model
+		result.ResolvedModel = &m
 	}
-
-	s := strategy
-	return &DefaultRouteStatus{
-		ModelRef:         modelRef,
-		ResolvedProvider: resolvedProvider,
-		ResolvedModel:    resolvedModel,
-		Strategy:         &s,
-	}, nil
+	return result, nil
 }
