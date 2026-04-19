@@ -484,7 +484,15 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 		return nil, err
 	}
 
-	// Resolve base revision after the tracker commit.
+	// Checkpoint any remaining caller dirt as a real commit on the current
+	// branch (FEAT-012 §22, US-126 AC#1). The new HEAD becomes the effective
+	// base for the worker worktree; caller's edits are preserved as a normal
+	// commit they can `git reset HEAD~` if they want them back uncommitted.
+	if _, err := gitOps.SynthesizeCommit(projectRoot, "chore: checkpoint pre-execute-bead "+attemptID); err != nil {
+		return nil, fmt.Errorf("pre-execute-bead checkpoint: %w", err)
+	}
+
+	// Resolve base revision after the tracker + checkpoint commits.
 	baseRev, err := resolveBase(gitOps, projectRoot, opts.FromRev)
 	if err != nil {
 		return nil, err
