@@ -367,3 +367,6 @@ func (m *commitMsgCapturingGitOps) SynthesizeCommit(dir, msg string) (bool, erro
 	// but we confirm the message was received.
 	return true, nil
 }
+
+func (m *commitMsgCapturingGitOps) UpdateRef(dir, ref, sha string) error { return nil }
+func (m *commitMsgCapturingGitOps) DeleteRef(dir, ref string) error      { return nil }

@@ -214,35 +214,26 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 		return landing, nil
 	}
 
-	// Evaluate required gates when a worktree path and governing IDs are provided.
-	var gateResults []GateCheckResult
-	var anyGateFailed, anyRatchetFailed bool
-	if opts.WtPath != "" && len(opts.GovernIDs) > 0 {
-		var err error
-		gateResults, anyGateFailed, anyRatchetFailed, err = evaluateRequiredGates(opts.WtPath, opts.GovernIDs)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating required gates: %w", err)
-		}
+	// Evaluate required gates when a worktree path and governing IDs are
+	// provided. EvaluateRequiredGatesForResult is the canonical helper —
+	// shared with upstream callers that want gate eval before submitting
+	// through the coordinator. It mutates res.GateResults / RequiredExecSummary
+	// / RatchetEvidence / RatchetSummary / ChecksFile in place; we mirror the
+	// outputs onto landing so ApplyLandingToResult can copy them back later
+	// without losing the existing landing.* contract.
+	anyGateFailed, anyRatchetFailed, gateErr := EvaluateRequiredGatesForResult(
+		opts.WtPath, opts.GovernIDs, res, projectRoot,
+		opts.ChecksArtifactPath, opts.ChecksArtifactRel,
+	)
+	if gateErr != nil {
+		return nil, gateErr
 	}
+	gateResults := res.GateResults
 	landing.GateResults = gateResults
-	landing.RequiredExecSummary = summarizeGates(gateResults, anyGateFailed)
-	landing.RatchetEvidence = collectRatchetEvidence(gateResults)
-	landing.RatchetSummary = summarizeRatchets(landing.RatchetEvidence)
-
-	// Write checks.json when gate evaluation ran and a path is provided.
-	if len(gateResults) > 0 && opts.ChecksArtifactPath != "" {
-		checks := executeBeadChecks{
-			AttemptID:       res.AttemptID,
-			EvaluatedAt:     time.Now().UTC(),
-			Summary:         landing.RequiredExecSummary,
-			Results:         gateResults,
-			RatchetSummary:  landing.RatchetSummary,
-			RatchetEvidence: landing.RatchetEvidence,
-		}
-		if writeErr := writeArtifactJSON(opts.ChecksArtifactPath, checks); writeErr == nil {
-			landing.ChecksFile = opts.ChecksArtifactRel
-		}
-	}
+	landing.RequiredExecSummary = res.RequiredExecSummary
+	landing.RatchetEvidence = res.RatchetEvidence
+	landing.RatchetSummary = res.RatchetSummary
+	landing.ChecksFile = res.ChecksFile
 
 	// Gate failed: preserve instead of merging. Ratchet misses get a
 	// dedicated reason so status/failure_mode classifiers can distinguish

@@ -125,8 +125,11 @@ type ExecuteBeadOptions struct {
 }
 
 // GitOps abstracts the git operations required by the worker.
-// Merge and UpdateRef are intentionally excluded — those belong to the
-// parent-side orchestrator (OrchestratorGitOps).
+// Merge is intentionally excluded — that belongs to the parent-side
+// orchestrator (OrchestratorGitOps). UpdateRef/DeleteRef are exposed here
+// so landing-side helpers (e.g. BuildLandingGateContext) can pin a
+// transient ref while running gate evaluation against an ephemeral
+// worktree.
 type GitOps interface {
 	HeadRev(dir string) (string, error)
 	ResolveRev(dir, rev string) (string, error)
@@ -140,6 +143,13 @@ type GitOps interface {
 	// commit was made, (false, nil) when there was nothing real to commit (all
 	// dirty files were noise), and (false, err) on failure.
 	SynthesizeCommit(dir, msg string) (bool, error)
+	// UpdateRef updates ref in dir to sha. Used by landing helpers to pin a
+	// commit so a transient worktree can check it out without racing with
+	// other work that might prune it.
+	UpdateRef(dir, ref, sha string) error
+	// DeleteRef removes ref from dir. Used to unpin a transient ref after
+	// the consumer (e.g. an ephemeral worktree) is done with it.
+	DeleteRef(dir, ref string) error
 }
 
 // AgentRunner runs an agent with the given options.
@@ -282,6 +292,24 @@ func (r *RealGitOps) WorktreeList(dir string) ([]string, error) {
 
 func (r *RealGitOps) WorktreePrune(dir string) error {
 	return osexec.Command("git", "-C", dir, "worktree", "prune").Run()
+}
+
+// UpdateRef updates ref in dir to sha via `git update-ref`.
+func (r *RealGitOps) UpdateRef(dir, ref, sha string) error {
+	out, err := osexec.Command("git", "-C", dir, "update-ref", ref, sha).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+// DeleteRef removes ref from dir via `git update-ref -d`.
+func (r *RealGitOps) DeleteRef(dir, ref string) error {
+	out, err := osexec.Command("git", "-C", dir, "update-ref", "-d", ref).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git update-ref -d %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }
 
 // IsDirty reports whether dir has any uncommitted changes (tracked modifications or untracked files).

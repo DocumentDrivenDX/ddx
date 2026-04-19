@@ -43,6 +43,8 @@ func (m *artifactTestGitOps) WorktreeList(dir string) ([]string, error) {
 func (m *artifactTestGitOps) WorktreePrune(dir string) error                 { return nil }
 func (m *artifactTestGitOps) IsDirty(dir string) (bool, error)               { return false, nil }
 func (m *artifactTestGitOps) SynthesizeCommit(dir, msg string) (bool, error) { return false, nil }
+func (m *artifactTestGitOps) UpdateRef(dir, ref, sha string) error           { return nil }
+func (m *artifactTestGitOps) DeleteRef(dir, ref string) error                { return nil }
 
 // artifactTestAgentRunner returns a fixed Result for artifact tests.
 type artifactTestAgentRunner struct {

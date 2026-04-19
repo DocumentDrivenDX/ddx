@@ -27,10 +27,10 @@ type fakeLandingGitOps struct {
 	callIdx  int
 }
 
-func (f *fakeLandingGitOps) HasRemote(_, _ string) bool           { return false }
-func (f *fakeLandingGitOps) FetchBranch(_, _, _ string) error     { return nil }
-func (f *fakeLandingGitOps) SyncWorkTreeToHead(_, _ string) error { return nil }
-func (f *fakeLandingGitOps) RemoveWorktree(_, _ string) error     { return nil }
+func (f *fakeLandingGitOps) HasRemote(_, _ string) bool               { return false }
+func (f *fakeLandingGitOps) FetchBranch(_, _, _ string) error         { return nil }
+func (f *fakeLandingGitOps) SyncWorkTreeToHead(_, _ string) error     { return nil }
+func (f *fakeLandingGitOps) RemoveWorktree(_, _ string) error         { return nil }
 func (f *fakeLandingGitOps) PushFFOnly(_, _, _, _ string) error       { return nil }
 func (f *fakeLandingGitOps) CountCommits(_, _, _ string) int          { return 1 }
 func (f *fakeLandingGitOps) StageDir(_, _ string) error               { return nil }

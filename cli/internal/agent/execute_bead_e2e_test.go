@@ -49,6 +49,10 @@ func (m *gateTestGitOps) IsDirty(dir string) (bool, error) { return false, nil }
 
 func (m *gateTestGitOps) SynthesizeCommit(dir, msg string) (bool, error) { return false, nil }
 
+func (m *gateTestGitOps) UpdateRef(dir, ref, sha string) error { return nil }
+
+func (m *gateTestGitOps) DeleteRef(dir, ref string) error { return nil }
+
 // gateTestOrchestratorGitOps is an OrchestratorGitOps mock for landing tests.
 // After the land-coordinator redesign, OrchestratorGitOps only needs UpdateRef;
 // the old Merge path has been replaced by LandingAdvancer (see execute_bead_land.go).

@@ -43,10 +43,10 @@ func scanBeadMetrics(workingDir string) (map[string]*beadMetricsSummary, error) 
 	}
 
 	type agg struct {
-		attempts     int
-		tokens       int
-		cost         float64
-		totalDurMS   float64
+		attempts   int
+		tokens     int
+		cost       float64
+		totalDurMS float64
 	}
 	byBead := map[string]*agg{}
 
