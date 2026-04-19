@@ -327,13 +327,13 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 }
 
 func enrichUsageRowsWithRoutingSignals(workDir string, rows []usageRow) []usageRow {
+	now := time.Now()
 	for i := range rows {
-		state := agent.ProbeHarnessStateForWorkDir(workDir, rows[i].Harness, 2*time.Second)
-		rows[i].QuotaState = state.QuotaState
-		if state.RoutingSignal == nil {
+		signal := agent.LoadRoutingSignalSnapshotForWorkDir(workDir, rows[i].Harness, now)
+		rows[i].QuotaState = signal.CurrentQuota.State
+		if signal.Provider == "" && signal.Source.Kind == "" {
 			continue
 		}
-		signal := state.RoutingSignal
 		rows[i].SignalProvider = signal.Provider
 		rows[i].SignalKind = signal.Source.Kind
 		rows[i].SignalFreshness = signal.Source.Freshness

@@ -598,7 +598,6 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 			checkRouting, _ := cmd.Flags().GetBool("routing")
 			timeoutStr, _ := cmd.Flags().GetString("timeout")
 			asJSON, _ := cmd.Flags().GetBool("json")
-			statuses := agent.NewRegistry().Discover()
 
 			// Parse timeout (default 15s for connectivity checks)
 			probeTimeout := 15 * time.Second
@@ -608,22 +607,26 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				}
 			}
 
-			// Routing mode: probe full HarnessState per harness.
+			// Routing mode: probe full HarnessState per harness via service.
 			if checkRouting {
-				// Refresh quota snapshots via tmux if stale (>15m).
-				// This is the slow path — only called from doctor, not from routing.
-				now := time.Now()
-				_ = agent.RefreshClaudeQuotaViaTmuxForWorkDir(f.WorkingDir, now, 15*time.Minute)
-				_ = agent.RefreshCodexQuotaViaTmuxForWorkDir(f.WorkingDir, now, 15*time.Minute)
+				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+				if svcErr != nil {
+					return fmt.Errorf("agent doctor: failed to initialize service: %w", svcErr)
+				}
+				ctx := cmd.Context()
+				harnesses, listErr := svc.ListHarnesses(ctx)
+				if listErr != nil {
+					return fmt.Errorf("agent doctor: listing harnesses: %w", listErr)
+				}
 
 				type routingEntry struct {
 					Name  string             `json:"name"`
 					State agent.HarnessState `json:"state"`
 				}
 				var entries []routingEntry
-				for _, s := range statuses {
-					st := agent.ProbeHarnessStateForWorkDir(f.WorkingDir, s.Name, probeTimeout)
-					entries = append(entries, routingEntry{Name: s.Name, State: st})
+				for _, h := range harnesses {
+					st := agent.ProbeHarnessStateForWorkDir(f.WorkingDir, h.Name, probeTimeout)
+					entries = append(entries, routingEntry{Name: h.Name, State: st})
 				}
 				if asJSON {
 					enc := json.NewEncoder(cmd.OutOrStdout())
@@ -713,6 +716,7 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				return nil
 			}
 
+			statuses := agent.NewRegistry().Discover()
 			available := 0
 			functional := 0
 			for i, s := range statuses {
