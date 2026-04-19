@@ -212,12 +212,12 @@ tags: [test]
 # Test Reviewer`
 
 				engineerContent := `---
-name: test-engineer-tdd
+name: test-engineer
 roles: [test-engineer]
-description: TDD test engineer
-tags: [test, tdd]
+description: Test engineer
+tags: [test, testing]
 ---
-# TDD Engineer`
+# Test Engineer`
 
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "test-reviewer.md"),
@@ -236,7 +236,7 @@ tags: [test, tdd]
 			expectCode: 0,
 			validateOutput: func(t *testing.T, output string) {
 				// Should only show test-engineer personas
-				assert.Contains(t, output, "test-engineer-tdd")
+				assert.Contains(t, output, "test-engineer")
 				assert.NotContains(t, output, "test-reviewer")
 			},
 		},

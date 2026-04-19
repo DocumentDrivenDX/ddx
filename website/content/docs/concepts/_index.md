@@ -52,18 +52,18 @@ A persona is a document that shapes how an agent behaves. DDx ships with persona
 
 | Persona | Behavior |
 |---------|----------|
-| `strict-code-reviewer` | Pedantic about quality, catches edge cases, demands tests |
-| `pragmatic-implementer` | Ships working code fast, avoids over-engineering |
-| `test-engineer-tdd` | Writes tests first, validates thoroughly |
-| `simplicity-architect` | Chooses the simplest design that works |
+| `code-reviewer` | Pedantic about quality, catches edge cases, demands tests |
+| `implementer` | Ships working code fast, avoids over-engineering |
+| `test-engineer` | Writes tests first, validates thoroughly |
+| `architect` | Chooses the simplest design that works |
 
 You **bind** personas to **roles** in your project configuration:
 
 ```yaml
 # .ddx.yml
 persona_bindings:
-  code-reviewer: strict-code-reviewer
-  architect: simplicity-architect
+  code-reviewer: code-reviewer
+  architect: architect
 ```
 
 When an agent is assigned to a role, it picks up the bound persona and adjusts its approach.

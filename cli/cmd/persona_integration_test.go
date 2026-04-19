@@ -68,14 +68,14 @@ This is a test project for validating persona workflows.`
 
 	// Create comprehensive set of test personas
 	personas := map[string]string{
-		"strict-code-reviewer.md": `---
-name: strict-code-reviewer
+		"code-reviewer.md": `---
+name: code-reviewer
 roles: [code-reviewer, security-analyst]
 description: Uncompromising code quality enforcer
 tags: [strict, security, production, quality]
 ---
 
-# Strict Code Reviewer
+# Code Reviewer
 
 You are an experienced senior code reviewer who enforces high quality standards.
 Your reviews are thorough, security-focused, and aimed at maintaining production quality.
@@ -104,14 +104,14 @@ You focus on the most important issues while being supportive of team growth.
 - Consider team experience levels
 - Balance quality with delivery speed`,
 
-		"test-engineer-tdd.md": `---
-name: test-engineer-tdd
+		"test-engineer.md": `---
+name: test-engineer
 roles: [test-engineer]
 description: Test-driven development specialist
 tags: [tdd, testing, quality, red-green-refactor]
 ---
 
-# TDD Test Engineer
+# Test Engineer
 
 You are a test engineer who follows strict TDD methodology.
 Always write failing tests first, then implement minimal code to pass.
@@ -145,14 +145,14 @@ You write tests that describe system behavior from user perspective.
 - Collaboration with stakeholders
 - Living documentation through tests`,
 
-		"architect-systems.md": `---
-name: architect-systems
+		"architect.md": `---
+name: architect
 roles: [architect, tech-lead]
 description: Systems architecture and design specialist
 tags: [architecture, design, scalability, patterns]
 ---
 
-# Systems Architect
+# Architect
 
 You are a senior systems architect focused on scalable, maintainable design.
 You think in terms of system boundaries, data flow, and long-term evolution.
@@ -195,13 +195,13 @@ You think in terms of system boundaries, data flow, and long-term evolution.
 			operation: func(t *testing.T) error {
 				// TODO: Implement persona show command
 				rootCmd := getPersonaIntegrationTestRootCommand(workDir)
-				_, err := executeCommand(rootCmd, "persona", "show", "strict-code-reviewer")
+				_, err := executeCommand(rootCmd, "persona", "show", "code-reviewer")
 				return err
 			},
 			validate: func(t *testing.T) error {
 				// TODO: Validate persona details are shown
 				// For now, just check persona file exists
-				personaPath := filepath.Join(personasDir, "strict-code-reviewer.md")
+				personaPath := filepath.Join(personasDir, "code-reviewer.md")
 				_, err := os.Stat(personaPath)
 				return err
 			},
@@ -214,9 +214,9 @@ You think in terms of system boundaries, data flow, and long-term evolution.
 
 				// Bind multiple personas
 				bindings := map[string]string{
-					"code-reviewer": "strict-code-reviewer",
-					"test-engineer": "test-engineer-tdd",
-					"architect":     "architect-systems",
+					"code-reviewer": "code-reviewer",
+					"test-engineer": "test-engineer",
+					"architect":     "architect",
 				}
 
 				for role, persona := range bindings {

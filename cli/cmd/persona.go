@@ -28,23 +28,9 @@ type PersonaInfo struct {
 }
 
 // deprecatedPersonas lists personas from the pre-consolidation roster
-// (pre-FEAT-011 Phase 3) that are scheduled for removal after one
-// release window. The value is the surviving replacement persona name,
-// or empty string for personas that have no direct replacement (dropped).
-// Deprecation warnings are emitted to stderr so they don't poison piped
-// stdout output; deprecated personas remain fully functional during the
-// window — the warning is a migration nudge, not a block.
-var deprecatedPersonas = map[string]string{
-	"strict-code-reviewer":       "code-reviewer",
-	"test-engineer-tdd":          "test-engineer",
-	"architect-systems":          "architect",
-	"pragmatic-implementer":      "implementer",
-	"reliability-guardian":       "",
-	"simplicity-architect":       "",
-	"data-driven-optimizer":      "",
-	"product-discovery-analyst":  "",
-	"product-manager-minimalist": "",
-}
+// (pre-FEAT-011 Phase 3) that have been removed. The map is kept as empty
+// to preserve the function signatures for future use if needed.
+var deprecatedPersonas = map[string]string{}
 
 // deprecationNoticeFor returns a human-readable warning string (without
 // a newline) for a deprecated persona, or empty if the name is current.

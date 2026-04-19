@@ -190,7 +190,7 @@ The CLI follows a noun-verb command structure for clarity and consistency:
 
 DDX includes a persona system that provides consistent AI personalities for different roles:
 
-- **Personas**: Reusable AI personality templates (e.g., `strict-code-reviewer`, `test-engineer-tdd`)
+- **Personas**: Reusable AI personality templates (e.g., `code-reviewer`, `test-engineer`, `architect`)
 - **Roles**: Abstract functions that personas fulfill (e.g., `code-reviewer`, `test-engineer`)
 - **Bindings**: Project-specific mappings between roles and personas in `.ddx.yml`
 

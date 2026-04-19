@@ -125,17 +125,17 @@ func TestE2ESmokeJourney(t *testing.T) {
 	personasDir := filepath.Join(workDir, ".ddx", "plugins", "ddx", "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 	personaContent := `---
-name: strict-code-reviewer
+name: code-reviewer
 roles: [code-reviewer]
-description: Strict code reviewer
-tags: [strict]
+description: Code reviewer
+tags: [quality]
 ---
 
-# Strict Code Reviewer
+# Code Reviewer
 
-You are a strict code reviewer.`
+You are a code reviewer.`
 	require.NoError(t, os.WriteFile(
-		filepath.Join(personasDir, "strict-code-reviewer.md"),
+		filepath.Join(personasDir, "code-reviewer.md"),
 		[]byte(personaContent),
 		0644,
 	))
@@ -167,12 +167,12 @@ You are a strict code reviewer.`
 		t.Logf("persona list output: %s", out)
 		assert.Equal(t, 0, code, "ddx persona list should exit 0")
 		assert.NotContains(t, out, "No personas found", "should list at least one persona")
-		assert.Contains(t, out, "strict-code-reviewer")
+		assert.Contains(t, out, "code-reviewer")
 	})
 
 	// TC-005: Persona bind
 	t.Run("TC-005-PersonaBind", func(t *testing.T) {
-		out, code := runInDir(t, binary, workDir, "persona", "bind", "code-reviewer", "strict-code-reviewer")
+		out, code := runInDir(t, binary, workDir, "persona", "bind", "code-reviewer", "code-reviewer")
 		t.Logf("persona bind output: %s", out)
 		assert.Equal(t, 0, code, "ddx persona bind should exit 0; output: %s", out)
 	})

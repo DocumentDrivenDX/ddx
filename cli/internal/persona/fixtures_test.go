@@ -65,14 +65,14 @@ func (f *TestFixtures) CreateTestClaude(t *testing.T, content string) {
 // GetTestPersonas returns a map of test persona files
 func GetTestPersonas() map[string]string {
 	return map[string]string{
-		"strict-code-reviewer.md": `---
-name: strict-code-reviewer
+		"code-reviewer.md": `---
+name: code-reviewer
 roles: [code-reviewer, security-analyst]
 description: Uncompromising code quality enforcer
 tags: [strict, security, production, quality]
 ---
 
-# Strict Code Reviewer
+# Code Reviewer
 
 You are an experienced senior code reviewer who enforces high quality standards.
 Your reviews are thorough, security-focused, and aimed at maintaining production quality.
@@ -114,14 +114,14 @@ You focus on the most important issues while being supportive of team growth.
 - Offer alternatives when possible
 - Encourage learning and improvement`,
 
-		"test-engineer-tdd.md": `---
-name: test-engineer-tdd
+		"test-engineer.md": `---
+name: test-engineer
 roles: [test-engineer]
 description: Test-driven development specialist
 tags: [tdd, testing, quality, red-green-refactor]
 ---
 
-# TDD Test Engineer
+# Test Engineer
 
 You are a test engineer who follows strict TDD methodology.
 Always write failing tests first, then implement minimal code to pass.
@@ -167,14 +167,14 @@ You write tests that describe system behavior from user perspective.
 - Acceptance criteria validation
 - Stakeholder collaboration`,
 
-		"architect-systems.md": `---
-name: architect-systems
+		"architect.md": `---
+name: architect
 roles: [architect, tech-lead]
 description: Systems architecture and design specialist
 tags: [architecture, design, scalability, patterns]
 ---
 
-# Systems Architect
+# Architect
 
 You are a senior systems architect focused on scalable, maintainable design.
 You think in terms of system boundaries, data flow, and long-term evolution.
@@ -352,14 +352,14 @@ repository:
   url: "https://github.com/test/project"
   branch: "main"
 persona_bindings:
-  code-reviewer: strict-code-reviewer
-  test-engineer: test-engineer-tdd
-  architect: architect-systems`,
+  code-reviewer: code-reviewer
+  test-engineer: test-engineer
+  architect: architect`,
 
 		"with_overrides": `version: "1.0"
 persona_bindings:
   code-reviewer: balanced-code-reviewer
-  test-engineer: test-engineer-tdd
+  test-engineer: test-engineer
 
 overrides:
   performance-workflow:
@@ -383,9 +383,9 @@ variables:
   environment: "development"
 
 persona_bindings:
-  code-reviewer: strict-code-reviewer
-  test-engineer: test-engineer-tdd
-  architect: architect-systems
+  code-reviewer: code-reviewer
+  test-engineer: test-engineer
+  architect: architect
   security-analyst: security-analyst
   performance-engineer: performance-engineer
   devops-engineer: devops-engineer
@@ -396,14 +396,14 @@ overrides:
     code-reviewer: performance-engineer
   security-workflow:
     code-reviewer: security-analyst
-    test-engineer: test-engineer-tdd
+    test-engineer: test-engineer
   helix:
-    architect: architect-systems
+    architect: architect
     test-engineer: test-engineer-bdd`,
 
 		"invalid_yaml": `version: "1.0"
 persona_bindings:
-  code-reviewer: strict-reviewer
+  code-reviewer: balanced-code-reviewer
   test-engineer: [invalid-yaml-structure
 description: This is invalid YAML`,
 	}
@@ -429,13 +429,13 @@ This is a test project.
 <!-- PERSONAS:START -->
 ## Active Personas
 
-### Code Reviewer: strict-code-reviewer
-# Strict Code Reviewer
+### Code Reviewer: code-reviewer
+# Code Reviewer
 
 You are an experienced senior code reviewer who enforces high quality standards.
 
-### Test Engineer: test-engineer-tdd
-# TDD Test Engineer
+### Test Engineer: test-engineer
+# Test Engineer
 
 You are a test engineer who follows strict TDD methodology.
 
@@ -449,13 +449,13 @@ Project guidance for a complex application.
 <!-- PERSONAS:START -->
 ## Active Personas
 
-### Architect: architect-systems
-# Systems Architect
+### Architect: architect
+# Architect
 
 You are a senior systems architect focused on scalable design.
 
-### Code Reviewer: strict-code-reviewer
-# Strict Code Reviewer
+### Code Reviewer: code-reviewer
+# Code Reviewer
 
 You are an experienced senior code reviewer.
 
@@ -464,8 +464,8 @@ You are an experienced senior code reviewer.
 
 You are a security analyst with expertise in vulnerabilities.
 
-### Test Engineer: test-engineer-tdd
-# TDD Test Engineer
+### Test Engineer: test-engineer
+# Test Engineer
 
 You follow strict TDD methodology.
 
@@ -495,7 +495,7 @@ Project guidance.
 <!-- PERSONAS:START -->
 ## Active Personas
 
-### Code Reviewer: strict-reviewer
+### Code Reviewer: balanced-code-reviewer
 Content without proper end marker.
 
 More content after.`,
@@ -524,11 +524,11 @@ Second section (shouldn't happen).
 func GetTestPersonaObjects() []*Persona {
 	return []*Persona{
 		{
-			Name:        "strict-code-reviewer",
+			Name:        "code-reviewer",
 			Roles:       []string{"code-reviewer", "security-analyst"},
 			Description: "Uncompromising code quality enforcer",
 			Tags:        []string{"strict", "security", "production", "quality"},
-			Content:     "# Strict Code Reviewer\n\nYou are an experienced senior code reviewer.",
+			Content:     "# Code Reviewer\n\nYou are an experienced senior code reviewer.",
 		},
 		{
 			Name:        "balanced-code-reviewer",
@@ -538,11 +538,11 @@ func GetTestPersonaObjects() []*Persona {
 			Content:     "# Balanced Code Reviewer\n\nYou provide constructive, balanced code reviews.",
 		},
 		{
-			Name:        "test-engineer-tdd",
+			Name:        "test-engineer",
 			Roles:       []string{"test-engineer"},
 			Description: "Test-driven development specialist",
 			Tags:        []string{"tdd", "testing", "quality", "red-green-refactor"},
-			Content:     "# TDD Test Engineer\n\nYou follow strict TDD methodology.",
+			Content:     "# Test Engineer\n\nYou follow strict TDD methodology.",
 		},
 		{
 			Name:        "test-engineer-bdd",
@@ -552,11 +552,11 @@ func GetTestPersonaObjects() []*Persona {
 			Content:     "# BDD Test Engineer\n\nYou focus on behavior-driven development.",
 		},
 		{
-			Name:        "architect-systems",
+			Name:        "architect",
 			Roles:       []string{"architect", "tech-lead"},
 			Description: "Systems architecture and design specialist",
 			Tags:        []string{"architecture", "design", "scalability", "patterns"},
-			Content:     "# Systems Architect\n\nYou focus on scalable, maintainable design.",
+			Content:     "# Architect\n\nYou focus on scalable, maintainable design.",
 		},
 		{
 			Name:        "security-analyst",
@@ -571,9 +571,9 @@ func GetTestPersonaObjects() []*Persona {
 // GetTestBindings returns test persona bindings
 func GetTestBindings() map[string]string {
 	return map[string]string{
-		"code-reviewer":        "strict-code-reviewer",
-		"test-engineer":        "test-engineer-tdd",
-		"architect":            "architect-systems",
+		"code-reviewer":        "code-reviewer",
+		"test-engineer":        "test-engineer",
+		"architect":            "architect",
 		"security-analyst":     "security-analyst",
 		"performance-engineer": "performance-engineer",
 		"devops-engineer":      "devops-engineer",
@@ -592,7 +592,7 @@ func GetTestOverrides() map[string]map[string]string {
 			"security-analyst": "security-analyst",
 		},
 		"helix": {
-			"architect":     "architect-systems",
+			"architect":     "architect",
 			"test-engineer": "test-engineer-bdd",
 		},
 	}

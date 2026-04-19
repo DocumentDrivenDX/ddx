@@ -21,7 +21,7 @@ A persona is a markdown file that defines:
 ddx persona load
 
 # Load a specific persona
-ddx persona load strict-code-reviewer
+ddx persona load code-reviewer
 
 # Check active personas
 ddx persona status
@@ -33,7 +33,7 @@ Projects can bind specific personas to abstract roles:
 
 ```bash
 # Bind a persona to a role
-ddx persona bind code-reviewer strict-code-reviewer
+ddx persona bind code-reviewer code-reviewer
 
 # View current bindings
 ddx persona bindings
@@ -45,9 +45,9 @@ ddx persona unbind code-reviewer
 This creates entries in your `.ddx.yml`:
 ```yaml
 persona_bindings:
-  code-reviewer: strict-code-reviewer
-  test-engineer: test-engineer-tdd
-  architect: architect-systems
+  code-reviewer: code-reviewer
+  test-engineer: test-engineer
+  architect: architect
 ```
 
 ### Discovering Personas
@@ -60,7 +60,7 @@ ddx persona list
 ddx persona list --role test-engineer
 
 # View persona details
-ddx persona show test-engineer-tdd
+ddx persona show test-engineer
 ```
 
 ## Creating a New Persona
@@ -192,17 +192,6 @@ Inspiration catalogs (not canon, but useful browsing):
 | `architect` | architect, technical-lead | Opinionated on when to reach for each pattern |
 | `specification-enforcer` | specification-enforcer, compliance-analyst | Refuses drift from governing artifacts |
 
-Deprecated (scheduled for removal after one release):
-`strict-code-reviewer` → `code-reviewer`;
-`test-engineer-tdd` → `test-engineer`;
-`architect-systems` → `architect`;
-`pragmatic-implementer` → `implementer`.
-
-Dropped (no replacement, use the 5 above or ship your own):
-`reliability-guardian`, `simplicity-architect`,
-`data-driven-optimizer`, `product-discovery-analyst`,
-`product-manager-minimalist`.
-
 ### Contributing Personas
 
 1. Create your persona file following the template
@@ -212,7 +201,7 @@ Dropped (no replacement, use the 5 above or ship your own):
 ## Role vs Persona
 
 - **Role**: Abstract function (e.g., "code-reviewer")
-- **Persona**: Concrete implementation (e.g., "strict-code-reviewer")
+- **Persona**: Concrete implementation (e.g., "code-reviewer")
 
 Workflows define required **roles**. Projects bind **personas** to those roles.
 
@@ -220,8 +209,8 @@ Workflows define required **roles**. Projects bind **personas** to those roles.
 
 1. **Setup Project Bindings**:
 ```bash
-ddx persona bind code-reviewer strict-code-reviewer
-ddx persona bind test-engineer test-engineer-tdd
+ddx persona bind code-reviewer code-reviewer
+ddx persona bind test-engineer test-engineer
 ```
 
 2. **Load for Interactive Session**:
@@ -248,7 +237,7 @@ A: DDX will prompt you to select from available personas for that role.
 A: Yes, use the `overrides` section in `.ddx.yml`:
 ```yaml
 persona_bindings:
-  test-engineer: test-engineer-tdd
+  test-engineer: test-engineer
 
   overrides:
     helix:

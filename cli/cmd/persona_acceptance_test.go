@@ -28,15 +28,15 @@ func setupMockPersonas(t *testing.T, env *TestEnvironment) {
 	personasDir := filepath.Join(libPath, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
-	// Create strict-code-reviewer persona
-	strictReviewerContent := `---
-name: strict-code-reviewer
+	// Create code-reviewer persona
+	codeReviewerContent := `---
+name: code-reviewer
 roles: [code-reviewer, security-analyst]
 description: Uncompromising code quality enforcer
 tags: [strict, security, production, quality]
 ---
 
-# Strict Code Reviewer
+# Code Reviewer
 
 You are an experienced senior code reviewer who enforces high quality standards.
 Your reviews are thorough, security-focused, and aimed at maintaining production quality.
@@ -48,43 +48,43 @@ Your reviews are thorough, security-focused, and aimed at maintaining production
 - Test coverage requirements must be met`
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(personasDir, "strict-code-reviewer.md"),
-		[]byte(strictReviewerContent),
+		filepath.Join(personasDir, "code-reviewer.md"),
+		[]byte(codeReviewerContent),
 		0644,
 	))
 
-	// Create test-engineer-tdd persona
+	// Create test-engineer persona
 	testEngineerContent := `---
-name: test-engineer-tdd
+name: test-engineer
 roles: [test-engineer, qa]
 description: Test-driven development advocate
 tags: [tdd, testing, quality]
 ---
 
-# Test Engineer (TDD)
+# Test Engineer
 
 You are a test engineer who champions test-driven development practices.`
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(personasDir, "test-engineer-tdd.md"),
+		filepath.Join(personasDir, "test-engineer.md"),
 		[]byte(testEngineerContent),
 		0644,
 	))
 
-	// Create architect-systems persona
+	// Create architect persona
 	architectContent := `---
-name: architect-systems
+name: architect
 roles: [architect, systems-design]
 description: Systems architecture expert
 tags: [architecture, design, systems]
 ---
 
-# Systems Architect
+# Architect
 
 You are a systems architect with deep expertise in distributed systems.`
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(personasDir, "architect-systems.md"),
+		filepath.Join(personasDir, "architect.md"),
 		[]byte(architectContent),
 		0644,
 	))
@@ -116,9 +116,9 @@ library:
     url: https://github.com/test/project
     branch: main
 persona_bindings:
-  code-reviewer: "strict-code-reviewer"
-  test-engineer: "test-engineer-tdd"
-  architect: "architect-systems"`
+  code-reviewer: "code-reviewer"
+  test-engineer: "test-engineer"
+  architect: "architect"`
 
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
@@ -150,14 +150,14 @@ This is a test project for validating persona functionality.`
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				// Create the bound personas
-				strictReviewerContent := `---
-name: strict-code-reviewer
+				codeReviewerContent := `---
+name: code-reviewer
 roles: [code-reviewer, security-analyst]
 description: Uncompromising code quality enforcer
 tags: [strict, security, production, quality]
 ---
 
-# Strict Code Reviewer
+# Code Reviewer
 
 You are an experienced senior code reviewer who enforces high quality standards.
 Your reviews are thorough, security-focused, and aimed at maintaining production quality.
@@ -168,14 +168,14 @@ Your reviews are thorough, security-focused, and aimed at maintaining production
 - Code readability and maintainability are essential
 - Test coverage requirements must be met`
 
-				tddEngineerContent := `---
-name: test-engineer-tdd
+				testEngineerContent := `---
+name: test-engineer
 roles: [test-engineer]
 description: Test-driven development specialist
 tags: [tdd, testing, quality, red-green-refactor]
 ---
 
-# TDD Test Engineer
+# Test Engineer
 
 You are a test engineer who follows strict TDD methodology.
 Always write failing tests first, then implement minimal code to pass.
@@ -186,13 +186,13 @@ Always write failing tests first, then implement minimal code to pass.
 3. Refactor: Improve code while keeping tests green`
 
 				architectContent := `---
-name: architect-systems
+name: architect
 roles: [architect, tech-lead]
 description: Systems architecture and design specialist
 tags: [architecture, design, scalability, patterns]
 ---
 
-# Systems Architect
+# Architect
 
 You are a senior systems architect focused on scalable, maintainable design.
 You think in terms of system boundaries, data flow, and long-term evolution.
@@ -205,21 +205,21 @@ You think in terms of system boundaries, data flow, and long-term evolution.
 
 				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(personasDir, "strict-code-reviewer.md"),
-					[]byte(strictReviewerContent),
+					filepath.Join(personasDir, "code-reviewer.md"),
+					[]byte(codeReviewerContent),
 					0644,
 				))
 
 				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(personasDir, "test-engineer-tdd.md"),
-					[]byte(tddEngineerContent),
+					filepath.Join(personasDir, "test-engineer.md"),
+					[]byte(testEngineerContent),
 					0644,
 				))
 
 				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(personasDir, "architect-systems.md"),
+					filepath.Join(personasDir, "architect.md"),
 					[]byte(architectContent),
 					0644,
 				))
@@ -254,18 +254,18 @@ You think in terms of system boundaries, data flow, and long-term evolution.
 				assert.Contains(t, claudeStr, "<!-- PERSONAS:END -->")
 
 				// Should contain all three personas
-				assert.Contains(t, claudeStr, "Strict Code Reviewer")
-				assert.Contains(t, claudeStr, "TDD Test Engineer")
-				assert.Contains(t, claudeStr, "Systems Architect")
+				assert.Contains(t, claudeStr, "Code Reviewer")
+				assert.Contains(t, claudeStr, "Test Engineer")
+				assert.Contains(t, claudeStr, "Architect")
 
 				// Should preserve original content
 				assert.Contains(t, claudeStr, "This is my project's guidance for Claude")
 				assert.Contains(t, claudeStr, "Project Context")
 
 				// Should indicate role mapping
-				assert.Contains(t, claudeStr, "Code Reviewer: strict-code-reviewer")
-				assert.Contains(t, claudeStr, "Test Engineer: test-engineer-tdd")
-				assert.Contains(t, claudeStr, "Architect: architect-systems")
+				assert.Contains(t, claudeStr, "Code Reviewer: code-reviewer")
+				assert.Contains(t, claudeStr, "Test Engineer: test-engineer")
+				assert.Contains(t, claudeStr, "Architect: architect")
 			},
 		},
 		{
@@ -624,8 +624,8 @@ artifacts:
 				// Create .ddx.yml to make this a valid DDx project
 				config := `version: "1.0"
 persona_bindings:
-  architect: "systems-architect"
-  test-engineer: "test-engineer-tdd"`
+  architect: "architect"
+  test-engineer: "test-engineer"`
 
 				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
 				require.NoError(t, os.WriteFile(
@@ -641,32 +641,32 @@ persona_bindings:
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				architectContent := `---
-name: systems-architect
+name: architect
 roles: [architect]
 description: Systems architect
 tags: [design]
 ---
-# Systems Architect`
+# Architect`
 
-				tddContent := `---
-name: test-engineer-tdd
+				testEngineerContent := `---
+name: test-engineer
 roles: [test-engineer]
-description: TDD specialist
+description: Test engineer
 tags: [testing]
 ---
-# TDD Engineer`
+# Test Engineer`
 
 				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(personasDir, "systems-architect.md"),
+					filepath.Join(personasDir, "architect.md"),
 					[]byte(architectContent),
 					0644,
 				))
 
 				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(personasDir, "test-engineer-tdd.md"),
-					[]byte(tddContent),
+					filepath.Join(personasDir, "test-engineer.md"),
+					[]byte(testEngineerContent),
 					0644,
 				))
 
@@ -1047,7 +1047,7 @@ func TestAcceptance_US035_DeveloperOverridingWorkflowPersonas(t *testing.T) {
 				// Create .ddx.yml with default bindings
 				config := `version: "1.0"
 persona_bindings:
-  test-engineer: "test-engineer-tdd"
+  test-engineer: "test-engineer"
 
 overrides:
   performance-workflow:
@@ -1066,13 +1066,13 @@ overrides:
 				personasDir := filepath.Join(homeDir, ".ddx", "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
-				tddContent := `---
-name: test-engineer-tdd
+				testEngineerContent := `---
+name: test-engineer
 roles: [test-engineer]
-description: TDD specialist
-tags: [tdd]
+description: Test engineer
+tags: [testing]
 ---
-# TDD Engineer`
+# Test Engineer`
 
 				bddContent := `---
 name: test-engineer-bdd
@@ -1084,8 +1084,8 @@ tags: [bdd, behavior]
 
 				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(personasDir, "test-engineer-tdd.md"),
-					[]byte(tddContent),
+					filepath.Join(personasDir, "test-engineer.md"),
+					[]byte(testEngineerContent),
 					0644,
 				))
 
@@ -1120,7 +1120,7 @@ tags: [bdd, behavior]
 
 				// Verify default bindings
 				personaBindings := config["persona_bindings"].(map[string]interface{})
-				assert.Equal(t, "test-engineer-tdd", personaBindings["test-engineer"])
+				assert.Equal(t, "test-engineer", personaBindings["test-engineer"])
 
 				// Verify overrides
 				overrides := config["overrides"].(map[string]interface{})
@@ -1128,7 +1128,7 @@ tags: [bdd, behavior]
 				assert.Equal(t, "test-engineer-bdd", perfWorkflow["test-engineer"])
 
 				// TODO: When workflow engine is implemented, verify:
-				// 1. Default workflows use test-engineer-tdd
+				// 1. Default workflows use test-engineer
 				// 2. performance-workflow uses test-engineer-bdd override
 				// 3. Override takes precedence over default binding
 			},
