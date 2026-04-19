@@ -792,34 +792,39 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				return nil
 			}
 
-			statuses := agent.NewRegistry().Discover()
+			svc, err := agent.NewServiceFromWorkDir(f.WorkingDir)
+			if err != nil {
+				return fmt.Errorf("constructing agent service: %w", err)
+			}
+			harnesses, err := svc.ListHarnesses(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("listing harnesses: %w", err)
+			}
 			available := 0
 			functional := 0
-			for i, s := range statuses {
+			for _, hi := range harnesses {
 				statusStr := "NOT FOUND"
-				if s.Available {
+				if hi.Available {
 					available++
-					statusStr = fmt.Sprintf("OK (%s)", s.Path)
+					statusStr = fmt.Sprintf("OK (%s)", hi.Path)
 
 					// Optionally test provider connectivity
 					if checkConnectivity {
-						providerStatus := agent.TestProviderConnectivityViaService(cmd.Context(), f.WorkingDir, s.Name, probeTimeout)
-						statuses[i].Provider = &providerStatus
-
+						providerStatus := agent.TestProviderConnectivityViaService(cmd.Context(), f.WorkingDir, hi.Name, probeTimeout)
 						if providerStatus.Reachable && providerStatus.CreditsOK {
-							statusStr = fmt.Sprintf("OK (%s) ✓ provider reachable", s.Path)
+							statusStr = fmt.Sprintf("OK (%s) ✓ provider reachable", hi.Path)
 							functional++
 						} else if providerStatus.Reachable && !providerStatus.CreditsOK {
-							statusStr = fmt.Sprintf("⚠️  (%s) provider out of credits/quota", s.Path)
+							statusStr = fmt.Sprintf("⚠️  (%s) provider out of credits/quota", hi.Path)
 						} else if providerStatus.Error != "" {
-							statusStr = fmt.Sprintf("⚠️  (%s) %s", s.Path, providerStatus.Error)
+							statusStr = fmt.Sprintf("⚠️  (%s) %s", hi.Path, providerStatus.Error)
 						}
 					}
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-12s %s\n", s.Name, statusStr)
+				fmt.Fprintf(cmd.OutOrStdout(), "%-12s %s\n", hi.Name, statusStr)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "\n%d/%d harnesses available", available, len(statuses))
+			fmt.Fprintf(cmd.OutOrStdout(), "\n%d/%d harnesses available", available, len(harnesses))
 			if checkConnectivity && available > 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), " (%d functional)", functional)
 			}
