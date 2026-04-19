@@ -568,7 +568,10 @@ func TestQuorumRunsAllHarnesses(t *testing.T) {
 	// Override executor to track calls
 	r.Executor = &trackingExecutor{calls: calls, output: "ok"}
 
-	results, err := r.RunQuorum(QuorumOptions{
+	run := func(opts RunOptions) (*Result, error) {
+		return r.Run(opts)
+	}
+	results, err := RunQuorumWith(run, QuorumOptions{
 		RunOptions: RunOptions{Prompt: "test"},
 		Harnesses:  []string{"codex", "claude"},
 		Strategy:   "unanimous",

@@ -9,6 +9,10 @@ package agent
 // The Runner.RunCompare/Runner.RunQuorum/Runner.RunBenchmark wrappers below
 // remain in place for test scaffolding only; production code should call
 // RunCompareViaService, RunQuorumViaService, and RunBenchmarkViaService.
+//
+// Phase 5h migration (ddx-bfff4bc7): Runner shim methods deleted; production
+// calls use ViaService variants directly. Tests use RunCompareWith/RunQuorumWith
+// with an injected RunFunc.
 
 import (
 	"context"
@@ -22,6 +26,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	agentlib "github.com/DocumentDrivenDX/agent"
 )
 
 // BenchmarkPrompt is a single test case in a benchmark suite.
@@ -162,10 +168,13 @@ func RunCompareViaService(ctx context.Context, workDir string, opts CompareOptio
 	return RunCompareWith(run, opts, defaultResolvePromptForCompare, cleanupCompareWorktrees)
 }
 
-// RunCompare keeps backward-compat for Runner-driven tests; production code
-// should call RunCompareViaService instead.
-func (r *Runner) RunCompare(opts CompareOptions) (*ComparisonRecord, error) {
-	return RunCompareWith(r.Run, opts, r.resolvePrompt, r.cleanupCompareWorktrees)
+// RunCompareWithAgent calls RunCompareViaService using a pre-built DdxAgent.
+// Suitable for callers that want to reuse a service instance.
+func RunCompareWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir string, opts CompareOptions) (*ComparisonRecord, error) {
+	run := func(runOpts RunOptions) (*Result, error) {
+		return RunViaServiceWith(ctx, agent, workDir, runOpts)
+	}
+	return RunCompareWith(run, opts, defaultResolvePromptForCompare, cleanupCompareWorktrees)
 }
 
 // defaultResolvePromptForCompare reads inline Prompt or PromptFile.
@@ -335,7 +344,7 @@ func runPostCommand(dir, command string) (string, bool) {
 }
 
 // cleanupCompareWorktrees removes the worktrees created for a compare run.
-// Free function; both Runner.RunCompare and RunCompareViaService route through
+// Free function; both RunCompareViaService and RunCompareWithAgent route through
 // this helper.
 func cleanupCompareWorktrees(repoDir, compareID string) {
 	if root, err := resolveGitRoot(repoDir); err == nil {
@@ -359,11 +368,6 @@ func cleanupCompareWorktrees(repoDir, compareID string) {
 	cmd.Dir = repoDir
 	cmd.Env = cleanGitEnv()
 	_ = cmd.Run()
-}
-
-// cleanupCompareWorktrees method shim for Runner.RunCompare backward compat.
-func (r *Runner) cleanupCompareWorktrees(repoDir, compareID string) {
-	cleanupCompareWorktrees(repoDir, compareID)
 }
 
 func genCompareID() string {
@@ -418,10 +422,12 @@ func RunQuorumViaService(ctx context.Context, workDir string, opts QuorumOptions
 	return RunQuorumWith(run, opts)
 }
 
-// RunQuorum keeps backward-compat for Runner-driven tests; production code
-// should call RunQuorumViaService instead.
-func (r *Runner) RunQuorum(opts QuorumOptions) ([]*Result, error) {
-	return RunQuorumWith(r.Run, opts)
+// RunQuorumWithAgent calls RunQuorumViaService using a pre-built DdxAgent.
+func RunQuorumWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir string, opts QuorumOptions) ([]*Result, error) {
+	run := func(runOpts RunOptions) (*Result, error) {
+		return RunViaServiceWith(ctx, agent, workDir, runOpts)
+	}
+	return RunQuorumWith(run, opts)
 }
 
 // QuorumMet returns true if enough results succeeded.
@@ -643,9 +649,11 @@ func RunBenchmarkViaService(ctx context.Context, workDir string, suite *Benchmar
 	}, suite)
 }
 
-// RunBenchmark keeps backward-compat for Runner-driven tests.
-func (r *Runner) RunBenchmark(suite *BenchmarkSuite) (*BenchmarkResult, error) {
-	return RunBenchmarkWith(r.RunCompare, suite)
+// RunBenchmarkWithAgent calls RunBenchmarkViaService using a pre-built DdxAgent.
+func RunBenchmarkWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir string, suite *BenchmarkSuite) (*BenchmarkResult, error) {
+	return RunBenchmarkWith(func(opts CompareOptions) (*ComparisonRecord, error) {
+		return RunCompareWithAgent(ctx, agent, workDir, opts)
+	}, suite)
 }
 
 func benchSummarize(result *BenchmarkResult) BenchmarkSummary {
