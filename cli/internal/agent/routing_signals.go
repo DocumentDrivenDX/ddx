@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -299,58 +298,12 @@ func (r *Runner) loadLMStudioSignal(now time.Time) RoutingSignalSnapshot {
 	return BuildLMStudioSignal("agent-config", statuses, now)
 }
 
-// RefreshCodexQuotaViaTmux refreshes the codex quota snapshot via tmux if the
-// existing snapshot is older than maxAge (or native JSONL is unavailable).
-// Safe to call from slow-path commands (ddx agent doctor), not from routing hot paths.
-func (r *Runner) RefreshCodexQuotaViaTmux(now time.Time, maxAge time.Duration) error {
-	snapshotPath := resolveCodexQuotaSnapshotPath()
-	if snapshotPath == "" {
-		return fmt.Errorf("cannot resolve codex quota snapshot path")
-	}
-	// Skip if fresh.
-	if _, _, observedAt, err := ReadClaudeFullSnapshot(snapshotPath, now); err == nil {
-		if !observedAt.IsZero() && now.UTC().Sub(observedAt.UTC()) < maxAge {
-			return nil
-		}
-	}
-
-	windows, err := ReadCodexQuotaViaTmux(30 * time.Second)
-	if err != nil {
-		return err
-	}
-	// Use WriteClaudeFullQuotaSnapshot (same format) for the codex snapshot.
-	return WriteClaudeFullQuotaSnapshot(snapshotPath, windows, nil, now)
-}
-
 func resolveCodexQuotaSnapshotPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return ""
 	}
 	return filepath.Join(home, ".ddx", "provider-state", "codex-quota.json")
-}
-
-// RefreshClaudeQuotaViaTmux refreshes the claude quota snapshot via tmux if the
-// existing snapshot is older than maxAge. Safe to call from slow-path commands
-// (ddx agent doctor) but NOT from routing hot paths.
-func (r *Runner) RefreshClaudeQuotaViaTmux(now time.Time, maxAge time.Duration) error {
-	snapshotPath := resolveClaudeQuotaSnapshotPath()
-	if snapshotPath == "" {
-		return fmt.Errorf("cannot resolve claude quota snapshot path")
-	}
-
-	// Skip if snapshot is fresh enough.
-	if _, _, observedAt, err := ReadClaudeFullSnapshot(snapshotPath, now); err == nil {
-		if !observedAt.IsZero() && now.UTC().Sub(observedAt.UTC()) < maxAge {
-			return nil
-		}
-	}
-
-	windows, acct, err := ReadClaudeQuotaViaTmux(30 * time.Second)
-	if err != nil {
-		return err
-	}
-	return WriteClaudeFullQuotaSnapshot(snapshotPath, windows, acct, now)
 }
 
 var sessionQuotaBlockPattern = regexp.MustCompile(`(?i)(you've hit your limit|quota exceeded|quota_exceeded|insufficient credits|insufficient_credits|429|rate limit|ratelimit)`)
