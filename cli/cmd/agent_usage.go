@@ -65,7 +65,16 @@ func (a *usageAgg) addSession(entry agent.SessionEntry) {
 	}
 }
 
-func (a *usageAgg) addOutcome(outcome agent.RoutingOutcome, registry *agent.Registry) {
+// localHarnesses tracks which harness names are local-only (no provider cost).
+// Replaces the previous *agent.Registry lookup so this file doesn't depend on
+// the legacy Registry type that's about to delete (per ddx-f0cab7b3).
+var localHarnesses = map[string]bool{
+	"agent":   true,
+	"virtual": true,
+	"script":  true,
+}
+
+func (a *usageAgg) addOutcome(outcome agent.RoutingOutcome) {
 	a.sessions++
 	a.inputTokens += outcome.InputTokens
 	a.outputTokens += outcome.OutputTokens
@@ -74,10 +83,7 @@ func (a *usageAgg) addOutcome(outcome agent.RoutingOutcome, registry *agent.Regi
 		a.costUSD += outcome.CostUSD
 		return
 	}
-	if registry == nil {
-		return
-	}
-	if harness, ok := registry.Get(outcome.Harness); ok && !harness.IsLocal && outcome.Model != "" {
+	if !localHarnesses[outcome.Harness] && outcome.Model != "" {
 		if est := agent.EstimateCost(outcome.Model, outcome.InputTokens, outcome.OutputTokens); est >= 0 {
 			a.costUSD += est
 		}
@@ -243,7 +249,6 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 	order := []string{}
 	mirrored := map[string]struct{}{}
 	cutoffByHarness := map[string]time.Time{}
-	registry := agent.NewRegistry()
 
 	for _, outcome := range outcomes {
 		if key := usageMirrorKey(outcome.NativeSessionID, outcome.TraceID, outcome.SpanID); key != "" {
@@ -265,7 +270,7 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 			byHarness[outcome.Harness] = a
 			order = append(order, outcome.Harness)
 		}
-		a.addOutcome(outcome, registry)
+		a.addOutcome(outcome)
 	}
 
 	if len(order) == 0 {
