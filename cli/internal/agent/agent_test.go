@@ -1121,53 +1121,6 @@ func TestValidateForExecuteLoopValidHarnessAndModel(t *testing.T) {
 	assert.NoError(t, r.ValidateForExecuteLoop("claude", "claude-sonnet-4-6", "", ""))
 }
 
-func TestValidateOrphanModelRejectsUnroutablePin(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	err := r.ValidateOrphanModel(RunOptions{Model: "qwen/qwen3-coder-next"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not in the catalog and no discovered provider")
-	assert.Contains(t, err.Error(), "qwen/qwen3-coder-next")
-}
-
-func TestValidateOrphanModelPassesWithProvider(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Model: "qwen/qwen3-coder-next", Provider: "vidar-coder"}))
-}
-
-func TestValidateOrphanModelPassesWithModelRef(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Model: "qwen/qwen3-coder-next", ModelRef: "code-medium"}))
-}
-
-func TestValidateOrphanModelPassesCatalogRef(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Model: "cheap"}))
-}
-
-func TestValidateOrphanModelSkipsSubprocessHarness(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateOrphanModel(RunOptions{Harness: "claude", Model: "claude-sonnet-4-6"}))
-}
-
-func TestValidateOrphanModelRejectsAgentHarnessPin(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	err := r.ValidateOrphanModel(RunOptions{Harness: "agent", Model: "qwen/qwen3-coder-next"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not in the catalog and no discovered provider")
-}
-
-func TestValidateForExecuteLoopOrphanModelErrors(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	err := r.ValidateForExecuteLoop("", "qwen/qwen3-coder-next", "", "")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not in the catalog and no discovered provider")
-}
-
-func TestValidateForExecuteLoopOrphanModelWithProviderPasses(t *testing.T) {
-	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, r.ValidateForExecuteLoop("", "qwen/qwen3-coder-next", "vidar-coder", ""))
-}
-
 func TestOSExecutor_NormalExit(t *testing.T) {
 	ex := &OSExecutor{}
 	ctx := context.Background()

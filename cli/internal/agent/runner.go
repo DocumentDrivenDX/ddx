@@ -33,13 +33,8 @@ type Runner struct {
 	LookPath      LookPathFunc // injected; defaults to exec.LookPath
 	AgentProvider interface{}  // injected agentlib.Provider for testing; nil = resolve from config
 
-	// WorkDir is the project root used for loading native agent config during
-	// provider discovery. Set by callers that need discovery-aware routing.
+	// WorkDir is the project root used for loading native agent config.
 	WorkDir string
-
-	// Discovery holds cached live provider discovery results. When non-nil,
-	// routing consults discovered models to resolve uncataloged model pins.
-	Discovery *DiscoveryResult
 }
 
 // NewRunner creates a runner with defaults.
@@ -88,52 +83,8 @@ func NewRunner(cfg Config) *Runner {
 	return r
 }
 
-// ValidateOrphanModel checks whether --model is an unroutable exact pin.
-// When --model is given but is not a known catalog ref, and neither --provider
-// nor --model-ref is set, the model cannot be routed unambiguously and must be
-// rejected before dispatch. This prevents silent fallback to the default provider.
-//
-// Subprocess harnesses (claude, codex, etc.) handle model routing natively via
-// their own CLI, so this validation is skipped when a non-agent harness is
-// explicitly specified in opts.Harness.
-func (r *Runner) ValidateOrphanModel(opts RunOptions) error {
-	if opts.Model == "" || opts.Provider != "" || opts.ModelRef != "" {
-		return nil
-	}
-	if opts.Harness != "" && opts.Harness != "agent" {
-		return nil
-	}
-	cat := r.catalog()
-	if cat.KnownOnAnySurface(opts.Model) {
-		return nil
-	}
-	// Check live provider discovery (exact and fuzzy) before erroring.
-	if r.Discovery == nil && r.WorkDir != "" {
-		if disc, err := DiscoverProviderModels(r.WorkDir, 5*time.Second); err == nil {
-			r.Discovery = disc
-		}
-	}
-	if r.Discovery != nil {
-		// Exact match on discovered providers.
-		if providers := r.Discovery.ProvidersForModel(opts.Model); len(providers) > 0 {
-			return nil
-		}
-		// Fuzzy prefix match on discovered models.
-		if resolved, _ := r.Discovery.FuzzyMatchModel(opts.Model); resolved != "" {
-			return nil
-		}
-	}
-	return fmt.Errorf("model %q is not in the catalog and no discovered provider serves it", opts.Model)
-}
-
 // Run invokes a single agent harness and returns the result.
 func (r *Runner) Run(opts RunOptions) (*Result, error) {
-	if r.AgentProvider == nil {
-		if err := r.ValidateOrphanModel(opts); err != nil {
-			return nil, err
-		}
-	}
-
 	harness, harnessName, err := r.resolveHarness(opts)
 	if err != nil {
 		return nil, err
@@ -290,10 +241,6 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 // Call this in execute-loop before starting the worker so failures are
 // surfaced before any beads are claimed rather than mid-execution.
 func (r *Runner) ValidateForExecuteLoop(harnessName, model, provider, modelRef string) error {
-	if err := r.ValidateOrphanModel(RunOptions{Harness: harnessName, Model: model, Provider: provider, ModelRef: modelRef}); err != nil {
-		return err
-	}
-
 	if harnessName == "" {
 		return nil // no explicit harness; routing will pick at claim time
 	}
