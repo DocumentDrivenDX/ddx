@@ -251,9 +251,8 @@ Examples:
 			//     provider/model was selected and why), tied to a specific bead ID.
 			var recentDecisions []recentRoutingDecision
 
-			r := f.agentRunner()
-			if r.Config.SessionLogDir != "" {
-				store := agent.NewRoutingMetricsStore(r.Config.SessionLogDir)
+			if logDir := agent.SessionLogDirForWorkDir(f.WorkingDir); logDir != "" {
+				store := agent.NewRoutingMetricsStore(logDir)
 				outcomes, _ := store.ReadOutcomes()
 				for _, o := range outcomes {
 					recentDecisions = append(recentDecisions, recentRoutingDecision{

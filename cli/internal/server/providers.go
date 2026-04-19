@@ -104,7 +104,6 @@ type ProviderDetail struct {
 func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	registry := agent.NewRegistry()
-	runner := s.workers.buildAgentRunner(s.WorkingDir)
 
 	statuses := registry.Discover()
 	statusByName := make(map[string]agent.HarnessStatus, len(statuses))
@@ -112,14 +111,14 @@ func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 		statusByName[st.Name] = st
 	}
 
-	metricsStore := metricsStoreFromRunner(runner, s.WorkingDir)
+	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 
 	result := make([]ProviderSummary, 0, len(registry.Names()))
 	for _, name := range registry.Names() {
 		harness, _ := registry.Get(name)
 		st := statusByName[name]
-		signal := runner.LoadRoutingSignalSnapshot(name, now)
+		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, name, now)
 		result = append(result, buildProviderSummary(name, harness, st, signal, outcomes, now))
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -141,7 +140,6 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	runner := s.workers.buildAgentRunner(s.WorkingDir)
 
 	statuses := registry.Discover()
 	var harnessStatus agent.HarnessStatus
@@ -152,8 +150,8 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	signal := runner.LoadRoutingSignalSnapshot(harnessName, now)
-	metricsStore := metricsStoreFromRunner(runner, s.WorkingDir)
+	signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, harnessName, now)
+	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 	burnSummaries, _ := metricsStore.ReadBurnSummaries()
 
@@ -166,7 +164,6 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 func (s *Server) mcpProviderList() mcpToolResult {
 	now := time.Now().UTC()
 	registry := agent.NewRegistry()
-	runner := s.workers.buildAgentRunner(s.WorkingDir)
 
 	statuses := registry.Discover()
 	statusByName := make(map[string]agent.HarnessStatus, len(statuses))
@@ -174,14 +171,14 @@ func (s *Server) mcpProviderList() mcpToolResult {
 		statusByName[st.Name] = st
 	}
 
-	metricsStore := metricsStoreFromRunner(runner, s.WorkingDir)
+	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 
 	result := make([]ProviderSummary, 0, len(registry.Names()))
 	for _, name := range registry.Names() {
 		harness, _ := registry.Get(name)
 		st := statusByName[name]
-		signal := runner.LoadRoutingSignalSnapshot(name, now)
+		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, name, now)
 		result = append(result, buildProviderSummary(name, harness, st, signal, outcomes, now))
 	}
 	data, err := json.Marshal(result)
@@ -202,7 +199,6 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	}
 
 	now := time.Now().UTC()
-	runner := s.workers.buildAgentRunner(s.WorkingDir)
 
 	statuses := registry.Discover()
 	var harnessStatus agent.HarnessStatus
@@ -213,8 +209,8 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 		}
 	}
 
-	signal := runner.LoadRoutingSignalSnapshot(harnessName, now)
-	metricsStore := metricsStoreFromRunner(runner, s.WorkingDir)
+	signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, harnessName, now)
+	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 	burnSummaries, _ := metricsStore.ReadBurnSummaries()
 
@@ -495,9 +491,10 @@ func computeProviderBurnEstimate(
 
 // ---- Utility functions ----
 
-// metricsStoreFromRunner returns a RoutingMetricsStore using the runner's session log dir.
-func metricsStoreFromRunner(runner *agent.Runner, workingDir string) *agent.RoutingMetricsStore {
-	logDir := runner.Config.SessionLogDir
+// metricsStoreForWorkDir returns a RoutingMetricsStore using the project's
+// configured session log dir resolved against workingDir.
+func metricsStoreForWorkDir(workingDir string) *agent.RoutingMetricsStore {
+	logDir := agent.SessionLogDirForWorkDir(workingDir)
 	if logDir == "" {
 		logDir = agent.DefaultLogDir
 	}

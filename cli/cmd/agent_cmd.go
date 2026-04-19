@@ -86,28 +86,6 @@ Examples:
 	return cmd
 }
 
-func (f *CommandFactory) agentRunner() *agent.Runner {
-	cfg, err := config.LoadWithWorkingDir(f.WorkingDir)
-	if err != nil || cfg.Agent == nil {
-		r := agent.NewRunner(agent.Config{
-			SessionLogDir: agent.ResolveLogDir(f.WorkingDir, ""),
-		})
-		r.WorkDir = f.WorkingDir
-		return r
-	}
-	r := agent.NewRunner(agent.Config{
-		Harness:         cfg.Agent.Harness,
-		Model:           cfg.Agent.Model,
-		Models:          cfg.Agent.Models,
-		ReasoningLevels: cfg.Agent.ReasoningLevels,
-		TimeoutMS:       cfg.Agent.TimeoutMS,
-		SessionLogDir:   agent.ResolveLogDir(f.WorkingDir, cfg.Agent.SessionLogDir),
-		Permissions:     cfg.Agent.Permissions,
-	})
-	r.WorkDir = f.WorkingDir
-	return r
-}
-
 func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -467,8 +445,7 @@ func (f *CommandFactory) newAgentListCommand() *cobra.Command {
 		Short: "List available agent harnesses",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := f.agentRunner()
-			statuses := r.Registry.Discover()
+			statuses := agent.NewRegistry().Discover()
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
@@ -591,12 +568,11 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 		Short: "Check agent harness health",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := f.agentRunner()
 			checkConnectivity, _ := cmd.Flags().GetBool("connectivity")
 			checkRouting, _ := cmd.Flags().GetBool("routing")
 			timeoutStr, _ := cmd.Flags().GetString("timeout")
 			asJSON, _ := cmd.Flags().GetBool("json")
-			statuses := r.Registry.Discover()
+			statuses := agent.NewRegistry().Discover()
 
 			// Parse timeout (default 15s for connectivity checks)
 			probeTimeout := 15 * time.Second
@@ -611,8 +587,8 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				// Refresh quota snapshots via tmux if stale (>15m).
 				// This is the slow path — only called from doctor, not from routing.
 				now := time.Now()
-				_ = r.RefreshClaudeQuotaViaTmux(now, 15*time.Minute)
-				_ = r.RefreshCodexQuotaViaTmux(now, 15*time.Minute)
+				_ = agent.RefreshClaudeQuotaViaTmuxForWorkDir(f.WorkingDir, now, 15*time.Minute)
+				_ = agent.RefreshCodexQuotaViaTmuxForWorkDir(f.WorkingDir, now, 15*time.Minute)
 
 				type routingEntry struct {
 					Name  string             `json:"name"`
@@ -620,7 +596,7 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				}
 				var entries []routingEntry
 				for _, s := range statuses {
-					st := r.ProbeHarnessState(s.Name, probeTimeout)
+					st := agent.ProbeHarnessStateForWorkDir(f.WorkingDir, s.Name, probeTimeout)
 					entries = append(entries, routingEntry{Name: s.Name, State: st})
 				}
 				if asJSON {
@@ -764,11 +740,7 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 		Short: "Show agent session history",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := f.agentRunner()
-			logDir := r.Config.SessionLogDir
-			if !filepath.IsAbs(logDir) {
-				logDir = filepath.Join(f.WorkingDir, logDir)
-			}
+			logDir := agent.SessionLogDirForWorkDir(f.WorkingDir)
 			logFile := logDir + "/sessions.jsonl"
 
 			data, err := os.ReadFile(logFile)

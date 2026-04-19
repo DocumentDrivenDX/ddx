@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	ddxagent "github.com/DocumentDrivenDX/ddx/internal/agent"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/spf13/cobra"
 )
@@ -82,9 +83,20 @@ func (f *CommandFactory) execStore() *ddxexec.Store {
 	if f.AgentRunnerOverride != nil {
 		store.AgentRunner = f.AgentRunnerOverride
 	} else {
-		store.AgentRunner = f.agentRunner()
+		store.AgentRunner = serviceExecAgentRunner{workDir: f.WorkingDir}
 	}
 	return store
+}
+
+// serviceExecAgentRunner satisfies ddxexec.AgentRunner by dispatching through
+// agent.RunViaService. It replaces the retired f.agentRunner() factory which
+// constructed a *agent.Runner only to call its Run method.
+type serviceExecAgentRunner struct {
+	workDir string
+}
+
+func (s serviceExecAgentRunner) Run(opts ddxagent.RunOptions) (*ddxagent.Result, error) {
+	return ddxagent.RunViaService(opts.Context, s.workDir, opts)
 }
 
 func (f *CommandFactory) newExecListCommand() *cobra.Command {

@@ -200,6 +200,11 @@ type WorkerManager struct {
 }
 
 // AgentRunnerFactory creates an agent.Runner for a project. Override for testing.
+//
+// Deprecated: kept for test source compatibility while ddx-bc1e99ec retired the
+// buildAgentRunner constructor. The field is no longer consulted by production
+// code; tests that set it have no effect on observability paths, which now flow
+// through agent.LoadRoutingSignalSnapshotForWorkDir / RunViaService.
 type AgentRunnerFactory func(projectRoot string) *agent.Runner
 
 const (
@@ -667,30 +672,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	_ = m.writeRecord(dir, record)
 	handle.record = record
 	m.mu.Unlock()
-}
-
-func (m *WorkerManager) buildAgentRunner(projectRoot string) *agent.Runner {
-	if m.AgentRunnerFactory != nil {
-		return m.AgentRunnerFactory(projectRoot)
-	}
-
-	// Load project config so server workers respect the same settings as CLI commands.
-	cfg, err := config.LoadWithWorkingDir(projectRoot)
-	agentCfg := agent.Config{}
-	if err == nil && cfg.Agent != nil {
-		agentCfg.Harness = cfg.Agent.Harness
-		agentCfg.Model = cfg.Agent.Model
-		agentCfg.Models = cfg.Agent.Models
-		agentCfg.ReasoningLevels = cfg.Agent.ReasoningLevels
-		agentCfg.TimeoutMS = cfg.Agent.TimeoutMS
-		agentCfg.SessionLogDir = cfg.Agent.SessionLogDir
-		agentCfg.Permissions = cfg.Agent.Permissions
-	}
-	agentCfg.SessionLogDir = agent.ResolveLogDir(projectRoot, agentCfg.SessionLogDir)
-
-	r := agent.NewRunner(agentCfg)
-	r.WorkDir = projectRoot
-	return r
 }
 
 func (m *WorkerManager) List() ([]WorkerRecord, error) {

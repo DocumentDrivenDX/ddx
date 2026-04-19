@@ -114,11 +114,7 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 				return fmt.Errorf("invalid --since value: %w", err)
 			}
 
-			r := f.agentRunner()
-			logDir := r.Config.SessionLogDir
-			if logDir != "" && !filepath.IsAbs(logDir) {
-				logDir = filepath.Join(f.WorkingDir, logDir)
-			}
+			logDir := agent.SessionLogDirForWorkDir(f.WorkingDir)
 			rows, err := aggregateUsageFromRoutingMetrics(logDir, harness, sinceTime)
 			if err != nil {
 				return err
@@ -130,7 +126,7 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rows = enrichUsageRowsWithRoutingSignals(r, rows)
+			rows = enrichUsageRowsWithRoutingSignals(f.WorkingDir, rows)
 
 			switch format {
 			case "json":
@@ -325,12 +321,9 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 	return rows, nil
 }
 
-func enrichUsageRowsWithRoutingSignals(r *agent.Runner, rows []usageRow) []usageRow {
-	if r == nil {
-		return rows
-	}
+func enrichUsageRowsWithRoutingSignals(workDir string, rows []usageRow) []usageRow {
 	for i := range rows {
-		state := r.ProbeHarnessState(rows[i].Harness, 2*time.Second)
+		state := agent.ProbeHarnessStateForWorkDir(workDir, rows[i].Harness, 2*time.Second)
 		rows[i].QuotaState = state.QuotaState
 		if state.RoutingSignal == nil {
 			continue
