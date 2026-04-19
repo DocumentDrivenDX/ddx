@@ -1428,6 +1428,7 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().String("max-tier", "", "Maximum tier for auto-escalation: cheap, standard, or smart (default: smart)")
 	cmd.Flags().Bool("no-adaptive-min-tier", false, "Disable adaptive min-tier promotion based on trailing cheap-tier success rate")
 	cmd.Flags().Int("adaptive-min-tier-window", 50, "Trailing window size for adaptive min-tier evaluation")
+	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
 	return cmd
 }
 
@@ -1451,6 +1452,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	maxTier, _ := cmd.Flags().GetString("max-tier")
 	noAdaptiveMinTier, _ := cmd.Flags().GetBool("no-adaptive-min-tier")
 	adaptiveWindow, _ := cmd.Flags().GetInt("adaptive-min-tier-window")
+	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 
 	// Adaptive min-tier: when the operator did not pin --min-tier and adaptation
 	// is not disabled, consult trailing cheap-tier success rate and promote to
@@ -1522,6 +1524,43 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// runs a single attempt with the specified harness/model.
 	escalationEnabled := harness == "" && model == ""
 
+	// Cost-cap state shared by both the single-attempt and tier-escalation
+	// paths. Accumulated billed spend (excluding local and subscription
+	// providers) above --max-cost trips the cap and halts further bead
+	// claiming. See escalation.DefaultMaxCostUSD / CountsTowardCostCap.
+	costCap := escalation.NewCostCapTracker(maxCostUSD, func(harnessName string) bool {
+		// Resolve the harness's billing class via the service. Treat any
+		// resolution error as "count by default" (safe — we'd rather cap
+		// early than silently overshoot).
+		svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+		if svcErr != nil {
+			return true
+		}
+		infos, err := svc.ListHarnesses(context.Background())
+		if err != nil {
+			return true
+		}
+		for _, h := range infos {
+			if h.Name == harnessName {
+				return escalation.CountsTowardCostCap(h.IsLocal, h.IsSubscription, h.CostClass)
+			}
+		}
+		return true
+	})
+	accumulateBilledCost := func(report agent.ExecuteBeadReport) {
+		costCap.Add(report.Harness, report.CostUSD)
+	}
+	costCapTripped := func() (agent.ExecuteBeadReport, bool) {
+		detail, tripped := costCap.Tripped()
+		if !tripped {
+			return agent.ExecuteBeadReport{}, false
+		}
+		return agent.ExecuteBeadReport{
+			Status: agent.ExecuteBeadStatusExecutionFailed,
+			Detail: detail,
+		}, true
+	}
+
 	// singleTierAttempt runs one execution attempt with an explicit harness
 	// and model. It is called both by the non-escalating path and by each
 	// iteration of the tier escalation loop.
@@ -1587,6 +1626,13 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		Store:    store,
 		Reviewer: reviewer,
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			// Stop AT THE START of each new bead claim if the cost cap has
+			// already tripped — otherwise we'd burn one extra attempt before
+			// halting the queue.
+			if cappedReport, capped := costCapTripped(); capped {
+				cappedReport.BeadID = beadID
+				return cappedReport, nil
+			}
 			if !escalationEnabled {
 				// Single-attempt path: --harness or --model was specified.
 				// Route dynamically when no harness is pinned.
@@ -1605,7 +1651,15 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 						}
 					}
 				}
-				return singleTierAttempt(ctx, beadID, "", resolvedHarness, model)
+				report, err := singleTierAttempt(ctx, beadID, "", resolvedHarness, model)
+				if err == nil {
+					accumulateBilledCost(report)
+					if cappedReport, capped := costCapTripped(); capped {
+						cappedReport.BeadID = beadID
+						return cappedReport, nil
+					}
+				}
+				return report, err
 			}
 
 			// Tier escalation path: try cheap → standard → smart (bounded by
@@ -1701,7 +1755,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				})
 
 				if report.Status == agent.ExecuteBeadStatusSuccess {
+					accumulateBilledCost(report)
 					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, string(tier), time.Now().UTC())
+					if cappedReport, capped := costCapTripped(); capped {
+						cappedReport.BeadID = beadID
+						return cappedReport, nil
+					}
 					return report, nil
 				}
 				if !escalation.ShouldEscalate(report.Status) {
@@ -1709,15 +1768,36 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
 					return report, nil
 				}
+				// Infrastructure failures don't consume escalation budget;
+				// defer the bead with a retry-after instead of burning a
+				// more expensive tier on a problem the model can't fix.
+				if escalation.IsInfrastructureFailure(report.Status, report.Detail) {
+					accumulateBilledCost(report)
+					retryAt := time.Now().UTC().Add(escalation.ProviderCooldownDuration)
+					report.RetryAfter = retryAt.Format(time.RFC3339)
+					report.Detail = "infrastructure failure (deferred): " + report.Detail
+					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
+					if cappedReport, capped := costCapTripped(); capped {
+						cappedReport.BeadID = beadID
+						return cappedReport, nil
+					}
+					return report, nil
+				}
 
-				// Execution-level failure: mark harness unhealthy so the next
-				// tier attempt (and parallel workers) skip it during cooldown.
+				// Execution-level model-capability failure: mark harness
+				// unhealthy + accumulate cost + escalate to the next tier.
+				accumulateBilledCost(report)
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
 					escalation.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(escalation.ProviderCooldownDuration))
 				}
 			}
 
 			_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
+
+			if cappedReport, capped := costCapTripped(); capped {
+				cappedReport.BeadID = beadID
+				return cappedReport, nil
+			}
 
 			if lastReport.BeadID == "" {
 				return agent.ExecuteBeadReport{

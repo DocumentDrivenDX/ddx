@@ -425,9 +425,56 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// escalationEnabled when neither Harness nor Model is pinned.
 		escalationEnabled := spec.Harness == "" && spec.Model == ""
 
+		// Cost-cap state shared by both single-attempt and tier-escalation
+		// paths within this worker run. Subscription / local providers do
+		// not contribute (see escalation.CountsTowardCostCap).
+		// TODO(ddx-785d02f7): expose maxCostUSD as a worker spec field
+		// once the spec config knob lands.
+		costCap := escalation.NewCostCapTracker(escalation.DefaultMaxCostUSD, func(harnessName string) bool {
+			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
+			if svcErr != nil {
+				return true
+			}
+			infos, err := svc.ListHarnesses(context.Background())
+			if err != nil {
+				return true
+			}
+			for _, h := range infos {
+				if h.Name == harnessName {
+					return escalation.CountsTowardCostCap(h.IsLocal, h.IsSubscription, h.CostClass)
+				}
+			}
+			return true
+		})
+		accumulateBilledCost := func(report agent.ExecuteBeadReport) {
+			costCap.Add(report.Harness, report.CostUSD)
+		}
+		costCapTripped := func() (agent.ExecuteBeadReport, bool) {
+			detail, tripped := costCap.Tripped()
+			if !tripped {
+				return agent.ExecuteBeadReport{}, false
+			}
+			return agent.ExecuteBeadReport{
+				Status: agent.ExecuteBeadStatusExecutionFailed,
+				Detail: detail,
+			}, true
+		}
+
 		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			if cappedReport, capped := costCapTripped(); capped {
+				cappedReport.BeadID = beadID
+				return cappedReport, nil
+			}
 			if !escalationEnabled {
-				return singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Model)
+				report, err := singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Model)
+				if err == nil {
+					accumulateBilledCost(report)
+					if cappedReport, capped := costCapTripped(); capped {
+						cappedReport.BeadID = beadID
+						return cappedReport, nil
+					}
+				}
+				return report, err
 			}
 
 			// Tier escalation: cheap → standard → smart (bounded by MinTier/MaxTier).
@@ -515,19 +562,44 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				})
 
 				if report.Status == agent.ExecuteBeadStatusSuccess {
+					accumulateBilledCost(report)
 					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, string(tier), time.Now().UTC())
+					if cappedReport, capped := costCapTripped(); capped {
+						cappedReport.BeadID = beadID
+						return cappedReport, nil
+					}
 					return report, nil
 				}
 				if !escalation.ShouldEscalate(report.Status) {
 					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
 					return report, nil
 				}
+				// Infrastructure failures don't consume escalation budget;
+				// defer the bead with a retry-after instead of escalating.
+				if escalation.IsInfrastructureFailure(report.Status, report.Detail) {
+					accumulateBilledCost(report)
+					retryAt := time.Now().UTC().Add(escalation.ProviderCooldownDuration)
+					report.RetryAfter = retryAt.Format(time.RFC3339)
+					report.Detail = "infrastructure failure (deferred): " + report.Detail
+					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
+					if cappedReport, capped := costCapTripped(); capped {
+						cappedReport.BeadID = beadID
+						return cappedReport, nil
+					}
+					return report, nil
+				}
+				accumulateBilledCost(report)
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
 					escalation.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(escalation.ProviderCooldownDuration))
 				}
 			}
 
 			_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
+
+			if cappedReport, capped := costCapTripped(); capped {
+				cappedReport.BeadID = beadID
+				return cappedReport, nil
+			}
 
 			if lastReport.BeadID == "" {
 				return agent.ExecuteBeadReport{
