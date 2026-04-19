@@ -70,12 +70,13 @@ func auditPluginRoot(root string, pkg *Package) []ValidationIssue {
 		})
 	}
 
-	for _, symlinkIssue := range auditBrokenSymlinks(root) {
+	ignoredBrokenSymlinkPaths := collectIgnoredBrokenSymlinkPaths(root, pkg)
+	for _, symlinkIssue := range auditBrokenSymlinks(root, ignoredBrokenSymlinkPaths) {
 		issues = append(issues, symlinkIssue)
 	}
 
 	for _, skillRoot := range collectSkillRoots(root, pkg) {
-		issues = append(issues, auditSkillRoot(skillRoot)...)
+		issues = append(issues, auditSkillRoot(root, skillRoot)...)
 	}
 
 	for _, rel := range pkg.Install.Executable {
@@ -126,7 +127,7 @@ func auditRecordedFiles(entry InstalledEntry) []ValidationIssue {
 	return issues
 }
 
-func auditBrokenSymlinks(root string) []ValidationIssue {
+func auditBrokenSymlinks(root string, ignored map[string]bool) []ValidationIssue {
 	var issues []ValidationIssue
 	walkRoot := root
 	if resolved, err := filepath.EvalSymlinks(root); err == nil && resolved != "" {
@@ -152,6 +153,9 @@ func auditBrokenSymlinks(root string) []ValidationIssue {
 			return nil
 		}
 		if info.Mode()&os.ModeSymlink == 0 {
+			return nil
+		}
+		if ignored != nil && ignored[path] {
 			return nil
 		}
 
@@ -197,17 +201,39 @@ func collectSkillRoots(root string, pkg *Package) []string {
 	}
 
 	for _, mapping := range pkg.Install.Skills {
-		add(filepath.Join(root, filepath.FromSlash(mapping.Source)))
-	}
+		sourceRoot := filepath.Join(root, filepath.FromSlash(mapping.Source))
+		add(sourceRoot)
 
-	add(filepath.Join(root, "skills"))
-	add(filepath.Join(root, ".agents", "skills"))
-	add(filepath.Join(root, ".claude", "skills"))
+		cleanSource := filepath.Clean(filepath.FromSlash(mapping.Source))
+		switch cleanSource {
+		case filepath.Join(".agents", "skills"), filepath.Join(".claude", "skills"):
+			add(filepath.Join(root, "skills"))
+		}
+	}
 
 	return roots
 }
 
-func auditSkillRoot(root string) []ValidationIssue {
+func collectIgnoredBrokenSymlinkPaths(root string, pkg *Package) map[string]bool {
+	ignored := make(map[string]bool)
+	for _, mapping := range pkg.Install.Skills {
+		cleanSource := filepath.Clean(filepath.FromSlash(mapping.Source))
+		switch cleanSource {
+		case filepath.Join(".agents", "skills"), filepath.Join(".claude", "skills"):
+			skillRoot := filepath.Join(root, cleanSource)
+			entries, err := os.ReadDir(skillRoot)
+			if err != nil {
+				continue
+			}
+			for _, entry := range entries {
+				ignored[filepath.Join(skillRoot, entry.Name())] = true
+			}
+		}
+	}
+	return ignored
+}
+
+func auditSkillRoot(packageRoot, root string) []ValidationIssue {
 	var issues []ValidationIssue
 
 	info, err := os.Stat(root)
@@ -235,8 +261,12 @@ func auditSkillRoot(root string) []ValidationIssue {
 		}
 		if skillInfo.Mode()&os.ModeSymlink != 0 {
 			if _, err := os.Stat(skillPath); err != nil {
-				issues = append(issues, ValidationIssue{Path: skillPath, Message: fmt.Sprintf("broken symlink: %v", err)})
-				continue
+				if recovered := recoverSkillDir(packageRoot, root, entry.Name()); recovered != "" {
+					skillPath = recovered
+				} else {
+					issues = append(issues, ValidationIssue{Path: skillPath, Message: fmt.Sprintf("broken symlink: %v", err)})
+					continue
+				}
 			}
 		}
 		if !skillInfo.IsDir() && skillInfo.Mode()&os.ModeSymlink == 0 {
@@ -260,6 +290,23 @@ func auditSkillRoot(root string) []ValidationIssue {
 	}
 
 	return issues
+}
+
+func recoverSkillDir(packageRoot, skillRoot, skillName string) string {
+	candidate := filepath.Join(packageRoot, "skills", skillName)
+	if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		return candidate
+	}
+
+	if strings.HasSuffix(filepath.Clean(skillRoot), filepath.Join(".agents", "skills")) ||
+		strings.HasSuffix(filepath.Clean(skillRoot), filepath.Join(".claude", "skills")) {
+		candidate = filepath.Join(packageRoot, "skills", skillName)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+
+	return ""
 }
 
 func auditExecutable(root, rel string) []ValidationIssue {

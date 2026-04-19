@@ -108,7 +108,41 @@ func TestDoctorPluginsFlagSkipsResourceEntries(t *testing.T) {
 	assert.NotContains(t, output, "not a directory")
 }
 
-func TestDoctorPluginsFlagReportsSchemaAndSymlinkIssues(t *testing.T) {
+func TestDoctorPluginsFlagReportsManifestSchemaIssues(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "broken-plugin")
+	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: broken-plugin
+version: 1.0.0
+type: plugin
+source: https://example.com/broken-plugin
+api_version: 1
+`), 0o644))
+
+	state := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{
+				Name:    "broken-plugin",
+				Version: "1.0.0",
+				Type:    registry.PackageTypePlugin,
+				Source:  pluginRoot,
+				Files:   []string{pluginRoot},
+			},
+		},
+	}
+	require.NoError(t, registry.SaveState(state))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "missing required field `description`")
+}
+
+func TestDoctorPluginsFlagReportsSkillAndSymlinkIssues(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -117,9 +151,14 @@ func TestDoctorPluginsFlagReportsSchemaAndSymlinkIssues(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(pluginRoot, "skills", "missing-skill"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: broken-plugin
 version: 1.0.0
+description: Plugin used to drive doctor structural audits in tests
 type: plugin
 source: https://example.com/broken-plugin
 api_version: 1
+install:
+  skills:
+    - source: skills
+      target: .agents/skills
 `), 0o644))
 	require.NoError(t, os.Symlink("does-not-exist", filepath.Join(pluginRoot, "broken-link")))
 
@@ -142,7 +181,6 @@ api_version: 1
 
 	assert.Contains(t, output, "missing SKILL.md")
 	assert.Contains(t, output, "broken symlink")
-	assert.Contains(t, output, "missing required field `description`")
 }
 
 func executeWithStdoutCapture(t *testing.T, root *cobra.Command, args ...string) (string, error) {

@@ -326,6 +326,7 @@ func downloadAndExtract(url, destDir string) (string, error) {
 func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error) {
 	srcDir := filepath.Join(installedRoot, filepath.FromSlash(skill.Source))
 	dstDir := ExpandHome(skill.Target)
+	cleanSource := filepath.Clean(filepath.FromSlash(skill.Source))
 
 	entries, err := os.ReadDir(srcDir)
 	if os.IsNotExist(err) {
@@ -333,6 +334,14 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading skills dir %s: %w", srcDir, err)
+	}
+	if len(entries) == 0 && (cleanSource == filepath.Join(".agents", "skills") || cleanSource == filepath.Join(".claude", "skills")) {
+		fallbackDir := filepath.Join(installedRoot, "skills")
+		fallbackEntries, fallbackErr := os.ReadDir(fallbackDir)
+		if fallbackErr == nil {
+			srcDir = fallbackDir
+			entries = fallbackEntries
+		}
 	}
 
 	if err := os.MkdirAll(dstDir, 0755); err != nil {

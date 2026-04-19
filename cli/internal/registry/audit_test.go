@@ -115,18 +115,14 @@ install:
 	}
 
 	issues := AuditInstalledEntry(entry, nil)
-	var sawBrokenLink, sawMissingSkill bool
+	var sawBrokenLink bool
 	for _, issue := range issues {
 		if strings.Contains(issue.Error(), "broken symlink") {
 			sawBrokenLink = true
 		}
-		if strings.Contains(issue.Error(), "missing SKILL.md") {
-			sawMissingSkill = true
-		}
 	}
 
 	assert.True(t, sawBrokenLink, "expected broken symlink issue, got: %+v", issues)
-	assert.True(t, sawMissingSkill, "expected missing SKILL.md issue, got: %+v", issues)
 }
 
 func TestAuditInstalledEntryReportsBrokenPluginRootSymlinkAndManifestSchemaIssues(t *testing.T) {
@@ -155,4 +151,59 @@ func TestAuditInstalledEntryReportsBrokenPluginRootSymlinkAndManifestSchemaIssue
 
 	assert.True(t, sawBrokenRoot, "expected broken root symlink issue, got: %+v", issues)
 	assert.True(t, sawMissingManifest, "expected missing manifest issue, got: %+v", issues)
+}
+
+func TestValidatePackageStructure_AllowsRecoverableBrokenSkillSymlinks(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "skills", "helix-align"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "skills", "helix-align", "SKILL.md"), []byte(`---
+name: helix-align
+description: test skill
+---
+
+Test body.
+`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".agents", "skills"), 0o755))
+	require.NoError(t, os.Symlink("/nonexistent/build-machine/skills/helix-align", filepath.Join(root, ".agents", "skills", "helix-align")))
+
+	pkg := &Package{
+		Name:        "sample-plugin",
+		Version:     "1.0.0",
+		Description: "Sample plugin",
+		Type:        PackageTypePlugin,
+		Source:      "https://example.com/sample-plugin",
+		APIVersion:  "1",
+		Install: PackageInstall{
+			Skills: []InstallMapping{
+				{Source: ".agents/skills/", Target: ".agents/skills/"},
+			},
+		},
+	}
+
+	issues := ValidatePackageStructure(root, pkg)
+	assert.Empty(t, issues, "recoverable skill symlink stubs should not fail install validation: %+v", issues)
+}
+
+func TestValidatePackageStructure_IgnoresUninstalledSkillRoots(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "library"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "skills", "broken-skill"), 0o755))
+
+	pkg := &Package{
+		Name:        "sample-plugin",
+		Version:     "1.0.0",
+		Description: "Sample plugin",
+		Type:        PackageTypePlugin,
+		Source:      "https://example.com/sample-plugin",
+		APIVersion:  "1",
+		Install: PackageInstall{
+			Root: &InstallMapping{
+				Source: "library",
+				Target: ".ddx/plugins/sample-plugin",
+			},
+		},
+	}
+
+	issues := ValidatePackageStructure(root, pkg)
+	assert.Empty(t, issues, "non-installed top-level skills should not fail package validation: %+v", issues)
 }

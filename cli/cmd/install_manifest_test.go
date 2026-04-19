@@ -237,6 +237,50 @@ install:
 	assert.True(t, os.IsNotExist(statErr), "plugin root should not be created on validation failure")
 }
 
+func TestInstallPackageAllowsRecoverableBrokenSkillSymlinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	tarball := mustBuildInstallTarballWithRecoverableSkillLink(t, "sample-plugin-1.0.0", `name: sample-plugin
+version: 1.0.0
+description: Sample plugin
+type: plugin
+source: https://example.com/sample-plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/sample-plugin
+  skills:
+    - source: .agents/skills/
+      target: .agents/skills/
+`)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(tarball)
+	}))
+	defer server.Close()
+
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(workDir))
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	entry, installErr := registry.InstallPackage(&registry.Package{
+		Name:    "sample-plugin",
+		Version: "1.0.0",
+		Type:    registry.PackageTypePlugin,
+		Source:  server.URL,
+	})
+	require.NoError(t, installErr)
+	require.NotEmpty(t, entry.Files)
+
+	_, statErr := os.Stat(filepath.Join(workDir, ".agents", "skills", "helix-align", "SKILL.md"))
+	assert.NoError(t, statErr, "recoverable tarball skill link should install successfully")
+}
+
 func mustBuildInstallTarball(t *testing.T, rootName string, manifest string) []byte {
 	t.Helper()
 
@@ -271,6 +315,65 @@ func mustBuildInstallTarball(t *testing.T, rootName string, manifest string) []b
 	writeFile(filepath.Join(rootName, "package.yaml"), manifest)
 	writeDir(filepath.Join(rootName, "skills"))
 	writeDir(filepath.Join(rootName, "skills", "bad-skill"))
+
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return buf.Bytes()
+}
+
+func mustBuildInstallTarballWithRecoverableSkillLink(t *testing.T, rootName string, manifest string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+
+	writeDir := func(name string) {
+		t.Helper()
+		if !strings.HasSuffix(name, "/") {
+			name += "/"
+		}
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name:     name,
+			Mode:     0o755,
+			Typeflag: tar.TypeDir,
+		}))
+	}
+	writeFile := func(name, body string) {
+		t.Helper()
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name:     name,
+			Mode:     0o644,
+			Size:     int64(len(body)),
+			Typeflag: tar.TypeReg,
+		}))
+		_, err := tw.Write([]byte(body))
+		require.NoError(t, err)
+	}
+	writeSymlink := func(name, target string) {
+		t.Helper()
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name:     name,
+			Mode:     0o777,
+			Typeflag: tar.TypeSymlink,
+			Linkname: target,
+		}))
+	}
+
+	writeDir(rootName)
+	writeFile(filepath.Join(rootName, "package.yaml"), manifest)
+	writeDir(filepath.Join(rootName, "skills"))
+	writeDir(filepath.Join(rootName, "skills", "helix-align"))
+	writeFile(filepath.Join(rootName, "skills", "helix-align", "SKILL.md"), `---
+name: helix-align
+description: test skill
+---
+
+Test body.
+`)
+	writeDir(filepath.Join(rootName, ".agents"))
+	writeDir(filepath.Join(rootName, ".agents", "skills"))
+	writeSymlink(filepath.Join(rootName, ".agents", "skills", "helix-align"), "/nonexistent/build-machine/skills/helix-align")
 
 	require.NoError(t, tw.Close())
 	require.NoError(t, gz.Close())
