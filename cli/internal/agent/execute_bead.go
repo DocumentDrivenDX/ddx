@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
@@ -111,6 +112,16 @@ type ExecuteBeadOptions struct {
 	// after the worker writes the result. Failures never affect the bead
 	// outcome — see executions_mirror.go.
 	MirrorCfg *config.ExecutionsMirrorConfig
+	// Service, when non-nil, is the agentlib.DdxAgent used to dispatch the
+	// agent invocation. Production callers leave this nil — ExecuteBead
+	// constructs a fresh service from projectRoot via NewServiceFromWorkDir.
+	// Tests may inject a pre-built service to avoid loading provider config.
+	Service agentlib.DdxAgent
+	// AgentRunner, when non-nil, replaces the service-based dispatch path for
+	// the agent invocation. Production callers leave this nil. Tests use this
+	// seam to return canned *Result values without spinning up a real service
+	// or provider chain. When set, it takes precedence over Service.
+	AgentRunner AgentRunner
 }
 
 // GitOps abstracts the git operations required by the worker.
@@ -419,7 +430,13 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 //
 // Merge, UpdateRef, gate evaluation, preserve-ref management, and orphan
 // recovery are the parent's responsibility (see LandBeadResult, RecoverOrphans).
-func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts ExecuteBeadOptions, gitOps GitOps, runner AgentRunner) (*ExecuteBeadResult, error) {
+//
+// Agent dispatch: production callers leave opts.Service and opts.AgentRunner
+// nil. ExecuteBead constructs a fresh agentlib.DdxAgent from projectRoot via
+// NewServiceFromWorkDir and dispatches via RunViaServiceWith. Tests may set
+// opts.AgentRunner to inject a fake that returns canned Result values; when
+// set, it takes precedence over the service path.
+func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts ExecuteBeadOptions, gitOps GitOps) (*ExecuteBeadResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -495,7 +512,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
 
-	agentResult, agentErr := runner.Run(RunOptions{
+	runOpts := RunOptions{
 		Context:       ctx,
 		Harness:       opts.Harness,
 		Prompt:        "",
@@ -513,7 +530,9 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 			"attempt_id": attemptID,
 			"session_id": sessionID,
 		},
-	})
+	}
+
+	agentResult, agentErr := dispatchAgentRun(ctx, projectRoot, opts, runOpts)
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
@@ -744,6 +763,31 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	})
 
 	return res, nil
+}
+
+// dispatchAgentRun resolves how the agent invocation should be executed and
+// returns the resulting *Result. Resolution order:
+//  1. opts.AgentRunner (test injection seam) — used directly via runner.Run.
+//  2. opts.Service (pre-built service) — used via RunViaServiceWith.
+//  3. Fallback: construct a fresh service via NewServiceFromWorkDir(projectRoot)
+//     and dispatch via RunViaServiceWith.
+//
+// The script and virtual harnesses are DDx-side helpers that the agent service
+// does not implement; RunViaService and RunViaServiceWith both delegate those
+// to a private Runner internally, so they continue to work through this path.
+func dispatchAgentRun(ctx context.Context, projectRoot string, opts ExecuteBeadOptions, runOpts RunOptions) (*Result, error) {
+	if opts.AgentRunner != nil {
+		return opts.AgentRunner.Run(runOpts)
+	}
+	svc := opts.Service
+	if svc == nil {
+		built, err := NewServiceFromWorkDir(projectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("execute-bead: build agent service: %w", err)
+		}
+		svc = built
+	}
+	return RunViaServiceWith(ctx, svc, projectRoot, runOpts)
 }
 
 // populateWorkerStatus fills in the Status and Detail fields on a worker result

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
@@ -404,12 +405,20 @@ func reviewXMLEscape(s string) string {
 	return buf.String()
 }
 
-// DefaultBeadReviewer implements BeadReviewer using a local AgentRunner.
+// DefaultBeadReviewer implements BeadReviewer by dispatching the review
+// invocation through the agent service (or a test-injected runner).
 // It fetches the bead, builds the review prompt, and runs the reviewer agent.
 type DefaultBeadReviewer struct {
 	ProjectRoot string
 	BeadStore   BeadReader
-	Runner      AgentRunner
+	// Service, when non-nil, is the agentlib.DdxAgent used to dispatch the
+	// review invocation. Production callers leave this nil — ReviewBead
+	// constructs a fresh service from ProjectRoot via NewServiceFromWorkDir.
+	Service agentlib.DdxAgent
+	// Runner, when non-nil, replaces the service-based dispatch path. Used by
+	// tests to return canned *Result values without spinning up a real
+	// service. Takes precedence over Service.
+	Runner AgentRunner
 	// Harness and Model override the reviewer harness/model.
 	// When empty, Harness defaults to "claude" and Model is resolved
 	// from TierSmart for the chosen harness.
@@ -462,12 +471,14 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	}
 
 	start := time.Now()
-	result, runErr := r.Runner.Run(RunOptions{
+	runOpts := RunOptions{
+		Context: ctx,
 		Harness: reviewHarness,
 		Model:   reviewModel,
 		Prompt:  prompt,
 		WorkDir: r.ProjectRoot,
-	})
+	}
+	result, runErr := r.dispatchReviewRun(ctx, runOpts)
 
 	durationMS := int(time.Since(start).Milliseconds())
 	if runErr != nil {
@@ -547,6 +558,27 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		Error:     reviewRes.Error,
 	})
 	return reviewRes, nil
+}
+
+// dispatchReviewRun resolves how the review invocation should be executed.
+// Resolution order matches dispatchAgentRun:
+//  1. r.Runner (test injection seam) — used directly via Runner.Run.
+//  2. r.Service (pre-built service) — used via RunViaServiceWith.
+//  3. Fallback: construct a fresh service via NewServiceFromWorkDir(ProjectRoot)
+//     and dispatch via RunViaServiceWith.
+func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runOpts RunOptions) (*Result, error) {
+	if r.Runner != nil {
+		return r.Runner.Run(runOpts)
+	}
+	svc := r.Service
+	if svc == nil {
+		built, err := NewServiceFromWorkDir(r.ProjectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("reviewer: build agent service: %w", err)
+		}
+		svc = built
+	}
+	return RunViaServiceWith(ctx, svc, r.ProjectRoot, runOpts)
 }
 
 // gitShow runs `git show <rev>` with pathspec exclusions for execution-

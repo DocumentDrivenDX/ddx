@@ -24,10 +24,11 @@ func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	gitOps := &RealGitOps{}
 
 	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:    "script",
-		Model:      dirFile,
-		BeadEvents: beadStore,
-	}, gitOps, runner)
+		Harness:     "script",
+		Model:       dirFile,
+		BeadEvents:  beadStore,
+		AgentRunner: runner,
+	}, gitOps)
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
@@ -70,10 +71,11 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 	gitOps := &RealGitOps{}
 
 	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:    "script",
-		Model:      dirFile,
-		BeadEvents: nil,
-	}, gitOps, runner)
+		Harness:     "script",
+		Model:       dirFile,
+		BeadEvents:  nil,
+		AgentRunner: runner,
+	}, gitOps)
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
@@ -97,10 +99,11 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	orchGitOps := &RealOrchestratorGitOps{}
 
 	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:    "script",
-		Model:      dirFile,
-		BeadEvents: beadStore,
-	}, gitOps, runner)
+		Harness:     "script",
+		Model:       dirFile,
+		BeadEvents:  beadStore,
+		AgentRunner: runner,
+	}, gitOps)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 

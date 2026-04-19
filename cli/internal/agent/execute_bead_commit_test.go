@@ -280,9 +280,10 @@ func TestSynthesizeCommitMessage_InExecuteBead(t *testing.T) {
 	}
 
 	_, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness: "test-harness",
-		Model:   "test-model",
-	}, gitOps, &artifactTestAgentRunner{})
+		Harness:     "test-harness",
+		Model:       "test-model",
+		AgentRunner: &artifactTestAgentRunner{},
+	}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}

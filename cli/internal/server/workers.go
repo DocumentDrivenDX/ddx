@@ -370,7 +370,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 
 		// singleTierAttempt runs one execution at a specific harness/model.
 		singleTierAttempt := func(ctx context.Context, beadID string, tier agent.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
-			runner := m.buildAgentRunner(projectRoot)
 			gitOps := &agent.RealGitOps{}
 			res, err := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
 				Harness:    resolvedHarness,
@@ -379,7 +378,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				ModelRef:   spec.ModelRef,
 				Effort:     spec.Effort,
 				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-			}, gitOps, runner)
+			}, gitOps)
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err
 			}
@@ -554,7 +553,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			reviewer = &agent.DefaultBeadReviewer{
 				ProjectRoot: projectRoot,
 				BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-				Runner:      m.buildAgentRunner(projectRoot),
 				Harness:     spec.ReviewHarness,
 				Model:       spec.ReviewModel,
 			}

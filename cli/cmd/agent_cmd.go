@@ -1414,7 +1414,6 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
 			BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-			Runner:      f.agentRunner(),
 			Harness:     reviewHarness,
 			Model:       reviewModel,
 		}
@@ -1430,7 +1429,6 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// and model. It is called both by the non-escalating path and by each
 	// iteration of the tier escalation loop.
 	singleTierAttempt := func(ctx context.Context, beadID string, tier agent.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
-		runner := f.agentRunner()
 		gitOps := &agent.RealGitOps{}
 
 		res, execErr := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
@@ -1442,7 +1440,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			Effort:     effort,
 			BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			MirrorCfg:  loadExecutionsMirrorConfig(projectRoot),
-		}, gitOps, runner)
+		}, gitOps)
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr
 		}

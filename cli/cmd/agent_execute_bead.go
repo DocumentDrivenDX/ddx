@@ -140,11 +140,12 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		orchestratorGitOps = f.executeBeadOrchestratorGitOverride
 	}
 
-	var runner agent.AgentRunner
+	// Test injection seam: AgentRunnerOverride feeds canned *Result values
+	// from fakes without spinning up a real provider. Production callers
+	// leave this nil so ExecuteBead constructs an agent service from
+	// projectRoot internally.
 	if f.AgentRunnerOverride != nil {
-		runner = f.AgentRunnerOverride
-	} else {
-		runner = f.agentRunner()
+		workerOpts.AgentRunner = f.AgentRunnerOverride
 	}
 
 	// Preflight the orphan-model check before creating a worktree. Mirrors
@@ -163,7 +164,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	agent.RecoverOrphans(gitOps, projectRoot, beadID)
 
 	// Worker step: run the agent in an isolated worktree.
-	res, err := agent.ExecuteBead(cmd.Context(), projectRoot, beadID, workerOpts, gitOps, runner)
+	res, err := agent.ExecuteBead(cmd.Context(), projectRoot, beadID, workerOpts, gitOps)
 	if err != nil && res == nil {
 		return err
 	}

@@ -222,7 +222,7 @@ func TestExecuteBead_TriggersMirror(t *testing.T) {
 		},
 	}
 	res, err := ExecuteBead(context.Background(), projectRoot, beadID,
-		ExecuteBeadOptions{MirrorCfg: cfg}, gitOps, &artifactTestAgentRunner{})
+		ExecuteBeadOptions{MirrorCfg: cfg, AgentRunner: &artifactTestAgentRunner{}}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
