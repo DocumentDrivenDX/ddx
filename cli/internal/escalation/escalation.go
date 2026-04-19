@@ -1,4 +1,4 @@
-package agent
+package escalation
 
 import (
 	"encoding/json"
@@ -23,6 +23,22 @@ const AdaptiveMinTierThreshold = 0.20
 // we do not starve it on insufficient evidence.
 const AdaptiveMinTierMinSamples = 3
 
+// SuccessStatus mirrors agent.ExecuteBeadStatusSuccess. The agent package's
+// TestEscalatableStatusesMatchAgentVocab guard catches drift if either side
+// renames. Defined locally so escalation does not import agent.
+const SuccessStatus = "success"
+
+// EscalatableStatuses is the set of executor status strings that warrant
+// retrying with a higher tier. Mirrors a subset of agent.ExecuteBeadStatus*
+// strings; the agent package has a TestEscalatableStatusesMatchAgentVocab
+// guard (see agent/tier_escalation_alignment_test.go) to catch drift.
+var EscalatableStatuses = map[string]bool{
+	"execution_failed":      true,
+	"no_changes":            true,
+	"post_run_check_failed": true,
+	"land_conflict":         true,
+}
+
 // AdaptiveMinTierResult carries the recommendation from AdaptiveMinTier along
 // with the observed cheap-tier sample count and success rate so callers can
 // emit a log line explaining the decision.
@@ -40,6 +56,20 @@ type AdaptiveMinTierResult struct {
 	Skipped bool
 }
 
+// taskResultLite is a minimal projection of agent.ExecuteBeadResult that
+// captures only the fields AdaptiveMinTier needs. Defined locally so the
+// escalation package does not depend on the agent package.
+type taskResultLite struct {
+	Harness string `json:"harness"`
+	Model   string `json:"model"`
+	Outcome string `json:"outcome"`
+}
+
+// TierResolver resolves a (harness, tier) pair to a concrete model name. This
+// is normally agent.ResolveModelTier; injected as a parameter so the
+// escalation package does not import agent.
+type TierResolver func(harness string, tier ModelTier) string
+
 // AdaptiveMinTier inspects the most recent `window` entries under
 // workingDir/.ddx/executions/*/result.json, computes the cheap-tier trailing
 // success rate, and returns a recommendation:
@@ -49,12 +79,12 @@ type AdaptiveMinTierResult struct {
 //     TierStandard with Skipped=true.
 //   - Otherwise returns TierCheap with Skipped=false.
 //
-// A tier is identified by resolving (harness, model) back through
-// ResolveModelTier — attempts whose harness/model do not match any known
+// A tier is identified by resolving (harness, model) back through the
+// supplied resolver — attempts whose harness/model do not match any known
 // tier mapping are ignored for the purpose of this calculation. When
 // workingDir has no executions directory (e.g. a fresh project), the cheap
 // tier is kept in-range so a first run is not artificially restricted.
-func AdaptiveMinTier(workingDir string, window int) AdaptiveMinTierResult {
+func AdaptiveMinTier(workingDir string, window int, resolver TierResolver) AdaptiveMinTierResult {
 	execRoot := filepath.Join(workingDir, ".ddx", "executions")
 	entries, err := os.ReadDir(execRoot)
 	if err != nil {
@@ -83,14 +113,14 @@ func AdaptiveMinTier(workingDir string, window int) AdaptiveMinTierResult {
 		if err != nil {
 			continue
 		}
-		var res ExecuteBeadResult
+		var res taskResultLite
 		if err := json.Unmarshal(raw, &res); err != nil {
 			continue
 		}
 		if res.Harness == "" {
 			continue
 		}
-		tier := classifyAttemptTier(res.Harness, res.Model)
+		tier := classifyAttemptTier(res.Harness, res.Model, resolver)
 		if tier == "" {
 			continue
 		}
@@ -125,15 +155,16 @@ func AdaptiveMinTier(workingDir string, window int) AdaptiveMinTierResult {
 }
 
 // classifyAttemptTier returns the ModelTier that corresponds to a (harness,
-// model) pair by reverse-lookup against ResolveModelTier. Returns "" when
-// no tier in TierOrder matches — e.g. an ad-hoc model pin not present in
-// the catalog, which should not contribute to tier-level analytics.
-func classifyAttemptTier(harness, model string) ModelTier {
-	if harness == "" {
+// model) pair by reverse-lookup against the supplied resolver. Returns ""
+// when no tier in TierOrder matches — e.g. an ad-hoc model pin not present
+// in the catalog, which should not contribute to tier-level analytics. A
+// nil resolver is treated as no-match for every tier.
+func classifyAttemptTier(harness, model string, resolver TierResolver) ModelTier {
+	if harness == "" || resolver == nil {
 		return ""
 	}
 	for _, tier := range TierOrder {
-		if ResolveModelTier(harness, tier) == model {
+		if resolver(harness, tier) == model {
 			return tier
 		}
 	}
@@ -245,14 +276,7 @@ func TiersInRange(minTier, maxTier ModelTier) []ModelTier {
 // Structural failures (e.g. validation errors) do not escalate because a
 // smarter model cannot fix a malformed prompt or corrupted bead state.
 func ShouldEscalate(status string) bool {
-	switch status {
-	case ExecuteBeadStatusExecutionFailed,
-		ExecuteBeadStatusNoChanges,
-		ExecuteBeadStatusPostRunCheckFailed,
-		ExecuteBeadStatusLandConflict:
-		return true
-	}
-	return false
+	return EscalatableStatuses[status]
 }
 
 // FormatTierAttemptBody formats the body of a tier-attempt bead event.
@@ -300,7 +324,7 @@ type EscalationSummary struct {
 // pass "" when the escalation was exhausted, in which case winning_tier is
 // set to EscalationWinningExhausted. Total cost is the sum of all attempt
 // costs; wasted cost is the sum of attempts whose status is not
-// ExecuteBeadStatusSuccess.
+// SuccessStatus.
 func BuildEscalationSummary(attempts []TierAttemptRecord, winningTier string) EscalationSummary {
 	out := EscalationSummary{
 		TiersAttempted: append([]TierAttemptRecord{}, attempts...),
@@ -311,11 +335,18 @@ func BuildEscalationSummary(attempts []TierAttemptRecord, winningTier string) Es
 	}
 	for _, a := range attempts {
 		out.TotalCostUSD += a.CostUSD
-		if a.Status != ExecuteBeadStatusSuccess {
+		if a.Status != SuccessStatus {
 			out.WastedCostUSD += a.CostUSD
 		}
 	}
 	return out
+}
+
+// BeadEventAppender records append-only evidence events on a bead. Mirrors
+// agent.BeadEventAppender so escalation can append events without importing
+// agent. *bead.Store satisfies both interfaces.
+type BeadEventAppender interface {
+	AppendEvent(id string, event bead.BeadEvent) error
 }
 
 // AppendEscalationSummaryEvent writes a kind:escalation-summary event to the

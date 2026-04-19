@@ -1,4 +1,4 @@
-package agent
+package escalation
 
 import (
 	"encoding/json"
@@ -12,6 +12,40 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// --- Local mirrors of agent.ExecuteBeadStatus* so these tests do not import
+// the agent package. Their string values must stay in sync with
+// cli/internal/agent/execute_bead_status.go; the agent package's
+// TestEscalatableStatusesMatchAgentVocab guards against drift for the
+// statuses that drive escalation.
+const (
+	statusExecutionFailed            = "execution_failed"
+	statusNoChanges                  = "no_changes"
+	statusPostRunCheckFailed         = "post_run_check_failed"
+	statusLandConflict               = "land_conflict"
+	statusStructuralValidationFailed = "structural_validation_failed"
+	statusAlreadySatisfied           = "already_satisfied"
+	statusSuccess                    = "success"
+)
+
+// testResolver mimics agent.ResolveModelTier for the claude harness, which is
+// the only harness the AdaptiveMinTier tests exercise. Unknown (harness, tier)
+// pairs resolve to "" so ad-hoc model pins are correctly classified as
+// non-tier attempts.
+func testResolver(harness string, tier ModelTier) string {
+	if harness != "claude" {
+		return ""
+	}
+	switch tier {
+	case TierCheap:
+		return "claude-haiku-4-5"
+	case TierStandard:
+		return "claude-sonnet-4-6"
+	case TierSmart:
+		return "claude-opus-4-6"
+	}
+	return ""
+}
 
 // --- EscalationSummary ---
 
@@ -38,9 +72,9 @@ func (r *recordingAppender) AppendEvent(id string, event bead.BeadEvent) error {
 // with correct statuses, costs, and a winning_tier/wasted_cost_usd roll-up.
 func TestEscalationSummary(t *testing.T) {
 	attempts := []TierAttemptRecord{
-		{Tier: "cheap", Harness: "agent", Model: "cheap-model", Status: ExecuteBeadStatusExecutionFailed, CostUSD: 0.02, DurationMS: 1200},
-		{Tier: "standard", Harness: "codex", Model: "standard-model", Status: ExecuteBeadStatusNoChanges, CostUSD: 0.15, DurationMS: 3400},
-		{Tier: "smart", Harness: "claude", Model: "smart-model", Status: ExecuteBeadStatusSuccess, CostUSD: 0.80, DurationMS: 9000},
+		{Tier: "cheap", Harness: "agent", Model: "cheap-model", Status: statusExecutionFailed, CostUSD: 0.02, DurationMS: 1200},
+		{Tier: "standard", Harness: "codex", Model: "standard-model", Status: statusNoChanges, CostUSD: 0.15, DurationMS: 3400},
+		{Tier: "smart", Harness: "claude", Model: "smart-model", Status: statusSuccess, CostUSD: 0.80, DurationMS: 9000},
 	}
 
 	summary := BuildEscalationSummary(attempts, "smart")
@@ -49,9 +83,9 @@ func TestEscalationSummary(t *testing.T) {
 	assert.InDelta(t, 0.97, summary.TotalCostUSD, 1e-9)
 	assert.InDelta(t, 0.17, summary.WastedCostUSD, 1e-9, "cheap (0.02) + standard (0.15) wasted, smart succeeded")
 	assert.Equal(t, "cheap", summary.TiersAttempted[0].Tier)
-	assert.Equal(t, ExecuteBeadStatusExecutionFailed, summary.TiersAttempted[0].Status)
-	assert.Equal(t, ExecuteBeadStatusNoChanges, summary.TiersAttempted[1].Status)
-	assert.Equal(t, ExecuteBeadStatusSuccess, summary.TiersAttempted[2].Status)
+	assert.Equal(t, statusExecutionFailed, summary.TiersAttempted[0].Status)
+	assert.Equal(t, statusNoChanges, summary.TiersAttempted[1].Status)
+	assert.Equal(t, statusSuccess, summary.TiersAttempted[2].Status)
 
 	// Now wire through AppendEscalationSummaryEvent and verify the emitted
 	// event has kind:escalation-summary, a summary line, and a JSON body
@@ -75,7 +109,7 @@ func TestEscalationSummary(t *testing.T) {
 	assert.Equal(t, "cheap", decoded.TiersAttempted[0].Tier)
 	assert.Equal(t, "agent", decoded.TiersAttempted[0].Harness)
 	assert.Equal(t, "cheap-model", decoded.TiersAttempted[0].Model)
-	assert.Equal(t, ExecuteBeadStatusExecutionFailed, decoded.TiersAttempted[0].Status)
+	assert.Equal(t, statusExecutionFailed, decoded.TiersAttempted[0].Status)
 	assert.InDelta(t, 0.02, decoded.TiersAttempted[0].CostUSD, 1e-9)
 	assert.Equal(t, int64(1200), decoded.TiersAttempted[0].DurationMS)
 	assert.InDelta(t, 0.97, decoded.TotalCostUSD, 1e-9)
@@ -86,8 +120,8 @@ func TestEscalationSummary(t *testing.T) {
 // succeeded): winning_tier is "exhausted" and all costs are wasted.
 func TestEscalationSummaryExhausted(t *testing.T) {
 	attempts := []TierAttemptRecord{
-		{Tier: "cheap", Harness: "agent", Model: "c", Status: ExecuteBeadStatusExecutionFailed, CostUSD: 0.01, DurationMS: 900},
-		{Tier: "smart", Harness: "claude", Model: "s", Status: ExecuteBeadStatusExecutionFailed, CostUSD: 0.50, DurationMS: 7000},
+		{Tier: "cheap", Harness: "agent", Model: "c", Status: statusExecutionFailed, CostUSD: 0.01, DurationMS: 900},
+		{Tier: "smart", Harness: "claude", Model: "s", Status: statusExecutionFailed, CostUSD: 0.50, DurationMS: 7000},
 	}
 	summary := BuildEscalationSummary(attempts, "")
 	assert.Equal(t, EscalationWinningExhausted, summary.WinningTier)
@@ -100,7 +134,7 @@ func TestEscalationSummaryExhausted(t *testing.T) {
 // mutating the caller's slice must not change the summary.
 func TestEscalationSummaryBuildSourceSliceIndependent(t *testing.T) {
 	attempts := []TierAttemptRecord{
-		{Tier: "cheap", Status: ExecuteBeadStatusSuccess, CostUSD: 0.05},
+		{Tier: "cheap", Status: statusSuccess, CostUSD: 0.05},
 	}
 	summary := BuildEscalationSummary(attempts, "cheap")
 	attempts[0].Tier = "mutated"
@@ -146,31 +180,31 @@ func TestTiersInRangeDoesNotMutateTierOrder(t *testing.T) {
 // --- ShouldEscalate ---
 
 func TestShouldEscalateExecutionFailed(t *testing.T) {
-	assert.True(t, ShouldEscalate(ExecuteBeadStatusExecutionFailed))
+	assert.True(t, ShouldEscalate(statusExecutionFailed))
 }
 
 func TestShouldEscalateNoChanges(t *testing.T) {
-	assert.True(t, ShouldEscalate(ExecuteBeadStatusNoChanges))
+	assert.True(t, ShouldEscalate(statusNoChanges))
 }
 
 func TestShouldEscalatePostRunCheckFailed(t *testing.T) {
-	assert.True(t, ShouldEscalate(ExecuteBeadStatusPostRunCheckFailed))
+	assert.True(t, ShouldEscalate(statusPostRunCheckFailed))
 }
 
 func TestShouldEscalateLandConflict(t *testing.T) {
-	assert.True(t, ShouldEscalate(ExecuteBeadStatusLandConflict))
+	assert.True(t, ShouldEscalate(statusLandConflict))
 }
 
 func TestShouldEscalateSuccessIsFalse(t *testing.T) {
-	assert.False(t, ShouldEscalate(ExecuteBeadStatusSuccess))
+	assert.False(t, ShouldEscalate(statusSuccess))
 }
 
 func TestShouldEscalateStructuralValidationIsFalse(t *testing.T) {
-	assert.False(t, ShouldEscalate(ExecuteBeadStatusStructuralValidationFailed))
+	assert.False(t, ShouldEscalate(statusStructuralValidationFailed))
 }
 
 func TestShouldEscalateAlreadySatisfiedIsFalse(t *testing.T) {
-	assert.False(t, ShouldEscalate(ExecuteBeadStatusAlreadySatisfied))
+	assert.False(t, ShouldEscalate(statusAlreadySatisfied))
 }
 
 // --- ProviderHealthTracker ---
@@ -235,6 +269,18 @@ func TestFormatTierAttemptBodyNoProbeNoDetail(t *testing.T) {
 
 // --- AdaptiveMinTier ---
 
+// adaptiveFixture is the JSON shape AdaptiveMinTier reads from
+// .ddx/executions/<ts>/result.json. It is a subset of agent.ExecuteBeadResult
+// — escalation's taskResultLite reads Harness/Model/Outcome only — but the
+// test writes BeadID too so result.json files remain recognizable to
+// ad-hoc inspection.
+type adaptiveFixture struct {
+	BeadID  string `json:"bead_id"`
+	Harness string `json:"harness"`
+	Model   string `json:"model"`
+	Outcome string `json:"outcome"`
+}
+
 // writeAdaptiveFixture writes a result.json for a synthetic attempt under
 // workingDir/.ddx/executions/<ts>/result.json. The `seq` parameter seeds the
 // timestamp so the lexicographic ordering matches chronological order.
@@ -243,7 +289,7 @@ func writeAdaptiveFixture(t *testing.T, workingDir string, seq int, harness, mod
 	ts := fmt.Sprintf("20260101T%06d-%08x", seq, seq)
 	dir := filepath.Join(workingDir, ".ddx", "executions", ts)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
-	res := ExecuteBeadResult{
+	res := adaptiveFixture{
 		BeadID:  fmt.Sprintf("bead-%d", seq),
 		Harness: harness,
 		Model:   model,
@@ -256,7 +302,7 @@ func writeAdaptiveFixture(t *testing.T, workingDir string, seq int, harness, mod
 
 func TestAdaptiveMinTierNoExecutionsReturnsCheap(t *testing.T) {
 	dir := t.TempDir()
-	got := AdaptiveMinTier(dir, 50)
+	got := AdaptiveMinTier(dir, 50, testResolver)
 	assert.Equal(t, TierCheap, got.Tier)
 	assert.False(t, got.Skipped)
 	assert.Equal(t, 0, got.CheapAttempts)
@@ -270,7 +316,7 @@ func TestAdaptiveMinTierCheapSuccessBelowThresholdPromotesToStandard(t *testing.
 	}
 	writeAdaptiveFixture(t, dir, 9, "claude", "claude-haiku-4-5", "task_succeeded")
 
-	got := AdaptiveMinTier(dir, 50)
+	got := AdaptiveMinTier(dir, 50, testResolver)
 	assert.Equal(t, TierStandard, got.Tier)
 	assert.True(t, got.Skipped)
 	assert.Equal(t, 10, got.CheapAttempts)
@@ -287,7 +333,7 @@ func TestAdaptiveMinTierCheapSuccessAboveThresholdStaysCheap(t *testing.T) {
 		writeAdaptiveFixture(t, dir, i, "claude", "claude-haiku-4-5", "task_failed")
 	}
 
-	got := AdaptiveMinTier(dir, 50)
+	got := AdaptiveMinTier(dir, 50, testResolver)
 	assert.Equal(t, TierCheap, got.Tier)
 	assert.False(t, got.Skipped)
 	assert.Equal(t, 10, got.CheapAttempts)
@@ -303,7 +349,7 @@ func TestAdaptiveMinTierAtThresholdStaysCheap(t *testing.T) {
 	}
 	writeAdaptiveFixture(t, dir, 4, "claude", "claude-haiku-4-5", "task_succeeded")
 
-	got := AdaptiveMinTier(dir, 50)
+	got := AdaptiveMinTier(dir, 50, testResolver)
 	assert.Equal(t, TierCheap, got.Tier)
 	assert.False(t, got.Skipped)
 	assert.InDelta(t, 0.20, got.CheapSuccessRate, 0.001)
@@ -316,7 +362,7 @@ func TestAdaptiveMinTierInsufficientSamplesStaysCheap(t *testing.T) {
 	writeAdaptiveFixture(t, dir, 0, "claude", "claude-haiku-4-5", "task_failed")
 	writeAdaptiveFixture(t, dir, 1, "claude", "claude-haiku-4-5", "task_failed")
 
-	got := AdaptiveMinTier(dir, 50)
+	got := AdaptiveMinTier(dir, 50, testResolver)
 	assert.Equal(t, TierCheap, got.Tier)
 	assert.False(t, got.Skipped)
 	assert.Equal(t, 2, got.CheapAttempts)
@@ -334,13 +380,13 @@ func TestAdaptiveMinTierWindowTruncatesToRecent(t *testing.T) {
 	}
 
 	// Window of 10 sees only the recent failing batch — cheap-tier rate is 0.
-	got := AdaptiveMinTier(dir, 10)
+	got := AdaptiveMinTier(dir, 10, testResolver)
 	assert.Equal(t, TierStandard, got.Tier)
 	assert.True(t, got.Skipped)
 	assert.Equal(t, 10, got.CheapAttempts)
 
 	// Window of 20 sees the whole span — cheap-tier rate is 50%, stays cheap.
-	got = AdaptiveMinTier(dir, 20)
+	got = AdaptiveMinTier(dir, 20, testResolver)
 	assert.Equal(t, TierCheap, got.Tier)
 	assert.False(t, got.Skipped)
 	assert.Equal(t, 20, got.CheapAttempts)
@@ -360,7 +406,7 @@ func TestAdaptiveMinTierIgnoresNonCheapAttempts(t *testing.T) {
 		writeAdaptiveFixture(t, dir, i, "claude", "claude-haiku-4-5", "task_failed")
 	}
 
-	got := AdaptiveMinTier(dir, 50)
+	got := AdaptiveMinTier(dir, 50, testResolver)
 	assert.Equal(t, TierStandard, got.Tier)
 	assert.True(t, got.Skipped)
 	assert.Equal(t, 4, got.CheapAttempts)
@@ -374,7 +420,7 @@ func TestAdaptiveMinTierIgnoresUnknownHarnessModel(t *testing.T) {
 		writeAdaptiveFixture(t, dir, i, "claude", "some-custom-pin-v1", "task_failed")
 	}
 
-	got := AdaptiveMinTier(dir, 50)
+	got := AdaptiveMinTier(dir, 50, testResolver)
 	assert.Equal(t, TierCheap, got.Tier)
 	assert.False(t, got.Skipped)
 	assert.Equal(t, 0, got.CheapAttempts, "attempts with non-catalog models must not count")

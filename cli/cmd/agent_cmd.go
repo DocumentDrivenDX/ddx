@@ -20,6 +20,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
@@ -1443,12 +1444,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// standard when the cheap tier has been nearly pure waste. This saves the
 	// queue from burning time and budget on attempts that almost never succeed.
 	if minTier == "" && !noAdaptiveMinTier {
-		adaptive := agent.AdaptiveMinTier(projectRoot, adaptiveWindow)
+		adaptive := escalation.AdaptiveMinTier(projectRoot, adaptiveWindow, agent.ResolveModelTier)
 		if adaptive.Skipped {
 			minTier = string(adaptive.Tier)
 			fmt.Fprintf(cmd.OutOrStdout(),
 				"adaptive min-tier: skipping cheap tier (trailing success rate %.2f over %d attempts; threshold %.2f) — min-tier=%s\n",
-				adaptive.CheapSuccessRate, adaptive.CheapAttempts, agent.AdaptiveMinTierThreshold, minTier)
+				adaptive.CheapSuccessRate, adaptive.CheapAttempts, escalation.AdaptiveMinTierThreshold, minTier)
 		}
 	}
 
@@ -1511,7 +1512,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// singleTierAttempt runs one execution attempt with an explicit harness
 	// and model. It is called both by the non-escalating path and by each
 	// iteration of the tier escalation loop.
-	singleTierAttempt := func(ctx context.Context, beadID string, tier agent.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
+	singleTierAttempt := func(ctx context.Context, beadID string, tier escalation.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
 
 		res, execErr := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
@@ -1600,7 +1601,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			// On escalatable failures, mark the harness unhealthy and try the
 			// next tier. A successful result or a non-escalatable failure
 			// (structural) terminates the loop early.
-			tiers := agent.TiersInRange(agent.ModelTier(minTier), agent.ModelTier(maxTier))
+			tiers := escalation.TiersInRange(escalation.ModelTier(minTier), escalation.ModelTier(maxTier))
 			if len(tiers) == 0 {
 				return agent.ExecuteBeadReport{
 					BeadID: beadID,
@@ -1620,7 +1621,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				}, nil
 			}
 			var lastReport agent.ExecuteBeadReport
-			var escalationAttempts []agent.TierAttemptRecord
+			var escalationAttempts []escalation.TierAttemptRecord
 
 			for _, tier := range tiers {
 				// Resolve the best harness for this tier via service.ResolveRoute.
@@ -1631,7 +1632,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				})
 				probeResult := "ok"
 				// Treat cooldown-marked harnesses as unavailable for this tier.
-				if routeErr == nil && !agent.GlobalProviderHealth.IsHealthy(dec.Harness) {
+				if routeErr == nil && !escalation.GlobalProviderHealth.IsHealthy(dec.Harness) {
 					routeErr = fmt.Errorf("provider cooldown")
 				}
 				if routeErr != nil {
@@ -1640,12 +1641,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
 						Kind:      "tier-attempt",
 						Summary:   "skipped",
-						Body:      agent.FormatTierAttemptBody(string(tier), "", "", probeResult, "no viable harness found"),
+						Body:      escalation.FormatTierAttemptBody(string(tier), "", "", probeResult, "no viable harness found"),
 						Actor:     assignee,
 						Source:    "ddx agent execute-loop",
 						CreatedAt: time.Now().UTC(),
 					})
-					escalationAttempts = append(escalationAttempts, agent.TierAttemptRecord{
+					escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
 						Tier:   string(tier),
 						Status: "skipped",
 					})
@@ -1667,7 +1668,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					report.ProbeResult = probeResult
 				}
 				lastReport = report
-				escalationAttempts = append(escalationAttempts, agent.TierAttemptRecord{
+				escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
 					Tier:       string(tier),
 					Harness:    report.Harness,
 					Model:      report.Model,
@@ -1680,30 +1681,30 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
 					Kind:      "tier-attempt",
 					Summary:   report.Status,
-					Body:      agent.FormatTierAttemptBody(string(tier), report.Harness, report.Model, probeResult, report.Detail),
+					Body:      escalation.FormatTierAttemptBody(string(tier), report.Harness, report.Model, probeResult, report.Detail),
 					Actor:     assignee,
 					Source:    "ddx agent execute-loop",
 					CreatedAt: time.Now().UTC(),
 				})
 
 				if report.Status == agent.ExecuteBeadStatusSuccess {
-					_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, string(tier), time.Now().UTC())
+					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, string(tier), time.Now().UTC())
 					return report, nil
 				}
-				if !agent.ShouldEscalate(report.Status) {
+				if !escalation.ShouldEscalate(report.Status) {
 					// Structural failure — escalation cannot help.
-					_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
+					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
 					return report, nil
 				}
 
 				// Execution-level failure: mark harness unhealthy so the next
 				// tier attempt (and parallel workers) skip it during cooldown.
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
-					agent.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(agent.ProviderCooldownDuration))
+					escalation.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(escalation.ProviderCooldownDuration))
 				}
 			}
 
-			_ = agent.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
+			_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
 
 			if lastReport.BeadID == "" {
 				return agent.ExecuteBeadReport{

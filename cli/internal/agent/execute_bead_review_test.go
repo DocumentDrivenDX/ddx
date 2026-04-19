@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,9 +78,9 @@ func TestParseReviewVerdict_ExtraWhitespace(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSelectReviewerTier_AlwaysSmart(t *testing.T) {
-	assert.Equal(t, TierSmart, SelectReviewerTier(TierCheap))
-	assert.Equal(t, TierSmart, SelectReviewerTier(TierStandard))
-	assert.Equal(t, TierSmart, SelectReviewerTier(TierSmart))
+	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierCheap))
+	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierStandard))
+	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierSmart))
 }
 
 // ---------------------------------------------------------------------------

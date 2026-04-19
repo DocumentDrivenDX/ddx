@@ -1,12 +1,7 @@
 package agent
 
-// ModelTier represents a quality/cost tier for model selection.
-type ModelTier string
-
-const (
-	TierSmart    ModelTier = "smart"    // top-tier foundation models; hard/broad tasks, interactive sessions, HELIX alignment
-	TierStandard ModelTier = "standard" // default for most builds; strong capability at reasonable cost
-	TierCheap    ModelTier = "cheap"    // mechanical tasks: extraction, formatting, simple transforms; minimize cost
+import (
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 )
 
 // harnessToSurface maps harness names to their catalog surface identifier.
@@ -21,7 +16,7 @@ var harnessToSurface = map[string]string{
 
 // ResolveModelTier returns the concrete model for a given harness and tier
 // by looking up the tier profile in BuiltinCatalog for the harness's surface.
-func ResolveModelTier(harness string, tier ModelTier) string {
+func ResolveModelTier(harness string, tier escalation.ModelTier) string {
 	surface, ok := harnessToSurface[harness]
 	if !ok {
 		return ""
@@ -32,24 +27,24 @@ func ResolveModelTier(harness string, tier ModelTier) string {
 
 // BenchmarkArm defines one arm in a benchmark run.
 type BenchmarkArm struct {
-	Label   string    `json:"label"`
-	Harness string    `json:"harness"`
-	Tier    ModelTier `json:"tier"`
-	Model   string    `json:"model,omitempty"` // explicit override; empty = resolve from tier
+	Label   string               `json:"label"`
+	Harness string               `json:"harness"`
+	Tier    escalation.ModelTier `json:"tier"`
+	Model   string               `json:"model,omitempty"` // explicit override; empty = resolve from tier
 }
 
 // DefaultBenchmarkArms returns the standard set of arms for a full comparison.
 func DefaultBenchmarkArms() []BenchmarkArm {
 	return []BenchmarkArm{
-		{Label: "agent-smart", Harness: "agent", Tier: TierSmart},
-		{Label: "agent-standard", Harness: "agent", Tier: TierStandard},
-		{Label: "agent-cheap", Harness: "agent", Tier: TierCheap},
-		{Label: "codex-smart", Harness: "codex", Tier: TierSmart},
-		{Label: "codex-standard", Harness: "codex", Tier: TierStandard},
-		{Label: "codex-cheap", Harness: "codex", Tier: TierCheap},
-		{Label: "claude-smart", Harness: "claude", Tier: TierSmart},
-		{Label: "claude-standard", Harness: "claude", Tier: TierStandard},
-		{Label: "claude-cheap", Harness: "claude", Tier: TierCheap},
+		{Label: "agent-smart", Harness: "agent", Tier: escalation.TierSmart},
+		{Label: "agent-standard", Harness: "agent", Tier: escalation.TierStandard},
+		{Label: "agent-cheap", Harness: "agent", Tier: escalation.TierCheap},
+		{Label: "codex-smart", Harness: "codex", Tier: escalation.TierSmart},
+		{Label: "codex-standard", Harness: "codex", Tier: escalation.TierStandard},
+		{Label: "codex-cheap", Harness: "codex", Tier: escalation.TierCheap},
+		{Label: "claude-smart", Harness: "claude", Tier: escalation.TierSmart},
+		{Label: "claude-standard", Harness: "claude", Tier: escalation.TierStandard},
+		{Label: "claude-cheap", Harness: "claude", Tier: escalation.TierCheap},
 	}
 }
 

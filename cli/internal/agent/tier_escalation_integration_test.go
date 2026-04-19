@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,9 +36,9 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			callCount++
-			tier := TierCheap
+			tier := escalation.TierCheap
 			if callCount > 1 {
-				tier = TierStandard
+				tier = escalation.TierStandard
 			}
 			attemptTiers = append(attemptTiers, string(tier))
 
@@ -50,7 +51,7 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 				CreatedAt: time.Now().UTC(),
 			})
 
-			if tier == TierCheap {
+			if tier == escalation.TierCheap {
 				return ExecuteBeadReport{
 					BeadID:      beadID,
 					Tier:        string(tier),
@@ -165,14 +166,14 @@ func TestEscalationTierRecordedInFinalEvent(t *testing.T) {
 // both the CLI and server escalation paths.
 func TestMinTierMaxTierRangeHelpers(t *testing.T) {
 	// --min-tier standard --max-tier smart → [standard, smart]
-	tiers := TiersInRange(TierStandard, TierSmart)
-	assert.Equal(t, []ModelTier{TierStandard, TierSmart}, tiers)
+	tiers := escalation.TiersInRange(escalation.TierStandard, escalation.TierSmart)
+	assert.Equal(t, []escalation.ModelTier{escalation.TierStandard, escalation.TierSmart}, tiers)
 
 	// --min-tier cheap --max-tier cheap → [cheap] (single tier, cost control)
-	tiers = TiersInRange(TierCheap, TierCheap)
-	assert.Equal(t, []ModelTier{TierCheap}, tiers)
+	tiers = escalation.TiersInRange(escalation.TierCheap, escalation.TierCheap)
+	assert.Equal(t, []escalation.ModelTier{escalation.TierCheap}, tiers)
 
 	// defaults → full range
-	tiers = TiersInRange("", "")
-	assert.Equal(t, []ModelTier{TierCheap, TierStandard, TierSmart}, tiers)
+	tiers = escalation.TiersInRange("", "")
+	assert.Equal(t, []escalation.ModelTier{escalation.TierCheap, escalation.TierStandard, escalation.TierSmart}, tiers)
 }

@@ -15,6 +15,7 @@ import (
 
 	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 )
 
 // ReviewVerdict is the outcome of a post-merge bead review.
@@ -255,8 +256,8 @@ func synthesizeReviewACsFromRationale(verdict ReviewVerdict, rationale string) [
 // SelectReviewerTier returns the tier to use for the review agent.
 // Rule: max(impl_tier + 1, smart). Since smart is the ceiling, the
 // reviewer always runs at smart tier regardless of the implementation tier.
-func SelectReviewerTier(_ ModelTier) ModelTier {
-	return TierSmart
+func SelectReviewerTier(_ escalation.ModelTier) escalation.ModelTier {
+	return escalation.TierSmart
 }
 
 // HasBeadLabel reports whether label is present in labels.
@@ -467,7 +468,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	}
 	reviewModel := r.Model
 	if reviewModel == "" {
-		reviewModel = ResolveModelTier(reviewHarness, SelectReviewerTier(TierSmart))
+		reviewModel = ResolveModelTier(reviewHarness, SelectReviewerTier(escalation.TierSmart))
 	}
 
 	start := time.Now()
