@@ -445,21 +445,47 @@ func (f *CommandFactory) newAgentListCommand() *cobra.Command {
 		Short: "List available agent harnesses",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			statuses := agent.NewRegistry().Discover()
+			svc, err := agent.NewServiceFromWorkDir(f.WorkingDir)
+			if err != nil {
+				return fmt.Errorf("constructing agent service: %w", err)
+			}
+
+			ctx := context.Background()
+			harnesses, err := svc.ListHarnesses(ctx)
+			if err != nil {
+				return fmt.Errorf("listing harnesses: %w", err)
+			}
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
+				type harnessEntry struct {
+					Name      string `json:"name"`
+					Type      string `json:"type,omitempty"`
+					Available bool   `json:"available"`
+					Path      string `json:"path,omitempty"`
+					Error     string `json:"error,omitempty"`
+				}
+				entries := make([]harnessEntry, 0, len(harnesses))
+				for _, h := range harnesses {
+					entries = append(entries, harnessEntry{
+						Name:      h.Name,
+						Type:      h.Type,
+						Available: h.Available,
+						Path:      h.Path,
+						Error:     h.Error,
+					})
+				}
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(statuses)
+				return enc.Encode(entries)
 			}
 
-			for _, s := range statuses {
+			for _, h := range harnesses {
 				indicator := "x"
-				if s.Available {
+				if h.Available {
 					indicator = "ok"
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-12s [%s]  %s\n", s.Name, indicator, s.Binary)
+				fmt.Fprintf(cmd.OutOrStdout(), "%-12s [%s]  %s\n", h.Name, indicator, h.Path)
 			}
 			return nil
 		},
