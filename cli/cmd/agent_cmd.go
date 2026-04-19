@@ -619,14 +619,90 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 					return fmt.Errorf("agent doctor: listing harnesses: %w", listErr)
 				}
 
-				type routingEntry struct {
-					Name  string             `json:"name"`
-					State agent.HarnessState `json:"state"`
-				}
-				var entries []routingEntry
+				// Refresh quota caches via HealthCheck, then re-fetch harness list.
 				for _, h := range harnesses {
-					st := agent.ProbeHarnessStateForWorkDir(f.WorkingDir, h.Name, probeTimeout)
-					entries = append(entries, routingEntry{Name: h.Name, State: st})
+					_ = svc.HealthCheck(ctx, agentlib.HealthTarget{Type: "harness", Name: h.Name})
+				}
+				harnesses, listErr = svc.ListHarnesses(ctx)
+				if listErr != nil {
+					return fmt.Errorf("agent doctor: re-listing harnesses after health check: %w", listErr)
+				}
+
+				type routingState struct {
+					Installed           bool                              `json:"installed"`
+					Reachable           bool                              `json:"reachable"`
+					Authenticated       bool                              `json:"authenticated"`
+					QuotaOK             bool                              `json:"quota_ok"`
+					QuotaState          string                            `json:"quota_state,omitempty"`
+					Degraded            bool                              `json:"degraded"`
+					Error               string                            `json:"error,omitempty"`
+					Quota               *agent.QuotaInfo                  `json:"quota,omitempty"`
+					RoutingSignal       *agent.RoutingSignalSnapshot      `json:"routing_signal,omitempty"`
+					ClaudeQuotaDecision *agent.ClaudeQuotaRoutingDecision `json:"claude_quota_decision,omitempty"`
+					LastChecked         time.Time                         `json:"last_checked,omitempty"`
+				}
+				type routingEntry struct {
+					Name  string       `json:"name"`
+					State routingState `json:"state"`
+				}
+				now := time.Now()
+				var entries []routingEntry
+				for _, hi := range harnesses {
+					signal := agent.LoadRoutingSignalSnapshotForWorkDir(f.WorkingDir, hi.Name, now)
+					st := routingState{
+						Installed:   hi.Available,
+						LastChecked: now,
+					}
+					// Derive reachable/authenticated: HealthCheck already ran; available == reachable for harnesses.
+					st.Reachable = hi.Available
+					st.Authenticated = hi.Available
+					// Derive quota state from routing signal.
+					if signal.Provider != "" {
+						st.RoutingSignal = &signal
+						if signal.CurrentQuota.State != "" {
+							st.QuotaState = signal.CurrentQuota.State
+							st.QuotaOK = signal.CurrentQuota.State == "ok" || signal.CurrentQuota.State == "unknown"
+						}
+						if signal.CurrentQuota.State == "blocked" {
+							st.QuotaOK = false
+						}
+						if st.Quota == nil && signal.CurrentQuota.State != "unknown" && signal.CurrentQuota.State != "" {
+							st.Quota = &agent.QuotaInfo{
+								PercentUsed: signal.CurrentQuota.UsedPercent,
+								LimitWindow: fmt.Sprintf("%d min", signal.CurrentQuota.WindowMinutes),
+								ResetDate:   signal.CurrentQuota.ResetsAt,
+							}
+						}
+					}
+					// Supplement from HarnessInfo.Quota (refreshed by HealthCheck for claude/codex).
+					if hi.Quota != nil && len(hi.Quota.Windows) > 0 {
+						// Derive QuotaState from worst window.
+						for _, w := range hi.Quota.Windows {
+							if w.State == "blocked" {
+								st.QuotaState = "blocked"
+								st.QuotaOK = false
+								break
+							}
+						}
+					}
+					// For claude: consult durable quota cache for absolute headroom.
+					if hi.Name == "claude" {
+						decision := agent.ReadClaudeQuotaRoutingDecision(now, agent.DefaultClaudeQuotaStaleAfter)
+						st.ClaudeQuotaDecision = &decision
+						if decision.Fresh && !decision.PreferClaude {
+							st.QuotaOK = false
+							if st.QuotaState == "" || st.QuotaState == "unknown" || st.QuotaState == "ok" {
+								st.QuotaState = "blocked"
+							}
+						}
+					}
+					if st.QuotaState == "" {
+						st.QuotaState = "unknown"
+					}
+					if hi.Error != "" {
+						st.Error = hi.Error
+					}
+					entries = append(entries, routingEntry{Name: hi.Name, State: st})
 				}
 				if asJSON {
 					enc := json.NewEncoder(cmd.OutOrStdout())
