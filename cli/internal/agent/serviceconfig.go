@@ -7,6 +7,16 @@ import (
 	agentconfig "github.com/DocumentDrivenDX/agent/config"
 )
 
+// DefaultProviderRequestTimeout bounds a single Chat / ChatStream call.
+// Defeats RC4 of ddx-0a651925: a stalled TCP socket that has delivered
+// headers but stopped emitting body bytes would otherwise pin a goroutine
+// until the outer wall-clock (3h) frees it.
+const DefaultProviderRequestTimeout = 15 * time.Minute
+
+// DefaultProviderIdleReadTimeout bounds the maximum idle gap between stream
+// deltas. Used by service callers to bound idle reads on streaming providers.
+const DefaultProviderIdleReadTimeout = 5 * time.Minute
+
 // ServiceConfigAdapter wraps a loaded *agentconfig.Config so it satisfies
 // the agentlib.ServiceConfig interface defined by CONTRACT-003. Used by
 // every DDx command that constructs an agentlib.DdxAgent.

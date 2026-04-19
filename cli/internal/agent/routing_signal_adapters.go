@@ -491,7 +491,7 @@ func WriteClaudeFullQuotaSnapshot(path string, windows []QuotaWindow, acct *Acco
 	}
 	payload := claudeQuotaSnapshotFile{
 		ObservedAt:   now.UTC(),
-		Basis:        claudeTmuxSourceKind,
+		Basis:        "tmux-usage",
 		QuotaWindows: windows,
 		Account:      acct,
 	}
