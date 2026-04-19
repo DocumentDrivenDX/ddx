@@ -167,9 +167,8 @@ type workerHandle struct {
 
 // WorkerManager manages in-process execute-loop workers as goroutines.
 type WorkerManager struct {
-	projectRoot        string
-	rootDir            string
-	AgentRunnerFactory AgentRunnerFactory
+	projectRoot string
+	rootDir     string
 	// BeadWorkerFactory, when non-nil, is called by runWorker to create the
 	// ExecuteBeadWorker instead of building one from the real agent runner.
 	// Override in tests to inject a fake executor.
@@ -198,14 +197,6 @@ type WorkerManager struct {
 	watchdogOnce sync.Once
 	watchdogStop chan struct{}
 }
-
-// AgentRunnerFactory creates an agent.Runner for a project. Override for testing.
-//
-// Deprecated: kept for test source compatibility while ddx-bc1e99ec retired the
-// buildAgentRunner constructor. The field is no longer consulted by production
-// code; tests that set it have no effect on observability paths, which now flow
-// through agent.LoadRoutingSignalSnapshotForWorkDir / RunViaService.
-type AgentRunnerFactory func(projectRoot string) *agent.Runner
 
 const (
 	defaultWatchdogDeadline      = 6 * time.Hour
