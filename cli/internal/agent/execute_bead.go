@@ -361,11 +361,16 @@ func EvidenceReviewExcludePathspecs() []string {
 // when a commit was made, (false, nil) when nothing real remained to commit
 // after exclusions, and (false, err) on failure.
 func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
+	// Do NOT list already-gitignored paths (.ddx/agent-logs, .ddx/workers) as
+	// :(exclude) pathspecs. Git treats a path named by :(exclude) as explicitly
+	// referenced, so when the path is also .gitignored git emits "The following
+	// paths are ignored by one of your .gitignore files" AND exits 1 — even
+	// though the pathspec is trying to SKIP it. Paths already in .gitignore are
+	// excluded by default; excludes here are only for paths that would
+	// otherwise be tracked.
 	addArgs := []string{
 		"-C", dir, "add", "-A", "--",
 		".",
-		":(exclude).ddx/agent-logs",
-		":(exclude).ddx/workers",
 		":(exclude).ddx/executions/*/embedded",
 		":(exclude).ddx/executions/*/no_changes_rationale.txt",
 		":(exclude).claude/skills",
