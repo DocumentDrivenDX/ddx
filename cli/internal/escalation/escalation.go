@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -177,63 +176,11 @@ var TierOrder = []ModelTier{TierCheap, TierStandard, TierSmart}
 // ProviderCooldownDuration is how long an unhealthy harness is skipped before
 // re-probing. Five minutes gives most transient errors time to resolve without
 // locking out a provider for too long.
+//
+// Per-harness cooldown tracking moved to the upstream agent service in v0.8.0:
+// callers record failures via svc.RecordRouteAttempt and read cooldown state
+// via svc.RouteStatus's RouteCandidateStatus.Healthy (ddx-7bc0c8d5).
 const ProviderCooldownDuration = 5 * time.Minute
-
-// ProviderHealthTracker tracks process-local provider health with per-harness
-// cooldowns. When a harness probe fails (network error, 502, auth rejected),
-// the harness is marked unhealthy for ProviderCooldownDuration. Subsequent
-// routing attempts skip unhealthy harnesses so the queue can continue with
-// working providers.
-type ProviderHealthTracker struct {
-	mu        sync.Mutex
-	unhealthy map[string]time.Time // harness name → unhealthy until
-}
-
-// NewProviderHealthTracker creates an empty tracker.
-func NewProviderHealthTracker() *ProviderHealthTracker {
-	return &ProviderHealthTracker{unhealthy: make(map[string]time.Time)}
-}
-
-// GlobalProviderHealth is the process-local singleton shared across workers
-// and execute-loop iterations. One worker's probe result benefits all others
-// in the same process.
-var GlobalProviderHealth = NewProviderHealthTracker()
-
-// Mark marks harness as unhealthy until the given time.
-func (h *ProviderHealthTracker) Mark(harness string, until time.Time) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.unhealthy[harness] = until
-}
-
-// IsHealthy returns true when harness has no active cooldown.
-func (h *ProviderHealthTracker) IsHealthy(harness string) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	until, ok := h.unhealthy[harness]
-	if !ok {
-		return true
-	}
-	if time.Now().After(until) {
-		delete(h.unhealthy, harness)
-		return true
-	}
-	return false
-}
-
-// Snapshot returns a copy of active (not yet expired) cooldowns.
-func (h *ProviderHealthTracker) Snapshot() map[string]time.Time {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	now := time.Now()
-	out := make(map[string]time.Time, len(h.unhealthy))
-	for k, v := range h.unhealthy {
-		if v.After(now) {
-			out[k] = v
-		}
-	}
-	return out
-}
 
 // tierIndex returns the position of t in TierOrder, or -1 if not found.
 func tierIndex(t ModelTier) int {

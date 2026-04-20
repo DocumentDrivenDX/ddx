@@ -643,17 +643,16 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				}
 
 				type routingState struct {
-					Installed           bool                              `json:"installed"`
-					Reachable           bool                              `json:"reachable"`
-					Authenticated       bool                              `json:"authenticated"`
-					QuotaOK             bool                              `json:"quota_ok"`
-					QuotaState          string                            `json:"quota_state,omitempty"`
-					Degraded            bool                              `json:"degraded"`
-					Error               string                            `json:"error,omitempty"`
-					Quota               *agent.QuotaInfo                  `json:"quota,omitempty"`
-					RoutingSignal       *agent.RoutingSignalSnapshot      `json:"routing_signal,omitempty"`
-					ClaudeQuotaDecision *agent.ClaudeQuotaRoutingDecision `json:"claude_quota_decision,omitempty"`
-					LastChecked         time.Time                         `json:"last_checked,omitempty"`
+					Installed     bool                         `json:"installed"`
+					Reachable     bool                         `json:"reachable"`
+					Authenticated bool                         `json:"authenticated"`
+					QuotaOK       bool                         `json:"quota_ok"`
+					QuotaState    string                       `json:"quota_state,omitempty"`
+					Degraded      bool                         `json:"degraded"`
+					Error         string                       `json:"error,omitempty"`
+					Quota         *agent.QuotaInfo             `json:"quota,omitempty"`
+					RoutingSignal *agent.RoutingSignalSnapshot `json:"routing_signal,omitempty"`
+					LastChecked   time.Time                    `json:"last_checked,omitempty"`
 				}
 				type routingEntry struct {
 					Name  string       `json:"name"`
@@ -662,7 +661,6 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				now := time.Now()
 				var entries []routingEntry
 				for _, hi := range harnesses {
-					signal := agent.LoadRoutingSignalSnapshotForWorkDir(f.WorkingDir, hi.Name, now)
 					st := routingState{
 						Installed:   hi.Available,
 						LastChecked: now,
@@ -670,44 +668,49 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 					// Derive reachable/authenticated: HealthCheck already ran; available == reachable for harnesses.
 					st.Reachable = hi.Available
 					st.Authenticated = hi.Available
-					// Derive quota state from routing signal.
-					if signal.Provider != "" {
-						st.RoutingSignal = &signal
-						if signal.CurrentQuota.State != "" {
-							st.QuotaState = signal.CurrentQuota.State
-							st.QuotaOK = signal.CurrentQuota.State == "ok" || signal.CurrentQuota.State == "unknown"
+					st.QuotaOK = true
+					// Derive quota state from upstream HarnessInfo.Quota.
+					if hi.Quota != nil {
+						switch hi.Quota.Status {
+						case "ok":
+							st.QuotaState = "ok"
+						case "stale":
+							st.QuotaState = "ok"
 						}
-						if signal.CurrentQuota.State == "blocked" {
-							st.QuotaOK = false
-						}
-						if st.Quota == nil && signal.CurrentQuota.State != "unknown" && signal.CurrentQuota.State != "" {
-							st.Quota = &agent.QuotaInfo{
-								PercentUsed: signal.CurrentQuota.UsedPercent,
-								LimitWindow: fmt.Sprintf("%d min", signal.CurrentQuota.WindowMinutes),
-								ResetDate:   signal.CurrentQuota.ResetsAt,
+						if len(hi.Quota.Windows) > 0 {
+							// Report worst window as current quota for routing.
+							var worstPct int
+							var worstReset string
+							blocked := false
+							for _, w := range hi.Quota.Windows {
+								if w.LimitID == "extra" {
+									continue
+								}
+								if w.State == "blocked" {
+									blocked = true
+									worstReset = w.ResetsAt
+								}
+								if int(w.UsedPercent+0.5) > worstPct {
+									worstPct = int(w.UsedPercent + 0.5)
+								}
 							}
-						}
-					}
-					// Supplement from HarnessInfo.Quota (refreshed by HealthCheck for claude/codex).
-					if hi.Quota != nil && len(hi.Quota.Windows) > 0 {
-						// Derive QuotaState from worst window.
-						for _, w := range hi.Quota.Windows {
-							if w.State == "blocked" {
+							if blocked {
 								st.QuotaState = "blocked"
 								st.QuotaOK = false
-								break
+							}
+							if worstPct > 0 && st.Quota == nil {
+								st.Quota = &agent.QuotaInfo{
+									PercentUsed: worstPct,
+									ResetDate:   worstReset,
+								}
 							}
 						}
-					}
-					// For claude: consult durable quota cache for absolute headroom.
-					if hi.Name == "claude" {
-						decision := agent.ReadClaudeQuotaRoutingDecision(now, agent.DefaultClaudeQuotaStaleAfter)
-						st.ClaudeQuotaDecision = &decision
-						if decision.Fresh && !decision.PreferClaude {
-							st.QuotaOK = false
-							if st.QuotaState == "" || st.QuotaState == "unknown" || st.QuotaState == "ok" {
-								st.QuotaState = "blocked"
-							}
+						// Translate upstream HarnessInfo into the local
+						// RoutingSignalSnapshot shape so the --json consumers
+						// (and human text below) keep their existing shape.
+						signal := harnessInfoToRoutingSignal(hi, now)
+						if signal.Provider != "" {
+							st.RoutingSignal = &signal
 						}
 					}
 					if st.QuotaState == "" {
@@ -765,21 +768,6 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 						}
 						if signal.HistoricalUsage.TotalTokens > 0 {
 							line += fmt.Sprintf("  native-usage: %d tokens", signal.HistoricalUsage.TotalTokens)
-						}
-					}
-					if st.ClaudeQuotaDecision != nil {
-						d := st.ClaudeQuotaDecision
-						if d.SnapshotPresent {
-							ageSec := int(d.Age.Round(time.Second).Seconds())
-							line += fmt.Sprintf("  claude-quota-cache: age=%ds fresh=%v", ageSec, d.Fresh)
-							if d.Snapshot != nil {
-								line += fmt.Sprintf(" 5h=%d/%d weekly=%d/%d source=%s",
-									d.Snapshot.FiveHourRemaining, d.Snapshot.FiveHourLimit,
-									d.Snapshot.WeeklyRemaining, d.Snapshot.WeeklyLimit,
-									d.Snapshot.Source)
-							}
-						} else {
-							line += "  claude-quota-cache: absent"
 						}
 					}
 					if !st.LastChecked.IsZero() {
@@ -857,6 +845,130 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 	cmd.Flags().String("timeout", "", "Timeout for connectivity checks (default 15s)")
 	cmd.Flags().Bool("json", false, "Output as JSON (with --routing)")
 	return cmd
+}
+
+// harnessHealthyViaService reports whether the upstream service has an active
+// failure cooldown recorded against the given harness. It replaces the
+// retired process-local escalation.GlobalProviderHealth singleton
+// (ddx-7bc0c8d5): the upstream service's RouteStatus is the authoritative
+// health source, so one worker's RecordRouteAttempt benefits every other
+// consumer. When RouteStatus is unavailable (e.g. fresh service with no
+// routes yet) the harness is considered healthy.
+func harnessHealthyViaService(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
+	if svc == nil || harness == "" {
+		return true
+	}
+	report, err := svc.RouteStatus(ctx)
+	if err != nil || report == nil {
+		return true
+	}
+	for _, route := range report.Routes {
+		for _, cand := range route.Candidates {
+			if cand.Provider != harness {
+				continue
+			}
+			if !cand.Healthy {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// harnessInfoToRoutingSignal translates an upstream HarnessInfo into the
+// RoutingSignalSnapshot shape consumers still emit. Introduced when the
+// DDx-side provider-native parsers were retired (ddx-7bc0c8d5): upstream
+// quota.Status values ("ok|stale|unavailable") map to the existing
+// freshness vocabulary so the JSON output for `ddx agent doctor --routing`
+// keeps its previous field layout.
+func harnessInfoToRoutingSignal(info agentlib.HarnessInfo, now time.Time) agent.RoutingSignalSnapshot {
+	if info.Quota == nil && len(info.UsageWindows) == 0 && info.Account == nil {
+		return agent.RoutingSignalSnapshot{}
+	}
+
+	snap := agent.RoutingSignalSnapshot{Provider: info.Name}
+	if info.Account != nil && (info.Account.Email != "" || info.Account.PlanType != "" || info.Account.OrgName != "") {
+		snap.Account = &agent.AccountInfo{
+			Email:    info.Account.Email,
+			PlanType: info.Account.PlanType,
+			OrgName:  info.Account.OrgName,
+		}
+	}
+
+	if info.Quota != nil {
+		freshness := "fresh"
+		if !info.Quota.Fresh {
+			freshness = "stale"
+		}
+		if info.Quota.Status == "unavailable" || info.Quota.Status == "unauthenticated" {
+			freshness = "unknown"
+		}
+		kind := info.Quota.Source
+		if kind == "" {
+			kind = "stats-cache"
+		}
+		var ageSeconds int64
+		if !info.Quota.CapturedAt.IsZero() {
+			if age := now.UTC().Sub(info.Quota.CapturedAt.UTC()); age > 0 {
+				ageSeconds = int64(age.Seconds())
+			}
+		}
+		meta := agent.SignalSourceMetadata{
+			Provider:   info.Name,
+			Kind:       kind,
+			ObservedAt: info.Quota.CapturedAt.UTC(),
+			Freshness:  freshness,
+			AgeSeconds: ageSeconds,
+		}
+		state := "unknown"
+		switch info.Quota.Status {
+		case "ok":
+			state = "ok"
+		case "stale":
+			state = "ok"
+		}
+		var usedPercent, windowMinutes int
+		var resetsAt string
+		for _, w := range info.Quota.Windows {
+			snap.QuotaWindows = append(snap.QuotaWindows, agent.QuotaWindow{
+				Name:          w.Name,
+				LimitID:       w.LimitID,
+				WindowMinutes: w.WindowMinutes,
+				UsedPercent:   w.UsedPercent,
+				ResetsAt:      w.ResetsAt,
+				ResetsAtUnix:  w.ResetsAtUnix,
+				State:         w.State,
+			})
+			if w.LimitID == "extra" {
+				continue
+			}
+			if w.State == "blocked" {
+				state = "blocked"
+				resetsAt = w.ResetsAt
+			}
+			if int(w.UsedPercent+0.5) > usedPercent {
+				usedPercent = int(w.UsedPercent + 0.5)
+				windowMinutes = w.WindowMinutes
+			}
+		}
+		snap.Source = meta
+		snap.CurrentQuota = agent.QuotaSignal{
+			Source:        meta,
+			State:         state,
+			UsedPercent:   usedPercent,
+			WindowMinutes: windowMinutes,
+			ResetsAt:      resetsAt,
+		}
+		snap.HistoricalUsage.Source = meta
+	}
+
+	for _, u := range info.UsageWindows {
+		snap.HistoricalUsage.InputTokens += u.InputTokens
+		snap.HistoricalUsage.OutputTokens += u.OutputTokens
+		snap.HistoricalUsage.TotalTokens += u.TotalTokens
+	}
+
+	return snap
 }
 
 func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
@@ -1699,7 +1811,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				})
 				probeResult := "ok"
 				// Treat cooldown-marked harnesses as unavailable for this tier.
-				if routeErr == nil && !escalation.GlobalProviderHealth.IsHealthy(dec.Harness) {
+				// Health is owned by the upstream service: consult svc.RouteStatus.
+				if routeErr == nil && !harnessHealthyViaService(ctx, svc, dec.Harness) {
 					routeErr = fmt.Errorf("provider cooldown")
 				}
 				if routeErr != nil {
@@ -1784,11 +1897,20 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					return report, nil
 				}
 
-				// Execution-level model-capability failure: mark harness
-				// unhealthy + accumulate cost + escalate to the next tier.
+				// Execution-level model-capability failure: record the
+				// failed attempt with the upstream service (which owns the
+				// cooldown window) + accumulate cost + escalate.
 				accumulateBilledCost(report)
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
-					escalation.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(escalation.ProviderCooldownDuration))
+					_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
+						Harness:   dec.Harness,
+						Provider:  dec.Provider,
+						Model:     dec.Model,
+						Status:    "failed",
+						Reason:    "execution_failed",
+						Error:     report.Detail,
+						Timestamp: time.Now().UTC(),
+					})
 				}
 			}
 

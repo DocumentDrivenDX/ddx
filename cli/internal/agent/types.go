@@ -248,10 +248,6 @@ type HarnessState struct {
 	Error         string                 `json:"error,omitempty"`
 	Quota         *QuotaInfo             `json:"quota,omitempty"`
 	RoutingSignal *RoutingSignalSnapshot `json:"routing_signal,omitempty"`
-	// ClaudeQuotaDecision is populated for the claude harness from the
-	// durable Claude current-quota cache. Diagnostic surfaces such as
-	// `ddx agent doctor --routing` use it to report cache freshness.
-	ClaudeQuotaDecision *ClaudeQuotaRoutingDecision `json:"claude_quota_decision,omitempty"`
 }
 
 // QuotaInfo holds parsed quota data from CLI introspection.
@@ -279,8 +275,41 @@ type QuotaWindow struct {
 	State         string  `json:"state"`
 }
 
-// RoutingSignalSnapshot captures provider-native routing signal metadata and
-// the provider-native usage/quota state attached to a harness state probe.
+// SignalSourceMetadata captures where a routing signal came from and how
+// fresh it is. Populated from upstream HarnessInfo/ProviderInfo.
+type SignalSourceMetadata struct {
+	Provider   string    `json:"provider"`
+	Kind       string    `json:"kind"`
+	Path       string    `json:"path,omitempty"`
+	ObservedAt time.Time `json:"observed_at,omitempty"`
+	Freshness  string    `json:"freshness"`
+	AgeSeconds int64     `json:"age_seconds,omitempty"`
+	Basis      string    `json:"basis,omitempty"`
+	Notes      string    `json:"notes,omitempty"`
+}
+
+// QuotaSignal captures current quota/headroom for a harness.
+type QuotaSignal struct {
+	Source        SignalSourceMetadata `json:"source"`
+	State         string               `json:"state"`
+	UsedPercent   int                  `json:"used_percent,omitempty"`
+	WindowMinutes int                  `json:"window_minutes,omitempty"`
+	ResetsAt      string               `json:"resets_at,omitempty"`
+}
+
+// UsageSignal captures token/session totals for a harness.
+type UsageSignal struct {
+	Source            SignalSourceMetadata `json:"source"`
+	InputTokens       int                  `json:"input_tokens,omitempty"`
+	CachedInputTokens int                  `json:"cached_input_tokens,omitempty"`
+	OutputTokens      int                  `json:"output_tokens,omitempty"`
+	TotalTokens       int                  `json:"total_tokens,omitempty"`
+	SessionCount      int                  `json:"session_count,omitempty"`
+}
+
+// RoutingSignalSnapshot captures routing signal metadata for a harness.
+// Populated from upstream HarnessInfo/ProviderInfo data — no provider-native
+// file parsing.
 type RoutingSignalSnapshot struct {
 	Provider        string               `json:"provider"`
 	Source          SignalSourceMetadata `json:"source"`

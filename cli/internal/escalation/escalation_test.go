@@ -207,49 +207,6 @@ func TestShouldEscalateAlreadySatisfiedIsFalse(t *testing.T) {
 	assert.False(t, ShouldEscalate(statusAlreadySatisfied))
 }
 
-// --- ProviderHealthTracker ---
-
-func TestProviderHealthTrackerIsHealthyByDefault(t *testing.T) {
-	h := NewProviderHealthTracker()
-	assert.True(t, h.IsHealthy("claude"))
-	assert.True(t, h.IsHealthy("codex"))
-}
-
-func TestProviderHealthTrackerMarkMakesUnhealthy(t *testing.T) {
-	h := NewProviderHealthTracker()
-	h.Mark("bragi", time.Now().Add(5*time.Minute))
-	assert.False(t, h.IsHealthy("bragi"))
-	assert.True(t, h.IsHealthy("claude"), "unrelated harness must remain healthy")
-}
-
-func TestProviderHealthTrackerExpiredCooldownRestoresHealth(t *testing.T) {
-	h := NewProviderHealthTracker()
-	// Mark as unhealthy in the past (already expired).
-	h.Mark("vidar", time.Now().Add(-1*time.Second))
-	assert.True(t, h.IsHealthy("vidar"), "expired cooldown must be treated as healthy")
-}
-
-func TestProviderHealthTrackerSnapshotExcludesExpired(t *testing.T) {
-	h := NewProviderHealthTracker()
-	h.Mark("live", time.Now().Add(5*time.Minute))
-	h.Mark("dead", time.Now().Add(-1*time.Second))
-
-	snap := h.Snapshot()
-	assert.Contains(t, snap, "live")
-	assert.NotContains(t, snap, "dead", "expired entries must be excluded from snapshot")
-}
-
-func TestProviderHealthTrackerSnapshotIsCopy(t *testing.T) {
-	h := NewProviderHealthTracker()
-	h.Mark("claude", time.Now().Add(5*time.Minute))
-
-	snap := h.Snapshot()
-	delete(snap, "claude")
-
-	// Tracker must be unaffected by external map mutations.
-	assert.False(t, h.IsHealthy("claude"), "internal state must be independent of snapshot copy")
-}
-
 // --- FormatTierAttemptBody ---
 
 func TestFormatTierAttemptBodyWithAllFields(t *testing.T) {

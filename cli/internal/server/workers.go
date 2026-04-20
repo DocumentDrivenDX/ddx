@@ -508,7 +508,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				})
 				probeResult := "ok"
 				// Treat cooldown-marked harnesses as unavailable for this tier.
-				if routeErr == nil && !escalation.GlobalProviderHealth.IsHealthy(dec.Harness) {
+				// Health is owned by the upstream service; consult svc.RouteStatus.
+				if routeErr == nil && !workerHarnessHealthy(ctx, svc, dec.Harness) {
 					routeErr = fmt.Errorf("provider cooldown")
 				}
 				if routeErr != nil {
@@ -590,7 +591,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				}
 				accumulateBilledCost(report)
 				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
-					escalation.GlobalProviderHealth.Mark(dec.Harness, time.Now().Add(escalation.ProviderCooldownDuration))
+					_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
+						Harness:   dec.Harness,
+						Provider:  dec.Provider,
+						Model:     dec.Model,
+						Status:    "failed",
+						Reason:    "execution_failed",
+						Error:     report.Detail,
+						Timestamp: time.Now().UTC(),
+					})
 				}
 			}
 
@@ -1419,6 +1428,31 @@ func relToProject(projectRoot, path string) string {
 		return path
 	}
 	return rel
+}
+
+// workerHarnessHealthy reports whether the upstream service has an active
+// failure cooldown recorded against the given harness. Replaces the retired
+// process-local escalation.GlobalProviderHealth singleton (ddx-7bc0c8d5).
+// When RouteStatus is unavailable, the harness is considered healthy.
+func workerHarnessHealthy(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
+	if svc == nil || harness == "" {
+		return true
+	}
+	report, err := svc.RouteStatus(ctx)
+	if err != nil || report == nil {
+		return true
+	}
+	for _, route := range report.Routes {
+		for _, cand := range route.Candidates {
+			if cand.Provider != harness {
+				continue
+			}
+			if !cand.Healthy {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func randomSuffix(n int) string {

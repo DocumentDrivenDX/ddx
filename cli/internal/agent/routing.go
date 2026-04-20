@@ -495,14 +495,6 @@ func scoreCandidate(profile string, plan CandidatePlan) float64 {
 	if plan.State.QuotaState == "unknown" {
 		base -= 3
 	}
-	if plan.State.RoutingSignal != nil {
-		switch plan.State.RoutingSignal.Source.Freshness {
-		case "cached":
-			base -= 1
-		case "stale":
-			base -= 4
-		}
-	}
 
 	// Historical success-rate adjustment. Only applied when we have sufficient
 	// data (>= 3 samples, encoded as HistoricalSuccessRate >= 0).

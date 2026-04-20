@@ -49,6 +49,10 @@ func ParseQuotaOutput(output string) *QuotaInfo {
 // ProbeHarnessState evaluates the routing-relevant state of a harness.
 // It checks installed, reachable, authenticated, and quota status.
 // The timeout applies to quota probing; binary lookup is always fast.
+//
+// Provider-native routing signals (codex/claude/openrouter/lmstudio) are
+// sourced from the upstream agent service (ddx-7bc0c8d5). This function
+// only exercises the local CLI quota-command path.
 func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) HarnessState {
 	state := HarnessState{
 		LastChecked: time.Now(),
@@ -70,18 +74,15 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 		return state
 	}
 
-	// HTTP-only providers: probe via API, no binary lookup.
+	// HTTP-only providers: reachability is probed by the upstream service.
+	// Without a live probe here, mark optimistically as installed; the
+	// full picture comes from svc.ListHarnesses in cmd/server callers.
 	if harness.IsHTTPProvider {
 		state.Installed = true
-		signal := r.LoadRoutingSignalSnapshot(harnessName, state.LastChecked)
-		state.RoutingSignal = &signal
-		state.Reachable = signal.CurrentQuota.State != "unknown"
-		state.Authenticated = signal.CurrentQuota.State != "unknown"
-		state.QuotaState = signal.CurrentQuota.State
-		state.QuotaOK = signal.CurrentQuota.State == "ok"
-		if state.QuotaState == "" {
-			state.QuotaState = "unknown"
-		}
+		state.Reachable = true
+		state.Authenticated = true
+		state.QuotaOK = true
+		state.QuotaState = "unknown"
 		return state
 	}
 
@@ -92,47 +93,6 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 		return state
 	}
 	state.Installed = true
-
-	// Load provider-native routing signals where the repo/docs define a stable source.
-	if harnessName == "codex" || harnessName == "claude" {
-		signal := r.LoadRoutingSignalSnapshot(harnessName, state.LastChecked)
-		state.RoutingSignal = &signal
-		if signal.CurrentQuota.State != "" {
-			state.QuotaState = signal.CurrentQuota.State
-			if signal.CurrentQuota.State == "blocked" {
-				state.QuotaOK = false
-			}
-		}
-		if signal.CurrentQuota.State == "blocked" {
-			state.QuotaOK = false
-		}
-		if state.Quota == nil && signal.CurrentQuota.State != "unknown" {
-			state.Quota = &QuotaInfo{
-				PercentUsed: signal.CurrentQuota.UsedPercent,
-				LimitWindow: fmt.Sprintf("%d min", signal.CurrentQuota.WindowMinutes),
-				ResetDate:   signal.CurrentQuota.ResetsAt,
-			}
-		}
-		if signal.CurrentQuota.State == "unknown" && harnessName == "claude" {
-			state.QuotaOK = true
-		}
-		// Consult the durable Claude current-quota cache for absolute
-		// 5-hour/weekly headroom. Foreground routing prefers cached
-		// snapshots over inline PTY capture: when the cache has a fresh
-		// snapshot reporting no headroom, prefer a non-claude fallback;
-		// when the snapshot is missing or stale, keep the routing signal
-		// but do NOT invoke PTY capture inline.
-		if harnessName == "claude" {
-			decision := ReadClaudeQuotaRoutingDecision(state.LastChecked, DefaultClaudeQuotaStaleAfter)
-			state.ClaudeQuotaDecision = &decision
-			if decision.Fresh && !decision.PreferClaude {
-				state.QuotaOK = false
-				if state.QuotaState == "" || state.QuotaState == "unknown" || state.QuotaState == "ok" {
-					state.QuotaState = "blocked"
-				}
-			}
-		}
-	}
 
 	// If there's a quota command, drive it to get quota data.
 	if harness.QuotaCommand != "" {
@@ -164,7 +124,7 @@ func (r *Runner) ProbeHarnessState(harnessName string, timeout time.Duration) Ha
 		return state
 	}
 
-	// No quota command: fall back to TUI slash command if native signal is unknown.
+	// No quota command: fall back to TUI slash command if available.
 	state.Reachable = true
 	state.Authenticated = true
 	if state.QuotaState == "" {
@@ -213,4 +173,15 @@ func (r *Runner) probeQuotaWithArgs(harnessName string, harness Harness, args []
 	}
 
 	return ParseQuotaOutput(combined), nil
+}
+
+// quotaStateFromUsedPercent maps a usage percentage to a quota state string.
+func quotaStateFromUsedPercent(usedPercent int) string {
+	if usedPercent >= 95 {
+		return "blocked"
+	}
+	if usedPercent >= 0 {
+		return "ok"
+	}
+	return "unknown"
 }

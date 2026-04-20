@@ -116,7 +116,7 @@ func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
-		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, info.Name, now)
+		signal := signalFromHarnessInfo(info, now)
 		result = append(result, buildProviderSummary(info, signal, outcomes, now))
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -142,7 +142,7 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, harnessName, now)
+	signal := signalFromHarnessInfo(info, now)
 	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 	burnSummaries, _ := metricsStore.ReadBurnSummaries()
@@ -165,7 +165,7 @@ func (s *Server) mcpProviderList() mcpToolResult {
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
-		signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, info.Name, now)
+		signal := signalFromHarnessInfo(info, now)
 		result = append(result, buildProviderSummary(info, signal, outcomes, now))
 	}
 	data, err := json.Marshal(result)
@@ -189,7 +189,7 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	}
 
 	now := time.Now().UTC()
-	signal := agent.LoadRoutingSignalSnapshotForWorkDir(s.WorkingDir, harnessName, now)
+	signal := signalFromHarnessInfo(info, now)
 	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
 	outcomes, _ := metricsStore.ReadOutcomes()
 	burnSummaries, _ := metricsStore.ReadBurnSummaries()
@@ -203,6 +203,125 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 }
 
 // ---- Build helpers ----
+
+// signalFromHarnessInfo translates upstream HarnessInfo into the
+// ddx-local RoutingSignalSnapshot shape used by buildProviderSummary /
+// buildProviderDetail. This is the vocabulary translation shim introduced
+// when the DDx-side provider-native parsers were retired (ddx-7bc0c8d5):
+// upstream quota.Status values "ok|stale|unavailable" map to the existing
+// "fresh|stale|unknown" vocabulary that the GraphQL/REST surface exposes so
+// the SvelteKit frontend renders identically.
+func signalFromHarnessInfo(info agentlib.HarnessInfo, now time.Time) agent.RoutingSignalSnapshot {
+	snap := agent.RoutingSignalSnapshot{Provider: info.Name}
+
+	if info.Account != nil && (info.Account.Email != "" || info.Account.PlanType != "" || info.Account.OrgName != "") {
+		snap.Account = &agent.AccountInfo{
+			Email:    info.Account.Email,
+			PlanType: info.Account.PlanType,
+			OrgName:  info.Account.OrgName,
+		}
+	}
+
+	if info.Quota == nil {
+		snap.CurrentQuota = agent.QuotaSignal{
+			Source: agent.SignalSourceMetadata{
+				Provider:  info.Name,
+				Kind:      "docs-only",
+				Freshness: "unknown",
+			},
+			State: "unknown",
+		}
+		snap.Source = snap.CurrentQuota.Source
+		return snap
+	}
+
+	// Translate upstream quota.Status (ok|stale|unavailable|unauthenticated|unknown)
+	// into the existing ddx vocabulary.
+	state := "unknown"
+	switch info.Quota.Status {
+	case "ok":
+		state = "ok"
+	case "stale":
+		state = "ok" // stale-but-present data still counts as headroom.
+	case "unavailable", "unauthenticated":
+		state = "unknown"
+	}
+
+	// Promote worst non-extra window to "blocked" if any window is blocked.
+	var usedPercent int
+	var windowMinutes int
+	var resetsAt string
+	var translatedWindows []agent.QuotaWindow
+	for _, w := range info.Quota.Windows {
+		qw := agent.QuotaWindow{
+			Name:          w.Name,
+			LimitID:       w.LimitID,
+			WindowMinutes: w.WindowMinutes,
+			UsedPercent:   w.UsedPercent,
+			ResetsAt:      w.ResetsAt,
+			ResetsAtUnix:  w.ResetsAtUnix,
+			State:         w.State,
+		}
+		translatedWindows = append(translatedWindows, qw)
+		if w.LimitID == "extra" {
+			continue
+		}
+		if w.State == "blocked" {
+			state = "blocked"
+			resetsAt = w.ResetsAt
+		}
+		if w.UsedPercent > float64(usedPercent) {
+			usedPercent = int(w.UsedPercent + 0.5)
+			windowMinutes = w.WindowMinutes
+		}
+	}
+	snap.QuotaWindows = translatedWindows
+
+	freshness := "fresh"
+	if !info.Quota.Fresh {
+		freshness = "stale"
+	}
+	if info.Quota.Status == "unavailable" || info.Quota.Status == "unauthenticated" {
+		freshness = "unknown"
+	}
+
+	kind := info.Quota.Source
+	if kind == "" {
+		kind = "stats-cache"
+	}
+
+	var ageSeconds int64
+	if !info.Quota.CapturedAt.IsZero() {
+		if age := now.UTC().Sub(info.Quota.CapturedAt.UTC()); age > 0 {
+			ageSeconds = int64(age.Seconds())
+		}
+	}
+
+	meta := agent.SignalSourceMetadata{
+		Provider:   info.Name,
+		Kind:       kind,
+		ObservedAt: info.Quota.CapturedAt.UTC(),
+		Freshness:  freshness,
+		AgeSeconds: ageSeconds,
+	}
+	snap.Source = meta
+	snap.CurrentQuota = agent.QuotaSignal{
+		Source:        meta,
+		State:         state,
+		UsedPercent:   usedPercent,
+		WindowMinutes: windowMinutes,
+		ResetsAt:      resetsAt,
+	}
+
+	for _, u := range info.UsageWindows {
+		snap.HistoricalUsage.InputTokens += u.InputTokens
+		snap.HistoricalUsage.OutputTokens += u.OutputTokens
+		snap.HistoricalUsage.TotalTokens += u.TotalTokens
+	}
+	snap.HistoricalUsage.Source = meta
+
+	return snap
+}
 
 func buildProviderSummary(
 	info agentlib.HarnessInfo,

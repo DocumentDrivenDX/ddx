@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/cobra"
 )
@@ -326,10 +328,31 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 	return rows, nil
 }
 
+// enrichUsageRowsWithRoutingSignals annotates usage rows with per-harness
+// routing signals from the upstream agent service. When the service is
+// unavailable the rows are returned unchanged. Legacy DDx-managed file
+// parsers were retired in ddx-7bc0c8d5.
 func enrichUsageRowsWithRoutingSignals(workDir string, rows []usageRow) []usageRow {
+	svc, err := agent.NewServiceFromWorkDir(workDir)
+	if err != nil || svc == nil {
+		return rows
+	}
+	ctx := context.Background()
+	infos, err := svc.ListHarnesses(ctx)
+	if err != nil {
+		return rows
+	}
+	byName := make(map[string]agentlib.HarnessInfo, len(infos))
+	for _, info := range infos {
+		byName[info.Name] = info
+	}
 	now := time.Now()
 	for i := range rows {
-		signal := agent.LoadRoutingSignalSnapshotForWorkDir(workDir, rows[i].Harness, now)
+		info, ok := byName[rows[i].Harness]
+		if !ok {
+			continue
+		}
+		signal := harnessInfoToRoutingSignal(info, now)
 		rows[i].QuotaState = signal.CurrentQuota.State
 		if signal.Provider == "" && signal.Source.Kind == "" {
 			continue
