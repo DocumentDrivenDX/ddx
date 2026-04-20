@@ -120,7 +120,7 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 		Provider:        opts.Provider,
 		Harness:         harness,
 		ModelRef:        opts.ModelRef,
-		Effort:          opts.Effort,
+		Reasoning:       agentlib.Reasoning(opts.Effort),
 		Permissions:     opts.Permissions,
 		WorkDir:         wd,
 		Timeout:         wall,
@@ -245,11 +245,11 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 		CostClass:           info.CostClass,
 		IsLocal:             info.IsLocal,
 		ExactPinSupport:     info.ExactPinSupport,
-		SupportsEffort:      len(info.SupportedEfforts) > 0 || harness.EffortFlag != "",
+		SupportsEffort:      len(info.SupportedReasoning) > 0 || harness.EffortFlag != "",
 		SupportsPermissions: len(info.SupportedPermissions) > 0 || len(harness.PermissionArgs) > 0,
 	}
-	if len(info.SupportedEfforts) > 0 {
-		caps.ReasoningLevels = append([]string{}, info.SupportedEfforts...)
+	if len(info.SupportedReasoning) > 0 {
+		caps.ReasoningLevels = append([]string{}, info.SupportedReasoning...)
 	} else if len(harness.ReasoningLevels) > 0 {
 		caps.ReasoningLevels = append([]string{}, harness.ReasoningLevels...)
 	}

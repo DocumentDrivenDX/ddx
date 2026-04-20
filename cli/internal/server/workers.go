@@ -502,9 +502,9 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			for _, tier := range tiers {
 				// Resolve the best harness for this tier via service.ResolveRoute.
 				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-					ModelRef: string(tier),
-					Provider: spec.Provider,
-					Effort:   spec.Effort,
+					ModelRef:  string(tier),
+					Provider:  spec.Provider,
+					Reasoning: agentlib.Reasoning(spec.Effort),
 				})
 				probeResult := "ok"
 				// Treat cooldown-marked harnesses as unavailable for this tier.

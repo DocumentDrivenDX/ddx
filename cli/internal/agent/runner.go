@@ -26,12 +26,11 @@ func containsString(slice []string, s string) bool {
 
 // Runner executes agent invocations.
 type Runner struct {
-	Registry      *Registry
-	Config        Config
-	Catalog       *Catalog     // model catalog for routing; defaults to BuiltinCatalog
-	Executor      Executor     // injected; defaults to OSExecutor
-	LookPath      LookPathFunc // injected; defaults to exec.LookPath
-	AgentProvider interface{}  // injected agentlib.Provider for testing; nil = resolve from config
+	Registry *Registry
+	Config   Config
+	Catalog  *Catalog     // model catalog for routing; defaults to BuiltinCatalog
+	Executor Executor     // injected; defaults to OSExecutor
+	LookPath LookPathFunc // injected; defaults to exec.LookPath
 
 	// WorkDir is the project root used for loading native agent config.
 	WorkDir string

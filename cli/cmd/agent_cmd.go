@@ -291,7 +291,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				}
 				routeReq := agentlib.RouteRequest{
 					Model:       model,
-					Effort:      effort,
+					Reasoning:   agentlib.Reasoning(effort),
 					Permissions: permissions,
 					ModelRef:    profile,
 				}
@@ -1641,10 +1641,10 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
 					if svcErr == nil {
 						dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-							Model:    model,
-							Provider: provider,
-							ModelRef: modelRef,
-							Effort:   effort,
+							Model:     model,
+							Provider:  provider,
+							ModelRef:  modelRef,
+							Reasoning: agentlib.Reasoning(effort),
 						})
 						if routeErr == nil {
 							resolvedHarness = dec.Harness
@@ -1693,9 +1693,9 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			for _, tier := range tiers {
 				// Resolve the best harness for this tier via service.ResolveRoute.
 				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-					ModelRef: string(tier),
-					Provider: provider,
-					Effort:   effort,
+					ModelRef:  string(tier),
+					Provider:  provider,
+					Reasoning: agentlib.Reasoning(effort),
 				})
 				probeResult := "ok"
 				// Treat cooldown-marked harnesses as unavailable for this tier.

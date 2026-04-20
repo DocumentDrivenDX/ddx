@@ -94,10 +94,6 @@ func useNewAgentPath() bool {
 //
 // Stall detection: we delegate to the agent's StallPolicy. The agent
 // emits a stall event then a final event with Status="stalled".
-//
-// Test injection: when r.AgentProvider is non-nil it is forwarded as
-// ServiceExecuteRequest.NativeProvider so tests can run end-to-end against
-// a virtual or fake provider without spinning up a real one.
 func runAgentViaService(r *Runner, opts RunOptions) (*Result, error) {
 	promptText, err := r.resolvePrompt(opts)
 	if err != nil {
@@ -137,7 +133,7 @@ func runAgentViaService(r *Runner, opts RunOptions) (*Result, error) {
 		Provider:        opts.Provider,
 		Harness:         "agent",
 		ModelRef:        opts.ModelRef,
-		Effort:          opts.Effort,
+		Reasoning:       agentlib.Reasoning(opts.Effort),
 		Permissions:     opts.Permissions,
 		WorkDir:         wd,
 		Timeout:         wallClock,
@@ -145,20 +141,6 @@ func runAgentViaService(r *Runner, opts RunOptions) (*Result, error) {
 		ProviderTimeout: DefaultProviderRequestTimeout,
 		SessionLogDir:   logDir,
 		Metadata:        opts.Correlation,
-	}
-
-	// Test injection: forward the runner's pre-built AgentProvider as the
-	// native-path provider override. Production flows leave AgentProvider
-	// nil and let the service resolve providers itself.
-	// When injecting a test provider, clear ProviderTimeout so the service
-	// does not wrap the test provider with an extra deadline layer — some test
-	// providers (e.g. the OMLX SSE fixture provider) are sensitive to the
-	// presence of an HTTP deadline context.
-	if r.AgentProvider != nil {
-		if p, ok := r.AgentProvider.(agentlib.Provider); ok {
-			req.NativeProvider = p
-			req.ProviderTimeout = 0
-		}
 	}
 
 	parentCtx := opts.Context
