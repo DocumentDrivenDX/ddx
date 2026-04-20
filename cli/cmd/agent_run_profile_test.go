@@ -213,7 +213,10 @@ func TestAgentRunProfileNoViableHarness(t *testing.T) {
 		"--text", "test",
 	)
 	require.Error(t, err, "should fail when no harness can satisfy the profile+effort request")
-	assert.Contains(t, err.Error(), "no viable harness found for profile",
+	// ddx-agent v0.7.0 returns "no provider configured for native harness"
+	// instead of the pre-0.6.0 "no viable harness found for profile" wording
+	// (ddx-4535f466).
+	assert.Contains(t, err.Error(), "no provider configured for native harness",
 		"error must identify the routing failure cause")
 }
 

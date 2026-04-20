@@ -25,7 +25,7 @@ func TestAgentModelsSuccess(t *testing.T) {
 func TestAgentModelsAutoSelect(t *testing.T) {
 	// No model configured — the first ranked model should be marked with >.
 	srv := newOAIModelsStub(t, []string{"alpha-model", "beta-model"})
-	cfg := "providers:\n  testprovider:\n    type: openai-compat\n    base_url: " +
+	cfg := "providers:\n  testprovider:\n    type: lmstudio\n    base_url: " +
 		srv.URL + "/v1\ndefault: testprovider\n"
 	dir := makeProviderTestDir(t, cfg)
 
@@ -61,7 +61,7 @@ func TestAgentModelsAll(t *testing.T) {
 	srv := newOAIModelsStub(t, []string{"local-model"})
 	cfg := `providers:
   testprovider:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + srv.URL + `/v1
     model: local-model
   claudeprov:

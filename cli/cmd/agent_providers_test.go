@@ -84,7 +84,7 @@ library:
 // oaiAgentConfig returns .agent/config.yaml YAML for a single openai-compat
 // provider pointing at baseURL (e.g. "http://127.0.0.1:PORT/v1").
 func oaiAgentConfig(baseURL, model string) string {
-	return "providers:\n  testprovider:\n    type: openai-compat\n    base_url: " +
+	return "providers:\n  testprovider:\n    type: lmstudio\n    base_url: " +
 		baseURL + "\n    model: " + model + "\ndefault: testprovider\n"
 }
 
@@ -115,7 +115,7 @@ func TestAgentProvidersJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &entries))
 	require.Len(t, entries, 1)
 	require.Equal(t, "testprovider", entries[0].Name)
-	require.Equal(t, "openai-compat", entries[0].Type)
+	require.Equal(t, "lmstudio", entries[0].Type)
 	require.True(t, entries[0].Default)
 	require.True(t, strings.Contains(entries[0].Status, "connected"))
 }

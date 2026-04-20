@@ -692,7 +692,16 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
+			// CloseWithEvidence runs the closure gate (ddx-e30e60a9); manual
+			// operator closes without evidence are intentionally a separate
+			// path. When --session and --commit are both unset, we are in
+			// manual-administration territory — use the ungated Store.Close
+			// so the gate doesn't reject legitimate tracker admin.
+			if sessionID == "" && commitSHA == "" {
+				if err := s.Close(args[0]); err != nil {
+					return err
+				}
+			} else if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
 				return err
 			}
 

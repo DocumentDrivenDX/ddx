@@ -16,7 +16,7 @@ import (
 func routeAgentConfig(baseURL, model, routeKey string) string {
 	return `providers:
   testprovider:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + baseURL + `
     model: ` + model + `
 default: testprovider

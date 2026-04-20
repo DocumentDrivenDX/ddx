@@ -58,7 +58,9 @@ agent:
 	require.Equal(t, "codex", caps.Binary)
 	require.Equal(t, "gpt-5.4", caps.Model)
 	require.Contains(t, caps.Models, "gpt-5.4") // default model always present
-	require.Equal(t, []string{"low", "medium", "high"}, caps.ReasoningLevels)
+	// ddx-agent v0.7.0 exposes the full reasoning scale including xhigh and
+	// max (ddx-4535f466).
+	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, caps.ReasoningLevels)
 }
 
 func TestAgentCapabilitiesCommandText(t *testing.T) {

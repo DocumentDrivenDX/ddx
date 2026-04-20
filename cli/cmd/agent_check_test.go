@@ -51,11 +51,11 @@ func TestAgentCheckMixedReachability(t *testing.T) {
 
 	cfg := `providers:
   liveprov:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + live.URL + `/v1
     model: good-model
   deadprov:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + deadURL + `/v1
     model: bad-model
 default: liveprov
@@ -78,11 +78,11 @@ func TestAgentCheckSingleProviderFlag(t *testing.T) {
 	srv := newOAIModelsStub(t, []string{"model-a", "model-b"})
 	cfg := `providers:
   prov1:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + srv.URL + `/v1
     model: model-a
   prov2:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + srv.URL + `/v1
     model: model-b
 default: prov1
@@ -137,7 +137,7 @@ func TestAgentCheckJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &entries))
 	require.Len(t, entries, 1)
 	require.Equal(t, "testprovider", entries[0].Provider)
-	require.Equal(t, "openai-compat", entries[0].Harness)
+	require.Equal(t, "lmstudio", entries[0].Harness)
 	require.Equal(t, "ok", entries[0].Status)
 	require.GreaterOrEqual(t, entries[0].LatencyMs, int64(0))
 	require.Empty(t, entries[0].Error)
@@ -175,11 +175,11 @@ func TestAgentCheckJSONMixedReachability(t *testing.T) {
 
 	cfg := `providers:
   liveprov:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + live.URL + `/v1
     model: good-model
   deadprov:
-    type: openai-compat
+    type: lmstudio
     base_url: ` + deadURL + `/v1
     model: bad-model
 default: liveprov
