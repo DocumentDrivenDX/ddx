@@ -33,10 +33,17 @@ const (
 // serviceFinalData mirrors the JSON shape of a CONTRACT-003 type=final
 // event payload (harnesses.FinalData). Defined locally because
 // internal/harnesses is module-private.
+//
+// FinalText carries the normalized final response text (agent-32e8ff5e /
+// v0.8.0) — the harness's user-facing output with stream-frame envelopes,
+// reasoning blocks, and tool-call scaffolding stripped. Callers that need
+// to parse verdicts or structured output should read this field, NOT the
+// raw harness stream.
 type serviceFinalData struct {
 	Status         string                `json:"status"`
 	ExitCode       int                   `json:"exit_code"`
 	Error          string                `json:"error,omitempty"`
+	FinalText      string                `json:"final_text,omitempty"`
 	DurationMS     int64                 `json:"duration_ms"`
 	Usage          *serviceFinalUsage    `json:"usage,omitempty"`
 	CostUSD        float64               `json:"cost_usd,omitempty"`
@@ -172,6 +179,8 @@ func runAgentViaService(r *Runner, opts RunOptions) (*Result, error) {
 		}
 	}
 	if final != nil {
+		// Normalized final text from the upstream harness (agent-32e8ff5e).
+		result.Output = final.FinalText
 		if final.Usage != nil {
 			result.InputTokens = final.Usage.InputTokens
 			result.OutputTokens = final.Usage.OutputTokens

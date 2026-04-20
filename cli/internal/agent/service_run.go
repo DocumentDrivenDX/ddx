@@ -158,6 +158,10 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 		}
 	}
 	if final != nil {
+		// Normalized final text from the upstream harness (agent-32e8ff5e);
+		// reviewer verdict extraction now parses this instead of raw stream
+		// frames (ddx-7bc0c8d5).
+		result.Output = final.FinalText
 		if final.Usage != nil {
 			result.InputTokens = final.Usage.InputTokens
 			result.OutputTokens = final.Usage.OutputTokens
