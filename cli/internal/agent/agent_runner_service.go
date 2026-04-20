@@ -30,54 +30,22 @@ const (
 	serviceNoopCompactionWallClockReason = "compaction_stuck_wall_clock_timeout"
 )
 
-// serviceFinalData mirrors the JSON shape of a CONTRACT-003 type=final
-// event payload (harnesses.FinalData). Defined locally because
-// internal/harnesses is module-private.
+// ServiceEvent payload types are now aliases to the upstream v0.8.0 public
+// types (agent-f0bc5467). DDx previously maintained byte-for-byte shadow
+// copies of these structs because CONTRACT-003 hadn't published them; that
+// left the consumer carrying stream-adjacent knowledge and drifted whenever
+// upstream shapes changed. With v0.8.0 the types are public and stable.
 //
-// FinalText carries the normalized final response text (agent-32e8ff5e /
-// v0.8.0) — the harness's user-facing output with stream-frame envelopes,
-// reasoning blocks, and tool-call scaffolding stripped. Callers that need
-// to parse verdicts or structured output should read this field, NOT the
-// raw harness stream.
-type serviceFinalData struct {
-	Status         string                `json:"status"`
-	ExitCode       int                   `json:"exit_code"`
-	Error          string                `json:"error,omitempty"`
-	FinalText      string                `json:"final_text,omitempty"`
-	DurationMS     int64                 `json:"duration_ms"`
-	Usage          *serviceFinalUsage    `json:"usage,omitempty"`
-	CostUSD        float64               `json:"cost_usd,omitempty"`
-	SessionLogPath string                `json:"session_log_path,omitempty"`
-	RoutingActual  *serviceRoutingActual `json:"routing_actual,omitempty"`
-}
-
-type serviceFinalUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
-}
-
-type serviceRoutingActual struct {
-	Harness            string   `json:"harness"`
-	Provider           string   `json:"provider,omitempty"`
-	Model              string   `json:"model"`
-	FallbackChainFired []string `json:"fallback_chain_fired,omitempty"`
-}
-
-// serviceToolCallData mirrors harnesses.ToolCallData.
-type serviceToolCallData struct {
-	ID    string          `json:"id"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input,omitempty"`
-}
-
-// serviceToolResultData mirrors harnesses.ToolResultData.
-type serviceToolResultData struct {
-	ID         string `json:"id"`
-	Output     string `json:"output,omitempty"`
-	Error      string `json:"error,omitempty"`
-	DurationMS int64  `json:"duration_ms,omitempty"`
-}
+// Aliases rather than an outright delete so existing call sites keep
+// working without a sweep. New code can (and should) use agentlib types
+// directly.
+type (
+	serviceFinalData      = agentlib.ServiceFinalData
+	serviceFinalUsage     = agentlib.ServiceFinalUsage
+	serviceRoutingActual  = agentlib.ServiceRoutingActual
+	serviceToolCallData   = agentlib.ServiceToolCallData
+	serviceToolResultData = agentlib.ServiceToolResultData
+)
 
 // useNewAgentPath reports whether RunAgent should dispatch to the new
 // agentlib.DdxAgent.Execute path. Default is on. Set the env var
