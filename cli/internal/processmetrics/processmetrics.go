@@ -720,7 +720,9 @@ func readJSONLRecords[T any](path string) ([]T, error) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	// 16MB max line — matches bead/session scanners; process-metrics rows are
+	// small but consistency avoids surprise truncation if a writer ever grows.
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	var out []T
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

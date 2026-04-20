@@ -1,3 +1,20 @@
+// Package bead implements the on-disk bead tracker.
+//
+// Size envelope (ddx-f8a11202):
+//
+// Individual bead fields — description, acceptance, notes, and each event's
+// body — are bounded by MaxFieldBytes (65,535 bytes). This matches upstream
+// bd's Dolt TEXT column limit so DDx-authored beads can always round-trip
+// through `bd import`. Writers exceeding the cap are truncated with a
+// `…[truncated, N bytes]` marker at AppendEvent; callers that need to
+// preserve the full payload (notably reviewer streams) should persist to a
+// sidecar artifact under `.ddx/executions/<id>/` and record a path
+// reference in the event body.
+//
+// On the read side, scanners use a 16MB buffer — real-world incidents have
+// produced 1.46MB bead rows and ~7MB session-log rows when writers bypassed
+// the cap. 16MB comfortably fits a bead with dozens of maxed-out fields and
+// matches the scanner in the agent package.
 package bead
 
 import (
@@ -169,7 +186,11 @@ func (s *Store) readAllRaw() ([]Bead, []string, error) {
 
 func parseBeadJSONL(data []byte) ([]Bead, []string, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	// 16MB max line. Real-world extremes observed: 1.46MB bead rows when a
+	// reviewer stream dumped into events[].body, and bd-exported lines stacking
+	// many 65KB fields. bd's upstream per-field cap is 65,535 bytes; an
+	// individual bead with dozens of maxed-out fields fits comfortably in 16MB.
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 
 	var beads []Bead
 	var warnings []string
@@ -664,10 +685,42 @@ func (s *Store) IncrNoChangesCount(id string) (int, error) {
 }
 
 // AppendEvent adds an immutable execution evidence entry to a bead.
+// MaxFieldBytes is the per-field hard cap on bead event bodies and adjacent
+// writer paths. 65,535 bytes matches upstream bd's Dolt TEXT column size so
+// DDx-authored beads always round-trip through `bd import`. Empirically
+// validated against bd 1.0.2 on 2026-04-20: 65,535 accepts, 65,536 rejects.
+const MaxFieldBytes = 65535
+
+// capFieldBytes enforces MaxFieldBytes on a single field value. Callers that
+// need to preserve the full payload should persist it to a sidecar artifact
+// and store a path reference in the field; this function is the defense-in-
+// depth cap for code paths that don't. Returns the input unchanged when it
+// fits; otherwise returns head+tail truncation with a byte-count marker.
+func capFieldBytes(s string) string {
+	if len(s) <= MaxFieldBytes {
+		return s
+	}
+	// Reserve a marker that always fits; keep head heavy (2/3) so
+	// human-readable context is preserved for the common short-rationale case.
+	marker := fmt.Sprintf("\n…[truncated, %d bytes]\n", len(s))
+	budget := MaxFieldBytes - len(marker)
+	if budget <= 0 {
+		return s[:MaxFieldBytes]
+	}
+	head := (budget * 2) / 3
+	tail := budget - head
+	return s[:head] + marker + s[len(s)-tail:]
+}
+
 func (s *Store) AppendEvent(id string, event BeadEvent) error {
 	if event.CreatedAt.IsZero() {
 		event.CreatedAt = time.Now().UTC()
 	}
+	// Defense in depth: cap every event body regardless of caller. The
+	// reviewer write path separately persists the full stream to an artifact
+	// and emits a <=512-byte body; this cap catches anything else.
+	event.Body = capFieldBytes(event.Body)
+	event.Summary = capFieldBytes(event.Summary)
 	return s.Update(id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)

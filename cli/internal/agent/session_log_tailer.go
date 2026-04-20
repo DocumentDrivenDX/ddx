@@ -88,7 +88,10 @@ func readNewLogLines(logDir string, states map[string]*fileTrackState, dst io.Wr
 
 		_, _ = f.Seek(fs.offset, io.SeekStart)
 		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // 4MB max line
+		// 16MB max line. Session-log `response` fields observed up to ~7MB in
+		// real incidents (2026-04-20 reviewer-malfunction report). Matches bead
+		// store and claude stream for consistency.
+		scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 		var newLines []string
 		for scanner.Scan() {
 			line := scanner.Text()

@@ -461,13 +461,24 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 				} else {
 					report.ReviewVerdict = string(reviewRes.Verdict)
 					report.ReviewRationale = reviewRes.Rationale
+					// Persist the full reviewer stream as an artifact so the
+					// event body never carries the raw stream (ddx-f8a11202).
+					// On error the artifact path is empty and the event body
+					// still contains the short verdict summary; callers of this
+					// loop can recover the full text from the reviewer session
+					// log if the artifact write failed.
+					artifactPath, artifactErr := persistReviewerStream(opts.ProjectRoot, candidate.ID, report.AttemptID, reviewRes.RawOutput)
+					if artifactErr != nil && opts.Log != nil {
+						_, _ = fmt.Fprintf(opts.Log, "reviewer stream artifact: %v\n", artifactErr)
+					}
+
 					switch reviewRes.Verdict {
 					case VerdictApprove:
 						// Approved: attach evidence and leave bead closed.
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review",
 							Summary:   "APPROVE",
-							Body:      reviewRes.RawOutput,
+							Body:      reviewEventBody("APPROVE", reviewRes.Rationale, artifactPath),
 							Actor:     assignee,
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
@@ -480,7 +491,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review",
 							Summary:   "REQUEST_CHANGES",
-							Body:      reviewRes.RawOutput,
+							Body:      reviewEventBody("REQUEST_CHANGES", reviewRes.Rationale, artifactPath),
 							Actor:     assignee,
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
@@ -501,7 +512,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 							_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 								Kind:      "review-malfunction",
 								Summary:   "BLOCK without rationale",
-								Body:      reviewRes.RawOutput,
+								Body:      reviewEventBody("BLOCK without rationale", "", artifactPath),
 								Actor:     assignee,
 								Source:    "ddx agent execute-loop",
 								CreatedAt: now().UTC(),
