@@ -26,17 +26,20 @@ import (
 // existing Runner RunOptions. SessionLogDir falls back to DefaultLogDir when
 // neither opts.SessionLogDir nor an explicit override is provided.
 //
-// The virtual and script harnesses are DDx-side helpers (replay-from-dictionary
-// and filesystem directives respectively); the agent service does not implement
-// them, so RunViaService delegates those cases to a private Runner constructed
-// just for the call.
+// The virtual and script harnesses route through a DDx-owned Runner path,
+// not the upstream service. These are not "carve-outs pending migration" —
+// they are different products from upstream's same-named stubs. DDx's
+// virtual is a content-addressed record/replay dictionary keyed by
+// PromptHash; upstream's is a unit-test stub where callers stuff
+// virtual.response into Metadata. DDx's script reads a filesystem directive
+// file; upstream does not model this at all. See runFixtureHarnessViaRunner.
 func RunViaService(ctx context.Context, workDir string, opts RunOptions) (*Result, error) {
 	resolvedHarness := opts.Harness
 	if resolvedHarness == "" && opts.Provider != "" {
 		resolvedHarness = opts.Provider
 	}
 	if resolvedHarness == "virtual" || resolvedHarness == "script" {
-		return runDDxOnlyHarnessViaRunner(ctx, workDir, opts)
+		return runFixtureHarnessViaRunner(ctx, workDir, opts)
 	}
 	svc, err := NewServiceFromWorkDir(workDir)
 	if err != nil {
@@ -45,11 +48,16 @@ func RunViaService(ctx context.Context, workDir string, opts RunOptions) (*Resul
 	return RunViaServiceWith(ctx, svc, workDir, opts)
 }
 
-// runDDxOnlyHarnessViaRunner handles harnesses (virtual, script) that are
-// implemented in DDx and not in the agent service. Constructs a single-use
-// Runner so production callers can keep using these harnesses while the
-// service catches up.
-func runDDxOnlyHarnessViaRunner(ctx context.Context, workDir string, opts RunOptions) (*Result, error) {
+// runFixtureHarnessViaRunner dispatches DDx's fixture-driven harnesses
+// (virtual, script) through the local Runner path. These harnesses are
+// DDx-owned products — virtual keys responses by a hash of the incoming
+// prompt for deterministic record/replay, script runs a directive file
+// against the worktree. Neither maps cleanly to the upstream v0.8.0
+// service-level virtual/script dispatch (agent-81830379), which takes
+// virtual.response or virtual.dict_dir metadata per call rather than a
+// keyed dictionary. Callers targeting the upstream stubs should construct
+// a direct Service.Execute request with Metadata populated.
+func runFixtureHarnessViaRunner(ctx context.Context, workDir string, opts RunOptions) (*Result, error) {
 	cfg := Config{SessionLogDir: ResolveLogDir(workDir, "")}
 	r := NewRunner(cfg)
 	r.WorkDir = workDir
