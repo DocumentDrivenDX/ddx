@@ -77,22 +77,51 @@ var reVerdictLine = regexp.MustCompile(`(?im)^#{1,4}\s+Verdict:\s*(APPROVE|REQUE
 var reReviewSectionHeading = regexp.MustCompile(`(?im)^#{1,4}\s+(AC Grades|Summary|Findings)\s*:?\s*$`)
 var reACReference = regexp.MustCompile(`(?i)\bAC#\s*([0-9]+)\b`)
 
-// ParseReviewVerdict extracts the verdict from a review agent's output.
-// The expected format includes a line: ### Verdict: APPROVE | REQUEST_CHANGES | BLOCK
-// Returns VerdictBlock when the output cannot be parsed (safe default: requires human attention).
-func ParseReviewVerdict(output string) ReviewVerdict {
+// ErrReviewVerdictUnparseable is returned by ParseReviewVerdictStrict when
+// the reviewer output does not contain a recognizable `### Verdict: ...`
+// line. Callers should surface this as a review-error (retryable) rather
+// than silently treating it as BLOCK — the pre-ddx-f7ae036f behavior was to
+// default-to-BLOCK, which produced spurious APPROVE→BLOCK mis-records
+// whenever the reviewer's output shape drifted (codex stream frames,
+// rationale-only responses, stall-truncated output).
+var ErrReviewVerdictUnparseable = fmt.Errorf("reviewer output: no recognizable verdict line")
+
+// ParseReviewVerdictStrict is the structured-error variant of
+// ParseReviewVerdict: on unparseable input it returns
+// ErrReviewVerdictUnparseable instead of silently returning VerdictBlock.
+// The execute-loop uses this path so a parse failure reopens the bead for
+// retry rather than recording a false BLOCK.
+func ParseReviewVerdictStrict(output string) (ReviewVerdict, error) {
 	m := reVerdictLine.FindStringSubmatch(output)
 	if m == nil {
-		return VerdictBlock
+		return "", ErrReviewVerdictUnparseable
 	}
 	switch strings.ToUpper(strings.TrimSpace(m[1])) {
 	case "APPROVE":
-		return VerdictApprove
+		return VerdictApprove, nil
 	case "REQUEST_CHANGES":
-		return VerdictRequestChanges
+		return VerdictRequestChanges, nil
+	case "BLOCK":
+		return VerdictBlock, nil
 	default:
+		return "", ErrReviewVerdictUnparseable
+	}
+}
+
+// ParseReviewVerdict extracts the verdict from a review agent's output.
+// The expected format includes a line: ### Verdict: APPROVE | REQUEST_CHANGES | BLOCK
+//
+// Deprecated: returns VerdictBlock on unparseable input, which masks
+// legitimate verdict-parse failures as BLOCKs and caused the wave-2
+// review-malfunction incident (ddx-f7ae036f). New callers should use
+// ParseReviewVerdictStrict and treat ErrReviewVerdictUnparseable as a
+// retryable review-error.
+func ParseReviewVerdict(output string) ReviewVerdict {
+	v, err := ParseReviewVerdictStrict(output)
+	if err != nil {
 		return VerdictBlock
 	}
+	return v
 }
 
 func ParseReviewResult(output string) (ReviewVerdict, []ReviewAC, string) {
@@ -528,10 +557,20 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		output = result.Output
 		sessionID = result.AgentSessionID
 	}
-	verdict, perAC, rationale := ParseReviewResult(output)
+	// Strict parse: unparseable reviewer output surfaces as a typed error so
+	// the execute-loop can classify it as review-error (retryable) rather
+	// than mis-recording it as BLOCK (ddx-f7ae036f). The review result
+	// artifacts still land on disk for forensics via writeReviewArtifacts
+	// below, regardless of the error path.
+	strictVerdict, parseErr := ParseReviewVerdictStrict(output)
+	perAC := parseReviewACTable(output)
+	rationale := strings.TrimSpace(extractReviewRationale(output, perAC))
+	if len(perAC) == 0 {
+		perAC = synthesizeReviewACsFromRationale(strictVerdict, rationale)
+	}
 	baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
 	reviewRes := &ReviewResult{
-		Verdict:         verdict,
+		Verdict:         strictVerdict,
 		Rationale:       rationale,
 		PerAC:           perAC,
 		RawOutput:       output,
@@ -549,15 +588,22 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		SessionID:    sessionID,
 		BaseRev:      baseRev,
 		ResultRev:    resultRev,
-		Verdict:      string(verdict),
+		Verdict:      string(strictVerdict),
 		BeadID:       beadID,
 		ExecutionDir: artifacts.DirRel,
 	}, reviewArtifactResult{
-		Verdict:   string(verdict),
+		Verdict:   string(strictVerdict),
 		PerAC:     perAC,
 		Rationale: rationale,
 		Error:     reviewRes.Error,
 	})
+	if parseErr != nil {
+		// Return the review result alongside the parse error so the caller
+		// can surface the full rationale + raw output as review-error event
+		// body (loop's reviewErr path) while still having access to the
+		// reviewer text for operator forensics.
+		return reviewRes, fmt.Errorf("reviewer: %w (raw output %d bytes; see %s)", parseErr, len(output), artifacts.DirRel)
+	}
 	return reviewRes, nil
 }
 

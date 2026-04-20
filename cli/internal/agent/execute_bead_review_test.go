@@ -59,9 +59,72 @@ func TestParseReviewVerdict_Block(t *testing.T) {
 }
 
 func TestParseReviewVerdict_UnparsableDefaultsToBlock(t *testing.T) {
+	// Backwards-compatible wrapper still returns VerdictBlock on unparseable
+	// input. New callers use ParseReviewVerdictStrict to get the typed error.
 	assert.Equal(t, VerdictBlock, ParseReviewVerdict(""))
 	assert.Equal(t, VerdictBlock, ParseReviewVerdict("No structured output here"))
 	assert.Equal(t, VerdictBlock, ParseReviewVerdict("verdict: APPROVE")) // no leading ##
+}
+
+// TestParseReviewVerdictStrict covers ddx-f7ae036f AC #3 and #4: the strict
+// variant returns a typed error on unparseable input instead of silently
+// collapsing to BLOCK. Callers that propagate the error get review-error
+// (retryable) event-loop handling; callers that swallow it get the same
+// legacy BLOCK default. The difference is the caller's choice, not a silent
+// mis-record.
+func TestParseReviewVerdictStrict(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    ReviewVerdict
+		wantErr bool
+	}{
+		{
+			name:    "clean APPROVE",
+			input:   "some preamble\n### Verdict: APPROVE\n\ntrailing",
+			want:    VerdictApprove,
+			wantErr: false,
+		},
+		{
+			name:    "clean BLOCK",
+			input:   "### Verdict: BLOCK\n",
+			want:    VerdictBlock,
+			wantErr: false,
+		},
+		{
+			name:    "clean REQUEST_CHANGES",
+			input:   "### Verdict: REQUEST_CHANGES\n",
+			want:    VerdictRequestChanges,
+			wantErr: false,
+		},
+		{
+			name:    "empty output",
+			input:   "",
+			wantErr: true,
+		},
+		{
+			name:    "unparseable — no verdict line",
+			input:   "Reviewer crashed mid-stream.\nNo structured verdict anywhere.",
+			wantErr: true,
+		},
+		{
+			name:    "unparseable — lowercase inline verdict without heading",
+			input:   "I would say verdict: APPROVE but I haven't formatted it",
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ParseReviewVerdictStrict(tc.input)
+			if tc.wantErr {
+				assert.ErrorIs(t, err, ErrReviewVerdictUnparseable,
+					"unparseable input must surface a typed error — the silent default-to-BLOCK behavior is what caused the f7ae036f incident")
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }
 
 func TestParseReviewVerdict_CaseInsensitive(t *testing.T) {
