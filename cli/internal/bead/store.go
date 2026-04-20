@@ -963,6 +963,61 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 	return s.readyFiltered(true)
 }
 
+// ReadyExecutionBreakdown classifies dependency-ready beads by the reason
+// they are NOT execution-eligible: epic containers, retry cooldown,
+// execution-eligible=false, or superseded. It's the diagnostic the work loop
+// emits when the execution queue is empty but `ddx bead ready` is not.
+type ReadyExecutionBreakdown struct {
+	SkippedEpics       []string
+	SkippedOnCooldown  []string
+	SkippedNotEligible []string
+	SkippedSuperseded  []string
+	NextRetryAfter     string
+}
+
+func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
+	out := ReadyExecutionBreakdown{}
+	ready, err := s.Ready()
+	if err != nil {
+		return out, err
+	}
+	now := time.Now().UTC()
+	var soonestRetry time.Time
+	for _, b := range ready {
+		if b.IssueType == "epic" {
+			out.SkippedEpics = append(out.SkippedEpics, b.ID)
+			continue
+		}
+		if retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]; ok {
+			if retryAfterStr, isStr := retryAfterRaw.(string); isStr && retryAfterStr != "" {
+				if retryAfter, err := time.Parse(time.RFC3339, retryAfterStr); err == nil && retryAfter.After(now) {
+					out.SkippedOnCooldown = append(out.SkippedOnCooldown, b.ID)
+					if soonestRetry.IsZero() || retryAfter.Before(soonestRetry) {
+						soonestRetry = retryAfter
+					}
+					continue
+				}
+			}
+		}
+		if eligible, ok := b.Extra["execution-eligible"]; ok {
+			if val, isBool := eligible.(bool); isBool && !val {
+				out.SkippedNotEligible = append(out.SkippedNotEligible, b.ID)
+				continue
+			}
+		}
+		if sup, ok := b.Extra["superseded-by"]; ok {
+			if s, isStr := sup.(string); isStr && s != "" {
+				out.SkippedSuperseded = append(out.SkippedSuperseded, b.ID)
+				continue
+			}
+		}
+	}
+	if !soonestRetry.IsZero() {
+		out.NextRetryAfter = soonestRetry.Format(time.RFC3339)
+	}
+	return out, nil
+}
+
 func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 	beads, err := s.ReadAll()
 	if err != nil {

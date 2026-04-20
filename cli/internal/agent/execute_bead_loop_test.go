@@ -265,6 +265,47 @@ func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts)
 }
 
+// TestExecuteBeadWorkerNoReadyWork_EpicOnlyQueue covers ddx-672cf2bf:
+// when the dependency-ready queue contains only epics, the loop must not
+// silently exit — it must surface a breakdown identifying the skipped epics
+// so the operator knows why nothing ran.
+func TestExecuteBeadWorkerNoReadyWork_EpicOnlyQueue(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	epic := &bead.Bead{ID: "ddx-epic-001", Title: "Epic container", IssueType: "epic", Priority: 1}
+	require.NoError(t, store.Create(epic))
+
+	cooldownTask := &bead.Bead{ID: "ddx-task-002", Title: "Cooldown task", IssueType: "task", Priority: 1,
+		Extra: map[string]any{
+			"execute-loop-retry-after": time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	require.NoError(t, store.Create(cooldownTask))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("unexpected execution for %s", beadID)
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker"})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.NoReadyWork, "NoReadyWork must fire when execution queue is empty but dep-ready queue isn't")
+	assert.Equal(t, 0, result.Attempts)
+
+	breakdown := result.NoReadyWorkDetail
+	assert.Equal(t, []string{"ddx-epic-001"}, breakdown.SkippedEpics,
+		"ready epic must surface in the breakdown with its id so the operator knows to decompose it")
+	assert.Equal(t, []string{"ddx-task-002"}, breakdown.SkippedOnCooldown,
+		"cooldown bead must surface separately so the operator sees retry-after, not just absence of work")
+	assert.NotEmpty(t, breakdown.NextRetryAfter,
+		"NextRetryAfter must identify the soonest cooldown release so the operator knows when to poll again")
+}
+
 func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

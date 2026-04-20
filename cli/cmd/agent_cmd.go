@@ -1851,6 +1851,27 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	if result.NoReadyWork {
 		fmt.Fprintf(cmd.OutOrStdout(), "project: %s\n", projectRoot)
 		fmt.Fprintln(cmd.OutOrStdout(), "No execution-ready beads.")
+		d := result.NoReadyWorkDetail
+		if len(d.SkippedEpics) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d ready epic(s) (epics are structural containers; decompose into tasks): %s\n",
+				len(d.SkippedEpics), strings.Join(d.SkippedEpics, ", "))
+		}
+		if len(d.SkippedOnCooldown) > 0 {
+			retryHint := ""
+			if d.NextRetryAfter != "" {
+				retryHint = " (next retry-after: " + d.NextRetryAfter + ")"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d bead(s) on retry cooldown%s: %s\n",
+				len(d.SkippedOnCooldown), retryHint, strings.Join(d.SkippedOnCooldown, ", "))
+		}
+		if len(d.SkippedNotEligible) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d bead(s) with execution-eligible=false: %s\n",
+				len(d.SkippedNotEligible), strings.Join(d.SkippedNotEligible, ", "))
+		}
+		if len(d.SkippedSuperseded) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d superseded bead(s): %s\n",
+				len(d.SkippedSuperseded), strings.Join(d.SkippedSuperseded, ", "))
+		}
 		return nil
 	}
 

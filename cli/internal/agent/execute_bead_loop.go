@@ -92,6 +92,23 @@ type ExecuteBeadLoopStore interface {
 	Reopen(id, reason, notes string) error
 }
 
+// readyDiagnoser is the optional interface the work loop uses to explain an
+// empty execution queue. bead.Store satisfies it via ReadyExecutionBreakdown.
+type readyDiagnoser interface {
+	ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
+}
+
+// NoReadyWorkBreakdown explains why the execution-ready queue is empty when
+// dependency-ready beads exist. Populated on an ExecuteBeadLoopResult when
+// NoReadyWork fires and the store exposes ReadyExecutionBreakdown.
+type NoReadyWorkBreakdown struct {
+	SkippedEpics       []string `json:"skipped_epics,omitempty"`
+	SkippedOnCooldown  []string `json:"skipped_on_cooldown,omitempty"`
+	SkippedNotEligible []string `json:"skipped_not_eligible,omitempty"`
+	SkippedSuperseded  []string `json:"skipped_superseded,omitempty"`
+	NextRetryAfter     string   `json:"next_retry_after,omitempty"`
+}
+
 // ProgressEvent is the FEAT-006 structured progress event. It is defined
 // separately in the server package (server.ProgressEvent); this alias lets
 // the agent package emit events without importing the server package.
@@ -172,13 +189,14 @@ type ExecuteBeadLoopOptions struct {
 }
 
 type ExecuteBeadLoopResult struct {
-	Attempts          int                 `json:"attempts"`
-	Successes         int                 `json:"successes"`
-	Failures          int                 `json:"failures"`
-	NoReadyWork       bool                `json:"no_ready_work,omitempty"`
-	LastSuccessAt     time.Time           `json:"last_success_at,omitempty"`
-	LastFailureStatus string              `json:"last_failure_status,omitempty"`
-	Results           []ExecuteBeadReport `json:"results,omitempty"`
+	Attempts          int                  `json:"attempts"`
+	Successes         int                  `json:"successes"`
+	Failures          int                  `json:"failures"`
+	NoReadyWork       bool                 `json:"no_ready_work,omitempty"`
+	NoReadyWorkDetail NoReadyWorkBreakdown `json:"no_ready_work_detail,omitempty"`
+	LastSuccessAt     time.Time            `json:"last_success_at,omitempty"`
+	LastFailureStatus string               `json:"last_failure_status,omitempty"`
+	Results           []ExecuteBeadReport  `json:"results,omitempty"`
 }
 
 // ExecuteBeadWorker drains the current single-project execution-ready queue.
@@ -299,6 +317,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		if !ok {
 			if result.Attempts == 0 {
 				result.NoReadyWork = true
+				if diag, ok := w.Store.(readyDiagnoser); ok {
+					if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
+						result.NoReadyWorkDetail = NoReadyWorkBreakdown{
+							SkippedEpics:       breakdown.SkippedEpics,
+							SkippedOnCooldown:  breakdown.SkippedOnCooldown,
+							SkippedNotEligible: breakdown.SkippedNotEligible,
+							SkippedSuperseded:  breakdown.SkippedSuperseded,
+							NextRetryAfter:     breakdown.NextRetryAfter,
+						}
+					}
+				}
 			}
 			if opts.PollInterval <= 0 {
 				return result, nil

@@ -831,7 +831,15 @@ func (f *CommandFactory) newBeadReadyCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ready",
 		Short: "List beads ready for work (no unclosed deps)",
-		Args:  cobra.NoArgs,
+		Long: `List beads whose dependencies are all closed, sorted by priority.
+
+By default this is the dependency-ready set: any open bead with no blocking
+deps, including epics and beads on retry cooldown. 'ddx work' operates on a
+narrower "execution-ready" subset — use --execution to see exactly what
+'ddx work' would pick from, or the reverse: if 'ddx bead ready' shows work
+but 'ddx work' reports none, the diff is epics, cooldown-waiting beads,
+beads with execution-eligible=false, and superseded beads.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			execution, _ := cmd.Flags().GetBool("execution")
@@ -869,7 +877,7 @@ func (f *CommandFactory) newBeadReadyCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
-	cmd.Flags().Bool("execution", false, "Filter by execution-eligible and not superseded")
+	cmd.Flags().Bool("execution", false, "Filter to the execution-ready subset (what ddx work picks from): open, deps-closed, not an epic, execution-eligible, not superseded, not on retry cooldown")
 	return cmd
 }
 
