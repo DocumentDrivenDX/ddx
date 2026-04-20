@@ -432,13 +432,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		result.Attempts++
 
 		if report.Status == ExecuteBeadStatusSuccess {
-			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-				return result, err
+			// Close the bead early when review is skipped. The closure gate
+			// (ddx-e30e60a9) accepts this path because closing_commit_sha is
+			// set and there is no malformed-APPROVE event to reject.
+			reviewApproved := true
+			reviewSkipped := w.Reviewer == nil || opts.NoReview || HasBeadLabel(candidate.Labels, "review:skip")
+
+			if reviewSkipped {
+				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
+					return result, err
+				}
 			}
 
-			// Post-merge review — on-by-default when Reviewer is configured.
-			// Skip when: --no-review flag, "review:skip" bead label, or no reviewer.
-			reviewApproved := true
 			if w.Reviewer != nil && !opts.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
 				// Record a routing evidence event so the subsequent review
 				// event can be attributed to the originating provider/model
@@ -474,7 +479,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 
 					switch reviewRes.Verdict {
 					case VerdictApprove:
-						// Approved: attach evidence and leave bead closed.
+						// Approved: record the verdict event and then close.
+						// Closure must land AFTER the review event so the
+						// gate (ddx-e30e60a9) sees the terminal verdict.
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review",
 							Summary:   "APPROVE",
@@ -483,6 +490,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
 						})
+						if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); cerr != nil {
+							return result, cerr
+						}
 					case VerdictRequestChanges:
 						// Needs fixes: record the review verdict, then reopen
 						// with findings in notes. The review event must land
@@ -565,16 +575,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 					return result, aerr
 				}
 				if satisfied {
-					// Adjudication confirmed bead is already satisfied: close
-					// with accumulated no-changes evidence so the queue drains.
-					if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); cerr != nil {
-						return result, cerr
-					}
+					// Adjudication confirmed bead is already satisfied.
+					// Set the terminal status BEFORE the close so the late
+					// executeBeadLoopEvent append captures "already_satisfied"
+					// (not "no_changes"), and emit an early execute-bead
+					// evidence event so the closure gate accepts even when
+					// BaseRev is empty (test fixtures and genuinely-no-commit
+					// satisfied beads).
 					report.Status = ExecuteBeadStatusAlreadySatisfied
 					if evidence != "" {
 						// Checker evidence explains why the bead is being closed;
 						// it takes precedence over the executor's attempt detail.
 						report.Detail = evidence
+					}
+					_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
+					if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); cerr != nil {
+						return result, cerr
 					}
 					result.Successes++
 					result.LastSuccessAt = now().UTC()
@@ -606,8 +622,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 
 		result.Results = append(result.Results, report)
 
-		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
-			return result, err
+		// Skip the late execute-bead append for already-satisfied beads —
+		// the satisfied path appends its own terminal event before
+		// CloseWithEvidence so the closure gate sees execution evidence.
+		// Duplicating it here would yield two identical events.
+		if report.Status != ExecuteBeadStatusAlreadySatisfied {
+			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+				return result, err
+			}
 		}
 
 		// Emit terminal progress phase event.

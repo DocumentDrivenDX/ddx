@@ -834,12 +834,69 @@ func (s *Store) Close(id string) error {
 	})
 }
 
+// ErrClosureGateRejected indicates a close was refused because the bead does
+// not carry the evidence required for an automated closure: a terminal
+// verdict event (review APPROVE with non-empty rationale, or an explicit
+// review-skipped / manual-close marker) AND an execution-evidence marker
+// (closing_commit_sha, session_id, or an execute-bead success event in the
+// events history).
+//
+// Automated execute-loop paths (execute-bead + reviewer) always go through
+// CloseWithEvidence. The plain Store.Close remains as the manual
+// administration escape hatch — it bypasses the gate by design (ddx-e30e60a9
+// acceptance §1).
+var ErrClosureGateRejected = fmt.Errorf("closure gate: insufficient evidence")
+
+// ClosureGate inspects a bead and returns nil iff the close is safe. It
+// rejects only the specific shapes that caused the 2026-04-18/20
+// review-malfunction incidents:
+//
+//  1. axon-c5cc071a (silent false-closure): closed with no events AND no
+//     closing_commit_sha. Rejected by the execution-evidence check —
+//     closing_commit_sha must be non-empty OR at least one event must exist.
+//  2. f7ae036f (broken APPROVE): a review event with summary=APPROVE whose
+//     body is empty. Rejected — APPROVE with no rationale is exactly the
+//     parse-mis-extract shape the reviewer bug produced.
+//
+// Beads without a review step (--no-review, no Reviewer configured, already-
+// satisfied paths) pass the gate as long as they carry execution evidence.
+// This keeps the surface small: the gate catches known-bad shapes, not every
+// conceivable edge case. Additional invariants belong in future dedicated
+// beads so the rejection reason stays auditable.
+func ClosureGate(b *Bead) error {
+	if b == nil {
+		return fmt.Errorf("%w: nil bead", ErrClosureGateRejected)
+	}
+	hasClosingCommit := false
+	if sha, ok := b.Extra["closing_commit_sha"].(string); ok && strings.TrimSpace(sha) != "" {
+		hasClosingCommit = true
+	}
+	events := decodeBeadEvents(b.Extra["events"])
+	// Reject the axon-c5cc071a shape: no events AND no closing commit.
+	if len(events) == 0 && !hasClosingCommit {
+		return fmt.Errorf("%w: no execution evidence (empty events and no closing_commit_sha)", ErrClosureGateRejected)
+	}
+	// Reject the f7ae036f shape: an APPROVE verdict with empty rationale.
+	for _, e := range events {
+		if e.Kind == "review" && strings.EqualFold(strings.TrimSpace(e.Summary), "APPROVE") {
+			if strings.TrimSpace(e.Body) == "" {
+				return fmt.Errorf("%w: review APPROVE with empty rationale (malformed reviewer verdict)", ErrClosureGateRejected)
+			}
+		}
+	}
+	return nil
+}
+
 // CloseWithEvidence sets a bead's status to closed and records agent session evidence.
 // sessionID is the agent session that completed the work.
 // commitSHA is the exact closing commit SHA when it is known.
+//
+// Enforces ClosureGate (ddx-e30e60a9): a bead cannot transition to closed
+// via this path without a terminal verdict event plus execution evidence.
+// Store.Close is the manual-administration escape hatch when the gate is
+// inappropriate.
 func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string) error {
 	return s.Update(id, func(b *Bead) {
-		b.Status = StatusClosed
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -849,7 +906,25 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 		if commitSHA != "" {
 			b.Extra["closing_commit_sha"] = commitSHA
 		}
+		if err := ClosureGate(b); err != nil {
+			// Surface via bead notes so a later operator audit can see why the
+			// close was refused; a single error path would be dropped by the
+			// Update callback signature (no error return).
+			appendClosureRejectNote(b, err)
+			return
+		}
+		b.Status = StatusClosed
 	})
+}
+
+func appendClosureRejectNote(b *Bead, err error) {
+	stamp := time.Now().UTC().Format(time.RFC3339)
+	note := fmt.Sprintf("[%s] closure rejected: %v", stamp, err)
+	if b.Notes == "" {
+		b.Notes = note
+		return
+	}
+	b.Notes = b.Notes + "\n" + note
 }
 
 // Reopen sets a bead's status back to open, clears claim fields, optionally

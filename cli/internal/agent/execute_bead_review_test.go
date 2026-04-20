@@ -324,7 +324,13 @@ func TestExecuteBeadWorkerReviewBlockWithoutRationaleIsMalfunction(t *testing.T)
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status, "malformed BLOCK should not reopen bead")
+	// ddx-e30e60a9 + ddx-738edf47: malformed BLOCK is a reviewer malfunction,
+	// not a terminal verdict. The loop refuses to close on a malfunction so
+	// a later attempt can retry. Pre-wave-2 behavior closed eagerly before
+	// review and left the malformed-BLOCK bead closed — that was the silent
+	// false-closure surface these beads eliminate.
+	assert.NotEqual(t, bead.StatusClosed, got.Status,
+		"malformed BLOCK must not close the bead — closing on reviewer malfunction was the silent-false-closure shape")
 	assert.NotContains(t, got.Notes, "REVIEW:BLOCK")
 
 	require.Len(t, result.Results, 1)
