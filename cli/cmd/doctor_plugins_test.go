@@ -108,50 +108,35 @@ func TestDoctorPluginsFlagSkipsResourceEntries(t *testing.T) {
 	assert.NotContains(t, output, "not a directory")
 }
 
-func TestDoctorPluginsFlagReportsManifestSchemaIssues(t *testing.T) {
-	workDir := t.TempDir()
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "broken-plugin")
-	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: broken-plugin
-version: 1.0.0
-type: plugin
-source: https://example.com/broken-plugin
-api_version: 1
-`), 0o644))
-
-	state := &registry.InstalledState{
-		Installed: []registry.InstalledEntry{
-			{
-				Name:    "broken-plugin",
-				Version: "1.0.0",
-				Type:    registry.PackageTypePlugin,
-				Source:  pluginRoot,
-				Files:   []string{pluginRoot},
-			},
-		},
-	}
-	require.NoError(t, registry.SaveState(state))
-
-	factory := NewCommandFactory(workDir)
-	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
-	require.NoError(t, err)
-
-	assert.Contains(t, output, "missing required field `description`")
-}
-
-func TestDoctorPluginsFlagReportsSkillAndSymlinkIssues(t *testing.T) {
+// TestDoctorPluginsFlagReportsBothManifestSchemaAndStructuralIssues covers
+// ddx-b9747ee3: a single plugin with BOTH a manifest schema defect AND
+// structural defects (missing SKILL.md, broken symlink) must produce all
+// three findings in a single `doctor --plugins` pass. The pre-fix behavior
+// silently swallowed structural issues whenever the manifest failed schema
+// validation, because AuditInstalledEntry fell back to an empty Package
+// struct and collectSkillRoots returned nothing.
+//
+// This is the consolidation of the two pre-fix split tests
+// (TestDoctorPluginsFlagReportsManifestSchemaIssues +
+// TestDoctorPluginsFlagReportsSkillAndSymlinkIssues). They had to be split
+// only because no single fixture could trigger both diagnostics under the
+// broken audit flow — a consolidated test proves the audit dimensions are
+// now independent.
+func TestDoctorPluginsFlagReportsBothManifestSchemaAndStructuralIssues(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
 	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "broken-plugin")
 	require.NoError(t, os.MkdirAll(filepath.Join(pluginRoot, "skills", "missing-skill"), 0o755))
+	require.NoError(t, os.Symlink("does-not-exist", filepath.Join(pluginRoot, "broken-link")))
+
+	// Manifest: missing the required `description` field (schema defect)
+	// alongside a valid `install.skills` section (so structural audit has
+	// something to walk). Pre-fix: the schema error caused audit to skip
+	// the install section entirely.
 	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: broken-plugin
 version: 1.0.0
-description: Plugin used to drive doctor structural audits in tests
 type: plugin
 source: https://example.com/broken-plugin
 api_version: 1
@@ -160,7 +145,6 @@ install:
     - source: skills
       target: .agents/skills
 `), 0o644))
-	require.NoError(t, os.Symlink("does-not-exist", filepath.Join(pluginRoot, "broken-link")))
 
 	state := &registry.InstalledState{
 		Installed: []registry.InstalledEntry{
@@ -179,8 +163,12 @@ install:
 	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
 	require.NoError(t, err)
 
-	assert.Contains(t, output, "missing SKILL.md")
-	assert.Contains(t, output, "broken symlink")
+	assert.Contains(t, output, "missing required field `description`",
+		"manifest schema defect must be reported — the whole point of doctor --plugins")
+	assert.Contains(t, output, "missing SKILL.md",
+		"structural defect must ALSO surface — a schema error must not hide install-tree problems")
+	assert.Contains(t, output, "broken symlink",
+		"every structural issue must surface in the same pass — otherwise operators fix the schema and re-run, only to discover more")
 }
 
 func executeWithStdoutCapture(t *testing.T, root *cobra.Command, args ...string) (string, error) {
