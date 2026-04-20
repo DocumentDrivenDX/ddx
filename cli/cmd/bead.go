@@ -61,6 +61,7 @@ Examples:
 	cmd.AddCommand(f.newBeadExportCommand())
 	cmd.AddCommand(f.newBeadReviewCommand())
 	cmd.AddCommand(f.newBeadMetricsCommand())
+	cmd.AddCommand(f.newBeadDoctorCommand())
 
 	return cmd
 }

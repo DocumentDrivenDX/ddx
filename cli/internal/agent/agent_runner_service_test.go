@@ -169,3 +169,19 @@ func (s *noopCompactionDdxAgent) ResolveRoute(ctx context.Context, req agentlib.
 func (s *noopCompactionDdxAgent) RouteStatus(ctx context.Context) (*agentlib.RouteStatusReport, error) {
 	return nil, nil
 }
+
+func (s *noopCompactionDdxAgent) ListProfiles(ctx context.Context) ([]agentlib.ProfileInfo, error) {
+	return nil, nil
+}
+
+func (s *noopCompactionDdxAgent) ResolveProfile(ctx context.Context, name string) (*agentlib.ResolvedProfile, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *noopCompactionDdxAgent) ProfileAliases(ctx context.Context) (map[string]string, error) {
+	return nil, nil
+}
+
+func (s *noopCompactionDdxAgent) RecordRouteAttempt(ctx context.Context, attempt agentlib.RouteAttempt) error {
+	return nil
+}
