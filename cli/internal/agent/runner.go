@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	agentlib "github.com/DocumentDrivenDX/agent"
 )
 
 func containsString(slice []string, s string) bool {
@@ -55,10 +57,8 @@ func NewRunner(cfg Config) *Runner {
 	//   2. Shared ddx-agent catalog (~/.config/agent/models.yaml — authoritative when installed)
 	//   3. User overrides (~/.ddx/model-catalog.yaml — user wins over shared and built-in)
 	catalog := BuiltinCatalog
-	if path := SharedCatalogPath(); path != "" {
-		if m, err := LoadSharedCatalog(path); err == nil && m != nil {
-			ApplySharedCatalog(catalog, m)
-		}
+	if svc, err := agentlib.New(agentlib.ServiceOptions{}); err == nil {
+		ApplyCatalogFromService(context.Background(), catalog, svc)
 	}
 	if path := DefaultModelCatalogPath(); path != "" {
 		if yml, err := LoadModelCatalogYAML(path); err == nil && yml != nil {

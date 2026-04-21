@@ -1,220 +1,196 @@
 package agent
 
 import (
-	"os"
-	"path/filepath"
+	"context"
+	"fmt"
 	"testing"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// testSharedManifestV3 is a representative version-3 ddx-agent catalog manifest.
-const testSharedManifestV3 = `
-version: 3
-generated_at: 2026-04-12T00:00:00Z
-catalog_version: 2026-04-12.2
-
-profiles:
-  code-high:
-    target: code-high
-  smart:
-    target: code-high
-  code-medium:
-    target: code-medium
-  standard:
-    target: code-medium
-  code-economy:
-    target: code-economy
-  cheap:
-    target: code-economy
-
-targets:
-  code-high:
-    family: coding-tier
-    aliases:
-      - high
-    status: active
-    surfaces:
-      agent.anthropic: opus-4.6
-      claude-code: opus-4.6
-      agent.openai: gpt-5.4
-      codex: gpt-5.4
-
-  code-medium:
-    family: coding-tier
-    aliases:
-      - medium
-    status: active
-    surfaces:
-      agent.anthropic: sonnet-4.6
-      claude-code: sonnet-4.6
-      agent.openai: gpt-5.4-mini
-      codex: gpt-5.4-mini
-
-  code-economy:
-    family: coding-tier
-    aliases:
-      - economy
-    status: active
-    surfaces:
-      agent.anthropic: haiku-5.5
-      claude-code: haiku-5.5
-      agent.openai: qwen3.5-27b
-
-  claude-sonnet-4:
-    family: claude-sonnet
-    status: deprecated
-    replacement: code-medium
-    surfaces:
-      agent.anthropic: claude-sonnet-4-20250514
-      agent.openai: anthropic/claude-sonnet-4
-`
-
-// testSharedManifestV2 is a minimal version-2 manifest (earlier schema).
-const testSharedManifestV2 = `
-version: 2
-generated_at: 2026-04-10T00:00:00Z
-catalog_version: 2026-04-11.1
-profiles:
-  code-high:
-    target: code-high
-targets:
-  code-high:
-    family: coding-tier
-    status: active
-    surfaces:
-      agent.openai: gpt-5.4
-`
-
-// writeSharedManifest writes content to a temp file and returns its path.
-func writeSharedManifest(t *testing.T, content string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "models.yaml")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
-	return path
+// catalogStubAgent is a minimal DdxAgent stub for catalog tests.
+type catalogStubAgent struct {
+	profiles []agentlib.ProfileInfo
+	resolved map[string]*agentlib.ResolvedProfile
 }
 
-// --- LoadSharedCatalog ---
-
-func TestLoadSharedCatalogMissingFile(t *testing.T) {
-	m, err := LoadSharedCatalog("/tmp/nonexistent-shared-catalog-xyz-abc.yaml")
-	require.NoError(t, err)
-	assert.Nil(t, m, "missing file must return nil with no error")
+func (s *catalogStubAgent) ListProfiles(_ context.Context) ([]agentlib.ProfileInfo, error) {
+	return s.profiles, nil
 }
 
-func TestLoadSharedCatalogValidV3(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-	require.NotNil(t, m)
-	assert.Equal(t, 3, m.Version)
-	assert.Equal(t, "2026-04-12.2", m.CatalogVersion)
-	assert.Contains(t, m.Profiles, "code-high")
-	assert.Contains(t, m.Profiles, "smart")
-	assert.Contains(t, m.Targets, "code-high")
+func (s *catalogStubAgent) ResolveProfile(_ context.Context, name string) (*agentlib.ResolvedProfile, error) {
+	r, ok := s.resolved[name]
+	if !ok {
+		return nil, fmt.Errorf("profile %q not found", name)
+	}
+	return r, nil
 }
 
-func TestLoadSharedCatalogValidV2(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV2)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-	require.NotNil(t, m)
-	assert.Equal(t, 2, m.Version)
+func (s *catalogStubAgent) ProfileAliases(_ context.Context) (map[string]string, error) {
+	return nil, nil
 }
 
-func TestLoadSharedCatalogUnsupportedVersion(t *testing.T) {
-	content := "version: 99\nprofiles: {}\ntargets:\n  x:\n    family: f\n    status: active\n    surfaces:\n      agent.openai: m\n"
-	path := writeSharedManifest(t, content)
-	_, err := LoadSharedCatalog(path)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported schema version")
+func (s *catalogStubAgent) Execute(_ context.Context, _ agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (s *catalogStubAgent) TailSessionLog(_ context.Context, _ string) (<-chan agentlib.ServiceEvent, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (s *catalogStubAgent) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
+	return nil, nil
+}
+func (s *catalogStubAgent) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
+	return nil, nil
+}
+func (s *catalogStubAgent) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	return nil, nil
+}
+func (s *catalogStubAgent) HealthCheck(_ context.Context, _ agentlib.HealthTarget) error {
+	return fmt.Errorf("not implemented")
+}
+func (s *catalogStubAgent) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (s *catalogStubAgent) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
+	return nil
+}
+func (s *catalogStubAgent) RouteStatus(_ context.Context) (*agentlib.RouteStatusReport, error) {
+	return nil, nil
 }
 
-func TestLoadSharedCatalogMalformedYAML(t *testing.T) {
-	path := writeSharedManifest(t, "not: valid: yaml: {{{{{")
-	_, err := LoadSharedCatalog(path)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse")
+// testSurfaces builds a []ProfileSurface using the surface names the agentlib service emits.
+func codeHighSurfaces() []agentlib.ProfileSurface {
+	return []agentlib.ProfileSurface{
+		{Name: "native-openai", Harness: "agent", Model: "gpt-5.4"},
+		{Name: "native-anthropic", Harness: "agent", Model: "opus-4.6"},
+		{Name: "claude", Harness: "claude", Model: "opus-4.6"},
+		{Name: "codex", Harness: "codex", Model: "gpt-5.4"},
+	}
 }
 
-// --- ApplySharedCatalog: profile/target/alias population ---
+func codeMediumSurfaces() []agentlib.ProfileSurface {
+	return []agentlib.ProfileSurface{
+		{Name: "native-openai", Harness: "agent", Model: "gpt-5.4-mini"},
+		{Name: "native-anthropic", Harness: "agent", Model: "sonnet-4.6"},
+		{Name: "claude", Harness: "claude", Model: "sonnet-4.6"},
+		{Name: "codex", Harness: "codex", Model: "gpt-5.4-mini"},
+	}
+}
 
-func TestApplySharedCatalogProfilesAdded(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
+func codeEconomySurfaces() []agentlib.ProfileSurface {
+	return []agentlib.ProfileSurface{
+		{Name: "native-openai", Harness: "agent", Model: "qwen3.5-27b"},
+		{Name: "native-anthropic", Harness: "agent", Model: "haiku-5.5"},
+		{Name: "claude", Harness: "claude", Model: "haiku-5.5"},
+	}
+}
 
+// newFullStub returns a stub with all tier profiles, aliases, and a deprecated entry.
+func newFullStub() *catalogStubAgent {
+	stub := &catalogStubAgent{
+		profiles: []agentlib.ProfileInfo{
+			{Name: "code-high", Target: "code-high"},
+			{Name: "smart", Target: "code-high", AliasOf: "code-high"},
+			{Name: "code-medium", Target: "code-medium"},
+			{Name: "standard", Target: "code-medium", AliasOf: "code-medium"},
+			{Name: "code-economy", Target: "code-economy"},
+			{Name: "cheap", Target: "code-economy", AliasOf: "code-economy"},
+			{Name: "high", Target: "code-high", AliasOf: "code-high"},
+			{Name: "medium", Target: "code-medium", AliasOf: "code-medium"},
+			{Name: "economy", Target: "code-economy", AliasOf: "code-economy"},
+			{Name: "claude-sonnet-4", Target: "code-medium", AliasOf: "code-medium", Deprecated: true, Replacement: "code-medium"},
+		},
+		resolved: map[string]*agentlib.ResolvedProfile{
+			"code-high":    {Name: "code-high", Target: "code-high", Surfaces: codeHighSurfaces()},
+			"smart":        {Name: "smart", Target: "code-high", Surfaces: codeHighSurfaces()},
+			"code-medium":  {Name: "code-medium", Target: "code-medium", Surfaces: codeMediumSurfaces()},
+			"standard":     {Name: "standard", Target: "code-medium", Surfaces: codeMediumSurfaces()},
+			"code-economy": {Name: "code-economy", Target: "code-economy", Surfaces: codeEconomySurfaces()},
+			"cheap":        {Name: "cheap", Target: "code-economy", Surfaces: codeEconomySurfaces()},
+			"high":         {Name: "high", Target: "code-high", Surfaces: codeHighSurfaces()},
+			"medium":       {Name: "medium", Target: "code-medium", Surfaces: codeMediumSurfaces()},
+			"economy":      {Name: "economy", Target: "code-economy", Surfaces: codeEconomySurfaces()},
+			"claude-sonnet-4": {
+				Name:        "claude-sonnet-4",
+				Target:      "code-medium",
+				Deprecated:  true,
+				Replacement: "code-medium",
+				Surfaces: []agentlib.ProfileSurface{
+					{Name: "native-openai", Harness: "agent", Model: "anthropic/claude-sonnet-4"},
+					{Name: "claude", Harness: "claude", Model: "claude-sonnet-4-20250514"},
+				},
+			},
+		},
+	}
+	return stub
+}
+
+// --- ApplyCatalogFromService: nil safety ---
+
+func TestApplyCatalogFromServiceNilSafe(t *testing.T) {
+	ApplyCatalogFromService(context.Background(), nil, nil)
+	ApplyCatalogFromService(context.Background(), NewCatalog(nil), nil)
+}
+
+// --- profile/alias/target population ---
+
+func TestApplyCatalogFromServiceProfilesAdded(t *testing.T) {
 	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	for _, name := range []string{"code-high", "smart", "code-medium", "standard", "code-economy", "cheap"} {
 		assert.True(t, cat.KnownOnAnySurface(name), "profile %q must be in catalog", name)
 	}
 }
 
-func TestApplySharedCatalogTargetIDsAdded(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
+func TestApplyCatalogFromServiceAliasesAdded(t *testing.T) {
 	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
-
-	for _, name := range []string{"code-high", "code-medium", "code-economy"} {
-		assert.True(t, cat.KnownOnAnySurface(name), "target %q must be in catalog", name)
-	}
-}
-
-func TestApplySharedCatalogAliasesAdded(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
-	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	for _, alias := range []string{"high", "medium", "economy"} {
 		assert.True(t, cat.KnownOnAnySurface(alias), "alias %q must be in catalog", alias)
 	}
 }
 
-// --- ApplySharedCatalog: surface translation ---
+// --- surface translation ---
 
-func TestApplySharedCatalogSurfaceTranslation(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
+func TestApplyCatalogFromServiceSurfaceTranslation(t *testing.T) {
 	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
-	// claude-code → claude
+	// claude surface
 	model, ok := cat.Resolve("code-high", "claude")
 	assert.True(t, ok)
 	assert.Equal(t, "opus-4.6", model)
 
-	// agent.openai → embedded-openai (wins over agent.anthropic)
+	// native-openai → embedded-openai (wins over native-anthropic)
 	model, ok = cat.Resolve("code-high", "embedded-openai")
 	assert.True(t, ok)
-	assert.Equal(t, "gpt-5.4", model, "agent.openai must win for embedded-openai surface")
+	assert.Equal(t, "gpt-5.4", model, "native-openai must map to embedded-openai")
 
-	// codex → codex
+	// codex surface
 	model, ok = cat.Resolve("code-high", "codex")
 	assert.True(t, ok)
 	assert.Equal(t, "gpt-5.4", model)
 }
 
-// --- Acceptance criteria: code-high/code-medium/code-economy tier coverage ---
-
-func TestApplySharedCatalogCodeHighMediumEconomy(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
+func TestApplyCatalogFromServiceNativeAnthropicNotMappedToEmbeddedOpenAI(t *testing.T) {
+	// native-anthropic must not map to embedded-openai; native-openai wins.
 	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
+
+	model, ok := cat.Resolve("code-high", "embedded-openai")
+	assert.True(t, ok)
+	assert.Equal(t, "gpt-5.4", model)
+	assert.NotEqual(t, "opus-4.6", model, "native-anthropic must not set embedded-openai")
+}
+
+// --- tier coverage ---
+
+func TestApplyCatalogFromServiceCodeHighMediumEconomy(t *testing.T) {
+	cat := NewCatalog(nil)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	cases := []struct {
 		tier    string
@@ -237,87 +213,43 @@ func TestApplySharedCatalogCodeHighMediumEconomy(t *testing.T) {
 	}
 }
 
-func TestApplySharedCatalogProfileMatchesTier(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
+func TestApplyCatalogFromServiceProfileMatchesTier(t *testing.T) {
 	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
-	// "smart" → code-high — same surface mappings.
 	codeHigh, _ := cat.Resolve("code-high", "claude")
 	smart, ok := cat.Resolve("smart", "claude")
-	assert.True(t, ok, "smart profile must be resolvable")
-	assert.Equal(t, codeHigh, smart, "smart must resolve same as code-high")
+	assert.True(t, ok)
+	assert.Equal(t, codeHigh, smart)
 
-	// "standard" → code-medium
 	codeMedium, _ := cat.Resolve("code-medium", "embedded-openai")
 	standard, ok := cat.Resolve("standard", "embedded-openai")
-	assert.True(t, ok, "standard profile must be resolvable")
-	assert.Equal(t, codeMedium, standard, "standard must resolve same as code-medium")
+	assert.True(t, ok)
+	assert.Equal(t, codeMedium, standard)
 
-	// "cheap" → code-economy
 	codeEconomy, _ := cat.Resolve("code-economy", "embedded-openai")
 	cheap, ok := cat.Resolve("cheap", "embedded-openai")
-	assert.True(t, ok, "cheap profile must be resolvable")
-	assert.Equal(t, codeEconomy, cheap, "cheap must resolve same as code-economy")
+	assert.True(t, ok)
+	assert.Equal(t, codeEconomy, cheap)
 }
 
-// --- Deprecated target handling ---
+// --- deprecated handling ---
 
-func TestApplySharedCatalogDeprecatedTargetAdded(t *testing.T) {
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
+func TestApplyCatalogFromServiceDeprecatedEntryAdded(t *testing.T) {
 	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	entry, ok := cat.Entry("claude-sonnet-4")
-	require.True(t, ok, "deprecated target must be in catalog")
+	assert.True(t, ok, "deprecated entry must be in catalog")
 	assert.True(t, entry.Deprecated)
 	assert.Equal(t, "code-medium", entry.ReplacedBy)
 }
 
-// --- agent.anthropic boundary ---
+// --- integration: routing ---
 
-func TestApplySharedCatalogAgentAnthropicNotMappedToOwnSurface(t *testing.T) {
-	// agent.anthropic is excluded from DDx surface translation. The embedded
-	// agent harness uses "embedded-openai" surface in DDx; agent.openai wins.
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
-	cat := NewCatalog(nil)
-	ApplySharedCatalog(cat, m)
-
-	// code-high → embedded-openai must be gpt-5.4 (agent.openai), not opus-4.6 (agent.anthropic).
-	model, ok := cat.Resolve("code-high", "embedded-openai")
-	assert.True(t, ok)
-	assert.Equal(t, "gpt-5.4", model)
-	assert.NotEqual(t, "opus-4.6", model, "agent.anthropic must not override embedded-openai surface")
-}
-
-// --- Nil safety ---
-
-func TestApplySharedCatalogNilSafe(t *testing.T) {
-	// Must not panic on nil inputs.
-	ApplySharedCatalog(nil, nil)
-	ApplySharedCatalog(NewCatalog(nil), nil)
-}
-
-// --- Integration: routing with shared catalog ---
-
-func TestSharedCatalogAllProfilesRoutable(t *testing.T) {
-	// All tier profiles from the shared manifest must produce at least one viable
-	// candidate when the catalog is applied to a runner.
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
+func TestApplyCatalogFromServiceAllProfilesRoutable(t *testing.T) {
 	cat := buildBuiltinCatalog()
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	r := newTestRunnerForRouting()
 	r.Catalog = cat
@@ -341,15 +273,9 @@ func TestSharedCatalogAllProfilesRoutable(t *testing.T) {
 	}
 }
 
-func TestSharedCatalogCodeHighRoutesToClaudeAndAgent(t *testing.T) {
-	// code-high must route to both claude (via claude-code surface) and agent
-	// (via agent.openai surface) when both are healthy.
-	path := writeSharedManifest(t, testSharedManifestV3)
-	m, err := LoadSharedCatalog(path)
-	require.NoError(t, err)
-
+func TestApplyCatalogFromServiceCodeHighRoutesToClaudeAndAgent(t *testing.T) {
 	cat := buildBuiltinCatalog()
-	ApplySharedCatalog(cat, m)
+	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	r := newTestRunnerForRouting()
 	r.Catalog = cat
