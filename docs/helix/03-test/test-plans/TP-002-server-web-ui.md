@@ -168,26 +168,25 @@ one run.
 
 ### TC-010: Project Registry and Scoped Routing
 
-The MCP registry and project-scoped routing checks in this section remain
-planned future coverage and are not yet implemented in
-`cli/internal/server/server_test.go` alongside the existing HTTP API and MCP
-endpoint coverage. The planned MCP coverage here should exercise project
-listing via `ddx_list_projects`, project lookup via `ddx_show_project`, and at
-least one project-aware MCP tool call using an explicit project selection.
-These cases are owned by the Go server tests in
-`cli/internal/server/server_test.go`.
+Ownership is split across layers. HTTP API, registry shape, singleton
+fallback, isolation, and MCP coverage are Go-side — owned by
+`cli/internal/server/server_test.go` and its companions. The UI project
+picker is SvelteKit-side — owned by `cli/internal/server/frontend/e2e/navigation.spec.ts`.
+Dedicated `projects.spec.ts` is intentionally not restored post-Svelte
+migration; the equivalent coverage is split across `navigation.spec.ts`
+(project picker) and the Go tests (HTTP + MCP contract).
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-010.1 | Registry loads | `GET /api/projects` lists each configured project root with a default marker | Implemented |
-| TC-010.2 | Scoped API requests | `GET /api/projects/:project/beads` and sibling routes resolve the selected project context | Implemented |
-| TC-010.3 | UI project picker | The web UI shows a project picker when more than one project is registered | Planned |
-| TC-010.4 | Singleton fallback | A single-project server still serves the legacy unscoped routes and dashboard | Implemented |
-| TC-010.5 | Isolation | A malformed or missing project root reports degraded status without blocking healthy sibling projects | Implemented |
-| TC-010.6 | Registry shape | Duplicate project ids fail registry loading before serving partial context | Planned |
-| TC-010.7 | MCP registry listing | `ddx_list_projects` lists the registered projects and marks the default project | Implemented |
-| TC-010.8 | MCP project lookup | `ddx_show_project` resolves the selected project context and returns the matching project metadata | Implemented |
-| TC-010.9 | MCP scoped tool call | A project-aware MCP tool call runs against the selected project and returns that project's data | Implemented |
+| TC-010.1 | Registry loads | `GET /api/projects` lists each configured project root with a default marker | Implemented — `cli/internal/server/server_test.go` |
+| TC-010.2 | Scoped API requests | `GET /api/projects/:project/beads` and sibling routes resolve the selected project context | Implemented — `cli/internal/server/server_test.go` |
+| TC-010.3 | UI project picker | The web UI shows a project picker when more than one project is registered | Implemented — `cli/internal/server/frontend/e2e/navigation.spec.ts` TC-004, TC-005 |
+| TC-010.4 | Singleton fallback | A single-project server still serves the legacy unscoped routes and dashboard | Implemented — `cli/internal/server/server_test.go` |
+| TC-010.5 | Isolation | A malformed or missing project root reports degraded status without blocking healthy sibling projects | Implemented — `cli/internal/server/server_test.go` |
+| TC-010.6 | Registry shape | Duplicate project ids fail registry loading before serving partial context | Planned — Go server tests |
+| TC-010.7 | MCP registry listing | `ddx_list_projects` lists the registered projects and marks the default project | Implemented — `cli/internal/server/server_test.go` |
+| TC-010.8 | MCP project lookup | `ddx_show_project` resolves the selected project context and returns the matching project metadata | Implemented — `cli/internal/server/server_test.go` |
+| TC-010.9 | MCP scoped tool call | A project-aware MCP tool call runs against the selected project and returns that project's data | Implemented — `cli/internal/server/server_test.go` |
 
 ### TC-011: Host+User State and Node Identity
 
@@ -208,15 +207,17 @@ per FEAT-020. These cases are owned by the Go server tests in
 ### TC-012: Host+User Project Isolation and Concurrency
 
 Verifies that one host+user server can serve multiple projects concurrently
-without cross-project leakage, per SD-019.
+without cross-project leakage, per SD-019. Owned entirely by the Go server
+tests in `cli/internal/server/server_test.go` — isolation is a server
+contract, not a UI surface.
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-012.1 | Bead isolation | `GET /api/projects/proj-a/beads` and `GET /api/projects/proj-b/beads` return disjoint bead sets from each project's own store | Implemented |
-| TC-012.2 | Document isolation | A document present only in project A is not visible via project B's documents endpoint | Implemented |
-| TC-012.3 | Concurrent requests | Parallel requests against different registered projects complete successfully without racing on adapters or caches | Implemented |
-| TC-012.4 | Degraded project isolation | A malformed project root is reported as degraded in `GET /api/projects` while sibling projects continue serving | Implemented |
-| TC-012.5 | Cache namespace | A cached lookup in project A does not surface the same key in project B | Implemented |
+| TC-012.1 | Bead isolation | `GET /api/projects/proj-a/beads` and `GET /api/projects/proj-b/beads` return disjoint bead sets from each project's own store | Implemented — `cli/internal/server/server_test.go` |
+| TC-012.2 | Document isolation | A document present only in project A is not visible via project B's documents endpoint | Implemented — `cli/internal/server/server_test.go` |
+| TC-012.3 | Concurrent requests | Parallel requests against different registered projects complete successfully without racing on adapters or caches | Implemented — `cli/internal/server/server_test.go` |
+| TC-012.4 | Degraded project isolation | A malformed project root is reported as degraded in `GET /api/projects` while sibling projects continue serving | Implemented — `cli/internal/server/server_test.go` |
+| TC-012.5 | Cache namespace | A cached lookup in project A does not surface the same key in project B | Implemented — `cli/internal/server/server_test.go` |
 
 ### TC-013: Execute-Loop Worker Lifecycle
 
