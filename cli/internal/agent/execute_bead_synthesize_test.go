@@ -10,15 +10,16 @@ import (
 
 // TestSynthesizeCommit_GitignoredDirsDoNotFail covers ddx-feb1d4a5:
 // RealGitOps.SynthesizeCommit must not fail with "staging changes: exit
-// status 1" when .ddx/agent-logs/ or .ddx/workers/ exist as untracked
-// gitignored directories. Previously the :(exclude) pathspecs for those paths
-// caused `git add` to report them as explicitly-ignored and exit non-zero.
+// status 1" when .ddx/agent-logs/, .ddx/workers/, or .ddx/executions/
+// exist as untracked gitignored directories. Previously the :(exclude)
+// pathspecs for these paths caused `git add` to report them as
+// explicitly-ignored and exit non-zero.
 func TestSynthesizeCommit_GitignoredDirsDoNotFail(t *testing.T) {
 	root, _ := newScriptHarnessRepo(t, 0)
 
 	gitignore := filepath.Join(root, ".gitignore")
 	require.NoError(t, os.WriteFile(gitignore,
-		[]byte(".ddx/agent-logs/\n.ddx/workers/\n"), 0644))
+		[]byte(".ddx/agent-logs/\n.ddx/workers/\n.ddx/executions/\n"), 0644))
 	runGitInteg(t, root, "add", ".gitignore")
 	runGitInteg(t, root, "commit", "-m", "chore: add gitignore")
 
@@ -31,6 +32,11 @@ func TestSynthesizeCommit_GitignoredDirsDoNotFail(t *testing.T) {
 	require.NoError(t, os.MkdirAll(workersDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(workersDir, "w.json"),
 		[]byte(`{}`), 0644))
+
+	executionsDir := filepath.Join(root, ".ddx", "executions", "attempt", "embedded")
+	require.NoError(t, os.MkdirAll(executionsDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "session.jsonl"),
+		[]byte(`{"ts":1}`), 0644))
 
 	ops := &RealGitOps{}
 
@@ -49,4 +55,5 @@ func TestSynthesizeCommit_GitignoredDirsDoNotFail(t *testing.T) {
 	require.Contains(t, trackedOut, "feature.txt", "real change must land in the commit")
 	require.NotContains(t, trackedOut, ".ddx/agent-logs", "gitignored path must not be committed")
 	require.NotContains(t, trackedOut, ".ddx/workers", "gitignored path must not be committed")
+	require.NotContains(t, trackedOut, ".ddx/executions", "gitignored path must not be committed")
 }

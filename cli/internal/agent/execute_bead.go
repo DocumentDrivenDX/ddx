@@ -371,11 +371,8 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	addArgs := []string{
 		"-C", dir, "add", "-A", "--",
 		".",
-		":(exclude).ddx/executions/*/embedded",
-		":(exclude).ddx/executions/*/no_changes_rationale.txt",
-		":(exclude).claude/skills",
-		":(exclude).agents/skills",
 	}
+	addArgs = append(addArgs, synthesizeCommitExcludePathspecs(dir)...)
 	if err := osexec.Command("git", addArgs...).Run(); err != nil {
 		return false, fmt.Errorf("staging changes: %w", err)
 	}
@@ -391,6 +388,44 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 		return false, fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return true, nil
+}
+
+func synthesizeCommitExcludePathspecs(dir string) []string {
+	candidates := []struct {
+		pathspec    string
+		ignoreProbe string
+	}{
+		{
+			pathspec:    ":(exclude).ddx/executions/*/embedded",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/embedded",
+		},
+		{
+			pathspec:    ":(exclude).ddx/executions/*/no_changes_rationale.txt",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/no_changes_rationale.txt",
+		},
+		{
+			pathspec:    ":(exclude).claude/skills",
+			ignoreProbe: ".claude/skills",
+		},
+		{
+			pathspec:    ":(exclude).agents/skills",
+			ignoreProbe: ".agents/skills",
+		},
+	}
+
+	pathspecs := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		if isGitIgnored(dir, c.ignoreProbe) {
+			continue
+		}
+		pathspecs = append(pathspecs, c.pathspec)
+	}
+	return pathspecs
+}
+
+func isGitIgnored(dir, path string) bool {
+	err := osexec.Command("git", "-C", dir, "check-ignore", "-q", "--", path).Run()
+	return err == nil
 }
 
 // GenerateAttemptID generates a unique attempt identifier.
