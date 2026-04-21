@@ -60,15 +60,24 @@ Bead-scoped work uses `area:bead` as an additive label, not a replacement for an
 
 ### e2e-playwright
 
-Two Playwright configurations:
+Three Playwright configurations, each deliberately scoped to a
+different backend so tests stay decoupled:
 
-1. **Visual regression** (`playwright.config.ts`):
+1. **Frontend functional + visual regression** (`cli/internal/server/frontend/playwright.config.ts`):
    - Tests in `cli/internal/server/frontend/e2e/`
    - Screenshots in `e2e/*.spec.ts-snapshots/`
-   - Runs against Go server on port 18080
+   - Runs against the **SvelteKit static preview** on port 4173
+     (`bun run build && bun run preview`). The preview serves the same
+     static bundle embedded into the Go binary; GraphQL is mocked at
+     the request layer in each spec.
+   - Rationale: functional + visual tests should not depend on a live
+     Go server or real GraphQL data. Request-route interception keeps
+     snapshots deterministic.
 
-2. **Demo recording** (`playwright.demo.config.ts`):
+2. **Demo recording** (`cli/internal/server/frontend/playwright.demo.config.ts`):
    - `demo-recording.spec.ts` navigates all 5 pages with interactions
+   - Runs against the **Go server** on port 18080 (real binary, real
+     data) to produce representative videos.
    - Video recording at 1280x720
    - Output in `demo-output/`
    - Run via `bun run demo:record`
@@ -76,6 +85,7 @@ Two Playwright configurations:
 3. **Microsite** (`website/playwright.config.ts`):
    - Tests in `website/e2e/microsite.spec.ts`
    - Screenshots for homepage, docs, navigation
+   - Runs against `hugo server` on the configured port
 
 ### hugo-hextra
 
