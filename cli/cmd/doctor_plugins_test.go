@@ -171,6 +171,103 @@ install:
 		"every structural issue must surface in the same pass — otherwise operators fix the schema and re-run, only to discover more")
 }
 
+// TestDoctorPluginsFlagReportsLostExecutablePermission is the ddx-b1503915
+// acceptance test for executable-bit validation. A plugin that declares a
+// file under install.executable must surface an issue when that file loses
+// its execute bit (chmod 0644). Relies on auditExecutable in
+// cli/internal/registry/audit.go.
+func TestDoctorPluginsFlagReportsLostExecutablePermission(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "exec-plugin")
+	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
+
+	// A hook script that MUST be executable per the manifest, installed
+	// without its execute bit (simulates a post-install chmod mishap or a
+	// tar extraction that dropped the mode bits).
+	hookPath := filepath.Join(pluginRoot, "hooks", "post-install.sh")
+	require.NoError(t, os.MkdirAll(filepath.Dir(hookPath), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\necho ok\n"), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: exec-plugin
+version: 1.0.0
+description: Plugin with an executable hook
+type: plugin
+source: https://example.com/exec-plugin
+api_version: 1
+install:
+  executable:
+    - hooks/post-install.sh
+`), 0o644))
+
+	state := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{
+				Name:    "exec-plugin",
+				Version: "1.0.0",
+				Type:    registry.PackageTypePlugin,
+				Source:  pluginRoot,
+				Files:   []string{pluginRoot},
+			},
+		},
+	}
+	require.NoError(t, registry.SaveState(state))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
+	require.NoError(t, err)
+	assert.Contains(t, output, "lost execute permission",
+		"a declared executable that lost its mode bit must surface — hooks silently failing to run is the kind of drift doctor exists to catch")
+	assert.Contains(t, output, "post-install.sh")
+}
+
+// TestDoctorPluginsFlagReportsOrphanSymlinkTarget is the ddx-b1503915
+// acceptance test for orphan-target detection on symlinks inside the
+// package tree. auditBrokenSymlinks walks the root and reports each symlink
+// whose target does not resolve.
+func TestDoctorPluginsFlagReportsOrphanSymlinkTarget(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "orphan-plugin")
+	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
+	// A symlink that points somewhere that does not exist. This is the
+	// shape left behind when a prior plugin version's skill directory was
+	// pruned but the symlink in the current layout wasn't.
+	require.NoError(t, os.Symlink(filepath.Join(pluginRoot, "does-not-exist"), filepath.Join(pluginRoot, "dangling-link")))
+
+	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: orphan-plugin
+version: 1.0.0
+description: Plugin with a dangling symlink
+type: plugin
+source: https://example.com/orphan-plugin
+api_version: 1
+`), 0o644))
+
+	state := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{
+				Name:    "orphan-plugin",
+				Version: "1.0.0",
+				Type:    registry.PackageTypePlugin,
+				Source:  pluginRoot,
+				Files:   []string{pluginRoot},
+			},
+		},
+	}
+	require.NoError(t, registry.SaveState(state))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
+	require.NoError(t, err)
+	assert.Contains(t, output, "broken symlink target",
+		"a symlink whose target does not resolve must surface with its target path")
+	assert.Contains(t, output, "dangling-link")
+}
+
 func executeWithStdoutCapture(t *testing.T, root *cobra.Command, args ...string) (string, error) {
 	t.Helper()
 
