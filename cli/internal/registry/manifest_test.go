@@ -84,3 +84,104 @@ func TestLoadPackageManifestWithFallbackUsesFallbackWhenManifestMissing(t *testi
 	require.Empty(t, issues)
 	assert.Same(t, fallback, pkg)
 }
+
+func TestLoadPackageManifestPreservesUnknownKeys(t *testing.T) {
+	dir := t.TempDir()
+	manifest := `name: future-plugin
+version: 1.0.0
+description: Manifest that uses keys introduced after this DDx build
+type: plugin
+source: https://example.com/future-plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/future-plugin
+# Unknown top-level keys a future api_version might introduce.
+hooks:
+  pre-install: scripts/pre.sh
+  post-install: scripts/post.sh
+signatures:
+  release:
+    algo: ed25519
+    key: AAA...ZZZ
+future_flag: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yaml"), []byte(manifest), 0o644))
+
+	pkg, issues, err := LoadPackageManifest(dir)
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	require.NotNil(t, pkg)
+
+	// Known keys parse as before.
+	assert.Equal(t, "future-plugin", pkg.Name)
+	assert.Equal(t, PackageTypePlugin, pkg.Type)
+
+	// Unknown keys survive on Extra, keyed by their original YAML name.
+	require.NotNil(t, pkg.Extra)
+	assert.Contains(t, pkg.Extra, "hooks")
+	assert.Contains(t, pkg.Extra, "signatures")
+	assert.Contains(t, pkg.Extra, "future_flag")
+	assert.Equal(t, true, pkg.Extra["future_flag"])
+	if hooks, ok := pkg.Extra["hooks"].(map[string]any); ok {
+		assert.Equal(t, "scripts/pre.sh", hooks["pre-install"])
+		assert.Equal(t, "scripts/post.sh", hooks["post-install"])
+	} else {
+		t.Fatalf("expected hooks to be map[string]any, got %T", pkg.Extra["hooks"])
+	}
+
+	// Round-trip: MarshalPackage emits a document that contains the unknown
+	// keys. Re-loading reproduces them.
+	out, err := MarshalPackage(pkg)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yaml"), out, 0o644))
+
+	reloaded, issues, err := LoadPackageManifest(dir)
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	require.NotNil(t, reloaded)
+	require.NotNil(t, reloaded.Extra)
+	assert.Contains(t, reloaded.Extra, "hooks")
+	assert.Contains(t, reloaded.Extra, "signatures")
+	assert.Contains(t, reloaded.Extra, "future_flag")
+}
+
+func TestLoadPackageManifestNoUnknownKeysYieldsNilExtra(t *testing.T) {
+	dir := t.TempDir()
+	manifest := `name: plain-plugin
+version: 1.0.0
+description: No unknown top-level keys
+type: plugin
+source: https://example.com/plain
+api_version: 1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yaml"), []byte(manifest), 0o644))
+	pkg, issues, err := LoadPackageManifest(dir)
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	require.NotNil(t, pkg)
+	assert.Nil(t, pkg.Extra, "no unknown keys should leave Extra nil")
+}
+
+func TestMarshalPackageExtraNeverOverwritesTypedFields(t *testing.T) {
+	pkg := &Package{
+		Name:        "guard",
+		Version:     "1.0.0",
+		Description: "Typed fields must win",
+		Type:        PackageTypePlugin,
+		Source:      "https://example.com/guard",
+		APIVersion:  "1",
+		Extra: map[string]any{
+			// Defensive: even if a caller stashed a known key in Extra,
+			// MarshalPackage must not let it overwrite the typed field.
+			"name":       "shadow",
+			"future_key": "kept",
+		},
+	}
+	out, err := MarshalPackage(pkg)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "name: guard")
+	assert.Contains(t, string(out), "future_key: kept")
+	assert.NotContains(t, string(out), "name: shadow")
+}

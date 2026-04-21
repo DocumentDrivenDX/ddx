@@ -47,6 +47,11 @@ type Package struct {
 	APIVersion  string         `yaml:"api_version,omitempty"`
 	Install     PackageInstall `yaml:"install"`
 	Keywords    []string       `yaml:"keywords,omitempty"`
+	// Extra captures top-level keys not recognized by this DDx version so
+	// newer manifests round-trip without silently dropping fields. See
+	// SD-018 "Manifest Versioning". Not marshaled via `yaml:"-"`; use
+	// MarshalPackage for round-trip serialization.
+	Extra map[string]any `yaml:"-"`
 }
 
 // Registry holds the list of known packages.
