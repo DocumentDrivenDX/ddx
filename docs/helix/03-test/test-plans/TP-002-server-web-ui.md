@@ -106,10 +106,10 @@ one run.
 | TC-003.8 | Create bead | "+ New Bead" opens modal with title, type, priority, labels, description, acceptance fields | Implemented |
 | TC-003.9 | Create bead submit | Submitting modal creates bead, card appears in OPEN column | Implemented |
 | TC-003.10 | Claim bead | "Claim" button on open bead moves it to IN PROGRESS | Implemented |
-| TC-003.11 | Unclaim bead | "Unclaim" button on in-progress bead moves it back to OPEN | Planned |
-| TC-003.12 | Close bead | "Close" button on in-progress bead moves it to CLOSED | Planned |
-| TC-003.13 | Reopen bead | "Re-open" on closed bead shows reason input, confirms reopens | Planned |
-| TC-003.14 | Drag and drop | Dragging a card between columns updates status | Planned |
+| TC-003.11 | Unclaim bead | "Unclaim" button on in-progress bead moves it back to OPEN | Implemented (`e2e/beads.spec.ts` TC-003.11) |
+| TC-003.12 | Close bead | "Close" button on in-progress bead moves it to CLOSED | Deferred — no `beadClose` mutation in `schema.graphql`; no Close button in `BeadDetail.svelte`. File an implementation bead before re-scheduling this test. |
+| TC-003.13 | Reopen bead | "Re-open" on closed bead shows reason input, confirms reopens | Deferred — `beadReopen` mutation exists in `schema.graphql` but `BeadDetail.svelte` exposes no Reopen button. |
+| TC-003.14 | Drag and drop | Dragging a card between columns updates status | Deferred — no drag-drop UI in the beads page today. |
 | TC-003.15 | Dependency display | Detail panel shows dependency list with check/circle status | Planned |
 
 ### TC-004: Document Graph

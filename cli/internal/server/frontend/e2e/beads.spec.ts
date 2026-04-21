@@ -326,3 +326,71 @@ test('TC-017: load more button appears and triggers second-page fetch', async ({
 	await loadMoreButton.click();
 	await expect(page.getByText('Page two bead')).toBeVisible();
 });
+
+// TP-002 TC-003.11 — unclaim an in-progress bead from the detail panel.
+// Covers FEAT-008 bead lifecycle mutation wiring for the Unclaim path
+// (beadUnclaim GraphQL mutation; BeadDetail.svelte Unclaim button).
+test('TC-003.11: Unclaim button on in-progress bead fires BeadUnclaim mutation', async ({
+	page
+}) => {
+	let unclaimCalled = false;
+
+	const IN_PROGRESS_BEAD = { ...BEAD_DETAIL, id: 'bead-002', status: 'in-progress', owner: 'alice' };
+	const UNCLAIMED_BEAD = { ...IN_PROGRESS_BEAD, status: 'open', owner: null };
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+		} else if (body.query.includes('BeadsByProject')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse([IN_PROGRESS_BEAD, BEADS[0], BEADS[2]]) })
+			});
+		} else if (body.query.includes('query Bead(')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { bead: IN_PROGRESS_BEAD } })
+			});
+		} else if (body.query.includes('BeadUnclaim') || body.query.includes('beadUnclaim')) {
+			unclaimCalled = true;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { beadUnclaim: UNCLAIMED_BEAD } })
+			});
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(`${BASE_URL}/bead-002`);
+
+	// An in-progress bead shows the Unclaim button, not Claim.
+	const unclaimButton = page.getByRole('button', { name: /unclaim/i });
+	await expect(unclaimButton).toBeVisible();
+
+	await unclaimButton.click();
+
+	// Mutation must fire and the UI must reflect the transition.
+	await expect.poll(() => unclaimCalled, { timeout: 5000 }).toBe(true);
+});
+
+// TP-002 TC-003.12 (close), TC-003.13 (reopen), TC-003.14 (drag-drop) are
+// DEFERRED. Rationale: the GraphQL schema has no beadClose mutation and the
+// BeadDetail component exposes no close/reopen/drag-drop UI. Filed as
+// separate work when the backend + component surfaces exist.
