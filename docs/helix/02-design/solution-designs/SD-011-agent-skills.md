@@ -4,160 +4,156 @@ ddx:
   depends_on:
     - FEAT-011
     - FEAT-001
+    - FEAT-015
     - ADR-001
 ---
 # Solution Design: DDx Agent Skills
 
+> **Updated 2026-04-20.** FEAT-011 consolidated the earlier 4-skill layout
+> (`ddx-bead`, `ddx-agent`, `ddx-install`, `ddx-status`) into a single
+> `ddx` skill with an intent router and per-topic reference files.
+
 ## Overview
 
-This design specifies the four core DDx skills (`ddx-bead`, `ddx-agent`,
-`ddx-install`, `ddx-status`), their installation mechanism, the SKILL.md
-format, and how `ddx init` registers them automatically.
+DDx ships a single agent-facing skill — `ddx` — that provides guidance
+for operating every DDx CLI surface: beads, the queue, executions,
+agents, harnesses, personas, reviews, and installation. The skill body
+is an intent router; the real domain guidance lives under
+`reference/*.md` files loaded on demand.
 
-Skills are plain-Markdown guidance wrappers over DDx CLI commands. They carry
-no compiled code or runtime dependencies — an agent reads the SKILL.md and
-follows its instructions by invoking `ddx` CLI commands directly.
+Skills are plain-Markdown guidance wrappers over DDx CLI commands. They
+carry no compiled code or runtime dependencies — an agent reads the
+skill and follows its instructions by invoking `ddx` CLI commands
+directly.
 
 ## Skill Format
 
-Each skill is a directory with a single `SKILL.md` file:
-
 ```
-~/.agents/skills/
-├── ddx-bead/SKILL.md
-├── ddx-agent/SKILL.md
-├── ddx-install/SKILL.md
-└── ddx-status/SKILL.md
+~/.agents/skills/ddx/
+├── SKILL.md
+├── evals/
+│   └── routing.jsonl
+└── reference/
+    ├── beads.md
+    ├── agents.md
+    ├── executions.md
+    ├── personas.md
+    └── ...
 ```
 
 ### SKILL.md Frontmatter
 
+The skill uses the top-level frontmatter schema enforced by
+`ddx skills check` (AGENTS.md §Skill Policy):
+
 ```yaml
 ---
-skill:
-  name: ddx-bead
-  description: Guided bead creation and triage
-  args:
-    - name: title
-      description: Short title for the new bead
-      required: false
+name: ddx
+description: Operates the DDx toolkit for document-driven development. ...
 ---
 ```
 
-The `skill` key is the conventional frontmatter block. `name` matches the
-directory name. `description` is shown in skill listings. `args` declares
-argument hints that the agent uses to prompt for missing inputs.
+- `name` — exactly matches the directory name (`ddx`).
+- `description` — intent triggers keyed to user phrasing ("drain the
+  queue", "run a bead", "create a bead", etc.). The description is
+  load-bearing for router selection by skills-aware agents.
+- `argument-hint` — optional; used only when the skill takes a
+  trailing positional or shorthand invocation hint.
+- **Nested `skill:` metadata is rejected.** The DDx skill uses
+  top-level fields only.
 
 ### SKILL.md Body
 
-The body provides step-by-step guidance the agent follows. It references DDx
-CLI commands by exact invocation. The body may include:
+The body opens with an overview and then an **intent router** — a
+table mapping user phrasing to the matching `reference/<topic>.md`
+file. The directive to the agent is strict: load the matching
+reference file before responding to a DDx-related request.
 
-- Ordered steps the agent executes
-- Validation checks before running commands
-- Fallback behavior when `ddx` is not on `$PATH` (emit a clear error and stop)
-- Context hints such as where to find governing documents
+Reference files cover:
 
-## Core Skills
-
-### `ddx-bead`
-
-Wraps `ddx bead create`, `ddx bead update`, and `ddx bead dep add`.
-
-The skill prompts for title, type, description, and acceptance criteria. It
-reads `.ddx/hooks/` to determine which labels are required by the project's
-hook configuration and includes them automatically. It suggests a `--spec-id`
-by scanning nearby governing documents. It assembles and runs the final
-`ddx bead create` command with all required flags.
-
-### `ddx-agent`
-
-Wraps `ddx agent run` and `ddx agent log`.
-
-The skill calls `ddx agent list` to enumerate available harnesses, then
-`ddx agent capabilities <harness>` to show model and effort options. It guides
-model and effort selection based on task complexity, assembles the full
-`ddx agent run` command, and surfaces the result via `ddx agent log`.
-
-### `ddx-install`
-
-Wraps `ddx search` and `ddx install`.
-
-The skill runs `ddx search <query>` to surface matching packages, shows the
-package description and install targets, waits for confirmation, then runs
-`ddx install <package>`. It verifies post-install health with `ddx doctor`.
-
-### `ddx-status`
-
-Wraps `ddx status`, `ddx doctor`, and `ddx bead list`.
-
-The skill runs all three commands in sequence and presents a unified project
-health summary: DDx version and sync state, health check results, and a count
-of open, ready, and blocked beads.
+- `reference/beads.md` — bead CRUD, dependencies, claims, evidence
+- `reference/agents.md` — harness dispatch, profiles, `ddx agent run`,
+  execute-bead / execute-loop (alias `ddx work`)
+- `reference/executions.md` — execution definitions and immutable run
+  history (`ddx metric` / `ddx exec`)
+- `reference/personas.md` — persona listing, show, binding
+- `reference/install.md` — plugin and skills install flows
+- additional topics as DDx surfaces grow
 
 ## Installation Mechanism
 
 ### Embedded Source
 
-Skill source files are embedded in the DDx binary under
-`cli/internal/skills/`. Each skill is a directory containing its `SKILL.md`.
-The binary writes them via the existing embedded-resource mechanism used for
-other bundled assets.
+Skill source lives in `cli/internal/skills/ddx/`. The binary embeds
+the tree via `//go:embed` (FEAT-011) so the skill ships with every
+DDx release and never requires a separate download.
 
-### `ddx init` Auto-Registration
+### Project-Local Install (`ddx init`)
 
-When `ddx init` runs, it creates `~/.agents/skills/` if absent and writes each
-bundled skill as a directory with its `SKILL.md`. Existing skill files are not
-overwritten unless the installed version predates the binary's bundled version
-(compared by a `version` field in the frontmatter).
+`ddx init` writes a project-local copy into `.ddx/skills/ddx/` and
+registers skill symlinks under `.agents/skills/` and `.claude/skills/`
+for the two major skill runtimes. Real files are copied (not
+symlinked to global) so project worktrees can evolve independently.
 
-### `ddx install ddx-skills`
+### Global Install (`ddx install --global`)
 
-`ddx install ddx-skills` (via FEAT-009) fetches the latest skill versions from
-the registry and writes them to `~/.agents/skills/`. This is the upgrade path
-for projects that do not want to upgrade the full DDx binary.
+Planned surface (FEAT-015 AC-002): extract the embedded skill to
+`~/.ddx/skills/ddx/` and create relative symlinks from
+`~/.agents/skills/ddx` and `~/.claude/skills/ddx` into that copy.
+Implementation tracked by `ddx-6f32aa4c`.
+
+### Plugin-Declared Skills (`ddx install <plugin>`)
+
+Plugins may declare additional skills in their `package.yaml`. The
+installer materializes relative symlinks from `.agents/skills/` and
+`.claude/skills/` into the plugin's skill directories and prunes
+stale links from prior plugin versions (FEAT-015 AC-004 / AC-013,
+tracked by `ddx-20fe27c7`).
 
 ### Manual Management
 
-Users may edit or replace skill files directly. `ddx init` does not overwrite
-manually modified files unless the `--force` flag is passed.
+Users may edit or replace the skill files directly. `ddx init` does
+not overwrite manually modified files unless `--force` is passed.
 
 ## CLI Invocation Pattern
 
-Skills invoke the `ddx` binary on `$PATH`. They do not shell-expand or
-hard-code paths. If `ddx` is absent, the skill emits:
+Reference files invoke the `ddx` binary on `$PATH`. They do not
+shell-expand or hard-code paths. If `ddx` is absent, the agent emits a
+clear error and halts. All CLI calls use structured flags — no
+positional argument guessing.
 
-```
-ddx is not installed or not on $PATH. Install from https://github.com/org/ddx.
-```
+## Validation
 
-and halts. All CLI calls use structured flags — no positional argument guessing.
-
-## Integration with `ddx init`
-
-`ddx init` gains a `skills` step after the existing initialization steps:
-
-1. Detect `~/.agents/skills/` (create if absent).
-2. For each bundled skill, write `~/.agents/skills/<name>/SKILL.md`.
-3. Report which skills were written or skipped.
-
-The step is non-fatal: if `~/.agents/` is not writable, `ddx init` logs a
-warning and continues.
+- `ddx skills check [path ...]` validates SKILL.md frontmatter for any
+  skill tree: top-level `name`, top-level `description`, optional
+  `argument-hint`, rejects nested `skill:` metadata, requires a
+  non-empty body.
+- `make skill-schema` (at `cli/Makefile:82`) runs `ddx skills check`
+  against both the canonical source (`skills/ddx`) and the embedded
+  copy (`cli/internal/skills/ddx`). Pre-commit and CI both enforce
+  this gate.
+- Unit tests in `cli/internal/skills/` verify the embedded tree
+  parses cleanly.
 
 ## Testing Strategy
 
-- Unit tests verify that each bundled SKILL.md parses valid frontmatter
-  (`skill.name`, `skill.description` present; `args` is a list if provided).
-- Integration tests for `ddx init` assert that skill directories exist and
-  contain a readable `SKILL.md` after initialization.
-- Acceptance test for `ddx install ddx-skills` verifies that skills are written
-  to `~/.agents/skills/` and match the registry manifest.
-- No end-to-end agent execution tests — skill correctness is validated by
-  inspecting the SKILL.md content, not by running an agent.
+- Static validation of every bundled `SKILL.md` via
+  `ddx skills check`.
+- Router evals: `skills/ddx/evals/routing.jsonl` contains labelled
+  user phrasings and expected reference-file selections. The eval is
+  the regression harness for router drift.
+- Integration tests for `ddx init` assert the skill directory exists
+  and contains a readable `SKILL.md` after initialization.
+- No end-to-end agent execution tests — skill correctness is
+  validated by inspecting the skill content and router evals, not by
+  running an agent.
 
 ## Non-Goals
 
-- Workflow-specific skills (HELIX provides those under its own install path).
-- Skills for commands that need no guidance (`ddx version`, `ddx upgrade`).
+- Workflow-specific skills (HELIX provides those under its own
+  install path; FEAT-011 stays platform-agnostic).
+- Skills for commands that need no guidance (`ddx version`,
+  `ddx upgrade`).
 - Interactive TUI or GUI — skills are agent-facing Markdown.
-- Compiled skill logic — all intelligence lives in CLI commands, not skill files.
+- Compiled skill logic — all intelligence lives in CLI commands, not
+  skill files.
