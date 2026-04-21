@@ -1,0 +1,74 @@
+{
+  "attempt_id": "20260421T015525-120e96ae",
+  "bead_id": "ddx-273e878a",
+  "base_rev": "cbfdb67b1724639149108c6d671f4f04e17a7c5e",
+  "created_at": "2026-04-21T01:55:25.749411939Z",
+  "requested": {
+    "harness": "gemini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-273e878a",
+    "title": "Remove ~/.config/agent/models.yaml parser; use svc.ListProfiles / ResolveProfile / ProfileAliases",
+    "description": "Land agent-1a0c0502 independent stream from parent bead ddx-7bc0c8d5. Safe to land in any order relative to the parser+GlobalProviderHealth atomic pair.\n\n## File to rewrite\n\ncli/internal/agent/agent_catalog_shared.go reads ~/.config/agent/models.yaml directly and hard-codes surface translations (\"agent.openai\" → \"embedded-openai\").\n\n## Migration target\n\n- svc.ListProfiles\n- svc.ResolveProfile\n- svc.ProfileAliases\n\nSurface translations that were hard-coded in the consumer should move to (or be obtained from) the upstream profile API.",
+    "acceptance": "(1) cli/internal/agent/agent_catalog_shared.go no longer reads ~/.config/agent/models.yaml.\n(2) Catalog surface translations sourced from svc.ListProfiles / ResolveProfile / ProfileAliases.\n(3) No hard-coded alias maps like \"agent.openai\" → \"embedded-openai\" remain in consumer code.\n(4) go -C cli build ./... and go -C cli test ./... green.",
+    "parent": "ddx-7bc0c8d5",
+    "labels": [
+      "area:agent",
+      "area:api",
+      "kind:refactor",
+      "phase:build",
+      "goal:thin-consumer",
+      "workstream:agent-upgrade"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-21T01:54:43Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1423711",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-21T01:34:13.010258672Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "no_changes\nresult_rev=edfb0198cc41543079400681381810f494ebaa8b\nbase_rev=edfb0198cc41543079400681381810f494ebaa8b\nretry_after=2026-04-21T07:34:13Z",
+          "created_at": "2026-04-21T01:34:13.352741574Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-21T01:55:25.223303537Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness=agent model=qwen3.5-27b probe=ok\nno_changes",
+          "created_at": "2026-04-21T01:55:25.290258399Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-21T01:55:13.906427693Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260421T015525-120e96ae",
+    "prompt": ".ddx/executions/20260421T015525-120e96ae/prompt.md",
+    "manifest": ".ddx/executions/20260421T015525-120e96ae/manifest.json",
+    "result": ".ddx/executions/20260421T015525-120e96ae/result.json",
+    "checks": ".ddx/executions/20260421T015525-120e96ae/checks.json",
+    "usage": ".ddx/executions/20260421T015525-120e96ae/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-273e878a-20260421T015525-120e96ae"
+  }
+}
