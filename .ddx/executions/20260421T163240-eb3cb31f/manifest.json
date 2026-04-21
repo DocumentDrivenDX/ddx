@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260421T163240-eb3cb31f",
+  "bead_id": "ddx-bbb65768",
+  "base_rev": "72fd95cef1422679bdcd98174fb58d4f6db2b192",
+  "created_at": "2026-04-21T16:32:40.733642508Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bbb65768",
+    "title": "profile/automation: default = local-first with escalation; fast/smart = cloud-first",
+    "description": "## Target UX\n\nThe user-facing profile vocabulary (cheap / default / fast / smart) should map to concrete routing policies that take full advantage of local models without blocking on their limits. Specifically:\n\n### default profile (the common case)\nTry local models first, escalate to cloud if:\n- local model's context window is too small for the bead prompt\n- local model lacks a capability the bead requires (tools, structured output, etc.)\n- local dispatch fails (provider unreachable, timeout, model-side error)\n- bead reopens due to post-run check failure (review-malfunction, land-conflict, etc.)\n\nEscalation target: next tier up in the ladder (standard cloud — e.g. codex gpt-5.4 within subscription). If THAT fails, escalate once more to smart cloud. Then stop and unclaim.\n\n### cheap profile\nLocal only. Never escalate. Intended for high-volume exploratory work where cost dominates and adequate-quality is sufficient. If the cheap tier can't serve the bead, the bead unclaims and waits.\n\n### fast profile\nCloud-first, skip local entirely. Intended for latency-critical or interactive work where local inference's 9s warmup is unacceptable. Starts at a fast cloud model (e.g. gemini-flash or haiku) and escalates to smart on failure.\n\n### smart profile\nCloud-high-quality from the start. Intended for bead-review, adversarial checks, or beads whose AC demands high-quality reasoning. No escalation — if smart fails, the work fails meaningfully.\n\n## Why this matters (dogfooding signal)\n\nAs of 2026-04-18, DDx's default is cheap = qwen/qwen3.6 local (vidar-omlx). With v0.3.14 shipping the SSE-comment-frame filter, the local path actually works end-to-end. The queue can drain mostly on local hardware for pennies per bead, escalating only when the bead genuinely needs cloud quality. That's the throughput-per-dollar goal (goal:throughput-per-dollar label).\n\n## Prereqs (already filed under ddx-2d974641 or sibling beads)\n\nThis epic is blocked on the autorouting epic delivering its exit-gate UX — 'declare provider + use canonical ref + autorouting works'. Specifically:\n\n- ddx-8610020e (RouteRequest.Provider field) — foundation\n- ddx-0486e601 (fuzzy normalization + per-provider) — lets cheap-tier model refs resolve to provider-native IDs\n- ddx-2f5a2284 (catalog/Profile discovery integration) — lets Profile tier overrides retarget to provider-native IDs\n- ddx-3c5ba7cc (tier escalation --provider affinity) — the lower half of this epic's 'escalate on failure' semantics\n- ddx-4817edfd (capability gating) — prevents routing to a model that can't serve the bead\n\nWith those in place, the profile-level policy here is mostly CONFIGURATION + a small amount of scoring-layer logic.\n\n## Scope\n\n### Config schema additions\n\n.ddx/config.yaml agent.routing extends with an explicit per-profile ladder:\n\n    agent:\n      routing:\n        profile_ladders:\n          default: [cheap, standard, smart]      # local first, escalate\n          cheap:   [cheap]                        # local only\n          fast:    [fast, smart]                  # cloud fast, escalate to smart\n          smart:   [smart]                        # cloud high-quality, no escalation\n        model_overrides:\n          cheap:    qwen/qwen3.6\n          fast:     kimi/k2.5\n          standard: codex/gpt-5.4                # new: subscription cloud, mid-quality\n          smart:    minimax/minimax-m2.7\n\nCurrent profile_priority field (a flat list) becomes a legacy alias for profile_ladders.default with a deprecation warning.\n\n### Tier-escalation policy (routing.go)\n\nFor a given profile P, iterate profile_ladders[P]:\n- Evaluate model_overrides[tier] resolves on a viable candidate (with --provider affinity from ddx-3c5ba7cc).\n- If yes, try it; on failure (execution_failed / land_conflict / post_run_check_failed), move to next tier.\n- Record tier decision + escalation chain in routing event on the bead so telemetry reflects where work actually landed.\n\n### User-facing CLI\n\n- ddx work --profile default — the new primary invocation. Most users run this.\n- ddx work --profile cheap / fast / smart — opt-in deviations.\n- --max-tier continues to cap the ladder (explicit user override beats config).\n\n### Telemetry + measurement\n\nEvery execution event records: requested_profile, requested_tier, resolved_tier, escalation_count, final_tier. Aggregated metrics (FEAT-016 / ddx-4b59b816) report per-profile throughput, per-tier cost, per-bead escalation rate.\n\n## Exit gate\n\n'ddx work --profile default --once --local' against a ready bead on a host with a healthy local provider AND healthy cloud fallback:\n- Claims the bead.\n- Tries cheap tier (local). If it succeeds, closes bead with tier=cheap recorded.\n- If cheap fails for any escalation-triggering reason, automatically retries at standard tier without operator intervention.\n- If standard fails, retries at smart.\n- Final outcome recorded faithfully (success at whatever tier landed, or exhaustion if all tiers failed).\n\n## Out of scope\n\n- Dynamic profile selection ('auto-pick profile based on bead complexity'). Too much magic; explicit profile choice is fine.\n- Cost budgets / circuit breakers. FEAT-014 (token awareness) tracks this separately.\n- Per-bead profile overrides (bead-level 'requires-profile: smart'). Could be a future follow-up but out of scope here.\n\n## Metadata\n\nGoverning spec: FEAT-006 (agent service) + the autorouting epic ddx-2d974641. This bead is the PROFILE-layer policy that sits on top of the routing fixes from ddx-2d974641. Do not start until ddx-2d974641's Phase-1 children are closed.",
+    "acceptance": "1. .ddx/config.yaml schema supports profile_ladders (per-profile ordered tier list) AND the legacy profile_priority is still readable with a deprecation warning.\n\n2. Four shipped profile ladders: default=[cheap,standard,smart], cheap=[cheap], fast=[fast,smart], smart=[smart]. Documented in FEAT-006.\n\n3. Tier escalation in routing.go / execute_bead_orchestrator.go iterates profile_ladders[P] on failure, respecting --provider affinity (ddx-3c5ba7cc) and capability gating (ddx-4817edfd). Escalation triggers: execution_failed, land_conflict, post_run_check_failed, structural_validation_failed. no_changes uses the existing cooldown path.\n\n4. Bead routing event records: requested_profile, requested_tier, resolved_tier, escalation_count, final_tier. A run that escalates cheap -\u003e standard -\u003e success at standard has an event with escalation_count=1, resolved_tier=standard, final_tier=standard.\n\n5. 'ddx work --profile default' drains the queue by trying local first and escalating only when needed. Measured outcome over a test run of 10 representative beads shows at least 50% closing at the cheap tier (target: most work lands locally; escalations are the exception).\n\n6. Regression tests cover each ladder path: success-at-cheap, escalate-cheap-to-standard, escalate-all-tiers-then-exhaustion, --max-tier caps the ladder, --profile cheap never escalates.\n\n7. FEAT-006 Profile Routing section updated with the ladder semantics and the intent table (default/cheap/fast/smart).",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:design",
+      "area:agent",
+      "area:routing",
+      "area:profiles",
+      "goal:throughput-per-dollar",
+      "wave:deferred",
+      "workstream:agent-upgrade"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "2026-04-18 dogfooding evidence: 2 omlx attempts at cheap tier, 2 no_changes.\n\nRun 1 — ddx-91bc770a (Checkpoint dirty parent trees before managed bead execution):\n- harness: agent / provider: vidar-omlx / model: Qwen3.6-35B-A3B-4bit\n- duration: 1300s (21.7 min)\n- tokens: 254,413\n- outcome: task_no_changes — no rationale written\n- bead-class: substantial git-layer refactor\n\nRun 2 — ddx-e3493010 (Resolution Path developer guide):\n- harness: agent / provider: vidar-omlx / model: Qwen3.6-35B-A3B-4bit\n- duration: 4150s (69.2 min)\n- tokens: 2,086,838 (2.09M)\n- outcome: task_no_changes — no rationale written\n- bead-class: documentation-only markdown authoring with code-walk citations\n\nFindings:\n\n1. v0.3.14 SSE filter is solid. 2M+ tokens streamed on run 2 with zero parse errors. Cheap-tier dispatch path no longer the blocker.\n\n2. Qwen3.6-35B-A3B-4bit is not strong enough to reliably close real DDx beads. Both attempts burned significant wall-clock and tokens without committing. \"Free\" local compute has real opportunity cost when model thrashes for an hour without output.\n\n3. Without ladder escalation, operator has to manually fall back. This IS the motivating case for ddx-bbb65768: default profile should detect no_changes on first tier and escalate to standard (codex subscription) for a second try.\n\n4. AC #5 of this bead sets 50% close-at-cheap target over 10 representative beads. Current observed rate: 0% close-at-cheap over 2 representative beads. Epic delivery must LIFT this rate — either through better capability gating OR by making escalation cheap enough that failed cheap attempts don't dominate total cost.\n\n5. Qwen3-Coder-Next-MLX-4bit might do better on code-heavy beads; gemma-4-31B-it on docs. Worth follow-up experiment pinning different local models per bead-class after autorouting foundation lands.\n\nEvidence bundles: .ddx/executions/20260418T023901-ba3d8d59/ and 20260418T030326-*/.",
+          "created_at": "2026-04-18T04:14:00.46487895Z",
+          "kind": "dogfooding",
+          "source": "ddx bead evidence add",
+          "summary": "Qwen3.6 cheap-tier: 2 no_changes over 2 beads (21m + 69m, 2.34M tokens, 0 commits)"
+        }
+      ],
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service (consumer of ddx-agent contract)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260421T163240-eb3cb31f",
+    "prompt": ".ddx/executions/20260421T163240-eb3cb31f/prompt.md",
+    "manifest": ".ddx/executions/20260421T163240-eb3cb31f/manifest.json",
+    "result": ".ddx/executions/20260421T163240-eb3cb31f/result.json",
+    "checks": ".ddx/executions/20260421T163240-eb3cb31f/checks.json",
+    "usage": ".ddx/executions/20260421T163240-eb3cb31f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bbb65768-20260421T163240-eb3cb31f"
+  }
+}
