@@ -107,7 +107,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 
 	// Agent harness: run in-process via the embedded agent library.
 	if harnessName == "agent" {
-		return r.RunAgent(opts)
+		return RunAgent(r, opts)
 	}
 
 	// Script harness: execute directives against the real filesystem and git.
@@ -131,7 +131,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 		if agentOpts.Provider == "" {
 			agentOpts.Provider = harnessName
 		}
-		return r.RunAgent(agentOpts)
+		return RunAgent(r, agentOpts)
 	}
 
 	prompt, err := r.resolvePrompt(opts)
