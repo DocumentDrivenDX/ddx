@@ -55,6 +55,12 @@ Never use on an execute-bead branch:
 When in doubt, check `git log <branch> --oneline | grep -E 'execute-bead|\[ddx-'`.
 If any match, preserve history on the merge.
 
+The `pre-push` hook in `lefthook.yml` (`merge-policy` command) enforces
+this: if a push would drop execute-bead or `[ddx-*]` commits the remote
+already has — i.e. a force-push rewriting that history — the hook
+rejects it. Do not disable this hook to work around it; the right move
+is to keep the commits intact and use `--ff-only` or a `--no-ff` merge.
+
 ## Prohibited Actions
 
 - Do not edit `.ddx/beads.jsonl` manually.

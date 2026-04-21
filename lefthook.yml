@@ -353,6 +353,48 @@ pre-push:
   parallel: false
 
   commands:
+    # AGENTS.md §Merge Policy: branches carrying execute-bead / [ddx-*]
+    # commits must preserve SHA history. closing_commit_sha pointers in
+    # .ddx/beads.jsonl index those exact commits; squash/rebase/amend that
+    # rewrites them destroys the output = bead(input) guarantee.
+    # This guard rejects a push if the local branch contains execute-bead
+    # or [ddx-*] tagged commits AND the remote already has a different
+    # history for them (i.e. a force-push rewrite is in flight).
+    merge-policy:
+      name: "Preserve execute-bead history"
+      run: |
+        # {1} = remote name (origin); {2} = remote URL
+        remote="${1:-origin}"
+        # Gather the commits being pushed. lefthook sets {push_files}
+        # for file pushes; for commit-level inspection we use git range.
+        # Find the remote-tracking branch HEAD to compute what's new.
+        local_ref="$(git symbolic-ref -q HEAD 2>/dev/null)"
+        [ -z "$local_ref" ] && exit 0
+        remote_ref="refs/remotes/$remote/${local_ref#refs/heads/}"
+        if ! git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+          # No remote tracking yet — first push, nothing to rewrite.
+          exit 0
+        fi
+        # Commits local has that remote does not (being pushed).
+        new_commits="$(git log --format='%H %s' "$remote_ref"..HEAD 2>/dev/null)"
+        [ -z "$new_commits" ] && exit 0
+        # Commits remote has that local dropped (rewritten or pruned).
+        dropped="$(git log --format='%H %s' HEAD.."$remote_ref" 2>/dev/null)"
+        [ -z "$dropped" ] && exit 0
+        # Check for execute-bead / [ddx-*] markers in dropped commits.
+        pattern='execute-bead|\[ddx-[0-9a-f]{8,}\]'
+        if printf '%s\n' "$dropped" | grep -qE "$pattern"; then
+          echo "ERROR: push would drop commits with execute-bead / [ddx-*] markers:"
+          printf '%s\n' "$dropped" | grep -E "$pattern" | head
+          echo ""
+          echo "AGENTS.md §Merge Policy forbids rewriting these SHAs because"
+          echo ".ddx/beads.jsonl closing_commit_sha points at them."
+          echo "Use --ff-only or --no-ff; do not squash, rebase, or amend."
+          exit 1
+        fi
+        exit 0
+      tags: [policy]
+
     # Run full test suite before push
     full-tests:
       name: "Full test suite"
