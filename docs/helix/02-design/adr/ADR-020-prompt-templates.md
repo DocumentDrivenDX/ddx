@@ -1,10 +1,58 @@
 # ADR-020: Prompt Template System with Quality Gates
 
-**Date**: 2026-04-07  
-**Status**: Proposed  
-**Authors**: Prompt Engineering Experiment Results  
+**Date**: 2026-04-07
+**Status**: Rejected (2026-04-21)
+**Authors**: Prompt Engineering Experiment Results
 
 ---
+
+## Rejection Rationale (2026-04-21)
+
+Decided during AR-2026-04-20 follow-up (governing bead `ddx-31028d84`).
+Rejected as out of scope for DDx core. Four reasons:
+
+1. **Platform/workflow boundary.** The PRD (`docs/helix/01-frame/prd.md`)
+   lists "A workflow methodology" as an explicit non-goal. Every
+   concrete example in this ADR — the `helix-frame-v2.yaml` template,
+   the `^(FEAT|US|TD|TP)-[0-9]{3}-` naming regex, the required frame
+   artifact layout — is HELIX-specific and belongs in the HELIX plugin,
+   not in DDx core.
+
+2. **The functional needs are already composable from DDx primitives.**
+   - Prompt templates and versioning: files in git + `ddx prompts
+     list/show` (FEAT-001). Git versions the templates.
+   - Quality gates: `ddx exec` and `ddx metric` run definitions
+     (FEAT-010) already run post-agent checks with pass/fail scoring,
+     and required-gate evaluation is wired into execute-bead landing.
+   - A/B testing: `ddx agent compare` / `quorum` / `grade` already
+     exist (FEAT-006).
+   - Comparison architecture: FEAT-019 agent-evaluation is the
+     formal home, pending Solution Design (`ddx-3b91ca7a`).
+
+3. **Parts are already stale.** The proposal adds an
+   `agent.agent_runner` config block that FEAT-006 marks deprecated
+   (lossy mirror of native `.agent/config.yaml`), and it references
+   `cli/internal/agent/compare.go` which is slated for deletion under
+   the thin-consumer migration epic `ddx-ac5c7fdb` (comparison moves
+   upstream into the agent library).
+
+4. **14 days as "Proposed" with zero traction.** No feature, user
+   story, or tracker bead references this ADR.
+
+### What to do with the insight
+
+The experimental finding — explicit prompts with strict conventions
+outperform vague prompts — is valuable. It should be captured in the
+HELIX plugin's prompt-engineering guidance, not in a DDx ADR. Any
+HELIX-specific prompt templates ship as HELIX plugin resources and
+reuse DDx's existing `ddx exec` / `ddx metric` quality-gate surface.
+
+No DDx-side implementation work is required. The original
+`tests/PROMPT-ENGINEERING-RESULTS.md` referenced below remains the
+primary source for the measurement data.
+
+---
+
 
 ## Context
 
