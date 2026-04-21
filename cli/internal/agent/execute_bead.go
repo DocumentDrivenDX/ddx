@@ -452,6 +452,60 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 	})
 }
 
+// costEventBody is the JSON shape persisted in a kind:cost evidence event.
+// `ddx bead metrics aggregate` reads these directly so cost rollup never
+// has to join against sessions.jsonl.
+type costEventBody struct {
+	AttemptID    string  `json:"attempt_id"`
+	Harness      string  `json:"harness,omitempty"`
+	Provider     string  `json:"provider,omitempty"`
+	Model        string  `json:"model,omitempty"`
+	InputTokens  int     `json:"input_tokens"`
+	OutputTokens int     `json:"output_tokens"`
+	TotalTokens  int     `json:"total_tokens"`
+	CostUSD      float64 `json:"cost_usd"`
+	DurationMS   int     `json:"duration_ms"`
+	ExitCode     int     `json:"exit_code"`
+}
+
+// appendBeadCostEvidence records a kind:cost evidence entry on the bead with
+// per-attempt token and dollar usage. Best-effort: errors are discarded so a
+// store failure never aborts the main execute-bead flow. Emits nothing when
+// the appender is nil, the beadID is empty, or every cost field is zero
+// (e.g., dry-run, no-changes with no provider call).
+func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string, body costEventBody) {
+	if appender == nil || beadID == "" {
+		return
+	}
+	if body.InputTokens == 0 && body.OutputTokens == 0 && body.TotalTokens == 0 && body.CostUSD == 0 {
+		return
+	}
+	body.AttemptID = attemptID
+	if body.TotalTokens == 0 {
+		body.TotalTokens = body.InputTokens + body.OutputTokens
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	var summary string
+	if body.CostUSD > 0 {
+		summary = fmt.Sprintf("tokens=%d cost_usd=%.4f", body.TotalTokens, body.CostUSD)
+	} else {
+		summary = fmt.Sprintf("tokens=%d", body.TotalTokens)
+	}
+	if body.Model != "" {
+		summary += fmt.Sprintf(" model=%s", body.Model)
+	}
+	_ = appender.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    "cost",
+		Summary: summary,
+		Body:    string(data),
+		Actor:   "ddx",
+		Source:  "ddx agent execute-bead",
+	})
+}
+
 // ExecuteBead is the thin worker: it creates an isolated worktree, constructs
 // the agent prompt from bead context, runs the agent harness, synthesizes a
 // commit if the agent left uncommitted changes, then cleans up the worktree
@@ -785,6 +839,20 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 
 	// Record routing evidence on the bead (best-effort; errors are discarded).
 	appendBeadRoutingEvidence(opts.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL)
+
+	// Record per-attempt cost evidence so cost rollup never has to join
+	// against sessions.jsonl. Best-effort; errors are discarded.
+	appendBeadCostEvidence(opts.BeadEvents, beadID, attemptID, costEventBody{
+		Harness:      resultHarness,
+		Provider:     resultProvider,
+		Model:        resultModel,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		TotalTokens:  tokens,
+		CostUSD:      costUSD,
+		DurationMS:   res.DurationMS,
+		ExitCode:     exitCode,
+	})
 
 	populateWorkerStatus(res)
 	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
