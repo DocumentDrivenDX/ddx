@@ -71,6 +71,115 @@ func newTestRunnerForRouting() *Runner {
 	return r
 }
 
+// TestAgentRouteTP020AcceptanceGroups pins the three TP-020 groups required by
+// ddx-78fb18f6: request normalization, candidate planning, and ranking. More
+// detailed one-case-per-behavior coverage lives below and in catalog_test.go.
+func TestAgentRouteTP020AcceptanceGroups(t *testing.T) {
+	t.Run("RequestNormalization", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			flags RouteFlags
+			cfg   Config
+			want  RouteRequest
+		}{
+			{
+				name:  "profile flag becomes routing profile",
+				flags: RouteFlags{Profile: "cheap"},
+				want:  RouteRequest{Profile: "cheap"},
+			},
+			{
+				name:  "catalog-known model becomes model ref",
+				flags: RouteFlags{Model: "qwen3"},
+				want:  RouteRequest{ModelRef: "qwen3"},
+			},
+			{
+				name:  "unknown model falls back to exact pin",
+				flags: RouteFlags{Model: "vendor/model-not-in-catalog"},
+				want:  RouteRequest{ModelPin: "vendor/model-not-in-catalog"},
+			},
+			{
+				name:  "harness override constrains route and preserves intent",
+				flags: RouteFlags{Harness: "codex", Profile: "cheap"},
+				want:  RouteRequest{HarnessOverride: "codex", Profile: "cheap"},
+			},
+			{
+				name: "config profile used when no explicit selector",
+				cfg:  Config{Profile: "smart"},
+				want: RouteRequest{Profile: "smart"},
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				got := NormalizeRouteRequest(tc.flags, tc.cfg, BuiltinCatalog)
+				assert.Equal(t, tc.want.Profile, got.Profile)
+				assert.Equal(t, tc.want.ModelRef, got.ModelRef)
+				assert.Equal(t, tc.want.ModelPin, got.ModelPin)
+				assert.Equal(t, tc.want.HarnessOverride, got.HarnessOverride)
+			})
+		}
+	})
+
+	t.Run("CandidatePlanning", func(t *testing.T) {
+		r := newTestRunnerForRouting()
+		states := stateFixtures()
+
+		plans := r.BuildCandidatePlans(RouteRequest{Profile: "cheap"}, states)
+		byHarness := candidatePlansByHarness(plans)
+
+		require.Contains(t, byHarness, "agent")
+		assert.True(t, byHarness["agent"].Viable)
+		assert.Equal(t, "profile:cheap", byHarness["agent"].RequestedRef)
+		assert.NotEmpty(t, byHarness["agent"].ConcreteModel)
+
+		require.Contains(t, byHarness, "gemini")
+		assert.False(t, byHarness["gemini"].Viable)
+		assert.Equal(t, "quota exceeded", byHarness["gemini"].RejectReason)
+
+		require.Contains(t, byHarness, "opencode")
+		assert.False(t, byHarness["opencode"].Viable)
+		assert.Equal(t, "not reachable", byHarness["opencode"].RejectReason)
+
+		require.Contains(t, byHarness, "pi")
+		assert.False(t, byHarness["pi"].Viable)
+		assert.Equal(t, "policy restricted", byHarness["pi"].RejectReason)
+	})
+
+	t.Run("Ranking", func(t *testing.T) {
+		r := newTestRunnerForRouting()
+		states := map[string]HarnessState{
+			"agent": healthyLocalState(),
+			"codex": healthyState(),
+		}
+
+		cheapPlans := r.BuildCandidatePlans(RouteRequest{Profile: "cheap"}, states)
+		cheapBest, err := SelectBestCandidate(RankCandidates("cheap", cheapPlans))
+		require.NoError(t, err)
+		assert.Equal(t, "agent", cheapBest.Harness)
+
+		smartPlans := r.BuildCandidatePlans(RouteRequest{Profile: "smart"}, states)
+		smartBest, err := SelectBestCandidate(RankCandidates("smart", smartPlans))
+		require.NoError(t, err)
+		assert.Equal(t, "codex", smartBest.Harness)
+
+		tied := []CandidatePlan{
+			{Harness: "z-cloud", CostClass: "medium", Viable: true},
+			{Harness: "a-cloud", CostClass: "medium", Viable: true},
+		}
+		ranked := RankCandidates("", tied)
+		require.Len(t, ranked, 2)
+		assert.Equal(t, "a-cloud", ranked[0].Harness)
+	})
+}
+
+func candidatePlansByHarness(plans []CandidatePlan) map[string]CandidatePlan {
+	byHarness := make(map[string]CandidatePlan, len(plans))
+	for _, plan := range plans {
+		byHarness[plan.Harness] = plan
+	}
+	return byHarness
+}
+
 // --- Candidate Planning and Rejection ---
 
 // TestAgentRoutingRejectsHarnessWithoutSurfaceMapping verifies that a harness
