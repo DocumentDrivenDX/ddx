@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-b0c3b23d",
+  "attempt_id": "20260421T173132-bf2a37ba",
+  "base_rev": "56497d62b151ff7256cc3761bb853c3b70addbdb",
+  "result_rev": "56497d62b151ff7256cc3761bb853c3b70addbdb",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen3.5-27b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+  "harness": "agent",
+  "provider": "vidar-omlx",
+  "model": "qwen3.5-27b",
+  "session_id": "eb-a0d34b34",
+  "duration_ms": 8,
+  "exit_code": 1,
+  "error": "agent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen3.5-27b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260421T173132-bf2a37ba",
+  "prompt_file": ".ddx/executions/20260421T173132-bf2a37ba/prompt.md",
+  "manifest_file": ".ddx/executions/20260421T173132-bf2a37ba/manifest.json",
+  "result_file": ".ddx/executions/20260421T173132-bf2a37ba/result.json",
+  "started_at": "2026-04-21T17:31:32.471765928Z",
+  "finished_at": "2026-04-21T17:31:32.480011126Z"
+}
