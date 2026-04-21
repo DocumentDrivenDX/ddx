@@ -69,7 +69,49 @@ type AgentConfig struct {
 	TimeoutMS       int                 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
+	Routing         *RoutingConfig      `yaml:"routing,omitempty" json:"routing,omitempty"`
 	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
+}
+
+// RoutingConfig is the agent routing policy block. See FEAT-006 Profile
+// Routing and epic ddx-bbb65768. ProfilePriority is the legacy flat list
+// and is deprecated in favour of ProfileLadders (per-profile tier lists).
+// When both are present, ProfileLadders wins.
+type RoutingConfig struct {
+	// ProfilePriority is the deprecated flat-list form. New configs should
+	// use ProfileLadders.
+	ProfilePriority []string `yaml:"profile_priority,omitempty" json:"profile_priority,omitempty"`
+	// ProfileLadders maps a profile name to the ordered tier list that a
+	// dispatch should try. Example:
+	//   default: [cheap, standard, smart]
+	//   cheap:   [cheap]
+	//   fast:    [fast, smart]
+	//   smart:   [smart]
+	ProfileLadders map[string][]string `yaml:"profile_ladders,omitempty" json:"profile_ladders,omitempty"`
+	// DefaultHarness is the fallback harness when no profile match succeeds.
+	DefaultHarness string `yaml:"default_harness,omitempty" json:"default_harness,omitempty"`
+	// ModelOverrides maps a profile name to a concrete model reference.
+	// e.g. { "cheap": "qwen/qwen3.6", "smart": "claude-opus-4-6" }.
+	ModelOverrides map[string]string `yaml:"model_overrides,omitempty" json:"model_overrides,omitempty"`
+}
+
+// ResolvedLadder returns the escalation ladder for the named profile. If
+// ProfileLadders contains an entry for profile, that wins. Otherwise falls
+// back to the deprecated ProfilePriority (which is treated as the ladder
+// for every profile). Returns nil when neither is set.
+func (r *RoutingConfig) ResolvedLadder(profile string) []string {
+	if r == nil {
+		return nil
+	}
+	if r.ProfileLadders != nil {
+		if ladder, ok := r.ProfileLadders[profile]; ok && len(ladder) > 0 {
+			return append([]string(nil), ladder...)
+		}
+	}
+	if len(r.ProfilePriority) > 0 {
+		return append([]string(nil), r.ProfilePriority...)
+	}
+	return nil
 }
 
 // AgentRunnerConfig was the embedded DDx Agent harness config block.
