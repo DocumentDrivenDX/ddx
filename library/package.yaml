@@ -1,0 +1,16 @@
+name: ddx
+version: 0.4.6
+description: DDx default library — prompts, personas, MCP server configs, and environment templates
+type: plugin
+source: https://github.com/DocumentDrivenDX/ddx
+api_version: "1"
+keywords:
+  - library
+  - prompts
+  - personas
+  - mcp
+  - default
+install:
+  root:
+    source: library
+    target: .ddx/plugins/ddx
