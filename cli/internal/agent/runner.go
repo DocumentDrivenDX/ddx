@@ -28,7 +28,7 @@ func containsString(slice []string, s string) bool {
 
 // Runner executes agent invocations.
 type Runner struct {
-	Registry *Registry
+	registry *harnessRegistry
 	Config   Config
 	Catalog  *Catalog     // model catalog for routing; defaults to BuiltinCatalog
 	Executor Executor     // injected; defaults to OSExecutor
@@ -67,13 +67,13 @@ func NewRunner(cfg Config) *Runner {
 	}
 
 	r := &Runner{
-		Registry: NewRegistry(),
+		registry: newHarnessRegistry(),
 		Config:   cfg,
 		Catalog:  catalog,
 		Executor: &OSExecutor{},
 		LookPath: DefaultLookPath,
 	}
-	r.Registry.LookPath = func(file string) (string, error) {
+	r.registry.LookPath = func(file string) (string, error) {
 		if r.LookPath != nil {
 			return r.LookPath(file)
 		}
@@ -308,7 +308,7 @@ func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 }
 
 // resolveHarness looks up the harness by name and checks availability.
-func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
+func (r *Runner) resolveHarness(opts RunOptions) (harnessConfig, string, error) {
 	name := opts.Harness
 	if name == "" {
 		// --provider names a harness directly (e.g. "agent", "local") →
@@ -316,7 +316,7 @@ func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 		// falls through to a different harness.
 		if opts.Provider != "" {
 			resolved := resolveHarnessAlias(opts.Provider)
-			if r.Registry.Has(resolved) {
+			if r.registry.Has(resolved) {
 				name = resolved
 			}
 		}
@@ -324,14 +324,14 @@ func (r *Runner) resolveHarness(opts RunOptions) (Harness, string, error) {
 	if name == "" {
 		name = r.Config.Harness
 	}
-	harness, ok := r.Registry.Get(name)
+	harness, ok := r.registry.Get(name)
 	if !ok {
-		return Harness{}, "", fmt.Errorf("agent: unknown harness: %s", name)
+		return harnessConfig{}, "", fmt.Errorf("agent: unknown harness: %s", name)
 	}
 	// Embedded and HTTP-only harnesses don't need a binary in PATH.
 	if name != "virtual" && name != "agent" && name != "script" && !harness.IsHTTPProvider {
 		if _, err := r.LookPath(harness.Binary); err != nil {
-			return Harness{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
+			return harnessConfig{}, "", fmt.Errorf("agent: harness %s not available: %s not found in PATH", name, harness.Binary)
 		}
 	}
 	return harness, name, nil
@@ -367,7 +367,7 @@ func (r *Runner) resolveModel(opts RunOptions, harnessName string) string {
 	return ""
 }
 
-func (r *Runner) resolveReasoningLevels(harnessName string, harness Harness) []string {
+func (r *Runner) resolveReasoningLevels(harnessName string, harness harnessConfig) []string {
 	if r.Config.ReasoningLevels != nil {
 		if levels, ok := r.Config.ReasoningLevels[harnessName]; ok && len(levels) > 0 {
 			return append([]string{}, levels...)
@@ -410,7 +410,7 @@ func resolvePermissions(cfgPerms, optsPerms string) string {
 
 // BuildArgs constructs the argument array for a harness invocation.
 // Exported for testing.
-func BuildArgs(h Harness, opts RunOptions, model string) []string {
+func BuildArgs(h harnessConfig, opts RunOptions, model string) []string {
 	// Use BaseArgs if set, fall back to legacy Args for compatibility.
 	base := h.BaseArgs
 	if base == nil {
@@ -449,7 +449,7 @@ func BuildArgs(h Harness, opts RunOptions, model string) []string {
 }
 
 // processResult converts execution output to a Result.
-func (r *Runner) processResult(harnessName, model string, harness Harness, execResult *ExecResult, execErr error, elapsed time.Duration, ctx context.Context) *Result {
+func (r *Runner) processResult(harnessName, model string, harness harnessConfig, execResult *ExecResult, execErr error, elapsed time.Duration, ctx context.Context) *Result {
 	result := &Result{
 		Harness:    harnessName,
 		Model:      model,
@@ -820,7 +820,7 @@ func extractUsageClaude(output string) UsageData {
 
 // ExtractTokens parses token usage from agent output using the harness's pattern.
 // For codex, it delegates to ExtractUsage and returns total tokens (input + output).
-func ExtractTokens(output string, harness Harness) int {
+func ExtractTokens(output string, harness harnessConfig) int {
 	if harness.Name == "codex" {
 		usage := ExtractUsage("codex", output)
 		if usage.InputTokens > 0 || usage.OutputTokens > 0 {
@@ -857,7 +857,7 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 	id := genSessionID()
 	var surface string
 	canonicalTarget := result.Model
-	if harness, ok := r.Registry.Get(result.Harness); ok {
+	if harness, ok := r.registry.Get(result.Harness); ok {
 		surface = harness.Surface
 		if canonicalTarget == "" {
 			canonicalTarget = harness.DefaultModel
@@ -931,7 +931,7 @@ func (r *Runner) TestProviderConnectivity(harnessName string, timeout time.Durat
 		return status
 	}
 
-	harness, ok := r.Registry.Get(harnessName)
+	harness, ok := r.registry.Get(harnessName)
 	if !ok {
 		status.Error = "unknown harness"
 		return status

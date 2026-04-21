@@ -287,7 +287,7 @@ func TestRunClaudeStreaming_OptsSessionLogDirOverridesConfig(t *testing.T) {
 	bundleEmbeddedDir := filepath.Join(tmp, "bundle-embedded")
 
 	r := NewRunner(Config{SessionLogDir: runnerDefaultDir})
-	harness := Harness{Name: "claude", Binary: binPath, PromptMode: "arg"}
+	harness := harnessConfig{Name: "claude", Binary: binPath, PromptMode: "arg"}
 	opts := RunOptions{
 		Harness:       "claude",
 		Prompt:        "hi",
@@ -320,7 +320,7 @@ func TestRunClaudeStreaming_FallsBackToConfigLogDir(t *testing.T) {
 	runnerDefaultDir := filepath.Join(tmp, "runner-default")
 
 	r := NewRunner(Config{SessionLogDir: runnerDefaultDir})
-	harness := Harness{Name: "claude", Binary: binPath, PromptMode: "arg"}
+	harness := harnessConfig{Name: "claude", Binary: binPath, PromptMode: "arg"}
 	opts := RunOptions{
 		Harness: "claude",
 		Prompt:  "hi",

@@ -185,7 +185,7 @@ func (r *Runner) recordRoutingOutcome(result *Result, elapsed time.Duration, opt
 		return
 	}
 
-	harness, _ := r.Registry.Get(result.Harness)
+	harness, _ := r.registry.Get(result.Harness)
 	canonicalTarget := result.Model
 	if canonicalTarget == "" {
 		canonicalTarget = opts.Model
@@ -223,34 +223,6 @@ func (r *Runner) recordRoutingOutcome(result *Result, elapsed time.Duration, opt
 	}
 
 	_ = NewRoutingMetricsStore(r.Config.SessionLogDir).AppendOutcome(outcome)
-}
-
-func (r *Runner) recordQuotaSnapshot(harnessName string, harness Harness, quota *QuotaInfo, sampleKind string) {
-	if r == nil || r.Config.SessionLogDir == "" || quota == nil {
-		return
-	}
-
-	snapshot := QuotaSnapshot{
-		Harness:         harnessName,
-		Surface:         harness.Surface,
-		CanonicalTarget: harness.DefaultModel,
-		Source:          harness.QuotaCommand,
-		ObservedAt:      time.Now().UTC(),
-		SampleKind:      sampleKind,
-		UsedPercent:     quota.PercentUsed,
-		ResetsAt:        quota.ResetDate,
-		QuotaState:      "ok",
-	}
-
-	if snapshot.CanonicalTarget == "" {
-		snapshot.CanonicalTarget = harnessName
-	}
-	if quota.PercentUsed >= 95 {
-		snapshot.QuotaState = "blocked"
-	}
-	snapshot.WindowMinutes = parseWindowMinutes(quota.LimitWindow)
-
-	_ = NewRoutingMetricsStore(r.Config.SessionLogDir).AppendQuotaSnapshot(snapshot)
 }
 
 func parseWindowMinutes(raw string) int {

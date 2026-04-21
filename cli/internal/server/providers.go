@@ -583,7 +583,7 @@ func computeProviderBurnEstimate(
 // ---- Utility functions ----
 
 // listHarnessInfos returns the harness inventory via the agent service.
-// Replaces direct use of agent.NewRegistry().
+// Replaces the older in-package harness inventory.
 func listHarnessInfos(ctx context.Context, workDir string) ([]agentlib.HarnessInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -606,7 +606,7 @@ func findHarnessInfo(infos []agentlib.HarnessInfo, name string) (agentlib.Harnes
 }
 
 // harnessDefaultModels returns the well-known default model(s) for a harness.
-// Mirrors the historical agent.Harness.{Models,DefaultModel} fields used by
+// Mirrors the historical in-package default model fields used by
 // the provider detail endpoint. Empty slice means "no default model published".
 func harnessDefaultModels(name string) []string {
 	switch name {

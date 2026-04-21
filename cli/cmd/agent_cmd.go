@@ -621,7 +621,7 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 				}
 			}
 
-			// Routing mode: probe full HarnessState per harness via service.
+			// Routing mode: derive full routing state per harness via service.
 			if checkRouting {
 				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
 				if svcErr != nil {

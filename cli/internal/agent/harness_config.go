@@ -1,10 +1,47 @@
 package agent
 
-// PreferenceOrder defines the default harness preference when multiple are available.
-var PreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "agent", "pi", "openrouter", "lmstudio"}
+// harnessConfig is the private compatibility shape used by DDx's legacy
+// Runner path for fixture harnesses and subprocess argument tests. Production
+// harness inventory comes from github.com/DocumentDrivenDX/agent ListHarnesses.
+type harnessConfig struct {
+	Name            string
+	Binary          string
+	Args            []string
+	BaseArgs        []string
+	PermissionArgs  map[string][]string
+	PromptMode      string
+	DefaultModel    string
+	Models          []string
+	ReasoningLevels []string
+	ModelFlag       string
+	WorkDirFlag     string
+	EffortFlag      string
+	EffortFormat    string
+	TokenPattern    string
+	Surface         string
+	CostClass       string
+	IsLocal         bool
+	ExactPinSupport bool
+	QuotaCommand    string
+	TUIQuotaCommand string
+	IsHTTPProvider  bool
+	IsSubscription  bool
+	TestOnly        bool
+}
 
-// builtinHarnesses defines known harnesses and how to invoke them.
-var builtinHarnesses = map[string]Harness{
+type harnessStatus struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	Binary    string `json:"binary"`
+	Path      string `json:"path,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// harnessPreferenceOrder defines the default harness preference when multiple are available.
+var harnessPreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "agent", "pi", "openrouter", "lmstudio"}
+
+// builtinHarnessConfigs defines known harnesses and how to invoke them.
+var builtinHarnessConfigs = map[string]harnessConfig{
 	"codex": {
 		Name:     "codex",
 		Binary:   "codex",
@@ -164,41 +201,41 @@ func resolveHarnessAlias(name string) string {
 	return name
 }
 
-// Registry manages known harnesses.
-type Registry struct {
+// harnessRegistry manages known harnesses.
+type harnessRegistry struct {
 	LookPath  LookPathFunc
-	harnesses map[string]Harness
+	harnesses map[string]harnessConfig
 }
 
-// NewRegistry creates a registry with builtin harnesses.
-func NewRegistry() *Registry {
-	r := &Registry{
+// newHarnessRegistry creates a registry with builtin harnesses.
+func newHarnessRegistry() *harnessRegistry {
+	r := &harnessRegistry{
 		LookPath:  DefaultLookPath,
-		harnesses: make(map[string]Harness),
+		harnesses: make(map[string]harnessConfig),
 	}
-	for k, v := range builtinHarnesses {
+	for k, v := range builtinHarnessConfigs {
 		r.harnesses[k] = v
 	}
 	return r
 }
 
 // Get returns a harness by name.
-func (r *Registry) Get(name string) (Harness, bool) {
+func (r *harnessRegistry) Get(name string) (harnessConfig, bool) {
 	h, ok := r.harnesses[name]
 	return h, ok
 }
 
 // Has returns true if the harness is registered.
-func (r *Registry) Has(name string) bool {
+func (r *harnessRegistry) Has(name string) bool {
 	_, ok := r.harnesses[name]
 	return ok
 }
 
 // Names returns all registered harness names in preference order.
-func (r *Registry) Names() []string {
+func (r *harnessRegistry) Names() []string {
 	var names []string
 	// First add preferred harnesses that exist in registry
-	for _, name := range PreferenceOrder {
+	for _, name := range harnessPreferenceOrder {
 		if _, ok := r.harnesses[name]; ok {
 			names = append(names, name)
 		}
@@ -206,7 +243,7 @@ func (r *Registry) Names() []string {
 	// Then add any extras not in preference list
 	for name := range r.harnesses {
 		found := false
-		for _, pref := range PreferenceOrder {
+		for _, pref := range harnessPreferenceOrder {
 			if name == pref {
 				found = true
 				break
@@ -220,15 +257,15 @@ func (r *Registry) Names() []string {
 }
 
 // Discover checks which harnesses are available on the system.
-func (r *Registry) Discover() []HarnessStatus {
-	var statuses []HarnessStatus
+func (r *harnessRegistry) Discover() []harnessStatus {
+	var statuses []harnessStatus
 	lookPath := r.LookPath
 	if lookPath == nil {
 		lookPath = DefaultLookPath
 	}
 	for _, name := range r.Names() {
 		h := r.harnesses[name]
-		status := HarnessStatus{
+		status := harnessStatus{
 			Name:   name,
 			Binary: h.Binary,
 		}
@@ -253,7 +290,7 @@ func (r *Registry) Discover() []HarnessStatus {
 }
 
 // FirstAvailable returns the first available harness in preference order.
-func (r *Registry) FirstAvailable() (string, bool) {
+func (r *harnessRegistry) FirstAvailable() (string, bool) {
 	for _, s := range r.Discover() {
 		if s.Available {
 			return s.Name, true

@@ -68,8 +68,8 @@ func (a *usageAgg) addSession(entry agent.SessionEntry) {
 }
 
 // localHarnesses tracks which harness names are local-only (no provider cost).
-// Replaces the previous *agent.Registry lookup so this file doesn't depend on
-// the legacy Registry type that's about to delete (per ddx-f0cab7b3).
+// Replaces the previous in-package harness lookup so this file depends on
+// service contract metadata instead of DDx-owned harness config.
 var localHarnesses = map[string]bool{
 	"agent":   true,
 	"virtual": true,

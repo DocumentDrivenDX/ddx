@@ -6,33 +6,6 @@ import (
 	"time"
 )
 
-// Harness defines a known agent harness.
-type Harness struct {
-	Name            string              // e.g. "codex", "claude", "gemini"
-	Binary          string              // binary name to exec
-	Args            []string            // deprecated: use BaseArgs; kept for compatibility
-	BaseArgs        []string            // args always included regardless of permission level
-	PermissionArgs  map[string][]string // extra args keyed by permission level: "safe", "supervised", "unrestricted"
-	PromptMode      string              // "arg" (final arg), "stdin" (pipe)
-	DefaultModel    string              // built-in model choice when no config override exists
-	Models          []string            // known valid models for this harness
-	ReasoningLevels []string            // supported reasoning levels in preference order
-	ModelFlag       string              // flag for model override (e.g. "-m", "--model"), empty if unsupported
-	WorkDirFlag     string              // flag for working directory (e.g. "-C", "--cwd"), empty if unsupported
-	EffortFlag      string              // flag for effort/reasoning control, empty if unsupported
-	EffortFormat    string              // format string for effort value (e.g. "reasoning.effort=%s"), empty = use value directly
-	TokenPattern    string              // regex to extract token count from output, must have one capture group
-	Surface         string              // catalog surface identifier: "codex", "claude", "embedded-openai", "embedded-anthropic"
-	CostClass       string              // local, cheap, medium, expensive
-	IsLocal         bool                // true for embedded/local harnesses (no cloud cost)
-	ExactPinSupport bool                // true if harness can accept an exact concrete model pin
-	QuotaCommand    string              // CLI args for non-interactive quota introspection (e.g. "usage", "status"); empty = skip probe. Must NOT be an interactive slash command.
-	TUIQuotaCommand string              // Slash command to send as a prompt when native quota signal is unavailable (e.g. "/usage", "/status"). Invoked with the binary's non-interactive print mode.
-	IsHTTPProvider  bool                // true for API-only providers (openrouter, lmstudio) that have no CLI binary.
-	IsSubscription  bool                // true for fixed-subscription harnesses (codex, claude) — preferred over pay-per-token when within quota.
-	TestOnly        bool                // true for sentinel/test harnesses (script, virtual) that must never be selected by production tier routing. Explicit --harness override still works.
-}
-
 // Config holds agent service configuration.
 type Config struct {
 	Profile         string              `yaml:"profile"`          // default routing intent: cheap, standard, smart
@@ -150,16 +123,6 @@ type ProviderStatus struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// HarnessStatus reports availability of a harness.
-type HarnessStatus struct {
-	Name      string          `json:"name"`
-	Available bool            `json:"available"`
-	Binary    string          `json:"binary"`
-	Path      string          `json:"path,omitempty"` // resolved binary path
-	Error     string          `json:"error,omitempty"`
-	Provider  *ProviderStatus `json:"provider,omitempty"` // provider connectivity status
-}
-
 // HarnessCapabilities describes the effective capabilities for a harness.
 type HarnessCapabilities struct {
 	Harness             string            `json:"harness"`
@@ -235,8 +198,8 @@ type ComparisonRecord struct {
 	Grades    []ComparisonGrade `json:"grades,omitempty"`
 }
 
-// HarnessState captures the runtime routing-relevant state of a harness.
-type HarnessState struct {
+// CandidateState captures contract-derived routing state for a candidate.
+type CandidateState struct {
 	Installed     bool                   `json:"installed"`
 	Reachable     bool                   `json:"reachable"`
 	Authenticated bool                   `json:"authenticated"`
@@ -375,23 +338,23 @@ type RouteRequest struct {
 
 // CandidatePlan is a routing evaluation result for one harness.
 type CandidatePlan struct {
-	Harness               string       `json:"harness"`
-	Surface               string       `json:"surface,omitempty"`          // catalog surface: embedded-openai, embedded-anthropic, codex, claude
-	RequestedRef          string       `json:"requested_ref,omitempty"`    // profile or model ref from the request
-	CanonicalTarget       string       `json:"canonical_target,omitempty"` // resolved catalog canonical target
-	ConcreteModel         string       `json:"concrete_model,omitempty"`   // concrete model string to pass to harness
-	SupportsEffort        bool         `json:"supports_effort"`
-	SupportsPermissions   bool         `json:"supports_permissions"`
-	State                 HarnessState `json:"state"`
-	Provider              string       `json:"provider,omitempty"`            // discovered provider endpoint name (e.g. vidar, bragi)
-	CostClass             string       `json:"cost_class,omitempty"`          // local, cheap, medium, expensive
-	IsSubscription        bool         `json:"is_subscription,omitempty"`     // fixed-subscription harness; preferred over pay-per-token within quota
-	EstimatedCostUSD      float64      `json:"estimated_cost_usd,omitempty"`  // -1 = unknown
-	HistoricalSuccessRate float64      `json:"historical_success_rate"`       // observed success rate from routing metrics; -1 when insufficient data (< 3 samples)
-	RejectReason          string       `json:"reject_reason,omitempty"`       // non-empty means rejected
-	DeprecationWarning    string       `json:"deprecation_warning,omitempty"` // non-empty when requested ref is deprecated
-	Score                 float64      `json:"score,omitempty"`
-	Viable                bool         `json:"viable"`
+	Harness               string         `json:"harness"`
+	Surface               string         `json:"surface,omitempty"`          // catalog surface: embedded-openai, embedded-anthropic, codex, claude
+	RequestedRef          string         `json:"requested_ref,omitempty"`    // profile or model ref from the request
+	CanonicalTarget       string         `json:"canonical_target,omitempty"` // resolved catalog canonical target
+	ConcreteModel         string         `json:"concrete_model,omitempty"`   // concrete model string to pass to harness
+	SupportsEffort        bool           `json:"supports_effort"`
+	SupportsPermissions   bool           `json:"supports_permissions"`
+	State                 CandidateState `json:"state"`
+	Provider              string         `json:"provider,omitempty"`            // discovered provider endpoint name (e.g. vidar, bragi)
+	CostClass             string         `json:"cost_class,omitempty"`          // local, cheap, medium, expensive
+	IsSubscription        bool           `json:"is_subscription,omitempty"`     // fixed-subscription harness; preferred over pay-per-token within quota
+	EstimatedCostUSD      float64        `json:"estimated_cost_usd,omitempty"`  // -1 = unknown
+	HistoricalSuccessRate float64        `json:"historical_success_rate"`       // observed success rate from routing metrics; -1 when insufficient data (< 3 samples)
+	RejectReason          string         `json:"reject_reason,omitempty"`       // non-empty means rejected
+	DeprecationWarning    string         `json:"deprecation_warning,omitempty"` // non-empty when requested ref is deprecated
+	Score                 float64        `json:"score,omitempty"`
+	Viable                bool           `json:"viable"`
 }
 
 // Default configuration values.

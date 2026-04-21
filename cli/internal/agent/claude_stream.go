@@ -301,7 +301,7 @@ func resolveClaudeProgressLogDir(opts RunOptions, cfg Config) string {
 // If the claude CLI rejects the stream-json flags (older build, unsupported
 // option), the caller falls back to the non-streaming path via
 // runClaudeWithFallbackFn.
-func runClaudeStreamingFn(r *Runner, ctx context.Context, harness Harness, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
+func runClaudeStreamingFn(r *Runner, ctx context.Context, harness harnessConfig, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
 	args := BuildArgs(harness, resolvedOpts, model)
 
 	start := time.Now()
@@ -474,7 +474,7 @@ func claudeStreamArgsUnsupported(stderr string) bool {
 // CLI rejects the stream-json flags, retries with the legacy buffered
 // --print/-p/--output-format=json invocation so existing non-streaming
 // contracts remain intact.
-func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness Harness, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
+func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness harnessConfig, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
 	result, err := runClaudeStreamingFn(r, ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
 	if err != nil {
 		return nil, err

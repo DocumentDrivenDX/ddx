@@ -64,10 +64,10 @@ func newTestRunner(exec *mockExecutor) *Runner {
 	return r
 }
 
-// --- Registry tests ---
+// --- Harness config tests ---
 
 func TestRegistryBuiltinHarnesses(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	for _, name := range []string{"codex", "claude", "gemini", "opencode", "agent", "pi"} {
 		assert.True(t, r.Has(name), "should have builtin harness: %s", name)
 	}
@@ -75,7 +75,7 @@ func TestRegistryBuiltinHarnesses(t *testing.T) {
 }
 
 func TestRegistryGet(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, ok := r.Get("codex")
 	require.True(t, ok)
 	assert.Equal(t, "codex", h.Name)
@@ -86,7 +86,7 @@ func TestRegistryGet(t *testing.T) {
 }
 
 func TestRegistryDefaultBaseArgs(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 
 	codex, ok := r.Get("codex")
 	require.True(t, ok)
@@ -100,7 +100,7 @@ func TestRegistryDefaultBaseArgs(t *testing.T) {
 }
 
 func TestRegistryNamesPreferenceOrder(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	names := r.Names()
 	require.Len(t, names, 10)
 	assert.Equal(t, "codex", names[0])
@@ -112,7 +112,7 @@ func TestRegistryNamesPreferenceOrder(t *testing.T) {
 // --- Arg construction tests ---
 
 func TestBuildArgsCodexBasic(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("codex")
 	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
 	// Default (safe): no bypass flags, structured JSON remains enabled.
@@ -124,7 +124,7 @@ func TestBuildArgsCodexBasic(t *testing.T) {
 }
 
 func TestBuildArgsCodexAllFlags(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("codex")
 	args := BuildArgs(h, RunOptions{
 		Prompt:  "build it",
@@ -142,7 +142,7 @@ func TestBuildArgsCodexAllFlags(t *testing.T) {
 }
 
 func TestBuildArgsClaudeBasic(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("claude")
 	args := BuildArgs(h, RunOptions{Prompt: "review code"}, "")
 	// Should have base args + prompt, with stream-json output preserved so the
@@ -151,7 +151,7 @@ func TestBuildArgsClaudeBasic(t *testing.T) {
 }
 
 func TestBuildArgsClaudeWithModel(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("claude")
 	args := BuildArgs(h, RunOptions{Prompt: "test"}, "claude-sonnet-4-6")
 	assert.Contains(t, args, "--model")
@@ -159,7 +159,7 @@ func TestBuildArgsClaudeWithModel(t *testing.T) {
 }
 
 func TestBuildArgsGeminiStdin(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("gemini")
 	args := BuildArgs(h, RunOptions{Prompt: "hello"}, "")
 	// stdin mode: prompt should NOT be in args
@@ -169,7 +169,7 @@ func TestBuildArgsGeminiStdin(t *testing.T) {
 }
 
 func TestBuildArgsNoModelFlagWhenEmpty(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	// No harness without ModelFlag in current registry - this test verifies BuildArgs behavior
 	// when a harness has no ModelFlag set
 	h, _ := r.Get("gemini")
@@ -181,7 +181,7 @@ func TestBuildArgsNoModelFlagWhenEmpty(t *testing.T) {
 // --- Permission profile tests ---
 
 func TestBuildArgsPermissionsDefault(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	// codex: default (no permissions set) should be safe — no bypass flags
 	h, _ := r.Get("codex")
 	args := BuildArgs(h, RunOptions{Prompt: "task"}, "")
@@ -202,7 +202,7 @@ func TestBuildArgsPermissionsDefault(t *testing.T) {
 }
 
 func TestBuildArgsPermissionsUnrestricted(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	// codex unrestricted
 	h, _ := r.Get("codex")
 	args := BuildArgs(h, RunOptions{Prompt: "task", Permissions: "unrestricted"}, "")
@@ -367,7 +367,7 @@ func TestCapabilitiesUnknownHarness(t *testing.T) {
 // --- Token extraction ---
 
 func TestExtractTokensCodex(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("codex")
 	// codex uses ExtractUsage (JSON path); plain-text output returns 0
 	assert.Equal(t, 0, ExtractTokens("some output\ntokens used\n1,234\n", h))
@@ -377,19 +377,19 @@ func TestExtractTokensCodex(t *testing.T) {
 }
 
 func TestExtractTokensNoPattern(t *testing.T) {
-	h := Harness{TokenPattern: ""}
+	h := harnessConfig{TokenPattern: ""}
 	assert.Equal(t, 0, ExtractTokens("tokens: 500", h))
 }
 
 func TestExtractTokensNoMatch(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("codex")
 	assert.Equal(t, 0, ExtractTokens("no token info", h))
 }
 
 // TC-010: codex harness BaseArgs contains "--json"
 func TestCodexArgsContainsJSON(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, ok := r.Get("codex")
 	require.True(t, ok)
 	assert.Contains(t, h.BaseArgs, "--json")
@@ -435,7 +435,7 @@ func TestExtractUsageCodexGarbageInput(t *testing.T) {
 // The harness switched from non-streaming "json" to "stream-json" to emit
 // real-time progress during long-running bead executions.
 func TestClaudeArgsContainsOutputFormatJSON(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, ok := r.Get("claude")
 	require.True(t, ok)
 	assert.Contains(t, h.BaseArgs, "--output-format")
@@ -650,7 +650,7 @@ func TestIntegration_CodexEcho(t *testing.T) {
 // --- Opencode harness tests ---
 
 func TestBuildArgsOpencodeBasic(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, ok := r.Get("opencode")
 	require.True(t, ok)
 	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
@@ -658,7 +658,7 @@ func TestBuildArgsOpencodeBasic(t *testing.T) {
 }
 
 func TestBuildArgsOpencodeAllFlags(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("opencode")
 	args := BuildArgs(h, RunOptions{
 		Prompt:  "build it",
@@ -675,7 +675,7 @@ func TestBuildArgsOpencodeAllFlags(t *testing.T) {
 }
 
 func TestOpencodeHarnessProperties(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, ok := r.Get("opencode")
 	require.True(t, ok)
 	assert.Equal(t, "opencode", h.Binary)
@@ -689,7 +689,7 @@ func TestOpencodeHarnessProperties(t *testing.T) {
 }
 
 func TestOpencodePermissionsAllLevels(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("opencode")
 
 	// All permission levels should produce the same args (opencode run auto-approves)
@@ -701,7 +701,7 @@ func TestOpencodePermissionsAllLevels(t *testing.T) {
 }
 
 func TestOpencodeModelFlag(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("opencode")
 	args := BuildArgs(h, RunOptions{Prompt: "test"}, "anthropic/claude-sonnet-4-6")
 	assert.Contains(t, args, "-m")
@@ -808,7 +808,7 @@ func TestIntegration_OpencodeEcho(t *testing.T) {
 // --- Pi harness tests ---
 
 func TestPiHarnessProperties(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, ok := r.Get("pi")
 	require.True(t, ok)
 	assert.Equal(t, "pi", h.Name)
@@ -823,7 +823,7 @@ func TestPiHarnessProperties(t *testing.T) {
 }
 
 func TestBuildArgsPiBasic(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("pi")
 	args := BuildArgs(h, RunOptions{Prompt: "hello world"}, "")
 	// arg mode: base args + prompt
@@ -831,7 +831,7 @@ func TestBuildArgsPiBasic(t *testing.T) {
 }
 
 func TestBuildArgsPiWithModelAndEffort(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("pi")
 	args := BuildArgs(h, RunOptions{
 		Prompt: "task",
@@ -923,7 +923,7 @@ func TestCapabilitiesPi(t *testing.T) {
 // --- Gemini harness tests ---
 
 func TestGeminiHarnessProperties(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, ok := r.Get("gemini")
 	require.True(t, ok)
 	assert.Equal(t, "gemini", h.Name)
@@ -938,7 +938,7 @@ func TestGeminiHarnessProperties(t *testing.T) {
 }
 
 func TestBuildArgsGeminiWithModel(t *testing.T) {
-	r := NewRegistry()
+	r := newHarnessRegistry()
 	h, _ := r.Get("gemini")
 	args := BuildArgs(h, RunOptions{Prompt: "task"}, "gemini-2.5")
 	assert.Contains(t, args, "-m")

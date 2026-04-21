@@ -252,7 +252,7 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 
 	// Pull binary and reasoning-level metadata from the local registry — the
 	// service does not expose these directly today.
-	registry := NewRegistry()
+	registry := newHarnessRegistry()
 	harness, _ := registry.Get(harnessName)
 
 	caps := &HarnessCapabilities{
