@@ -121,3 +121,13 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 - Workflow enforcement (HELIX)
 - Document editing UI (ddx-server web UI)
 - Loop orchestration / supervisory dispatch (HELIX)
+
+## Design References
+
+- `docs/helix/02-design/solution-designs/SD-007-release-readiness.md` — release gating and version semantics
+- `docs/helix/02-design/solution-designs/SD-011-agent-skills.md` — skill packaging and dispatch
+- `docs/helix/02-design/solution-designs/SD-012-git-awareness.md` — auto-commit and history surfaces
+- `docs/helix/02-design/solution-designs/SD-018-plugin-api-stability.md` — plugin manifest and extension surfaces
+- `docs/helix/03-test/test-plans/TP-007-e2e-smoke-tests.md` — end-to-end CLI journey
+- `docs/helix/03-test/test-plans/TP-015-onboarding-journey.md` — first-run onboarding
+- `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — agent routing behaviour consumed by the CLI

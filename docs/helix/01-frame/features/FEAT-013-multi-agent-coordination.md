@@ -239,3 +239,11 @@ to handle conflicts. That's workflow-level policy (HELIX). DDx provides:
 - Real-time collaborative editing (use git)
 - Building a distributed system — DDx stays local-first with git as the
   coordination bus
+
+## Design References
+
+- `docs/helix/02-design/solution-designs/SD-013-multi-agent-coordination.md` — coordinator, claims, and worktree-aware dispatch
+- `docs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md` — per-project routing and isolation
+- `docs/helix/02-design/solution-designs/SD-020-multi-machine-coordinator-topology.md` — host+user coordinator scoping
+- `docs/helix/02-design/solution-designs/SD-021-service-backed-multi-node-topology.md` — service-backed node topology
+- `docs/helix/03-test/test-plans/TP-002-server-web-ui.md` — worker and project coverage touching this feature

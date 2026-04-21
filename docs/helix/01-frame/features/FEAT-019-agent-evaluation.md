@@ -412,3 +412,7 @@ working tree
 - **Escalation and supervisory rules** — whether to accept a result, retry, or escalate is workflow tool policy; DDx provides the comparison and grading data
 - Container or VM-level sandboxing
 - Cross-repo or cross-project comparison
+
+## Test Plan
+
+See `docs/helix/03-test/test-plans/TP-019-agent-evaluation.md`.

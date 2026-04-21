@@ -67,3 +67,18 @@ DDx is currently migrating from the legacy DDx-internal routing/harness
 implementation to the CONTRACT-003 surface. Migration epic: `ddx-ac5c7fdb`.
 Pre-migration, FEAT-006 documented harness orchestration responsibilities
 that have since moved upstream.
+
+## Design References
+
+- `docs/helix/02-design/solution-designs/SD-006-agent-session-capture.md` — session log shape and evidence bundles
+- `docs/helix/02-design/solution-designs/SD-013-multi-agent-coordination.md` — worktree-aware dispatch, concurrent bead safety
+- `docs/helix/02-design/solution-designs/SD-014-token-awareness.md` — provider availability, quota, and signal model
+- `docs/helix/02-design/solution-designs/SD-016-process-metrics.md` — bead-level cost and rework derivation
+- `docs/helix/02-design/solution-designs/SD-020-multi-machine-coordinator-topology.md` — host+user coordinator scoping
+- `docs/helix/02-design/solution-designs/SD-021-service-backed-multi-node-topology.md` — service-backed node topology
+- `docs/helix/02-design/technical-designs/TD-006-agent-session-capture.md` — session log and artifact format
+- `docs/helix/02-design/technical-designs/TD-010-executions.md` — execution attempt bundles at `.ddx/executions/`
+- `docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md` — current thin-consumer migration plan
+- `docs/helix/03-test/test-plans/TP-006-agent-session-capture.md` — session capture test coverage
+- `docs/helix/03-test/test-plans/TP-014-token-awareness.md` — token-awareness coverage
+- `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — routing and catalog resolution coverage
