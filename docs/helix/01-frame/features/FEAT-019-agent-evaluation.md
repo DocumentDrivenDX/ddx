@@ -88,6 +88,9 @@ operators answer: "For this prompt, how does harness A compare to harness
 B?" and "What if we reran this bead with a different model?" — with
 concrete artifacts (diffs, outputs, grades) — automatically and repeatably.
 
+The canonical architecture is
+[`SD-023`](../../02-design/solution-designs/SD-023-agent-evaluation.md).
+
 ## Requirements
 
 ### Functional
@@ -415,4 +418,5 @@ working tree
 
 ## Test Plan
 
-See `docs/helix/03-test/test-plans/TP-019-agent-evaluation.md`.
+See `docs/helix/02-design/solution-designs/SD-023-agent-evaluation.md` and
+`docs/helix/03-test/test-plans/TP-019-agent-evaluation.md`.

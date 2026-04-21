@@ -4,8 +4,13 @@ ddx:
   depends_on:
     - FEAT-019
     - FEAT-006
+    - SD-023
 ---
 # Test Plan: Agent Evaluation and Prompt Comparison (FEAT-019)
+
+**Design authority:** [`SD-023`](../../02-design/solution-designs/SD-023-agent-evaluation.md)
+defines the comparison isolation, grading, benchmark, and replay architecture
+validated by this plan.
 
 ## Test Layers
 
