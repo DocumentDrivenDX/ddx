@@ -67,9 +67,10 @@ exact definitions.
   personas.
 - **Binding** — a project-specific `role: persona` map in
   `.ddx/config.yaml` under `persona_bindings`.
-- **Profile** — intent-based routing policy for `ddx agent run`:
-  `cheap` (low-cost), `fast` (low-latency), `smart` (balanced
-  default). `--profile cheap|fast|smart`.
+- **Profile** — intent-based routing policy for `ddx agent run` and
+  `ddx work`: `default` (local-first with cloud escalation), `cheap`
+  (local-only), `fast` (cloud-fast), `smart` (high-quality cloud).
+  `--profile default|cheap|fast|smart`.
 - **Plugin** — a self-contained extension installed to
   `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
   prompts, patterns, templates) is auto-installed by `ddx init`.

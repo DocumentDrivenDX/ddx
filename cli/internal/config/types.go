@@ -95,23 +95,48 @@ type RoutingConfig struct {
 	ModelOverrides map[string]string `yaml:"model_overrides,omitempty" json:"model_overrides,omitempty"`
 }
 
+var defaultProfileLadders = map[string][]string{
+	"default": {"cheap", "standard", "smart"},
+	"cheap":   {"cheap"},
+	"fast":    {"fast", "smart"},
+	"smart":   {"smart"},
+}
+
+// DefaultProfileLadders returns the built-in profile escalation policy.
+func DefaultProfileLadders() map[string][]string {
+	out := make(map[string][]string, len(defaultProfileLadders))
+	for profile, ladder := range defaultProfileLadders {
+		out[profile] = append([]string(nil), ladder...)
+	}
+	return out
+}
+
 // ResolvedLadder returns the escalation ladder for the named profile. If
 // ProfileLadders contains an entry for profile, that wins. Otherwise falls
-// back to the deprecated ProfilePriority (which is treated as the ladder
-// for every profile). Returns nil when neither is set.
+// back to the deprecated ProfilePriority for the default profile only. If
+// neither is set, returns the shipped FEAT-006 profile ladder.
 func (r *RoutingConfig) ResolvedLadder(profile string) []string {
+	if profile == "" {
+		profile = "default"
+	}
 	if r == nil {
-		return nil
+		if ladder, ok := defaultProfileLadders[profile]; ok {
+			return append([]string(nil), ladder...)
+		}
+		return append([]string(nil), defaultProfileLadders["default"]...)
 	}
 	if r.ProfileLadders != nil {
 		if ladder, ok := r.ProfileLadders[profile]; ok && len(ladder) > 0 {
 			return append([]string(nil), ladder...)
 		}
 	}
-	if len(r.ProfilePriority) > 0 {
+	if profile == "default" && len(r.ProfilePriority) > 0 {
 		return append([]string(nil), r.ProfilePriority...)
 	}
-	return nil
+	if ladder, ok := defaultProfileLadders[profile]; ok {
+		return append([]string(nil), ladder...)
+	}
+	return append([]string(nil), defaultProfileLadders["default"]...)
 }
 
 // AgentRunnerConfig was the embedded DDx Agent harness config block.

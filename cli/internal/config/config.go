@@ -72,6 +72,10 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 
 	// Apply defaults to ensure complete configuration
 	config.ApplyDefaults()
+	if config.Agent != nil && config.Agent.Routing != nil &&
+		len(config.Agent.Routing.ProfilePriority) > 0 {
+		fmt.Fprintln(os.Stderr, "warning: agent.routing.profile_priority is deprecated; use agent.routing.profile_ladders.default instead")
+	}
 
 	// Override library path with environment variable if set
 	if envLibraryPath := os.Getenv("DDX_LIBRARY_BASE_PATH"); envLibraryPath != "" {

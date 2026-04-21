@@ -52,7 +52,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 19. Backend abstraction (jsonl/bd/br)
 
 **Agent Service (implemented — FEAT-006)**
-20. `ddx agent run --profile=<cheap|fast|smart> --prompt <file>` — invoke an AI agent through automatic routing
+20. `ddx agent run --profile=<default|cheap|fast|smart> --prompt <file>` — invoke an AI agent through automatic routing
 20b. `ddx agent run --model <ref-or-exact> [--effort <level>]` — request a specific model ref, alias, or exact model pin
 20c. `ddx agent run --harness=<name>` — explicitly override automatic routing and force one harness
 21. `ddx agent run --quorum=majority --harnesses=a,b` — multi-agent consensus

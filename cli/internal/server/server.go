@@ -1947,6 +1947,7 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		ProjectRoot   string `json:"project_root"`
 		Harness       string `json:"harness"`
 		Model         string `json:"model"`
+		Profile       string `json:"profile"`
 		Provider      string `json:"provider"`
 		ModelRef      string `json:"model_ref"`
 		Effort        string `json:"effort"`
@@ -1990,6 +1991,7 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		ProjectRoot:   projectRoot,
 		Harness:       req.Harness,
 		Model:         req.Model,
+		Profile:       req.Profile,
 		Provider:      req.Provider,
 		ModelRef:      req.ModelRef,
 		Effort:        req.Effort,

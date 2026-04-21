@@ -25,7 +25,7 @@ ddx agent run [flags]
       --model string         Model override; normally omit when using --profile
       --permissions string   Permission level: safe, supervised, unrestricted (overrides config)
       --post-run string      Command to run in each worktree after the agent completes
-      --profile string       Routing intent: cheap, fast, smart (selects harness, model, and defaults automatically)
+      --profile string       Routing intent: default, cheap, fast, smart (selects harness, model, and defaults automatically)
       --prompt string        Path to prompt file
       --quorum string        Quorum strategy: any, majority, unanimous
       --record               Record prompt→response pair for virtual harness replay

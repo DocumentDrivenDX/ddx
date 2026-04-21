@@ -29,7 +29,7 @@ ddx agent execute-loop [flags]
   ddx agent execute-loop
 
   # Pick one ready bead, execute it, and stop
-  ddx agent execute-loop --once
+  ddx agent execute-loop --profile default --once
 
   # Run continuously as a bounded queue worker
   ddx agent execute-loop --poll-interval 30s
@@ -50,6 +50,7 @@ ddx agent execute-loop [flags]
       --model string             Model override
       --once                     Process at most one ready bead
       --poll-interval duration   Poll interval for continuous scanning; zero drains current ready work and exits
+      --profile string           Routing profile: default, cheap, fast, or smart (default "default")
 ```
 
 ### Options inherited from parent commands

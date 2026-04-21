@@ -22,7 +22,7 @@ and behavior are identical.
   ddx work
 
   # Pick one ready bead, execute it, and stop
-  ddx work --once
+  ddx work --profile default --once
 
   # Run continuously as a bounded queue worker
   ddx work --poll-interval 30s

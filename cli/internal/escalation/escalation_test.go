@@ -183,8 +183,8 @@ func TestShouldEscalateExecutionFailed(t *testing.T) {
 	assert.True(t, ShouldEscalate(statusExecutionFailed))
 }
 
-func TestShouldEscalateNoChanges(t *testing.T) {
-	assert.True(t, ShouldEscalate(statusNoChanges))
+func TestShouldEscalateNoChangesIsFalse(t *testing.T) {
+	assert.False(t, ShouldEscalate(statusNoChanges))
 }
 
 func TestShouldEscalatePostRunCheckFailed(t *testing.T) {
@@ -199,8 +199,8 @@ func TestShouldEscalateSuccessIsFalse(t *testing.T) {
 	assert.False(t, ShouldEscalate(statusSuccess))
 }
 
-func TestShouldEscalateStructuralValidationIsFalse(t *testing.T) {
-	assert.False(t, ShouldEscalate(statusStructuralValidationFailed))
+func TestShouldEscalateStructuralValidationIsTrue(t *testing.T) {
+	assert.True(t, ShouldEscalate(statusStructuralValidationFailed))
 }
 
 func TestShouldEscalateAlreadySatisfiedIsFalse(t *testing.T) {

@@ -17,11 +17,12 @@ token tracking, session logging, and multi-agent quorum.
 The embedded DDx agent harness is named 'agent' and is always available without
 installing external binaries. Use --harness agent or --profile cheap to route to it.
 
-Profile routing (--profile cheap|fast|smart) selects the best available harness
+Profile routing (--profile default|cheap|fast|smart) selects the best available harness
 and model automatically. Workflow tools should prefer --profile over --harness to
 stay decoupled from harness installation details.
 
 Examples:
+  ddx agent run --profile default --prompt task.md
   ddx agent run --profile cheap --prompt task.md
   ddx agent run --profile smart --prompt task.md
   ddx agent run --profile smart --model gpt-5.4   # explicit override; avoid by default

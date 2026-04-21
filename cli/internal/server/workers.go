@@ -31,6 +31,7 @@ type ExecuteLoopWorkerSpec struct {
 	ProjectRoot  string        `json:"project_root,omitempty"`
 	Harness      string        `json:"harness,omitempty"`
 	Model        string        `json:"model,omitempty"`
+	Profile      string        `json:"profile,omitempty"`
 	Provider     string        `json:"provider,omitempty"`
 	ModelRef     string        `json:"model_ref,omitempty"`
 	Effort       string        `json:"effort,omitempty"`
@@ -95,6 +96,7 @@ type WorkerRecord struct {
 	Harness        string                 `json:"harness,omitempty"`
 	Provider       string                 `json:"provider,omitempty"`
 	Model          string                 `json:"model,omitempty"`
+	Profile        string                 `json:"profile,omitempty"`
 	Effort         string                 `json:"effort,omitempty"`
 	Once           bool                   `json:"once,omitempty"`
 	PollInterval   string                 `json:"poll_interval,omitempty"`
@@ -309,6 +311,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		ProjectRoot:  effectiveRoot,
 		Harness:      spec.Harness,
 		Model:        spec.Model,
+		Profile:      agent.NormalizeRoutingProfile(spec.Profile),
 		Effort:       spec.Effort,
 		Once:         spec.Once,
 		PollInterval: spec.PollInterval.String(),
@@ -422,6 +425,13 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}, nil
 		}
 
+		profile := agent.NormalizeRoutingProfile(spec.Profile)
+		cfg, _ := config.LoadWithWorkingDir(projectRoot)
+		var routingCfg *config.RoutingConfig
+		if cfg != nil && cfg.Agent != nil {
+			routingCfg = cfg.Agent.Routing
+		}
+
 		// escalationEnabled when neither Harness nor Model is pinned.
 		escalationEnabled := spec.Harness == "" && spec.Model == ""
 
@@ -477,8 +487,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				return report, err
 			}
 
-			// Tier escalation: cheap → standard → smart (bounded by MinTier/MaxTier).
-			tiers := escalation.TiersInRange(escalation.ModelTier(spec.MinTier), escalation.ModelTier(spec.MaxTier))
+			// Profile escalation: configured profile ladder bounded by MinTier/MaxTier.
+			tiers := agent.ResolveProfileLadder(routingCfg, profile, spec.MinTier, spec.MaxTier)
 			if len(tiers) == 0 {
 				return agent.ExecuteBeadReport{
 					BeadID: beadID,
@@ -498,11 +508,14 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			var lastReport agent.ExecuteBeadReport
 			var escalationAttempts []escalation.TierAttemptRecord
+			requestedTier := string(tiers[0])
 
-			for _, tier := range tiers {
+			for tierIdx, tier := range tiers {
+				modelRefForTier := agent.ResolveTierModelRef(routingCfg, tier)
 				// Resolve the best harness for this tier via service.ResolveRoute.
 				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-					ModelRef:  string(tier),
+					Profile:   profile,
+					ModelRef:  modelRefForTier,
 					Provider:  spec.Provider,
 					Reasoning: agentlib.Reasoning(spec.Effort),
 				})
@@ -532,16 +545,26 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Model)
 				if attemptErr != nil {
 					report = agent.ExecuteBeadReport{
-						BeadID:      beadID,
-						Tier:        string(tier),
-						Harness:     dec.Harness,
-						Model:       dec.Model,
-						Status:      agent.ExecuteBeadStatusExecutionFailed,
-						Detail:      attemptErr.Error(),
-						ProbeResult: probeResult,
+						BeadID:           beadID,
+						Tier:             string(tier),
+						Harness:          dec.Harness,
+						Model:            dec.Model,
+						Status:           agent.ExecuteBeadStatusExecutionFailed,
+						Detail:           attemptErr.Error(),
+						ProbeResult:      probeResult,
+						RequestedProfile: profile,
+						RequestedTier:    requestedTier,
+						ResolvedTier:     string(tier),
+						EscalationCount:  tierIdx,
+						FinalTier:        string(tier),
 					}
 				} else {
 					report.ProbeResult = probeResult
+					report.RequestedProfile = profile
+					report.RequestedTier = requestedTier
+					report.ResolvedTier = string(tier)
+					report.EscalationCount = tierIdx
+					report.FinalTier = string(tier)
 				}
 				lastReport = report
 				escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
@@ -650,6 +673,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ProjectRoot:  projectRoot,
 		Harness:      spec.Harness,
 		Model:        spec.Model,
+		Profile:      agent.NormalizeRoutingProfile(spec.Profile),
 		Provider:     spec.Provider,
 		ModelRef:     spec.ModelRef,
 		ProgressCh:   progressCh,

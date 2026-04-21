@@ -52,6 +52,31 @@ DDx owns:
   and user input. The agent receives those as `ExecuteRequest` fields and
   performs the routing.
 
+## Profile Routing
+
+`ddx work --profile default` is the primary queue-drain invocation. DDx maps
+the user-facing profile to an ordered tier ladder and resolves each tier through
+the agent service with the configured provider affinity and capability gating.
+
+| Profile | Ladder | Intent |
+| --- | --- | --- |
+| `default` | `[cheap, standard, smart]` | Local first, then subscription cloud, then high-quality cloud when earlier tiers fail. This is the common throughput-per-dollar path. |
+| `cheap` | `[cheap]` | Local only. Never escalates; if local cannot serve the bead, the bead is unclaimed and waits. |
+| `fast` | `[fast, smart]` | Cloud-fast first, skipping local warmup; escalates to smart on failure. |
+| `smart` | `[smart]` | High-quality cloud from the start. No escalation. |
+
+The `.ddx/config.yaml` field `agent.routing.profile_ladders` can override the
+ordered tier list per profile. The legacy flat `agent.routing.profile_priority`
+is still read as the `default` profile fallback and emits a deprecation warning;
+new configs should use `profile_ladders.default`. `agent.routing.model_overrides`
+can map a ladder tier such as `cheap`, `standard`, `fast`, or `smart` to a
+concrete model reference before DDx asks the agent service to resolve the route.
+
+Escalation advances to the next tier for `execution_failed`,
+`land_conflict`, `post_run_check_failed`, and
+`structural_validation_failed`. `no_changes` keeps the existing cooldown and
+satisfaction-adjudication path rather than consuming a higher tier.
+
 ## Asking ddx-agent for changes
 
 When DDx needs new behavior from the agent — a new method, a new field on

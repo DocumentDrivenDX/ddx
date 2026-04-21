@@ -178,7 +178,7 @@ func TestInfrastructureFailureDoesNotEscalate(t *testing.T) {
 		{"connection refused triggers defer", agent.ExecuteBeadStatusExecutionFailed, "dial tcp: connection refused", true},
 		{"401 unauthorized triggers defer", agent.ExecuteBeadStatusExecutionFailed, "401 Unauthorized", true},
 		{"plain test failure does NOT defer (escalates)", agent.ExecuteBeadStatusExecutionFailed, "TestFoo: assertion failed", false},
-		{"non-escalatable structural failure never infrastructure", "structural_validation_failed", "anything 502", false},
+		{"structural failure escalates but is not infrastructure", "structural_validation_failed", "anything 502", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

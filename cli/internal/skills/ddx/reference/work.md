@@ -21,7 +21,7 @@ Flags worth knowing:
 - `--poll-interval <dur>` — continuous worker mode; wait between
   iterations.
 - `--harness <name>` — force a specific harness (overrides profile).
-- `--profile cheap|fast|smart` — routing intent (default `smart`).
+- `--profile default|cheap|fast|smart` — routing intent (default `default`).
 - `--model <ref>` — exact model pin (overrides profile).
 - `--local` — run inline in the current process (no subprocess).
 

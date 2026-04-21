@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
@@ -128,4 +129,29 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "routing evidence must be recorded even on task_succeeded path")
+}
+
+func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	appendLoopRoutingEvidence(app, "ddx-0001", ExecuteBeadReport{
+		Provider:         "openai",
+		Model:            "gpt-5.4",
+		RequestedProfile: "default",
+		RequestedTier:    "cheap",
+		ResolvedTier:     "standard",
+		EscalationCount:  1,
+		FinalTier:        "standard",
+	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
+
+	require.Len(t, app.events, 1)
+	assert.Equal(t, "ddx-0001", app.events[0].BeadID)
+	assert.Equal(t, "routing", app.events[0].Event.Kind)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
+	assert.Equal(t, "default", body["requested_profile"])
+	assert.Equal(t, "cheap", body["requested_tier"])
+	assert.Equal(t, "standard", body["resolved_tier"])
+	assert.Equal(t, float64(1), body["escalation_count"])
+	assert.Equal(t, "standard", body["final_tier"])
 }

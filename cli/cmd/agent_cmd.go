@@ -39,11 +39,12 @@ token tracking, session logging, and multi-agent quorum.
 The embedded DDx agent harness is named 'agent' and is always available without
 installing external binaries. Use --harness agent or --profile cheap to route to it.
 
-Profile routing (--profile cheap|fast|smart) selects the best available harness
+Profile routing (--profile default|cheap|fast|smart) selects the best available harness
 and model automatically. Workflow tools should prefer --profile over --harness to
 stay decoupled from harness installation details.
 
 Examples:
+  ddx agent run --profile default --prompt task.md
   ddx agent run --profile cheap --prompt task.md
   ddx agent run --profile smart --prompt task.md
   ddx agent run --profile smart --model gpt-5.4   # explicit override; avoid by default
@@ -285,12 +286,16 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			resolvedHarness := harness
 			resolvedModel := model
 			if harness == "" && (profile != "" || model != "") {
+				if profile != "" {
+					profile = agent.NormalizeRoutingProfile(profile)
+				}
 				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
 				if svcErr != nil {
 					return fmt.Errorf("agent: failed to initialize routing service: %w", svcErr)
 				}
 				routeReq := agentlib.RouteRequest{
 					Model:       model,
+					Profile:     profile,
 					Reasoning:   agentlib.Reasoning(effort),
 					Permissions: permissions,
 					ModelRef:    profile,
@@ -405,7 +410,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd.Flags().String("text", "", "Inline prompt text")
 	cmd.Flags().String("harness", "", "Harness name (default from config); use 'agent' for the embedded DDx agent")
 	cmd.Flags().String("model", "", "Model override; normally omit when using --profile")
-	cmd.Flags().String("profile", "", "Routing intent: cheap, fast, smart (selects harness, model, and defaults automatically)")
+	cmd.Flags().String("profile", "", "Routing intent: default, cheap, fast, smart (selects harness, model, and defaults automatically)")
 	cmd.Flags().String("effort", "", "Reasoning effort override; normally omit when using --profile")
 	cmd.Flags().String("timeout", "", "Timeout duration (e.g. 30s, 5m)")
 	cmd.Flags().String("quorum", "", "Quorum strategy: any, majority, unanimous")
@@ -1507,7 +1512,7 @@ is registered with the server (run "ddx server" from that directory, or use
   ddx agent execute-loop
 
   # Pick one ready bead, execute it, and stop
-  ddx agent execute-loop --once
+  ddx agent execute-loop --profile default --once
 
   # Run continuously as a bounded queue worker
   ddx agent execute-loop --poll-interval 30s
@@ -1525,6 +1530,7 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
 	cmd.Flags().String("harness", "", "Agent harness to use")
 	cmd.Flags().String("model", "", "Model override")
+	cmd.Flags().String("profile", agent.DefaultRoutingProfile, "Routing profile: default, cheap, fast, or smart")
 	cmd.Flags().String("provider", "", "Provider name (e.g. vidar, openrouter); selects a named provider from config")
 	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
@@ -1549,6 +1555,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	fromRev, _ := cmd.Flags().GetString("from")
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
+	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
 	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
@@ -1581,7 +1588,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
-		return f.executeLoopWithServer(cmd, projectRoot, harness, model, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel, minTier, maxTier)
+		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel, minTier, maxTier)
 	}
 
 	// Pre-flight: validate harness availability and model compatibility
@@ -1633,6 +1640,13 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// In that case the executor iterates through tiers (cheap → standard →
 	// smart) and escalates on failure. When either flag is set, the executor
 	// runs a single attempt with the specified harness/model.
+	profile = agent.NormalizeRoutingProfile(profile)
+	cfg, _ := config.LoadWithWorkingDir(projectRoot)
+	var routingCfg *config.RoutingConfig
+	if cfg != nil && cfg.Agent != nil {
+		routingCfg = cfg.Agent.Routing
+	}
+
 	escalationEnabled := harness == "" && model == ""
 
 	// Cost-cap state shared by both the single-attempt and tier-escalation
@@ -1773,13 +1787,13 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				return report, err
 			}
 
-			// Tier escalation path: try cheap → standard → smart (bounded by
-			// --min-tier / --max-tier). For each tier, probe available harnesses,
+			// Profile escalation path: iterate the configured profile ladder
+			// (bounded by --min-tier / --max-tier). For each tier, probe available harnesses,
 			// filter out unhealthy ones, pick the best, and attempt execution.
 			// On escalatable failures, mark the harness unhealthy and try the
 			// next tier. A successful result or a non-escalatable failure
-			// (structural) terminates the loop early.
-			tiers := escalation.TiersInRange(escalation.ModelTier(minTier), escalation.ModelTier(maxTier))
+			// terminates the loop early.
+			tiers := agent.ResolveProfileLadder(routingCfg, profile, minTier, maxTier)
 			if len(tiers) == 0 {
 				return agent.ExecuteBeadReport{
 					BeadID: beadID,
@@ -1800,11 +1814,14 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			}
 			var lastReport agent.ExecuteBeadReport
 			var escalationAttempts []escalation.TierAttemptRecord
+			requestedTier := string(tiers[0])
 
-			for _, tier := range tiers {
+			for tierIdx, tier := range tiers {
+				modelRefForTier := agent.ResolveTierModelRef(routingCfg, tier)
 				// Resolve the best harness for this tier via service.ResolveRoute.
 				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-					ModelRef:  string(tier),
+					Profile:   profile,
+					ModelRef:  modelRefForTier,
 					Provider:  provider,
 					Reasoning: agentlib.Reasoning(effort),
 				})
@@ -1835,16 +1852,26 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Model)
 				if attemptErr != nil {
 					report = agent.ExecuteBeadReport{
-						BeadID:      beadID,
-						Tier:        string(tier),
-						Harness:     dec.Harness,
-						Model:       dec.Model,
-						Status:      agent.ExecuteBeadStatusExecutionFailed,
-						Detail:      attemptErr.Error(),
-						ProbeResult: probeResult,
+						BeadID:           beadID,
+						Tier:             string(tier),
+						Harness:          dec.Harness,
+						Model:            dec.Model,
+						Status:           agent.ExecuteBeadStatusExecutionFailed,
+						Detail:           attemptErr.Error(),
+						ProbeResult:      probeResult,
+						RequestedProfile: profile,
+						RequestedTier:    requestedTier,
+						ResolvedTier:     string(tier),
+						EscalationCount:  tierIdx,
+						FinalTier:        string(tier),
 					}
 				} else {
 					report.ProbeResult = probeResult
+					report.RequestedProfile = profile
+					report.RequestedTier = requestedTier
+					report.ResolvedTier = string(tier)
+					report.EscalationCount = tierIdx
+					report.FinalTier = string(tier)
 				}
 				lastReport = report
 				escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
@@ -1943,6 +1970,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		ProjectRoot:  projectRoot,
 		Harness:      harness,
 		Model:        model,
+		Profile:      profile,
 		Provider:     provider,
 		ModelRef:     modelRef,
 		SessionID:    loopSessionID,
@@ -2015,7 +2043,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.
-func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel, minTier, maxTier string) error {
+func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel, minTier, maxTier string) error {
 	serverBase := resolveServerURL(projectRoot)
 
 	workerSpec := map[string]any{
@@ -2027,6 +2055,9 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	}
 	if model != "" {
 		workerSpec["model"] = model
+	}
+	if profile != "" {
+		workerSpec["profile"] = profile
 	}
 	if provider != "" {
 		workerSpec["provider"] = provider

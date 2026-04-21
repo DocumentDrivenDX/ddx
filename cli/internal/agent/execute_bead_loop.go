@@ -46,6 +46,13 @@ type ExecuteBeadReport struct {
 	CostUSD float64 `json:"cost_usd,omitempty"`
 	// DurationMS is the wall-clock duration of this attempt.
 	DurationMS int64 `json:"duration_ms,omitempty"`
+	// Profile routing telemetry. Populated when execute-loop uses a profile
+	// ladder rather than an explicit harness/model pin.
+	RequestedProfile string `json:"requested_profile,omitempty"`
+	RequestedTier    string `json:"requested_tier,omitempty"`
+	ResolvedTier     string `json:"resolved_tier,omitempty"`
+	EscalationCount  int    `json:"escalation_count,omitempty"`
+	FinalTier        string `json:"final_tier,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -176,6 +183,7 @@ type ExecuteBeadLoopOptions struct {
 	ProjectRoot string
 	Harness     string
 	Model       string
+	Profile     string
 	Provider    string
 	ModelRef    string
 	SessionID   string
@@ -235,6 +243,7 @@ func newProgressEvent(workerID, projectID, beadID, attemptID, phase string, phas
 		BeadID:    beadID,
 		Harness:   opts.Harness,
 		Model:     opts.Model,
+		Profile:   opts.Profile,
 		Phase:     phase,
 		PhaseSeq:  phaseSeq,
 		Heartbeat: heartbeat,
@@ -432,6 +441,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		result.Attempts++
 
 		if report.Status == ExecuteBeadStatusSuccess {
+			appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC())
 			// Close the bead early when review is skipped. The closure gate
 			// (ddx-e30e60a9) accepts this path because closing_commit_sha is
 			// set and there is no malformed-APPROVE event to reject.
@@ -445,13 +455,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			}
 
 			if w.Reviewer != nil && !opts.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
-				// Record a routing evidence event so the subsequent review
-				// event can be attributed to the originating provider/model
-				// tier by review-outcomes analytics. Duplicates an event that
-				// ExecuteBead may also have written; the latest-before-review
-				// rule makes duplicates harmless.
-				appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC())
-
 				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, report.Harness, report.Model)
 				if reviewErr != nil {
 					// Review error: log event but leave bead closed (don't block on reviewer failures).
@@ -653,6 +656,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			BeadID:    candidate.ID,
 			Harness:   opts.Harness,
 			Model:     opts.Model,
+			Profile:   opts.Profile,
 			Phase:     terminalPhase,
 			PhaseSeq:  phaseSeq,
 			Heartbeat: false,
@@ -701,7 +705,7 @@ func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}) (bead.B
 // from the executor's ExecuteBeadReport, so that review-outcomes analytics can
 // attribute a subsequent review verdict to the originating provider/model tier.
 // Best-effort: errors and missing-provider cases are silently ignored.
-func appendLoopRoutingEvidence(store ExecuteBeadLoopStore, beadID string, report ExecuteBeadReport, createdAt time.Time) {
+func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report ExecuteBeadReport, createdAt time.Time) {
 	if store == nil || beadID == "" {
 		return
 	}
@@ -716,6 +720,11 @@ func appendLoopRoutingEvidence(store ExecuteBeadLoopStore, beadID string, report
 		"resolved_provider": provider,
 		"resolved_model":    report.Model,
 		"fallback_chain":    []string{},
+		"requested_profile": report.RequestedProfile,
+		"requested_tier":    report.RequestedTier,
+		"resolved_tier":     report.ResolvedTier,
+		"escalation_count":  report.EscalationCount,
+		"final_tier":        report.FinalTier,
 	})
 	if err != nil {
 		return

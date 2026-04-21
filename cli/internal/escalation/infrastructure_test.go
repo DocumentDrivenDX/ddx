@@ -13,7 +13,7 @@ func TestIsInfrastructureFailure(t *testing.T) {
 		detail string
 		want   bool
 	}{
-		{"non-escalatable status returns false", "structural_validation_failed", "anything 502", false},
+		{"structural validation is not infrastructure", "structural_validation_failed", "anything 502", false},
 		{"escalatable + empty detail returns false", "execution_failed", "", false},
 		{"escalatable + plain test failure is not infrastructure", "execution_failed", "TestFoo failed: assertion error", false},
 		{"escalatable + 502 from provider is infrastructure", "execution_failed", `provider error: POST "http://bragi:1234/v1/chat/completions": 502 Bad Gateway`, true},

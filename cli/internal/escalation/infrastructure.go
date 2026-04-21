@@ -47,15 +47,16 @@ var InfrastructureFailurePatterns = []string{
 
 // IsInfrastructureFailure reports whether the given failure status + detail
 // indicates a transient infrastructure problem the model could not have
-// fixed. Returns false for non-escalatable statuses (those don't need this
-// distinction — they bail out of the loop anyway) and for statuses whose
-// detail does not match any known infrastructure pattern.
+// fixed. Only execution_failed can be infrastructure; other escalatable
+// statuses are semantic outcomes that should proceed through the tier ladder.
+// Returns false for statuses whose detail does not match any known
+// infrastructure pattern.
 //
 // Used by the execute-loop to decide whether to (a) defer the bead with a
 // retry-after and try the same tier later, or (b) burn through to the next
 // tier as the standard escalation policy.
 func IsInfrastructureFailure(status, detail string) bool {
-	if !EscalatableStatuses[status] {
+	if status != "execution_failed" {
 		return false
 	}
 	if detail == "" {

@@ -1,6 +1,9 @@
 package config
 
 import (
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,10 +66,42 @@ routing:
 	assert.Nil(t, cfg.Routing.ProfileLadders)
 }
 
+func TestLoadConfigWarnsForLegacyProfilePriority(t *testing.T) {
+	tempDir := t.TempDir()
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+agent:
+  routing:
+    profile_priority: [cheap, standard]
+`), 0644))
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+	})
+
+	_, loadErr := LoadWithWorkingDir(tempDir)
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+	require.NoError(t, loadErr)
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "agent.routing.profile_priority is deprecated")
+}
+
 // TestRoutingConfigResolvedLadder captures the precedence rule:
 // ProfileLadders wins when a profile-specific entry exists; legacy
-// ProfilePriority is the whole-config fallback for every profile; nil
-// for unknown profiles without legacy fallback.
+// ProfilePriority is the default-profile fallback; the shipped FEAT-006
+// defaults are used when neither config form is set.
 func TestRoutingConfigResolvedLadder(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -97,27 +132,41 @@ func TestRoutingConfigResolvedLadder(t *testing.T) {
 			want:    []string{"cheap", "standard"},
 		},
 		{
-			name: "legacy only",
+			name: "legacy only aliases default",
 			cfg: &RoutingConfig{
 				ProfilePriority: []string{"cheap"},
 			},
-			profile: "anything",
+			profile: "default",
 			want:    []string{"cheap"},
+		},
+		{
+			name: "legacy only does not override named shipped profile",
+			cfg: &RoutingConfig{
+				ProfilePriority: []string{"cheap"},
+			},
+			profile: "smart",
+			want:    []string{"smart"},
 		},
 		{
 			name:    "nil routing",
 			cfg:     nil,
 			profile: "default",
-			want:    nil,
+			want:    []string{"cheap", "standard", "smart"},
 		},
 		{
-			name: "empty everywhere",
+			name: "empty everywhere uses shipped default",
 			cfg: &RoutingConfig{
 				ProfileLadders:  map[string][]string{},
 				ProfilePriority: nil,
 			},
 			profile: "default",
-			want:    nil,
+			want:    []string{"cheap", "standard", "smart"},
+		},
+		{
+			name:    "shipped fast profile",
+			cfg:     nil,
+			profile: "fast",
+			want:    []string{"fast", "smart"},
 		},
 	}
 	for _, tc := range cases {
@@ -125,6 +174,13 @@ func TestRoutingConfigResolvedLadder(t *testing.T) {
 			assert.Equal(t, tc.want, tc.cfg.ResolvedLadder(tc.profile))
 		})
 	}
+}
+
+func TestDefaultProfileLaddersReturnsCopy(t *testing.T) {
+	got := DefaultProfileLadders()
+	require.Equal(t, []string{"cheap", "standard", "smart"}, got["default"])
+	got["default"][0] = "mutated"
+	assert.Equal(t, "cheap", DefaultProfileLadders()["default"][0], "caller mutation must not leak into defaults")
 }
 
 // TestResolvedLadderReturnsCopy guarantees callers cannot mutate the

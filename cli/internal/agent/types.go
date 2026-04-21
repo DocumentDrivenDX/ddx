@@ -8,7 +8,7 @@ import (
 
 // Config holds agent service configuration.
 type Config struct {
-	Profile         string              `yaml:"profile"`          // default routing intent: cheap, standard, smart
+	Profile         string              `yaml:"profile"`          // default routing intent: default, cheap, fast, smart
 	Harness         string              `yaml:"harness"`          // optional forced harness override
 	Model           string              `yaml:"model"`            // optional default model ref or exact pin
 	Models          map[string]string   `yaml:"models"`           // per-harness model overrides
@@ -22,7 +22,7 @@ type Config struct {
 // RouteFlags holds raw CLI flag values before normalization into a RouteRequest.
 // These come directly from parsed command-line arguments.
 type RouteFlags struct {
-	Profile     string // --profile: cheap, standard, smart
+	Profile     string // --profile: default, cheap, fast, smart
 	Model       string // --model: logical ref or exact pin
 	Provider    string // --provider: explicit provider name
 	ModelRef    string // --model-ref: catalog model reference
@@ -328,7 +328,7 @@ type BurnSummary struct {
 
 // RouteRequest is the normalized routing ask built from CLI flags and config.
 type RouteRequest struct {
-	Profile         string // cheap, standard, smart
+	Profile         string // default, cheap, fast, smart
 	ModelRef        string // logical catalog ref or alias
 	ModelPin        string // exact concrete model string (bypasses catalog policy)
 	Effort          string // low, medium, high, etc.
