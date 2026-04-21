@@ -171,9 +171,16 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 		// frames (ddx-7bc0c8d5).
 		result.Output = final.FinalText
 		if final.Usage != nil {
-			result.InputTokens = final.Usage.InputTokens
-			result.OutputTokens = final.Usage.OutputTokens
-			result.Tokens = final.Usage.TotalTokens
+			// v0.9.1: Usage fields became *int (nullable).
+			if final.Usage.InputTokens != nil {
+				result.InputTokens = *final.Usage.InputTokens
+			}
+			if final.Usage.OutputTokens != nil {
+				result.OutputTokens = *final.Usage.OutputTokens
+			}
+			if final.Usage.TotalTokens != nil {
+				result.Tokens = *final.Usage.TotalTokens
+			}
 		}
 		if final.CostUSD > 0 {
 			result.CostUSD = final.CostUSD

@@ -8,10 +8,8 @@ github.com/99designs/gqlgen v0.17.89 h1:KzEcxPiMgQoMw3m/E85atUEHyZyt0PbAflMia5Kw
 github.com/99designs/gqlgen v0.17.89/go.mod h1:GFqruTVGB7ZTdrf1uzOagpXbY7DrEt1pIxnTdhIbWvQ=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/DocumentDrivenDX/agent v0.7.0 h1:azcX1QIYTtP14IfZPNlhRxA7gPQnICSTJF/VNipem8c=
-github.com/DocumentDrivenDX/agent v0.7.0/go.mod h1:tTZSeU/V+X3en5sEmS7TJRhIMQgDDkxP1kXfYcTdYQ4=
-github.com/DocumentDrivenDX/agent v0.8.0 h1:VlggSXH3qR2pD2443JDAwpl6/Ct1dg9ghrkwPbEJRNU=
-github.com/DocumentDrivenDX/agent v0.8.0/go.mod h1:tTZSeU/V+X3en5sEmS7TJRhIMQgDDkxP1kXfYcTdYQ4=
+github.com/DocumentDrivenDX/agent v0.9.1 h1:/2QguuWGBlRA9oN9Ef/4tUjf8788TxchSukK3yX29oE=
+github.com/DocumentDrivenDX/agent v0.9.1/go.mod h1:sNJY1OkOud4R7kTpgGlcqLu8PZTeadWayT/nrCfoPd8=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
@@ -132,6 +130,8 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/hdevalence/ed25519consensus v0.2.0 h1:37ICyZqdyj0lAZ8P4D1d1id3HqbbG1N3iBb1Tb4rdcU=
 github.com/hdevalence/ed25519consensus v0.2.0/go.mod h1:w3BHWjwJbFU29IRHL1Iqkw3sus+7FctEyM4RqDxYNzo=
+github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02 h1:AgcIVYPa6XJnU3phs104wLj8l5GEththEw6+F79YsIY=
+github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02/go.mod h1:Q48J4R4DvxnHolD5P8pOtXigYlRuPLGl6moFx3ulM68=
 github.com/huin/goupnp v1.3.0 h1:UvLUlWDNpoUdYzb2TCn+MuTWtcjXKSza2n6CBdQ0xXc=
 github.com/huin/goupnp v1.3.0/go.mod h1:gnGPsThkYa7bFi/KWmEysQRf48l2dvR5bxr2OFckNX8=
 github.com/illarion/gonotify/v3 v3.0.2 h1:O7S6vcopHexutmpObkeWsnzMJt/r1hONIEogeVNmJMk=

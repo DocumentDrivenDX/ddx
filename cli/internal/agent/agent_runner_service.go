@@ -150,9 +150,18 @@ func runAgentViaService(r *Runner, opts RunOptions) (*Result, error) {
 		// Normalized final text from the upstream harness (agent-32e8ff5e).
 		result.Output = final.FinalText
 		if final.Usage != nil {
-			result.InputTokens = final.Usage.InputTokens
-			result.OutputTokens = final.Usage.OutputTokens
-			result.Tokens = final.Usage.TotalTokens
+			// v0.9.1: Usage fields became *int so the API can distinguish
+			// "harness reported zero" from "harness didn't report". Treat
+			// nil as zero for DDx's int-valued result struct.
+			if final.Usage.InputTokens != nil {
+				result.InputTokens = *final.Usage.InputTokens
+			}
+			if final.Usage.OutputTokens != nil {
+				result.OutputTokens = *final.Usage.OutputTokens
+			}
+			if final.Usage.TotalTokens != nil {
+				result.Tokens = *final.Usage.TotalTokens
+			}
 		}
 		if final.CostUSD > 0 {
 			result.CostUSD = final.CostUSD

@@ -39,6 +39,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/creachadair/msync v0.7.1 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gaissmai/bart v0.26.1 // indirect
@@ -50,6 +51,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/jsimonetti/rtnetlink v1.4.0 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
@@ -90,7 +92,7 @@ require (
 )
 
 require (
-	github.com/DocumentDrivenDX/agent v0.8.0
+	github.com/DocumentDrivenDX/agent v0.9.1
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
