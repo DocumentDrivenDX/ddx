@@ -26,8 +26,8 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 
 	// The executor simulates tier-based escalation by reading the tier from
 	// the report it is asked to build. In the real code path the tier is
-	// resolved via ProbeAndBuildCandidatePlans + catalog; here we inject it
-	// directly via ExecuteBeadReport.Tier.
+	// resolved by the agent service; here we inject it directly via
+	// ExecuteBeadReport.Tier.
 	//
 	// cheap  → execution_failed (provider down)
 	// standard → success

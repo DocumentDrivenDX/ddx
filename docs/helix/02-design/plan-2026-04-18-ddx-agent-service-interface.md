@@ -262,7 +262,7 @@ Only **10 non-test files** import `github.com/DocumentDrivenDX/agent`. The 113 s
 ### Specs that encode the current boundary
 - **PLAN-2026-04-08-AGENT-ROUTING-AND-CATALOG-RESOLUTION** [superseded] — original two-layer design.
 - **FEAT-006 — Agent Service** — DDx owns harness orchestration + cross-harness routing; embedded agent owns provider/backend selection.
-- **SD-015 — Resolution path** — 5-mode precedence (harness override → explicit model → profile → default → provider targeting) + RankCandidates rules + fuzzy match with shortest-suffix tiebreak.
+- **SD-015 — Resolution path** — 5-mode precedence (harness override → explicit model → profile → default → provider targeting), candidate-ranking rules, and fuzzy match with shortest-suffix tiebreak.
 - **SD-023 — Routing visibility** — explicit DDx/agent boundary; DDx accesses agent state via Go package APIs, not shellout. Eight visibility beads block on this boundary.
 - **agent-side: plan-2026-04-10-model-first-routing.md, SD-005 (provider config), SD-002 (standalone CLI)** — model-first routing, ModelRouteCandidateConfig, RoutingConfig (weight tuning), CandidateScorer interface for DDx quota overlay.
 
@@ -271,11 +271,11 @@ Only **10 non-test files** import `github.com/DocumentDrivenDX/agent`. The 113 s
 DDx side, all in `cli/internal/agent/`:
 | File | What it does | Key smell |
 |---|---|---|
-| `routing.go:27` `BuildCandidatePlans` | Enumerates harnesses, builds CandidatePlan per harness | Parallel impl with agent's routing_smart.go |
-| `routing.go:106` `evaluateCandidate` | Per-harness scoring, catalog resolution per harness surface | Capability gating per provider+model is missing |
-| `routing.go:275` `NormalizeRouteRequest` | Maps CLI flags + config → RouteRequest | **`--provider` silently dropped** (ddx-8610020e) |
-| `routing.go:434` `RankCandidates` / `:471` `scoreCandidate` / `:556` `SelectBestCandidate` | Rank + select | Profile policy hardcoded; no per-model-route override |
-| `routing.go:567` `ProbeAndBuildCandidatePlans` | Live probe + build | Probes every harness/provider, no cache |
+| legacy DDx routing planner | Enumerates harnesses, builds CandidatePlan per harness | Parallel impl with agent's routing_smart.go |
+| legacy DDx candidate evaluator | Per-harness scoring, catalog resolution per harness surface | Capability gating per provider+model is missing |
+| legacy DDx route request normalization | Maps CLI flags + config → RouteRequest | **`--provider` silently dropped** (ddx-8610020e) |
+| legacy DDx candidate scorer/selector | Rank + select | Profile policy hardcoded; no per-model-route override |
+| legacy DDx live route probe | Live probe + build | Probes every harness/provider, no cache |
 | `discovery.go` `FuzzyMatchModel` | Cross-provider model fuzzy match | **No case norm, no vendor-prefix strip** (ddx-0486e601) |
 | `tier_escalation.go:57` `AdaptiveMinTier` | Trailing success rate → tier promotion | Doesn't talk to agent's per-route failover; they don't know about each other |
 | `routing_metrics.go`, `routing_signals*.go` | Routing observation surfaces | DDx-only; agent has its own observation store |
@@ -445,7 +445,7 @@ type DdxAgent interface {
     HealthCheck(ctx, target HealthTarget) error
 
     // ResolveRoute returns the routing decision for an under-specified request,
-    // without executing. (Replaces both DDx's BuildCandidatePlans and agent's
+    // without executing. (Replaces both DDx's legacy planner and agent's
     // routing_smart.go scoring with one entrypoint.)
     ResolveRoute(ctx, req RouteRequest) (*RouteDecision, error)
 }
@@ -472,7 +472,7 @@ Two-layer routing — DDx routing across harnesses (claude/codex/opencode/agent/
 
 Three architectural options on the table:
 
-**A. Routing stays in ddx-agent, exposed via `RankCandidates`.** DDx calls in to score candidates for harness routing. Two-layer routing where the inner layer asks the agent.
+**A. Routing stays in ddx-agent, exposed via a candidate-ranking API.** DDx calls in to score candidates for harness routing. Two-layer routing where the inner layer asks the agent.
 
 **B. Lift all routing to DDx.** ddx-agent becomes a mechanism (list/probe/resolve/execute). DDx ranks `(harness, provider?, model)` tuples uniformly. Single-layer routing in DDx.
 
@@ -484,7 +484,7 @@ Three architectural options on the table:
 |---|---|---|---|
 | Algorithm location | ddx-agent (exposed) | DDx | ddx-agent (internal) |
 | Harness execution | DDx | DDx | ddx-agent |
-| API surface | 7 methods (+RankCandidates) | 5 methods | 5-6 methods |
+| API surface | 7 methods (+candidate-ranking API) | 5 methods | 5-6 methods |
 | Standalone CLI gets smart routing | Yes (providers only) | No | Yes (all harnesses) |
 | Algorithm impls | 1 (exposed) | 1 (DDx only) | 1 (internal) |
 | Conceptual model | Two layers | One layer in DDx | One layer in ddx-agent |
@@ -921,7 +921,7 @@ The harness wrappers are not just `exec.Command + parse JSON`. They include subt
 
 | File | Lines | What it covers |
 |---|---|---|
-| `routing_test.go` | 915 | Primary routing tests — BuildCandidatePlans, evaluateCandidate, RankCandidates, SelectBestCandidate, NormalizeRouteRequest |
+| `routing_test.go` | 915 | Primary routing tests for the legacy DDx planner, evaluator, ranking, selection, and request normalization |
 | `routing_signal_tmux_test.go` | 143 | TMUX scrape parser tests for claude `/usage` and codex `/status` output |
 | `routing_signal_adapters_test.go` | 142 | Signal adapter tests |
 | `routing_signals_integration_test.go` | 206 | End-to-end signal flow |
@@ -1043,7 +1043,7 @@ Concrete deliverable: ddx-agent ships an integration suite that, given credentia
 - 5.9 **Migrate virtual-provider test sites** (32 of them) to `Options.FakeProvider`. Static-script and dynamic-callback patterns per spec. Tests using prompt assertions adopt `PromptAssertionHook`; tests using compaction adopt `CompactionAssertionHook`; tests using tool wiring adopt `ToolWiringHook`.
 - 5.10 **Delete DDx-side stall/circuit-breaker code** (`agent_runner.go:200-318`) — replaced by upstream StallPolicy.
 - 5.11 **Move routing infrastructure upstream first** — `routing.go`, `routing_metrics.go`, `routing_signals*.go`, `tier_escalation.go`, `discovery.go`, `provider_deadline.go`, `providerstatus/probe.go`, `registry.go`, parts of `types.go` (RouteRequest, CandidatePlan, Harness, HarnessState). **Slice by file, not by category** — ~7 separate beads (one per file or tightly-coupled file group). Order within: state.go + registry.go together (mutually dependent), then routing.go (depends on registry types), then signals/metrics/discovery/etc. independently.
-- 5.12 **Move comparison/benchmark upstream after routing** — `compare.go`, `benchmark.go`, `quorum.go`, `condense.go` → agent. `compare.go` calls `RankCandidates` which moved in 5.11; this depends on 5.11 completing. ~4 separate beads.
+- 5.12 **Move comparison/benchmark upstream after routing** — `compare.go`, `benchmark.go`, `quorum.go`, `condense.go` → agent. `compare.go` calls the legacy DDx candidate ranking API that moved in 5.11; this depends on 5.11 completing. ~4 separate beads.
 - 5.13 **Verify imports.** `grep -rn "DocumentDrivenDX/agent/" cli/` should show ONLY `agentlib` (root) — no internal subpackage imports.
 
 ### Phase 6 — Cutover and cleanup

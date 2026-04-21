@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func quotaTestHarness() Harness {
+	return Harness{
+		Name:         "quota-test",
+		Binary:       "quota-test",
+		PromptMode:   "arg",
+		QuotaCommand: "usage",
+	}
+}
+
 func TestRoutingMetricsStoreRoundTrip(t *testing.T) {
 	store := NewRoutingMetricsStore(t.TempDir())
 

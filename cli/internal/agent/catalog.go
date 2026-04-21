@@ -42,6 +42,15 @@ type Catalog struct {
 	blockedModelIDs map[string]bool          // concrete model IDs that routing must never select
 }
 
+// catalog returns the catalog to use for runtime model metadata checks.
+// Defaults to BuiltinCatalog.
+func (r *Runner) catalog() *Catalog {
+	if r.Catalog != nil {
+		return r.Catalog
+	}
+	return BuiltinCatalog
+}
+
 // NewCatalog creates a Catalog from a slice of entries.
 func NewCatalog(entries []CatalogEntry) *Catalog {
 	c := &Catalog{entries: make(map[string]CatalogEntry, len(entries))}
