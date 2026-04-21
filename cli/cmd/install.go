@@ -19,26 +19,46 @@ import (
 // newInstallCommand creates the "ddx install <name>" command.
 func (f *CommandFactory) newInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install <name>",
-		Short: "Install a package or resource",
-		Long: `Install a package or resource from the DDx registry.
+		Use:   "install [<name>]",
+		Short: "Install a package, resource, or the embedded DDx skills",
+		Long: `Install a package or resource from the DDx registry, or extract the
+embedded DDx skill tree into the user's home with --global.
 
 Examples:
   ddx install helix                        # Install HELIX workflow
   ddx install helix --force                # Reinstall even if already up to date
-  ddx install persona/strict-code-reviewer # Install a single persona`,
-		Args: cobra.ExactArgs(1),
+  ddx install persona/strict-code-reviewer # Install a single persona
+  ddx install --global                     # Extract embedded skills to ~/.ddx/ (FEAT-015 AC-002)
+  ddx install --global --force             # Overwrite existing ~/.ddx/skills/ files`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if global, _ := cmd.Flags().GetBool("global"); global {
+				return cobra.MaximumNArgs(1)(cmd, args)
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
 		RunE: f.runInstall,
 	}
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
 	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
+	cmd.Flags().Bool("global", false, "Extract embedded DDx skills to ~/.ddx/ and link ~/.agents/, ~/.claude/")
 	return cmd
 }
 
 func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
-	name := args[0]
 	out := cmd.OutOrStdout()
 	force, _ := cmd.Flags().GetBool("force")
+
+	// Handle --global: extract embedded DDx skill tree into the user's
+	// home directory. Does not touch project-local state, so no cwd shuffle
+	// is required.
+	if global, _ := cmd.Flags().GetBool("global"); global {
+		return f.installGlobal(force, out)
+	}
+
+	if len(args) == 0 {
+		return fmt.Errorf("install: a package name is required unless --global is set")
+	}
+	name := args[0]
 
 	// Ensure install operations resolve relative paths against the project
 	// root (WorkingDir), not the caller's cwd. This prevents creating stale

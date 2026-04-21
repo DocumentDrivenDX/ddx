@@ -289,13 +289,21 @@ ls ~/.ddx/ 2>&1      # → no such directory (install.sh doesn't create it)
 ```
 
 ### AC-002: Global Skill Installation
+Post-consolidation (FEAT-011, 2026-04-17): the embedded tree is the
+single portable `ddx` skill. Adjust the example from the pre-consolidation
+`ddx-bead`/`ddx-agent`/etc. listing to match the current layout:
+
 ```bash
 # After AC-001
 ddx install --global
-ls ~/.ddx/skills/ddx-bead/   # → skill files exist
-ls ~/.agents/skills/ddx-bead # → symlink to ~/.ddx/skills/ddx-bead
-ls ~/.claude/skills/ddx-bead # → symlink to ~/.agents/skills/ddx-bead
+ls ~/.ddx/skills/ddx/           # → skill files exist (SKILL.md, reference/*.md)
+readlink ~/.agents/skills/ddx   # → ../../.ddx/skills/ddx
+readlink ~/.claude/skills/ddx   # → ../../.agents/skills/ddx
 ```
+
+Implementation: `cli/cmd/install_global.go`. Covered by
+`TestInstallGlobalExtractsSkillsAndChainsSymlinks` and the adjacent
+idempotency / safety tests.
 
 ### AC-003: Repository Initialization
 ```bash
