@@ -4,6 +4,12 @@ ddx:
 ---
 # Persona Rewrite — Reference Audit
 
+> **Historical — completed.** Persona consolidation landed (commits
+> 41fbd2f0 "chore: delete dropped persona files", 6856fc70
+> "chore(skills): remove pre-consolidation skill trees"). Governing
+> feature: FEAT-011 (`docs/helix/01-frame/features/FEAT-011-skills.md`).
+> Retained as reference-audit record; not load-bearing.
+
 Generated 2026-04-17 per bead ddx-5241bb19 (Phase 3 of FEAT-011
 consolidation). Enumerates every reference to the current 10 personas
 across config, workflows, tests, docs, and specs so the rewrite can

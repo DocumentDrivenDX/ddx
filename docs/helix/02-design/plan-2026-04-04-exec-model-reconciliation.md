@@ -7,6 +7,13 @@ ddx:
 ---
 # Design Plan: DDx Execution Model Reconciliation
 
+> **Historical — converged.** Requirements are incorporated into
+> FEAT-010 (`docs/helix/01-frame/features/FEAT-010-executions.md`),
+> FEAT-004 (`docs/helix/01-frame/features/FEAT-004-beads.md`), TD-010
+> (`docs/helix/02-design/technical-designs/TD-010-executions.md`), and
+> TD-005 (`docs/helix/02-design/technical-designs/TD-005-metric-runtime-history.md`).
+> Retained for decision trail; not load-bearing.
+
 **Date**: 2026-04-04
 **Status**: Converged
 **Refinement Rounds**: 4
