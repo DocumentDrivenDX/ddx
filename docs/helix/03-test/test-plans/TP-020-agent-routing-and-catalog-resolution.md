@@ -7,6 +7,21 @@ ddx:
 ---
 # Test Plan: Agent Routing and Catalog Resolution
 
+> **Migrated 2026-04-21.** The candidate planning, ranking, and harness-state
+> probing test cases this plan used to cover (`TestAgentRoute*`,
+> `TestAgentRouteTP020AcceptanceGroups`, the `catalog_test.go` BuildCandidatePlans
+> matrix) tested a DDx-side routing planner (`cli/internal/agent/routing.go`)
+> that was deleted in commit `00481155` once upstream
+> `github.com/DocumentDrivenDX/agent` v0.8.0 shipped `DdxAgent.ResolveRoute`
+> (agent-1a486c2e). Those tests now live in the upstream agent repo; DDx is a
+> thin consumer via `svc.ResolveRoute` with coverage at the call-site level
+> (`TestAgentRouteRequestFromProfile` / `TestAgentRunProfileFlag*` in cmd/).
+>
+> This plan is retained as a historical record of the DDx-side routing
+> coverage. Any new DDx-side routing test case belongs in this file only if
+> it exercises DDx-specific behavior (legacy script/virtual/HTTP dispatch in
+> runner.go), not general routing semantics.
+
 ## Scope
 
 Validate DDx intent-first agent routing, shared-catalog projection across
