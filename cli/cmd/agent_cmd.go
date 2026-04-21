@@ -848,12 +848,11 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 }
 
 // harnessHealthyViaService reports whether the upstream service has an active
-// failure cooldown recorded against the given harness. It replaces the
-// retired process-local escalation.GlobalProviderHealth singleton
-// (ddx-7bc0c8d5): the upstream service's RouteStatus is the authoritative
-// health source, so one worker's RecordRouteAttempt benefits every other
-// consumer. When RouteStatus is unavailable (e.g. fresh service with no
-// routes yet) the harness is considered healthy.
+// failure cooldown recorded against the given harness. The upstream service's
+// RouteStatus is the authoritative health source, so one worker's
+// RecordRouteAttempt benefits every other consumer. When RouteStatus is
+// unavailable (e.g. fresh service with no routes yet) the harness is
+// considered healthy.
 func harnessHealthyViaService(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
 	if svc == nil || harness == "" {
 		return true

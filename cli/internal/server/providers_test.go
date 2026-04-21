@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 )
 
@@ -234,6 +235,75 @@ func TestProviderUnknownStateContract(t *testing.T) {
 				t.Errorf("%s: success_rate must be -1 when sample_count<3, got %v", harnessName, perf.SuccessRate)
 			}
 		}
+	}
+}
+
+func TestProviderQuotaStatusTranslationFromHarnessInfo(t *testing.T) {
+	now := time.Date(2026, 4, 21, 1, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name          string
+		status        string
+		fresh         bool
+		wantHeadroom  string
+		wantAuthState string
+		wantFreshness string
+	}{
+		{
+			name:          "ok fresh",
+			status:        "ok",
+			fresh:         true,
+			wantHeadroom:  "ok",
+			wantAuthState: "authenticated",
+			wantFreshness: "fresh",
+		},
+		{
+			name:          "stale but usable",
+			status:        "stale",
+			fresh:         false,
+			wantHeadroom:  "ok",
+			wantAuthState: "authenticated",
+			wantFreshness: "stale",
+		},
+		{
+			name:          "unavailable",
+			status:        "unavailable",
+			fresh:         false,
+			wantHeadroom:  "unknown",
+			wantAuthState: "unknown",
+			wantFreshness: "unknown",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			info := agentlib.HarnessInfo{
+				Name:      "claude",
+				Available: true,
+				Quota: &agentlib.QuotaState{
+					Status:     tc.status,
+					Fresh:      tc.fresh,
+					Source:     "stats-cache",
+					CapturedAt: now.Add(-1 * time.Minute),
+				},
+			}
+			signal := signalFromHarnessInfo(info, now)
+			summary := buildProviderSummary(info, signal, nil, now)
+			detail := buildProviderDetail(info, signal, nil, nil, now)
+
+			if summary.QuotaHeadroom != tc.wantHeadroom {
+				t.Fatalf("summary quota_headroom = %q, want %q", summary.QuotaHeadroom, tc.wantHeadroom)
+			}
+			if detail.AuthState != tc.wantAuthState {
+				t.Fatalf("detail auth_state = %q, want %q", detail.AuthState, tc.wantAuthState)
+			}
+			if signal.Source.Freshness != tc.wantFreshness {
+				t.Fatalf("signal freshness = %q, want %q", signal.Source.Freshness, tc.wantFreshness)
+			}
+			if detail.SignalSources[0] != "stats-cache" {
+				t.Fatalf("detail signal source = %q, want stats-cache", detail.SignalSources[0])
+			}
+		})
 	}
 }
 

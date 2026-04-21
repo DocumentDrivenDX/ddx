@@ -1431,9 +1431,9 @@ func relToProject(projectRoot, path string) string {
 }
 
 // workerHarnessHealthy reports whether the upstream service has an active
-// failure cooldown recorded against the given harness. Replaces the retired
-// process-local escalation.GlobalProviderHealth singleton (ddx-7bc0c8d5).
-// When RouteStatus is unavailable, the harness is considered healthy.
+// failure cooldown recorded against the given harness. RouteStatus is the
+// service-owned health source. When RouteStatus is unavailable, the harness is
+// considered healthy.
 func workerHarnessHealthy(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
 	if svc == nil || harness == "" {
 		return true
