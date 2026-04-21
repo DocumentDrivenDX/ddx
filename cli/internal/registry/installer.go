@@ -417,8 +417,20 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 			}
 		}
 
-		if err := os.Symlink(realSrc, dst); err != nil {
-			return nil, fmt.Errorf("symlinking %s -> %s: %w", dst, realSrc, err)
+		// FEAT-015 §5 "Relative Symlinks for Plugins" — compute a
+		// path-relative target so the link survives clones, home-
+		// directory moves, and tarball rebuilds on a different machine.
+		// Fall back to the absolute path only when filepath.Rel refuses
+		// (different filesystem roots; extremely rare on Linux/macOS).
+		linkTarget := realSrc
+		if absDstDir, absErr := filepath.Abs(filepath.Dir(dst)); absErr == nil {
+			if rel, relErr := filepath.Rel(absDstDir, realSrc); relErr == nil {
+				linkTarget = rel
+			}
+		}
+
+		if err := os.Symlink(linkTarget, dst); err != nil {
+			return nil, fmt.Errorf("symlinking %s -> %s: %w", dst, linkTarget, err)
 		}
 		written = append(written, dst)
 	}

@@ -460,3 +460,42 @@ func TestPruneStaleSkillLinks_EmptyInstalledRoot(t *testing.T) {
 	_, err := os.Lstat(staleLink)
 	assert.NoError(t, err, "nothing should be removed when installedRoot is empty")
 }
+
+// FEAT-015 §5 / AC-004: plugin skill symlinks must be RELATIVE so they
+// survive clones, home-directory moves, and tarball rebuilds on a
+// different machine. This test asserts the link target is a relative
+// path and that it resolves back to the real skill content.
+func TestSymlinkSkills_WritesRelativeSymlinks(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	// Simulate a plugin installed at $project/.ddx/plugins/helix/ with
+	// a skill at .agents/skills/helix-align (real directory).
+	pluginRoot := filepath.Join(projectRoot, ".ddx", "plugins", "helix")
+	realSkillDir := filepath.Join(pluginRoot, ".agents", "skills", "helix-align")
+	require.NoError(t, os.MkdirAll(realSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(realSkillDir, "SKILL.md"), []byte("# helix-align\n"), 0o644))
+
+	// Install target is $project/.agents/skills/ — a sibling of the
+	// plugin root that shares a common ancestor, so filepath.Rel
+	// produces a short relative path.
+	dstDir := filepath.Join(projectRoot, ".agents", "skills")
+
+	written, err := symlinkSkills(pluginRoot, &InstallMapping{
+		Source: ".agents/skills",
+		Target: dstDir,
+	})
+	require.NoError(t, err)
+	require.Len(t, written, 1)
+
+	linkPath := filepath.Join(dstDir, "helix-align")
+	target, err := os.Readlink(linkPath)
+	require.NoError(t, err)
+	assert.False(t, filepath.IsAbs(target),
+		"plugin skill symlink must be relative (got absolute: %s) — FEAT-015 §5 relative-symlinks rule",
+		target)
+
+	// Sanity: relative link resolves to the real SKILL.md.
+	content, err := os.ReadFile(filepath.Join(linkPath, "SKILL.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# helix-align\n", string(content))
+}
