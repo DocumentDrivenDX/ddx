@@ -443,8 +443,8 @@ func displayStatus(cmd *cobra.Command, status *StatusInfo, showChanges, showDiff
 
 	if len(status.Usage) > 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Agent Usage (30d):")
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %8s  %13s  %14s  %10s  %-8s  %10s  %-18s  %-10s\n",
-			"HARNESS", "SESSIONS", "INPUT TOKENS", "OUTPUT TOKENS", "EST. COST", "QUOTA", "USED", "SOURCE", "FRESHNESS")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %8s  %13s  %14s  %10s  %-15s  %-8s  %10s  %-18s  %-10s\n",
+			"HARNESS", "SESSIONS", "INPUT TOKENS", "OUTPUT TOKENS", "EST. COST", "COST BASIS", "QUOTA", "USED", "SOURCE", "FRESHNESS")
 		for _, row := range status.Usage {
 			source := row.SignalProvider
 			if row.SignalKind != "" {
@@ -453,12 +453,13 @@ func displayStatus(cmd *cobra.Command, status *StatusInfo, showChanges, showDiff
 				}
 				source += row.SignalKind
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %8d  %13s  %14s  %10s  %-8s  %10s  %-18s  %-10s\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %8d  %13s  %14s  %10s  %-15s  %-8s  %10s  %-18s  %-10s\n",
 				row.Harness,
 				row.Sessions,
 				formatComma(row.InputTokens),
 				formatComma(row.OutputTokens),
 				fmt.Sprintf("$%.2f", row.CostUSD),
+				row.CostBasis,
 				row.QuotaState,
 				formatUsageQuotaUsed(row),
 				source,

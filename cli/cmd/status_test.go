@@ -263,6 +263,7 @@ func TestStatusIncludesAgentUsage(t *testing.T) {
 		assert.Contains(t, output, "1,234")
 		assert.Contains(t, output, "567")
 		assert.Contains(t, output, "$1.23")
+		assert.Contains(t, output, "estimated_value")
 	})
 
 	t.Run("succeeds_without_session_logs", func(t *testing.T) {

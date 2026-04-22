@@ -22,6 +22,7 @@ type usageRow struct {
 	InputTokens            int     `json:"input_tokens" yaml:"input_tokens"`
 	OutputTokens           int     `json:"output_tokens" yaml:"output_tokens"`
 	CostUSD                float64 `json:"cost_usd" yaml:"cost_usd"`
+	CostBasis              string  `json:"cost_basis,omitempty" yaml:"cost_basis,omitempty"`
 	AvgDurationMS          float64 `json:"avg_duration_ms" yaml:"avg_duration_ms"`
 	QuotaState             string  `json:"quota_state,omitempty" yaml:"quota_state,omitempty"`
 	SignalProvider         string  `json:"signal_provider,omitempty" yaml:"signal_provider,omitempty"`
@@ -41,6 +42,7 @@ type usageAgg struct {
 	outputTokens int
 	costUSD      float64
 	totalDurMS   int
+	costBasis    string
 }
 
 type usageSessionRecord struct {
@@ -57,6 +59,7 @@ func (a *usageAgg) addSession(entry agent.SessionEntry) {
 	// Use recorded cost if available, else estimate from pricing table.
 	if entry.CostUSD > 0 {
 		a.costUSD += entry.CostUSD
+		a.mergeCostBasis(usageCostBasisReported)
 		return
 	}
 	if entry.Model == "" {
@@ -64,6 +67,9 @@ func (a *usageAgg) addSession(entry agent.SessionEntry) {
 	}
 	if est := agent.EstimateCost(entry.Model, entry.InputTokens, entry.OutputTokens); est >= 0 {
 		a.costUSD += est
+		if est > 0 {
+			a.mergeCostBasis(usageCostBasisEstimated)
+		}
 	}
 }
 
@@ -83,11 +89,15 @@ func (a *usageAgg) addOutcome(outcome agent.RoutingOutcome) {
 	a.totalDurMS += outcome.LatencyMS
 	if outcome.CostUSD > 0 {
 		a.costUSD += outcome.CostUSD
+		a.mergeCostBasis(usageCostBasisReported)
 		return
 	}
 	if !localHarnesses[outcome.Harness] && outcome.Model != "" {
 		if est := agent.EstimateCost(outcome.Model, outcome.InputTokens, outcome.OutputTokens); est >= 0 {
 			a.costUSD += est
+			if est > 0 {
+				a.mergeCostBasis(usageCostBasisEstimated)
+			}
 		}
 	}
 }
@@ -103,7 +113,63 @@ func (a *usageAgg) toRow(harness string) usageRow {
 		InputTokens:   a.inputTokens,
 		OutputTokens:  a.outputTokens,
 		CostUSD:       a.costUSD,
+		CostBasis:     inferredUsageCostBasis(harness, a.costUSD, a.costBasis),
 		AvgDurationMS: avgDur,
+	}
+}
+
+const (
+	usageCostBasisReported       = "reported"
+	usageCostBasisEstimated      = "estimated"
+	usageCostBasisEstimatedValue = "estimated_value"
+	usageCostBasisMixed          = "mixed"
+)
+
+func (a *usageAgg) mergeCostBasis(basis string) {
+	if basis == "" {
+		return
+	}
+	if a.costBasis == "" {
+		a.costBasis = basis
+		return
+	}
+	if a.costBasis != basis {
+		a.costBasis = usageCostBasisMixed
+	}
+}
+
+func inferredUsageCostBasis(harness string, costUSD float64, basis string) string {
+	if costUSD <= 0 {
+		return ""
+	}
+	if isSubscriptionHarnessName(harness) {
+		return usageCostBasisEstimatedValue
+	}
+	if basis != "" {
+		return basis
+	}
+	return usageCostBasisEstimated
+}
+
+func isSubscriptionHarnessName(harness string) bool {
+	switch strings.ToLower(harness) {
+	case "claude", "codex":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyUsageCostBasis(row *usageRow, isSubscription bool) {
+	if row == nil || row.CostUSD <= 0 {
+		return
+	}
+	if isSubscription {
+		row.CostBasis = usageCostBasisEstimatedValue
+		return
+	}
+	if row.CostBasis == "" {
+		row.CostBasis = usageCostBasisEstimated
 	}
 }
 
@@ -353,6 +419,7 @@ func enrichUsageRowsWithRoutingSignals(workDir string, rows []usageRow) []usageR
 			continue
 		}
 		signal := harnessInfoToRoutingSignal(info, now)
+		applyUsageCostBasis(&rows[i], info.IsSubscription)
 		rows[i].QuotaState = signal.CurrentQuota.State
 		if signal.Provider == "" && signal.Source.Kind == "" {
 			continue
@@ -421,8 +488,8 @@ func formatComma(n int) string {
 
 func renderUsageTable(cmd *cobra.Command, rows []usageRow) error {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%-12s  %8s  %13s  %14s  %10s  %12s  %-8s  %-18s  %-10s\n",
-		"HARNESS", "SESSIONS", "INPUT TOKENS", "OUTPUT TOKENS", "EST. COST", "AVG DURATION", "QUOTA", "SOURCE", "FRESHNESS")
+	fmt.Fprintf(out, "%-12s  %8s  %13s  %14s  %10s  %-15s  %12s  %-8s  %-18s  %-10s\n",
+		"HARNESS", "SESSIONS", "INPUT TOKENS", "OUTPUT TOKENS", "EST. COST", "COST BASIS", "AVG DURATION", "QUOTA", "SOURCE", "FRESHNESS")
 
 	var totalSessions int
 	var totalInput, totalOutput int
@@ -437,12 +504,13 @@ func renderUsageTable(cmd *cobra.Command, rows []usageRow) error {
 			}
 			source += r.SignalKind
 		}
-		fmt.Fprintf(out, "%-12s  %8d  %13s  %14s  %10s  %11.1fs  %-8s  %-18s  %-10s\n",
+		fmt.Fprintf(out, "%-12s  %8d  %13s  %14s  %10s  %-15s  %11.1fs  %-8s  %-18s  %-10s\n",
 			r.Harness,
 			r.Sessions,
 			formatComma(r.InputTokens),
 			formatComma(r.OutputTokens),
 			fmt.Sprintf("$%.2f", r.CostUSD),
+			r.CostBasis,
 			r.AvgDurationMS/1000.0,
 			r.QuotaState,
 			source,
@@ -459,12 +527,13 @@ func renderUsageTable(cmd *cobra.Command, rows []usageRow) error {
 	if totalSessions > 0 {
 		avgTotal = totalDurMS / float64(totalSessions)
 	}
-	fmt.Fprintf(out, "%-12s  %8d  %13s  %14s  %10s  %11.1fs\n",
+	fmt.Fprintf(out, "%-12s  %8d  %13s  %14s  %10s  %-15s  %11.1fs\n",
 		"TOTAL",
 		totalSessions,
 		formatComma(totalInput),
 		formatComma(totalOutput),
 		fmt.Sprintf("$%.2f", totalCost),
+		"",
 		avgTotal/1000.0,
 	)
 	return nil
@@ -478,7 +547,7 @@ func renderUsageJSON(cmd *cobra.Command, rows []usageRow) error {
 
 func renderUsageCSV(cmd *cobra.Command, rows []usageRow) error {
 	w := csv.NewWriter(cmd.OutOrStdout())
-	_ = w.Write([]string{"harness", "sessions", "input_tokens", "output_tokens", "cost_usd", "avg_duration_ms", "quota_state", "signal_provider", "signal_kind", "signal_freshness", "native_input_tokens", "native_output_tokens", "native_total_tokens", "native_session_count", "native_quota_used_percent"})
+	_ = w.Write([]string{"harness", "sessions", "input_tokens", "output_tokens", "cost_usd", "cost_basis", "avg_duration_ms", "quota_state", "signal_provider", "signal_kind", "signal_freshness", "native_input_tokens", "native_output_tokens", "native_total_tokens", "native_session_count", "native_quota_used_percent"})
 	for _, r := range rows {
 		_ = w.Write([]string{
 			r.Harness,
@@ -486,6 +555,7 @@ func renderUsageCSV(cmd *cobra.Command, rows []usageRow) error {
 			strconv.Itoa(r.InputTokens),
 			strconv.Itoa(r.OutputTokens),
 			fmt.Sprintf("%.4f", r.CostUSD),
+			r.CostBasis,
 			fmt.Sprintf("%.1f", r.AvgDurationMS),
 			r.QuotaState,
 			r.SignalProvider,

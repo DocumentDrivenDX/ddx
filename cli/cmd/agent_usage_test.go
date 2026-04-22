@@ -1,13 +1,16 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -101,6 +104,7 @@ agent:
 	assert.Equal(t, 320, byHarness["claude"].InputTokens)
 	assert.Equal(t, 32, byHarness["claude"].OutputTokens)
 	assert.InDelta(t, 3.75, byHarness["claude"].CostUSD, 0.0001)
+	assert.Equal(t, usageCostBasisEstimatedValue, byHarness["claude"].CostBasis)
 	assert.InDelta(t, 1500.0, byHarness["claude"].AvgDurationMS, 0.0001)
 }
 
@@ -171,5 +175,70 @@ agent:
 	assert.Equal(t, 320, row.InputTokens)
 	assert.Equal(t, 32, row.OutputTokens)
 	assert.InDelta(t, 3.75, row.CostUSD, 0.0001)
+	assert.Equal(t, usageCostBasisEstimatedValue, row.CostBasis)
 	assert.InDelta(t, 1500.0, row.AvgDurationMS, 0.0001)
+}
+
+func TestUsageCostBasis(t *testing.T) {
+	t.Run("subscription_harness_cost_is_estimated_value", func(t *testing.T) {
+		row := usageRow{Harness: "claude", CostUSD: 1.23, CostBasis: usageCostBasisReported}
+
+		applyUsageCostBasis(&row, true)
+
+		assert.Equal(t, usageCostBasisEstimatedValue, row.CostBasis)
+	})
+
+	t.Run("non_subscription_reported_cost_keeps_reported_basis", func(t *testing.T) {
+		row := usageRow{Harness: "openrouter", CostUSD: 1.23, CostBasis: usageCostBasisReported}
+
+		applyUsageCostBasis(&row, false)
+
+		assert.Equal(t, usageCostBasisReported, row.CostBasis)
+	})
+}
+
+func TestRenderUsageOutputsCostBasis(t *testing.T) {
+	rows := []usageRow{{
+		Harness:       "codex",
+		Sessions:      1,
+		InputTokens:   10,
+		OutputTokens:  5,
+		CostUSD:       0.12,
+		CostBasis:     usageCostBasisEstimatedValue,
+		AvgDurationMS: 1000,
+	}}
+
+	t.Run("table", func(t *testing.T) {
+		cmd := &cobra.Command{}
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		require.NoError(t, renderUsageTable(cmd, rows))
+
+		assert.Contains(t, out.String(), "COST BASIS")
+		assert.Contains(t, out.String(), usageCostBasisEstimatedValue)
+	})
+
+	t.Run("json", func(t *testing.T) {
+		cmd := &cobra.Command{}
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		require.NoError(t, renderUsageJSON(cmd, rows))
+
+		assert.Contains(t, out.String(), `"cost_basis": "estimated_value"`)
+	})
+
+	t.Run("csv", func(t *testing.T) {
+		cmd := &cobra.Command{}
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		require.NoError(t, renderUsageCSV(cmd, rows))
+
+		lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+		require.Len(t, lines, 2)
+		assert.Contains(t, lines[0], "cost_basis")
+		assert.Contains(t, lines[1], usageCostBasisEstimatedValue)
+	})
 }
