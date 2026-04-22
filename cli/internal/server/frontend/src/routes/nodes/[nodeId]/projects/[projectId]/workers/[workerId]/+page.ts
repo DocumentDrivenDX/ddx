@@ -97,7 +97,9 @@ export const load: PageLoad = async ({ params, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch);
 	const [workerResult, logResult] = await Promise.all([
 		client.request<WorkerResult>(WORKER_QUERY, { id: params.workerId }),
-		client.request<WorkerLogResult>(WORKER_LOG_QUERY, { workerID: params.workerId })
+		client
+			.request<WorkerLogResult>(WORKER_LOG_QUERY, { workerID: params.workerId })
+			.catch(() => ({ workerLog: { stdout: '', stderr: '' } }))
 	]);
 	return {
 		worker: workerResult.worker

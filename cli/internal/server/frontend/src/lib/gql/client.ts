@@ -70,6 +70,18 @@ function fallbackDataForQuery(query: string): object | null {
 		data.queueSummary = { ready: 0, blocked: 0, inProgress: 0 };
 	}
 
+	if (query.includes('workersByProject')) {
+		data.workersByProject = {
+			edges: [],
+			pageInfo: EMPTY_PAGE_INFO,
+			totalCount: 0
+		};
+	}
+
+	if (query.includes('workerLog')) {
+		data.workerLog = { stdout: '', stderr: '' };
+	}
+
 	if (query.includes('workerDispatch')) {
 		data.workerDispatch = { id: 'worker-preview', state: 'queued', kind: 'execute-loop' };
 	}
