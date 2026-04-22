@@ -120,7 +120,7 @@
 			class="fixed inset-0 z-50 bg-gray-950/45 backdrop-blur-[2px] dark:bg-black/60"
 		/>
 		<Dialog.Content
-			aria-label={actionLabel}
+			aria-label={title}
 			onEscapeKeydown={handleEscape}
 			class="fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-2xl shadow-gray-950/20 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:shadow-black/50"
 		>

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Tooltip as BitsTooltip } from 'bits-ui';
 
 	interface TooltipProps {
 		content?: string;
@@ -23,33 +22,78 @@
 		side = 'top',
 		align = 'center'
 	}: TooltipProps = $props();
+
+	let open = $state(false);
+	let timeout: number | null = null;
+	const tooltipId = `tooltip-${Math.random().toString(36).slice(2)}`;
+
+	function show() {
+		if (disabled) return;
+		if (timeout) window.clearTimeout(timeout);
+		timeout = window.setTimeout(() => {
+			open = true;
+			timeout = null;
+		}, delayDuration);
+	}
+
+	function hide() {
+		if (timeout) {
+			window.clearTimeout(timeout);
+			timeout = null;
+		}
+		open = false;
+	}
+
+	function sideClass(): string {
+		switch (side) {
+			case 'right':
+				return 'top-1/2 left-full ml-2 -translate-y-1/2';
+			case 'bottom':
+				return 'top-full mt-2';
+			case 'left':
+				return 'top-1/2 right-full mr-2 -translate-y-1/2';
+			default:
+				return 'bottom-full mb-2';
+		}
+	}
+
+	function alignClass(): string {
+		if (side === 'left' || side === 'right') {
+			return 'translate-x-0';
+		}
+		switch (align) {
+			case 'start':
+				return 'left-0';
+			case 'end':
+				return 'right-0';
+			default:
+				return 'left-1/2 -translate-x-1/2';
+		}
+	}
 </script>
 
-<BitsTooltip.Root {delayDuration} {disabled}>
-	<BitsTooltip.Trigger>
-		{#snippet child({ props })}
-			<span
-				{...props}
-				class="inline-flex max-w-full align-middle"
-				data-disabled-trigger={disabledTrigger ? '' : undefined}
-			>
-				{@render children?.()}
-			</span>
-		{/snippet}
-	</BitsTooltip.Trigger>
-	<BitsTooltip.Portal>
-		<BitsTooltip.Content
-			{side}
-			{align}
-			sideOffset={8}
-			class="z-50 max-w-xs rounded-md bg-gray-950 px-2.5 py-1.5 text-xs leading-5 font-medium text-white shadow-lg shadow-gray-950/20 dark:bg-gray-100 dark:text-gray-950 dark:shadow-black/30"
+<span
+	role="presentation"
+	class="relative inline-flex max-w-full align-middle"
+	data-disabled-trigger={disabledTrigger ? '' : undefined}
+	aria-describedby={open ? tooltipId : undefined}
+	onpointerenter={show}
+	onpointerleave={hide}
+	onfocusin={show}
+	onfocusout={hide}
+>
+	{@render children?.()}
+	{#if open}
+		<span
+			id={tooltipId}
+			role="tooltip"
+			class="absolute z-50 max-w-xs rounded-md bg-gray-950 px-2.5 py-1.5 text-xs leading-5 font-medium whitespace-nowrap text-white shadow-lg shadow-gray-950/20 dark:bg-gray-100 dark:text-gray-950 dark:shadow-black/30 {sideClass()} {alignClass()}"
 		>
 			{#if tooltip}
 				{@render tooltip()}
 			{:else}
 				{content}
 			{/if}
-			<BitsTooltip.Arrow class="fill-gray-950 dark:fill-gray-100" />
-		</BitsTooltip.Content>
-	</BitsTooltip.Portal>
-</BitsTooltip.Root>
+		</span>
+	{/if}
+</span>

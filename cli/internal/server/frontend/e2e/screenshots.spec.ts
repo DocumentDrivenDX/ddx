@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test';
 
 // DDx Server UI — visual regression screenshots
 // These capture each page for visual review and regression detection.
@@ -10,37 +10,58 @@ import { test, expect } from '@playwright/test'
 // snapshotted in both modes; any theme-specific palette drift fails CI.
 
 const PAGES = [
-  { path: '/', name: 'dashboard', ready: 'h1', maskStarted: true, tolerance: 0.02 },
-  { path: '/beads', name: 'beads-kanban', ready: 'text=OPEN', tolerance: 0.04 },
-  { path: '/documents', name: 'documents', ready: 'h1', tolerance: 0.02 },
-  { path: '/graph', name: 'graph', ready: 'h1', tolerance: 0.06 },
-  { path: '/agent', name: 'agent', ready: 'h1', tolerance: 0.04 },
-  { path: '/personas', name: 'personas', ready: 'text=Personas', tolerance: 0.04 },
-  { path: '/nodes/local-node/projects/local-project/plugins', name: 'plugins', ready: 'text=Plugins', tolerance: 0.04 },
-  { path: '/nodes/local-node/projects/local-project/plugins/helix', name: 'plugin-detail', ready: 'text=Manifest', tolerance: 0.04 },
-  { path: '/nodes/local-node/projects/local-project/efficacy', name: 'efficacy', ready: 'text=Efficacy', tolerance: 0.04 },
-] as const
+	{ path: '/', name: 'dashboard', ready: 'h1', maskStarted: true, tolerance: 0.02 },
+	{ path: '/beads', name: 'beads-kanban', ready: 'text=OPEN', tolerance: 0.04 },
+	{ path: '/documents', name: 'documents', ready: 'h1', tolerance: 0.02 },
+	{ path: '/graph', name: 'graph', ready: 'h1', tolerance: 0.06 },
+	{ path: '/agent', name: 'agent', ready: 'h1', tolerance: 0.04 },
+	{ path: '/personas', name: 'personas', ready: 'text=Personas', tolerance: 0.04 },
+	{
+		path: '/nodes/local-node/projects/local-project',
+		name: 'project-overview',
+		ready: 'text=Actions',
+		tolerance: 0.04
+	},
+	{
+		path: '/nodes/local-node/projects/local-project/plugins',
+		name: 'plugins',
+		ready: 'text=Plugins',
+		tolerance: 0.04
+	},
+	{
+		path: '/nodes/local-node/projects/local-project/plugins/helix',
+		name: 'plugin-detail',
+		ready: 'text=Manifest',
+		tolerance: 0.04
+	},
+	{
+		path: '/nodes/local-node/projects/local-project/efficacy',
+		name: 'efficacy',
+		ready: 'text=Efficacy',
+		tolerance: 0.04
+	}
+] as const;
 
-const MODES = ['light', 'dark'] as const
+const MODES = ['light', 'dark'] as const;
 
 test.describe('DDx Server UI Screenshots', () => {
-  for (const mode of MODES) {
-    for (const pg of PAGES) {
-      test(`${pg.name} (${mode})`, async ({ page }) => {
-        await page.addInitScript((m) => {
-          window.localStorage.setItem('mode-watcher-mode', m)
-        }, mode)
+	for (const mode of MODES) {
+		for (const pg of PAGES) {
+			test(`${pg.name} (${mode})`, async ({ page }) => {
+				await page.addInitScript((m) => {
+					window.localStorage.setItem('mode-watcher-mode', m);
+				}, mode);
 
-        await page.goto(pg.path)
-        await page.waitForSelector(pg.ready)
-        await page.waitForTimeout(500)
+				await page.goto(pg.path);
+				await page.waitForSelector(pg.ready);
+				await page.waitForTimeout(500);
 
-        await expect(page).toHaveScreenshot(`${pg.name}-${mode}.png`, {
-          fullPage: true,
-          maxDiffPixelRatio: pg.tolerance,
-          mask: pg.maskStarted ? [page.locator('text=/^Started:/')] : undefined,
-        })
-      })
-    }
-  }
-})
+				await expect(page).toHaveScreenshot(`${pg.name}-${mode}.png`, {
+					fullPage: true,
+					maxDiffPixelRatio: pg.tolerance,
+					mask: pg.maskStarted ? [page.locator('text=/^Started:/')] : undefined
+				});
+			});
+		}
+	}
+});
