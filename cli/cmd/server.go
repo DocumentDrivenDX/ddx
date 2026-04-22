@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/server"
@@ -20,6 +21,20 @@ func resolveTsnetAuthKey(envKey, flagKey, configKey string) string {
 		return flagKey
 	}
 	return configKey
+}
+
+// defaultTsnetHostname returns "ddx-<short-hostname>" for the current host,
+// falling back to "ddx" when the hostname is unavailable or empty.
+func defaultTsnetHostname() string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return "ddx"
+	}
+	// Trim any trailing domain so the ts-net name stays short and stable.
+	if i := strings.Index(h, "."); i >= 0 {
+		h = h[:i]
+	}
+	return "ddx-" + h
 }
 
 func (f *CommandFactory) newServerCommand() *cobra.Command {
@@ -81,27 +96,26 @@ MCP (POST /mcp):
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
 			srv := server.New(listenAddr, f.WorkingDir)
 
-			// Build tsnet config: flags override config file
-			tc := &config.TsnetConfig{}
+			// Build tsnet config. tsnet is on by default — flags override config,
+			// and --tsnet=false disables it. Hostname defaults to ddx-<hostname>.
+			tc := &config.TsnetConfig{Enabled: true}
 			if cfg, err := config.LoadWithWorkingDir(f.WorkingDir); err == nil && cfg.Server != nil && cfg.Server.Tsnet != nil {
 				*tc = *cfg.Server.Tsnet
 			}
-			if tsnetEnabled {
-				tc.Enabled = true
+			if cmd.Flags().Changed("tsnet") {
+				tc.Enabled = tsnetEnabled
 			}
 			if tsnetHostname != "" {
 				tc.Hostname = tsnetHostname
+			}
+			if tc.Hostname == "" {
+				tc.Hostname = defaultTsnetHostname()
 			}
 			// Prefer TS_AUTHKEY env var; CLI flag is a fallback (secrets on CLI are visible in ps/history)
 			tc.AuthKey = resolveTsnetAuthKey(os.Getenv("TS_AUTHKEY"), tsnetAuthKey, tc.AuthKey)
 			if tc.Enabled {
 				srv.TsnetConfig = tc
-				fmt.Fprintf(cmd.OutOrStdout(), "DDx ts-net enabled (hostname: %s)\n", func() string {
-					if tc.Hostname != "" {
-						return tc.Hostname
-					}
-					return "ddx"
-				}())
+				fmt.Fprintf(cmd.OutOrStdout(), "DDx ts-net enabled (hostname: %s)\n", tc.Hostname)
 			}
 
 			return srv.ListenAndServeTLS(tlsCert, tlsKey)
@@ -112,8 +126,8 @@ MCP (POST /mcp):
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1", "Address to bind to")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "TLS certificate file (PEM); auto-generates self-signed cert if omitted")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "TLS private key file (PEM); auto-generates self-signed key if omitted")
-	cmd.Flags().BoolVar(&tsnetEnabled, "tsnet", false, "Enable Tailscale ts-net listener (opt-in, see ADR-006)")
-	cmd.Flags().StringVar(&tsnetHostname, "tsnet-hostname", "", "Tailscale hostname (default: ddx)")
+	cmd.Flags().BoolVar(&tsnetEnabled, "tsnet", true, "Enable Tailscale ts-net listener (use --tsnet=false to disable; see ADR-006)")
+	cmd.Flags().StringVar(&tsnetHostname, "tsnet-hostname", "", "Tailscale hostname (default: ddx-<hostname>)")
 	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use (SECURITY: visible in ps/history; prefer TS_AUTHKEY env var)")
 
 	// Worker management
