@@ -281,7 +281,7 @@
 									Instructions
 								</h2>
 								<div
-									class="persona-body rounded-md border border-zinc-200 bg-stone-50 p-5 text-sm leading-7 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+									class="persona-body rounded-md border border-zinc-200 bg-stone-50 p-5 text-sm leading-7 text-zinc-800 [&_code]:rounded [&_code]:bg-zinc-950/8 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:[&_code]:bg-zinc-100/12"
 								>
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									{@html renderedBody}
@@ -484,14 +484,4 @@
 		padding-left: 1.25rem;
 	}
 
-	.persona-body :global(code) {
-		border-radius: 0.25rem;
-		background: rgb(24 24 27 / 0.08);
-		padding: 0.1rem 0.25rem;
-		font-size: 0.85em;
-	}
-
-	:global(.dark) .persona-body :global(code) {
-		background: rgb(244 244 245 / 0.12);
-	}
 </style>

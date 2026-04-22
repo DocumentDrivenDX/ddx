@@ -1,0 +1,58 @@
+{
+  "bead": "ddx-250b570f",
+  "frontendPackage": "cli/internal/server/frontend",
+  "commands": [
+    {
+      "command": "bun run check",
+      "status": "passed",
+      "summary": "0 errors, 5 existing warnings"
+    },
+    {
+      "command": "bun run test:a11y",
+      "status": "passed",
+      "summary": "13 passed: 12 WCAG axe route/mode checks plus theme toggle persistence"
+    },
+    {
+      "command": "bunx playwright test e2e/screenshots.spec.ts",
+      "status": "passed",
+      "summary": "20 screenshot drift checks passed without updating baselines"
+    },
+    {
+      "command": "rg -n \"#[0-9A-Fa-f]{3,8}\\\\b|rgb\\\\(|rgba\\\\(|hsl\\\\(|hsla\\\\(\" cli/internal/server/frontend/src || true",
+      "status": "passed",
+      "summary": "no hard-coded hex, rgb, rgba, hsl, or hsla matches in src/"
+    }
+  ],
+  "axe": {
+    "tags": ["wcag2a", "wcag2aa", "wcag21aa"],
+    "violations": 0,
+    "routes": [
+      { "mode": "light", "name": "dashboard", "path": "/", "violations": 0 },
+      { "mode": "light", "name": "beads", "path": "/beads", "violations": 0 },
+      { "mode": "light", "name": "documents", "path": "/documents", "violations": 0 },
+      { "mode": "light", "name": "graph", "path": "/graph", "violations": 0 },
+      { "mode": "light", "name": "agent", "path": "/agent", "violations": 0 },
+      { "mode": "light", "name": "personas", "path": "/personas", "violations": 0 },
+      { "mode": "dark", "name": "dashboard", "path": "/", "violations": 0 },
+      { "mode": "dark", "name": "beads", "path": "/beads", "violations": 0 },
+      { "mode": "dark", "name": "documents", "path": "/documents", "violations": 0 },
+      { "mode": "dark", "name": "graph", "path": "/graph", "violations": 0 },
+      { "mode": "dark", "name": "agent", "path": "/agent", "violations": 0 },
+      { "mode": "dark", "name": "personas", "path": "/personas", "violations": 0 }
+    ]
+  },
+  "requiredScreenshotBaselines": [
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/dashboard-light-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/dashboard-dark-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/beads-kanban-light-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/beads-kanban-dark-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/documents-light-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/documents-dark-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/graph-light-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/graph-dark-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/agent-light-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/agent-dark-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/personas-light-linux.png",
+    "cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/personas-dark-linux.png"
+  ]
+}
