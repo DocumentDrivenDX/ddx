@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "`FILTER_BEADS` fixture is not changed in the provided diff; no priority `0` bead is added.\n`beads.spec.ts` / `US-082g.a` is not changed or evidenced, so the default-sort assertion remains unevaluated."
+}
