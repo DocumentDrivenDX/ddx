@@ -410,7 +410,22 @@ const FILTER_BEADS = [
 ];
 
 test('US-082g.a: priority sort defaults to P0-first and is toggleable', async ({ page }) => {
-	await mockGraphQL(page);
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('BeadsByProject')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse(FILTER_BEADS) })
+			});
+		} else if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else {
+			await route.continue();
+		}
+	});
 	await page.goto(BASE_URL);
 
 	const prioritySort = page.getByRole('button', { name: /sort by priority/i });

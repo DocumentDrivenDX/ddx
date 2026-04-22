@@ -9,8 +9,22 @@
 	import { subscribeBeadLifecycle } from '$lib/gql/subscriptions';
 
 	const BEADS_QUERY = gql`
-		query BeadsByProject($projectID: String!, $first: Int, $after: String, $status: String, $label: String, $search: String) {
-			beadsByProject(projectID: $projectID, first: $first, after: $after, status: $status, label: $label, search: $search) {
+		query BeadsByProject(
+			$projectID: String!
+			$first: Int
+			$after: String
+			$status: String
+			$label: String
+			$search: String
+		) {
+			beadsByProject(
+				projectID: $projectID
+				first: $first
+				after: $after
+				status: $status
+				label: $label
+				search: $search
+			) {
 				edges {
 					node {
 						id
@@ -69,6 +83,7 @@
 	let appendedPageInfo = $state<PageInfo | null>(null);
 	let loadingMore = $state(false);
 	let showCreateForm = $state(false);
+	let prioritySortAsc = $state(true);
 
 	// Live status overrides from beadLifecycle subscription (beadID -> status)
 	let liveStatusOverrides = $state<Map<string, string>>(new Map());
@@ -133,13 +148,16 @@
 	});
 
 	let edges = $derived([...data.beads.edges, ...appendedEdges]);
+	let sortedEdges = $derived(
+		[...edges].sort((a, b) =>
+			prioritySortAsc ? a.node.priority - b.node.priority : b.node.priority - a.node.priority
+		)
+	);
 	let pageInfo = $derived<PageInfo>(appendedPageInfo ?? data.beads.pageInfo);
 	let totalCount = $derived(data.beads.totalCount);
 
 	// Derive all unique labels from current result set
-	let allLabels = $derived(
-		Array.from(new Set(edges.flatMap((e) => e.node.labels ?? []))).sort()
-	);
+	let allLabels = $derived(Array.from(new Set(edges.flatMap((e) => e.node.labels ?? []))).sort());
 
 	// The currently open bead (from child route params)
 	let activeBead = $derived(($page.params as Record<string, string>)['beadId'] ?? null);
@@ -237,7 +255,7 @@
 			type="search"
 			bind:value={searchInput}
 			placeholder="Search beads…"
-			class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400"
+			class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400"
 		/>
 	</div>
 
@@ -286,16 +304,31 @@
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">ID</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Title</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Status</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Priority</th>
+					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">
+						<button
+							type="button"
+							aria-label="Sort by priority"
+							class="ml-auto inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white"
+							onclick={() => (prioritySortAsc = !prioritySortAsc)}
+						>
+							Priority
+							<span aria-hidden="true">{prioritySortAsc ? '↑' : '↓'}</span>
+						</button>
+					</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Owner</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Updated</th>
 				</tr>
 			</thead>
 			<tbody>
-				{#each edges as edge (edge.cursor)}
+				{#each sortedEdges as edge (edge.cursor)}
 					<tr
+						data-testid="bead-row"
+						data-priority={edge.node.priority}
 						onclick={() => openBead(edge.node.id)}
-						class="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 {activeBead === edge.node.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}"
+						class="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 {activeBead ===
+						edge.node.id
+							? 'bg-blue-50 dark:bg-blue-900/20'
+							: ''}"
 					>
 						<td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
 							{edge.node.id}
@@ -304,7 +337,11 @@
 							{edge.node.title}
 						</td>
 						<td class="px-4 py-3">
-							<span class="font-medium {statusClass(liveStatusOverrides.get(edge.node.id) ?? edge.node.status)}">
+							<span
+								class="font-medium {statusClass(
+									liveStatusOverrides.get(edge.node.id) ?? edge.node.status
+								)}"
+							>
 								{liveStatusOverrides.get(edge.node.id) ?? edge.node.status}
 							</span>
 						</td>
@@ -358,7 +395,7 @@
 
 	<!-- Create form panel -->
 	<div
-		class="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl dark:bg-gray-900"
+		class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl dark:bg-gray-900"
 	>
 		<div
 			class="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700"
