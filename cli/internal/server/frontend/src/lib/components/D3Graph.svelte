@@ -49,7 +49,7 @@
 			.attr('orient', 'auto')
 			.append('path')
 			.attr('d', 'M0,-5L10,0L0,5')
-			.attr('fill', '#94a3b8')
+			.attr('class', 'fill-slate-400 dark:fill-slate-500')
 
 		// Container for pan/zoom
 		const g = svg.append('g')
@@ -92,7 +92,7 @@
 			.selectAll<SVGLineElement, (typeof simLinks)[0]>('line')
 			.data(simLinks)
 			.join('line')
-			.attr('stroke', '#94a3b8')
+			.attr('class', 'stroke-slate-400 dark:stroke-slate-500')
 			.attr('stroke-width', 1.5)
 			.attr('stroke-opacity', 0.7)
 			.attr('marker-end', 'url(#ddx-arrow)')
@@ -108,8 +108,7 @@
 		nodeGroup
 			.append('circle')
 			.attr('r', 14)
-			.attr('fill', '#3b82f6')
-			.attr('stroke', '#1e40af')
+			.attr('class', 'fill-blue-500 stroke-blue-800 dark:fill-blue-400 dark:stroke-blue-700')
 			.attr('stroke-width', 1.5)
 
 		nodeGroup
@@ -177,7 +176,7 @@
 </script>
 
 <div class="relative h-full w-full">
-	<svg bind:this={svgEl} class="h-full w-full" style="color: #374151;" />
+	<svg bind:this={svgEl} class="h-full w-full text-gray-700 dark:text-gray-300" />
 
 	{#if tooltipNode}
 		<div
