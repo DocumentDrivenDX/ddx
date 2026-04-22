@@ -44,9 +44,11 @@ jobs:
         extra_args: --debug --only-verified
     
     - name: Gitleaks
+      if: ${{ secrets.GITLEAKS_LICENSE != '' }}
       uses: gitleaks/gitleaks-action@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
     
     - name: Check for hardcoded secrets in Go code
       run: |
@@ -91,16 +93,19 @@ jobs:
         head-ref: ${{ github.event.pull_request.head.sha || github.sha }}
     
     - name: Nancy vulnerability scan
-      continue-on-error: true  # Allow workflow to continue if OSS Index auth fails
+      if: ${{ secrets.OSS_INDEX_USERNAME != '' && secrets.OSS_INDEX_TOKEN != '' }}
       run: |
         go install github.com/sonatype-nexus-community/nancy@latest
-        go list -json -deps | nancy sleuth --quiet || exit_code=$?
+        go list -json -deps | nancy sleuth --quiet --username "$OSS_INDEX_USERNAME" --token "$OSS_INDEX_TOKEN" || exit_code=$?
         if [ "${exit_code:-0}" -ne 0 ]; then
           echo "⚠️ Vulnerabilities found in dependencies"
-          go list -json -deps | nancy sleuth
+          go list -json -deps | nancy sleuth --username "$OSS_INDEX_USERNAME" --token "$OSS_INDEX_TOKEN"
           exit 1
         fi
         echo "✅ No known vulnerabilities in dependencies"
+      env:
+        OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
+        OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
     
     - name: Go vulnerability check
       run: |
@@ -114,7 +119,7 @@ jobs:
 
     - name: Bun audit
       working-directory: cli/internal/server/frontend
-      run: bun audit
+      run: bun audit --audit-level high
     
     - name: License check
       run: |

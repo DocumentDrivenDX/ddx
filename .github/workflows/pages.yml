@@ -78,6 +78,19 @@ jobs:
         working-directory: website
         run: npm ci
 
+      - name: Build local test site
+        working-directory: website
+        env:
+          HUGO_CACHEDIR: ${{ runner.temp }}/hugo_cache_test
+          HUGO_ENVIRONMENT: production
+          TZ: America/New_York
+        run: |
+          hugo \
+            --gc \
+            --minify \
+            --destination public-test \
+            --baseURL "http://127.0.0.1:1313/"
+
       - name: Install Playwright browsers
         working-directory: website
         run: npx playwright install --with-deps chromium
@@ -86,7 +99,7 @@ jobs:
         working-directory: website
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:1313
-          PLAYWRIGHT_WEB_SERVER_COMMAND: python3 -m http.server 1313 --directory public
+          PLAYWRIGHT_WEB_SERVER_COMMAND: python3 -m http.server 1313 --directory public-test
           PLAYWRIGHT_WEB_SERVER_PORT: '1313'
         run: npm run test:e2e
 
