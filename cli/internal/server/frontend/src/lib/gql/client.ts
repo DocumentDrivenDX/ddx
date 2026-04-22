@@ -3,6 +3,32 @@ import { GraphQLClient } from 'graphql-request';
 const EMPTY_PAGE_INFO = { hasNextPage: false, endCursor: null };
 const FALLBACK_NODE = { id: 'local-node', name: 'Local Node' };
 const FALLBACK_PROJECT = { id: 'local-project', name: 'Local Project', path: '/' };
+const FALLBACK_PERSONAS = [
+	{
+		id: 'persona-code-reviewer',
+		name: 'code-reviewer',
+		roles: ['code-reviewer'],
+		description: 'Strict reviewer focused on correctness and safety.',
+		body: '# Code Reviewer\n\nYou are a strict reviewer focused on correctness, regressions, and missing tests.',
+		source: 'ddx-library',
+		bindings: [{ projectId: 'local-project', role: 'code-reviewer', persona: 'code-reviewer' }],
+		tags: [],
+		filePath: null,
+		modTime: null
+	},
+	{
+		id: 'persona-test-engineer',
+		name: 'test-engineer',
+		roles: ['test-engineer', 'implementer'],
+		description: 'Writes focused tests before implementation changes.',
+		body: '# Test Engineer\n\nYou turn acceptance criteria into concrete failing tests first.',
+		source: 'ddx-library',
+		bindings: [],
+		tags: [],
+		filePath: null,
+		modTime: null
+	}
+];
 const FALLBACK_PLUGIN = {
 	name: 'helix',
 	version: '1.4.2',
@@ -55,7 +81,7 @@ function fallbackDataForQuery(query: string): object | null {
 	}
 
 	if (query.includes('personas')) {
-		data.personas = [];
+		data.personas = FALLBACK_PERSONAS;
 	}
 
 	if (query.includes('agentSessions')) {
@@ -157,10 +183,23 @@ function fallbackGraphQLResponse(data: object): Response {
 	});
 }
 
+function delegateInputFor(
+	input: Parameters<typeof globalThis.fetch>[0]
+): Parameters<typeof globalThis.fetch>[0] {
+	if (typeof window === 'undefined' || !isGraphQLEndpoint(input)) {
+		return input;
+	}
+	if (typeof input === 'string' || input instanceof URL) {
+		return '/graphql';
+	}
+	return input;
+}
+
 function withStaticPreviewFallback(fetchFn?: typeof globalThis.fetch): typeof globalThis.fetch {
 	const delegate = fetchFn ?? globalThis.fetch;
 	return async (input, init) => {
-		const response = await delegate(input, init);
+		const delegateInput = delegateInputFor(input);
+		const response = await delegate(delegateInput, init);
 		if (response.status !== 404 || !isGraphQLEndpoint(input)) {
 			return response;
 		}
