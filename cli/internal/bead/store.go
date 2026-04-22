@@ -684,7 +684,6 @@ func (s *Store) IncrNoChangesCount(id string) (int, error) {
 	return newCount, err
 }
 
-// AppendEvent adds an immutable execution evidence entry to a bead.
 // MaxFieldBytes is the per-field hard cap on bead event bodies and adjacent
 // writer paths. 65,535 bytes matches upstream bd's Dolt TEXT column size so
 // DDx-authored beads always round-trip through `bd import`. Empirically
