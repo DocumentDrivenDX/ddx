@@ -57,6 +57,11 @@ jobs:
         fi
         echo "✓ git-subtree is available"
 
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
     - name: Build CLI binary
       run: |
         cd cli
