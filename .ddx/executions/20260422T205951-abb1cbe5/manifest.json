@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260422T205951-abb1cbe5",
+  "bead_id": "ddx-0a33bc5f",
+  "base_rev": "309c8b2693a8f7a7f81cba920b616806bcbc4ec6",
+  "created_at": "2026-04-22T20:59:51.868899316Z",
+  "requested": {
+    "harness": "claude",
+    "model": "codex/gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0a33bc5f",
+    "title": "Efficacy page is slow and sources from the wrong place: rework as session aggregation, seed ≥1k fixture, raise DB decision if in-place insufficient",
+    "description": "## Observed\n\nThe Efficacy page at `/nodes/.../projects/.../efficacy` loads very slowly. User feedback: efficacy should really be \"an aggregation of sessions grouped by provider / harness / model\" — which is not what the current implementation does.\n\n## Ground truth (current implementation)\n\n`cli/internal/server/graphql/resolver_feat008.go:676-833` —\n\n- `EfficacyRows` builds its rollup from **bead evidence events** (`kind:routing` and `kind:cost` on every closed bead), not from sessions.\n- Computation path: `store.ReadAll()` → for every closed bead, read its event file → filter for routing/cost → per-(harness, provider, model) aggregate.\n- There is a cache (`efficacyMemo`), keyed by a fingerprint that itself walks every event on every closed bead to compute event count + max timestamp. So cache validation costs almost as much as cache rebuild.\n- Cost shape: `O(closed_beads × events_per_bead)` on every request (cache miss) and even on cache hit the fingerprint walk happens.\n\n## Why this is wrong (per user feedback)\n\n- Efficacy is a sessions-view concept: \"how is harness/provider/model X doing?\" Sessions are the natural row. Bead events are a lossy, indirect proxy — they only exist for *closed* beads, they duplicate session state, and they force coupling between the efficacy feature and bead lifecycle.\n- The bead-event path misses: open beads with in-flight sessions, sessions that didn't close a bead, benchmark/quorum sessions, non-execute-bead invocations (e.g., `ddx agent run`).\n- The sessions feed is already being reworked into a sharded pointer index (`ddx-2ceb02fa`). Efficacy should read from that index — single source of truth.\n\n## Proposed direction\n\n### Part 1 — Reshape the data source\n\n- Rebuild `EfficacyRows` as an aggregation over `sessions.index` (the sharded index from `ddx-2ceb02fa`), not over bead events.\n- Grouping key: `(harness, provider, model)` — optionally filterable by project, bead, label, time range.\n- Metrics per row: attempts (count), successes (count + rate), median input/output tokens, median duration, median cost. Identical shape to today; only the source changes.\n- Shard awareness: time-range queries map to a shard set (same pattern as `ddx-2ceb02fa`); the default view reads current + previous shard.\n\n### Part 2 — Fixture + baseline (honor user's 1,000+ record floor)\n\n- Perf harness target: aggregate ≥**1,000 session rows** (≥ 10 distinct `(harness, provider, model)` groups) within the budget below.\n- Stretch fixture: 50,000 session rows across 24 monthly shards. Measures steady-state behavior as the index grows.\n- Baseline captured in the bead notes before any optimization.\n\n### Part 3 — Perf targets (first pass, in-place)\n\n- Default Efficacy view (all-time) on a 10k-session, 2-shard fixture: p95 ≤ 150ms in-process / ≤ 400ms HTTP.\n- Date-filtered view (last 30 days, 1 shard): p95 ≤ 60ms in-process / ≤ 200ms HTTP.\n- If in-place optimization (scope, pushdown, memoize-per-shard, streaming aggregation) **cannot hit these numbers** on the 50k stretch fixture, **do not silently change substrate** — raise the decision with the user. Candidate backends named by the user: axon, sqlite, postgres. Bring a recommendation + rationale, not a fait accompli.\n\n### Part 4 — Drop the bead-event read path\n\n- After the rewrite, remove `efficacyFingerprint`, `buildEfficacySnapshot` event iteration, `attemptsFromEvidence`, and `efficacyMemo`. They become dead weight once the source moves.\n- Evidence events on beads remain (they're bead audit trail, not efficacy data); nothing in bead lifecycle changes.\n\n## Out of scope\n\n- The `comparisons` / \"compare arms\" feature on this page (tracked separately — see companion bead).\n- Project-scope filtering UI (the backend support can be added now; the UI widget is a follow-up).\n- Cross-machine / federated efficacy rollups.",
+    "acceptance": "**User story:** As a developer reviewing how different harness/provider/model combinations are performing, I expect the Efficacy page to load quickly on a workspace with tens of thousands of sessions, and I expect the rows to reflect every agent invocation — not just those tied to closed beads.\n\n**Acceptance criteria:**\n\n1. **Source change.** `EfficacyRows` resolver reads from the sharded sessions index (`.ddx/agent-logs/sessions/sessions-YYYY-MM.jsonl`, per `ddx-2ceb02fa`). Bead-event read paths (`efficacyFingerprint`, `buildEfficacySnapshot`'s event loop, `attemptsFromEvidence`, `efficacyMemo`) are removed in the same PR — no dead code retained.\n\n2. **Schema parity.** Row shape and field names stay as they are today (rowKey, harness, provider, model, attempts, successes, successRate, medianInputTokens, medianOutputTokens, medianDurationMs, medianCostUsd, warning). UI does not need to change. Optional new filters (`since`, `until`, `projectId`) are added as nullable args with sensible defaults.\n\n3. **Fixture + baseline recorded.** Fixture seeds ≥10,000 session index rows across 2+ monthly shards with ≥10 distinct `(harness, provider, model)` groups. Baseline latencies (before any optimization beyond source change) written to bead notes with hardware + go-version footer.\n\n4. **First-pass perf targets.**\n   - All-time rollup on 10k-row, 2-shard fixture: p95 ≤ 150ms in-process / ≤ 400ms HTTP.\n   - Last-30-days rollup on same fixture: p95 ≤ 60ms / ≤ 200ms HTTP.\n   - Stretch fixture (50k rows × 24 shards): all-time p95 ≤ 400ms in-process / ≤ 1000ms HTTP, or **user is consulted** before choosing a new substrate.\n\n5. **DB-decision protocol (per user directive 2026-04-22).**\n   - If targets in (4) cannot be met with in-place optimization (streaming aggregation, per-shard memoization with correct invalidation, selective field read), the PR author posts a short proposal in the bead notes: measured achievable numbers, proposed substrate from {axon, sqlite, postgres}, and migration cost. Implementation of that substrate requires explicit user approval before landing.\n\n6. **Completeness test.** A fixture seeds sessions that would not appear under the old bead-event path (open-bead sessions, `ddx agent run` sessions, benchmark sessions). The new resolver returns rows for each of them. A matching integration test on the old code path (kept as a golden-output comparison for one cycle) asserts the new output is a strict superset in the cases it should be.\n\n7. **Freshness.** A session written via the sessions index writer (from `ddx-2ceb02fa`) is visible in the Efficacy query within 2s. Integration test writes a row and queries the aggregation.\n\n8. **Playwright smoke.** `/efficacy` opens, renders the rollup table, and clicks into `EfficacyAttempts` for one row — all within normal navigation budgets. Uses the 10k-row fixture; asserts the table has ≥5 rows rendered.\n\n9. **Cross-reference.** This bead is a dependent of `ddx-2ceb02fa` (sessions index must exist). If `ddx-2ceb02fa` is not yet landed when this work starts, bead notes record the stub / interim source chosen and the timeline for switching over.",
+    "labels": [
+      "feat-008",
+      "feat-010",
+      "feat-019",
+      "efficacy",
+      "perf"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T20:59:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2792459",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:51.254212382Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T20:59:51.450641001Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T20:59:46.738805253Z",
+      "feature": "FEAT-019"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T205951-abb1cbe5",
+    "prompt": ".ddx/executions/20260422T205951-abb1cbe5/prompt.md",
+    "manifest": ".ddx/executions/20260422T205951-abb1cbe5/manifest.json",
+    "result": ".ddx/executions/20260422T205951-abb1cbe5/result.json",
+    "checks": ".ddx/executions/20260422T205951-abb1cbe5/checks.json",
+    "usage": ".ddx/executions/20260422T205951-abb1cbe5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0a33bc5f-20260422T205951-abb1cbe5"
+  }
+}
