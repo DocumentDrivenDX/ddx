@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "`cli/internal/agent/serviceconfig_test.go:56` proves routing can resolve against an `httptest` live endpoint, but there is no evidence that `ddx work --no-adaptive-min-tier --min-tier cheap --max-tier cheap` was rerun against live local endpoints.\n`.ddx/beads.jsonl:19` through `.ddx/beads.jsonl:488` show the 32 `workstream:fake-migration` beads still updated before this attempt, with no post-change routing/cost/execute events showing progress on local models."
+}
