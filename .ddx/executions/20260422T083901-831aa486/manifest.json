@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260422T083901-831aa486",
+  "bead_id": "ddx-443731d5",
+  "base_rev": "818640efdc46d5a5b095e697423b21a1f38a06a9",
+  "created_at": "2026-04-22T08:39:01.599275614Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-443731d5",
+    "title": "FEAT-008 P5b: US-085c bead delete with typed confirm",
+    "description": "On bead detail, add Delete button → TypedConfirmDialog with expectedText = bead id. Cancel returns focus to Delete trigger. Parent beads show cascade-to-children checkbox. Submit fires beadClose(id, reason: 'deleted via UI'). On success: redirect to project-scoped list /nodes/{nodeId}/projects/{projectId}/beads (NOT /beads).",
+    "acceptance": "US-085c green in e2e/beads.spec.ts; beadClose mutation exercised; cancel focus return works.",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "phase-5",
+      "us-085c"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T08:39:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "execute-loop-heartbeat-at": "2026-04-22T08:39:01.122586371Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T083901-831aa486",
+    "prompt": ".ddx/executions/20260422T083901-831aa486/prompt.md",
+    "manifest": ".ddx/executions/20260422T083901-831aa486/manifest.json",
+    "result": ".ddx/executions/20260422T083901-831aa486/result.json",
+    "checks": ".ddx/executions/20260422T083901-831aa486/checks.json",
+    "usage": ".ddx/executions/20260422T083901-831aa486/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-443731d5-20260422T083901-831aa486"
+  }
+}
