@@ -70,6 +70,33 @@ func NewCatalogWithPins(entries []CatalogEntry, pins []DeprecatedPin) *Catalog {
 	return c
 }
 
+// Clone returns an independent copy of the catalog.
+func (c *Catalog) Clone() *Catalog {
+	if c == nil {
+		return NewCatalog(nil)
+	}
+	clone := &Catalog{
+		entries:         make(map[string]CatalogEntry, len(c.entries)),
+		deprecatedPins:  make(map[string]DeprecatedPin, len(c.deprecatedPins)),
+		blockedModelIDs: make(map[string]bool, len(c.blockedModelIDs)),
+	}
+	for ref, entry := range c.entries {
+		surfaces := make(map[string]string, len(entry.Surfaces))
+		for surface, model := range entry.Surfaces {
+			surfaces[surface] = model
+		}
+		entry.Surfaces = surfaces
+		clone.entries[ref] = entry
+	}
+	for pin, entry := range c.deprecatedPins {
+		clone.deprecatedPins[pin] = entry
+	}
+	for id, blocked := range c.blockedModelIDs {
+		clone.blockedModelIDs[id] = blocked
+	}
+	return clone
+}
+
 // AddOrReplace inserts or replaces a catalog entry by Ref.
 func (c *Catalog) AddOrReplace(entry CatalogEntry) {
 	if c.entries == nil {

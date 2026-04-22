@@ -222,3 +222,31 @@ func TestDefaultModelCatalogYAMLBlockedModelsNeverResolve(t *testing.T) {
 		assert.True(t, cat.IsBlockedModelID(id), "default blocked model %q must be registered", id)
 	}
 }
+
+func TestCatalogCloneIsIndependent(t *testing.T) {
+	cat := NewCatalogWithPins([]CatalogEntry{
+		{Ref: "cheap", Surfaces: map[string]string{"codex": "gpt-5.4-mini"}},
+	}, []DeprecatedPin{
+		{Pin: "gpt-4o", Surface: "codex", ReplacedBy: "gpt-5.4-mini"},
+	})
+	cat.AddBlockedModelID("blocked-model")
+
+	clone := cat.Clone()
+	clone.AddOrReplace(CatalogEntry{Ref: "cheap", Surfaces: map[string]string{"claude": "haiku-5.5"}})
+	clone.deprecatedPins["gpt-4o"] = DeprecatedPin{Pin: "gpt-4o", Surface: "codex", ReplacedBy: "gpt-5.4"}
+	clone.AddBlockedModelID("new-blocked-model")
+
+	model, ok := cat.Resolve("cheap", "codex")
+	assert.True(t, ok)
+	assert.Equal(t, "gpt-5.4-mini", model)
+
+	_, ok = cat.Resolve("cheap", "claude")
+	assert.False(t, ok)
+
+	pin, ok := cat.CheckDeprecatedPin("gpt-4o", "codex")
+	assert.True(t, ok)
+	assert.Equal(t, "gpt-5.4-mini", pin.ReplacedBy)
+
+	assert.True(t, cat.IsBlockedModelID("blocked-model"))
+	assert.False(t, cat.IsBlockedModelID("new-blocked-model"))
+}

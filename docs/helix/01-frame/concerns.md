@@ -11,6 +11,7 @@ ddx:
 - go-std (tech-stack, cli/api)
 - typescript-bun (tech-stack, ui)
 - e2e-playwright (testing, ui/site)
+- frontend-design (design-system, ui)
 - hugo-hextra (microsite, site)
 - demo-asciinema (demo, all)
 - security-owasp (security, all)
@@ -86,6 +87,69 @@ different backend so tests stay decoupled:
    - Tests in `website/e2e/microsite.spec.ts`
    - Screenshots for homepage, docs, navigation
    - Runs against `hugo server` on the configured port
+
+### frontend-design
+
+Cross-cutting design and accessibility concern for every UI surface DDx ships
+(the SvelteKit web UI in `cli/internal/server/frontend/` and any future
+embedded views). Applies to every feature that touches the UI — individual
+feature specs do not restate its rules.
+
+**Authoritative guide for aesthetic/UX judgement**
+
+The installed `anthropics/skills@frontend-design` skill is the authoritative
+guide for creating and reviewing UI surfaces under this concern. When a
+feature requires a design judgement (layout, typography, interaction
+affordance, visual hierarchy), delegate the judgement to that skill; the
+concern below captures the non-negotiable constraints the skill's output
+must satisfy.
+
+**Palette discipline**
+
+- Colors reference semantic tokens (e.g. `status.open`, `status.blocked`,
+  `priority.p0`, `tier.cheap`) centralized in Tailwind config and/or
+  `$lib/stores/theme.ts`. Raw hex in component markup is a drift signal;
+  CI greps for `#[0-9a-fA-F]{3,8}` outside the theme files and fails.
+- Every colored state has an accompanying non-color cue (text label, icon,
+  pattern). Status conveyed by color alone is a violation.
+- Status/priority/tier vocabularies use the SAME token across all pages so
+  a "blocked" bead and a "blocked" worker look identical.
+
+**Dark / light parity**
+
+- Every page is legible in both dark and light modes without hover, focus,
+  or menu interaction. The top-nav theme toggle switches modes; choice
+  persists to localStorage and is bookmarkable via `?theme=dark|light`.
+- Visual regression: `screenshots.spec.ts` captures EACH page twice —
+  once per theme. Threshold-gated diffs catch palette drift.
+
+**Accessibility floor**
+
+- WCAG AA: 4.5:1 contrast for normal text, 3:1 for large text, in both
+  modes.
+- Every interactive control reachable by keyboard; focus rings visible
+  in both themes.
+- `@axe-core/playwright` runs against every page; CI fails on any
+  `critical` or `serious` violation. Lane: `bun run test:a11y`.
+
+**Quality gates (CI-enforced)**
+
+| Gate | Command | Frequency |
+|------|---------|-----------|
+| Palette discipline grep | pre-commit lefthook check on `cli/internal/server/frontend/src/**/*.{svelte,ts}` | per commit |
+| Axe-core page scans | `bun run test:a11y` | CI + pre-push |
+| Dark/light visual regression | `playwright screenshots.spec.ts` with theme matrix | CI |
+| Keyboard-reachability smoke | Playwright `tab` through interactive controls on each page | CI |
+
+**Drift signals (alignment-review fodder)**
+
+- Raw hex color in a component (grep miss) → palette discipline broken.
+- Page visible only in one theme (manual reviewer's report; CI catches
+  via visual-regression diff) → dark/light parity broken.
+- A11y scan surfaces a new `critical` violation → blocking; not a warning.
+- A user story's acceptance criterion restates "must work in dark mode"
+  or "must be WCAG-AA" → the concern is leaking into feature specs;
+  remove the restatement.
 
 ### hugo-hextra
 

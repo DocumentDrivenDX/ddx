@@ -269,6 +269,8 @@ ci:
       run: |
         # Check for actual merge conflict markers (exactly 7 characters followed by space or newline)
         conflicts=$(find . -type f ! -path "./.git/*" ! -path "./cli/.git/*" ! -name "lefthook.yml" \
+          ! -path "*/node_modules/*" ! -path "*/.svelte-kit/*" ! -path "./cli/internal/server/frontend/build/*" \
+          ! -path "./website/public/*" ! -path "./cli/build/*" \
           -exec grep -l "^<<<<<<<[ \t]\|^=======\$\|^>>>>>>>[ \t]\|^||||||[ \t]" {} \; 2>/dev/null | head -1)
         if [ -n "$conflicts" ]; then
           echo "Merge conflict markers found in: $conflicts"

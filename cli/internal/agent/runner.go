@@ -56,7 +56,7 @@ func NewRunner(cfg Config) *Runner {
 	//   1. Built-in seed (DefaultModelCatalogYAML — deterministic fallback for smart/standard/cheap)
 	//   2. Shared ddx-agent catalog (~/.config/agent/models.yaml — authoritative when installed)
 	//   3. User overrides (~/.ddx/model-catalog.yaml — user wins over shared and built-in)
-	catalog := BuiltinCatalog
+	catalog := BuiltinCatalog.Clone()
 	if svc, err := agentlib.New(agentlib.ServiceOptions{}); err == nil {
 		ApplyCatalogFromService(context.Background(), catalog, svc)
 	}
