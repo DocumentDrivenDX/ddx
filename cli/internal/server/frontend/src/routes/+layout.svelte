@@ -2,6 +2,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { ModeWatcher } from 'mode-watcher';
+	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import NavShell from '$lib/components/NavShell.svelte';
 	import { nodeStore } from '$lib/stores/node.svelte';
 
@@ -18,3 +19,4 @@
 <NavShell>
 	{@render children()}
 </NavShell>
+<CommandPalette />
