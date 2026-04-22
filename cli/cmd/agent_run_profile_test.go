@@ -213,10 +213,11 @@ func TestAgentRunProfileNoViableHarness(t *testing.T) {
 		"--text", "test",
 	)
 	require.Error(t, err, "should fail when no harness can satisfy the profile+effort request")
-	// ddx-agent v0.9.2 routes this through the unified routing engine, which
-	// reports the rejected candidate count instead of a provider-config special
-	// case while preserving the no-viable-harness classification.
-	assert.Contains(t, err.Error(), "no viable routing candidate",
+	// ddx-agent v0.9.3 replaced the named-profile routing path with live
+	// endpoint discovery; when the requested model has no live endpoint, the
+	// engine now reports it as an "orphan model" rather than a rejected-
+	// candidate count, while preserving the no-viable-harness classification.
+	assert.Contains(t, err.Error(), "orphan model",
 		"error must identify the routing failure cause")
 }
 
