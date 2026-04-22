@@ -74,7 +74,8 @@
 		};
 	}
 
-	const STATUS_OPTIONS = ['open', 'in-progress', 'closed', 'blocked'];
+	const STATUS_OPTIONS = ['open', 'ready', 'in-progress', 'closed', 'blocked'];
+	const PRIORITY_OPTIONS = [0, 1, 2, 3, 4];
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
@@ -83,7 +84,7 @@
 	let appendedPageInfo = $state<PageInfo | null>(null);
 	let loadingMore = $state(false);
 	let showCreateForm = $state(false);
-	let prioritySortAsc = $state(true);
+	let prioritySortAsc = $derived(data.activeSort !== 'priority-desc');
 
 	// Live status overrides from beadLifecycle subscription (beadID -> status)
 	let liveStatusOverrides = $state<Map<string, string>>(new Map());
@@ -137,7 +138,9 @@
 	});
 
 	// Track the active filter combo so we can reset appended pages on change
-	let filterKey = $derived(`${data.activeStatus}::${data.activeLabel}::${data.activeSearch}`);
+	let filterKey = $derived(
+		`${data.activeStatus}::${data.activePriority}::${data.activeLabel}::${data.activeSearch}`
+	);
 	let prevFilterKey = $state('');
 	$effect(() => {
 		if (filterKey !== prevFilterKey) {
@@ -148,8 +151,24 @@
 	});
 
 	let edges = $derived([...data.beads.edges, ...appendedEdges]);
+	let filteredEdges = $derived(
+		edges.filter((edge) => {
+			const activeStatus = liveStatusOverrides.get(edge.node.id) ?? edge.node.status;
+			const labels = edge.node.labels ?? [];
+			const search = data.activeSearch?.toLowerCase();
+			return (
+				(!data.activeStatus || activeStatus === data.activeStatus) &&
+				(!data.activePriority || String(edge.node.priority) === data.activePriority) &&
+				(!data.activeLabel || labels.includes(data.activeLabel)) &&
+				(!search ||
+					edge.node.title.toLowerCase().includes(search) ||
+					edge.node.id.toLowerCase().includes(search) ||
+					labels.some((label) => label.toLowerCase().includes(search)))
+			);
+		})
+	);
 	let sortedEdges = $derived(
-		[...edges].sort((a, b) =>
+		[...filteredEdges].sort((a, b) =>
 			prioritySortAsc ? a.node.priority - b.node.priority : b.node.priority - a.node.priority
 		)
 	);
@@ -158,30 +177,66 @@
 
 	// Derive all unique labels from current result set
 	let allLabels = $derived(Array.from(new Set(edges.flatMap((e) => e.node.labels ?? []))).sort());
+	let hasActiveFilters = $derived(
+		Boolean(data.activeStatus || data.activePriority || data.activeLabel || data.activeSearch)
+	);
 
 	// The currently open bead (from child route params)
 	let activeBead = $derived(($page.params as Record<string, string>)['beadId'] ?? null);
 
-	function setFilter(key: 'status' | 'label', value: string | null) {
+	function setFilter(key: 'status' | 'priority' | 'labels', value: string | null) {
 		const params = new URLSearchParams($page.url.searchParams);
 		if (value === null) {
 			params.delete(key);
 		} else {
 			params.set(key, value);
 		}
+		if (key === 'labels') {
+			params.delete('label');
+		}
 		// Changing filters resets pagination
 		params.delete('after');
 		const search = params.toString();
 		// Stay on same path (either /beads or /beads/[beadId])
-		goto(search ? `?${search}` : $page.url.pathname, { replaceState: false });
+		goto(search ? `?${search}` : $page.url.pathname, { replaceState: true });
 	}
 
 	function toggleStatus(status: string) {
 		setFilter('status', data.activeStatus === status ? null : status);
 	}
 
+	function togglePriority(priority: number) {
+		const priorityValue = String(priority);
+		setFilter('priority', data.activePriority === priorityValue ? null : priorityValue);
+	}
+
+	function togglePrioritySort() {
+		const params = new URLSearchParams($page.url.searchParams);
+		const nextSort = prioritySortAsc ? 'priority-desc' : 'priority-asc';
+		if (nextSort === 'priority-asc') {
+			params.delete('sort');
+		} else {
+			params.set('sort', nextSort);
+		}
+		const search = params.toString();
+		goto(search ? `?${search}` : $page.url.pathname, { replaceState: true });
+	}
+
 	function toggleLabel(label: string) {
-		setFilter('label', data.activeLabel === label ? null : label);
+		setFilter('labels', data.activeLabel === label ? null : label);
+	}
+
+	function clearFilters() {
+		const params = new URLSearchParams($page.url.searchParams);
+		params.delete('status');
+		params.delete('priority');
+		params.delete('label');
+		params.delete('labels');
+		params.delete('q');
+		params.delete('after');
+		searchInput = '';
+		const search = params.toString();
+		goto(search ? `?${search}` : $page.url.pathname, { replaceState: true });
 	}
 
 	async function loadMore() {
@@ -231,6 +286,10 @@
 			? 'rounded-full border px-3 py-1 text-xs font-medium border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-300'
 			: 'rounded-full border px-3 py-1 text-xs font-medium border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800';
 	}
+
+	function priorityLabel(priority: number): string {
+		return `P${priority}`;
+	}
 </script>
 
 <div class="space-y-4">
@@ -238,7 +297,7 @@
 		<h1 class="text-xl font-semibold dark:text-white">Beads</h1>
 		<div class="flex items-center gap-3">
 			<span class="text-sm text-gray-700 dark:text-gray-300">
-				{edges.length} of {totalCount}
+				{sortedEdges.length} of {totalCount}
 			</span>
 			<button
 				onclick={() => (showCreateForm = true)}
@@ -263,14 +322,44 @@
 	<div class="flex flex-wrap gap-2">
 		<span class="self-center text-xs text-gray-700 dark:text-gray-300">Status:</span>
 		{#each STATUS_OPTIONS as status}
-			<button class={chipClass(data.activeStatus === status)} onclick={() => toggleStatus(status)}>
+			<button
+				type="button"
+				aria-pressed={data.activeStatus === status}
+				class={chipClass(data.activeStatus === status)}
+				onclick={() => toggleStatus(status)}
+			>
 				{status}
 			</button>
 		{/each}
 		{#if data.activeStatus}
 			<button
+				type="button"
 				class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
 				onclick={() => setFilter('status', null)}
+			>
+				clear
+			</button>
+		{/if}
+	</div>
+
+	<!-- Priority filter chips -->
+	<div class="flex flex-wrap gap-2">
+		<span class="self-center text-xs text-gray-700 dark:text-gray-300">Priority:</span>
+		{#each PRIORITY_OPTIONS as priority}
+			<button
+				type="button"
+				aria-pressed={data.activePriority === String(priority)}
+				class={chipClass(data.activePriority === String(priority))}
+				onclick={() => togglePriority(priority)}
+			>
+				{priorityLabel(priority)}
+			</button>
+		{/each}
+		{#if data.activePriority}
+			<button
+				type="button"
+				class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+				onclick={() => setFilter('priority', null)}
 			>
 				clear
 			</button>
@@ -280,16 +369,22 @@
 	<!-- Label filter chips (only shown when labels exist in current result) -->
 	{#if allLabels.length > 0}
 		<div class="flex flex-wrap gap-2">
-			<span class="self-center text-xs text-gray-700 dark:text-gray-300">Label:</span>
+			<span class="self-center text-xs text-gray-700 dark:text-gray-300">Labels:</span>
 			{#each allLabels as label}
-				<button class={chipClass(data.activeLabel === label)} onclick={() => toggleLabel(label)}>
+				<button
+					type="button"
+					aria-pressed={data.activeLabel === label}
+					class={chipClass(data.activeLabel === label)}
+					onclick={() => toggleLabel(label)}
+				>
 					{label}
 				</button>
 			{/each}
 			{#if data.activeLabel}
 				<button
+					type="button"
 					class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
-					onclick={() => setFilter('label', null)}
+					onclick={() => setFilter('labels', null)}
 				>
 					clear
 				</button>
@@ -309,7 +404,7 @@
 							type="button"
 							aria-label="Sort by priority"
 							class="ml-auto inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white"
-							onclick={() => (prioritySortAsc = !prioritySortAsc)}
+							onclick={togglePrioritySort}
 						>
 							Priority
 							<span aria-hidden="true">{prioritySortAsc ? '↑' : '↓'}</span>
@@ -320,7 +415,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each sortedEdges as edge (edge.cursor)}
+				{#each sortedEdges as edge (edge.node.id)}
 					<tr
 						data-testid="bead-row"
 						data-priority={edge.node.priority}
@@ -335,6 +430,24 @@
 						</td>
 						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
 							{edge.node.title}
+							{#if edge.node.labels?.length}
+								<div class="mt-2 flex flex-wrap gap-1">
+									{#each edge.node.labels as label}
+										<button
+											type="button"
+											data-testid="label-chip"
+											aria-pressed={data.activeLabel === label}
+											class={chipClass(data.activeLabel === label)}
+											onclick={(event) => {
+												event.stopPropagation();
+												toggleLabel(label);
+											}}
+										>
+											{label}
+										</button>
+									{/each}
+								</div>
+							{/if}
 						</td>
 						<td class="px-4 py-3">
 							<span
@@ -346,7 +459,7 @@
 							</span>
 						</td>
 						<td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
-							{edge.node.priority}
+							{priorityLabel(edge.node.priority)}
 						</td>
 						<td class="px-4 py-3 text-gray-600 dark:text-gray-300">
 							{edge.node.owner ?? '—'}
@@ -356,10 +469,23 @@
 						</td>
 					</tr>
 				{/each}
-				{#if edges.length === 0}
+				{#if sortedEdges.length === 0}
 					<tr>
 						<td colspan="6" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
-							No beads found.
+							{#if hasActiveFilters}
+								<div class="space-y-3">
+									<p>No beads match the current filters.</p>
+									<button
+										type="button"
+										class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+										onclick={clearFilters}
+									>
+										Clear filters
+									</button>
+								</div>
+							{:else}
+								No beads found.
+							{/if}
 						</td>
 					</tr>
 				{/if}
