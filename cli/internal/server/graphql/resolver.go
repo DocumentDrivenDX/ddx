@@ -83,7 +83,12 @@ func (r *queryResolver) BeadDepTree(ctx context.Context, beadID string) (string,
 
 // Bead is the resolver for the bead field.
 func (r *queryResolver) Bead(ctx context.Context, id string) (*Bead, error) {
-	panic("not implemented")
+	for _, snap := range r.State.GetBeadSnapshots("", "", "", "") {
+		if snap.ID == id {
+			return beadFromSnapshot(snap), nil
+		}
+	}
+	return nil, nil
 }
 
 // DocumentByPath is the resolver for the documentByPath field.

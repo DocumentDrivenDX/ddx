@@ -466,6 +466,22 @@ type Worker implements Node {
   lastAttempt: LastAttemptInfo
   """Land coordinator metrics for this worker's project"""
   landSummary: CoordinatorMetrics
+  """Recent streamed response events captured for the worker detail view"""
+  recentEvents: [WorkerRecentEvent!]!
+}
+
+"""WorkerRecentEvent is one captured response frame in worker detail history"""
+type WorkerRecentEvent {
+  """Event kind: text_delta or tool_call"""
+  kind: String!
+  """Text content for text_delta events"""
+  text: String
+  """Tool name for tool_call events"""
+  name: String
+  """Tool call input payload encoded as JSON text"""
+  inputs: String
+  """Tool call output text"""
+  output: String
 }
 
 """CurrentAttemptInfo summarises the in-flight execution attempt"""
@@ -664,10 +680,26 @@ type Persona implements Node {
   tags: [String!]!
   """Full persona prompt/instruction text"""
   content: String!
+  """Markdown body for frontend detail views"""
+  body: String!
+  """Persona source package or plugin"""
+  source: String!
+  """Known project bindings for this persona"""
+  bindings: [PersonaBinding!]!
   """Filesystem path to the persona definition file"""
   filePath: String
   """Last modification time of the persona file"""
   modTime: DateTime
+}
+
+"""PersonaBinding records one role binding for a persona"""
+type PersonaBinding {
+  """Project identifier containing the binding"""
+  projectId: String!
+  """Role name bound to the persona"""
+  role: String!
+  """Persona name assigned to the role"""
+  persona: String!
 }
 
 """PersonaEdge is one edge in a PersonaConnection"""
@@ -1295,6 +1327,190 @@ type DefaultRouteStatus {
   strategy: String
 }
 
+"""QueueSummary is a compact project queue status for action dispatch."""
+type QueueSummary {
+  """Open beads with no unmet dependencies"""
+  ready: Int!
+  """Open beads blocked by unmet dependencies"""
+  blocked: Int!
+  """Beads currently claimed or executing"""
+  inProgress: Int!
+}
+
+"""WorkerDispatchResult describes the worker started by an action."""
+type WorkerDispatchResult {
+  """Worker identifier"""
+  id: ID!
+  """Queued/running state"""
+  state: String!
+  """Worker kind"""
+  kind: String!
+}
+
+"""PluginDispatchResult describes the worker started by a plugin action."""
+type PluginDispatchResult {
+  """Worker identifier"""
+  id: ID!
+  """Queued/running state"""
+  state: String!
+  """Plugin action requested"""
+  action: String!
+}
+
+"""PersonaBindResult reports a persona binding write."""
+type PersonaBindResult {
+  """True when the binding was accepted"""
+  ok: Boolean!
+  """Role name bound"""
+  role: String!
+  """Persona assigned to the role"""
+  persona: String!
+}
+
+"""EfficacyWarning flags a model row that needs operator attention."""
+type EfficacyWarning {
+  """Warning kind"""
+  kind: String!
+  """Numeric threshold involved in the warning"""
+  threshold: Float
+}
+
+"""EfficacyRow summarizes agent performance for one harness/provider/model tuple."""
+type EfficacyRow {
+  """Stable row key"""
+  rowKey: String!
+  """Agent harness"""
+  harness: String!
+  """Provider name"""
+  provider: String!
+  """Model identifier"""
+  model: String!
+  """Attempt count"""
+  attempts: Int!
+  """Successful attempt count"""
+  successes: Int!
+  """Successes divided by attempts"""
+  successRate: Float!
+  """Median input tokens"""
+  medianInputTokens: Int!
+  """Median output tokens"""
+  medianOutputTokens: Int!
+  """Median duration in milliseconds"""
+  medianDurationMs: Int!
+  """Median cost in USD when known"""
+  medianCostUsd: Float
+  """Optional warning metadata"""
+  warning: EfficacyWarning
+}
+
+"""EfficacyAttempt is one historical attempt for an efficacy row."""
+type EfficacyAttempt {
+  """Bead identifier"""
+  beadId: String!
+  """Attempt outcome"""
+  outcome: String!
+  """Duration in milliseconds"""
+  durationMs: Int!
+  """Cost in USD when known"""
+  costUsd: Float
+  """Execution evidence URL or path"""
+  evidenceBundleUrl: String!
+}
+
+"""EfficacyAttempts groups attempt details for a row."""
+type EfficacyAttempts {
+  """Stable row key"""
+  rowKey: String!
+  """Attempts in newest-first order"""
+  attempts: [EfficacyAttempt!]!
+}
+
+"""ComparisonRecord is a queued or completed model comparison."""
+type ComparisonRecord {
+  """Comparison identifier"""
+  id: ID!
+  """Comparison state"""
+  state: String!
+  """Number of configured arms"""
+  armCount: Int!
+}
+
+"""ComparisonDispatchResult describes a queued model comparison."""
+type ComparisonDispatchResult {
+  """Comparison identifier"""
+  id: ID!
+  """Queued/running state"""
+  state: String!
+  """Number of configured arms"""
+  armCount: Int!
+}
+
+"""PluginInfo describes one plugin registry entry."""
+type PluginInfo {
+  """Plugin name"""
+  name: String!
+  """Registry version"""
+  version: String!
+  """Installed version, if present"""
+  installedVersion: String
+  """Plugin classification"""
+  type: String!
+  """Short description"""
+  description: String!
+  """Search keywords"""
+  keywords: [String!]!
+  """available, installed, or update-available"""
+  status: String!
+  """Registry source"""
+  registrySource: String!
+  """Approximate disk footprint"""
+  diskBytes: Int!
+  """Manifest encoded as JSON text"""
+  manifest: String
+  """Skill names exposed by the plugin"""
+  skills: [String!]!
+  """Prompt names exposed by the plugin"""
+  prompts: [String!]!
+  """Template names exposed by the plugin"""
+  templates: [String!]!
+}
+
+"""PaletteDocumentResult is a document match for the command palette."""
+type PaletteDocumentResult {
+  kind: String!
+  path: String!
+  title: String!
+}
+
+"""PaletteBeadResult is a bead match for the command palette."""
+type PaletteBeadResult {
+  kind: String!
+  id: ID!
+  title: String!
+}
+
+"""PaletteActionResult is an executable action in the command palette."""
+type PaletteActionResult {
+  kind: String!
+  id: ID!
+  label: String!
+}
+
+"""PaletteNavigationResult is a navigation target in the command palette."""
+type PaletteNavigationResult {
+  kind: String!
+  route: String!
+  title: String!
+}
+
+"""PaletteSearchResults groups command palette result buckets."""
+type PaletteSearchResults {
+  documents: [PaletteDocumentResult!]!
+  beads: [PaletteBeadResult!]!
+  actions: [PaletteActionResult!]!
+  navigation: [PaletteNavigationResult!]!
+}
+
 # ============================================
 # Query Root
 # ============================================
@@ -1598,17 +1814,8 @@ type Query {
   # Persona Queries
   # ==========================================
 
-  """List all personas with cursor pagination (maps to GET /api/personas)"""
-  personas(
-    """Return the first N edges after the cursor"""
-    first: Int,
-    """Cursor to start after"""
-    after: String,
-    """Return the last N edges before the cursor"""
-    last: Int,
-    """Cursor to end before"""
-    before: String
-  ): PersonaConnection!
+  """List all personas as a flat array (maps to GET /api/personas)"""
+  personas: [Persona!]!
 
   """Fetch a single persona by name (maps to GET /api/personas)"""
   persona(
@@ -1751,6 +1958,45 @@ type Query {
 
   """Show which provider/model the default model-ref resolves to (mirrors `ddx agent route-status`)"""
   defaultRouteStatus: DefaultRouteStatus
+
+  """Return compact queue counts for a project."""
+  queueSummary(
+    """Project identifier"""
+    projectId: String!
+  ): QueueSummary!
+
+  """Return model efficacy rows."""
+  efficacyRows: [EfficacyRow!]!
+
+  """Return attempt details for one efficacy row."""
+  efficacyAttempts(
+    """Stable efficacy row key"""
+    rowKey: String!
+  ): EfficacyAttempts!
+
+  """Return model comparison records."""
+  comparisons: [ComparisonRecord!]!
+
+  """Return plugin registry entries."""
+  pluginsList: [PluginInfo!]!
+
+  """Return one plugin registry entry."""
+  pluginDetail(
+    """Plugin name"""
+    name: String!
+  ): PluginInfo
+
+  """Return persona bindings for a project as JSON text."""
+  projectBindings(
+    """Project identifier"""
+    projectId: String!
+  ): String!
+
+  """Search command palette documents, beads, actions, and navigation."""
+  paletteSearch(
+    """Search query"""
+    query: String!
+  ): PaletteSearchResults!
 }
 
 # ============================================
@@ -1790,6 +2036,14 @@ type Mutation {
     id: ID!
   ): Bead!
 
+  """Close a bead."""
+  beadClose(
+    """Bead ID to close"""
+    id: ID!,
+    """Operator-provided reason"""
+    reason: String
+  ): Bead!
+
   """Write or update a document in the library (maps to PUT /api/docs/{id})"""
   documentWrite(
     """Document path relative to the library root"""
@@ -1797,6 +2051,42 @@ type Mutation {
     """Document content"""
     content: String!
   ): Document!
+
+  """Dispatch a project worker action."""
+  workerDispatch(
+    """Worker kind: execute-loop, realign-specs, or run-checks"""
+    kind: String!,
+    """Project identifier"""
+    projectId: String!,
+    """Optional JSON-encoded arguments"""
+    args: String
+  ): WorkerDispatchResult!
+
+  """Dispatch a plugin install/update/uninstall action."""
+  pluginDispatch(
+    """Plugin name"""
+    name: String!,
+    """Plugin action"""
+    action: String!,
+    """Install scope"""
+    scope: String!
+  ): PluginDispatchResult!
+
+  """Dispatch a model comparison."""
+  comparisonDispatch(
+    """Comparison arms"""
+    arms: [ComparisonArmInput!]!
+  ): ComparisonDispatchResult!
+
+  """Bind a role to a persona for a project."""
+  personaBind(
+    """Role name"""
+    role: String!,
+    """Persona name"""
+    persona: String!,
+    """Project identifier"""
+    projectId: String!
+  ): PersonaBindResult!
 }
 
 # ============================================
@@ -1845,6 +2135,18 @@ input BeadUpdateInput {
   acceptance: String
   """Freeform notes appended during work"""
   notes: String
+}
+
+"""ComparisonArmInput is one requested comparison arm."""
+input ComparisonArmInput {
+  """Agent harness"""
+  harness: String
+  """Provider name"""
+  provider: String
+  """Model identifier"""
+  model: String!
+  """Prompt or task text"""
+  prompt: String!
 }
 
 # ============================================

@@ -8,7 +8,7 @@ import (
 )
 
 // Personas is the resolver for the personas field.
-func (r *queryResolver) Personas(ctx context.Context, first *int, after *string, last *int, before *string) (*PersonaConnection, error) {
+func (r *queryResolver) Personas(ctx context.Context) ([]*Persona, error) {
 	loader := persona.NewPersonaLoader(r.WorkingDir)
 	ps, err := loader.ListPersonas()
 	if err != nil {
@@ -18,7 +18,7 @@ func (r *queryResolver) Personas(ctx context.Context, first *int, after *string,
 	for i, p := range ps {
 		gql[i] = personaToGQL(p)
 	}
-	return personaConnectionFrom(gql, first, after, last, before), nil
+	return gql, nil
 }
 
 // Persona is the resolver for the persona field.
@@ -61,6 +61,9 @@ func personaToGQL(p *persona.Persona) *Persona {
 		Description: p.Description,
 		Tags:        p.Tags,
 		Content:     p.Content,
+		Body:        p.Content,
+		Source:      "ddx-library",
+		Bindings:    []*PersonaBinding{},
 	}
 }
 
