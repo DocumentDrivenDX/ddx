@@ -457,22 +457,23 @@
 		line-height: 1.75;
 	}
 	.doc-content :global(a) {
-		color: #2563eb;
+		color: var(--doc-link-text);
 		text-decoration: underline;
 	}
 	.doc-content :global(a:hover) {
-		color: #1d4ed8;
+		color: var(--doc-link-text-hover);
 	}
 	.doc-content :global(code) {
 		font-family: ui-monospace, monospace;
 		font-size: 0.875em;
-		background-color: #f3f4f6;
+		background-color: var(--doc-code-surface);
+		color: var(--doc-code-text);
 		padding: 0.125rem 0.375rem;
 		border-radius: 0.25rem;
 	}
 	.doc-content :global(pre) {
-		background-color: #1f2937;
-		color: #f9fafb;
+		background-color: var(--doc-pre-surface);
+		color: var(--doc-pre-text);
 		padding: 1rem;
 		border-radius: 0.5rem;
 		overflow-x: auto;
@@ -484,11 +485,11 @@
 		font-size: 0.875rem;
 	}
 	.doc-content :global(blockquote) {
-		border-left: 4px solid #d1d5db;
+		border-left: 4px solid var(--doc-quote-border);
 		padding-left: 1rem;
 		margin-left: 0;
 		margin-bottom: 1rem;
-		color: #6b7280;
+		color: var(--doc-muted-text);
 		font-style: italic;
 	}
 	.doc-content :global(table) {
@@ -498,22 +499,22 @@
 		font-size: 0.875rem;
 	}
 	.doc-content :global(th) {
-		background-color: #f9fafb;
-		border: 1px solid #e5e7eb;
+		background-color: var(--doc-table-heading-surface);
+		border: 1px solid var(--doc-table-border);
 		padding: 0.5rem 0.75rem;
 		text-align: left;
 		font-weight: 600;
 	}
 	.doc-content :global(td) {
-		border: 1px solid #e5e7eb;
+		border: 1px solid var(--doc-table-border);
 		padding: 0.5rem 0.75rem;
 	}
 	.doc-content :global(tr:hover) {
-		background-color: #f9fafb;
+		background-color: var(--doc-row-hover-surface);
 	}
 	.doc-content :global(hr) {
 		border: none;
-		border-top: 1px solid #e5e7eb;
+		border-top: 1px solid var(--doc-rule-border);
 		margin: 1.5rem 0;
 	}
 	.doc-content :global(img) {
@@ -522,32 +523,4 @@
 		border-radius: 0.375rem;
 	}
 
-	/* Dark mode overrides */
-	:global(.dark) .doc-content :global(a) {
-		color: #60a5fa;
-	}
-	:global(.dark) .doc-content :global(a:hover) {
-		color: #93c5fd;
-	}
-	:global(.dark) .doc-content :global(code) {
-		background-color: #374151;
-		color: #f9fafb;
-	}
-	:global(.dark) .doc-content :global(blockquote) {
-		border-left-color: #4b5563;
-		color: #9ca3af;
-	}
-	:global(.dark) .doc-content :global(th) {
-		background-color: #1f2937;
-		border-color: #374151;
-	}
-	:global(.dark) .doc-content :global(td) {
-		border-color: #374151;
-	}
-	:global(.dark) .doc-content :global(tr:hover) {
-		background-color: #1f2937;
-	}
-	:global(.dark) .doc-content :global(hr) {
-		border-top-color: #374151;
-	}
 </style>

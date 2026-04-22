@@ -54,6 +54,19 @@
 	--tier-smart-text: oklch(41% 0.13 315);
 	--tier-smart-surface: oklch(97% 0.02 315);
 	--tier-smart-border: oklch(79% 0.09 315);
+
+	--doc-link-text: var(--color-blue-600);
+	--doc-link-text-hover: var(--color-blue-700);
+	--doc-code-surface: var(--color-gray-100);
+	--doc-code-text: inherit;
+	--doc-pre-surface: var(--color-gray-800);
+	--doc-pre-text: var(--color-gray-50);
+	--doc-quote-border: var(--color-gray-300);
+	--doc-muted-text: var(--color-gray-500);
+	--doc-table-heading-surface: var(--color-gray-50);
+	--doc-table-border: var(--color-gray-200);
+	--doc-row-hover-surface: var(--color-gray-50);
+	--doc-rule-border: var(--color-gray-200);
 }
 
 :root.dark,
@@ -108,6 +121,19 @@
 	--tier-smart-text: oklch(78% 0.1 315);
 	--tier-smart-surface: oklch(28% 0.06 315);
 	--tier-smart-border: oklch(51% 0.09 315);
+
+	--doc-link-text: var(--color-blue-400);
+	--doc-link-text-hover: var(--color-blue-300);
+	--doc-code-surface: var(--color-gray-700);
+	--doc-code-text: var(--color-gray-50);
+	--doc-pre-surface: var(--color-gray-800);
+	--doc-pre-text: var(--color-gray-50);
+	--doc-quote-border: var(--color-gray-600);
+	--doc-muted-text: var(--color-gray-400);
+	--doc-table-heading-surface: var(--color-gray-800);
+	--doc-table-border: var(--color-gray-700);
+	--doc-row-hover-surface: var(--color-gray-800);
+	--doc-rule-border: var(--color-gray-700);
 }
 
 @layer utilities {
