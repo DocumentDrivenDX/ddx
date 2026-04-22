@@ -3,17 +3,52 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { subscribeWorkerProgress } from '$lib/gql/subscriptions';
+	import { wsConnection, type WsState } from '$lib/stores/connection.svelte';
+	import { createClient } from '$lib/gql/client';
+	import { gql } from 'graphql-request';
+	import type { WorkerRecentEvent } from './+page';
 
 	let { data }: { data: PageData } = $props();
 
 	let logLines = $state<string[]>([]);
 	let logContainer = $state<HTMLPreElement | null>(null);
 	let autoScroll = $state(true);
+	let liveEvents = $state<WorkerRecentEvent[]>([]);
+	let reconnecting = $state(false);
+	let catchingUp = $state(false);
+	let streamTerminal = $state(false);
+	let streamCompletedAt = $state<string | null>(null);
+	let previousWsState = $state<WsState>('idle');
+
+	type LiveItem =
+		| { type: 'text'; text: string }
+		| { type: 'tool_call'; event: WorkerRecentEvent; key: string };
+
+	const RECENT_EVENTS_QUERY = gql`
+		query WorkerRecentEvents($id: ID!) {
+			worker(id: $id) {
+				id
+				recentEvents {
+					kind
+					text
+					name
+					inputs
+					output
+				}
+			}
+		}
+	`;
 
 	// Initialize log lines from initial captured stdout
 	$effect(() => {
 		const raw = data.initialLog ?? '';
 		logLines = raw.length > 0 ? raw.split('\n') : [];
+	});
+
+	$effect(() => {
+		liveEvents = data.worker?.recentEvents ?? [];
+		streamTerminal = false;
+		streamCompletedAt = null;
 	});
 
 	// Auto-scroll to bottom when new lines arrive (if autoScroll is enabled)
@@ -31,15 +66,36 @@
 	// Subscribe to live worker progress events
 	$effect(() => {
 		const workerId = data.worker?.id;
-		if (!workerId) return;
+		if (!workerId || isTerminal) return;
 
 		const dispose = subscribeWorkerProgress(workerId, (evt) => {
+			if (terminalPhases.has(evt.phase)) {
+				streamTerminal = true;
+				streamCompletedAt = evt.timestamp;
+			}
+			if (isTerminal || terminalPhases.has(evt.phase)) return;
 			if (evt.logLine != null && evt.logLine.length > 0) {
 				logLines = [...logLines, evt.logLine];
+				const frame = workerFrameFromProgressLine(evt.logLine);
+				if (frame) appendLiveEvent(frame);
 			}
 		});
 
 		return dispose;
+	});
+
+	$effect(() => {
+		const state = wsConnection.state;
+		reconnecting = wsConnection.showBanner || catchingUp;
+		if (
+			data.worker?.id &&
+			previousWsState !== 'idle' &&
+			previousWsState !== 'connected' &&
+			state === 'connected'
+		) {
+			void catchUpRecentEvents(data.worker.id);
+		}
+		previousWsState = state;
 	});
 
 	function handleScroll() {
@@ -72,15 +128,126 @@
 
 	function toolLabel(event: { name: string | null; inputs: unknown }): string {
 		const details = inputText(event.inputs);
+		const summary = toolInputSummary(event.inputs);
+		if (summary && details) return `${event.name ?? 'tool'} path ${summary} ${details}`;
 		return details ? `${event.name ?? 'tool'} ${details}` : (event.name ?? 'tool');
 	}
+
+	function toolInputSummary(input: unknown): string {
+		const parsed = typeof input === 'string' ? parseJSON(input) : input;
+		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+		const value =
+			(parsed as Record<string, unknown>).path ?? (parsed as Record<string, unknown>).file;
+		if (typeof value !== 'string' || value.length === 0) return '';
+		return value.split('/').pop() ?? value;
+	}
+
+	function parseJSON(value: string): unknown {
+		try {
+			return JSON.parse(value);
+		} catch {
+			return null;
+		}
+	}
+
+	function evidenceBundleHref(workerId: string): string {
+		return `/executions/${encodeURIComponent(workerId)}/result.json`;
+	}
+
+	function formatCompletedAt(value: string | null): string {
+		if (!value) return 'terminal state';
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return value;
+		return date.toLocaleTimeString([], {
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		});
+	}
+
+	function appendLiveEvent(event: WorkerRecentEvent) {
+		liveEvents = [...liveEvents, event];
+	}
+
+	function workerFrameFromProgressLine(line: string): WorkerRecentEvent | null {
+		const trimmed = line.trim();
+		if (!trimmed.startsWith('{')) return null;
+		try {
+			const raw = JSON.parse(trimmed) as Record<string, unknown>;
+			const kind = String(raw.kind ?? raw.type ?? '');
+			const payload =
+				raw.data && typeof raw.data === 'object' ? (raw.data as Record<string, unknown>) : raw;
+			if (kind === 'text_delta') {
+				const text = raw.text ?? payload.text ?? payload.delta;
+				return typeof text === 'string'
+					? { kind: 'text_delta', text, name: null, inputs: null, output: null }
+					: null;
+			}
+			if (kind === 'tool_call') {
+				return {
+					kind: 'tool_call',
+					text: null,
+					name: typeof payload.name === 'string' ? payload.name : null,
+					inputs: inputText(payload.inputs ?? payload.input),
+					output: typeof payload.output === 'string' ? payload.output : null
+				};
+			}
+		} catch {
+			return null;
+		}
+		return null;
+	}
+
+	async function catchUpRecentEvents(workerId: string) {
+		catchingUp = true;
+		try {
+			const client = createClient(fetch);
+			const result = await client.request<{
+				worker: { recentEvents?: WorkerRecentEvent[] } | null;
+			}>(RECENT_EVENTS_QUERY, { id: workerId });
+			liveEvents = result.worker?.recentEvents ?? liveEvents;
+		} catch (err) {
+			console.error('[ddx] worker recentEvents catch-up failed:', err);
+		} finally {
+			catchingUp = false;
+			reconnecting = wsConnection.showBanner;
+		}
+	}
+
+	const terminalPhases = new Set(['done', 'exited', 'stopped', 'failed', 'error', 'preserved']);
 
 	const isTerminal = $derived(
 		data.worker?.state === 'done' ||
 			data.worker?.state === 'exited' ||
 			data.worker?.state === 'stopped' ||
+			data.worker?.state === 'failed' ||
+			data.worker?.state === 'error' ||
+			streamTerminal ||
 			Boolean(data.worker?.finishedAt)
 	);
+
+	const completedAt = $derived(data.worker?.finishedAt ?? streamCompletedAt);
+
+	const liveItems = $derived.by(() => {
+		const items: LiveItem[] = [];
+		for (const event of liveEvents) {
+			if (event.kind === 'text_delta' && event.text) {
+				const last = items.at(-1);
+				if (last?.type === 'text') {
+					last.text += event.text;
+				} else {
+					items.push({ type: 'text', text: event.text });
+				}
+			} else if (event.kind === 'tool_call') {
+				items.push({
+					type: 'tool_call',
+					event,
+					key: `${items.length}-${event.name ?? 'tool'}-${inputText(event.inputs).slice(0, 40)}`
+				});
+			}
+		}
+		return items;
+	});
 </script>
 
 {#if data.worker}
@@ -90,7 +257,7 @@
 		onclick={handleClose}
 		role="button"
 		tabindex="-1"
-		aria-label="Close panel"
+		aria-label="Dismiss panel"
 		onkeydown={(e) => e.key === 'Escape' && handleClose()}
 	></div>
 
@@ -181,48 +348,73 @@
 			{/if}
 		</div>
 
-		{#if data.worker.recentEvents.length > 0}
-			<section
-				aria-label="Live response"
-				aria-live="polite"
-				class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700"
-			>
-				<div class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">Live response</div>
-				<div class="space-y-2 text-gray-800 dark:text-gray-200">
-					<p class="whitespace-pre-wrap">
-						{#each data.worker.recentEvents as event}
-							{#if event.kind === 'text_delta' && event.text}
-								{event.text}
-							{/if}
-						{/each}
-					</p>
-					{#each data.worker.recentEvents as event}
-						{#if event.kind === 'tool_call'}
+		<section
+			role="region"
+			aria-label="Live response"
+			aria-live="polite"
+			class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700"
+		>
+			<div class="mb-2 flex items-center justify-between gap-3">
+				<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Live response</div>
+				{#if reconnecting && !isTerminal}
+					<div
+						class="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+					>
+						Reconnecting…
+					</div>
+				{/if}
+			</div>
+			<div aria-live="polite" class="space-y-2 text-gray-800 dark:text-gray-200">
+				{#if liveItems.length === 0}
+					<p class="text-xs text-gray-500 dark:text-gray-400">Waiting for response…</p>
+				{:else}
+					{#each liveItems as item (item.type === 'tool_call' ? item.key : item.text)}
+						{#if item.type === 'text'}
+							<p class="whitespace-pre-wrap">{item.text}</p>
+						{:else}
 							<details class="rounded border border-gray-200 dark:border-gray-700">
 								<summary
+									role="button"
 									class="cursor-pointer px-3 py-2 font-mono text-xs text-gray-700 dark:text-gray-200"
 								>
-									{toolLabel(event)}
+									{toolLabel(item.event)}
 								</summary>
-								<pre
-									class="overflow-x-auto border-t border-gray-200 p-3 text-xs whitespace-pre-wrap dark:border-gray-700">{event.output}</pre>
+								<div class="border-t border-gray-200 dark:border-gray-700">
+									<div
+										class="px-3 pt-3 pb-1 text-[11px] font-medium text-gray-500 uppercase dark:text-gray-400"
+									>
+										Inputs
+									</div>
+									<pre class="overflow-x-auto px-3 pb-3 text-xs whitespace-pre-wrap">{inputText(
+											item.event.inputs
+										)}</pre>
+									{#if item.event.output}
+										<div
+											class="border-t border-gray-200 px-3 pt-3 pb-1 text-[11px] font-medium text-gray-500 uppercase dark:border-gray-700 dark:text-gray-400"
+										>
+											Output
+										</div>
+										<pre class="overflow-x-auto px-3 pb-3 text-xs whitespace-pre-wrap">{item.event
+												.output}</pre>
+									{/if}
+								</div>
 							</details>
 						{/if}
 					{/each}
-					{#if isTerminal}
-						<p class="text-xs text-gray-600 dark:text-gray-400">
-							Completed at {data.worker.finishedAt ?? 'terminal state'}.
-							<a
-								class="text-blue-600 hover:underline dark:text-blue-400"
-								href={`/executions/${data.worker.id}/result.json`}
-							>
-								Evidence bundle
-							</a>
-						</p>
-					{/if}
-				</div>
-			</section>
-		{/if}
+				{/if}
+				{#if isTerminal}
+					<p class="text-xs text-gray-600 dark:text-gray-400">
+						Completed at {formatCompletedAt(completedAt)}.
+						<a
+							class="text-blue-600 hover:underline dark:text-blue-400"
+							href={evidenceBundleHref(data.worker.id)}
+						>
+							Evidence bundle
+						</a>
+					</p>
+				{/if}
+			</div>
+		</section>
 
 		<!-- Log area -->
 		<div class="flex min-h-0 flex-1 flex-col">
