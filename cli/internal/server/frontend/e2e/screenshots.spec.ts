@@ -16,6 +16,7 @@ const PAGES = [
   { path: '/graph', name: 'graph', ready: 'h1', tolerance: 0.06 },
   { path: '/agent', name: 'agent', ready: 'h1', tolerance: 0.04 },
   { path: '/personas', name: 'personas', ready: 'text=Personas', tolerance: 0.04 },
+  { path: '/nodes/local-node/projects/local-project/efficacy', name: 'efficacy', ready: 'text=Efficacy', tolerance: 0.04 },
 ] as const
 
 const MODES = ['light', 'dark'] as const

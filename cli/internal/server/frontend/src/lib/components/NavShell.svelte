@@ -10,7 +10,8 @@
 		Moon,
 		Sun,
 		Radio,
-		Layers
+		Layers,
+		BarChart3
 	} from 'lucide-svelte';
 	import { page } from '$app/stores';
 	import { toggleMode, mode } from '$lib/theme';
@@ -28,7 +29,8 @@
 		{ page: 'workers', label: 'Workers', Icon: Cpu },
 		{ page: 'sessions', label: 'Sessions', Icon: Terminal },
 		{ page: 'personas', label: 'Personas', Icon: Users },
-		{ page: 'commits', label: 'Commits', Icon: GitCommit }
+		{ page: 'commits', label: 'Commits', Icon: GitCommit },
+		{ page: 'efficacy', label: 'Efficacy', Icon: BarChart3 }
 	];
 
 	const navLinks = $derived(

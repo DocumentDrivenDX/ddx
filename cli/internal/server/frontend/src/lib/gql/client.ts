@@ -75,7 +75,50 @@ function fallbackDataForQuery(query: string): object | null {
 	}
 
 	if (query.includes('efficacyRows')) {
-		data.efficacyRows = [];
+		data.efficacyRows = [
+			{
+				rowKey: 'codex|openai|gpt-5',
+				harness: 'codex',
+				provider: 'openai',
+				model: 'gpt-5',
+				attempts: 42,
+				successes: 40,
+				successRate: 0.9524,
+				medianInputTokens: 3200,
+				medianOutputTokens: 1100,
+				medianDurationMs: 28000,
+				medianCostUsd: 0.032,
+				warning: null
+			},
+			{
+				rowKey: 'claude|anthropic|claude-sonnet-4-6',
+				harness: 'claude',
+				provider: 'anthropic',
+				model: 'claude-sonnet-4-6',
+				attempts: 60,
+				successes: 57,
+				successRate: 0.95,
+				medianInputTokens: 4100,
+				medianOutputTokens: 1500,
+				medianDurationMs: 45000,
+				medianCostUsd: 0.047,
+				warning: null
+			},
+			{
+				rowKey: 'codex|vidar-omlx|qwen3.6-35b',
+				harness: 'codex',
+				provider: 'vidar-omlx',
+				model: 'qwen3.6-35b',
+				attempts: 80,
+				successes: 48,
+				successRate: 0.6,
+				medianInputTokens: 2800,
+				medianOutputTokens: 900,
+				medianDurationMs: 62000,
+				medianCostUsd: null,
+				warning: { kind: 'below-adaptive-floor', threshold: 0.7 }
+			}
+		];
 	}
 
 	if (query.includes('efficacyAttempts')) {
