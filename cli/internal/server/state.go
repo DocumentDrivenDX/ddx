@@ -38,10 +38,12 @@ type ServerState struct {
 	Node          NodeState      `json:"node"`
 	Projects      []ProjectEntry `json:"projects"`
 
-	mu             sync.RWMutex         `json:"-"`
-	dir            string               `json:"-"`
-	workingDir     string               `json:"-"` // root working directory; set post-init by server
-	coordinatorReg *coordinatorRegistry `json:"-"` // set by Server after workers are created
+	mu             sync.RWMutex              `json:"-"`
+	dir            string                    `json:"-"`
+	workingDir     string                    `json:"-"` // root working directory; set post-init by server
+	coordinatorReg *coordinatorRegistry      `json:"-"` // set by Server after workers are created
+	beadIndexMu    sync.RWMutex              `json:"-"`
+	beadIndex      map[string]beadIndexEntry `json:"-"`
 }
 
 const stateSchemaVersion = "1"

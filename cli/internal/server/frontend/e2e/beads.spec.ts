@@ -169,6 +169,7 @@ test('TC-014: clicking a bead row opens its detail panel', async ({ page }) => {
 	// URL should now include the beadId
 	await expect(page).toHaveURL(/\/beads\/bead-001/);
 	// Detail panel content should appear
+	await expect(page.getByRole('heading', { name: 'First bead' })).toBeVisible({ timeout: 1000 });
 	await expect(page.getByText('A test description')).toBeVisible();
 });
 

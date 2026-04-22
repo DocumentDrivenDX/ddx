@@ -50,6 +50,7 @@ type StateProvider interface {
 	GetProjectSnapshots(includeUnreachable bool) []*Project
 	GetProjectSnapshotByID(id string) (*Project, bool)
 	GetBeadSnapshots(status, label, projectID, search string) []BeadSnapshot
+	GetBeadSnapshot(id string) (*BeadSnapshot, bool)
 
 	// Worker queries
 	GetWorkersGraphQL(projectID string) []*Worker

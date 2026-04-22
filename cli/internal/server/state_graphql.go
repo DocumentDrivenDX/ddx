@@ -45,6 +45,11 @@ func (s *ServerState) GetProjectSnapshotByID(id string) (*ddxgraphql.Project, bo
 	return projectEntryToGQL(entry), true
 }
 
+type beadIndexEntry struct {
+	ProjectID   string
+	ProjectPath string
+}
+
 // GetBeadSnapshots implements ddxgraphql.StateProvider.
 func (s *ServerState) GetBeadSnapshots(status, label, projectID, search string) []ddxgraphql.BeadSnapshot {
 	projects := s.GetProjects()
@@ -71,37 +76,104 @@ func (s *ServerState) GetBeadSnapshots(status, label, projectID, search string) 
 					continue
 				}
 			}
-			snap := ddxgraphql.BeadSnapshot{
-				ProjectID:   proj.ID,
-				ID:          b.ID,
-				Title:       b.Title,
-				Status:      b.Status,
-				Priority:    b.Priority,
-				IssueType:   b.IssueType,
-				Owner:       b.Owner,
-				CreatedAt:   b.CreatedAt,
-				CreatedBy:   b.CreatedBy,
-				UpdatedAt:   b.UpdatedAt,
-				Labels:      b.Labels,
-				Parent:      b.Parent,
-				Description: b.Description,
-				Acceptance:  b.Acceptance,
-				Notes:       b.Notes,
-			}
-			for _, d := range b.Dependencies {
-				snap.Dependencies = append(snap.Dependencies, ddxgraphql.BeadDependencySnapshot{
-					IssueID:     d.IssueID,
-					DependsOnID: d.DependsOnID,
-					Type:        d.Type,
-					CreatedAt:   d.CreatedAt,
-					CreatedBy:   d.CreatedBy,
-					Metadata:    d.Metadata,
-				})
-			}
+			s.rememberBeadLocation(b.ID, proj)
+			snap := beadSnapshotFromStoreBead(proj.ID, b)
 			result = append(result, snap)
 		}
 	}
 	return result
+}
+
+// GetBeadSnapshot implements ddxgraphql.StateProvider.
+func (s *ServerState) GetBeadSnapshot(id string) (*ddxgraphql.BeadSnapshot, bool) {
+	if id == "" {
+		return nil, false
+	}
+
+	if loc, ok := s.lookupBeadLocation(id); ok {
+		proj := ProjectEntry{ID: loc.ProjectID, Path: loc.ProjectPath}
+		if snap, ok := readBeadSnapshotFromProject(proj, id); ok {
+			return snap, true
+		}
+		s.forgetBeadLocation(id)
+	}
+
+	for _, proj := range s.GetProjects() {
+		if snap, ok := readBeadSnapshotFromProject(proj, id); ok {
+			s.rememberBeadLocation(id, proj)
+			return snap, true
+		}
+	}
+	return nil, false
+}
+
+func (s *ServerState) rememberBeadLocation(id string, proj ProjectEntry) {
+	if id == "" || proj.ID == "" || proj.Path == "" {
+		return
+	}
+	s.beadIndexMu.Lock()
+	defer s.beadIndexMu.Unlock()
+	if s.beadIndex == nil {
+		s.beadIndex = make(map[string]beadIndexEntry)
+	}
+	s.beadIndex[id] = beadIndexEntry{ProjectID: proj.ID, ProjectPath: proj.Path}
+}
+
+func (s *ServerState) lookupBeadLocation(id string) (beadIndexEntry, bool) {
+	s.beadIndexMu.RLock()
+	defer s.beadIndexMu.RUnlock()
+	if s.beadIndex == nil {
+		return beadIndexEntry{}, false
+	}
+	loc, ok := s.beadIndex[id]
+	return loc, ok
+}
+
+func (s *ServerState) forgetBeadLocation(id string) {
+	s.beadIndexMu.Lock()
+	defer s.beadIndexMu.Unlock()
+	delete(s.beadIndex, id)
+}
+
+func readBeadSnapshotFromProject(proj ProjectEntry, id string) (*ddxgraphql.BeadSnapshot, bool) {
+	store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
+	b, err := store.Get(id)
+	if err != nil {
+		return nil, false
+	}
+	snap := beadSnapshotFromStoreBead(proj.ID, *b)
+	return &snap, true
+}
+
+func beadSnapshotFromStoreBead(projectID string, b bead.Bead) ddxgraphql.BeadSnapshot {
+	snap := ddxgraphql.BeadSnapshot{
+		ProjectID:   projectID,
+		ID:          b.ID,
+		Title:       b.Title,
+		Status:      b.Status,
+		Priority:    b.Priority,
+		IssueType:   b.IssueType,
+		Owner:       b.Owner,
+		CreatedAt:   b.CreatedAt,
+		CreatedBy:   b.CreatedBy,
+		UpdatedAt:   b.UpdatedAt,
+		Labels:      b.Labels,
+		Parent:      b.Parent,
+		Description: b.Description,
+		Acceptance:  b.Acceptance,
+		Notes:       b.Notes,
+	}
+	for _, d := range b.Dependencies {
+		snap.Dependencies = append(snap.Dependencies, ddxgraphql.BeadDependencySnapshot{
+			IssueID:     d.IssueID,
+			DependsOnID: d.DependsOnID,
+			Type:        d.Type,
+			CreatedAt:   d.CreatedAt,
+			CreatedBy:   d.CreatedBy,
+			Metadata:    d.Metadata,
+		})
+	}
+	return snap
 }
 
 func projectEntryToGQL(e ProjectEntry) *ddxgraphql.Project {

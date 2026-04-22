@@ -191,6 +191,16 @@ func (p *testStateProvider) GetBeadSnapshots(status, label, projectID, search st
 	return out
 }
 
+func (p *testStateProvider) GetBeadSnapshot(id string) (*ddxgraphql.BeadSnapshot, bool) {
+	for _, b := range p.beads {
+		if b.ID == id {
+			snap := b
+			return &snap, true
+		}
+	}
+	return nil, false
+}
+
 // No-op implementations for resolver methods not exercised by these tests.
 func (p *testStateProvider) GetWorkersGraphQL(_ string) []*ddxgraphql.Worker { return nil }
 func (p *testStateProvider) GetWorkerGraphQL(_ string) (*ddxgraphql.Worker, bool) {
