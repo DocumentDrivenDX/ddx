@@ -3,6 +3,21 @@ import { GraphQLClient } from 'graphql-request';
 const EMPTY_PAGE_INFO = { hasNextPage: false, endCursor: null };
 const FALLBACK_NODE = { id: 'local-node', name: 'Local Node' };
 const FALLBACK_PROJECT = { id: 'local-project', name: 'Local Project', path: '/' };
+const FALLBACK_PLUGIN = {
+	name: 'helix',
+	version: '1.4.2',
+	installedVersion: '1.4.2',
+	type: 'workflow',
+	description: 'HELIX methodology: phases, gates, supervisory dispatch',
+	keywords: ['workflow', 'methodology'],
+	status: 'installed',
+	registrySource: 'builtin',
+	diskBytes: 4200000,
+	manifest: '{"name":"helix","version":"1.4.2"}',
+	skills: ['helix-align', 'helix-plan'],
+	prompts: ['drain-queue', 'run-checks'],
+	templates: ['FEAT-spec']
+};
 
 function fallbackDataForQuery(query: string): object | null {
 	const data: Record<string, unknown> = {};
@@ -40,11 +55,7 @@ function fallbackDataForQuery(query: string): object | null {
 	}
 
 	if (query.includes('personas')) {
-		data.personas = {
-			edges: [],
-			pageInfo: EMPTY_PAGE_INFO,
-			totalCount: 0
-		};
+		data.personas = [];
 	}
 
 	if (query.includes('agentSessions')) {
@@ -52,6 +63,64 @@ function fallbackDataForQuery(query: string): object | null {
 			edges: [],
 			pageInfo: EMPTY_PAGE_INFO,
 			totalCount: 0
+		};
+	}
+
+	if (query.includes('queueSummary')) {
+		data.queueSummary = { ready: 0, blocked: 0, inProgress: 0 };
+	}
+
+	if (query.includes('workerDispatch')) {
+		data.workerDispatch = { id: 'worker-preview', state: 'queued', kind: 'execute-loop' };
+	}
+
+	if (query.includes('efficacyRows')) {
+		data.efficacyRows = [];
+	}
+
+	if (query.includes('efficacyAttempts')) {
+		data.efficacyAttempts = { rowKey: '', attempts: [] };
+	}
+
+	if (query.includes('comparisons')) {
+		data.comparisons = [];
+	}
+
+	if (query.includes('comparisonDispatch')) {
+		data.comparisonDispatch = { id: 'cmp-preview', state: 'queued', armCount: 0 };
+	}
+
+	if (query.includes('projectBindings')) {
+		data.projectBindings = '{}';
+	}
+
+	if (query.includes('personaBind')) {
+		data.personaBind = { ok: true, role: '', persona: '' };
+	}
+
+	if (query.includes('pluginsList')) {
+		data.pluginsList = [FALLBACK_PLUGIN];
+	}
+
+	if (query.includes('pluginDetail')) {
+		data.pluginDetail = FALLBACK_PLUGIN;
+	}
+
+	if (query.includes('pluginDispatch')) {
+		data.pluginDispatch = { id: 'worker-plugin-preview', state: 'queued', action: 'install' };
+	}
+
+	if (query.includes('paletteSearch')) {
+		data.paletteSearch = { documents: [], beads: [], actions: [], navigation: [] };
+	}
+
+	if (query.includes('beadClose')) {
+		data.beadClose = {
+			id: 'preview-bead',
+			title: 'Preview bead',
+			status: 'closed',
+			priority: 2,
+			issueType: 'task'
 		};
 	}
 

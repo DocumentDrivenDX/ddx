@@ -256,13 +256,14 @@ func workerFromRecord(rec WorkerRecord) *ddxgraphql.Worker {
 	successes := rec.Successes
 	failures := rec.Failures
 	w := &ddxgraphql.Worker{
-		ID:          rec.ID,
-		Kind:        rec.Kind,
-		State:       rec.State,
-		ProjectRoot: rec.ProjectRoot,
-		Attempts:    &attempts,
-		Successes:   &successes,
-		Failures:    &failures,
+		ID:           rec.ID,
+		Kind:         rec.Kind,
+		State:        rec.State,
+		ProjectRoot:  rec.ProjectRoot,
+		Attempts:     &attempts,
+		Successes:    &successes,
+		Failures:     &failures,
+		RecentEvents: []*ddxgraphql.WorkerRecentEvent{},
 	}
 	if rec.Status != "" {
 		w.Status = &rec.Status

@@ -49,6 +49,13 @@ query WorkerDetail($id: ID!) {
 			startedAt
 			elapsedMs
 		}
+		recentEvents {
+			kind
+			text
+			name
+			inputs
+			output
+		}
 	}
 }
 

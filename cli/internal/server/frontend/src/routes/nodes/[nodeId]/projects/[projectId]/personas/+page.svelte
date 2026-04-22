@@ -6,10 +6,10 @@
 	let selectedId = $state<string | null>(null);
 	let selected = $derived.by(() => {
 		if (selectedId !== null) {
-			const match = data.personas.edges.find((e) => e.node.id === selectedId);
-			if (match) return match.node;
+			const match = data.personas.find((p) => p.id === selectedId);
+			if (match) return match;
 		}
-		return data.personas.edges.length > 0 ? data.personas.edges[0].node : null;
+		return data.personas.length > 0 ? data.personas[0] : null;
 	});
 
 	function fmtDate(iso: string | null): string {
@@ -25,11 +25,10 @@
 			class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700"
 		>
 			<h1 class="text-sm font-semibold dark:text-white">Personas</h1>
-			<span class="text-xs text-gray-700 dark:text-gray-300">{data.personas.totalCount}</span>
+			<span class="text-xs text-gray-700 dark:text-gray-300">{data.personas.length}</span>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
-			{#each data.personas.edges as edge (edge.cursor)}
-				{@const p = edge.node}
+			{#each data.personas as p (p.id)}
 				<button
 					onclick={() => (selectedId = p.id)}
 					class="w-full border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 {selected?.id ===
@@ -45,7 +44,7 @@
 					{/if}
 				</button>
 			{/each}
-			{#if data.personas.edges.length === 0}
+			{#if data.personas.length === 0}
 				<div class="px-4 py-8 text-center text-xs text-gray-700 dark:text-gray-300">
 					No personas found.
 				</div>
@@ -104,6 +103,20 @@
 							</div>
 						</div>
 					{/if}
+					{#if selected.bindings.length > 0}
+						<div class="col-span-2 sm:col-span-3">
+							<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Bindings</div>
+							<div class="mt-1 flex flex-wrap gap-1">
+								{#each selected.bindings as binding}
+									<span
+										class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+									>
+										{binding.projectId}: {binding.role}
+									</span>
+								{/each}
+							</div>
+						</div>
+					{/if}
 				</div>
 
 				<!-- Content -->
@@ -112,7 +125,7 @@
 						Prompt / Instructions
 					</div>
 					<pre
-						class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{selected.content}</pre>
+						class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{selected.body}</pre>
 				</div>
 			</div>
 		{:else}

@@ -375,6 +375,38 @@ type CommitEdge struct {
 	Cursor string `json:"cursor"`
 }
 
+// ComparisonArmInput is one requested comparison arm.
+type ComparisonArmInput struct {
+	// Agent harness
+	Harness *string `json:"harness,omitempty"`
+	// Provider name
+	Provider *string `json:"provider,omitempty"`
+	// Model identifier
+	Model string `json:"model"`
+	// Prompt or task text
+	Prompt string `json:"prompt"`
+}
+
+// ComparisonDispatchResult describes a queued model comparison.
+type ComparisonDispatchResult struct {
+	// Comparison identifier
+	ID string `json:"id"`
+	// Queued/running state
+	State string `json:"state"`
+	// Number of configured arms
+	ArmCount int `json:"armCount"`
+}
+
+// ComparisonRecord is a queued or completed model comparison.
+type ComparisonRecord struct {
+	// Comparison identifier
+	ID string `json:"id"`
+	// Comparison state
+	State string `json:"state"`
+	// Number of configured arms
+	ArmCount int `json:"armCount"`
+}
+
 // ComparisonResult records a metric comparison against a baseline
 type ComparisonResult struct {
 	// Baseline value being compared against
@@ -674,6 +706,64 @@ type DocumentReview struct {
 	ReviewedAt string `json:"reviewedAt"`
 }
 
+// EfficacyAttempt is one historical attempt for an efficacy row.
+type EfficacyAttempt struct {
+	// Bead identifier
+	BeadID string `json:"beadId"`
+	// Attempt outcome
+	Outcome string `json:"outcome"`
+	// Duration in milliseconds
+	DurationMs int `json:"durationMs"`
+	// Cost in USD when known
+	CostUsd *float64 `json:"costUsd,omitempty"`
+	// Execution evidence URL or path
+	EvidenceBundleURL string `json:"evidenceBundleUrl"`
+}
+
+// EfficacyAttempts groups attempt details for a row.
+type EfficacyAttempts struct {
+	// Stable row key
+	RowKey string `json:"rowKey"`
+	// Attempts in newest-first order
+	Attempts []*EfficacyAttempt `json:"attempts"`
+}
+
+// EfficacyRow summarizes agent performance for one harness/provider/model tuple.
+type EfficacyRow struct {
+	// Stable row key
+	RowKey string `json:"rowKey"`
+	// Agent harness
+	Harness string `json:"harness"`
+	// Provider name
+	Provider string `json:"provider"`
+	// Model identifier
+	Model string `json:"model"`
+	// Attempt count
+	Attempts int `json:"attempts"`
+	// Successful attempt count
+	Successes int `json:"successes"`
+	// Successes divided by attempts
+	SuccessRate float64 `json:"successRate"`
+	// Median input tokens
+	MedianInputTokens int `json:"medianInputTokens"`
+	// Median output tokens
+	MedianOutputTokens int `json:"medianOutputTokens"`
+	// Median duration in milliseconds
+	MedianDurationMs int `json:"medianDurationMs"`
+	// Median cost in USD when known
+	MedianCostUsd *float64 `json:"medianCostUsd,omitempty"`
+	// Optional warning metadata
+	Warning *EfficacyWarning `json:"warning,omitempty"`
+}
+
+// EfficacyWarning flags a model row that needs operator attention.
+type EfficacyWarning struct {
+	// Warning kind
+	Kind string `json:"kind"`
+	// Numeric threshold involved in the warning
+	Threshold *float64 `json:"threshold,omitempty"`
+}
+
 // Evaluation holds interpretation rules for execution results
 type Evaluation struct {
 	// Comparison operator (e.g. "lt", "gt", "eq")
@@ -947,6 +1037,42 @@ type PageInfo struct {
 	EndCursor *string `json:"endCursor,omitempty"`
 }
 
+// PaletteActionResult is an executable action in the command palette.
+type PaletteActionResult struct {
+	Kind  string `json:"kind"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// PaletteBeadResult is a bead match for the command palette.
+type PaletteBeadResult struct {
+	Kind  string `json:"kind"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// PaletteDocumentResult is a document match for the command palette.
+type PaletteDocumentResult struct {
+	Kind  string `json:"kind"`
+	Path  string `json:"path"`
+	Title string `json:"title"`
+}
+
+// PaletteNavigationResult is a navigation target in the command palette.
+type PaletteNavigationResult struct {
+	Kind  string `json:"kind"`
+	Route string `json:"route"`
+	Title string `json:"title"`
+}
+
+// PaletteSearchResults groups command palette result buckets.
+type PaletteSearchResults struct {
+	Documents  []*PaletteDocumentResult   `json:"documents"`
+	Beads      []*PaletteBeadResult       `json:"beads"`
+	Actions    []*PaletteActionResult     `json:"actions"`
+	Navigation []*PaletteNavigationResult `json:"navigation"`
+}
+
 // Persona represents an AI persona definition from the library
 type Persona struct {
 	// Unique persona identifier
@@ -961,6 +1087,12 @@ type Persona struct {
 	Tags []string `json:"tags"`
 	// Full persona prompt/instruction text
 	Content string `json:"content"`
+	// Markdown body for frontend detail views
+	Body string `json:"body"`
+	// Persona source package or plugin
+	Source string `json:"source"`
+	// Known project bindings for this persona
+	Bindings []*PersonaBinding `json:"bindings"`
 	// Filesystem path to the persona definition file
 	FilePath *string `json:"filePath,omitempty"`
 	// Last modification time of the persona file
@@ -971,6 +1103,26 @@ func (Persona) IsNode() {}
 
 // Globally unique identifier
 func (this Persona) GetID() string { return this.ID }
+
+// PersonaBindResult reports a persona binding write.
+type PersonaBindResult struct {
+	// True when the binding was accepted
+	Ok bool `json:"ok"`
+	// Role name bound
+	Role string `json:"role"`
+	// Persona assigned to the role
+	Persona string `json:"persona"`
+}
+
+// PersonaBinding records one role binding for a persona
+type PersonaBinding struct {
+	// Project identifier containing the binding
+	ProjectID string `json:"projectId"`
+	// Role name bound to the persona
+	Role string `json:"role"`
+	// Persona name assigned to the role
+	Persona string `json:"persona"`
+}
 
 // PersonaConnection is a Relay cursor connection of personas
 type PersonaConnection struct {
@@ -998,6 +1150,46 @@ type PhaseTransition struct {
 	Ts string `json:"ts"`
 	// Sequence number of this phase
 	PhaseSeq int `json:"phaseSeq"`
+}
+
+// PluginDispatchResult describes the worker started by a plugin action.
+type PluginDispatchResult struct {
+	// Worker identifier
+	ID string `json:"id"`
+	// Queued/running state
+	State string `json:"state"`
+	// Plugin action requested
+	Action string `json:"action"`
+}
+
+// PluginInfo describes one plugin registry entry.
+type PluginInfo struct {
+	// Plugin name
+	Name string `json:"name"`
+	// Registry version
+	Version string `json:"version"`
+	// Installed version, if present
+	InstalledVersion *string `json:"installedVersion,omitempty"`
+	// Plugin classification
+	Type string `json:"type"`
+	// Short description
+	Description string `json:"description"`
+	// Search keywords
+	Keywords []string `json:"keywords"`
+	// available, installed, or update-available
+	Status string `json:"status"`
+	// Registry source
+	RegistrySource string `json:"registrySource"`
+	// Approximate disk footprint
+	DiskBytes int `json:"diskBytes"`
+	// Manifest encoded as JSON text
+	Manifest *string `json:"manifest,omitempty"`
+	// Skill names exposed by the plugin
+	Skills []string `json:"skills"`
+	// Prompt names exposed by the plugin
+	Prompts []string `json:"prompts"`
+	// Template names exposed by the plugin
+	Templates []string `json:"templates"`
 }
 
 // Project represents a registered ddx project on this node
@@ -1105,6 +1297,16 @@ type ProviderStatus struct {
 
 // Query is the root entry point for all read operations
 type Query struct {
+}
+
+// QueueSummary is a compact project queue status for action dispatch.
+type QueueSummary struct {
+	// Open beads with no unmet dependencies
+	Ready int `json:"ready"`
+	// Open beads blocked by unmet dependencies
+	Blocked int `json:"blocked"`
+	// Beads currently claimed or executing
+	InProgress int `json:"inProgress"`
 }
 
 // ReadyCheck represents one subsystem readiness check
@@ -1321,6 +1523,8 @@ type Worker struct {
 	LastAttempt *LastAttemptInfo `json:"lastAttempt,omitempty"`
 	// Land coordinator metrics for this worker's project
 	LandSummary *CoordinatorMetrics `json:"landSummary,omitempty"`
+	// Recent streamed response events captured for the worker detail view
+	RecentEvents []*WorkerRecentEvent `json:"recentEvents"`
 }
 
 func (Worker) IsNode() {}
@@ -1336,6 +1540,16 @@ type WorkerConnection struct {
 	PageInfo *PageInfo `json:"pageInfo"`
 	// Total number of workers matching the filter
 	TotalCount int `json:"totalCount"`
+}
+
+// WorkerDispatchResult describes the worker started by an action.
+type WorkerDispatchResult struct {
+	// Worker identifier
+	ID string `json:"id"`
+	// Queued/running state
+	State string `json:"state"`
+	// Worker kind
+	Kind string `json:"kind"`
 }
 
 // WorkerEdge is one edge in a WorkerConnection
@@ -1396,4 +1610,18 @@ type WorkerLog struct {
 	Stdout string `json:"stdout"`
 	// Captured standard error
 	Stderr string `json:"stderr"`
+}
+
+// WorkerRecentEvent is one captured response frame in worker detail history
+type WorkerRecentEvent struct {
+	// Event kind: text_delta or tool_call
+	Kind string `json:"kind"`
+	// Text content for text_delta events
+	Text *string `json:"text,omitempty"`
+	// Tool name for tool_call events
+	Name *string `json:"name,omitempty"`
+	// Tool call input payload encoded as JSON text
+	Inputs *string `json:"inputs,omitempty"`
+	// Tool call output text
+	Output *string `json:"output,omitempty"`
 }

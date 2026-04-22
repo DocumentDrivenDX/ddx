@@ -486,25 +486,25 @@ func TestGraphQLPersonas(t *testing.T) {
 
 	srv := New(":0", workDir)
 
-	// Query.personas — Relay connection over all personas in the library.
-	body := gqlPost(t, srv, `{ personas { edges { node { id name roles description } cursor } pageInfo { hasNextPage } totalCount } }`)
+	// Query.personas — flat array over all personas in the library.
+	body := gqlPost(t, srv, `{ personas { id name roles description body source bindings { projectId role persona } } }`)
 	if errs := gqlErrors(body); len(errs) > 0 {
 		t.Fatalf("personas GraphQL errors: %v", errs)
 	}
 	var resp struct {
 		Data struct {
-			Personas struct {
-				Edges []struct {
-					Node struct {
-						ID          string   `json:"id"`
-						Name        string   `json:"name"`
-						Roles       []string `json:"roles"`
-						Description string   `json:"description"`
-					} `json:"node"`
-					Cursor string `json:"cursor"`
-				} `json:"edges"`
-				PageInfo   struct{ HasNextPage bool } `json:"pageInfo"`
-				TotalCount int                        `json:"totalCount"`
+			Personas []struct {
+				ID          string   `json:"id"`
+				Name        string   `json:"name"`
+				Roles       []string `json:"roles"`
+				Description string   `json:"description"`
+				Body        string   `json:"body"`
+				Source      string   `json:"source"`
+				Bindings    []struct {
+					ProjectID string `json:"projectId"`
+					Role      string `json:"role"`
+					Persona   string `json:"persona"`
+				} `json:"bindings"`
 			} `json:"personas"`
 		} `json:"data"`
 	}
@@ -514,25 +514,31 @@ func TestGraphQLPersonas(t *testing.T) {
 	// The library directory also contains reviewer.md (no frontmatter) — it is
 	// skipped. Only test-reviewer.md with valid frontmatter should appear.
 	foundTestReviewer := false
-	for _, e := range resp.Data.Personas.Edges {
-		if e.Node.Name == "test-reviewer" {
+	for _, p := range resp.Data.Personas {
+		if p.Name == "test-reviewer" {
 			foundTestReviewer = true
-			if e.Node.ID != "persona-test-reviewer" {
-				t.Errorf("expected id=persona-test-reviewer, got %q", e.Node.ID)
+			if p.ID != "persona-test-reviewer" {
+				t.Errorf("expected id=persona-test-reviewer, got %q", p.ID)
 			}
-			if len(e.Node.Roles) == 0 || e.Node.Roles[0] != "code-reviewer" {
-				t.Errorf("expected roles=[code-reviewer], got %v", e.Node.Roles)
+			if len(p.Roles) == 0 || p.Roles[0] != "code-reviewer" {
+				t.Errorf("expected roles=[code-reviewer], got %v", p.Roles)
 			}
-			if e.Node.Description != "Test code reviewer persona" {
-				t.Errorf("expected description=%q, got %q", "Test code reviewer persona", e.Node.Description)
+			if p.Description != "Test code reviewer persona" {
+				t.Errorf("expected description=%q, got %q", "Test code reviewer persona", p.Description)
 			}
-			if e.Node.Name != "test-reviewer" {
-				t.Errorf("expected name=test-reviewer, got %q", e.Node.Name)
+			if p.Name != "test-reviewer" {
+				t.Errorf("expected name=test-reviewer, got %q", p.Name)
+			}
+			if p.Body == "" {
+				t.Error("expected non-empty persona body")
+			}
+			if p.Source == "" {
+				t.Error("expected non-empty persona source")
 			}
 		}
 	}
 	if !foundTestReviewer {
-		t.Errorf("test-reviewer not found in personas response (totalCount=%d)", resp.Data.Personas.TotalCount)
+		t.Errorf("test-reviewer not found in personas response (count=%d)", len(resp.Data.Personas))
 	}
 
 	// Query.persona(name) — fetch by name.

@@ -63,6 +63,24 @@
 		const s = Math.floor((ms % 60000) / 1000);
 		return `${m}m${s}s`;
 	}
+
+	function inputText(input: unknown): string {
+		if (input == null) return '';
+		if (typeof input === 'string') return input;
+		return JSON.stringify(input);
+	}
+
+	function toolLabel(event: { name: string | null; inputs: unknown }): string {
+		const details = inputText(event.inputs);
+		return details ? `${event.name ?? 'tool'} ${details}` : (event.name ?? 'tool');
+	}
+
+	const isTerminal = $derived(
+		data.worker?.state === 'done' ||
+			data.worker?.state === 'exited' ||
+			data.worker?.state === 'stopped' ||
+			Boolean(data.worker?.finishedAt)
+	);
 </script>
 
 {#if data.worker}
@@ -78,7 +96,7 @@
 
 	<!-- Detail panel -->
 	<div
-		class="fixed right-0 top-0 z-50 flex h-full w-full max-w-2xl flex-col bg-white shadow-xl dark:bg-gray-900"
+		class="fixed top-0 right-0 z-50 flex h-full w-full max-w-2xl flex-col bg-white shadow-xl dark:bg-gray-900"
 	>
 		<!-- Header -->
 		<div
@@ -163,6 +181,49 @@
 			{/if}
 		</div>
 
+		{#if data.worker.recentEvents.length > 0}
+			<section
+				aria-label="Live response"
+				aria-live="polite"
+				class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700"
+			>
+				<div class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">Live response</div>
+				<div class="space-y-2 text-gray-800 dark:text-gray-200">
+					<p class="whitespace-pre-wrap">
+						{#each data.worker.recentEvents as event}
+							{#if event.kind === 'text_delta' && event.text}
+								{event.text}
+							{/if}
+						{/each}
+					</p>
+					{#each data.worker.recentEvents as event}
+						{#if event.kind === 'tool_call'}
+							<details class="rounded border border-gray-200 dark:border-gray-700">
+								<summary
+									class="cursor-pointer px-3 py-2 font-mono text-xs text-gray-700 dark:text-gray-200"
+								>
+									{toolLabel(event)}
+								</summary>
+								<pre
+									class="overflow-x-auto border-t border-gray-200 p-3 text-xs whitespace-pre-wrap dark:border-gray-700">{event.output}</pre>
+							</details>
+						{/if}
+					{/each}
+					{#if isTerminal}
+						<p class="text-xs text-gray-600 dark:text-gray-400">
+							Completed at {data.worker.finishedAt ?? 'terminal state'}.
+							<a
+								class="text-blue-600 hover:underline dark:text-blue-400"
+								href={`/executions/${data.worker.id}/result.json`}
+							>
+								Evidence bundle
+							</a>
+						</p>
+					{/if}
+				</div>
+			</section>
+		{/if}
+
 		<!-- Log area -->
 		<div class="flex min-h-0 flex-1 flex-col">
 			<div
@@ -188,9 +249,8 @@
 			<pre
 				bind:this={logContainer}
 				onscroll={handleScroll}
-				class="flex-1 overflow-auto bg-gray-950 px-4 py-3 font-mono text-xs leading-relaxed text-green-400 dark:text-green-300"
-			>{#if logLines.length === 0}<span class="text-gray-600 dark:text-gray-500"
-						>No log output yet…</span
+				class="flex-1 overflow-auto bg-gray-950 px-4 py-3 font-mono text-xs leading-relaxed text-green-400 dark:text-green-300">{#if logLines.length === 0}<span
+						class="text-gray-600 dark:text-gray-500">No log output yet…</span
 					>{:else}{logLines.join('\n')}{/if}</pre>
 		</div>
 	</div>
