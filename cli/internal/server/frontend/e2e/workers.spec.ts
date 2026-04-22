@@ -286,3 +286,108 @@ test('TC-048: WorkerProgress subscription is attempted for running workers', asy
 	const runningRows = page.locator('td').filter({ hasText: 'running' });
 	await expect(runningRows).toHaveCount(1);
 });
+
+// -----------------------------------------------------------------------
+// FEAT-008 US-086a: streaming agent response text + tool-call cards
+// -----------------------------------------------------------------------
+
+test('US-086a.a: worker detail renders a Live Response panel while running', async ({ page }) => {
+	// This test exercises the presence of the live-response UI affordance. The
+	// actual WebSocket text_delta stream is exercised under a real server in
+	// demo-recording.spec.ts; the unit-level e2e asserts that the component
+	// renders with an initial empty state + ARIA live region so screen readers
+	// announce streaming updates.
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('worker(') || body.query.includes('Worker(')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { worker: WORKER_DETAIL } }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(`${BASE_URL}/${WORKER_DETAIL.id}`);
+
+	const liveResponse = page.getByRole('region', { name: /live response/i });
+	await expect(liveResponse).toBeVisible();
+	await expect(liveResponse).toHaveAttribute('aria-live', /polite|assertive/);
+});
+
+test('US-086a.b: tool calls render as collapsible cards interleaved with text', async ({ page }) => {
+	// Fixture: the worker detail query returns a recent_events array
+	// that includes text_delta + tool_call frames; the component renders
+	// them in delivery order.
+	const WORKER_WITH_EVENTS = {
+		...WORKER_DETAIL,
+		recentEvents: [
+			{ kind: 'text_delta', text: 'Looking at ' },
+			{ kind: 'text_delta', text: 'the bead spec.\n\n' },
+			{
+				kind: 'tool_call',
+				name: 'read',
+				inputs: { path: 'docs/helix/01-frame/prd.md' },
+				output: 'PRD content...'
+			},
+			{ kind: 'text_delta', text: 'Now I understand.' }
+		]
+	};
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('worker(') || body.query.includes('Worker(')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { worker: WORKER_WITH_EVENTS } }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(`${BASE_URL}/${WORKER_DETAIL.id}`);
+
+	const live = page.getByRole('region', { name: /live response/i });
+	await expect(live.getByText(/Looking at the bead spec/)).toBeVisible();
+
+	const toolCard = live.getByRole('button', { name: /read .* prd\.md/i }).first();
+	await expect(toolCard).toBeVisible();
+	await toolCard.click();
+	await expect(live.getByText(/PRD content/)).toBeVisible();
+
+	await expect(live.getByText(/Now I understand/)).toBeVisible();
+});
+
+test('US-086a.c: terminal-phase worker freezes stream with completion timestamp', async ({ page }) => {
+	const DONE_WORKER = {
+		...WORKER_DETAIL,
+		state: 'done',
+		status: 'success',
+		finishedAt: '2026-01-01T10:15:00Z',
+		currentAttempt: null,
+		recentEvents: [{ kind: 'text_delta', text: 'Done.' }]
+	};
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('worker(') || body.query.includes('Worker(')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { worker: DONE_WORKER } }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(`${BASE_URL}/${WORKER_DETAIL.id}`);
+	const live = page.getByRole('region', { name: /live response/i });
+	await expect(live.getByText(/completed at/i)).toBeVisible();
+	// Link to the evidence bundle
+	await expect(live.getByRole('link', { name: /evidence bundle/i })).toBeVisible();
+});

@@ -14,9 +14,11 @@
 		"format": "prettier --write .",
 		"test:unit": "vitest",
 		"test": "bun run test:unit -- --run && bun run test:e2e",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"test:a11y": "playwright test e2e/a11y.spec.ts"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "^4.10.0",
 		"@eslint/compat": "^2.0.4",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.59.1",

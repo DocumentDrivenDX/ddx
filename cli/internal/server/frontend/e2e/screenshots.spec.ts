@@ -4,61 +4,40 @@ import { test, expect } from '@playwright/test'
 // These capture each page for visual review and regression detection.
 // Run: bunx playwright test e2e/screenshots.spec.ts --update-snapshots
 // to update baselines after intentional changes.
+//
+// Dark/light parity is a FEAT-008 frontend-design gate
+// (docs/helix/01-frame/concerns.md#frontend-design). Every page is
+// snapshotted in both modes; any theme-specific palette drift fails CI.
+
+const PAGES = [
+  { path: '/', name: 'dashboard', ready: 'h1', maskStarted: true, tolerance: 0.02 },
+  { path: '/beads', name: 'beads-kanban', ready: 'text=OPEN', tolerance: 0.04 },
+  { path: '/documents', name: 'documents', ready: 'h1', tolerance: 0.02 },
+  { path: '/graph', name: 'graph', ready: 'h1', tolerance: 0.06 },
+  { path: '/agent', name: 'agent', ready: 'h1', tolerance: 0.04 },
+  { path: '/personas', name: 'personas', ready: 'text=Personas', tolerance: 0.04 },
+] as const
+
+const MODES = ['light', 'dark'] as const
 
 test.describe('DDx Server UI Screenshots', () => {
-  test('dashboard', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForSelector('h1')
-    // Wait for API data to load
-    await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('dashboard.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.02,
-      mask: [page.locator('text=/^Started:/')],
-    })
-  })
+  for (const mode of MODES) {
+    for (const pg of PAGES) {
+      test(`${pg.name} (${mode})`, async ({ page }) => {
+        await page.addInitScript((m) => {
+          window.localStorage.setItem('mode-watcher-mode', m)
+        }, mode)
 
-  test('beads kanban board', async ({ page }) => {
-    await page.goto('/beads')
-    await page.waitForSelector('text=OPEN')
-    await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('beads-kanban.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.04,
-    })
-  })
+        await page.goto(pg.path)
+        await page.waitForSelector(pg.ready)
+        await page.waitForTimeout(500)
 
-  test('documents page', async ({ page }) => {
-    await page.goto('/documents')
-    await page.waitForSelector('h1')
-    await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('documents.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.02,
-    })
-  })
-
-  test('graph page', async ({ page }) => {
-    await page.goto('/graph')
-    await page.waitForSelector('h1')
-    await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('graph.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.06,
-    })
-  })
-
-  test('agent page', async ({ page }) => {
-    await page.goto('/agent')
-    await page.waitForSelector('h1')
-    await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('agent.png', { fullPage: true })
-  })
-
-  test('personas page', async ({ page }) => {
-    await page.goto('/personas')
-    await page.waitForSelector('text=Personas')
-    await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('personas.png', { fullPage: true })
-  })
+        await expect(page).toHaveScreenshot(`${pg.name}-${mode}.png`, {
+          fullPage: true,
+          maxDiffPixelRatio: pg.tolerance,
+          mask: pg.maskStarted ? [page.locator('text=/^Started:/')] : undefined,
+        })
+      })
+    }
+  }
 })

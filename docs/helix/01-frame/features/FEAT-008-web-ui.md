@@ -527,6 +527,231 @@ provider logs
 - Given I look at the summary, then I see total tokens consumed by harness and
   by day where a signal source exists
 
+### US-081a: Developer Follows Intra-Repo Markdown Links
+**As a** developer reading one doc and referenced by another
+**I want** markdown links inside the rendered view to navigate to the
+  linked doc within the UI
+**So that** I can traverse the document graph by following the links the
+  author actually wrote, not only the dependency edges
+
+**Acceptance Criteria:**
+- Given a rendered doc contains a link like
+  `[FEAT-006](../features/FEAT-006-agent-service.md)` or
+  `[spec](/docs/helix/02-design/solution-designs/SD-022-gql-svelte-migration.md)`,
+  when I click the link, then I navigate to that doc's detail view in the
+  SAME tab without a full page reload
+- Given I click a link and then hit the browser Back button, then I return
+  to the previous doc with its scroll position restored
+- Given a link points outside the repo (absolute http[s] URL), when I click
+  it, then it opens in a new tab (`target=_blank rel=noopener`) and DOES
+  NOT navigate away from the UI
+- Given a link points to an anchor on the same doc (`#section-id`), when I
+  click it, then the page scrolls to that anchor without changing the route
+
+### US-082g: Developer Sorts and Filters the Beads List
+**As a** developer triaging the backlog
+**I want** to sort and filter the beads list by common criteria
+**So that** I can find what's ready, what's blocked, what's mine, and what
+  was most recently updated without scrolling through hundreds of rows
+
+**Acceptance Criteria:**
+- Given the beads list is open, then sort controls are present for
+  `Priority` (P0 first by default), `Updated`, `Created`, `Title`. Clicking
+  a header toggles asc/desc; active sort is visible.
+- Given I click a status filter chip (Open / Ready / Blocked / In-progress
+  / Closed), then only beads matching that status appear AND the URL
+  updates to `?status=<name>` so the filter is bookmarkable
+- Given I apply multiple filters (e.g. `?status=open&priority=p0`), then
+  all filters compose with AND semantics; the URL reflects every active
+  chip
+- Given I type in the search box with active filters, then the search
+  narrows the already-filtered set (filter scope, not search scope)
+- Given I click a label chip on any bead row, then the list filters to
+  that label; clicking it again removes the filter
+- Given the list is filtered to empty, then a zero-state panel explains
+  the filter combination and offers a "clear filters" affordance
+- Given I reload a URL with filter + sort params, then the same view is
+  restored without interaction
+
+### US-083a: Developer Toggles WYSIWYG vs Plain-Markdown Editor
+**As a** developer editing a doc in the browser
+**I want** to choose between a rich preview-while-editing view and a
+  raw-markdown textarea
+**So that** I can fix a typo in the rendered view or hand-edit frontmatter
+  without a round-trip
+
+**Acceptance Criteria:**
+- Given I'm editing a doc, then a mode toggle is visible with two options:
+  `WYSIWYG` (default) and `Plain`
+- Given I'm in `WYSIWYG` mode, when I toggle to `Plain`, then the editor
+  switches to a monospace textarea containing the exact raw markdown
+  (frontmatter preserved); unsaved edits are retained across the toggle
+- Given I'm in `Plain` mode and I toggle back to `WYSIWYG`, then my raw
+  edits re-render immediately
+- Given the doc has YAML frontmatter, `Plain` mode shows and edits the
+  frontmatter; `WYSIWYG` mode shows a collapsible "Frontmatter" panel
+  above the content
+- Given I save from either mode, then the file is written to disk via
+  `documentWrite` with the raw markdown; the render view refreshes; the
+  doc's "Updated" timestamp advances
+
+### US-085c: Developer Deletes (Soft-Closes) a Bead from the UI
+**As a** developer cleaning up mis-filed beads
+**I want** to delete a bead from the UI
+**So that** mistakes don't pollute the queue
+
+**Acceptance Criteria:**
+- Given I am on a bead's detail panel, then a `Delete` button is visible
+  with destructive styling (icon + danger palette token; not red alone)
+- Given I click `Delete`, then a confirmation modal opens showing the
+  bead ID, title, and a required text field where I type the bead ID to
+  confirm (prevents accidental deletes)
+- Given I confirm, then the bead is soft-closed via the standard close
+  path (status → `closed`, reason recorded as `deleted via UI`); the
+  list refreshes; the detail panel closes; the URL redirects to the
+  beads list
+- Given I cancel the modal, then the bead is unchanged and the modal
+  closes; focus returns to the Delete button
+- Given a bead has active child beads (parent of N open beads), then
+  the confirmation modal surfaces the child count and requires
+  additional `--cascade` checkbox opt-in; canceled by default
+
+### US-086a: Developer Sees Streaming Agent Response Text
+**As a** developer watching an agent work on a bead
+**I want** to see the agent's response content stream in as it's produced
+**So that** I can tell what the agent is doing without tailing log files
+
+**Acceptance Criteria:**
+- Given a worker is in a running phase for a bead, when I open the worker
+  detail, then a "Live response" panel shows accumulated response text,
+  updating as the `workerProgress` subscription delivers `text_delta`
+  frames
+- Given the response contains tool calls, then each tool call is rendered
+  as a collapsible card showing the tool name, inputs, and (once returned)
+  the output, interleaved with text in delivery order
+- Given the worker reaches a terminal phase, then the live-response panel
+  freezes at its final content with a "Completed at HH:MM:SS" timestamp
+  and a link to the execution evidence bundle
+- Given the subscription disconnects mid-stream, then a banner shows
+  "Reconnecting…" and the panel auto-resumes on reconnect without losing
+  the text received so far
+
+### US-095: Operator Initiates Work from the UI
+**As an** operator managing a project without context-switching to a
+  terminal
+**I want** to start common work flows from the UI
+**So that** "drain the queue", "re-align the specs", and "run the tests"
+  are one click away
+
+**Acceptance Criteria:**
+- Given I am on a project view, then an `Actions` panel exposes at
+  minimum three actions:
+  - `Drain queue` — dispatches `ddx work` as a server-side worker
+  - `Re-align specs` — dispatches a HELIX `align` action as a worker
+  - `Run checks` — dispatches the project's execution definitions
+- Given I click an action, then a confirmation dialog shows the expected
+  scope (e.g. "N ready beads will be attempted"); on confirm, the worker
+  is dispatched and appears in the Workers list within 1s
+- Given dispatching fails (e.g. queue already has an active worker of
+  the same kind), then the dialog surfaces the error with a clear
+  remediation hint; no silent failure
+- Given I start an action, then the originating button shows a spinner
+  until the worker is `running`; the button becomes an anchor to that
+  worker's detail
+- Given I lack permission or a prerequisite is missing (no ready beads,
+  no spec tree, no check suite), then the action is disabled with a
+  tooltip explaining the prerequisite
+
+### US-096: Operator Views Model Efficacy and Runs Comparisons
+**As an** operator pursuing the cost-tiered throughput-per-dollar goal
+**I want** to see per-model completion rates, cost, and latency, and run
+  A/B comparisons between prompts or models
+**So that** I can steer the system toward the models and prompts that
+  actually work
+
+**Acceptance Criteria:**
+- Given closed beads carry `kind:cost` + `kind:routing` evidence events,
+  when I open the `Efficacy` view, then a table lists every distinct
+  `(harness, provider, model)` tuple used in the last N days with:
+  success count, attempt count, completion rate, median tokens in/out,
+  median duration, median cost (or `—` when no cost signal)
+- Given I filter by tier / label / spec-id, then the table refilters
+  live; URL encodes the filter for bookmarking
+- Given I click `Compare`, then a dialog lets me pick N `(model, prompt)`
+  pairs; on submit, DDx dispatches `ddx agent compare` and the resulting
+  `ComparisonRecord` appears under `Comparisons` with per-arm outputs,
+  diffs, and (if configured) grader scores
+- Given a model's completion rate crosses the configured adaptive-min-tier
+  floor (trailing-window success rate < threshold), then a warning badge
+  appears on that row with a tooltip linking to the routing metrics doc
+- Given I click a row, then a detail panel shows the last 10 attempts
+  with per-attempt outcome, evidence links, and links to the execution
+  bundles; click-through to the bead that originated each attempt
+
+### US-097: Developer Browses and Binds Personas
+**As a** developer configuring a project for consistent agent behavior
+**I want** to browse available personas in the UI and bind them to roles
+**So that** I don't have to hand-edit `.ddx/config.yaml`
+
+**Acceptance Criteria:**
+- Given personas are installed (via `ddx install` or the DDx default
+  plugin), when I open the `Personas` page, then I see a card per persona
+  with name, role tags, and a short description pulled from the
+  persona file's frontmatter
+- Given a persona's card, when I click it, then I see the full persona
+  body rendered as markdown plus the list of projects currently binding
+  this persona and the role each binds
+- Given I am on a persona detail and I click `Bind to role`, then a form
+  lets me pick a role (code-reviewer, test-engineer, implementer, etc.)
+  and project; submitting writes the binding to `.ddx/config.yaml`'s
+  `persona_bindings` map via a server-side mutation
+- Given a role is already bound in the selected project, then the form
+  warns "This will replace the existing binding: `X`" and requires
+  confirmation before overwriting
+
+### US-098: Operator Browses and Installs Plugins
+**As an** operator setting up DDx for a new project
+**I want** to see available plugins and install one from the UI
+**So that** I don't have to know the exact `ddx install <name>` invocation
+
+**Acceptance Criteria:**
+- Given the `Plugins` page is open, then I see all plugins from the
+  built-in registry plus any configured additional registries, with
+  name, version, type (workflow / plugin / persona-pack / template-pack),
+  description, keywords, and install status (installed / available /
+  update-available)
+- Given I click an available plugin, when I click `Install`, then a
+  modal shows the install scope (global vs project) and required disk
+  space; on confirm, the UI triggers `ddx install <name>` server-side
+  and streams install progress via a worker-backed dispatch
+- Given a plugin is installed, then I can view its manifest
+  (package.yaml), its skills, its prompts, and its templates from the
+  same card; an `Uninstall` action with confirmation is present
+- Given a plugin has an available update, then the card shows both
+  current and target versions and an `Update` action
+
+### US-099: Developer Uses a Keyboard Command Palette
+**As a** developer who lives on the keyboard
+**I want** a command palette (Cmd+K / Ctrl+K) for navigation and actions
+**So that** I can jump to any bead, document, or action without using the
+  mouse
+
+**Acceptance Criteria:**
+- Given I press `Cmd+K` (or `Ctrl+K` on non-mac), then a modal search
+  palette opens with focus in the input field
+- Given I type in the palette, then results include: documents (matching
+  path or title), beads (matching id or title), actions from US-095,
+  and navigation entries (every top-level page)
+- Given I press `Enter` on a result, then I navigate to that destination
+  (or trigger that action); the palette closes
+- Given I press `Escape`, then the palette closes without changes
+- Given I press `Cmd+K` while on a bead detail, then bead-specific actions
+  (Claim, Unclaim, Close, Reopen, Re-run, Delete) appear at the top of
+  the result list with their keybindings
+- Given I'm on a deep URL and open the palette, then navigation results
+  preserve the current project/node context (relative paths, not
+  absolute)
+
 ## Provider Dashboard: Playwright Fixture Scenarios
 
 The provider dashboard has deterministic fixture data requirements so that

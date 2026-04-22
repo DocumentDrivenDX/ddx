@@ -394,3 +394,185 @@ test('TC-003.11: Unclaim button on in-progress bead fires BeadUnclaim mutation',
 // DEFERRED. Rationale: the GraphQL schema has no beadClose mutation and the
 // BeadDetail component exposes no close/reopen/drag-drop UI. Filed as
 // separate work when the backend + component surfaces exist.
+
+// -----------------------------------------------------------------------
+// FEAT-008 US-082g: sort + filter the beads list
+// These tests MUST FAIL until the implementation provides the UI affordances
+// called out in the AC. Do not weaken them to match gaps.
+// -----------------------------------------------------------------------
+
+const FILTER_BEADS = [
+	{ id: 'bead-p0-a', title: 'Urgent thing', status: 'open', priority: 0, labels: ['ui'] },
+	{ id: 'bead-p0-b', title: 'Another urgent', status: 'ready', priority: 0, labels: ['ui', 'infra'] },
+	{ id: 'bead-p1', title: 'Normal work', status: 'open', priority: 1, labels: ['docs'] },
+	{ id: 'bead-p3', title: 'Cleanup', status: 'closed', priority: 3, labels: ['chore'] },
+	{ id: 'bead-block', title: 'Waiting on upstream', status: 'blocked', priority: 0, labels: ['agent'] }
+];
+
+test('US-082g.a: priority sort defaults to P0-first and is toggleable', async ({ page }) => {
+	await mockGraphQL(page);
+	await page.goto(BASE_URL);
+
+	const prioritySort = page.getByRole('button', { name: /sort by priority/i });
+	await expect(prioritySort, 'priority sort control must be visible').toBeVisible();
+
+	// Default order: P0 before P1 before P3.
+	const rows = page.locator('[data-testid="bead-row"]');
+	await expect(rows.first()).toHaveAttribute('data-priority', '0');
+
+	await prioritySort.click();
+	// Toggled: P3 first, P0 last.
+	await expect(rows.first()).toHaveAttribute('data-priority', /[23]/);
+});
+
+test('US-082g.b: status filter chip narrows list and updates URL', async ({ page }) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('BeadsByProject')) {
+			const url = new URL(page.url());
+			const statusParam = url.searchParams.get('status');
+			const filtered = statusParam
+				? FILTER_BEADS.filter((b) => b.status === statusParam)
+				: FILTER_BEADS;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse(filtered) })
+			});
+		} else if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(BASE_URL);
+	const blockedChip = page.getByRole('button', { name: /blocked/i });
+	await expect(blockedChip).toBeVisible();
+	await blockedChip.click();
+
+	await expect(page).toHaveURL(/status=blocked/);
+	await expect(page.getByText('Waiting on upstream')).toBeVisible();
+	await expect(page.getByText('Urgent thing')).toHaveCount(0);
+});
+
+test('US-082g.c: multi-filter URL is bookmarkable', async ({ page }) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('BeadsByProject')) {
+			const url = new URL(page.url());
+			let filtered = FILTER_BEADS;
+			if (url.searchParams.get('status')) filtered = filtered.filter((b) => b.status === url.searchParams.get('status'));
+			if (url.searchParams.get('priority')) filtered = filtered.filter((b) => String(b.priority) === url.searchParams.get('priority'));
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse(filtered) }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	// Open with filters already in URL — page MUST render matching beads on load.
+	await page.goto(`${BASE_URL}?status=open&priority=0`);
+
+	const statusChip = page.getByRole('button', { name: /open/i }).first();
+	const priorityChip = page.getByRole('button', { name: /p0/i }).first();
+	await expect(statusChip).toHaveAttribute('aria-pressed', 'true');
+	await expect(priorityChip).toHaveAttribute('aria-pressed', 'true');
+
+	await expect(page.getByText('Urgent thing')).toBeVisible();
+	await expect(page.getByText('Cleanup')).toHaveCount(0);
+});
+
+test('US-082g.d: label chip filter is clickable from a row', async ({ page }) => {
+	await mockGraphQL(page);
+	await page.goto(BASE_URL);
+
+	const uiLabel = page.locator('[data-testid="bead-row"] [data-testid="label-chip"]', { hasText: /ui/i }).first();
+	await expect(uiLabel).toBeVisible();
+	await uiLabel.click();
+
+	await expect(page).toHaveURL(/labels?=ui/);
+});
+
+test('US-082g.e: empty filter result shows zero-state with clear-filters affordance', async ({ page }) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('BeadsByProject')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse([]) }) });
+		} else if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(`${BASE_URL}?status=open&priority=0&label=nonexistent`);
+	await expect(page.getByText(/no beads match/i)).toBeVisible();
+	const clearBtn = page.getByRole('button', { name: /clear filters/i });
+	await expect(clearBtn).toBeVisible();
+	await clearBtn.click();
+	await expect(page).not.toHaveURL(/status=/);
+});
+
+// -----------------------------------------------------------------------
+// FEAT-008 US-085c: delete (soft-close) a bead from the UI
+// -----------------------------------------------------------------------
+
+test('US-085c: delete button triggers typed-confirmation modal and BeadClose mutation', async ({
+	page
+}) => {
+	let closeCalled = false;
+	let closeArgs: Record<string, unknown> | null = null;
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('BeadsByProject')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse() }) });
+		} else if (body.query.includes('query Bead(')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { bead: BEAD_DETAIL } }) });
+		} else if (body.query.includes('BeadClose') || body.query.includes('beadClose')) {
+			closeCalled = true;
+			closeArgs = body.variables ?? null;
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { beadClose: { ...BEAD_DETAIL, status: 'closed' } } }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(`${BASE_URL}/${BEAD_DETAIL.id}`);
+
+	const deleteBtn = page.getByRole('button', { name: /delete/i });
+	await expect(deleteBtn).toBeVisible();
+	await deleteBtn.click();
+
+	// Confirmation modal requires typing the bead ID before enabling Confirm.
+	const modal = page.getByRole('dialog', { name: /delete bead/i });
+	await expect(modal).toBeVisible();
+	const confirmBtn = modal.getByRole('button', { name: /confirm|delete/i });
+	await expect(confirmBtn).toBeDisabled();
+
+	const idField = modal.getByLabel(/type the bead id/i);
+	await idField.fill(BEAD_DETAIL.id);
+	await expect(confirmBtn).toBeEnabled();
+
+	await confirmBtn.click();
+	await expect.poll(() => closeCalled).toBe(true);
+	expect(closeArgs).toMatchObject({
+		id: BEAD_DETAIL.id,
+		reason: expect.stringContaining('deleted')
+	});
+
+	// URL should redirect to list; detail panel should be gone.
+	await expect(page).toHaveURL(new RegExp(`${BASE_URL}/?$`));
+});
