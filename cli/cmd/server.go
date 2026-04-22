@@ -76,7 +76,6 @@ MCP (POST /mcp):
   ddx_doc_show                 Document metadata
   ddx_doc_deps                 Upstream dependencies
   ddx_agent_sessions           List agent sessions`,
-		Aliases: []string{"serve"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
@@ -120,10 +119,12 @@ MCP (POST /mcp):
 	// Worker management
 	cmd.AddCommand(f.newServerWorkersCommand())
 
-	// Service management
-	cmd.AddCommand(f.newServerInstallServiceCommand())
-	cmd.AddCommand(f.newServerServiceStatusCommand())
-	cmd.AddCommand(f.newServerUninstallServiceCommand())
+	// Service management (systemd on Linux, launchd on macOS)
+	cmd.AddCommand(f.newServerInstallCommand())
+	cmd.AddCommand(f.newServerUninstallCommand())
+	cmd.AddCommand(f.newServerStartCommand())
+	cmd.AddCommand(f.newServerStopCommand())
+	cmd.AddCommand(f.newServerStatusCommand())
 
 	return cmd
 }

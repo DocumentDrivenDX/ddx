@@ -5,28 +5,41 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 
-	"github.com/DocumentDrivenDX/ddx/internal/systemd"
+	"github.com/DocumentDrivenDX/ddx/internal/service"
 	"github.com/spf13/cobra"
 )
 
-func (f *CommandFactory) newServerInstallServiceCommand() *cobra.Command {
+// envKeysForService are forwarded from the current environment into the
+// installed service's environment so agent harnesses work out of the box.
+var envKeysForService = []string{
+	"ANTHROPIC_API_KEY",
+	"OPENAI_API_KEY",
+	"OPENROUTER_API_KEY",
+	"GEMINI_API_KEY",
+	"DDX_AGENT_HARNESS",
+	"DDX_AGENT_MODEL",
+	"DDX_AGENT_EFFORT",
+}
+
+func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 	var workDir string
 	var execPath string
 
 	cmd := &cobra.Command{
-		Use:   "install-service",
-		Short: "Install ddx server as a systemd user service",
+		Use:   "install",
+		Short: "Install ddx server as a user service (systemd on Linux, launchd on macOS)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if runtime.GOOS != "linux" {
-				return fmt.Errorf("install-service is only supported on Linux (systemd user service)")
+			backend, err := service.New()
+			if err != nil {
+				return err
 			}
+
 			resolvedExec, err := os.Executable()
 			if err != nil {
 				resolvedExec, err = exec.LookPath("ddx")
 				if err != nil {
-					return fmt.Errorf("cannot locate ddx binary; specify --exec-path")
+					return fmt.Errorf("cannot locate ddx binary; specify --exec")
 				}
 			}
 			if execPath != "" {
@@ -41,20 +54,19 @@ func (f *CommandFactory) newServerInstallServiceCommand() *cobra.Command {
 				return fmt.Errorf("cannot determine project root; specify --workdir")
 			}
 
-			// Write environment file alongside the project config
-			envFile := filepath.Join(resolvedWork, ".ddx", "server.env")
-			if err := writeEnvFile(envFile); err != nil {
-				return fmt.Errorf("write env file: %w", err)
+			env := map[string]string{}
+			for _, k := range envKeysForService {
+				if v := os.Getenv(k); v != "" {
+					env[k] = v
+				}
 			}
 
-			cfg := systemd.UnitConfig{
+			return backend.Install(service.Config{
 				ExecPath: resolvedExec,
 				WorkDir:  resolvedWork,
-				LogPath:  resolvedWork + "/.ddx/logs/ddx-server.log",
-				EnvFile:  envFile,
-				Env:      nil, // using EnvironmentFile instead
-			}
-			return systemd.Install(cfg)
+				LogPath:  filepath.Join(resolvedWork, ".ddx", "logs", "ddx-server.log"),
+				Env:      env,
+			})
 		},
 	}
 	cmd.Flags().StringVar(&workDir, "workdir", "", "Project root for the server (default: current directory)")
@@ -62,63 +74,58 @@ func (f *CommandFactory) newServerInstallServiceCommand() *cobra.Command {
 	return cmd
 }
 
-func (f *CommandFactory) newServerServiceStatusCommand() *cobra.Command {
+func (f *CommandFactory) newServerUninstallCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "service-status",
-		Short: "Show ddx server systemd service status",
+		Use:   "uninstall",
+		Short: "Remove the ddx server user service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if runtime.GOOS != "linux" {
-				return fmt.Errorf("service-status is only supported on Linux")
+			backend, err := service.New()
+			if err != nil {
+				return err
 			}
-			return systemd.Status()
+			return backend.Uninstall()
 		},
 	}
 }
 
-func (f *CommandFactory) newServerUninstallServiceCommand() *cobra.Command {
+func (f *CommandFactory) newServerStartCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "uninstall-service",
-		Short: "Remove ddx server systemd service",
+		Use:   "start",
+		Short: "Start the ddx server service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if runtime.GOOS != "linux" {
-				return fmt.Errorf("uninstall-service is only supported on Linux")
+			backend, err := service.New()
+			if err != nil {
+				return err
 			}
-			return systemd.Uninstall()
+			return backend.Start()
 		},
 	}
 }
 
-// writeEnvFile creates a .ddx/server.env file with API keys from the current
-// environment. The file is overwritten on each install. Edit it manually to
-// update keys without reinstalling (then systemctl --user restart ddx-server).
-func writeEnvFile(path string) error {
-	keys := []string{
-		"ANTHROPIC_API_KEY",
-		"OPENAI_API_KEY",
-		"OPENROUTER_API_KEY",
-		"GEMINI_API_KEY",
-		"DDX_AGENT_HARNESS",
-		"DDX_AGENT_MODEL",
-		"DDX_AGENT_EFFORT",
+func (f *CommandFactory) newServerStopCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the ddx server service",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			backend, err := service.New()
+			if err != nil {
+				return err
+			}
+			return backend.Stop()
+		},
 	}
-	var lines []string
-	for _, k := range keys {
-		v := os.Getenv(k)
-		if v != "" {
-			lines = append(lines, k+"="+v)
-		}
-	}
-	// Always write the file so it exists even if no keys are set
-	return os.WriteFile(path, []byte(fmt.Sprintf("# DDx server environment (edit and restart)\n%s\n", formatEnvLines(lines))), 0o600)
 }
 
-func formatEnvLines(lines []string) string {
-	if len(lines) == 0 {
-		return ""
+func (f *CommandFactory) newServerStatusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Show ddx server service status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			backend, err := service.New()
+			if err != nil {
+				return err
+			}
+			return backend.Status()
+		},
 	}
-	result := ""
-	for _, l := range lines {
-		result += l + "\n"
-	}
-	return result[:len(result)-1]
 }
