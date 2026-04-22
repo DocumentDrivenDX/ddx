@@ -214,13 +214,13 @@
 	function statusClass(status: string): string {
 		switch (status) {
 			case 'open':
-				return 'text-blue-600 dark:text-blue-400';
+				return 'text-status-open';
 			case 'in-progress':
-				return 'text-yellow-600 dark:text-yellow-400';
+				return 'text-status-in-progress';
 			case 'closed':
-				return 'text-green-600 dark:text-green-400';
+				return 'text-status-closed';
 			case 'blocked':
-				return 'text-red-600 dark:text-red-400';
+				return 'text-status-blocked';
 			default:
 				return 'text-gray-500 dark:text-gray-400';
 		}
@@ -237,7 +237,7 @@
 	<div class="flex items-center justify-between">
 		<h1 class="text-xl font-semibold dark:text-white">Beads</h1>
 		<div class="flex items-center gap-3">
-			<span class="text-sm text-gray-500 dark:text-gray-400">
+			<span class="text-sm text-gray-700 dark:text-gray-300">
 				{edges.length} of {totalCount}
 			</span>
 			<button
@@ -261,7 +261,7 @@
 
 	<!-- Status filter chips -->
 	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-gray-500 dark:text-gray-400">Status:</span>
+		<span class="self-center text-xs text-gray-700 dark:text-gray-300">Status:</span>
 		{#each STATUS_OPTIONS as status}
 			<button class={chipClass(data.activeStatus === status)} onclick={() => toggleStatus(status)}>
 				{status}
@@ -269,7 +269,7 @@
 		{/each}
 		{#if data.activeStatus}
 			<button
-				class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-400 hover:text-gray-600 dark:border-gray-600 dark:text-gray-500"
+				class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
 				onclick={() => setFilter('status', null)}
 			>
 				clear
@@ -280,7 +280,7 @@
 	<!-- Label filter chips (only shown when labels exist in current result) -->
 	{#if allLabels.length > 0}
 		<div class="flex flex-wrap gap-2">
-			<span class="self-center text-xs text-gray-500 dark:text-gray-400">Label:</span>
+			<span class="self-center text-xs text-gray-700 dark:text-gray-300">Label:</span>
 			{#each allLabels as label}
 				<button class={chipClass(data.activeLabel === label)} onclick={() => toggleLabel(label)}>
 					{label}
@@ -288,7 +288,7 @@
 			{/each}
 			{#if data.activeLabel}
 				<button
-					class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-400 hover:text-gray-600 dark:border-gray-600 dark:text-gray-500"
+					class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
 					onclick={() => setFilter('label', null)}
 				>
 					clear
@@ -358,7 +358,7 @@
 				{/each}
 				{#if edges.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+						<td colspan="6" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
 							No beads found.
 						</td>
 					</tr>

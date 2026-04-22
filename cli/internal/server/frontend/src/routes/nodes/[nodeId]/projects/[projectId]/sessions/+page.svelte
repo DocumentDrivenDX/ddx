@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import type { SessionNode } from './+page';
 
 	let { data }: { data: PageData } = $props();
 
@@ -34,8 +33,7 @@
 				totalTokens += s.tokens.total ?? 0;
 			}
 		}
-		const cacheRate =
-			totalTokens > 0 ? Math.round((totalCached / totalTokens) * 100) : 0;
+		const cacheRate = totalTokens > 0 ? Math.round((totalCached / totalTokens) * 100) : 0;
 		return { totalCost, totalPrompt, totalCompletion, totalCached, totalTokens, cacheRate };
 	});
 
@@ -59,11 +57,11 @@
 	function statusClass(status: string): string {
 		switch (status) {
 			case 'completed':
-				return 'text-green-600 dark:text-green-400';
+				return 'text-status-completed';
 			case 'running':
-				return 'text-blue-600 dark:text-blue-400';
+				return 'text-status-running';
 			case 'failed':
-				return 'text-red-600 dark:text-red-400';
+				return 'text-status-failed';
 			default:
 				return 'text-gray-500 dark:text-gray-400';
 		}
@@ -73,35 +71,53 @@
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
 		<h1 class="text-xl font-semibold dark:text-white">Sessions</h1>
-		<span class="text-sm text-gray-500 dark:text-gray-400">
+		<span class="text-sm text-gray-700 dark:text-gray-300">
 			{data.sessions.totalCount} sessions
 		</span>
 	</div>
 
 	<!-- Token summary -->
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-			<div class="text-xs text-gray-500 dark:text-gray-400">Sessions</div>
+		<div
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div class="text-xs text-gray-700 dark:text-gray-300">Sessions</div>
 			<div class="mt-1 text-lg font-semibold dark:text-white">{data.sessions.totalCount}</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-			<div class="text-xs text-gray-500 dark:text-gray-400">Total Cost</div>
+		<div
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div class="text-xs text-gray-700 dark:text-gray-300">Total Cost</div>
 			<div class="mt-1 text-lg font-semibold dark:text-white">{fmtCost(summary.totalCost)}</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-			<div class="text-xs text-gray-500 dark:text-gray-400">Total Tokens</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.totalTokens.toLocaleString()}</div>
+		<div
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div class="text-xs text-gray-700 dark:text-gray-300">Total Tokens</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">
+				{summary.totalTokens.toLocaleString()}
+			</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-			<div class="text-xs text-gray-500 dark:text-gray-400">Prompt</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.totalPrompt.toLocaleString()}</div>
+		<div
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div class="text-xs text-gray-700 dark:text-gray-300">Prompt</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">
+				{summary.totalPrompt.toLocaleString()}
+			</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-			<div class="text-xs text-gray-500 dark:text-gray-400">Completion</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.totalCompletion.toLocaleString()}</div>
+		<div
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div class="text-xs text-gray-700 dark:text-gray-300">Completion</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">
+				{summary.totalCompletion.toLocaleString()}
+			</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-			<div class="text-xs text-gray-500 dark:text-gray-400">Cache Hit</div>
+		<div
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div class="text-xs text-gray-700 dark:text-gray-300">Cache Hit</div>
 			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.cacheRate}%</div>
 		</div>
 	</div>
@@ -113,10 +129,13 @@
 				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
 					<th class="w-6 px-4 py-3"></th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">ID</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Harness / Model</th>
+					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+						>Harness / Model</th
+					>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Status</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Started</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Duration</th>
+					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Duration</th
+					>
 					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Cost</th>
 					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Tokens</th>
 				</tr>
@@ -158,7 +177,9 @@
 						</td>
 					</tr>
 					{#if isExpanded}
-						<tr class="border-b border-gray-100 bg-blue-50/50 dark:border-gray-700 dark:bg-blue-900/10">
+						<tr
+							class="border-b border-gray-100 bg-blue-50/50 dark:border-gray-700 dark:bg-blue-900/10"
+						>
 							<td colspan="8" class="px-6 py-4">
 								<div class="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
 									<div>
@@ -183,25 +204,33 @@
 									</div>
 									{#if s.tokens}
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Prompt tokens</div>
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+												Prompt tokens
+											</div>
 											<div class="mt-1 font-mono text-xs dark:text-gray-200">
 												{s.tokens.prompt?.toLocaleString() ?? '—'}
 											</div>
 										</div>
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Completion tokens</div>
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+												Completion tokens
+											</div>
 											<div class="mt-1 font-mono text-xs dark:text-gray-200">
 												{s.tokens.completion?.toLocaleString() ?? '—'}
 											</div>
 										</div>
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Cached tokens</div>
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+												Cached tokens
+											</div>
 											<div class="mt-1 font-mono text-xs dark:text-gray-200">
 												{s.tokens.cached?.toLocaleString() ?? '—'}
 											</div>
 										</div>
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Total tokens</div>
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+												Total tokens
+											</div>
 											<div class="mt-1 font-mono text-xs dark:text-gray-200">
 												{s.tokens.total?.toLocaleString() ?? '—'}
 											</div>
@@ -220,7 +249,7 @@
 				{/each}
 				{#if data.sessions.edges.length === 0}
 					<tr>
-						<td colspan="8" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+						<td colspan="8" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
 							No sessions found for this project.
 						</td>
 					</tr>

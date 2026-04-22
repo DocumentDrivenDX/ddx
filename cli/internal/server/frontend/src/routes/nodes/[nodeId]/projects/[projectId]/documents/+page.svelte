@@ -15,7 +15,7 @@
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
 		<h1 class="text-xl font-semibold dark:text-white">Documents</h1>
-		<span class="text-sm text-gray-500 dark:text-gray-400">
+		<span class="text-sm text-gray-700 dark:text-gray-300">
 			{data.docs.totalCount} total
 		</span>
 	</div>
@@ -47,7 +47,7 @@
 				{/each}
 				{#if data.docs.edges.length === 0}
 					<tr>
-						<td colspan="2" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+						<td colspan="2" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
 							No documents found.
 						</td>
 					</tr>

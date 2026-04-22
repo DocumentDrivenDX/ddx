@@ -35,15 +35,12 @@
 		pages.map(({ page, label, Icon }) => {
 			const nodeId = nodeStore.value?.id;
 			const projectId = projectStore.value?.id;
-			const href =
-				nodeId && projectId ? `/nodes/${nodeId}/projects/${projectId}/${page}` : null;
+			const href = nodeId && projectId ? `/nodes/${nodeId}/projects/${projectId}/${page}` : null;
 			return { href, label, Icon };
 		})
 	);
 
-	const allBeadsHref = $derived(
-		nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/beads` : null
-	);
+	const allBeadsHref = $derived(nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/beads` : null);
 
 	const providersHref = $derived(
 		nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/providers` : null
@@ -58,7 +55,7 @@
 		class="flex shrink-0 items-center gap-4 border-b border-gray-200 px-4 py-2 dark:border-gray-800 dark:bg-gray-900"
 	>
 		<span class="text-lg font-semibold tracking-tight dark:text-white">DDx</span>
-		<span class="text-xs text-gray-400 dark:text-gray-500">Node: {nodeName}</span>
+		<span class="text-xs text-gray-700 dark:text-gray-300">Node: {nodeName}</span>
 		<div class="mx-2 h-4 w-px bg-gray-200 dark:bg-gray-700"></div>
 		<ProjectPicker />
 		<div class="ml-auto">
@@ -106,7 +103,7 @@
 					</a>
 				{:else}
 					<span
-						class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-400 dark:text-gray-600"
+						class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
 						title="/(no project)"
 					>
 						<Icon class="h-4 w-4 shrink-0" />
@@ -129,7 +126,7 @@
 				</a>
 			{:else}
 				<span
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-400 dark:text-gray-600"
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
 				>
 					<Layers class="h-4 w-4 shrink-0" />
 					All Beads
@@ -149,7 +146,7 @@
 				</a>
 			{:else}
 				<span
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-400 dark:text-gray-600"
+					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
 				>
 					<Radio class="h-4 w-4 shrink-0" />
 					Providers

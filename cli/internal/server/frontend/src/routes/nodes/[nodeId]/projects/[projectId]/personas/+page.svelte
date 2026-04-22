@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import type { PersonaNode } from './+page';
 
 	let { data }: { data: PageData } = $props();
 
@@ -22,9 +21,11 @@
 <div class="flex h-full gap-0">
 	<!-- Left panel: persona list -->
 	<div class="flex w-64 shrink-0 flex-col border-r border-gray-200 dark:border-gray-700">
-		<div class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+		<div
+			class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700"
+		>
 			<h1 class="text-sm font-semibold dark:text-white">Personas</h1>
-			<span class="text-xs text-gray-400 dark:text-gray-500">{data.personas.totalCount}</span>
+			<span class="text-xs text-gray-700 dark:text-gray-300">{data.personas.totalCount}</span>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#each data.personas.edges as edge (edge.cursor)}
@@ -45,7 +46,7 @@
 				</button>
 			{/each}
 			{#if data.personas.edges.length === 0}
-				<div class="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-600">
+				<div class="px-4 py-8 text-center text-xs text-gray-700 dark:text-gray-300">
 					No personas found.
 				</div>
 			{/if}
@@ -98,7 +99,7 @@
 					{#if selected.filePath}
 						<div class="col-span-2 sm:col-span-3">
 							<div class="text-xs font-medium text-gray-500 dark:text-gray-400">File</div>
-							<div class="mt-1 break-all font-mono text-xs text-gray-500 dark:text-gray-400">
+							<div class="mt-1 font-mono text-xs break-all text-gray-500 dark:text-gray-400">
 								{selected.filePath}
 							</div>
 						</div>
@@ -111,12 +112,11 @@
 						Prompt / Instructions
 					</div>
 					<pre
-						class="overflow-x-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-xs leading-relaxed text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-					>{selected.content}</pre>
+						class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{selected.content}</pre>
 				</div>
 			</div>
 		{:else}
-			<div class="flex h-full items-center justify-center text-gray-400 dark:text-gray-600">
+			<div class="flex h-full items-center justify-center text-gray-700 dark:text-gray-300">
 				Select a persona to view details.
 			</div>
 		{/if}

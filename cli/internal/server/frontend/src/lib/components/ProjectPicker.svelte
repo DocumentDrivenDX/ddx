@@ -60,7 +60,8 @@
 </script>
 
 <select
-	class="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 disabled:text-gray-400 dark:disabled:text-gray-600"
+	aria-label="Project"
+	class="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 disabled:text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:disabled:text-gray-300"
 	value={projectStore.value?.id ?? ''}
 	onchange={handleChange}
 	disabled={loading}
