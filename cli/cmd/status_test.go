@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -238,6 +239,41 @@ func TestAcceptance_US012_TrackAssetVersions(t *testing.T) {
 		manifestStr := string(content)
 		assert.Contains(t, manifestStr, "version:")
 		assert.Contains(t, manifestStr, "last_updated:")
+	})
+}
+
+func TestStatusIncludesAgentUsage(t *testing.T) {
+	t.Run("renders_30d_agent_usage_from_session_logs", func(t *testing.T) {
+		testDir, cleanup := setupStatusTestDir(t)
+		defer cleanup()
+		defer func() { _ = os.RemoveAll(testDir) }()
+
+		logDir := filepath.Join(testDir, ".ddx", "agent-logs")
+		require.NoError(t, os.MkdirAll(logDir, 0755))
+		entry := fmt.Sprintf(`{"id":"sess-1","timestamp":%q,"harness":"codex","model":"gpt-test","input_tokens":1234,"output_tokens":567,"cost_usd":1.23,"duration_ms":2000,"exit_code":0}`+"\n", time.Now().UTC().Format(time.RFC3339Nano))
+		require.NoError(t, os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(entry), 0644))
+
+		factory := NewCommandFactory(testDir)
+		rootCmd := factory.NewRootCommand()
+		output, err := executeStatusCommand(rootCmd, "status")
+
+		require.NoError(t, err)
+		assert.Contains(t, output, "Agent Usage (30d):")
+		assert.Contains(t, output, "codex")
+		assert.Contains(t, output, "1,234")
+		assert.Contains(t, output, "567")
+		assert.Contains(t, output, "$1.23")
+	})
+
+	t.Run("succeeds_without_session_logs", func(t *testing.T) {
+		testDir, cleanup := setupStatusTestDir(t)
+		defer cleanup()
+		defer func() { _ = os.RemoveAll(testDir) }()
+
+		status, err := checkStatus(testDir, false, false, false)
+
+		require.NoError(t, err)
+		assert.Empty(t, status.Usage)
 	})
 }
 

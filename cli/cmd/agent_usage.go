@@ -17,22 +17,22 @@ import (
 
 // usageRow holds aggregated stats for a single harness.
 type usageRow struct {
-	Harness                string  `json:"harness"`
-	Sessions               int     `json:"sessions"`
-	InputTokens            int     `json:"input_tokens"`
-	OutputTokens           int     `json:"output_tokens"`
-	CostUSD                float64 `json:"cost_usd"`
-	AvgDurationMS          float64 `json:"avg_duration_ms"`
-	QuotaState             string  `json:"quota_state,omitempty"`
-	SignalProvider         string  `json:"signal_provider,omitempty"`
-	SignalKind             string  `json:"signal_kind,omitempty"`
-	SignalFreshness        string  `json:"signal_freshness,omitempty"`
-	SignalBasis            string  `json:"signal_basis,omitempty"`
-	NativeInputTokens      int     `json:"native_input_tokens,omitempty"`
-	NativeOutputTokens     int     `json:"native_output_tokens,omitempty"`
-	NativeTotalTokens      int     `json:"native_total_tokens,omitempty"`
-	NativeSessionCount     int     `json:"native_session_count,omitempty"`
-	NativeQuotaUsedPercent int     `json:"native_quota_used_percent,omitempty"`
+	Harness                string  `json:"harness" yaml:"harness"`
+	Sessions               int     `json:"sessions" yaml:"sessions"`
+	InputTokens            int     `json:"input_tokens" yaml:"input_tokens"`
+	OutputTokens           int     `json:"output_tokens" yaml:"output_tokens"`
+	CostUSD                float64 `json:"cost_usd" yaml:"cost_usd"`
+	AvgDurationMS          float64 `json:"avg_duration_ms" yaml:"avg_duration_ms"`
+	QuotaState             string  `json:"quota_state,omitempty" yaml:"quota_state,omitempty"`
+	SignalProvider         string  `json:"signal_provider,omitempty" yaml:"signal_provider,omitempty"`
+	SignalKind             string  `json:"signal_kind,omitempty" yaml:"signal_kind,omitempty"`
+	SignalFreshness        string  `json:"signal_freshness,omitempty" yaml:"signal_freshness,omitempty"`
+	SignalBasis            string  `json:"signal_basis,omitempty" yaml:"signal_basis,omitempty"`
+	NativeInputTokens      int     `json:"native_input_tokens,omitempty" yaml:"native_input_tokens,omitempty"`
+	NativeOutputTokens     int     `json:"native_output_tokens,omitempty" yaml:"native_output_tokens,omitempty"`
+	NativeTotalTokens      int     `json:"native_total_tokens,omitempty" yaml:"native_total_tokens,omitempty"`
+	NativeSessionCount     int     `json:"native_session_count,omitempty" yaml:"native_session_count,omitempty"`
+	NativeQuotaUsedPercent int     `json:"native_quota_used_percent,omitempty" yaml:"native_quota_used_percent,omitempty"`
 }
 
 type usageAgg struct {

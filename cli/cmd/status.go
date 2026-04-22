@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -72,6 +73,7 @@ type StatusInfo struct {
 	UpstreamInfo  *UpstreamInfo        `yaml:"upstream,omitempty" json:"upstream,omitempty"`
 	Modifications []ModifiedFile       `yaml:"modifications,omitempty" json:"modifications,omitempty"`
 	Resources     []StatusResourceInfo `yaml:"resources" json:"resources"`
+	Usage         []usageRow           `yaml:"usage,omitempty" json:"usage,omitempty"`
 	Performance   PerformanceInfo      `yaml:"performance" json:"performance"`
 }
 
@@ -156,9 +158,31 @@ func checkStatus(workingDir string, checkUpstream, showChanges, showDiff bool) (
 		return nil, err
 	}
 	status.Resources = resources
+	status.Usage = collectStatusUsage(workingDir)
 
 	status.Performance.CollectionTime = time.Since(start)
 	return status, nil
+}
+
+func collectStatusUsage(workingDir string) []usageRow {
+	since, err := parseSince("30d")
+	if err != nil {
+		return nil
+	}
+
+	logDir := agent.SessionLogDirForWorkDir(workingDir)
+	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", since)
+	if err != nil {
+		return nil
+	}
+	if len(rows) == 0 {
+		rows, err = aggregateUsage(filepath.Join(logDir, "sessions.jsonl"), "", since, nil)
+	}
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+
+	return enrichUsageRowsWithRoutingSignals(workingDir, rows)
 }
 
 func getVersionInfoFromDir(workingDir string) (version, hash string, err error) {
@@ -417,6 +441,33 @@ func displayStatus(cmd *cobra.Command, status *StatusInfo, showChanges, showDiff
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
+	if len(status.Usage) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Agent Usage (30d):")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %8s  %13s  %14s  %10s  %-8s  %10s  %-18s  %-10s\n",
+			"HARNESS", "SESSIONS", "INPUT TOKENS", "OUTPUT TOKENS", "EST. COST", "QUOTA", "USED", "SOURCE", "FRESHNESS")
+		for _, row := range status.Usage {
+			source := row.SignalProvider
+			if row.SignalKind != "" {
+				if source != "" {
+					source += "/"
+				}
+				source += row.SignalKind
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s  %8d  %13s  %14s  %10s  %-8s  %10s  %-18s  %-10s\n",
+				row.Harness,
+				row.Sessions,
+				formatComma(row.InputTokens),
+				formatComma(row.OutputTokens),
+				fmt.Sprintf("$%.2f", row.CostUSD),
+				row.QuotaState,
+				formatUsageQuotaUsed(row),
+				source,
+				row.SignalFreshness,
+			)
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+
 	// Show verbose information
 	if viper.GetBool("verbose") {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Performance: Collection took %v\n", status.Performance.CollectionTime)
@@ -449,6 +500,13 @@ func displayStatus(cmd *cobra.Command, status *StatusInfo, showChanges, showDiff
 		// This would show actual git diff output
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "(diff functionality would show detailed changes here)")
 	}
+}
+
+func formatUsageQuotaUsed(row usageRow) string {
+	if row.QuotaState == "" && row.SignalProvider == "" && row.SignalKind == "" {
+		return ""
+	}
+	return fmt.Sprintf("%d%%", row.NativeQuotaUsedPercent)
 }
 
 func exportStatusManifest(cmd *cobra.Command, status *StatusInfo, path string) error {
