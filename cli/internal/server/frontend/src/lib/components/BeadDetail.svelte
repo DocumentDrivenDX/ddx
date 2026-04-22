@@ -3,8 +3,9 @@
 	import { createClient } from '$lib/gql/client';
 	import { invalidateAll } from '$app/navigation';
 	import { nodeStore } from '$lib/stores/node.svelte';
-	import { X, UserPlus, UserMinus, Pencil } from 'lucide-svelte';
+	import { X, UserPlus, UserMinus, Pencil, Trash2 } from 'lucide-svelte';
 	import BeadForm from './BeadForm.svelte';
+	import TypedConfirmDialog from './TypedConfirmDialog.svelte';
 
 	interface Dependency {
 		issueId: string;
@@ -30,6 +31,7 @@
 		acceptance: string | null;
 		notes: string | null;
 		dependencies: Dependency[] | null;
+		childCount?: number;
 	}
 
 	let { bead: initialBead, onClose }: { bead: Bead; onClose: () => void } = $props();
@@ -38,12 +40,35 @@
 	let editing = $state(false);
 	let busy = $state(false);
 	let actionError = $state<string | null>(null);
+	let deleteDialogOpen = $state(false);
+	let cascadeToChildren = $state(false);
+	let deleteButton = $state<HTMLButtonElement | null>(null);
+	const hasChildBeads = $derived((bead.childCount ?? 0) > 0);
 
 	const CLAIM_MUTATION = gql`
 		mutation BeadClaim($id: ID!, $assignee: String!) {
 			beadClaim(id: $id, assignee: $assignee) {
-				id title status priority issueType owner createdAt createdBy updatedAt labels parent description acceptance notes
-				dependencies { issueId dependsOnId type createdAt createdBy }
+				id
+				title
+				status
+				priority
+				issueType
+				owner
+				createdAt
+				createdBy
+				updatedAt
+				labels
+				parent
+				description
+				acceptance
+				notes
+				dependencies {
+					issueId
+					dependsOnId
+					type
+					createdAt
+					createdBy
+				}
 			}
 		}
 	`;
@@ -51,8 +76,55 @@
 	const UNCLAIM_MUTATION = gql`
 		mutation BeadUnclaim($id: ID!) {
 			beadUnclaim(id: $id) {
-				id title status priority issueType owner createdAt createdBy updatedAt labels parent description acceptance notes
-				dependencies { issueId dependsOnId type createdAt createdBy }
+				id
+				title
+				status
+				priority
+				issueType
+				owner
+				createdAt
+				createdBy
+				updatedAt
+				labels
+				parent
+				description
+				acceptance
+				notes
+				dependencies {
+					issueId
+					dependsOnId
+					type
+					createdAt
+					createdBy
+				}
+			}
+		}
+	`;
+
+	const CLOSE_MUTATION = gql`
+		mutation BeadClose($id: ID!, $reason: String) {
+			beadClose(id: $id, reason: $reason) {
+				id
+				title
+				status
+				priority
+				issueType
+				owner
+				createdAt
+				createdBy
+				updatedAt
+				labels
+				parent
+				description
+				acceptance
+				notes
+				dependencies {
+					issueId
+					dependsOnId
+					type
+					createdAt
+					createdBy
+				}
 			}
 		}
 	`;
@@ -93,6 +165,29 @@
 		}
 	}
 
+	function openDeleteDialog() {
+		cascadeToChildren = false;
+		deleteDialogOpen = true;
+	}
+
+	async function handleDeleteConfirm() {
+		busy = true;
+		actionError = null;
+		try {
+			const client = createClient();
+			await client.request<{ beadClose: Bead }>(CLOSE_MUTATION, {
+				id: bead.id,
+				reason: 'deleted via UI'
+			});
+			await invalidateAll();
+			onClose();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : 'Delete failed';
+		} finally {
+			busy = false;
+		}
+	}
+
 	function statusClass(status: string): string {
 		switch (status) {
 			case 'open':
@@ -111,7 +206,7 @@
 
 <!-- Right-side detail panel -->
 <div
-	class="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl dark:bg-gray-900"
+	class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl dark:bg-gray-900"
 >
 	<!-- Header -->
 	<div
@@ -147,10 +242,20 @@
 				{/if}
 				<button
 					onclick={() => (editing = true)}
+					disabled={busy}
 					class="flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
 				>
 					<Pencil class="h-3.5 w-3.5" />
 					Edit
+				</button>
+				<button
+					bind:this={deleteButton}
+					onclick={openDeleteDialog}
+					disabled={busy}
+					class="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+				>
+					<Trash2 class="h-3.5 w-3.5" />
+					Delete
 				</button>
 			{/if}
 			<button
@@ -192,13 +297,17 @@
 			<dl class="space-y-4 text-sm">
 				<div class="grid grid-cols-2 gap-4">
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+						<dt
+							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+						>
 							Priority
 						</dt>
 						<dd class="mt-1 text-gray-900 dark:text-gray-100">{bead.priority}</dd>
 					</div>
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+						<dt
+							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+						>
 							Type
 						</dt>
 						<dd class="mt-1 text-gray-900 dark:text-gray-100">{bead.issueType || '—'}</dd>
@@ -206,7 +315,7 @@
 					{#if bead.parent}
 						<div class="col-span-2">
 							<dt
-								class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400"
+								class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
 							>
 								Parent
 							</dt>
@@ -217,7 +326,9 @@
 
 				{#if bead.labels && bead.labels.length > 0}
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+						<dt
+							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+						>
 							Labels
 						</dt>
 						<dd class="mt-1 flex flex-wrap gap-1">
@@ -233,7 +344,9 @@
 
 				{#if bead.description}
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+						<dt
+							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+						>
 							Description
 						</dt>
 						<dd class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">
@@ -244,7 +357,9 @@
 
 				{#if bead.acceptance}
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+						<dt
+							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+						>
 							Acceptance
 						</dt>
 						<dd class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">
@@ -255,7 +370,9 @@
 
 				{#if bead.notes}
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+						<dt
+							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+						>
 							Notes
 						</dt>
 						<dd class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">{bead.notes}</dd>
@@ -264,7 +381,9 @@
 
 				{#if bead.dependencies && bead.dependencies.length > 0}
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+						<dt
+							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+						>
 							Dependencies
 						</dt>
 						<dd class="mt-1 space-y-1">
@@ -291,4 +410,42 @@
 			</dl>
 		{/if}
 	</div>
+
+	<TypedConfirmDialog
+		bind:open={deleteDialogOpen}
+		actionLabel="Delete bead"
+		title="Delete bead"
+		expectedText={bead.id}
+		expectedLabel="bead id"
+		destructive
+		confirmDisabled={busy}
+		returnFocusTo={deleteButton}
+		onConfirm={handleDeleteConfirm}
+	>
+		{#snippet summary()}
+			<span>
+				This closes <span class="font-mono">{bead.id}</span> as deleted.
+			</span>
+		{/snippet}
+
+		{#if hasChildBeads}
+			<label
+				class="mt-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-100"
+			>
+				<input
+					type="checkbox"
+					bind:checked={cascadeToChildren}
+					class="mt-1 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500 dark:border-red-700 dark:bg-gray-900"
+				/>
+				<span>
+					<span class="block font-medium">Cascade to child beads</span>
+					<span class="block text-xs text-red-700 dark:text-red-300">
+						Apply the delete intent to {bead.childCount} child {bead.childCount === 1
+							? 'bead'
+							: 'beads'}.
+					</span>
+				</span>
+			</label>
+		{/if}
+	</TypedConfirmDialog>
 </div>
