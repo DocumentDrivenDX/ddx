@@ -3887,6 +3887,7 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 			WorkingDir:   s.WorkingDir,
 			Workers:      s.workers,
 			BeadBus:      s.beadHub,
+			Actions:      &workerDispatchAdapter{manager: s.workers},
 			ExecLogs:     &execLogAdapter{workingDir: s.WorkingDir},
 			CoordMetrics: &coordMetricsAdapter{reg: s.workers.LandCoordinators},
 		},

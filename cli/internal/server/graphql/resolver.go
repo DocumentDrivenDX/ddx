@@ -30,11 +30,19 @@ type BeadLifecycleSubscriber interface {
 	SubscribeLifecycle(projectID string) (<-chan bead.LifecycleEvent, func())
 }
 
+// ActionDispatcher starts backend workers for GraphQL action mutations.
+// The server package supplies the production implementation so this package
+// does not import the outer server package.
+type ActionDispatcher interface {
+	DispatchWorker(ctx context.Context, kind string, projectRoot string, args *string) (*WorkerDispatchResult, error)
+}
+
 type Resolver struct {
 	State      StateProvider
 	WorkingDir string
 	Workers    ProgressSubscriber
 	BeadBus    BeadLifecycleSubscriber
+	Actions    ActionDispatcher
 	// ExecLogs provides execution run log retrieval for the executionEvidence
 	// subscription. If nil, that subscription returns an error.
 	ExecLogs ExecLogProvider
