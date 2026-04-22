@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260422T210144-11501ed2",
+  "bead_id": "ddx-05b4cc9d",
+  "base_rev": "f74eb775aecc573abcb4664218f72d3ba48b95f0",
+  "created_at": "2026-04-22T21:01:44.603143821Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen/qwen3.6-35b-a3b",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-05b4cc9d",
+    "title": "workersByProject compares project id to project path: per-project workers view always empty",
+    "description": "## Observed\n\nUser clicks \"Drain queue\" on the project home page. Mutation returns success with a worker id. Navigating to `/nodes/.../projects/\u003cid\u003e/workers` shows no workers — an empty table.\n\nVerified on disk: the worker record exists and is running.\n\n```\n$ cat .ddx/workers/worker-20260422T205846-f23f/status.json\n{\n  \"id\": \"worker-20260422T205846-f23f\",\n  \"kind\": \"execute-loop\",\n  \"state\": \"running\",\n  \"project_root\": \"/Users/erik/Projects/ddx\",\n  ...\n}\n```\n\nSo the dispatch worked, but the per-project workers list filters it out.\n\n## Root cause\n\n`cli/internal/server/state_graphql.go:156` in `GetWorkersGraphQL`:\n\n```go\nif projectID != \"\" \u0026\u0026 rec.ProjectRoot != projectID {\n    continue\n}\n```\n\n- `projectID` is the GraphQL argument — a project **id** like `proj-96d7ea83`.\n- `rec.ProjectRoot` is the worker record field — a project **path** like `/Users/erik/Projects/ddx`.\n\nThese are different representations and never match. With any non-empty `projectID`, every worker is filtered out.\n\nThe global `workers` resolver (`resolver_agent.go:9`) passes `\"\"` and works correctly. Only the per-project path (`workersByProject` → `GetWorkersGraphQL(projectID)`) is broken. The user's flow (dispatch from project home → navigate to project workers) hits exactly this path.\n\nNote: `GetBeadSnapshots` (state_graphql.go:49-105) handles the same concept correctly by iterating `s.Projects` and filtering on `proj.ID != projectID` — comparing id to id. The worker resolver does not use that pattern.\n\n## Proposed direction\n\nTwo options; prefer (1) for minimal change, (2) for long-term clarity.\n\n### Option 1 — Resolve id → path at the filter site\n\n```go\nexpectedPath := \"\"\nif projectID != \"\" {\n    proj, ok := s.GetProjectByID(projectID)\n    if !ok {\n        return nil // unknown project id → no workers\n    }\n    expectedPath = proj.Path\n}\n...\nif expectedPath != \"\" \u0026\u0026 rec.ProjectRoot != expectedPath {\n    continue\n}\n```\n\n### Option 2 — Store project id on the worker record\n\nAdd `ProjectID string` to `WorkerRecord`. Populate at creation time in `WorkerManager.StartExecuteLoop` via `s.GetProjectByPath(effectiveRoot)`. Filter on `rec.ProjectID != projectID`. Cleaner — the worker record carries its own identity and the query doesn't depend on runtime resolution. Requires a tiny migration (for older records missing the field, fall back to path-resolve as in Option 1).\n\nRecommend Option 2. It removes the representation mismatch for good and is cheap.\n\n## Scope note\n\nThis is a one-line functional bug with outsized impact: it's the reason the Workers page looks broken whenever used as the dashboard intends. Prioritizing P1.\n\n## Out of scope\n\n- Workers pane lifecycle controls (`ddx-69789664`).\n- Cross-project workers view — the global `workers` query already handles that.",
+    "acceptance": "**User story:** As an operator, clicking Drain queue on a project home page starts a worker that I can immediately see in that project's Workers view, with its state and current bead updating live.\n\n**Acceptance criteria:**\n\n1. **Root-cause fix.** The `workersByProject(projectID:)` resolver returns all workers whose target project matches the requested id. Both Option 1 (id→path resolution) and Option 2 (store project id on record) satisfy this; implementation chooses one with a one-line justification in the PR description.\n\n2. **Regression test — project-scoped query.**\n   - Seed a ServerState with two registered projects (different paths and ids).\n   - Start one worker for each project.\n   - `workersByProject(projectID: \u003cid-1\u003e)` returns exactly worker 1.\n   - `workersByProject(projectID: \u003cid-2\u003e)` returns exactly worker 2.\n   - `workers` (global) returns both.\n   - Unknown project id returns empty list, not an error.\n\n3. **Regression test — backward compat.**\n   - A worker record on disk without a `ProjectID` field (simulating a pre-migration record) is correctly matched by the path-resolution fallback. Only required if Option 2 is chosen.\n\n4. **End-to-end validation.**\n   - Playwright: navigate to project home, click Drain, confirm, wait 2s, navigate to Workers tab. Assert exactly one new row with `state: running` and matching worker id.\n   - Same test run against a second project asserts that project's Workers tab does not show project-1's worker.\n\n5. **No regression to unrelated surfaces.**\n   - Global `workers` query still returns all workers.\n   - Worker detail page still loads by worker id.\n   - Workers live-progress subscription still patches rows in place.\n\n6. **Cross-reference.**\n   - Note on `ddx-69789664` (Workers lifecycle controls): that bead's acceptance assumed Workers pane worked correctly. Point to this bead as the prerequisite for those tests to be meaningful.",
+    "labels": [
+      "feat-008",
+      "feat-010",
+      "bug",
+      "graphql"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T21:01:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2792459",
+      "execute-loop-heartbeat-at": "2026-04-22T21:01:41.870183844Z",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T210144-11501ed2",
+    "prompt": ".ddx/executions/20260422T210144-11501ed2/prompt.md",
+    "manifest": ".ddx/executions/20260422T210144-11501ed2/manifest.json",
+    "result": ".ddx/executions/20260422T210144-11501ed2/result.json",
+    "checks": ".ddx/executions/20260422T210144-11501ed2/checks.json",
+    "usage": ".ddx/executions/20260422T210144-11501ed2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-05b4cc9d-20260422T210144-11501ed2"
+  }
+}
