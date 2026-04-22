@@ -1,0 +1,57 @@
+{
+  "attempt_id": "20260422T205928-f3642466",
+  "bead_id": "ddx-9ce6842a",
+  "base_rev": "58f32b278049da2aa12f131e5ac031908f31d64c",
+  "created_at": "2026-04-22T20:59:29.130615654Z",
+  "requested": {
+    "harness": "claude",
+    "model": "codex/gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9ce6842a",
+    "title": "Bead list and cross-project all-beads are too slow: establish a GraphQL perf harness and fix N·M scan pattern",
+    "description": "## Observed\n\nPer-project `/beads` page is noticeably slow; the cross-project \"all beads\" view is substantially slower. Related: `ddx-ad0db8fd` already identified the single-bead-detail slowness caused by the same storage pattern.\n\n## Root cause (same pattern, different call site)\n\n`cli/internal/server/graphql/resolver_beads.go:22,40` —\n\n- `Beads` (cross-project) and `BeadsByProject` (single-project) both call `r.State.GetBeadSnapshots(status, label, projectID, search)`.\n- `GetBeadSnapshots` (`cli/internal/server/state_graphql.go:49-105`) iterates every registered project, constructs a `bead.Store` per project, calls `ReadAll()` (scan + JSONL parse of every bead file), filters in Go. Cost is `O(projects × beads_per_project)` on every call, independent of the filter/page size.\n- All filtering (status, label, project, search) is Go-side, post-read. The page-size window is applied in `beadConnectionFromSnapshots` after the full corpus is already materialized.\n- Cross-project \"all beads\" = same loop, just without the projectID filter. It is the worst case by design.\n\nThis is the same shape that's breaking the Sessions feed (`ddx-2ceb02fa`) and single-bead detail (`ddx-ad0db8fd`). A point fix here is insufficient — we need a measurement surface first so we stop relying on anecdote.\n\n## Proposed direction\n\n### Part 1 — Perf harness (foundational; enables everything else)\n\nIntroduce a reusable GraphQL perf harness under `cli/internal/server/perf/` or `cli/internal/server/graphql/bench_test.go`:\n\n- Seeded fixture builder: generates N projects × M beads with configurable distribution of status/labels/dependencies. Reuses existing store primitives (no fake data layer).\n- Go benchmark + scriptable HTTP runner (wrapper around an already-running server) reporting p50/p95/p99 per query shape.\n- Targets covered on day one: `bead(id:)`, `beadsByProject(projectID, first, after, status, label, search)`, `beads(projectID=nil, first, after, status, label)`, `docGraph`, `sessions` (so the sessions shard work `ddx-2ceb02fa` inherits this harness). New query targets are added by writing a single table row.\n- Thresholds are **recorded, not asserted**, in the first pass. CI surfaces a regression if a threshold is breached beyond a configured delta (e.g., +25% p95). Initial pass is \"land the harness and record baseline\"; a follow-up wires it into CI.\n\n### Part 2 — Fix the scan pattern\n\nMinimum viable, in priority order:\n\n1. **Scope by project when the query is scoped.** `BeadsByProject` should call a new `GetBeadSnapshotsForProject(projectID, filters…)` that only opens that one project's store. Trivial change; eliminates the cross-project factor for the common case.\n2. **Early filter pushdown.** `GetBeadSnapshots` should apply status/label/projectID filters at the file-parse boundary where cheap, not after materializing every bead. (Still reads every file — deeper fix below.)\n3. **Lightweight in-memory index with invalidation.** After (1) and (2), if \"all beads\" or search is still slow, introduce an index keyed `{projectID, beadID}` with basic metadata (status, labels, title, updatedAt). Refresh on bead write + debounced filesystem watch. Full-body reads stay lazy — the index never holds bodies. This is the same storage discipline we adopted for sessions in `ddx-2ceb02fa`.\n\nThe harness from Part 1 is the gate for choosing between (2) and (3); don't commit to the index without numbers.\n\n## Out of scope\n\n- Full-text search infrastructure (tracked separately if needed).\n- Changing the on-disk bead format.\n- Cross-node federation performance. Current concern is a single server reading a single workspace.",
+    "acceptance": "**User story:** As a developer using the web UI on a real-world-sized workspace (tens of projects × hundreds of beads each), the beads list opens in under a second and the cross-project all-beads view stays usable. Before any perf fix lands, we can reproduce the problem and measure improvement — not guess.\n\n**Acceptance criteria:**\n\n1. **Perf harness exists and is reusable.**\n   - Fixture builder generates `N × M` beads across projects with configurable shape (status mix, label density, dep count). Reuses the real `bead.Store` write path (no fake writer).\n   - Benchmark covers at minimum: `bead(id:)`, `beadsByProject`, `beads` (cross-project), `docGraph`, `sessions`. Adding a new target is a single-table-row change.\n   - Each target produces p50/p95/p99 for in-process calls and end-to-end HTTP. Results write to a human-readable report (markdown or JSON) plus a machine-readable artifact suitable for CI diffing later.\n\n2. **Baseline recorded.** First run of the harness on the current `main` binary is stored in the bead notes and in `docs/helix/04-observe/perf/YYYY-MM-DD-baseline.md` (or equivalent existing location). Numbers include hardware + go version footer.\n\n3. **BeadsByProject scope fix.** `BeadsByProject` calls a new `GetBeadSnapshotsForProject(projectID, …)` that opens exactly one project's store. Unit test asserts only that project's store is opened (no iteration over other projects).\n\n4. **Filter pushdown.** Status/label/projectID filters apply at the per-file / per-entry parse boundary, not post-materialization. Benchmark captures before/after for the common filtered case (e.g., `status=open`).\n\n5. **Perf targets on fixture (10 projects × 500 beads = 5000 beads total):**\n   - `bead(id:)` p95 ≤ 50ms in-process / ≤ 200ms HTTP (already covered by `ddx-ad0db8fd`; this bead may inherit the work).\n   - `beadsByProject(first=50)` p95 ≤ 75ms in-process / ≤ 250ms HTTP.\n   - `beads(first=50, no projectID)` p95 ≤ 200ms in-process / ≤ 500ms HTTP.\n   These are targets for the **first** pass (scope + pushdown). If they are not met with (1)+(2), escalate to the in-memory index (step 3 of Part 2 in the description) and update these targets with the new baseline.\n\n6. **Stale-read safety.** Regardless of fix chosen, a test writes a bead via `ddx bead update`, then queries it via GraphQL, then asserts the new value is visible on the very next request. Works under concurrency: N concurrent readers + writers interleaved without torn reads or panics.\n\n7. **CI posture (soft).** The harness is runnable via `make bench-graphql` (or the project's equivalent). CI wiring to fail on \u003e25% regression is a follow-up bead — recorded in this bead's notes with the proposed threshold but not implemented here.\n\n8. **Playwright smoke.** Opening `/beads` on the fixture project returns an interactive (clickable) list within 1s. Opening the cross-project `/beads` page returns within 2s. These are ceilings, not p95 targets — guards against outright regression, not fine-grained perf.\n\n9. **Cross-reference.** This bead's notes list `ddx-ad0db8fd` (bead detail) and `ddx-2ceb02fa` (sessions shard/index) as the other two bead/session perf threads that should inherit this harness.",
+    "labels": [
+      "feat-008",
+      "feat-004",
+      "perf",
+      "graphql"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T20:59:23Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2792459",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:28.485694569Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T20:59:28.687045804Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T20:59:23.673560141Z",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T205928-f3642466",
+    "prompt": ".ddx/executions/20260422T205928-f3642466/prompt.md",
+    "manifest": ".ddx/executions/20260422T205928-f3642466/manifest.json",
+    "result": ".ddx/executions/20260422T205928-f3642466/result.json",
+    "checks": ".ddx/executions/20260422T205928-f3642466/checks.json",
+    "usage": ".ddx/executions/20260422T205928-f3642466/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9ce6842a-20260422T205928-f3642466"
+  }
+}
