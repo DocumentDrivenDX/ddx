@@ -515,7 +515,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				// Resolve the best harness for this tier via service.ResolveRoute.
 				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
 					Profile:   profile,
-					ModelRef:  modelRefForTier,
+					Model:     modelRefForTier,
 					Provider:  spec.Provider,
 					Reasoning: agentlib.Reasoning(spec.Effort),
 				})

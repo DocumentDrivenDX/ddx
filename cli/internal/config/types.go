@@ -69,8 +69,20 @@ type AgentConfig struct {
 	TimeoutMS       int                 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
+	Endpoints       []AgentEndpoint     `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
 	Routing         *RoutingConfig      `yaml:"routing,omitempty" json:"routing,omitempty"`
 	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
+}
+
+// AgentEndpoint describes one endpoint-first native agent provider target.
+// Name and model are intentionally absent: routing discovers the live model IDs
+// from the endpoint's /v1/models response at dispatch time.
+type AgentEndpoint struct {
+	Type    string `yaml:"type,omitempty" json:"type,omitempty"`
+	Host    string `yaml:"host,omitempty" json:"host,omitempty"`
+	Port    int    `yaml:"port,omitempty" json:"port,omitempty"`
+	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	APIKey  string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
 }
 
 // RoutingConfig is the agent routing policy block. See FEAT-006 Profile

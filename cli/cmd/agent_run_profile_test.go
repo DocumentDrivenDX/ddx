@@ -213,10 +213,10 @@ func TestAgentRunProfileNoViableHarness(t *testing.T) {
 		"--text", "test",
 	)
 	require.Error(t, err, "should fail when no harness can satisfy the profile+effort request")
-	// ddx-agent v0.7.0 returns "no provider configured for native harness"
-	// instead of the pre-0.6.0 "no viable harness found for profile" wording
-	// (ddx-4535f466).
-	assert.Contains(t, err.Error(), "no provider configured for native harness",
+	// ddx-agent v0.9.2 routes this through the unified routing engine, which
+	// reports the rejected candidate count instead of a provider-config special
+	// case while preserving the no-viable-harness classification.
+	assert.Contains(t, err.Error(), "no viable routing candidate",
 		"error must identify the routing failure cause")
 }
 

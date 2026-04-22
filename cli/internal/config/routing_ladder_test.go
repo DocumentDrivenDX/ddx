@@ -66,6 +66,29 @@ routing:
 	assert.Nil(t, cfg.Routing.ProfileLadders)
 }
 
+func TestAgentConfigParsesEndpointBlocks(t *testing.T) {
+	raw := `
+harness: claude
+endpoints:
+  - type: lmstudio
+    host: vidar
+    port: 1234
+    api_key: lmstudio
+  - type: omlx
+    base_url: http://vidar:1235/v1
+`
+	var cfg AgentConfig
+	require.NoError(t, yaml.Unmarshal([]byte(raw), &cfg))
+
+	require.Len(t, cfg.Endpoints, 2)
+	assert.Equal(t, "lmstudio", cfg.Endpoints[0].Type)
+	assert.Equal(t, "vidar", cfg.Endpoints[0].Host)
+	assert.Equal(t, 1234, cfg.Endpoints[0].Port)
+	assert.Equal(t, "lmstudio", cfg.Endpoints[0].APIKey)
+	assert.Equal(t, "omlx", cfg.Endpoints[1].Type)
+	assert.Equal(t, "http://vidar:1235/v1", cfg.Endpoints[1].BaseURL)
+}
+
 func TestLoadConfigWarnsForLegacyProfilePriority(t *testing.T) {
 	tempDir := t.TempDir()
 	ddxDir := filepath.Join(tempDir, ".ddx")

@@ -9,6 +9,22 @@ update_check:
     frequency: 24h
 agent:
     harness: claude
+    endpoints:
+        - type: lmstudio
+          host: vidar
+          port: 1234
+          api_key: lmstudio
+        - type: omlx
+          host: vidar
+          port: 1235
+        - type: lmstudio
+          host: bragi
+          port: 1234
+          api_key: lmstudio
+        - type: lmstudio
+          host: grendel
+          port: 1234
+          api_key: lmstudio
     routing:
         profile_ladders:
             default:

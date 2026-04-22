@@ -246,6 +246,51 @@
             "unrestricted"
           ]
         },
+        "endpoints": {
+          "type": "array",
+          "description": "Endpoint-first native agent provider targets. These blocks intentionally omit provider profile names and model pins; routing discovers live models from /v1/models.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "Provider endpoint type, such as lmstudio, omlx, ollama, openrouter, or openai"
+              },
+              "host": {
+                "type": "string",
+                "description": "Endpoint host used with port when base_url is omitted"
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "description": "Endpoint port used with host when base_url is omitted"
+              },
+              "base_url": {
+                "type": "string",
+                "description": "OpenAI-compatible base URL, for example http://vidar:1235/v1"
+              },
+              "api_key": {
+                "type": "string",
+                "description": "Optional endpoint API key"
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "base_url"
+                ]
+              },
+              {
+                "required": [
+                  "host",
+                  "port"
+                ]
+              }
+            ]
+          }
+        },
         "routing": {
           "type": "object",
           "description": "Model routing configuration",

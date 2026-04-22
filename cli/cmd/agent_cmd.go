@@ -1821,7 +1821,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				// Resolve the best harness for this tier via service.ResolveRoute.
 				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
 					Profile:   profile,
-					ModelRef:  modelRefForTier,
+					Model:     modelRefForTier,
 					Provider:  provider,
 					Reasoning: agentlib.Reasoning(effort),
 				})
