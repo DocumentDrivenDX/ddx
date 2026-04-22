@@ -335,7 +335,12 @@ test('TC-003.11: Unclaim button on in-progress bead fires BeadUnclaim mutation',
 }) => {
 	let unclaimCalled = false;
 
-	const IN_PROGRESS_BEAD = { ...BEAD_DETAIL, id: 'bead-002', status: 'in-progress', owner: 'alice' };
+	const IN_PROGRESS_BEAD = {
+		...BEAD_DETAIL,
+		id: 'bead-002',
+		status: 'in-progress',
+		owner: 'alice'
+	};
 	const UNCLAIMED_BEAD = { ...IN_PROGRESS_BEAD, status: 'open', owner: null };
 
 	await page.route('/graphql', async (route) => {
@@ -390,10 +395,9 @@ test('TC-003.11: Unclaim button on in-progress bead fires BeadUnclaim mutation',
 	await expect.poll(() => unclaimCalled, { timeout: 5000 }).toBe(true);
 });
 
-// TP-002 TC-003.12 (close), TC-003.13 (reopen), TC-003.14 (drag-drop) are
-// DEFERRED. Rationale: the GraphQL schema has no beadClose mutation and the
-// BeadDetail component exposes no close/reopen/drag-drop UI. Filed as
-// separate work when the backend + component surfaces exist.
+// TP-002 TC-003.12 (generic close), TC-003.13 (reopen), TC-003.14 (drag-drop)
+// are DEFERRED. US-085c below covers the delete soft-close path via beadClose;
+// generic close/reopen/drag-drop controls remain separate lifecycle work.
 
 // -----------------------------------------------------------------------
 // FEAT-008 US-082g: sort + filter the beads list
@@ -403,10 +407,22 @@ test('TC-003.11: Unclaim button on in-progress bead fires BeadUnclaim mutation',
 
 const FILTER_BEADS = [
 	{ id: 'bead-p0-a', title: 'Urgent thing', status: 'open', priority: 0, labels: ['ui'] },
-	{ id: 'bead-p0-b', title: 'Another urgent', status: 'ready', priority: 0, labels: ['ui', 'infra'] },
+	{
+		id: 'bead-p0-b',
+		title: 'Another urgent',
+		status: 'ready',
+		priority: 0,
+		labels: ['ui', 'infra']
+	},
 	{ id: 'bead-p1', title: 'Normal work', status: 'open', priority: 1, labels: ['docs'] },
 	{ id: 'bead-p3', title: 'Cleanup', status: 'closed', priority: 3, labels: ['chore'] },
-	{ id: 'bead-block', title: 'Waiting on upstream', status: 'blocked', priority: 0, labels: ['agent'] }
+	{
+		id: 'bead-block',
+		title: 'Waiting on upstream',
+		status: 'blocked',
+		priority: 0,
+		labels: ['agent']
+	}
 ];
 
 test('US-082g.a: priority sort defaults to P0-first and is toggleable', async ({ page }) => {
@@ -419,9 +435,17 @@ test('US-082g.a: priority sort defaults to P0-first and is toggleable', async ({
 				body: JSON.stringify({ data: makeBeadsResponse(FILTER_BEADS) })
 			});
 		} else if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else {
 			await route.continue();
 		}
@@ -455,9 +479,17 @@ test('US-082g.b: status filter chip narrows list and updates URL', async ({ page
 				body: JSON.stringify({ data: makeBeadsResponse(filtered) })
 			});
 		} else if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else {
 			await route.continue();
 		}
@@ -477,15 +509,29 @@ test('US-082g.c: multi-filter URL is bookmarkable', async ({ page }) => {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
 		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else if (body.query.includes('BeadsByProject')) {
 			const url = new URL(page.url());
 			let filtered = FILTER_BEADS;
-			if (url.searchParams.get('status')) filtered = filtered.filter((b) => b.status === url.searchParams.get('status'));
-			if (url.searchParams.get('priority')) filtered = filtered.filter((b) => String(b.priority) === url.searchParams.get('priority'));
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse(filtered) }) });
+			if (url.searchParams.get('status'))
+				filtered = filtered.filter((b) => b.status === url.searchParams.get('status'));
+			if (url.searchParams.get('priority'))
+				filtered = filtered.filter((b) => String(b.priority) === url.searchParams.get('priority'));
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse(filtered) })
+			});
 		} else {
 			await route.continue();
 		}
@@ -507,22 +553,38 @@ test('US-082g.d: label chip filter is clickable from a row', async ({ page }) =>
 	await mockGraphQL(page);
 	await page.goto(BASE_URL);
 
-	const uiLabel = page.locator('[data-testid="bead-row"] [data-testid="label-chip"]', { hasText: /ui/i }).first();
+	const uiLabel = page
+		.locator('[data-testid="bead-row"] [data-testid="label-chip"]', { hasText: /ui/i })
+		.first();
 	await expect(uiLabel).toBeVisible();
 	await uiLabel.click();
 
 	await expect(page).toHaveURL(/labels?=ui/);
 });
 
-test('US-082g.e: empty filter result shows zero-state with clear-filters affordance', async ({ page }) => {
+test('US-082g.e: empty filter result shows zero-state with clear-filters affordance', async ({
+	page
+}) => {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
 		if (body.query.includes('BeadsByProject')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse([]) }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse([]) })
+			});
 		} else if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else {
 			await route.continue();
 		}
@@ -545,21 +607,52 @@ test('US-085c: delete button triggers typed-confirmation modal and BeadClose mut
 }) => {
 	let closeCalled = false;
 	let closeArgs: Record<string, unknown> | null = null;
+	const CHILD_BEAD = { id: 'bead-child', parent: BEAD_DETAIL.id };
 
 	await page.route('/graphql', async (route) => {
-		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
 		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else if (body.query.includes('BeadsByProject')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse() }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse() })
+			});
 		} else if (body.query.includes('query Bead(')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { bead: BEAD_DETAIL } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						bead: BEAD_DETAIL,
+						projectBeads: {
+							edges: [{ node: { id: BEAD_DETAIL.id, parent: null } }, { node: CHILD_BEAD }]
+						}
+					}
+				})
+			});
 		} else if (body.query.includes('BeadClose') || body.query.includes('beadClose')) {
 			closeCalled = true;
 			closeArgs = body.variables ?? null;
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { beadClose: { ...BEAD_DETAIL, status: 'closed' } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { beadClose: { ...BEAD_DETAIL, status: 'closed' } } })
+			});
 		} else {
 			await route.continue();
 		}
@@ -567,14 +660,20 @@ test('US-085c: delete button triggers typed-confirmation modal and BeadClose mut
 
 	await page.goto(`${BASE_URL}/${BEAD_DETAIL.id}`);
 
-	const deleteBtn = page.getByRole('button', { name: /delete/i });
+	const deleteBtn = page.getByRole('button', { name: 'Delete', exact: true });
 	await expect(deleteBtn).toBeVisible();
 	await deleteBtn.click();
 
 	// Confirmation modal requires typing the bead ID before enabling Confirm.
-	const modal = page.getByRole('dialog', { name: /delete bead/i });
+	let modal = page.getByRole('dialog', { name: /delete bead/i });
 	await expect(modal).toBeVisible();
-	const confirmBtn = modal.getByRole('button', { name: /confirm|delete/i });
+	await expect(modal.getByRole('checkbox', { name: /cascade to child beads/i })).toBeVisible();
+	await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(deleteBtn).toBeFocused();
+
+	await deleteBtn.click();
+	modal = page.getByRole('dialog', { name: /delete bead/i });
+	const confirmBtn = modal.getByRole('button', { name: 'Delete bead', exact: true });
 	await expect(confirmBtn).toBeDisabled();
 
 	const idField = modal.getByLabel(/type the bead id/i);
@@ -585,7 +684,7 @@ test('US-085c: delete button triggers typed-confirmation modal and BeadClose mut
 	await expect.poll(() => closeCalled).toBe(true);
 	expect(closeArgs).toMatchObject({
 		id: BEAD_DETAIL.id,
-		reason: expect.stringContaining('deleted')
+		reason: 'deleted via UI'
 	});
 
 	// URL should redirect to list; detail panel should be gone.
