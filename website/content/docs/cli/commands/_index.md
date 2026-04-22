@@ -17,7 +17,7 @@ Auto-generated reference for every `ddx` command.
 | [`ddx exec`](/docs/cli/commands/ddx_exec/) | Validate and run DDx execution definitions |
 | [`ddx help`](/docs/cli/commands/ddx_help/) | Help about any command |
 | [`ddx init`](/docs/cli/commands/ddx_init/) | Initialize DDx in current project |
-| [`ddx install`](/docs/cli/commands/ddx_install/) | Install a package or resource |
+| [`ddx install`](/docs/cli/commands/ddx_install/) | Install a package, resource, or the embedded DDx skills |
 | [`ddx installed`](/docs/cli/commands/ddx_installed/) | List installed packages |
 | [`ddx jq`](/docs/cli/commands/ddx_jq/) | Process JSON with jq expressions |
 | [`ddx list`](/docs/cli/commands/ddx_list/) | List available DDx resources |
@@ -36,3 +36,4 @@ Auto-generated reference for every `ddx` command.
 | [`ddx upgrade`](/docs/cli/commands/ddx_upgrade/) | Upgrade DDx to the latest version |
 | [`ddx verify`](/docs/cli/commands/ddx_verify/) | Verify installed package integrity |
 | [`ddx version`](/docs/cli/commands/ddx_version/) | Show version information |
+| [`ddx work`](/docs/cli/commands/ddx_work/) | Work the bead execution queue |
