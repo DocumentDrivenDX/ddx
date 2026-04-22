@@ -143,7 +143,7 @@
 				<button
 					type="button"
 					class="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-					aria-label="Cancel {actionLabel}"
+					aria-label="Close dialog"
 					onclick={() => cancel('cancel')}
 				>
 					<X class="h-4 w-4" aria-hidden="true" />
