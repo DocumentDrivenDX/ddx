@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "BLOCK: `cli/internal/server/graphql/resolver_feat008.go`, `PluginDispatch` returns `queued-plugin-...` without invoking any real plugin install/dispatch path or validating the requested action/scope.\nBLOCK: `cli/internal/server/graphql/resolver_feat008.go`, `ComparisonDispatch` returns `queued-comparison-...` from `time.Now()` and `len(arms)` only; no real comparison job/record is created.\nREQUEST_CHANGES: `cli/internal/server/graphql/feat008_test.go`, `TestIntegration_FEAT008BackendOperations` smoke-calls `pluginDispatch` and `comparisonDispatch` but does not assert their returned IDs/states or verify any real DDx side effect."
+}
