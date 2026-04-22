@@ -51,8 +51,8 @@ async function mockRoutes(page: import('@playwright/test').Page) {
 				body: JSON.stringify({ data: makeDocsResponse() })
 			});
 		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
-			const vars = (route.request().postDataJSON() as { variables?: Record<string, string> })
-				.variables ?? {};
+			const vars =
+				(route.request().postDataJSON() as { variables?: Record<string, string> }).variables ?? {};
 			const path = vars.path ?? '';
 			await route.fulfill({
 				status: 200,
@@ -89,9 +89,9 @@ test('TC-021: document list renders all returned documents', async ({ page }) =>
 	await mockRoutes(page);
 	await page.goto(BASE_URL);
 
-	await expect(page.getByText('Vision')).toBeVisible();
-	await expect(page.getByText('PRD')).toBeVisible();
-	await expect(page.getByText('API Design')).toBeVisible();
+	await expect(page.getByRole('cell', { name: /^Vision$/ })).toBeVisible();
+	await expect(page.getByRole('cell', { name: /^PRD$/ })).toBeVisible();
+	await expect(page.getByRole('cell', { name: /^API Design$/ })).toBeVisible();
 });
 
 // TC-022: Total count is displayed in the header area
@@ -118,7 +118,7 @@ test('TC-024: clicking a document row navigates to the detail page', async ({ pa
 	await page.goto(BASE_URL);
 
 	// Click on the Vision document row
-	await page.getByText('Vision').click();
+	await page.getByRole('cell', { name: /^Vision$/ }).click();
 
 	// URL should include the document path
 	await expect(page).toHaveURL(/\/documents\/docs\/helix\/01-frame\/vision\.md/);
@@ -139,7 +139,10 @@ test('TC-026: editing a document fires the DocumentWrite mutation', async ({ pag
 	let mutationInput: { path?: string; content?: string } = {};
 
 	await page.route('/graphql', async (route) => {
-		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
 		if (body.query.includes('NodeInfo')) {
 			await route.fulfill({
 				status: 200,
@@ -186,8 +189,9 @@ test('TC-026: editing a document fires the DocumentWrite mutation', async ({ pag
 	await expect(page.getByRole('button', { name: /edit/i })).toBeVisible();
 	await page.getByRole('button', { name: /edit/i }).click();
 
-	// Textarea should appear with the document content
-	const textarea = page.locator('textarea');
+	// Plain mode exposes the raw markdown textarea.
+	await page.getByRole('radio', { name: /plain/i }).click();
+	const textarea = page.getByRole('textbox', { name: /plain markdown editor/i });
 	await expect(textarea).toBeVisible();
 	await textarea.fill('# Vision\n\nUpdated content.');
 
@@ -200,7 +204,9 @@ test('TC-026: editing a document fires the DocumentWrite mutation', async ({ pag
 });
 
 // TC-027: Empty state shown when no documents are returned
-test('TC-027: documents page shows empty state when no documents are returned', async ({ page }) => {
+test('TC-027: documents page shows empty state when no documents are returned', async ({
+	page
+}) => {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
 		if (body.query.includes('NodeInfo')) {
@@ -262,18 +268,38 @@ async function mockDocsWithLinks(page: import('@playwright/test').Page) {
 			variables?: Record<string, string>;
 		};
 		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
 			const path = body.variables?.path ?? '';
 			if (path.includes('prd.md')) {
-				await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documentByPath: DOC_LINK_TARGET } }) });
+				await route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ data: { documentByPath: DOC_LINK_TARGET } })
+				});
 			} else {
-				await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documentByPath: DOC_WITH_LINK } }) });
+				await route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ data: { documentByPath: DOC_WITH_LINK } })
+				});
 			}
 		} else if (body.query.includes('Documents')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeDocsResponse() }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeDocsResponse() })
+			});
 		} else {
 			await route.continue();
 		}
@@ -339,14 +365,34 @@ async function mockEditable(page: import('@playwright/test').Page) {
 			variables?: Record<string, unknown>;
 		};
 		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documentByPath: { ...DOC_TO_EDIT, content: currentContent } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { documentByPath: { ...DOC_TO_EDIT, content: currentContent } }
+				})
+			});
 		} else if (body.query.includes('DocumentWrite') || body.query.includes('documentWrite')) {
 			currentContent = (body.variables?.content ?? currentContent) as string;
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documentWrite: { ...DOC_TO_EDIT, content: currentContent } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { documentWrite: { ...DOC_TO_EDIT, content: currentContent } }
+				})
+			});
 		} else {
 			await route.continue();
 		}
@@ -363,6 +409,7 @@ test('US-083a.a: editor has WYSIWYG and Plain mode toggles', async ({ page }) =>
 	await expect(wysiwygToggle).toBeVisible();
 	await expect(plainToggle).toBeVisible();
 	await expect(wysiwygToggle).toBeChecked();
+	await expect(page.getByText('Frontmatter')).toBeVisible();
 });
 
 test('US-083a.b: Plain mode shows raw markdown including frontmatter', async ({ page }) => {
@@ -413,15 +460,31 @@ test('US-083a.d: saving writes via documentWrite with raw markdown', async ({ pa
 			variables?: Record<string, unknown>;
 		};
 		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documentByPath: DOC_TO_EDIT } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { documentByPath: DOC_TO_EDIT } })
+			});
 		} else if (body.query.includes('DocumentWrite') || body.query.includes('documentWrite')) {
 			writeCalled = true;
 			writtenContent = ((body.variables ?? {}).content as string) ?? '';
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { documentWrite: DOC_TO_EDIT } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { documentWrite: DOC_TO_EDIT } })
+			});
 		} else {
 			await route.continue();
 		}
