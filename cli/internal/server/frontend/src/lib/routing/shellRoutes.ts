@@ -29,7 +29,13 @@ interface ShellRouteDefaultsResult {
 	};
 }
 
-export type ProjectShellSection = 'beads' | 'documents' | 'graph' | 'sessions' | 'personas';
+export type ProjectShellSection =
+	| 'beads'
+	| 'documents'
+	| 'graph'
+	| 'sessions'
+	| 'personas'
+	| 'plugins';
 
 export async function resolveDefaultProjectRoute(
 	section: ProjectShellSection,

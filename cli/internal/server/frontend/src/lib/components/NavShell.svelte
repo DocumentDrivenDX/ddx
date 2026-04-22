@@ -7,6 +7,7 @@
 		Terminal,
 		Users,
 		GitCommit,
+		Package,
 		Moon,
 		Sun,
 		Radio,
@@ -29,6 +30,7 @@
 		{ page: 'workers', label: 'Workers', Icon: Cpu },
 		{ page: 'sessions', label: 'Sessions', Icon: Terminal },
 		{ page: 'personas', label: 'Personas', Icon: Users },
+		{ page: 'plugins', label: 'Plugins', Icon: Package },
 		{ page: 'commits', label: 'Commits', Icon: GitCommit },
 		{ page: 'efficacy', label: 'Efficacy', Icon: BarChart3 }
 	];
