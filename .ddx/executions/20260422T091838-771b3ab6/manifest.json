@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260422T091838-771b3ab6",
+  "bead_id": "ddx-b09a606b",
+  "base_rev": "40919c6b5937abac116d30144aecec1f2d239d03",
+  "created_at": "2026-04-22T09:18:38.601675761Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b09a606b",
+    "title": "FEAT-008 P11: real backend resolvers (swap Phase 2 stubs)",
+    "description": "Replace stubbed resolvers from Phase 2 with real implementations. queueSummary: scan bead tracker. pluginsList/pluginDetail: shell ddx install list --json + registry scan. personaBind: write .ddx/config.yaml persona_bindings. paletteSearch: path+title prefix + FTS, 50-result cap, no body indexing in first pass. efficacyRows/efficacyAttempts: aggregate kind:cost + kind:routing evidence events from closed beads; memoize per (project, filters, max_event_sequence); invalidate on new evidence. workerDispatch(kind: realign-specs|run-checks) stub return queued-worker is acceptable here; real execution is a follow-up bead.",
+    "acceptance": "No mock fallbacks remain; manual smoke test of each action works against a real DDx instance.",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "phase-11",
+      "backend"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T09:18:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "execute-loop-heartbeat-at": "2026-04-22T09:18:38.129004021Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T091838-771b3ab6",
+    "prompt": ".ddx/executions/20260422T091838-771b3ab6/prompt.md",
+    "manifest": ".ddx/executions/20260422T091838-771b3ab6/manifest.json",
+    "result": ".ddx/executions/20260422T091838-771b3ab6/result.json",
+    "checks": ".ddx/executions/20260422T091838-771b3ab6/checks.json",
+    "usage": ".ddx/executions/20260422T091838-771b3ab6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b09a606b-20260422T091838-771b3ab6"
+  }
+}
