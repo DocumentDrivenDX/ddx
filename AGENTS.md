@@ -1,5 +1,13 @@
 # DDx Agent Instructions
 
+## Agent Routing Reference
+
+DDx agent routing rules live in ddx-agent and should be linked, not duplicated:
+
+- Profile catalog: https://github.com/DocumentDrivenDX/agent/blob/master/docs/routing/profiles.md
+- Override precedence: https://github.com/DocumentDrivenDX/agent/blob/master/docs/routing/override-precedence.md
+- Best-provider contract: https://github.com/DocumentDrivenDX/agent/blob/master/docs/routing/best-provider.md
+
 This repository uses DDx's built-in bead tracker for durable work management.
 
 ## Bead Policy

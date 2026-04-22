@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 DDx (Document-Driven Development eXperience) is the shared infrastructure platform for document-driven development. It provides the tools that developers and workflow systems (like HELIX) use to manage the documents AI agents consume to build software.
 
+## Agent Routing Reference
+
+DDx agent routing behavior is documented in ddx-agent and should be linked, not duplicated:
+
+- Profile catalog: https://github.com/DocumentDrivenDX/agent/blob/master/docs/routing/profiles.md
+- Override precedence: https://github.com/DocumentDrivenDX/agent/blob/master/docs/routing/override-precedence.md
+- Best-provider contract: https://github.com/DocumentDrivenDX/agent/blob/master/docs/routing/best-provider.md
+
 DDx is one layer in a three-project stack:
 - **DDx** (this repo) — platform services: document library, bead tracker, agent service, personas, templates, git sync
 - **HELIX** (`~/Projects/helix`) — workflow methodology: phases, gates, supervisory dispatch, bounded actions
