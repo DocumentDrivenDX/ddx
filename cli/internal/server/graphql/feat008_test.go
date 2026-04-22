@@ -202,13 +202,56 @@ install:
 		t.Fatalf("bead(id): want %q, got %q", ready.ID, data.Bead.ID)
 	}
 
-	gqlPost(t, h, `mutation {
+	mutationResp := gqlPost(t, h, `mutation {
 		workerDispatch(kind: "realign-specs", projectId: "`+projectID+`") { id state kind }
 		pluginDispatch(name: "local-ui", action: "install", scope: "project") { id state action }
 		comparisonDispatch(arms: [{ model: "gpt-5", prompt: "Summarize file X" }, { model: "claude-sonnet-4-6", prompt: "Summarize file X" }]) { id state armCount }
 		personaBind(role: "code-reviewer", persona: "code-reviewer", projectId: "`+projectID+`") { ok role persona }
 		beadClose(id: "`+ready.ID+`", reason: "done") { id status }
 	}`)
+	var mutationData struct {
+		PluginDispatch struct {
+			ID     string `json:"id"`
+			State  string `json:"state"`
+			Action string `json:"action"`
+		} `json:"pluginDispatch"`
+		ComparisonDispatch struct {
+			ID       string `json:"id"`
+			State    string `json:"state"`
+			ArmCount int    `json:"armCount"`
+		} `json:"comparisonDispatch"`
+	}
+	if err := json.Unmarshal(mutationResp["data"], &mutationData); err != nil {
+		t.Fatalf("parse mutation data: %v", err)
+	}
+	if strings.HasPrefix(mutationData.PluginDispatch.ID, "queued-plugin-") || mutationData.PluginDispatch.State != "installed" || mutationData.PluginDispatch.Action != "install" {
+		t.Fatalf("pluginDispatch did not run the real plugin path: %+v", mutationData.PluginDispatch)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, ".ddx", "plugin-dispatches", mutationData.PluginDispatch.ID+".json")); err != nil {
+		t.Fatalf("pluginDispatch did not write an audit record: %v", err)
+	}
+	if strings.HasPrefix(mutationData.ComparisonDispatch.ID, "queued-comparison-") || mutationData.ComparisonDispatch.State != "queued" || mutationData.ComparisonDispatch.ArmCount != 2 {
+		t.Fatalf("comparisonDispatch did not create a real queued record: %+v", mutationData.ComparisonDispatch)
+	}
+	comparisonPath := filepath.Join(workDir, ".ddx", "comparisons", mutationData.ComparisonDispatch.ID+".json")
+	if _, err := os.Stat(comparisonPath); err != nil {
+		t.Fatalf("comparisonDispatch did not write a comparison record: %v", err)
+	}
+
+	comparisonResp := gqlPost(t, h, `{ comparisons { id state armCount } }`)
+	var comparisonData struct {
+		Comparisons []struct {
+			ID       string `json:"id"`
+			State    string `json:"state"`
+			ArmCount int    `json:"armCount"`
+		} `json:"comparisons"`
+	}
+	if err := json.Unmarshal(comparisonResp["data"], &comparisonData); err != nil {
+		t.Fatalf("parse comparisons data: %v", err)
+	}
+	if len(comparisonData.Comparisons) != 1 || comparisonData.Comparisons[0].ID != mutationData.ComparisonDispatch.ID || comparisonData.Comparisons[0].ArmCount != 2 {
+		t.Fatalf("comparisons did not read back dispatched record: %+v", comparisonData.Comparisons)
+	}
 
 	cfgData, err := os.ReadFile(filepath.Join(workDir, ".ddx", "config.yaml"))
 	if err != nil {

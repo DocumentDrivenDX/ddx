@@ -2,6 +2,8 @@ package graphql
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -68,17 +70,78 @@ func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, proj
 
 // PluginDispatch is the resolver for the pluginDispatch field.
 func (r *mutationResolver) PluginDispatch(ctx context.Context, name string, action string, scope string) (*PluginDispatchResult, error) {
+	name = strings.TrimSpace(name)
+	action = strings.ToLower(strings.TrimSpace(action))
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if name == "" {
+		return nil, fmt.Errorf("plugin name is required")
+	}
+	if scope != "project" {
+		return nil, fmt.Errorf("unsupported plugin scope %q", scope)
+	}
+
+	state, err := dispatchPluginAction(r.WorkingDir, name, action)
+	if err != nil {
+		return nil, err
+	}
+	id := newDispatchID("plugin", action, name)
+	if err := writeJSONRecord(r.WorkingDir, "plugin-dispatches", id, pluginDispatchRecord{
+		ID:        id,
+		Name:      name,
+		Action:    action,
+		Scope:     scope,
+		State:     state,
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		return nil, err
+	}
 	return &PluginDispatchResult{
-		ID:     "queued-plugin-" + slug(action) + "-" + slug(name),
-		State:  queuedPlaceholderState,
+		ID:     id,
+		State:  state,
 		Action: action,
 	}, nil
 }
 
 // ComparisonDispatch is the resolver for the comparisonDispatch field.
 func (r *mutationResolver) ComparisonDispatch(ctx context.Context, arms []*ComparisonArmInput) (*ComparisonDispatchResult, error) {
+	if len(arms) == 0 {
+		return nil, fmt.Errorf("comparison requires at least one arm")
+	}
+	for i, arm := range arms {
+		if arm == nil {
+			return nil, fmt.Errorf("comparison arm %d is required", i)
+		}
+		arm.Model = strings.TrimSpace(arm.Model)
+		arm.Prompt = strings.TrimSpace(arm.Prompt)
+		if arm.Model == "" {
+			return nil, fmt.Errorf("comparison arm %d model is required", i)
+		}
+		if arm.Prompt == "" {
+			return nil, fmt.Errorf("comparison arm %d prompt is required", i)
+		}
+		if arm.Harness != nil {
+			trimmed := strings.TrimSpace(*arm.Harness)
+			arm.Harness = &trimmed
+		}
+		if arm.Provider != nil {
+			trimmed := strings.TrimSpace(*arm.Provider)
+			arm.Provider = &trimmed
+		}
+	}
+
+	id := newDispatchID("comparison")
+	record := comparisonDispatchRecord{
+		ID:        id,
+		State:     queuedPlaceholderState,
+		ArmCount:  len(arms),
+		Arms:      arms,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := writeJSONRecord(r.WorkingDir, "comparisons", id, record); err != nil {
+		return nil, err
+	}
 	return &ComparisonDispatchResult{
-		ID:       "queued-comparison-" + time.Now().UTC().Format("20060102T150405"),
+		ID:       id,
 		State:    queuedPlaceholderState,
 		ArmCount: len(arms),
 	}, nil
@@ -147,7 +210,19 @@ func (r *queryResolver) EfficacyAttempts(ctx context.Context, rowKey string) (*E
 
 // Comparisons is the resolver for the comparisons field.
 func (r *queryResolver) Comparisons(ctx context.Context) ([]*ComparisonRecord, error) {
-	return []*ComparisonRecord{}, nil
+	records, err := readComparisonRecords(r.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ComparisonRecord, 0, len(records))
+	for _, record := range records {
+		out = append(out, &ComparisonRecord{
+			ID:       record.ID,
+			State:    record.State,
+			ArmCount: record.ArmCount,
+		})
+	}
+	return out, nil
 }
 
 // PluginsList is the resolver for the pluginsList field.
@@ -227,6 +302,173 @@ func (r *Resolver) projectRoot(projectID string) string {
 		}
 	}
 	return r.WorkingDir
+}
+
+type pluginDispatchRecord struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Action    string    `json:"action"`
+	Scope     string    `json:"scope"`
+	State     string    `json:"state"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type comparisonDispatchRecord struct {
+	ID        string                `json:"id"`
+	State     string                `json:"state"`
+	ArmCount  int                   `json:"arm_count"`
+	Arms      []*ComparisonArmInput `json:"arms"`
+	CreatedAt time.Time             `json:"created_at"`
+}
+
+func dispatchPluginAction(workingDir string, name string, action string) (string, error) {
+	state, err := registry.LoadState()
+	if err != nil {
+		return "", fmt.Errorf("loading plugin state: %w", err)
+	}
+
+	switch action {
+	case "install":
+		if entry := state.FindInstalled(name); entry != nil && entry.VerifyFiles() {
+			return "installed", nil
+		}
+		entry, err := installRegistryPlugin(workingDir, state, name)
+		if err != nil {
+			return "", err
+		}
+		if entry != nil && entry.VerifyFiles() {
+			return "installed", nil
+		}
+		return "", fmt.Errorf("plugin %q install completed but recorded files are not present", name)
+	case "update":
+		installed := state.FindInstalled(name)
+		if installed == nil {
+			return "", fmt.Errorf("plugin %q is not installed", name)
+		}
+		pkg, err := registry.BuiltinRegistry().Find(name)
+		if err != nil {
+			return "", fmt.Errorf("plugin %q is not updateable from the built-in registry", name)
+		}
+		if installed.Version == pkg.Version && installed.VerifyFiles() {
+			return "installed", nil
+		}
+		entry, err := installRegistryPlugin(workingDir, state, name)
+		if err != nil {
+			return "", err
+		}
+		if entry != nil && entry.VerifyFiles() {
+			return "installed", nil
+		}
+		return "", fmt.Errorf("plugin %q update completed but recorded files are not present", name)
+	case "uninstall":
+		entry := state.FindInstalled(name)
+		if entry == nil {
+			return "", fmt.Errorf("plugin %q is not installed", name)
+		}
+		if err := registry.UninstallPackage(entry); err != nil {
+			return "", err
+		}
+		state.Remove(name)
+		if err := registry.SaveState(state); err != nil {
+			return "", fmt.Errorf("saving plugin state: %w", err)
+		}
+		return "uninstalled", nil
+	default:
+		return "", fmt.Errorf("unsupported plugin action %q", action)
+	}
+}
+
+func installRegistryPlugin(workingDir string, state *registry.InstalledState, name string) (*registry.InstalledEntry, error) {
+	pkg, err := registry.BuiltinRegistry().Find(name)
+	if err != nil {
+		return nil, err
+	}
+
+	origDir, _ := os.Getwd()
+	if workingDir != "" && origDir != workingDir {
+		if err := os.Chdir(workingDir); err != nil {
+			return nil, fmt.Errorf("entering project root: %w", err)
+		}
+		defer func() { _ = os.Chdir(origDir) }()
+	}
+
+	entry, err := registry.InstallPackage(pkg)
+	if err != nil {
+		return nil, fmt.Errorf("installing plugin %q: %w", name, err)
+	}
+	state.AddOrUpdate(entry)
+	if err := registry.SaveState(state); err != nil {
+		return nil, fmt.Errorf("saving plugin state: %w", err)
+	}
+	return state.FindInstalled(name), nil
+}
+
+func readComparisonRecords(workingDir string) ([]comparisonDispatchRecord, error) {
+	dir := filepath.Join(workingDir, ".ddx", "comparisons")
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return []comparisonDispatchRecord{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	records := make([]comparisonDispatchRecord, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var record comparisonDispatchRecord
+		if err := json.Unmarshal(data, &record); err != nil {
+			return nil, fmt.Errorf("parsing comparison record %s: %w", entry.Name(), err)
+		}
+		if record.ID == "" {
+			continue
+		}
+		records = append(records, record)
+	}
+	sort.Slice(records, func(i, j int) bool {
+		if !records[i].CreatedAt.Equal(records[j].CreatedAt) {
+			return records[i].CreatedAt.After(records[j].CreatedAt)
+		}
+		return records[i].ID < records[j].ID
+	})
+	return records, nil
+}
+
+func writeJSONRecord(workingDir string, kind string, id string, record any) error {
+	dir := filepath.Join(workingDir, ".ddx", kind)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(dir, id+".json"), data, 0o644)
+}
+
+func newDispatchID(prefix string, parts ...string) string {
+	segments := []string{slug(prefix)}
+	for _, part := range parts {
+		if s := slug(part); s != "" {
+			segments = append(segments, s)
+		}
+	}
+	segments = append(segments, randomHex(4))
+	return strings.Join(segments, "-")
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return time.Now().UTC().Format("20060102T150405.000000000")
+	}
+	return hex.EncodeToString(b)
 }
 
 func pluginCatalog(workingDir string) ([]*PluginInfo, error) {
