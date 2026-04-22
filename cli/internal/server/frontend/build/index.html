@@ -5,12 +5,34 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<title>DDx</title>
-		<link href="/_app/immutable/entry/start.DajI4D0D.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/bso9NQqB.js" rel="modulepreload">
+		<script>
+			(() => {
+				if (window.__ddxCommandPaletteBridgeInstalled) return;
+				window.__ddxCommandPaletteBridgeInstalled = true;
+
+				window.addEventListener(
+					'keydown',
+					(event) => {
+						if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+							event.preventDefault();
+							window.__ddxCommandPalettePendingOpen = true;
+							window.dispatchEvent(new CustomEvent('ddx-command-palette-open'));
+						}
+
+						if (event.key === 'Escape') {
+							window.dispatchEvent(new CustomEvent('ddx-command-palette-close'));
+						}
+					},
+					{ capture: true }
+				);
+			})();
+		</script>
+		<link href="/_app/immutable/entry/start.BFqZBZzl.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DM0K8RBK.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/CiQrvRQZ.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/CMS4ri9N.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/Bhd4fp5Y.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/f7QogPEi.js" rel="modulepreload">
-		<link href="/_app/immutable/entry/app.0BUv6hmn.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.CZRHR0xB.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/DXjYIF9c.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/EBFaVcf9.js" rel="modulepreload">
 		
@@ -19,15 +41,15 @@
 		<div style="display: contents">
 			<script>
 				{
-					__sveltekit_syvspf = {
+					__sveltekit_1tzw9o3 = {
 						base: ""
 					};
 
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/_app/immutable/entry/start.DajI4D0D.js"),
-						import("/_app/immutable/entry/app.0BUv6hmn.js")
+						import("/_app/immutable/entry/start.BFqZBZzl.js"),
+						import("/_app/immutable/entry/app.CZRHR0xB.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
