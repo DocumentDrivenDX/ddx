@@ -187,6 +187,7 @@ type ExecuteBeadLoopOptions struct {
 	Provider    string
 	ModelRef    string
 	SessionID   string
+	LabelFilter string
 
 	// MinTier and MaxTier bound the tier escalation range when the executor
 	// uses tier-based auto-escalation. Empty string uses the defaults (cheap
@@ -319,7 +320,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			return result, err
 		}
 
-		candidate, ok, err := w.nextCandidate(attempted)
+		candidate, ok, err := w.nextCandidate(attempted, opts.LabelFilter)
 		if err != nil {
 			return result, err
 		}
@@ -687,13 +688,16 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 	}
 }
 
-func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}) (bead.Bead, bool, error) {
+func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter string) (bead.Bead, bool, error) {
 	ready, err := w.Store.ReadyExecution()
 	if err != nil {
 		return bead.Bead{}, false, err
 	}
 	for _, candidate := range ready {
 		if _, seen := attempted[candidate.ID]; seen {
+			continue
+		}
+		if labelFilter != "" && !HasBeadLabel(candidate.Labels, labelFilter) {
 			continue
 		}
 		return candidate, true, nil

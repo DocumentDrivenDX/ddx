@@ -465,6 +465,21 @@ func workerFromRecord(rec WorkerRecord) *ddxgraphql.Worker {
 			PhaseSeq: pt.PhaseSeq,
 		})
 	}
+	for _, e := range rec.Lifecycle {
+		ev := e
+		gqlEvent := &ddxgraphql.WorkerLifecycleEvent{
+			Action:    ev.Action,
+			Actor:     ev.Actor,
+			Timestamp: ev.Timestamp.UTC().Format(time.RFC3339),
+		}
+		if ev.Detail != "" {
+			gqlEvent.Detail = &ev.Detail
+		}
+		if ev.BeadID != "" {
+			gqlEvent.BeadID = &ev.BeadID
+		}
+		w.LifecycleEvents = append(w.LifecycleEvents, gqlEvent)
+	}
 	if rec.LastAttempt != nil {
 		w.LastAttempt = lastAttemptFromRecord(rec.LastAttempt)
 	}
@@ -726,6 +741,9 @@ func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgrap
 
 	if e.BeadID != "" {
 		sess.BeadID = &e.BeadID
+	}
+	if e.WorkerID != "" {
+		sess.WorkerID = &e.WorkerID
 	}
 	if e.NativeLogRef != "" {
 		sess.StdoutPath = &e.NativeLogRef

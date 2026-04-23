@@ -72,17 +72,29 @@ const WORKER_DETAIL = {
 		phase: 'executing',
 		startedAt: '2026-01-01T10:05:00Z',
 		elapsedMs: 30000
-	}
+	},
+	recentEvents: [],
+	lifecycleEvents: []
 };
 
 const WORKER_LOG = { stdout: 'Starting execution...\nStep 1 complete\nStep 2 complete', stderr: '' };
 
-function makeWorkersResponse(workers = WORKERS) {
+function makeWorkersResponse(workers: Record<string, unknown>[] = WORKERS) {
 	return {
 		workersByProject: {
 			edges: workers.map((w, i) => ({ node: w, cursor: `cursor-${i}` })),
 			pageInfo: { hasNextPage: false, endCursor: null },
 			totalCount: workers.length
+		}
+	};
+}
+
+function makeSessionsResponse(sessions: Record<string, unknown>[] = []) {
+	return {
+		agentSessions: {
+			edges: sessions.map((node) => ({ node, cursor: String(node.id) })),
+			pageInfo: { hasNextPage: false, endCursor: null },
+			totalCount: sessions.length
 		}
 	};
 }
@@ -126,6 +138,12 @@ async function mockGraphQL(page: import('@playwright/test').Page, workers = WORK
 				contentType: 'application/json',
 				body: JSON.stringify({ data: { workerLog: WORKER_LOG } })
 			});
+		} else if (body.query.includes('AgentSessions') || body.query.includes('agentSessions')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeSessionsResponse() })
+			});
 		} else if (body.query.includes('WorkerProgress')) {
 			// Subscriptions are handled over WebSocket; pass through
 			await route.continue();
@@ -141,6 +159,7 @@ test('TC-040: workers page loads with heading and worker table', async ({ page }
 	await page.goto(BASE_URL);
 
 	await expect(page.getByRole('heading', { name: 'Workers' })).toBeVisible();
+	await expect(page.getByText(/Workers drain the bead queue/)).toBeVisible();
 
 	// Table columns
 	await expect(page.getByRole('columnheader', { name: 'ID' })).toBeVisible();
@@ -232,6 +251,159 @@ test('TC-047: workers page shows empty state when no workers are returned', asyn
 
 	await expect(page.getByText('No workers found.')).toBeVisible();
 	await expect(page.getByText('0 total')).toBeVisible();
+});
+
+test('workers page starts and stops an execute-loop worker with IA links', async ({ page }) => {
+	let workers: Record<string, unknown>[] = [...WORKERS.filter((worker) => worker.state !== 'running')];
+	let startCalled = false;
+	let stopCalled = false;
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+		} else if (body.query.includes('StartWorker') || body.query.includes('startWorker')) {
+			startCalled = true;
+			const worker = {
+				id: 'worker-ui-started',
+				kind: 'execute-loop',
+				state: 'running',
+				status: 'running',
+				harness:
+					typeof (body.variables?.input as Record<string, unknown> | undefined)?.harness === 'string'
+						? (body.variables?.input as Record<string, string>).harness
+						: 'codex',
+				model: null,
+				currentBead: null,
+				attempts: 0,
+				successes: 0,
+				failures: 0,
+				startedAt: '2026-04-22T12:00:00Z'
+			};
+			workers = [worker, ...workers];
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { startWorker: { id: worker.id, state: worker.state, kind: worker.kind } } })
+			});
+		} else if (body.query.includes('StopWorker') || body.query.includes('stopWorker')) {
+			stopCalled = true;
+			workers = workers.map((worker) =>
+				worker.id === body.variables?.id ? { ...worker, state: 'stopped', status: 'stopped' } : worker
+			);
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { stopWorker: { id: body.variables?.id, state: 'stopped', kind: 'execute-loop' } }
+				})
+			});
+		} else if (body.query.includes('WorkersByProject')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeWorkersResponse(workers) })
+			});
+		} else if (body.query.includes('WorkerDetail')) {
+			const worker = workers.find((item) => item.id === 'worker-ui-started') ?? workers[0];
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						worker: {
+							...WORKER_DETAIL,
+							...worker,
+							effort: 'medium',
+							once: false,
+							pollInterval: '30s',
+							finishedAt: worker?.state === 'stopped' ? '2026-04-22T12:01:00Z' : null,
+							currentAttempt: null,
+							lifecycleEvents: [
+								{
+									action: 'start',
+									actor: 'local-operator',
+									timestamp: '2026-04-22T12:00:00Z',
+									detail: 'profile=smart effort=medium',
+									beadId: null
+								},
+								{
+									action: 'stop',
+									actor: 'local-operator',
+									timestamp: '2026-04-22T12:01:00Z',
+									detail: 'reason=stop',
+									beadId: null
+								}
+							]
+						}
+					}
+				})
+			});
+		} else if (body.query.includes('WorkerLog')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { workerLog: { stdout: '', stderr: '' } } })
+			});
+		} else if (body.query.includes('AgentSessions') || body.query.includes('agentSessions')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeSessionsResponse() })
+			});
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(BASE_URL);
+	await expect(page.getByText(/Workers drain the bead queue/)).toBeVisible();
+	await expect(page.getByRole('link', { name: /recent sessions/i })).toHaveAttribute('href', /\/sessions$/);
+	await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(0);
+
+	await page.getByRole('button', { name: 'Start worker' }).click();
+	await page.getByLabel('Harness').fill('codex');
+	await page.getByLabel('Label filter').fill('ui');
+	await page.getByRole('button', { name: 'Start', exact: true }).click();
+	await expect.poll(() => startCalled).toBe(true);
+	await expect(page.getByText('worker-u')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(1);
+
+	page.once('dialog', async (dialog) => {
+		await dialog.dismiss();
+	});
+	await page.getByRole('button', { name: 'Stop' }).click();
+	await expect.poll(() => stopCalled).toBe(false);
+
+	page.once('dialog', async (dialog) => {
+		await dialog.accept();
+	});
+	await page.getByRole('button', { name: 'Stop' }).click();
+	await expect.poll(() => stopCalled).toBe(true);
+	await expect(page.getByText('stopped').first()).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(0);
+
+	await page.getByText('worker-u').click();
+	await expect(page).toHaveURL(/\/workers\/worker-ui-started$/);
+	await expect(page.getByText('No sessions recorded yet.')).toBeVisible();
+	await expect(page.getByText('Lifecycle audit')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Close' }).click();
+	await page.getByRole('link', { name: /recent sessions/i }).click();
+	await expect(page).toHaveURL(/\/sessions$/);
+	await expect(page.getByText(/Sessions are immutable agent-run history/)).toBeVisible();
 });
 
 // TC-048: Workers page subscribes to WorkerProgress for running workers (subscription exercised)

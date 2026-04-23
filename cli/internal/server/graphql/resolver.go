@@ -35,6 +35,7 @@ type BeadLifecycleSubscriber interface {
 // does not import the outer server package.
 type ActionDispatcher interface {
 	DispatchWorker(ctx context.Context, kind string, projectRoot string, args *string) (*WorkerDispatchResult, error)
+	StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error)
 }
 
 type Resolver struct {

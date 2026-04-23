@@ -35,6 +35,7 @@ type ExecuteLoopWorkerSpec struct {
 	Provider     string        `json:"provider,omitempty"`
 	ModelRef     string        `json:"model_ref,omitempty"`
 	Effort       string        `json:"effort,omitempty"`
+	LabelFilter  string        `json:"label_filter,omitempty"`
 	Once         bool          `json:"once,omitempty"`
 	PollInterval time.Duration `json:"poll_interval,omitempty"`
 	// Review options — controls the post-merge review agent.
@@ -87,6 +88,14 @@ type LastAttemptInfo struct {
 	ElapsedMS int64     `json:"elapsed_ms"`
 }
 
+type WorkerLifecycleEvent struct {
+	Action    string    `json:"action"`
+	Actor     string    `json:"actor"`
+	Timestamp time.Time `json:"timestamp"`
+	Detail    string    `json:"detail,omitempty"`
+	BeadID    string    `json:"bead_id,omitempty"`
+}
+
 type WorkerRecord struct {
 	ID             string                 `json:"id"`
 	Kind           string                 `json:"kind"`
@@ -114,6 +123,7 @@ type WorkerRecord struct {
 	CurrentAttempt *CurrentAttemptInfo    `json:"current_attempt,omitempty"`
 	RecentPhases   []PhaseTransition      `json:"recent_phases,omitempty"`
 	LastAttempt    *LastAttemptInfo       `json:"last_attempt,omitempty"`
+	Lifecycle      []WorkerLifecycleEvent `json:"lifecycle,omitempty"`
 	LandSummary    *CoordinatorMetrics    `json:"land_summary,omitempty"`
 	// PID is the OS process id of an external worker subprocess, if any.
 	// Zero for purely in-process (goroutine-only) workers. Surfaced so the
@@ -220,6 +230,23 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 	return m
 }
 
+func lifecycleStartDetail(spec ExecuteLoopWorkerSpec) string {
+	parts := []string{"kind=execute-loop"}
+	if spec.Harness != "" {
+		parts = append(parts, "harness="+spec.Harness)
+	}
+	if spec.Profile != "" {
+		parts = append(parts, "profile="+agent.NormalizeRoutingProfile(spec.Profile))
+	}
+	if spec.Effort != "" {
+		parts = append(parts, "effort="+spec.Effort)
+	}
+	if spec.LabelFilter != "" {
+		parts = append(parts, "label_filter="+spec.LabelFilter)
+	}
+	return strings.Join(parts, " ")
+}
+
 // applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies
 // any server.watchdog_deadline / server.stall_deadline overrides. Invalid or
 // missing values are silently ignored — defaults are filled in by the
@@ -319,6 +346,12 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		SpecPath:     relToProject(m.projectRoot, filepath.Join(dir, "spec.json")),
 		StartedAt:    time.Now().UTC(),
 	}
+	record.Lifecycle = append(record.Lifecycle, WorkerLifecycleEvent{
+		Action:    "start",
+		Actor:     "local-operator",
+		Timestamp: record.StartedAt,
+		Detail:    lifecycleStartDetail(spec),
+	})
 	_ = m.writeRecord(dir, record)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -680,6 +713,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Profile:      agent.NormalizeRoutingProfile(spec.Profile),
 		Provider:     spec.Provider,
 		ModelRef:     spec.ModelRef,
+		LabelFilter:  spec.LabelFilter,
 		ProgressCh:   progressCh,
 		PreClaimHook: buildPreClaimHook(projectRoot, landingOps),
 		NoReview:     spec.NoReview,
@@ -858,6 +892,13 @@ func (m *WorkerManager) Stop(id string) error {
 	startedAt := handle.record.StartedAt
 	handle.record.State = "stopping"
 	handle.record.Status = "stopping"
+	handle.record.Lifecycle = append(handle.record.Lifecycle, WorkerLifecycleEvent{
+		Action:    "stop",
+		Actor:     "local-operator",
+		Timestamp: now,
+		Detail:    fmt.Sprintf("reason=stop pid=%d", pid),
+		BeadID:    beadID,
+	})
 	dir := filepath.Join(m.rootDir, id)
 	transitionSnapshot := handle.record
 	cancel := handle.cancel

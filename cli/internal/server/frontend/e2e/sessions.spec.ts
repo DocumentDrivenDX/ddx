@@ -9,6 +9,7 @@ type SessionNode = {
 	id: string;
 	projectId: string;
 	beadId: string | null;
+	workerId: string | null;
 	harness: string;
 	model: string;
 	effort: string;
@@ -26,6 +27,7 @@ const olderSession: SessionNode = {
 	id: 'sess-older-20260418',
 	projectId: PROJECT_ID,
 	beadId: 'ddx-old',
+	workerId: null,
 	harness: 'claude',
 	model: 'claude-sonnet-4-6',
 	effort: 'standard',
@@ -43,6 +45,7 @@ const latestBundleSession: SessionNode = {
 	id: 'sess-latest-20260422',
 	projectId: PROJECT_ID,
 	beadId: 'ddx-new',
+	workerId: 'worker-session-owner',
 	harness: 'codex',
 	model: 'gpt-5.4',
 	effort: 'high',
@@ -60,6 +63,7 @@ const liveSession: SessionNode = {
 	id: 'sess-live-20260422',
 	projectId: PROJECT_ID,
 	beadId: 'ddx-live',
+	workerId: null,
 	harness: 'agent',
 	model: 'qwen3.6',
 	effort: 'medium',
@@ -126,6 +130,8 @@ test('sessions page lists sharded sessions, lazy-loads bundle bodies, and refres
 	await page.goto(BASE_URL);
 
 	await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible();
+	await expect(page.getByText(/Sessions are immutable agent-run history/)).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Workers →' })).toHaveAttribute('href', /\/workers$/);
 	await expect(page.getByText('codex')).toBeVisible();
 	await expect(page.getByText('gpt-5.4')).toBeVisible();
 	await expect(page.getByText(/No sessions recorded between/)).toBeVisible();
@@ -133,6 +139,7 @@ test('sessions page lists sharded sessions, lazy-loads bundle bodies, and refres
 
 	await page.getByRole('row', { name: /codex.*gpt-5\.4/i }).click();
 	await expect.poll(() => detailRequested).toBe(true);
+	await expect(page.getByRole('link', { name: 'worker-session-owner' })).toHaveAttribute('href', /\/workers\/worker-session-owner$/);
 	await expect(page.getByText('bundle prompt body')).toBeVisible();
 	await expect(page.getByText('bundle response body')).toBeVisible();
 

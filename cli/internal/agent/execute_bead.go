@@ -659,6 +659,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 			"base_rev":    baseRev,
 			"attempt_id":  attemptID,
 			"session_id":  sessionID,
+			"worker_id":   opts.WorkerID,
 			"bundle_path": artifacts.DirRel,
 			"prompt_file": artifacts.PromptRel,
 		},

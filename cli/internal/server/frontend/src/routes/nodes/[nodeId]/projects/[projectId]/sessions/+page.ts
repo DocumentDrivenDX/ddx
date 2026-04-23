@@ -10,6 +10,7 @@ const SESSIONS_QUERY = gql`
 					id
 					projectId
 					beadId
+					workerId
 					harness
 					model
 					effort
@@ -60,6 +61,7 @@ export interface SessionNode {
 	id: string
 	projectId: string
 	beadId: string | null
+	workerId: string | null
 	harness: string
 	model: string
 	effort: string
@@ -98,6 +100,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		(e) => e.node.projectId === params.projectId
 	)
 	return {
+		nodeId: params.nodeId,
 		projectId: params.projectId,
 		sessions: {
 			...data.agentSessions,

@@ -35,6 +35,13 @@ const WORKER_QUERY = gql`
 				inputs
 				output
 			}
+			lifecycleEvents {
+				action
+				actor
+				timestamp
+				detail
+				beadId
+			}
 		}
 	}
 `;
@@ -44,6 +51,33 @@ const WORKER_LOG_QUERY = gql`
 		workerLog(workerID: $workerID) {
 			stdout
 			stderr
+		}
+	}
+`;
+
+const WORKER_SESSIONS_QUERY = gql`
+	query WorkerSessions($first: Int) {
+		agentSessions(first: $first) {
+			edges {
+				node {
+					id
+					projectId
+					workerId
+					beadId
+					harness
+					model
+					status
+					startedAt
+					durationMs
+					cost
+				}
+				cursor
+			}
+			pageInfo {
+				hasNextPage
+				endCursor
+			}
+			totalCount
 		}
 	}
 `;
@@ -75,6 +109,7 @@ export interface WorkerDetail {
 	failures: number | null;
 	currentAttempt: CurrentAttempt | null;
 	recentEvents: WorkerRecentEvent[];
+	lifecycleEvents: WorkerLifecycleEvent[];
 }
 
 export interface WorkerRecentEvent {
@@ -85,6 +120,27 @@ export interface WorkerRecentEvent {
 	output: string | null;
 }
 
+export interface WorkerLifecycleEvent {
+	action: string;
+	actor: string;
+	timestamp: string;
+	detail: string | null;
+	beadId: string | null;
+}
+
+export interface WorkerSession {
+	id: string;
+	projectId: string;
+	workerId: string | null;
+	beadId: string | null;
+	harness: string;
+	model: string;
+	status: string;
+	startedAt: string;
+	durationMs: number;
+	cost: number | null;
+}
+
 interface WorkerResult {
 	worker: WorkerDetail | null;
 }
@@ -93,18 +149,45 @@ interface WorkerLogResult {
 	workerLog: { stdout: string; stderr: string };
 }
 
+interface WorkerSessionsResult {
+	agentSessions: {
+		edges: Array<{ node: WorkerSession; cursor: string }>;
+		pageInfo: { hasNextPage: boolean; endCursor: string | null };
+		totalCount: number;
+	};
+}
+
 export const load: PageLoad = async ({ params, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch);
-	const [workerResult, logResult] = await Promise.all([
+	const [workerResult, logResult, sessionsResult] = await Promise.all([
 		client.request<WorkerResult>(WORKER_QUERY, { id: params.workerId }),
 		client
 			.request<WorkerLogResult>(WORKER_LOG_QUERY, { workerID: params.workerId })
-			.catch(() => ({ workerLog: { stdout: '', stderr: '' } }))
+			.catch(() => ({ workerLog: { stdout: '', stderr: '' } })),
+		client
+			.request<WorkerSessionsResult>(WORKER_SESSIONS_QUERY, { first: 100 })
+			.catch(() => ({
+				agentSessions: {
+					edges: [],
+					pageInfo: { hasNextPage: false, endCursor: null },
+					totalCount: 0
+				}
+			}))
 	]);
+	const workerSessions = sessionsResult.agentSessions.edges
+		.map((edge) => edge.node)
+		.filter((session) => session.projectId === params.projectId && session.workerId === params.workerId);
 	return {
+		nodeId: params.nodeId,
+		projectId: params.projectId,
 		worker: workerResult.worker
-			? { ...workerResult.worker, recentEvents: workerResult.worker.recentEvents ?? [] }
+			? {
+					...workerResult.worker,
+					recentEvents: workerResult.worker.recentEvents ?? [],
+					lifecycleEvents: workerResult.worker.lifecycleEvents ?? []
+				}
 			: null,
-		initialLog: logResult.workerLog.stdout
+		initialLog: logResult.workerLog.stdout,
+		sessions: workerSessions
 	};
 };

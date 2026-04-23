@@ -17,6 +17,8 @@ type AgentSession struct {
 	ProjectID string `json:"projectId"`
 	// Bead being worked on (null for ad-hoc runs)
 	BeadID *string `json:"beadId,omitempty"`
+	// Worker that produced this session, when known
+	WorkerID *string `json:"workerId,omitempty"`
 	// Agent harness used (e.g. "claude", "codex")
 	Harness string `json:"harness"`
 	// Model identifier
@@ -1461,6 +1463,20 @@ type StaleReason struct {
 	Reasons []string `json:"reasons"`
 }
 
+// StartWorkerInput configures a project execute-loop worker.
+type StartWorkerInput struct {
+	// Project identifier
+	ProjectID string `json:"projectId"`
+	// Optional harness override
+	Harness *string `json:"harness,omitempty"`
+	// Routing profile, defaulting to smart when omitted
+	Profile *string `json:"profile,omitempty"`
+	// Reasoning effort, defaulting to medium when omitted
+	Effort *string `json:"effort,omitempty"`
+	// Optional label filter for ready beads
+	LabelFilter *string `json:"labelFilter,omitempty"`
+}
+
 // Subscription is the root entry point for all real-time events
 type Subscription struct {
 }
@@ -1547,6 +1563,8 @@ type Worker struct {
 	LandSummary *CoordinatorMetrics `json:"landSummary,omitempty"`
 	// Recent streamed response events captured for the worker detail view
 	RecentEvents []*WorkerRecentEvent `json:"recentEvents"`
+	// Operator lifecycle actions recorded for this worker
+	LifecycleEvents []*WorkerLifecycleEvent `json:"lifecycleEvents"`
 }
 
 func (Worker) IsNode() {}
@@ -1624,6 +1642,30 @@ type WorkerExecutionResult struct {
 	ResultRev *string `json:"resultRev,omitempty"`
 	// Suggested retry delay (e.g. "30s")
 	RetryAfter *string `json:"retryAfter,omitempty"`
+}
+
+// WorkerLifecycleEvent records an operator lifecycle action.
+type WorkerLifecycleEvent struct {
+	// Action name, such as start or stop
+	Action string `json:"action"`
+	// Actor identifier known to the server
+	Actor string `json:"actor"`
+	// When the action was recorded
+	Timestamp string `json:"timestamp"`
+	// Optional action detail
+	Detail *string `json:"detail,omitempty"`
+	// Bead involved in the action, if any
+	BeadID *string `json:"beadId,omitempty"`
+}
+
+// WorkerLifecycleResult describes a lifecycle mutation result.
+type WorkerLifecycleResult struct {
+	// Worker identifier
+	ID string `json:"id"`
+	// Worker state after the mutation was accepted
+	State string `json:"state"`
+	// Worker kind
+	Kind string `json:"kind"`
 }
 
 // WorkerLog holds captured output from a worker process
