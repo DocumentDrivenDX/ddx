@@ -170,11 +170,13 @@ func TestLoadSessionBodiesFromBundle(t *testing.T) {
 
 func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	workDir := t.TempDir()
+	embeddedLogDir := filepath.Join(workDir, ExecuteBeadArtifactDir, "attempt-1", "embedded")
 	svc := &noopCompactionDdxAgent{interval: time.Millisecond, total: 0}
 	_, err := RunViaServiceWith(context.Background(), svc, workDir, RunOptions{
-		Harness: "agent",
-		Prompt:  "hello",
-		Model:   "fake-model",
+		Harness:       "agent",
+		Prompt:        "hello",
+		Model:         "fake-model",
+		SessionLogDir: embeddedLogDir,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -188,6 +190,13 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	}
 	if entries[0].Harness != "agent" {
 		t.Fatalf("harness=%q, want agent", entries[0].Harness)
+	}
+	embeddedEntries, err := ReadSessionIndex(embeddedLogDir, SessionIndexQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(embeddedEntries) != 0 {
+		t.Fatalf("embedded session index rows=%d, want 0", len(embeddedEntries))
 	}
 }
 
