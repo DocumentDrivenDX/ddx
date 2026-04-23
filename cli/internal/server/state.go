@@ -137,7 +137,7 @@ func loadServerState(dir, nodeName string) *ServerState {
 	// Migration: canonicalize paths, resolve linked worktrees, dedupe, sweep.
 	phantoms := s.migrate()
 	if phantoms > 0 {
-		log.Printf("ddx-server: pruned %d phantom test-dir projects from state file", phantoms)
+		log.Printf("ddx-server: Pruned %d phantom test-dir projects from state file", phantoms)
 	}
 	return s
 }

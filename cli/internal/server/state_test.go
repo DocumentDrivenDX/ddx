@@ -233,7 +233,7 @@ func TestLoadServerStateLogsPhantomCleanup(t *testing.T) {
 	_ = loadServerState(stateDir, "test-node")
 
 	got := buf.String()
-	if !strings.Contains(got, "pruned 2 phantom test-dir projects") {
+	if !strings.Contains(got, "Pruned 2 phantom test-dir projects") {
 		t.Errorf("expected cleanup log line, got %q", got)
 	}
 }

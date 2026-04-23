@@ -81,6 +81,50 @@ jobs:
       env:
         LEFTHOOK_QUIET: meta,execution
 
+    - name: Guard server state against test pollution
+      run: |
+        set -euo pipefail
+
+        export XDG_DATA_HOME="$(mktemp -d)"
+
+        cd cli
+        go test ./... -count=1
+
+        ./build/ddx server --addr 127.0.0.1 --port 17743 --tsnet=false > ../ddx-state-guard-server.log 2>&1 &
+        server_pid=$!
+        cleanup() {
+          kill "$server_pid" 2>/dev/null || true
+          wait "$server_pid" 2>/dev/null || true
+        }
+        trap cleanup EXIT
+
+        state_file="$XDG_DATA_HOME/ddx/server-state.json"
+        for _ in $(seq 1 20); do
+          if [ -f "$state_file" ]; then
+            break
+          fi
+          sleep 0.25
+        done
+
+        if [ ! -f "$state_file" ]; then
+          cat ../ddx-state-guard-server.log
+          echo "server-state.json was not created"
+          exit 1
+        fi
+
+        project_count="$(jq '.projects | length' "$state_file")"
+        if [ "$project_count" -gt 20 ]; then
+          jq '.projects[] | {name, path}' "$state_file"
+          echo "server-state.json contains $project_count projects; expected <= 20"
+          exit 1
+        fi
+
+        if jq -e '.projects[]? | select(.path | test("(^/tmp/|^/private/tmp/|^/var/folders/|/Test[A-Z][A-Za-z0-9_]*[0-9]+/)"))' "$state_file" >/dev/null; then
+          jq '.projects[] | select(.path | test("(^/tmp/|^/private/tmp/|^/var/folders/|/Test[A-Z][A-Za-z0-9_]*[0-9]+/)")) | {name, path}' "$state_file"
+          echo "server-state.json contains Go test temp-dir project entries"
+          exit 1
+        fi
+
   # Separate build job for matrix builds
   build:
     name: Build

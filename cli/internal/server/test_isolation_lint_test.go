@@ -15,7 +15,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,28 +52,25 @@ var isolationHelpers = map[string]bool{
 // perf sub-package, and asserts that every test (or benchmark) function that
 // wires up a server also isolates XDG_DATA_HOME. See ddx-15f7ee0b Fix A.
 func TestTestsIsolateStateDir(t *testing.T) {
-	roots := []string{".", "./perf"}
-	for _, root := range roots {
-		walkAndLintTestFiles(t, root)
-	}
-}
-
-func walkAndLintTestFiles(t *testing.T, root string) {
-	t.Helper()
-	entries, err := os.ReadDir(root)
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "frontend", "node_modules", ".svelte-kit", "build":
+				return filepath.SkipDir
+			default:
+				return nil
+			}
+		}
+		if strings.HasSuffix(d.Name(), "_test.go") {
+			lintTestFile(t, path)
+		}
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("read %s: %v", root, err)
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			// Only recurse into non-hidden sub-dirs that contain *_test.go.
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		lintTestFile(t, filepath.Join(root, name))
+		t.Fatalf("walk server tests: %v", err)
 	}
 }
 
