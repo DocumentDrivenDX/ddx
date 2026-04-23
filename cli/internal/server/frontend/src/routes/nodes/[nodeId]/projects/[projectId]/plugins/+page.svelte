@@ -244,16 +244,17 @@
 		phase: string
 	) {
 		if (!inFlightWorkers.has(name)) return;
+		if (isFailurePhase(phase)) {
+			workerFailures.set(name, { workerId, action });
+			clearInFlight(name);
+			return;
+		}
 		try {
 			await refreshPlugins();
 		} catch (err) {
 			console.error('[ddx] plugin refresh after worker terminal failed:', err);
 		}
-
 		clearInFlight(name);
-		if (isFailurePhase(phase)) {
-			workerFailures.set(name, { workerId, action });
-		}
 	}
 
 	async function dispatchPlugin(

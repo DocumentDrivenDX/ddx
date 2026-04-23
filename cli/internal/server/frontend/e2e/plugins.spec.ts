@@ -313,7 +313,10 @@ test('plugin update refreshes card when worker completes successfully', async ({
 
 test('plugin update failure shows per-card failure without changing status', async ({ page }) => {
 	const stream = await mockWorkerProgress(page);
-	const plugins = [...PLUGINS];
+	// Backend incorrectly reports "installed" after a failed worker.
+	// The card must still show pre-dispatch state because the failure path
+	// must not refresh the plugins list.
+	let plugins: PluginFixture[] = [...PLUGINS];
 
 	await mockPlugins(page, {
 		pluginsListFn: () => plugins,
@@ -324,6 +327,12 @@ test('plugin update failure shows per-card failure without changing status', asy
 	const card = page.getByRole('article', { name: /ddx-cost-tier/i });
 	await card.getByRole('button', { name: /update/i }).click();
 	await expect.poll(() => stream.hasSubscription('worker-upd-failed')).toBe(true);
+
+	plugins = plugins.map((plugin) =>
+		plugin.name === 'ddx-cost-tier'
+			? { ...plugin, status: 'installed', installedVersion: plugin.version }
+			: plugin
+	);
 	stream.send('worker-upd-failed', 'failed');
 
 	await expect(card.getByRole('link', { name: /update failed/i })).toBeVisible({ timeout: 2000 });
