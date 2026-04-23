@@ -386,3 +386,80 @@ func TestGraphQLDocGraph(t *testing.T) {
 		t.Errorf("expected dependents[alpha]=[beta], got %v", dependents["alpha"])
 	}
 }
+
+func TestGraphQLDocGraphIssues(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "gql-doc-test-node")
+
+	workDir := setupTestDir(t)
+	files := map[string]string{
+		"docs/alpha.md": "---\nddx:\n  id: shared.id\n---\n# Alpha\n",
+		"docs/beta.md":  "---\nddx:\n  id: shared.id\n---\n# Beta\n",
+		"docs/gamma.md": "---\nddx:\n  id: doc.gamma\n  depends_on:\n    - ghost.doc\n---\n# Gamma\n",
+	}
+	for rel, content := range files {
+		path := filepath.Join(workDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srv := New(":0", workDir)
+	body := `{"query": "{ docGraphIssues { kind path id message relatedPath } }"}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			DocGraphIssues []struct {
+				Kind        string  `json:"kind"`
+				Path        *string `json:"path"`
+				ID          *string `json:"id"`
+				Message     string  `json:"message"`
+				RelatedPath *string `json:"relatedPath"`
+			} `json:"docGraphIssues"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v\nbody: %s", err, w.Body.String())
+	}
+	if len(resp.Errors) > 0 {
+		t.Fatalf("GraphQL errors: %v", resp.Errors)
+	}
+
+	if len(resp.Data.DocGraphIssues) != 2 {
+		t.Fatalf("expected 2 issues, got %d: %#v", len(resp.Data.DocGraphIssues), resp.Data.DocGraphIssues)
+	}
+	seen := map[string]bool{}
+	for _, issue := range resp.Data.DocGraphIssues {
+		seen[issue.Kind] = true
+		if issue.Message == "" {
+			t.Errorf("issue %q has empty message", issue.Kind)
+		}
+		if issue.Kind == "duplicate_id" && issue.RelatedPath == nil {
+			t.Error("duplicate_id issue should expose relatedPath")
+		}
+		if issue.Kind == "missing_dep" && (issue.ID == nil || *issue.ID != "ghost.doc") {
+			t.Errorf("missing_dep issue id = %v, want ghost.doc", issue.ID)
+		}
+	}
+	for _, kind := range []string{"duplicate_id", "missing_dep"} {
+		if !seen[kind] {
+			t.Errorf("expected %s issue in docGraphIssues response", kind)
+		}
+	}
+}

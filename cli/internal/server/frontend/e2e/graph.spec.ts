@@ -1,4 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, request as playwrightRequest, test } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as net from 'node:net';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Shared fixtures
 const NODE_INFO = { id: 'node-abc', name: 'Test Node' };
@@ -6,6 +13,11 @@ const PROJECT_ID = 'proj-1';
 const BASE_URL = `/nodes/node-abc/projects/${PROJECT_ID}/graph`;
 
 const PROJECTS = [{ id: PROJECT_ID, name: 'Project Alpha', path: '/repos/alpha' }];
+
+const FRONTEND_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CLI_DIR = path.resolve(FRONTEND_DIR, '../../..');
+
+let ddxBinary: string | null = null;
 
 const GRAPH_DOCS = [
 	{
@@ -92,6 +104,166 @@ async function mockGraphQL(
 	});
 }
 
+function ensureDdxBinary(): string {
+	if (ddxBinary) return ddxBinary;
+
+	const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ddx-graph-e2e-bin-'));
+	ddxBinary = path.join(binDir, process.platform === 'win32' ? 'ddx-e2e.exe' : 'ddx-e2e');
+	const result = spawnSync('go', ['build', '-o', ddxBinary, '.'], {
+		cwd: CLI_DIR,
+		env: process.env,
+		encoding: 'utf8'
+	});
+	if (result.status !== 0) {
+		throw new Error(`failed to build ddx test binary\n${result.stdout}\n${result.stderr}`);
+	}
+	return ddxBinary;
+}
+
+async function freePort(): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const server = net.createServer();
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', () => {
+			const address = server.address();
+			if (!address || typeof address === 'string') {
+				server.close(() => reject(new Error('could not allocate port')));
+				return;
+			}
+			const port = address.port;
+			server.close(() => resolve(port));
+		});
+	});
+}
+
+function writeFixtureFile(root: string, rel: string, content: string) {
+	const target = path.join(root, ...rel.split('/'));
+	fs.mkdirSync(path.dirname(target), { recursive: true });
+	fs.writeFileSync(target, content);
+}
+
+function makeIssueFixture(): string {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ddx-graph-issues-'));
+	writeFixtureFile(root, 'docs/alpha.md', '---\nddx:\n  id: shared.id\n---\n# Alpha\n');
+	writeFixtureFile(root, 'docs/beta.md', '---\nddx:\n  id: shared.id\n---\n# Beta\n');
+	writeFixtureFile(
+		root,
+		'docs/gamma.md',
+		'---\nddx:\n  id: doc.gamma\n  depends_on:\n    - ghost.doc\n---\n# Gamma\n'
+	);
+	return root;
+}
+
+function makeCleanFixture(): string {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ddx-graph-clean-'));
+	writeFixtureFile(root, 'docs/alpha.md', '---\nddx:\n  id: doc.alpha\n---\n# Alpha\n');
+	writeFixtureFile(
+		root,
+		'docs/beta.md',
+		'---\nddx:\n  id: doc.beta\n  depends_on:\n    - doc.alpha\n---\n# Beta\n'
+	);
+	return root;
+}
+
+interface RealServer {
+	api: APIRequestContext;
+	nodeId: string;
+	projectId: string;
+	process: ChildProcessWithoutNullStreams;
+	root: string;
+}
+
+async function startRealDdxServer(fixtureRoot: string): Promise<RealServer> {
+	const port = await freePort();
+	const bin = ensureDdxBinary();
+	const child = spawn(bin, ['server', '--port', String(port), '--tsnet=false'], {
+		cwd: fixtureRoot,
+		env: {
+			...process.env,
+			DDX_NODE_NAME: 'graph-e2e-node',
+			XDG_DATA_HOME: path.join(fixtureRoot, '.xdg-data')
+		}
+	});
+	child.stdout.resume();
+	child.stderr.resume();
+	const baseURL = `https://127.0.0.1:${port}`;
+	const api = await playwrightRequest.newContext({ baseURL, ignoreHTTPSErrors: true });
+
+	let lastError: unknown;
+	for (let i = 0; i < 80; i++) {
+		if (child.exitCode !== null) {
+			throw new Error(`ddx server exited early with code ${child.exitCode}`);
+		}
+		try {
+			const resp = await api.get('/api/health', { timeout: 500 });
+			if (resp.ok()) {
+				const infoResp = await api.post('/graphql', {
+					data: {
+						query: `query E2EProjectInfo {
+							nodeInfo { id name }
+							projects { edges { node { id name path } } }
+						}`
+					}
+				});
+				const payload = (await infoResp.json()) as {
+					data: {
+						nodeInfo: { id: string };
+						projects: { edges: Array<{ node: { id: string } }> };
+					};
+				};
+				const projectId = payload.data.projects.edges[0]?.node.id;
+				if (!projectId) throw new Error('ddx server returned no registered project');
+				return {
+					api,
+					nodeId: payload.data.nodeInfo.id,
+					projectId,
+					process: child,
+					root: fixtureRoot
+				};
+			}
+		} catch (err) {
+			lastError = err;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 125));
+	}
+
+	child.kill();
+	await api.dispose();
+	throw new Error(`ddx server did not become healthy: ${String(lastError)}`);
+}
+
+async function stopRealDdxServer(server: RealServer) {
+	await server.api.dispose();
+	if (server.process.exitCode === null) {
+		server.process.kill();
+		await Promise.race([
+			new Promise((resolve) => server.process.once('exit', resolve)),
+			new Promise((resolve) => {
+				setTimeout(() => {
+					if (server.process.exitCode === null) server.process.kill('SIGKILL');
+					resolve(undefined);
+				}, 2000);
+			})
+		]);
+	}
+	fs.rmSync(server.root, { recursive: true, force: true });
+}
+
+async function proxyGraphQLToRealServer(page: Page, api: APIRequestContext) {
+	await page.route('/graphql', async (route) => {
+		const response = await api.post('/graphql', {
+			data: route.request().postDataJSON()
+		});
+		await route.fulfill({
+			status: response.status(),
+			headers: {
+				'content-type': response.headers()['content-type'] ?? 'application/json'
+			},
+			body: await response.text()
+		});
+	});
+}
+
 // TC-030: Graph page loads with heading
 test('TC-030: graph page loads with Document Graph heading', async ({ page }) => {
 	await mockGraphQL(page);
@@ -173,104 +345,61 @@ test('TC-035: integrity surface is absent when no issues are returned', async ({
 	await expect(page.getByTestId('integrity-panel')).toHaveCount(0);
 });
 
-// TC-037: Integrity panel groups structured issues by kind with counts.
-test('TC-037: integrity panel groups issues by kind with counts and paths', async ({ page }) => {
-	const issues: GraphIssueFixture[] = [
-		{
-			kind: 'duplicate_id',
-			path: 'docs/alpha.md',
-			id: 'shared.id',
-			message: 'duplicate document id "shared.id" in "docs/alpha.md"',
-			relatedPath: 'docs/beta.md'
-		},
-		{
-			kind: 'missing_dep',
-			path: 'docs/gamma.md',
-			id: 'ghost.doc',
-			message: 'document "doc.gamma" declares dependency "ghost.doc" which is not in the graph',
-			relatedPath: null
-		}
-	];
+// TC-037: Fixture-backed graph integrity uses real docgraph detection and GraphQL plumbing.
+test('TC-037: integrity panel groups real fixture issues by kind with counts and paths', async ({
+	page
+}) => {
+	const server = await startRealDdxServer(makeIssueFixture());
+	try {
+		await proxyGraphQLToRealServer(page, server.api);
+		await page.goto(`/nodes/${server.nodeId}/projects/${server.projectId}/graph`);
 
-	await mockGraphQL(page, GRAPH_DOCS, [], issues);
-	await page.goto(BASE_URL);
+		const panel = page.getByTestId('integrity-panel');
+		await expect(panel).toBeVisible();
+		await expect(panel).toContainText('Duplicate ID');
+		await expect(panel).toContainText('(1)');
+		await expect(panel).toContainText('Missing dep target');
 
-	const panel = page.getByTestId('integrity-panel');
-	await expect(panel).toBeVisible();
-	await expect(panel).toContainText('Duplicate ID');
-	await expect(panel).toContainText('(1)');
-	await expect(panel).toContainText('Missing dep target');
+		const badge = page.getByTestId('integrity-badge');
+		await expect(badge).toBeVisible();
+		await expect(badge).toContainText('2');
 
-	const badge = page.getByTestId('integrity-badge');
-	await expect(badge).toBeVisible();
-	await expect(badge).toContainText('2');
+		// Expand Duplicate ID group and assert both fixture paths are visible.
+		await page.getByTestId('integrity-group-duplicate_id').click();
+		await expect(panel).toContainText('docs/alpha.md');
+		await expect(panel).toContainText('docs/beta.md');
 
-	// Expand Duplicate ID group and assert both paths are visible.
-	await page.getByTestId('integrity-group-duplicate_id').click();
-	await expect(panel).toContainText('docs/alpha.md');
-	await expect(panel).toContainText('docs/beta.md');
+		// Expand Missing dep target group and assert the frontmatter removal snippet is visible.
+		await page.getByTestId('integrity-group-missing_dep').click();
+		await expect(panel.getByTestId('integrity-missing-dep-snippet')).toContainText('- ghost.doc');
 
-	// Expand Missing dep target group and assert the frontmatter removal snippet is visible.
-	await page.getByTestId('integrity-group-missing_dep').click();
-	await expect(panel.getByTestId('integrity-missing-dep-snippet')).toContainText('- ghost.doc');
+		// Clicking the path link navigates to the real document viewer for that file.
+		const pathLink = panel.getByTestId('integrity-path-link').first();
+		const href = await pathLink.getAttribute('href');
+		expect(href).toBe(
+			`/nodes/${server.nodeId}/projects/${server.projectId}/documents/docs/beta.md`
+		);
 
-	// Clicking the path link navigates to the documents route for that file.
-	const pathLink = panel.getByTestId('integrity-path-link').first();
-	const href = await pathLink.getAttribute('href');
-	expect(href).toBe(`/nodes/node-abc/projects/${PROJECT_ID}/documents/docs/alpha.md`);
-
-	// Follow the link to assert routing. Override the GraphQL mock to stub
-	// DocumentByPath so SvelteKit's client-side router can render the target.
-	await page.route('/graphql', async (route) => {
-		const body = route.request().postDataJSON() as { query: string };
-		if (body.query.includes('DocumentByPath')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					data: {
-						documentByPath: {
-							id: 'shared.id',
-							path: 'docs/alpha.md',
-							title: 'Alpha',
-							content: '# Alpha',
-							dependsOn: [],
-							inputs: [],
-							dependents: []
-						}
-					}
-				})
-			});
-		} else if (body.query.includes('NodeInfo')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
-			});
-		} else if (body.query.includes('Projects')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
-				})
-			});
-		} else {
-			await route.continue();
-		}
-	});
-	await pathLink.click();
-	await expect(page).toHaveURL(href!);
+		await pathLink.click();
+		await expect(page).toHaveURL(href!);
+	} finally {
+		await stopRealDdxServer(server);
+	}
 });
 
 // TC-038: Clean graph hides both the badge and the integrity panel.
 test('TC-038: clean graph hides the integrity badge and panel', async ({ page }) => {
-	await mockGraphQL(page, GRAPH_DOCS, [], []);
-	await page.goto(BASE_URL);
+	const server = await startRealDdxServer(makeCleanFixture());
+	try {
+		await proxyGraphQLToRealServer(page, server.api);
+		await page.goto(`/nodes/${server.nodeId}/projects/${server.projectId}/graph`);
 
-	await expect(page.getByRole('heading', { name: 'Document Graph' })).toBeVisible();
-	await expect(page.getByTestId('integrity-panel')).toHaveCount(0);
-	await expect(page.getByTestId('integrity-badge')).toHaveCount(0);
+		await expect(page.getByRole('heading', { name: 'Document Graph' })).toBeVisible();
+		await expect(page.getByTestId('integrity-panel')).toHaveCount(0);
+		await expect(page.getByTestId('integrity-badge')).toHaveCount(0);
+	} finally {
+		await stopRealDdxServer(server);
+	}
 });
 
 // TC-036: Graph page re-fetches DocGraph query on navigation (interaction with query)
