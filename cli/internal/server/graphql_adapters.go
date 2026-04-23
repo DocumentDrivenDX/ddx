@@ -42,8 +42,7 @@ func (a *coordMetricsAdapter) GetCoordinatorMetrics(projectRoot string) *ddxgrap
 }
 
 // workerDispatchAdapter implements GraphQL action dispatch using the live
-// WorkerManager. Non execute-loop actions are handled in the GraphQL resolver
-// because their real executors are intentionally deferred to a follow-up bead.
+// WorkerManager.
 type workerDispatchAdapter struct {
 	manager *WorkerManager
 }
@@ -114,6 +113,34 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		ID:    record.ID,
 		State: record.State,
 		Kind:  record.Kind,
+	}, nil
+}
+
+func (a *workerDispatchAdapter) DispatchPlugin(ctx context.Context, projectRoot string, name string, action string, scope string) (*ddxgraphql.PluginDispatchResult, error) {
+	if a == nil || a.manager == nil {
+		return nil, fmt.Errorf("worker dispatcher is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	record, err := a.manager.StartPluginAction(PluginActionWorkerSpec{
+		ProjectRoot: projectRoot,
+		Name:        name,
+		Action:      action,
+		Scope:       scope,
+	}, func(runCtx context.Context) (string, error) {
+		if err := runCtx.Err(); err != nil {
+			return "", err
+		}
+		return ddxgraphql.DispatchPluginAction(projectRoot, name, action)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ddxgraphql.PluginDispatchResult{
+		ID:     record.ID,
+		State:  record.State,
+		Action: action,
 	}, nil
 }
 

@@ -30,6 +30,8 @@ const (
 	queuedPlaceholderState = "queued"
 )
 
+var pluginActionMu sync.Mutex
+
 // BeadClose is the resolver for the beadClose field.
 func (r *mutationResolver) BeadClose(ctx context.Context, id string, reason *string) (*Bead, error) {
 	if r.WorkingDir == "" {
@@ -121,26 +123,24 @@ func (r *mutationResolver) PluginDispatch(ctx context.Context, name string, acti
 		return nil, fmt.Errorf("unsupported plugin scope %q", scope)
 	}
 
-	state, err := dispatchPluginAction(r.WorkingDir, name, action)
+	if r.Actions == nil {
+		return nil, fmt.Errorf("plugin dispatcher is not configured")
+	}
+	result, err := r.Actions.DispatchPlugin(ctx, r.WorkingDir, name, action, scope)
 	if err != nil {
 		return nil, err
 	}
-	id := newDispatchID("plugin", action, name)
-	if err := writeJSONRecord(r.WorkingDir, "plugin-dispatches", id, pluginDispatchRecord{
-		ID:        id,
+	if err := writeJSONRecord(r.WorkingDir, "plugin-dispatches", result.ID, pluginDispatchRecord{
+		ID:        result.ID,
 		Name:      name,
 		Action:    action,
 		Scope:     scope,
-		State:     state,
+		State:     result.State,
 		CreatedAt: time.Now().UTC(),
 	}); err != nil {
 		return nil, err
 	}
-	return &PluginDispatchResult{
-		ID:     id,
-		State:  state,
-		Action: action,
-	}, nil
+	return result, nil
 }
 
 // ComparisonDispatch is the resolver for the comparisonDispatch field.
@@ -419,7 +419,10 @@ type comparisonDispatchRecord struct {
 	CreatedAt time.Time             `json:"created_at"`
 }
 
-func dispatchPluginAction(workingDir string, name string, action string) (string, error) {
+func DispatchPluginAction(workingDir string, name string, action string) (string, error) {
+	pluginActionMu.Lock()
+	defer pluginActionMu.Unlock()
+
 	state, err := registry.LoadState()
 	if err != nil {
 		return "", fmt.Errorf("loading plugin state: %w", err)

@@ -48,6 +48,15 @@ type ExecuteLoopWorkerSpec struct {
 	MaxTier string `json:"max_tier,omitempty"`
 }
 
+type PluginActionWorkerSpec struct {
+	ProjectRoot string `json:"project_root,omitempty"`
+	Name        string `json:"name"`
+	Action      string `json:"action"`
+	Scope       string `json:"scope"`
+}
+
+type PluginActionExecutor func(ctx context.Context) (string, error)
+
 // Terminal phases per FEAT-006.
 var terminalPhases = map[string]bool{
 	"done":      true,
@@ -379,6 +388,172 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	go m.runWorker(ctx, id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
 
 	return record, nil
+}
+
+func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run PluginActionExecutor) (WorkerRecord, error) {
+	if run == nil {
+		return WorkerRecord{}, fmt.Errorf("plugin action executor is required")
+	}
+
+	effectiveRoot := spec.ProjectRoot
+	if effectiveRoot == "" {
+		effectiveRoot = m.projectRoot
+	}
+
+	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {
+		return WorkerRecord{}, err
+	}
+
+	id := "worker-" + time.Now().UTC().Format("20060102T150405") + "-" + randomSuffix(4)
+	dir := filepath.Join(m.rootDir, id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return WorkerRecord{}, err
+	}
+
+	spec.ProjectRoot = effectiveRoot
+	specData, _ := json.MarshalIndent(spec, "", "  ")
+	_ = os.WriteFile(filepath.Join(dir, "spec.json"), append(specData, '\n'), 0o644)
+
+	logPath := filepath.Join(dir, "worker.log")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return WorkerRecord{}, err
+	}
+
+	startedAt := time.Now().UTC()
+	record := WorkerRecord{
+		ID:          id,
+		Kind:        "plugin-dispatch",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: effectiveRoot,
+		StdoutPath:  relToProject(m.projectRoot, logPath),
+		SpecPath:    relToProject(m.projectRoot, filepath.Join(dir, "spec.json")),
+		StartedAt:   startedAt,
+		Lifecycle: []WorkerLifecycleEvent{{
+			Action:    "start",
+			Actor:     "local-operator",
+			Timestamp: startedAt,
+			Detail:    fmt.Sprintf("%s plugin %s (%s)", spec.Action, spec.Name, spec.Scope),
+		}},
+	}
+	_ = m.writeRecord(dir, record)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	logBuf := &bytes.Buffer{}
+	multiLog := io.MultiWriter(logBuf, logFile)
+	progressCh := make(chan agent.ProgressEvent, 16)
+	handle := &workerHandle{
+		record:       record,
+		cancel:       cancel,
+		logBuf:       logBuf,
+		logFile:      logFile,
+		progressCh:   progressCh,
+		progressDone: make(chan struct{}),
+		lastPhaseTS:  startedAt,
+	}
+
+	m.mu.Lock()
+	m.workers[id] = handle
+	m.mu.Unlock()
+
+	m.ensureWatchdog()
+
+	go m.drainProgress(id, handle, progressCh)
+	go m.runPluginAction(ctx, id, dir, spec, handle, multiLog, progressCh, run)
+
+	return record, nil
+}
+
+func (m *WorkerManager) runPluginAction(ctx context.Context, id, dir string, spec PluginActionWorkerSpec, handle *workerHandle, log io.Writer, progressCh chan agent.ProgressEvent, run PluginActionExecutor) {
+	startedAt := time.Now().UTC()
+	phaseSeq := 1
+	sendProgress(progressCh, agent.ProgressEvent{
+		EventID:   "evt-" + randomSuffix(8),
+		AttemptID: id,
+		WorkerID:  id,
+		ProjectID: spec.ProjectRoot,
+		Phase:     "running",
+		PhaseSeq:  phaseSeq,
+		TS:        startedAt,
+		Message:   fmt.Sprintf("%s plugin %s", spec.Action, spec.Name),
+	})
+	if log != nil {
+		_, _ = fmt.Fprintf(log, "%s plugin %s (%s)\n", spec.Action, spec.Name, spec.Scope)
+	}
+
+	state, err := run(ctx)
+	if ctxErr := ctx.Err(); ctxErr != nil && err == nil {
+		err = ctxErr
+	}
+
+	phase := "done"
+	message := state
+	if err != nil {
+		phase = "failed"
+		message = err.Error()
+	}
+	phaseSeq++
+	sendProgress(progressCh, agent.ProgressEvent{
+		EventID:   "evt-" + randomSuffix(8),
+		AttemptID: id,
+		WorkerID:  id,
+		ProjectID: spec.ProjectRoot,
+		Phase:     phase,
+		PhaseSeq:  phaseSeq,
+		TS:        time.Now().UTC(),
+		ElapsedMS: time.Since(startedAt).Milliseconds(),
+		Message:   message,
+	})
+
+	if log != nil {
+		if err != nil {
+			_, _ = fmt.Fprintf(log, "failed: %s\n", err)
+		} else {
+			_, _ = fmt.Fprintf(log, "completed: %s\n", state)
+		}
+	}
+
+	close(progressCh)
+	<-handle.progressDone
+
+	m.mu.Lock()
+	record := handle.record
+	preservedState := ""
+	if record.State == "stopped" || record.State == "reaped" {
+		preservedState = record.State
+	}
+	record.FinishedAt = time.Now().UTC()
+	_ = handle.logFile.Close()
+	if err != nil {
+		record.State = "failed"
+		record.Status = "failed"
+		record.Error = err.Error()
+		record.LastError = err.Error()
+	} else {
+		record.State = "exited"
+		record.Status = "success"
+		record.LastResult = &WorkerExecutionResult{
+			AttemptID: id,
+			WorkerID:  id,
+			Status:    state,
+			Detail:    fmt.Sprintf("%s plugin %s", spec.Action, spec.Name),
+		}
+	}
+	if preservedState != "" {
+		record.State = preservedState
+		record.Status = preservedState
+	}
+	_ = m.writeRecord(dir, record)
+	handle.record = record
+	m.mu.Unlock()
+}
+
+func sendProgress(ch chan<- agent.ProgressEvent, evt agent.ProgressEvent) {
+	select {
+	case ch <- evt:
+	default:
+	}
 }
 
 func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
