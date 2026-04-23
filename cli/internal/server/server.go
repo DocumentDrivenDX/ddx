@@ -105,6 +105,23 @@ func (s *Server) Handler() http.Handler {
 	return s.mux
 }
 
+// State exposes the server's persistent state so adjacent packages (notably
+// the perf harness) can register additional projects or query snapshots
+// without reaching into unexported internals. The returned value MUST NOT be
+// mutated concurrently with the server — it is the same pointer the server
+// itself uses.
+func (s *Server) State() *ServerState {
+	return s.state
+}
+
+// RegisterProject adds (or refreshes) a project entry on the server's state
+// and persists the updated state file. Returns the stored entry.
+func (s *Server) RegisterProject(path string) ProjectEntry {
+	entry := s.state.RegisterProject(path)
+	_ = s.state.save()
+	return entry
+}
+
 // Shutdown stops the server's background services: closes the bead lifecycle
 // hub and stops all land coordinators. Returns the first error encountered.
 // Both operations are idempotent and safe to call on an idle server.

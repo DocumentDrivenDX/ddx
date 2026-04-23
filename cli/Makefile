@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build copy-skills eval-skill
+.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build copy-skills eval-skill bench-graphql
 
 # Default target
 all: clean deps test build
@@ -82,6 +82,19 @@ deps:
 test: copy-skills
 	@echo "Running tests..."
 	go test -v ./...
+
+# Run the GraphQL perf harness (ddx-9ce6842a). Seeds a 10 × 500 bead fixture
+# and records baseline numbers under docs/helix/06-iterate/perf/. Override
+# the fixture size or the report date via BENCH_REPORT_DATE.
+BENCH_REPORT_DIR ?= ../docs/helix/06-iterate/perf
+BENCH_REPORT_DATE ?= $(shell date -u +%Y-%m-%d)
+bench-graphql:
+	@echo "Running GraphQL perf harness (fixture: 10 × 500 beads = 5,000)..."
+	@mkdir -p $(BENCH_REPORT_DIR)
+	DDX_BENCH_REPORT_DIR=$(BENCH_REPORT_DIR) \
+	DDX_BENCH_REPORT_DATE=$(BENCH_REPORT_DATE) \
+	go test ./internal/server/perf/ -run TestGraphQLPerfMatrix_Baseline -v -timeout 5m
+	@echo "Baseline report written to $(BENCH_REPORT_DIR)/$(BENCH_REPORT_DATE)-baseline.md"
 
 # Validate the shared bead record schema
 bead-schema:

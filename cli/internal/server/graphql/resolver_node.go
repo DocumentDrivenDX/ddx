@@ -50,6 +50,12 @@ type StateProvider interface {
 	GetProjectSnapshots(includeUnreachable bool) []*Project
 	GetProjectSnapshotByID(id string) (*Project, bool)
 	GetBeadSnapshots(status, label, projectID, search string) []BeadSnapshot
+	// GetBeadSnapshotsForProject returns snapshots for a single registered
+	// project without iterating any other projects' stores. Implementations
+	// MUST open only the named project's bead store. The resolver for
+	// Query.beadsByProject uses this path to avoid the N-project scan that
+	// backs the cross-project GetBeadSnapshots call (ddx-9ce6842a).
+	GetBeadSnapshotsForProject(projectID, status, label, search string) []BeadSnapshot
 	GetBeadSnapshot(id string) (*BeadSnapshot, bool)
 
 	// Worker queries

@@ -37,7 +37,7 @@ func (r *queryResolver) BeadsByProject(ctx context.Context, projectID string, fi
 	if search != nil {
 		searchVal = *search
 	}
-	snaps := r.State.GetBeadSnapshots(statusVal, labelVal, projectID, searchVal)
+	snaps := r.State.GetBeadSnapshotsForProject(projectID, statusVal, labelVal, searchVal)
 	return beadConnectionFromSnapshots(snaps, first, after, last, before), nil
 }
 

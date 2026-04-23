@@ -51,37 +51,91 @@ type beadIndexEntry struct {
 }
 
 // GetBeadSnapshots implements ddxgraphql.StateProvider.
+//
+// When projectID is non-empty this delegates to GetBeadSnapshotsForProject so
+// the resolver path opens exactly one project's store; a scoped query never
+// pays the N-project scan cost (ddx-9ce6842a Part 2 step 1). When projectID is
+// empty every registered project is scanned — that is still O(projects) by
+// necessity, but each project's bead.Store receives a pushed-down filter so
+// non-matching beads are never materialized as BeadSnapshot values.
 func (s *ServerState) GetBeadSnapshots(status, label, projectID, search string) []ddxgraphql.BeadSnapshot {
+	if projectID != "" {
+		return s.GetBeadSnapshotsForProject(projectID, status, label, search)
+	}
 	projects := s.GetProjects()
+	pred := beadFilterPredicate(status, label, search)
 	var result []ddxgraphql.BeadSnapshot
 	for _, proj := range projects {
-		if projectID != "" && proj.ID != projectID {
-			continue
-		}
-		store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
-		beads, err := store.ReadAll()
-		if err != nil {
-			continue
-		}
-		for _, b := range beads {
-			if status != "" && b.Status != status {
-				continue
-			}
-			if label != "" && !containsString(b.Labels, label) {
-				continue
-			}
-			if search != "" {
-				q := strings.ToLower(search)
-				if !strings.Contains(strings.ToLower(b.ID), q) && !strings.Contains(strings.ToLower(b.Title), q) {
-					continue
-				}
-			}
-			s.rememberBeadLocation(b.ID, proj)
-			snap := beadSnapshotFromStoreBead(proj.ID, b)
-			result = append(result, snap)
-		}
+		result = append(result, s.beadSnapshotsForProjectEntry(proj, pred)...)
 	}
 	return result
+}
+
+// GetBeadSnapshotsForProject implements ddxgraphql.StateProvider. It opens
+// exactly one project's bead store — iteration over other projects is not
+// performed for any reason, so the cross-project loop cost is avoided for the
+// common per-project bead list.
+func (s *ServerState) GetBeadSnapshotsForProject(projectID, status, label, search string) []ddxgraphql.BeadSnapshot {
+	if projectID == "" {
+		return nil
+	}
+	proj, ok := s.GetProjectByID(projectID)
+	if !ok {
+		return nil
+	}
+	pred := beadFilterPredicate(status, label, search)
+	return s.beadSnapshotsForProjectEntry(proj, pred)
+}
+
+// beadStoreOpenHook is a test-only hook: when non-nil, every call to
+// beadSnapshotsForProjectEntry invokes it with the project path it is about
+// to open. Tests use this to assert that the scoped path opens exactly one
+// project's store (ddx-9ce6842a AC §3).
+var beadStoreOpenHook func(projectPath string)
+
+// beadSnapshotsForProjectEntry reads the single project's bead store, applies
+// the (possibly nil) predicate at the store layer (filter pushdown), and
+// returns GraphQL snapshots for the matching beads. Callers are responsible
+// for deciding which projects to pass through — this helper never touches any
+// other project's state.
+func (s *ServerState) beadSnapshotsForProjectEntry(proj ProjectEntry, pred func(bead.Bead) bool) []ddxgraphql.BeadSnapshot {
+	if beadStoreOpenHook != nil {
+		beadStoreOpenHook(proj.Path)
+	}
+	store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
+	beads, err := store.ReadAllFiltered(pred)
+	if err != nil {
+		return nil
+	}
+	out := make([]ddxgraphql.BeadSnapshot, 0, len(beads))
+	for _, b := range beads {
+		s.rememberBeadLocation(b.ID, proj)
+		out = append(out, beadSnapshotFromStoreBead(proj.ID, b))
+	}
+	return out
+}
+
+// beadFilterPredicate returns a predicate suitable for bead.Store.ReadAllFiltered
+// that applies status/label/search filters. A nil return means "match all".
+func beadFilterPredicate(status, label, search string) func(bead.Bead) bool {
+	if status == "" && label == "" && search == "" {
+		return nil
+	}
+	q := strings.ToLower(search)
+	return func(b bead.Bead) bool {
+		if status != "" && b.Status != status {
+			return false
+		}
+		if label != "" && !containsString(b.Labels, label) {
+			return false
+		}
+		if q != "" {
+			if !strings.Contains(strings.ToLower(b.ID), q) && !strings.Contains(strings.ToLower(b.Title), q) {
+				return false
+			}
+		}
+		return true
+	}
 }
 
 // GetBeadSnapshot implements ddxgraphql.StateProvider.
