@@ -136,7 +136,7 @@ func Targets() []Target {
 			Name:  "agentSessions",
 			Query: `{ agentSessions(first: 50) { totalCount edges { node { id harness model } } } }`,
 			InProcess: func(f *BeadFixture) error {
-				sessions := f.Server.State().GetAgentSessionsGraphQL()
+				sessions := f.Server.State().GetAgentSessionsGraphQL(nil, nil)
 				_ = sessions // may be empty when fixture seeds 0 sessions; still exercised
 				return nil
 			},
