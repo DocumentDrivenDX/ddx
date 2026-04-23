@@ -52,6 +52,24 @@ func NewServiceFromWorkDir(workDir string) (agentlib.DdxAgent, error) {
 	return agentlib.New(opts)
 }
 
+// NewStatusProbeServiceFromWorkDir constructs a service for status surfaces
+// without pre-filtering .ddx agent endpoints by /models reachability. The
+// returned service still probes when ListProviders is called, but unreachable
+// configured endpoints remain present in the result as unreachable rows.
+func NewStatusProbeServiceFromWorkDir(workDir string) (agentlib.DdxAgent, error) {
+	opts := agentlib.ServiceOptions{
+		ConfigPath: filepath.Join(workDir, "config.yaml"),
+	}
+	sc, err := serviceConfigFromDDxEndpointsNoFilter(workDir)
+	if err != nil {
+		return nil, err
+	}
+	if sc != nil {
+		opts.ServiceConfig = sc
+	}
+	return agentlib.New(opts)
+}
+
 type endpointServiceConfig struct {
 	providers   map[string]agentlib.ServiceProviderEntry
 	names       []string
@@ -70,6 +88,48 @@ func serviceConfigFromDDxEndpoints(workDir string) (agentlib.ServiceConfig, erro
 	return newEndpointServiceConfig(context.Background(), cfg.Agent.Endpoints, workDir)
 }
 
+func serviceConfigFromDDxEndpointsNoFilter(workDir string) (agentlib.ServiceConfig, error) {
+	cfg, err := ddxconfig.LoadWithWorkingDir(workDir)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Agent == nil || len(cfg.Agent.Endpoints) == 0 {
+		return nil, nil
+	}
+	return newEndpointServiceConfigWithoutLiveFilter(cfg.Agent.Endpoints, workDir)
+}
+
+// ConfiguredProviderSnapshots returns endpoint-provider rows from .ddx config
+// without probing their /models endpoints. It is used by UI surfaces that must
+// first-paint from last-known or configured state and refresh live probes
+// asynchronously.
+func ConfiguredProviderSnapshots(workDir string) ([]agentlib.ProviderInfo, bool, error) {
+	cfg, err := ddxconfig.LoadWithWorkingDir(workDir)
+	if err != nil {
+		return nil, false, err
+	}
+	if cfg.Agent == nil || len(cfg.Agent.Endpoints) == 0 {
+		return nil, false, nil
+	}
+	out := make([]agentlib.ProviderInfo, 0, len(cfg.Agent.Endpoints))
+	for i, endpoint := range cfg.Agent.Endpoints {
+		name, entry, err := endpointProviderEntry(endpoint, i)
+		if err != nil {
+			return nil, true, err
+		}
+		out = append(out, agentlib.ProviderInfo{
+			Name:         name,
+			Type:         strings.ToLower(strings.TrimSpace(entry.Type)),
+			BaseURL:      entry.BaseURL,
+			Endpoints:    append([]agentlib.ServiceProviderEndpoint(nil), entry.Endpoints...),
+			Status:       "unknown",
+			DefaultModel: entry.Model,
+			IsDefault:    i == 0,
+		})
+	}
+	return out, true, nil
+}
+
 func newEndpointServiceConfig(ctx context.Context, endpoints []ddxconfig.AgentEndpoint, workDir string) (*endpointServiceConfig, error) {
 	sc := &endpointServiceConfig{
 		providers: make(map[string]agentlib.ServiceProviderEntry),
@@ -82,6 +142,25 @@ func newEndpointServiceConfig(ctx context.Context, endpoints []ddxconfig.AgentEn
 		}
 		if !endpointHasLiveModels(ctx, entry.BaseURL, entry.APIKey) {
 			continue
+		}
+		sc.providers[name] = entry
+		sc.names = append(sc.names, name)
+		if sc.defaultName == "" {
+			sc.defaultName = name
+		}
+	}
+	return sc, nil
+}
+
+func newEndpointServiceConfigWithoutLiveFilter(endpoints []ddxconfig.AgentEndpoint, workDir string) (*endpointServiceConfig, error) {
+	sc := &endpointServiceConfig{
+		providers: make(map[string]agentlib.ServiceProviderEntry),
+		workDir:   workDir,
+	}
+	for i, endpoint := range endpoints {
+		name, entry, err := endpointProviderEntry(endpoint, i)
+		if err != nil {
+			return nil, err
 		}
 		sc.providers[name] = entry
 		sc.names = append(sc.names, name)

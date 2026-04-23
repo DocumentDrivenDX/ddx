@@ -19,6 +19,8 @@ Design note for `ddx-23978824`: unify the providers page to include both endpoin
 Common fields — `ProviderStatus` (existing type) gains:
 
 - `kind: ENDPOINT | HARNESS` — discriminant
+- `reachable: Boolean!` — last-known ability to accept work; false when the row is only a configured snapshot or explicitly unavailable
+- `detail: String!` — human-readable status detail (error text, binary path, or "not checked yet")
 - `lastCheckedAt: String` — RFC3339 timestamp of the in-process probe result
 - `usage: ProviderUsage` (nullable) — token/request counts over rolling windows
 - `quota: ProviderQuota` (nullable) — ceiling/remaining/resetAt
@@ -65,10 +67,11 @@ Harness-specific header mapping:
 ## Async liveness
 
 Initial page load strategy:
-1. Frontend fires `providerStatuses` + `harnessStatuses` concurrently. Both resolvers return **cached** status from the last probe, populating `lastCheckedAt`. Synchronous work: read-only.
-2. Frontend emits (optional) refresh action that enqueues fresh probes and re-queries once complete.
+1. Frontend fires `providerStatuses` + `harnessStatuses` concurrently in one GraphQL request. The endpoint resolver returns the in-process cache when present; otherwise it returns a configured endpoint snapshot without probing `/models`. Harness inventory is read directly from the harness catalog.
+2. Returning endpoint rows schedules a background provider probe. Later `providerStatuses` reads patch rows from the cache once the probe finishes.
+3. If only legacy/global provider config is present and no DDx endpoint snapshots exist, the synchronous fallback is bounded so the page can still first-paint harness rows instead of waiting on a full probe wall.
 
-The existing `providerStatuses` resolver today performs blocking probes; the design preserves that behavior for the *refresh* path but adds a fast path when the rows are already populated. Implementation note: for this bead, the cached path falls back to the existing probe when no cache exists, but the shape is ready for a stats-cache reader to land.
+The status cache is deliberately process-local. It is a rendering cache, not the source of truth; DDx can replace it with a persisted probe snapshot store later without changing the GraphQL row model.
 
 ## Trend view
 

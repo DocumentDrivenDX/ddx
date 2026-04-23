@@ -4,11 +4,21 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 )
+
+var providerStatusCache = struct {
+	sync.Mutex
+	rows     map[string][]*ProviderStatus
+	inFlight map[string]bool
+}{
+	rows:     make(map[string][]*ProviderStatus),
+	inFlight: make(map[string]bool),
+}
 
 // ProviderStatuses is the resolver for the providerStatuses field.
 // It mirrors the output of `ddx agent providers`, annotating each row with
@@ -16,47 +26,35 @@ import (
 // the sessions index. Quota is populated when the upstream ProviderInfo
 // exposes token-level quota headers; null otherwise (FEAT-014 no-fabrication).
 func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error) {
-	svc, err := agent.NewServiceFromWorkDir(r.WorkingDir)
-	if err != nil {
-		return []*ProviderStatus{}, nil //nolint:nilerr
-	}
-	providers, err := svc.ListProviders(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("listing providers: %w", err)
-	}
-
 	now := time.Now().UTC()
 	entries := r.sessionIndexEntries()
-	lastChecked := now.Format(time.RFC3339)
 
-	results := make([]*ProviderStatus, 0, len(providers))
-	for _, p := range providers {
-		url := p.BaseURL
-		if url == "" {
-			url = "(api)"
-		}
-		ps := &ProviderStatus{
-			Name:              p.Name,
-			Kind:              ProviderKindEndpoint,
-			ProviderType:      p.Type,
-			BaseURL:           url,
-			Model:             p.DefaultModel,
-			Status:            p.Status,
-			ModelCount:        p.ModelCount,
-			IsDefault:         p.IsDefault,
-			LastCheckedAt:     strPtr(lastChecked),
-			DefaultForProfile: defaultProfilesForEndpoint(p),
-		}
-		if p.CooldownState != nil && !p.CooldownState.Until.IsZero() {
-			s := p.CooldownState.Until.UTC().Format(time.RFC3339)
-			ps.CooldownUntil = &s
-		}
-		ps.Usage = buildUsage(entries, p.Name, agent.MatchProvider, now)
-		ps.Quota = quotaFromProviderInfo(p)
-		results = append(results, ps)
+	if rows := cachedProviderRows(r.WorkingDir); len(rows) > 0 {
+		refreshProviderStatuses(r.WorkingDir)
+		return providerRowsWithUsage(rows, entries, now), nil
 	}
 
-	return results, nil
+	if snapshots, ok, err := agent.ConfiguredProviderSnapshots(r.WorkingDir); err == nil && ok {
+		rows := providerStatusesFromInfos(snapshots, entries, now)
+		storeProviderRows(r.WorkingDir, rows)
+		refreshProviderStatuses(r.WorkingDir)
+		return rows, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("loading provider snapshots: %w", err)
+	}
+
+	// Legacy/global provider config fallback. Bound the synchronous path so the
+	// UI can still first-paint harness rows even if provider probing is slow.
+	probeCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	providers, err := liveProviderInfos(probeCtx, r.WorkingDir)
+	if err != nil {
+		refreshProviderStatuses(r.WorkingDir)
+		return []*ProviderStatus{}, nil
+	}
+	rows := providerStatusesFromInfos(providers, entries, now)
+	storeProviderRows(r.WorkingDir, rows)
+	return rows, nil
 }
 
 // HarnessStatuses is the resolver for the harnessStatuses field.
@@ -64,7 +62,7 @@ func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus
 // taken from HarnessInfo.Available, rolling usage from the sessions index,
 // and quota from the harness-reported rate-limit data when available.
 func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus, error) {
-	svc, err := agent.NewServiceFromWorkDir(r.WorkingDir)
+	svc, err := agentlib.New(agentlib.ServiceOptions{})
 	if err != nil {
 		return []*ProviderStatus{}, nil //nolint:nilerr
 	}
@@ -86,6 +84,8 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 			BaseURL:           "(subprocess)",
 			Model:             info.DefaultModel,
 			Status:            harnessStatusLine(info),
+			Reachable:         info.Available,
+			Detail:            harnessDetail(info),
 			ModelCount:        harnessModelCount(info),
 			IsDefault:         false,
 			LastCheckedAt:     strPtr(lastChecked),
@@ -166,7 +166,11 @@ func (r *queryResolver) ProviderTrend(ctx context.Context, name string, windowDa
 		if ceiling := detected.ceilingTokens; ceiling > 0 {
 			c := ceiling
 			trend.CeilingTokens = &c
-			if p := projectRunOutHours(buckets, float64(ceiling)-float64(detected.remaining)); p > 0 {
+			remaining := detected.remaining
+			if remaining < 0 {
+				remaining = ceiling - sumTailTokens(buckets, 24)
+			}
+			if p := projectRunOutHours(buckets, float64(remaining)); p > 0 {
 				trend.ProjectedRunOutHours = &p
 			}
 		}
@@ -185,22 +189,29 @@ type detectedRow struct {
 // detectProviderOrHarness looks up a name against providers first, then
 // harnesses, returning the resolved kind and quota signal (if any).
 func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string) (ProviderKind, *detectedRow) {
-	svc, err := agent.NewServiceFromWorkDir(r.WorkingDir)
-	if err != nil {
-		return ProviderKindEndpoint, nil
-	}
-	providers, _ := svc.ListProviders(ctx)
-	for _, p := range providers {
-		if strings.EqualFold(p.Name, name) {
-			q := quotaFromProviderInfo(p)
-			return ProviderKindEndpoint, detectedFromQuota(q)
+	if svc, err := agentlib.New(agentlib.ServiceOptions{}); err == nil {
+		harnesses, _ := svc.ListHarnesses(ctx)
+		for _, h := range harnesses {
+			if strings.EqualFold(h.Name, name) {
+				q := quotaFromHarnessInfo(h)
+				return ProviderKindHarness, detectedFromQuota(q)
+			}
 		}
 	}
-	harnesses, _ := svc.ListHarnesses(ctx)
-	for _, h := range harnesses {
-		if strings.EqualFold(h.Name, name) {
-			q := quotaFromHarnessInfo(h)
-			return ProviderKindHarness, detectedFromQuota(q)
+	if snapshots, ok, _ := agent.ConfiguredProviderSnapshots(r.WorkingDir); ok {
+		for _, p := range snapshots {
+			if strings.EqualFold(p.Name, name) {
+				q := quotaFromProviderInfo(p)
+				return ProviderKindEndpoint, detectedFromQuota(q)
+			}
+		}
+	}
+	if providers, err := liveProviderInfos(ctx, r.WorkingDir); err == nil {
+		for _, p := range providers {
+			if strings.EqualFold(p.Name, name) {
+				q := quotaFromProviderInfo(p)
+				return ProviderKindEndpoint, detectedFromQuota(q)
+			}
 		}
 	}
 	return ProviderKindEndpoint, nil
@@ -220,11 +231,11 @@ func detectedFromQuota(q *ProviderQuota) *detectedRow {
 	return row
 }
 
-// projectRunOutHours returns the hours projected until `used` reaches ceiling
+// projectRunOutHours returns the hours projected until current headroom is used
 // based on the last-24-hour slope of the bucket series. Returns 0 when the
-// slope is non-positive, the ceiling is already met, or the series is too
+// slope is non-positive, headroom is gone/unknown, or the series is too
 // short to estimate.
-func projectRunOutHours(buckets []agent.UsageBucket, used float64) float64 {
+func projectRunOutHours(buckets []agent.UsageBucket, remaining float64) float64 {
 	if len(buckets) < 2 {
 		return 0
 	}
@@ -252,9 +263,6 @@ func projectRunOutHours(buckets []agent.UsageBucket, used float64) float64 {
 	if perHour <= 0 {
 		return 0
 	}
-	// Estimate remaining headroom as ceilingTokens - used. When `used` is
-	// negative (ceiling unknown) we can't project.
-	remaining := -used
 	if remaining <= 0 {
 		return 0
 	}
@@ -263,6 +271,128 @@ func projectRunOutHours(buckets []agent.UsageBucket, used float64) float64 {
 		return 0
 	}
 	return hours
+}
+
+func sumTailTokens(buckets []agent.UsageBucket, maxBuckets int) int {
+	if maxBuckets <= 0 || len(buckets) == 0 {
+		return 0
+	}
+	if maxBuckets > len(buckets) {
+		maxBuckets = len(buckets)
+	}
+	total := 0
+	for _, b := range buckets[len(buckets)-maxBuckets:] {
+		total += b.Tokens
+	}
+	return total
+}
+
+func liveProviderInfos(ctx context.Context, workDir string) ([]agentlib.ProviderInfo, error) {
+	svc, err := agent.NewStatusProbeServiceFromWorkDir(workDir)
+	if err != nil {
+		return nil, err
+	}
+	return svc.ListProviders(ctx)
+}
+
+func refreshProviderStatuses(workDir string) {
+	providerStatusCache.Lock()
+	if providerStatusCache.inFlight[workDir] {
+		providerStatusCache.Unlock()
+		return
+	}
+	providerStatusCache.inFlight[workDir] = true
+	providerStatusCache.Unlock()
+
+	go func() {
+		defer func() {
+			providerStatusCache.Lock()
+			delete(providerStatusCache.inFlight, workDir)
+			providerStatusCache.Unlock()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		providers, err := liveProviderInfos(ctx, workDir)
+		if err != nil {
+			return
+		}
+		rows := providerStatusesFromInfos(providers, nil, time.Now().UTC())
+		storeProviderRows(workDir, rows)
+	}()
+}
+
+func cachedProviderRows(workDir string) []*ProviderStatus {
+	providerStatusCache.Lock()
+	defer providerStatusCache.Unlock()
+	return cloneProviderRows(providerStatusCache.rows[workDir])
+}
+
+func storeProviderRows(workDir string, rows []*ProviderStatus) {
+	providerStatusCache.Lock()
+	defer providerStatusCache.Unlock()
+	providerStatusCache.rows[workDir] = cloneProviderRows(rows)
+}
+
+func providerStatusesFromInfos(providers []agentlib.ProviderInfo, entries []agent.SessionIndexEntry, now time.Time) []*ProviderStatus {
+	lastChecked := now.UTC().Format(time.RFC3339)
+	results := make([]*ProviderStatus, 0, len(providers))
+	for _, p := range providers {
+		url := p.BaseURL
+		if url == "" {
+			url = "(api)"
+		}
+		ps := &ProviderStatus{
+			Name:              p.Name,
+			Kind:              ProviderKindEndpoint,
+			ProviderType:      p.Type,
+			BaseURL:           url,
+			Model:             p.DefaultModel,
+			Status:            p.Status,
+			Reachable:         providerReachable(p),
+			Detail:            providerDetail(p),
+			ModelCount:        p.ModelCount,
+			IsDefault:         p.IsDefault,
+			LastCheckedAt:     strPtr(lastChecked),
+			DefaultForProfile: defaultProfilesForEndpoint(p),
+		}
+		if ps.ProviderType == "" {
+			ps.ProviderType = "endpoint"
+		}
+		if p.CooldownState != nil && !p.CooldownState.Until.IsZero() {
+			s := p.CooldownState.Until.UTC().Format(time.RFC3339)
+			ps.CooldownUntil = &s
+		}
+		ps.Usage = buildUsage(entries, p.Name, agent.MatchProvider, now)
+		ps.Quota = quotaFromProviderInfo(p)
+		results = append(results, ps)
+	}
+	return results
+}
+
+func providerRowsWithUsage(rows []*ProviderStatus, entries []agent.SessionIndexEntry, now time.Time) []*ProviderStatus {
+	out := cloneProviderRows(rows)
+	for _, row := range out {
+		row.Usage = buildUsage(entries, row.Name, agent.MatchProvider, now)
+	}
+	return out
+}
+
+func cloneProviderRows(rows []*ProviderStatus) []*ProviderStatus {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]*ProviderStatus, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		clone := *row
+		if row.DefaultForProfile != nil {
+			clone.DefaultForProfile = append([]string(nil), row.DefaultForProfile...)
+		}
+		out = append(out, &clone)
+	}
+	return out
 }
 
 // sessionIndexEntries reads the project's session index for all available
@@ -393,6 +523,31 @@ func defaultProfilesForEndpoint(p agentlib.ProviderInfo) []string {
 	return []string{}
 }
 
+func providerReachable(p agentlib.ProviderInfo) bool {
+	return strings.EqualFold(strings.TrimSpace(p.Status), "connected")
+}
+
+func providerDetail(p agentlib.ProviderInfo) string {
+	if p.LastError != nil && strings.TrimSpace(p.LastError.Detail) != "" {
+		return p.LastError.Detail
+	}
+	for _, ep := range p.EndpointStatus {
+		if ep.LastError != nil && strings.TrimSpace(ep.LastError.Detail) != "" {
+			return ep.LastError.Detail
+		}
+		if strings.TrimSpace(ep.Status) != "" && !strings.EqualFold(ep.Status, p.Status) {
+			return ep.Status
+		}
+	}
+	if strings.TrimSpace(p.Status) != "" {
+		if strings.EqualFold(p.Status, "unknown") {
+			return "not checked yet"
+		}
+		return p.Status
+	}
+	return "not reported"
+}
+
 func harnessTypeLabel(info agentlib.HarnessInfo) string {
 	if info.Type != "" {
 		return info.Type
@@ -408,6 +563,22 @@ func harnessStatusLine(info agentlib.HarnessInfo) string {
 		return "unavailable: " + info.Error
 	}
 	return "unavailable"
+}
+
+func harnessDetail(info agentlib.HarnessInfo) string {
+	if info.LastError != nil && strings.TrimSpace(info.LastError.Detail) != "" {
+		return info.LastError.Detail
+	}
+	if strings.TrimSpace(info.Error) != "" {
+		return info.Error
+	}
+	if info.Available && strings.TrimSpace(info.Path) != "" {
+		return info.Path
+	}
+	if info.Available {
+		return "available"
+	}
+	return "binary not found"
 }
 
 func harnessModelCount(_ agentlib.HarnessInfo) int {

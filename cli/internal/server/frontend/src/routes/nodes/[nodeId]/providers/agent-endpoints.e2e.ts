@@ -10,6 +10,8 @@ const ENDPOINT_ROWS = [
 		baseURL: 'http://localhost:1234/v1',
 		model: 'qwen3-7b',
 		status: 'connected',
+		reachable: true,
+		detail: 'connected',
 		modelCount: 3,
 		isDefault: true,
 		cooldownUntil: null,
@@ -33,6 +35,8 @@ const HARNESS_ROWS = [
 		baseURL: '(subprocess)',
 		model: 'claude-sonnet-4-6',
 		status: 'available',
+		reachable: true,
+		detail: '/usr/local/bin/claude',
 		modelCount: 0,
 		isDefault: false,
 		cooldownUntil: null,
@@ -58,6 +62,8 @@ const HARNESS_ROWS = [
 		baseURL: '(subprocess)',
 		model: 'gpt-5.4',
 		status: 'available',
+		reachable: true,
+		detail: '/usr/local/bin/codex',
 		modelCount: 0,
 		isDefault: false,
 		cooldownUntil: null,
@@ -101,7 +107,10 @@ const TREND_30D = {
 
 async function mockGraphQL(page: Page) {
 	await page.route('/graphql', async (route) => {
-		const body = route.request().postDataJSON() as { query: string; variables?: { name: string; windowDays: number } };
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: { name: string; windowDays: number };
+		};
 		const q = body.query;
 		if (q.includes('NodeInfo')) {
 			await route.fulfill({
@@ -151,7 +160,7 @@ test('unified view shows endpoints and harnesses with kind labels', async ({ pag
 	// a good proxy (real probes are async and out-of-band).
 	await expect(page.getByTestId('agent-endpoints-table')).toBeVisible();
 	const interactiveMs = Date.now() - start;
-	expect(interactiveMs).toBeLessThan(3000);
+	expect(interactiveMs).toBeLessThan(500);
 
 	await expect(page.getByTestId('endpoint-row-qwen-local')).toBeVisible();
 	await expect(page.getByTestId('endpoint-row-claude')).toBeVisible();
@@ -160,6 +169,7 @@ test('unified view shows endpoints and harnesses with kind labels', async ({ pag
 	await expect(page.getByTestId('endpoint-kind-qwen-local')).toHaveText('endpoint');
 	await expect(page.getByTestId('endpoint-kind-claude')).toHaveText('harness');
 	await expect(page.getByTestId('endpoint-kind-codex')).toHaveText('harness');
+	await expect(page.getByTestId('endpoint-reachable-claude')).toHaveText('reachable');
 
 	// Tokens column populated for rows with usage.
 	await expect(page.getByTestId('endpoint-tokens-qwen-local')).toContainText('12.0k');

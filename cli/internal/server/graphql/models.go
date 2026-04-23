@@ -1344,6 +1344,10 @@ type ProviderStatus struct {
 	Model string `json:"model"`
 	// Live connectivity status message
 	Status string `json:"status"`
+	// True when the last-known status says this endpoint/harness can accept work.
+	Reachable bool `json:"reachable"`
+	// Human-readable detail explaining the current status.
+	Detail string `json:"detail"`
 	// Number of models discovered via /v1/models (endpoints) or harness model count (harnesses).
 	ModelCount int `json:"modelCount"`
 	// True when this is the default provider/harness.
