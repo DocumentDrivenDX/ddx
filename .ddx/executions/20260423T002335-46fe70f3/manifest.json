@@ -1,0 +1,138 @@
+{
+  "attempt_id": "20260423T002335-46fe70f3",
+  "bead_id": "ddx-ad0db8fd",
+  "base_rev": "c1822352b4bbfa4181f96a203bce522d249f342d",
+  "created_at": "2026-04-23T00:23:35.915528856Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ad0db8fd",
+    "title": "Bead detail GraphQL resolver scans every project and every bead on each request",
+    "description": "## Observed\n\nOpening a bead in the sidepane on `/nodes/.../projects/.../beads?q=test` takes 5+ seconds. The beads list renders quickly; the delay is on single-bead lookup.\n\n## Root cause\n\n`cli/internal/server/graphql/resolver.go:93-100` — the `Bead(id)` resolver calls `r.State.GetBeadSnapshots(\"\", \"\", \"\", \"\")` with no filters, which at `cli/internal/server/state_graphql.go:49-105` walks **every project**, constructs a `bead.Store` per project, calls `ReadAll()` (full directory scan + JSONL parse of every bead file), then iterates the result in Go to find one matching ID.\n\nSo every sidepane open = `O(projects × beads_per_project)` disk reads + parses, for a lookup that should be `O(1)` or `O(log n)`.\n\n`bead.Store` already exposes `Get(id)` (`cli/internal/bead/store.go:450`), but the resolver doesn't use it — nor does it know which project the bead lives in, because the GraphQL schema exposes `bead(id:)` without a project scope.\n\n## Proposed direction (not prescriptive)\n\nAny of these would resolve it; pick based on measurements:\n\n1. **Project scope the query.** Change schema to `bead(projectId:, id:)` (or accept a composite global id) and call `Store.Get` directly.\n2. **Maintain an in-memory index** `beadID → projectID` refreshed on bead mutations and on a debounced filesystem watcher; resolver does one map lookup + one `Store.Get`.\n3. **Short-TTL snapshot cache** behind `GetBeadSnapshots`, invalidated on bead writes.\n\nBefore picking: add a baseline measurement harness (see acceptance) so we know the actual p50/p95 before and after, not just anecdote.",
+    "acceptance": "**User story:** As a developer browsing the web UI beads view, I want clicking a bead to open its detail pane within ~200ms on a repo with hundreds of beads across several projects, so the UI feels interactive.\n\n**Acceptance criteria:**\n\n1. A benchmark/harness exists (Go benchmark or scripted GraphQL client) that measures end-to-end `bead(id:)` latency against a fixture repo with ≥ 5 projects and ≥ 500 beads total. Output is a p50/p95 number, not a pass/fail bool.\n2. Baseline is recorded in the bead notes (actual number measured on the current `main` binary at the time of fix).\n3. After the fix, p95 for `bead(id:)` on the fixture is ≤ 50ms in-process / ≤ 200ms over HTTP on a dev laptop.\n4. The fix does not introduce a stale-read regression: writing a bead via `ddx bead update` and then fetching it via GraphQL returns the new value on the next request (verified by a test that does write-then-read).\n5. Concurrency-safe: an integration test spawns N concurrent `bead(id:)` queries interleaved with `bead update` mutations and asserts no panics, no torn reads, and consistent responses.\n6. Playwright e2e: open `/nodes/.../beads`, click a bead row, assert the sidepane shows the bead title within 1s (generous budget; guards against regressions not the p95).",
+    "labels": [
+      "feat-008",
+      "feat-004",
+      "perf",
+      "graphql"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-23T00:23:35Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2988370",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:05.950521722Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T20:59:06.140939145Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"codex/gpt-5.4\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:08.987836547Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=codex/gpt-5.4"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=claude model=codex/gpt-5.4 probe=ok\nunsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+          "created_at": "2026-04-22T20:59:09.194779063Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"gemini\",\"resolved_model\":\"minimax/minimax-m2.7\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:11.82744163Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=gemini model=minimax/minimax-m2.7"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness=gemini model=minimax/minimax-m2.7 probe=ok\nunsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+          "created_at": "2026-04-22T20:59:12.015250183Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"harness\":\"agent\",\"model\":\"qwen/qwen3.6-35b-a3b\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2323},{\"tier\":\"standard\",\"harness\":\"claude\",\"model\":\"codex/gpt-5.4\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2012},{\"tier\":\"smart\",\"harness\":\"gemini\",\"model\":\"minimax/minimax-m2.7\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2015}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-22T20:59:12.073529736Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite\ntier=smart\nprobe_result=ok\nresult_rev=c8e08156ecc62d9a084ed706a7182ab79974f3f6\nbase_rev=c8e08156ecc62d9a084ed706a7182ab79974f3f6\nretry_after=2026-04-23T02:59:12Z",
+          "created_at": "2026-04-22T20:59:12.243974198Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-22T23:52:15.864967024Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "Missing implementation change in `cli/internal/server/graphql/resolver.go`: `Bead(id:)` is not shown using a scoped lookup, cache, or index instead of scanning all bead snapshots.\nMissing benchmark or scripted GraphQL latency harness for a fixture repo with at least 5 projects and 500 beads.\nMissing bead-note update recording the baseline p50/p95 measured on the current `main` binary.\nMissing post-fix performance evidence showing p95 within the required in-process or HTTP budget.\nMissing write-then-read regression test covering `ddx bead update` followed by GraphQL `bead(id:)`.\nMissing concurrent integration test interleaving `bead(id:)` queries with bead updates.\nMissing Playwright e2e test for opening `/nodes/.../beads`, clicking a bead row, and rendering the sidepane title within 1s.",
+          "created_at": "2026-04-22T23:52:39.014205842Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-22T23:52:39.096808954Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nMissing implementation change in `cli/internal/server/graphql/resolver.go`: `Bead(id:)` is not shown using a scoped lookup, cache, or index instead of scanning all bead snapshots.\nMissing benchmark or scripted GraphQL latency harness for a fixture repo with at least 5 projects and 500 beads.\nMissing bead-note update recording the baseline p50/p95 measured on the current `main` binary.\nMissing post-fix performance evidence showing p95 within the required in-process or HTTP budget.\nMissing write-then-read regression test covering `ddx bead update` followed by GraphQL `bead(id:)`.\nMissing concurrent integration test interleaving `bead(id:)` queries with bead updates.\nMissing Playwright e2e test for opening `/nodes/.../beads`, clicking a bead row, and rendering the sidepane title within 1s.\nresult_rev=120e0ded9a6ba73dee88b5141f034de9c53435c0\nbase_rev=b0b7e6cfdcbb4e8b3acfa52f040ac98117b3e5ad",
+          "created_at": "2026-04-22T23:52:39.163914875Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-23T00:23:35.101437304Z",
+      "execute-loop-last-detail": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+      "execute-loop-last-status": "execution_failed",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260423T002335-46fe70f3",
+    "prompt": ".ddx/executions/20260423T002335-46fe70f3/prompt.md",
+    "manifest": ".ddx/executions/20260423T002335-46fe70f3/manifest.json",
+    "result": ".ddx/executions/20260423T002335-46fe70f3/result.json",
+    "checks": ".ddx/executions/20260423T002335-46fe70f3/checks.json",
+    "usage": ".ddx/executions/20260423T002335-46fe70f3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ad0db8fd-20260423T002335-46fe70f3"
+  }
+}
