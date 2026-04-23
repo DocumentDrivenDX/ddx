@@ -253,6 +253,69 @@ func TestGraphQLDocumentByPath_ResolvesDocgraphTrackedDoc(t *testing.T) {
 	}
 }
 
+// Bead ddx-12cae4dd AC#4: tolerate legacy absolute document paths emitted
+// before docgraph paths were normalised, while still returning the clean
+// relative path expected by current callers.
+func TestGraphQLDocumentByPath_ResolvesLegacyAbsoluteDocgraphPath(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "gql-doc-test-node")
+
+	workDir := setupTestDir(t)
+	docPath := filepath.Join(workDir, "docs", "resources", "agent-harness-ac.md")
+	if err := os.MkdirAll(filepath.Dir(docPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nddx:\n  id: agent-harness-ac\n---\n# Agent Harness AC\n\nLegacy absolute path content.\n"
+	if err := os.WriteFile(docPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := New(":0", workDir)
+
+	payload, err := json.Marshal(map[string]any{
+		"query":     `query DocumentByPath($path: String!) { documentByPath(path: $path) { id path content } }`,
+		"variables": map[string]string{"path": docPath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			DocumentByPath *struct {
+				ID      string `json:"id"`
+				Path    string `json:"path"`
+				Content string `json:"content"`
+			} `json:"documentByPath"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v\nbody: %s", err, w.Body.String())
+	}
+	if resp.Data.DocumentByPath == nil {
+		t.Fatalf("documentByPath returned null for legacy absolute path; body: %s", w.Body.String())
+	}
+	if resp.Data.DocumentByPath.ID != "agent-harness-ac" {
+		t.Errorf("got id %q, want %q", resp.Data.DocumentByPath.ID, "agent-harness-ac")
+	}
+	if got, want := filepath.ToSlash(resp.Data.DocumentByPath.Path), "docs/resources/agent-harness-ac.md"; got != want {
+		t.Errorf("got returned path %q, want %q", got, want)
+	}
+	if !strings.Contains(resp.Data.DocumentByPath.Content, "Legacy absolute path content.") {
+		t.Errorf("content missing expected body text: %q", resp.Data.DocumentByPath.Content)
+	}
+}
+
 // TC-GQL-005: Query.docGraph returns the full document dependency graph.
 func TestGraphQLDocGraph(t *testing.T) {
 	xdgDir := t.TempDir()

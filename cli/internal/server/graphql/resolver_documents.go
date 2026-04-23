@@ -21,15 +21,9 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 		return nil, fmt.Errorf("path is required")
 	}
 
-	cleaned := filepath.Clean(path)
-	if strings.Contains(cleaned, "..") {
-		return nil, fmt.Errorf("invalid path")
-	}
-	// Legacy clients may emit absolute filesystem paths (bead ddx-12cae4dd)
-	// produced before doc.Path was normalised. Reject them — any real document
-	// resolved through the graph uses a relative path.
-	if filepath.IsAbs(cleaned) {
-		return nil, nil
+	cleaned, err := cleanDocumentPath(r.WorkingDir, path)
+	if err != nil {
+		return nil, err
 	}
 
 	// Prefer the docgraph-tracked location: the documents list surfaces files
@@ -82,6 +76,22 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 		Dependents: []string{},
 		Content:    &content,
 	}, nil
+}
+
+func cleanDocumentPath(workingDir, path string) (string, error) {
+	cleaned := filepath.Clean(filepath.FromSlash(path))
+	if filepath.IsAbs(cleaned) {
+		rel, err := filepath.Rel(filepath.Clean(workingDir), cleaned)
+		if err != nil {
+			return "", fmt.Errorf("invalid path")
+		}
+		cleaned = rel
+	}
+	if cleaned == "." || filepath.IsAbs(cleaned) || cleaned == ".." ||
+		strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid path")
+	}
+	return cleaned, nil
 }
 
 // Documents is the resolver for the documents field with Relay cursor pagination.

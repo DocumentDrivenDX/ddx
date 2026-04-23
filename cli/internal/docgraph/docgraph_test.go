@@ -581,6 +581,7 @@ func TestBuildGraph_ExcludesClaudeWorktreesAndStoresRelativePaths(t *testing.T) 
 		"docs/foo.md":                           "---\nddx:\n  id: foo\n---\n# Canonical Foo\n",
 		".claude/worktrees/agent-x/docs/foo.md": "---\nddx:\n  id: foo.dup\n---\n# Shadow Foo\n",
 		".claude/worktrees/agent-x/README.md":   "---\nddx:\n  id: shadow.readme\n---\n# Shadow Readme\n",
+		"scratch/worktrees/agent-y/docs/bar.md": "---\nddx:\n  id: shadow.worktrees\n---\n# Shadow Worktree\n",
 	})
 
 	graph, err := BuildGraph(root)
@@ -596,6 +597,9 @@ func TestBuildGraph_ExcludesClaudeWorktreesAndStoresRelativePaths(t *testing.T) 
 	}
 	if graph.Documents["shadow.readme"] != nil {
 		t.Error(".claude/worktrees README.md should be excluded")
+	}
+	if graph.Documents["shadow.worktrees"] != nil {
+		t.Error("worktrees/ subtree should be excluded regardless of parent")
 	}
 
 	for id, doc := range graph.Documents {
