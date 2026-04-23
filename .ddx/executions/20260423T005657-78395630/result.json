@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "`.ddx/config.yaml` is missing from the diff, so there is no evidence that DDx migrated away from named provider profiles to endpoint-first routing.\n`cli/go.mod` is missing from the diff, so there is no evidence that DDx was bumped to the upstream agent release containing the endpoint-first redesign.\nNo `ddx work --no-adaptive-min-tier --min-tier cheap --max-tier cheap` output, tracker updates, or child bead progress evidence is included, so the cheap-only live-endpoint drain requirement is unevaluated."
+}
