@@ -1,0 +1,131 @@
+{
+  "attempt_id": "20260423T044433-ce3a2c9d",
+  "bead_id": "ddx-23978824",
+  "base_rev": "9c8b2a54fcc8d62ae9bd7f467ea4695fd893b5e4",
+  "created_at": "2026-04-23T04:44:33.816700211Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-23978824",
+    "title": "Providers pane: unify with harnesses (include claude-code and codex), show quota utilization + trend",
+    "description": "## Observed\n\nThree related issues on `/nodes/.../providers`:\n\n1. **Loads slowly.** The page fires two GraphQL queries on mount — `providerStatuses` (which probes every configured provider for live connectivity) and `defaultRouteStatus` (which resolves the default route). Both are synchronous and serialized only by `Promise.all`. Each provider probe is a real network call.\n2. **Missing harnesses.** The pane shows API-endpoint providers (qwen, minimax, etc. — anything wired through the service with an endpoint). It does not show subprocess-invoked harnesses like `claude` (Claude Code) or `codex`. That is accurate to the current `providerStatuses` resolver (`cli/internal/server/graphql/resolver_providers.go:15-50`, which calls `svc.ListProviders`) but not what an operator wants: the operator thinks of \"where their agent work can run,\" which includes both endpoint providers AND subprocess harnesses.\n3. **No quota visibility.** Operator need: see current token utilization rate + quota utilization per harness/provider, trend it, and use the trend to decide whether to throttle before hitting a cap.\n\n## Root cause by area\n\n- **Slow load:** `svc.ListProviders` probes every configured provider for liveness. Probes are serial within the service call, and the whole query blocks page render.\n- **Missing harnesses:** Subprocess harnesses (claude, codex, gemini) are first-class in the CLI (`ddx agent list`, `ddx agent doctor`, `ddx agent check`) but are not surfaced via `providerStatuses`. They have their own status concepts — binary installed, credentials configured, rate-limit headroom — that don't map cleanly onto the endpoint-provider model.\n- **No quota:** No existing data source captures rolling token usage vs quota. Quota information varies wildly by harness: Claude Code has message / session headroom concepts from response headers; codex has rate-limit headers; endpoint providers have API quota per key. There is no unified representation today.\n\n## Proposed direction\n\nThree deliverables, sequenced from easy to hard.\n\n### Deliverable 1 — Unified \"Agent endpoints\" view (renames/rescopes the page)\n\n- Rename the surface from \"Providers\" to **\"Agent endpoints\"** (or similar — confirm copy in the design note). The domain object is \"a place where agent work can run,\" not \"an API provider.\"\n- Merge the data: `providerStatuses` stays as the source for endpoint providers. A new `harnessStatuses` resolver (read from `svc.ListHarnesses` / existing `ddx agent list` + `ddx agent doctor` machinery) surfaces subprocess harnesses. Page renders both in one table with a `kind` column (`endpoint` | `harness`) — or two tables if design prefers.\n- Status fields common to both: name, kind, reachable (bool), detail (text), last-checked-at, default-for-profile (set of profile names).\n- Asynchronous liveness. The page renders an instant first paint from cached status; liveness probes fire in background and patch rows as they return. No synchronous probe-wall on load.\n\n### Deliverable 2 — Token \u0026 quota fields\n\n- Extend the status payload (per row) with: `usage { tokensUsedLastHour, tokensUsedLast24h, requestsLastHour, requestsLast24h }` and `quota { ceilingTokens?, ceilingWindowSeconds?, remaining?, resetAt? }`. Any field may be null if the provider/harness doesn't expose it.\n- Data sources:\n  - **Endpoint providers:** aggregate from the sessions index (`ddx-2ceb02fa`) filtered to the last 1h / 24h, grouped by provider. Quota ceilings come from any headers we capture during calls, plus optional static config.\n  - **Subprocess harnesses:** same sessions-index aggregation for usage. Quota — parse rate-limit headers from the harness output where available (Claude Code, codex both emit them). For harnesses that don't, leave quota null and render \"not reported.\"\n- Row gains two small inline displays: utilization bar (used / ceiling for the quota window) and a 7-day sparkline of tokens/hour.\n\n### Deliverable 3 — Trend view\n\n- Click into a row → detail page showing: 7-day and 30-day time-series of tokens/hour and requests/hour, with the quota ceiling overlaid. Aggregations come from the sessions index, bucketed server-side to avoid shipping raw rows.\n- Simple \"projected to hit quota in ~X hours/days\" callout computed from the slope of the last 24h — enough to answer \"are we on a trend to run out?\" without building a forecasting system.\n\n## Cross-bead dependencies\n\n- Depends on `ddx-2ceb02fa` (sessions index) for any usage-rate data. If that bead isn't landed when this work starts, the usage/quota features stub to \"not available\" and ship purely with the unified-view rename + async liveness.\n- Fixture / perf guidance: per the standing directive recorded in `ddx-9ce6842a`, any aggregation here is tested against ≥1k session records. If in-place aggregation can't hit perf targets, bring the DB-substrate question to the user before picking one.",
+    "acceptance": "**User story:** As an operator, I want a single view that shows every place my agents can run — endpoint providers and subprocess harnesses alike — with status, recent token usage, and quota utilization. When I click into one, I see a 7-day trend so I can tell if I'm about to run out.\n\n**Acceptance criteria:**\n\n1. **Deliverable 1 — Unified view.**\n   - New `harnessStatuses` GraphQL resolver returns subprocess harnesses (claude, codex, gemini, agent) with: name, kind=`harness`, reachable, detail, lastCheckedAt, defaultForProfile.\n   - Existing `providerStatuses` shape gains `kind=\\\"endpoint\\\"` and `lastCheckedAt`.\n   - UI page loads within 500ms on a warm cache — it renders from last-known status **first**, then patches rows live as async probes return. Playwright asserts the table is interactive within 500ms of navigation and that row status patches within 5s of the probe completing.\n   - Subprocess harnesses claude and codex **appear in the table** on a machine where their binaries are installed, with correct reachable status. Integration test.\n\n2. **Deliverable 2 — Usage + quota fields (stubbable).**\n   - Per-row fields `usage` and `quota` as described. All fields nullable.\n   - For endpoint providers, `usage.tokensUsedLast24h` and `usage.tokensUsedLastHour` are computed from the sessions index (fixture: ≥1k session rows covering the last 24h). Unit test asserts correctness on a seeded window.\n   - For subprocess harnesses that expose rate-limit headers (claude, codex), parsed headers populate `quota.ceilingTokens`, `quota.ceilingWindowSeconds`, `quota.remaining`, `quota.resetAt`. Parser tested with captured header fixtures from each harness.\n   - For harnesses/providers that expose nothing, fields remain null and the UI renders `—` / \"not reported\"; no fabricated data.\n   - Utilization bar renders when both `usage` and `quota.ceilingTokens` are present. Sparkline renders when ≥6 hourly buckets of usage are available.\n\n3. **Deliverable 3 — Trend detail.**\n   - Detail route `/nodes/.../providers/[name]` shows 7-day and 30-day tokens/hour + requests/hour time series, with quota ceiling overlay when known.\n   - Buckets computed server-side from the sessions index; the client receives ≤ 200 data points per series.\n   - \"Projected to hit quota in ~X\" callout uses last-24h slope only. Renders only when `quota.ceilingTokens` is known and the last-24h slope is non-zero positive; otherwise absent.\n   - Playwright asserts the detail route renders with seeded usage and the projection text appears for a fixture that has a ceiling + ascending usage.\n\n4. **Perf posture.**\n   - Fixture for perf test: ≥1,000 session index rows covering the last 30 days with usage distributed across ≥5 endpoints/harnesses. Per standing directive in `ddx-9ce6842a`.\n   - Targets: unified list p95 ≤ 200ms HTTP (excluding async probes); trend detail p95 ≤ 400ms HTTP on the fixture.\n   - If in-place aggregation cannot hit the detail-view p95 on a 10,000-row stretch fixture, pause and raise the DB-substrate decision with the user per the standing directive — do not silently switch.\n\n5. **Design note.**\n   - One-pager in `docs/helix/02-design/` before implementation recording the page-rename decision, the row model (common fields, kind-specific fields), async-probe strategy, and the quota source per harness/provider. PR links to it.\n\n6. **No regressions.**\n   - `ddx agent providers`, `ddx agent doctor`, `ddx agent list`, `ddx agent check` CLI commands continue to work unchanged.\n   - `defaultRouteStatus` query remains.\n\n7. **Cross-references.**\n   - Depends on `ddx-2ceb02fa` (sessions index) for usage aggregation. If that bead is not yet landed when this work starts, ship Deliverable 1 standalone with usage/quota stubbed as \"not available,\" and re-open the remaining deliverables when the index is ready.",
+    "labels": [
+      "feat-008",
+      "feat-006",
+      "feat-014",
+      "providers",
+      "observability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-23T04:44:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3704155",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:01:01.045566953Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T21:01:01.261532584Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"codex/gpt-5.4\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:01:03.866245764Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=codex/gpt-5.4"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=claude model=codex/gpt-5.4 probe=ok\nunsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+          "created_at": "2026-04-22T21:01:04.084927142Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"gemini\",\"resolved_model\":\"minimax/minimax-m2.7\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:01:06.671792252Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=gemini model=minimax/minimax-m2.7"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness=gemini model=minimax/minimax-m2.7 probe=ok\nunsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+          "created_at": "2026-04-22T21:01:06.874835892Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"harness\":\"agent\",\"model\":\"qwen/qwen3.6-35b-a3b\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":4258},{\"tier\":\"standard\",\"harness\":\"claude\",\"model\":\"codex/gpt-5.4\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2010},{\"tier\":\"smart\",\"harness\":\"gemini\",\"model\":\"minimax/minimax-m2.7\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2009}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-22T21:01:06.937166221Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite\ntier=smart\nprobe_result=ok\nresult_rev=3188996f8f7af0606575ac86c0352482d6a442c5\nbase_rev=3188996f8f7af0606575ac86c0352482d6a442c5\nretry_after=2026-04-23T03:01:07Z",
+          "created_at": "2026-04-22T21:01:07.116735128Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T03:39:14.999283193Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T031421-5a434cc0\",\"harness\":\"claude\",\"input_tokens\":151,\"output_tokens\":63878,\"total_tokens\":64029,\"cost_usd\":9.221891750000001,\"duration_ms\":1492979,\"exit_code\":0}",
+          "created_at": "2026-04-23T03:39:15.070172184Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=64029 cost_usd=9.2219"
+        },
+        {
+          "actor": "ddx",
+          "body": "merge conflict\npreserve_ref=refs/ddx/iterations/ddx-23978824/20260423T031421-5a434cc0-47df655530c9\nresult_rev=9b4b50bd0470670c1824cda3f61b8895d5f4d81f\nbase_rev=99428b3a7be76b4536b192cc92f8a3d02bf19642",
+          "created_at": "2026-04-23T03:39:16.350156333Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "land_conflict"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-23T04:44:33.263834045Z",
+      "execute-loop-last-detail": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+      "execute-loop-last-status": "execution_failed",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260423T044433-ce3a2c9d",
+    "prompt": ".ddx/executions/20260423T044433-ce3a2c9d/prompt.md",
+    "manifest": ".ddx/executions/20260423T044433-ce3a2c9d/manifest.json",
+    "result": ".ddx/executions/20260423T044433-ce3a2c9d/result.json",
+    "checks": ".ddx/executions/20260423T044433-ce3a2c9d/checks.json",
+    "usage": ".ddx/executions/20260423T044433-ce3a2c9d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-23978824-20260423T044433-ce3a2c9d"
+  }
+}
