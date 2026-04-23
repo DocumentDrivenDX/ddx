@@ -44,6 +44,96 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 	assert.Equal(t, "exited", final.State)
 }
 
+func TestWorkerManagerStartPluginActionPublishesTerminalProgress(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	record, err := m.StartPluginAction(PluginActionWorkerSpec{
+		ProjectRoot: root,
+		Name:        "helix",
+		Action:      "update",
+		Scope:       "project",
+	}, func(ctx context.Context) (string, error) {
+		close(started)
+		select {
+		case <-release:
+			return "installed", nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	})
+	require.NoError(t, err)
+	require.Equal(t, "plugin-dispatch", record.Kind)
+	require.Equal(t, "running", record.State)
+
+	<-started
+	events, unsubscribe := m.SubscribeProgress(record.ID)
+	defer unsubscribe()
+	close(release)
+
+	require.Eventually(t, func() bool {
+		for evt := range events {
+			if evt.Phase == "done" && evt.WorkerID == record.ID {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		shown, err := m.Show(record.ID)
+		return err == nil && shown.State == "exited" && shown.Status == "success" && shown.Successes == 1
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestWorkerManagerStartPluginActionPublishesFailureProgress(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	record, err := m.StartPluginAction(PluginActionWorkerSpec{
+		ProjectRoot: root,
+		Name:        "helix",
+		Action:      "update",
+		Scope:       "project",
+	}, func(ctx context.Context) (string, error) {
+		close(started)
+		select {
+		case <-release:
+			return "", fmt.Errorf("install failed")
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	})
+	require.NoError(t, err)
+
+	<-started
+	events, unsubscribe := m.SubscribeProgress(record.ID)
+	defer unsubscribe()
+	close(release)
+
+	require.Eventually(t, func() bool {
+		for evt := range events {
+			if evt.Phase == "failed" && evt.WorkerID == record.ID && strings.Contains(evt.Message, "install failed") {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		shown, err := m.Show(record.ID)
+		return err == nil && shown.State == "failed" && shown.Status == "failed" && shown.Failures == 1
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
 func TestWorkerManagerList(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)

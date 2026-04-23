@@ -83,6 +83,7 @@ func newGQLHandler(state ddxgraphql.StateProvider, workDir string, beadBus ddxgr
 			State:      state,
 			WorkingDir: workDir,
 			BeadBus:    beadBus,
+			Actions:    testActionDispatcher{},
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
@@ -94,6 +95,45 @@ func newGQLHandler(state ddxgraphql.StateProvider, workDir string, beadBus ddxgr
 		},
 	})
 	return gqlSrv
+}
+
+type testActionDispatcher struct{}
+
+func (testActionDispatcher) DispatchWorker(ctx context.Context, kind string, projectRoot string, args *string) (*ddxgraphql.WorkerDispatchResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &ddxgraphql.WorkerDispatchResult{
+		ID:    "queued-worker-" + kind,
+		State: "queued",
+		Kind:  kind,
+	}, nil
+}
+
+func (testActionDispatcher) DispatchPlugin(ctx context.Context, projectRoot string, name string, action string, scope string) (*ddxgraphql.PluginDispatchResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	state, err := ddxgraphql.DispatchPluginAction(projectRoot, name, action)
+	if err != nil {
+		return nil, err
+	}
+	return &ddxgraphql.PluginDispatchResult{
+		ID:     "worker-plugin-" + name,
+		State:  state,
+		Action: action,
+	}, nil
+}
+
+func (testActionDispatcher) StopWorker(ctx context.Context, id string) (*ddxgraphql.WorkerLifecycleResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &ddxgraphql.WorkerLifecycleResult{
+		ID:    id,
+		State: "stopped",
+		Kind:  "execute-loop",
+	}, nil
 }
 
 // ─────────────────────────── testStateProvider ──────────────────────────────
