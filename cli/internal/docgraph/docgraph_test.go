@@ -566,6 +566,63 @@ func TestBodyLinkNoDuplicateWithFrontmatter(t *testing.T) {
 	}
 }
 
+// TestBuildGraph_ExcludesClaudeWorktreesAndStoresRelativePaths verifies the two
+// defects fixed alongside the bead ddx-12cae4dd:
+//
+//  1. Agent worktree copies checked out under .claude/worktrees/ must not be
+//     surfaced by the documents graph, even when they contain markdown files
+//     with valid DDx frontmatter that would otherwise duplicate canonical
+//     docs/ entries.
+//  2. Document paths stored on the graph must be relative to the working
+//     directory. Leaking absolute filesystem paths produced malformed URLs
+//     (leading double slashes) in the web UI documents view.
+func TestBuildGraph_ExcludesClaudeWorktreesAndStoresRelativePaths(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/foo.md":                           "---\nddx:\n  id: foo\n---\n# Canonical Foo\n",
+		".claude/worktrees/agent-x/docs/foo.md": "---\nddx:\n  id: foo.dup\n---\n# Shadow Foo\n",
+		".claude/worktrees/agent-x/README.md":   "---\nddx:\n  id: shadow.readme\n---\n# Shadow Readme\n",
+	})
+
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if graph.Documents["foo"] == nil {
+		t.Fatal("expected canonical docs/foo.md document in graph")
+	}
+	if graph.Documents["foo.dup"] != nil {
+		t.Error(".claude/worktrees shadow copy should be excluded")
+	}
+	if graph.Documents["shadow.readme"] != nil {
+		t.Error(".claude/worktrees README.md should be excluded")
+	}
+
+	for id, doc := range graph.Documents {
+		if filepath.IsAbs(doc.Path) {
+			t.Errorf("document %q has absolute path %q, want path relative to working dir", id, doc.Path)
+		}
+		if strings.Contains(filepath.ToSlash(doc.Path), ".claude/") {
+			t.Errorf("document %q path %q contains .claude/ (worktrees must be skipped)", id, doc.Path)
+		}
+	}
+	for key := range graph.PathToID {
+		if filepath.IsAbs(key) {
+			t.Errorf("PathToID key %q is absolute, want relative", key)
+		}
+		if strings.Contains(filepath.ToSlash(key), ".claude/") {
+			t.Errorf("PathToID key %q contains .claude/", key)
+		}
+	}
+
+	if doc := graph.Documents["foo"]; doc != nil {
+		want := filepath.FromSlash("docs/foo.md")
+		if doc.Path != want {
+			t.Errorf("got doc.Path %q, want %q", doc.Path, want)
+		}
+	}
+}
+
 func TestBodyLinkReverseTraversal(t *testing.T) {
 	// A depends on B via body link; C depends on B via frontmatter.
 	// DependentIDs(B) should include both A and C.

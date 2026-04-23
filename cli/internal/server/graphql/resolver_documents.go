@@ -14,8 +14,8 @@ import (
 )
 
 // DocumentByPath is the resolver for the documentByPath field.
-// It reads the document at the given library-relative path and returns its
-// metadata (from the docgraph) plus the raw file content.
+// It reads the document at the given path (relative to the docgraph root or
+// library) and returns its metadata plus raw file content.
 func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Document, error) {
 	if path == "" {
 		return nil, fmt.Errorf("path is required")
@@ -25,13 +25,42 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 	if strings.Contains(cleaned, "..") {
 		return nil, fmt.Errorf("invalid path")
 	}
+	// Legacy clients may emit absolute filesystem paths (bead ddx-12cae4dd)
+	// produced before doc.Path was normalised. Reject them — any real document
+	// resolved through the graph uses a relative path.
+	if filepath.IsAbs(cleaned) {
+		return nil, nil
+	}
 
+	// Prefer the docgraph-tracked location: the documents list surfaces files
+	// walked under workingDir, so the detail view must read from the same root
+	// (otherwise the URL for a valid list entry 404s).
+	if graph, graphErr := docgraph.BuildGraphWithConfig(r.WorkingDir); graphErr == nil {
+		if id, ok := graph.PathToID[cleaned]; ok {
+			if d, ok := graph.Documents[id]; ok {
+				absPath := d.Path
+				if !filepath.IsAbs(absPath) {
+					absPath = filepath.Join(graph.RootDir, absPath)
+				}
+				if data, readErr := os.ReadFile(absPath); readErr == nil {
+					content := string(data)
+					doc := docToGQL(*d)
+					doc.Content = &content
+					return doc, nil
+				}
+			}
+		}
+	}
+
+	// Fall back to the configured library path so documents created via the
+	// documentWrite mutation (which target the library) remain readable even
+	// when they have no DDx frontmatter and so do not appear in the graph.
 	cfg, err := config.LoadWithWorkingDir(r.WorkingDir)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if cfg.Library == nil || cfg.Library.Path == "" {
-		return nil, fmt.Errorf("library not configured")
+		return nil, nil
 	}
 	libPath := cfg.Library.Path
 	if !filepath.IsAbs(libPath) {
@@ -45,19 +74,6 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 	}
 	content := string(data)
 
-	// Try to enrich with docgraph metadata.
-	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
-	if err == nil {
-		if id, ok := graph.PathToID[cleaned]; ok {
-			if d, ok := graph.Documents[id]; ok {
-				doc := docToGQL(*d)
-				doc.Content = &content
-				return doc, nil
-			}
-		}
-	}
-
-	// File exists but not in the docgraph (e.g., no DDx frontmatter).
 	return &Document{
 		ID:         cleaned,
 		Path:       cleaned,

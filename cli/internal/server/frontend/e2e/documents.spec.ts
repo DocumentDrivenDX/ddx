@@ -203,6 +203,90 @@ test('TC-026: editing a document fires the DocumentWrite mutation', async ({ pag
 	expect(mutationInput.path).toBe('docs/helix/01-frame/vision.md');
 });
 
+// Bead ddx-12cae4dd: the documents list must only surface canonical project
+// documents. Entries under .claude/worktrees/ (agent scratch copies) and
+// absolute filesystem paths were producing broken URLs and 404s. This test
+// exercises the happy path after the backend fix: every surfaced document has
+// a clean relative path and clicking a real docs/ entry renders its content.
+test('ddx-12cae4dd: documents list only shows clean relative paths and opens real docs', async ({
+	page
+}) => {
+	const CLEAN_DOCS = [
+		{
+			id: 'doc-ac',
+			path: 'docs/resources/agent-harness-ac.md',
+			title: 'Agent Harness Acceptance'
+		},
+		{ id: 'doc-prd', path: 'docs/helix/01-frame/prd.md', title: 'PRD' }
+	];
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, string>;
+		};
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+		} else if (body.query.includes('Documents')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeDocsResponse(CLEAN_DOCS) })
+			});
+		} else if (body.query.includes('DocumentByPath') || body.query.includes('documentByPath')) {
+			const requested = body.variables?.path ?? '';
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						documentByPath: {
+							path: requested,
+							content: `# Content of ${requested}\n\nRendered body.`
+						}
+					}
+				})
+			});
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(BASE_URL);
+
+	// Wait for the table to populate before asserting on rendered paths.
+	await expect(page.getByRole('cell', { name: /^Agent Harness Acceptance$/ })).toBeVisible();
+
+	// Assert every listed document has a clean relative path.
+	const pathCells = page.locator('tbody tr td:nth-child(2)');
+	const count = await pathCells.count();
+	expect(count).toBeGreaterThan(0);
+	for (let i = 0; i < count; i++) {
+		const path = (await pathCells.nth(i).textContent())?.trim() ?? '';
+		expect(path, 'path must not contain .claude/').not.toContain('.claude/');
+		expect(path, 'path must not start with /').not.toMatch(/^\//);
+	}
+
+	// Click the real docs/ entry and verify it renders its content (no 404).
+	await page.getByRole('cell', { name: /^Agent Harness Acceptance$/ }).click();
+	await expect(page).toHaveURL(/\/documents\/docs\/resources\/agent-harness-ac\.md$/);
+	await expect(page).not.toHaveURL(/\/documents\/\//);
+	await expect(page.getByText(/Content of docs\/resources\/agent-harness-ac\.md/)).toBeVisible();
+	await expect(page.getByText('Document not found.')).toHaveCount(0);
+});
+
 // TC-027: Empty state shown when no documents are returned
 test('TC-027: documents page shows empty state when no documents are returned', async ({
 	page

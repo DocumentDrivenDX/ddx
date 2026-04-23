@@ -178,7 +178,11 @@ func (f *CommandFactory) newDocStampCommand() *cobra.Command {
 					path = doc.Path
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "stamped %s\n", path)
-				if _, acErr := internalgit.AutoCommit(path, id, "stamp reviewed", acCfg); acErr != nil {
+				autoCommitPath := path
+				if ok && !filepath.IsAbs(autoCommitPath) {
+					autoCommitPath = filepath.Join(graph.RootDir, autoCommitPath)
+				}
+				if _, acErr := internalgit.AutoCommit(autoCommitPath, id, "stamp reviewed", acCfg); acErr != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: auto-commit failed for %s: %v\n", path, acErr)
 				}
 			}
@@ -492,7 +496,9 @@ func (f *CommandFactory) newDocHistoryCommand() *cobra.Command {
 			}
 			gitArgs = append(gitArgs, "--", doc.Path)
 
-			out, gitErr := exec.Command("git", gitArgs...).Output()
+			gitCmd := exec.Command("git", gitArgs...)
+			gitCmd.Dir = f.docRoot()
+			out, gitErr := gitCmd.Output()
 			if gitErr != nil {
 				if exitErr, ok2 := gitErr.(*exec.ExitError); ok2 {
 					if strings.Contains(string(exitErr.Stderr), "not a git repository") {
@@ -581,7 +587,9 @@ func (f *CommandFactory) newDocDiffCommand() *cobra.Command {
 				gitArgs = []string{"diff", args[1], args[2], "--", doc.Path}
 			}
 
-			out, gitErr := exec.Command("git", gitArgs...).Output()
+			gitCmd := exec.Command("git", gitArgs...)
+			gitCmd.Dir = f.docRoot()
+			out, gitErr := gitCmd.Output()
 			if gitErr != nil {
 				if exitErr, ok2 := gitErr.(*exec.ExitError); ok2 {
 					if strings.Contains(string(exitErr.Stderr), "not a git repository") {
@@ -658,6 +666,10 @@ func (f *CommandFactory) newDocChangedCommand() *cobra.Command {
 
 				absPath := filepath.Join(repoRoot, relPath)
 				cleanPath := filepath.Clean(absPath)
+				graphKey := cleanPath
+				if rel, relErr := filepath.Rel(graph.RootDir, cleanPath); relErr == nil {
+					graphKey = rel
+				}
 
 				var changeType string
 				switch {
@@ -670,13 +682,13 @@ func (f *CommandFactory) newDocChangedCommand() *cobra.Command {
 				}
 
 				if changeType == "deleted" {
-					if id, ok := graph.PathToID[cleanPath]; ok {
+					if id, ok := graph.PathToID[graphKey]; ok {
 						entries = append(entries, changedEntry{ID: id, Path: relPath, ChangeType: changeType})
 					}
 					continue
 				}
 
-				if id, ok := graph.PathToID[cleanPath]; ok {
+				if id, ok := graph.PathToID[graphKey]; ok {
 					entries = append(entries, changedEntry{ID: id, Path: relPath, ChangeType: changeType})
 					continue
 				}

@@ -1617,7 +1617,8 @@ func (s *Server) handleDocWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// doc.Path is already an absolute path from the docgraph.
+	// doc.Path is relative to the docgraph root; resolve against workingDir
+	// before touching the file system.
 	fullPath := doc.Path
 	if !filepath.IsAbs(fullPath) {
 		fullPath = filepath.Join(wd, fullPath)
@@ -3605,7 +3606,8 @@ func (s *Server) mcpDocWrite(workingDir, id, content string) mcpToolResult {
 	if !ok {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
 	}
-	// doc.Path is already an absolute path from the docgraph.
+	// doc.Path is relative to the docgraph root; resolve against workingDir
+	// before touching the file system.
 	fullPath := doc.Path
 	if !filepath.IsAbs(fullPath) {
 		fullPath = filepath.Join(workingDir, fullPath)
@@ -3786,6 +3788,10 @@ func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 
 		absPath := filepath.Join(repoRoot, relPath)
 		cleanPath := filepath.Clean(absPath)
+		graphKey := cleanPath
+		if rel, relErr := filepath.Rel(graph.RootDir, cleanPath); relErr == nil {
+			graphKey = rel
+		}
 
 		var changeType string
 		switch {
@@ -3797,7 +3803,7 @@ func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 			changeType = "modified"
 		}
 
-		if id, ok := graph.PathToID[cleanPath]; ok {
+		if id, ok := graph.PathToID[graphKey]; ok {
 			entries = append(entries, changedEntry{ID: id, Path: relPath, ChangeType: changeType})
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -114,6 +115,141 @@ func TestGraphQLDocuments(t *testing.T) {
 	}
 	if !foundAlpha {
 		t.Error("expected document with id 'alpha' in results")
+	}
+}
+
+// Bead ddx-12cae4dd: documents query must not surface agent worktree copies
+// checked out under .claude/worktrees/, and returned paths must be relative
+// (never absolute) so the web UI can build valid routes.
+func TestGraphQLDocuments_SkipsClaudeWorktreesAndUsesRelativePaths(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "gql-doc-test-node")
+
+	workDir := setupTestDir(t)
+
+	files := map[string]string{
+		filepath.Join(workDir, "docs", "resources", "agent-harness-ac.md"): "---\nddx:\n  id: agent-harness-ac\n---\n# Agent Harness AC\n",
+		// Agent scratch copy with frontmatter — must be ignored.
+		filepath.Join(workDir, ".claude", "worktrees", "agent-a0673989", "docs", "resources", "agent-harness-ac.md"): "---\nddx:\n  id: worktree-shadow\n---\n# Shadow Copy\n",
+	}
+	for path, content := range files {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srv := New(":0", workDir)
+
+	body := `{"query": "{ documents { edges { node { id path } } totalCount } }"}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			Documents struct {
+				Edges []struct {
+					Node struct {
+						ID   string `json:"id"`
+						Path string `json:"path"`
+					} `json:"node"`
+				} `json:"edges"`
+			} `json:"documents"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v\nbody: %s", err, w.Body.String())
+	}
+
+	sawCanonical := false
+	for _, e := range resp.Data.Documents.Edges {
+		path := filepath.ToSlash(e.Node.Path)
+		if strings.HasPrefix(path, "/") {
+			t.Errorf("document %q has absolute path %q (leaking filesystem root into web URL)", e.Node.ID, e.Node.Path)
+		}
+		if strings.Contains(path, ".claude/") {
+			t.Errorf("document %q path %q is inside .claude/ (worktree scratch must not be surfaced)", e.Node.ID, e.Node.Path)
+		}
+		if e.Node.ID == "worktree-shadow" {
+			t.Errorf("worktree shadow document was surfaced in documents query")
+		}
+		if e.Node.ID == "agent-harness-ac" {
+			sawCanonical = true
+			if want := "docs/resources/agent-harness-ac.md"; path != want {
+				t.Errorf("got agent-harness-ac path %q, want %q", e.Node.Path, want)
+			}
+		}
+	}
+	if !sawCanonical {
+		t.Error("expected canonical docs/resources/agent-harness-ac.md document in response")
+	}
+}
+
+// Bead ddx-12cae4dd AC#5: documentByPath must resolve documents walked by the
+// docgraph (under workingDir), not only those under the configured library.
+// Before the fix, clicking a docgraph entry outside the library returned null
+// and the web UI rendered "Document not found".
+func TestGraphQLDocumentByPath_ResolvesDocgraphTrackedDoc(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "gql-doc-test-node")
+
+	workDir := setupTestDir(t)
+	docPath := filepath.Join(workDir, "docs", "resources", "agent-harness-ac.md")
+	if err := os.MkdirAll(filepath.Dir(docPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nddx:\n  id: agent-harness-ac\n---\n# Agent Harness AC\n\nBody content.\n"
+	if err := os.WriteFile(docPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := New(":0", workDir)
+
+	query := `{"query": "{ documentByPath(path: \"docs/resources/agent-harness-ac.md\") { id path content } }"}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(query))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			DocumentByPath *struct {
+				ID      string `json:"id"`
+				Path    string `json:"path"`
+				Content string `json:"content"`
+			} `json:"documentByPath"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v\nbody: %s", err, w.Body.String())
+	}
+	if resp.Data.DocumentByPath == nil {
+		t.Fatalf("documentByPath returned null for docgraph-tracked doc; body: %s", w.Body.String())
+	}
+	if resp.Data.DocumentByPath.ID != "agent-harness-ac" {
+		t.Errorf("got id %q, want %q", resp.Data.DocumentByPath.ID, "agent-harness-ac")
+	}
+	if !strings.Contains(resp.Data.DocumentByPath.Content, "Body content.") {
+		t.Errorf("content missing expected body text: %q", resp.Data.DocumentByPath.Content)
+	}
+	if strings.HasPrefix(resp.Data.DocumentByPath.Path, "/") {
+		t.Errorf("path %q leaks absolute filesystem root", resp.Data.DocumentByPath.Path)
 	}
 }
 
