@@ -65,18 +65,41 @@ const ATTEMPTS_DETAIL = {
 	}))
 };
 
-const TEN_K_SESSION_FIXTURE_ROWS = Array.from({ length: 12 }, (_, i) => ({
-	rowKey: `fixture-harness-${i % 4}|fixture-provider-${i % 3}|fixture-model-${i}`,
-	harness: `fixture-harness-${i % 4}`,
-	provider: `fixture-provider-${i % 3}`,
-	model: `fixture-model-${i}`,
-	attempts: 834,
-	successes: 780,
-	successRate: 0.935,
-	medianInputTokens: 2200 + i,
-	medianOutputTokens: 700 + i,
-	medianDurationMs: 18000 + i * 100,
-	medianCostUsd: i % 5 === 0 ? null : 0.02 + i / 1000,
+// TEN_K_SESSION_FIXTURE_ROWS mirrors the aggregated shape the backend produces
+// from the 10k-session fixture seeded by seedEfficacySessionFixture
+// (cli/internal/server/graphql/efficacy_sessions_test.go). The backend
+// groups 10k sessions across 10 (harness, provider, model) groups — keep
+// these rows in lock-step with that fixture so the UI smoke test renders the
+// same shape the production aggregation would. The real-backend counterpart
+// is TestEfficacyRowsSmokeOverRealBackend in the same Go test file; together
+// they cover AC §8 (UI rendering here, real HTTP round-trip there).
+const TEN_K_SESSION_FIXTURE_GROUPS = [
+	{ harness: 'agent', provider: 'openai', model: 'gpt-5.4' },
+	{ harness: 'agent', provider: 'openai', model: 'gpt-5.4-mini' },
+	{ harness: 'codex', provider: 'openai', model: 'gpt-5.3-codex' },
+	{ harness: 'claude', provider: 'anthropic', model: 'claude-sonnet-4-6' },
+	{ harness: 'claude', provider: 'anthropic', model: 'claude-opus-4-6' },
+	{ harness: 'gemini', provider: 'google', model: 'gemini-2.5-pro' },
+	{ harness: 'benchmark', provider: 'local', model: 'qwen3.5-27b' },
+	{ harness: 'quorum', provider: 'openrouter', model: 'minimax/minimax-m2.7' },
+	{ harness: 'agent-run', provider: 'moonshot', model: 'moonshot/kimi-k2.5' },
+	{ harness: 'script', provider: 'vidar', model: 'qwen/qwen3-coder-next' }
+] as const;
+
+const TEN_K_SESSION_FIXTURE_ROWS = TEN_K_SESSION_FIXTURE_GROUPS.map((g, i) => ({
+	rowKey: `${g.harness}|${g.provider}|${g.model}`,
+	harness: g.harness,
+	provider: g.provider,
+	model: g.model,
+	// 10 groups × ~1000 attempts per group ≈ 10k sessions; 10/11 succeed per
+	// the seed loop's failure cadence.
+	attempts: 1000,
+	successes: 910,
+	successRate: 0.91,
+	medianInputTokens: 3500 + i,
+	medianOutputTokens: 1200 + i,
+	medianDurationMs: 5500 + i * 100,
+	medianCostUsd: i % 5 === 0 ? null : 0.005 + i / 1000,
 	warning: null
 }));
 
@@ -231,14 +254,23 @@ test('US-096.e: row click opens detail panel with last 10 attempts and evidence 
 });
 
 test('smoke: efficacy opens with 10k-session rollup fixture and attempt details', async ({ page }) => {
+	// AC §8 UI half. Renders the aggregated shape the 10k-session fixture
+	// produces (see TEN_K_SESSION_FIXTURE_ROWS above) and exercises the
+	// click-into EfficacyAttempts flow. The matching real-backend smoke —
+	// TestEfficacyRowsSmokeOverRealBackend in
+	// cli/internal/server/graphql/efficacy_sessions_test.go — drives the same
+	// fixture through the real GraphQL HTTP handler.
 	await mockEfficacy(page, { rows: TEN_K_SESSION_FIXTURE_ROWS });
 	await page.goto(BASE_URL);
 
 	const table = page.getByRole('table', { name: /efficacy/i });
 	await expect(table).toBeVisible();
-	await expect(table.getByRole('row')).toHaveCount(13);
+	// 10 data rows + 1 header row; the AC §8 floor is ≥5 rendered rows.
+	const dataRows = table.getByRole('row').filter({ hasNot: page.getByRole('columnheader') });
+	await expect(dataRows).toHaveCount(TEN_K_SESSION_FIXTURE_ROWS.length);
+	expect(TEN_K_SESSION_FIXTURE_ROWS.length).toBeGreaterThanOrEqual(5);
 
-	await table.getByRole('row', { name: /fixture-model-0/i }).click();
+	await table.getByRole('row', { name: /gpt-5\.4/i }).first().click();
 	const panel = page.getByRole('complementary', { name: /attempts|detail/i });
 	await expect(panel).toBeVisible();
 	await expect(panel.getByRole('row')).toHaveCount(11);

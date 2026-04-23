@@ -173,6 +173,77 @@ func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 	t.Logf("efficacy perf baseline: 10k all-time in-process p95=%s http p95=%s; last30 in-process p95=%s http p95=%s; 50k/24-shard all-time in-process p95=%s http p95=%s", allTimeInProcess, allTimeHTTP, filteredInProcess, filteredHTTP, stretchInProcess, stretchHTTP)
 }
 
+// TestEfficacyRowsSmokeOverRealBackend is the backend half of the
+// AC §8 Playwright smoke: it seeds the same 10k-session index fixture the
+// frontend smoke mirrors (see cli/internal/server/frontend/e2e/efficacy.spec.ts
+// "smoke: efficacy opens with 10k-session rollup fixture"), then drives the
+// real GraphQL HTTP handler end-to-end — first EfficacyRows, then
+// EfficacyAttempts for the first row returned (the "click into the row"
+// gesture). Together with the Playwright smoke they form the ddx-0a33bc5f
+// equivalent of the beads smoke pair (Playwright UI mock +
+// cli/internal/server/perf/smoke_test.go real-backend ceiling).
+func TestEfficacyRowsSmokeOverRealBackend(t *testing.T) {
+	workDir := t.TempDir()
+	now := time.Now().UTC()
+	seedEfficacySessionFixture(t, workDir, 10_000, 2, now)
+
+	httpHandler := efficacyHTTPHandler(workDir)
+	rowsResp := graphqlPOSTForTestReturningBody(t, httpHandler, `{ efficacyRows { rowKey harness provider model attempts successes successRate medianDurationMs medianCostUsd } }`)
+	var rowsData struct {
+		Data struct {
+			EfficacyRows []struct {
+				RowKey           string   `json:"rowKey"`
+				Attempts         int      `json:"attempts"`
+				Successes        int      `json:"successes"`
+				SuccessRate      float64  `json:"successRate"`
+				MedianDurationMs int      `json:"medianDurationMs"`
+				MedianCostUsd    *float64 `json:"medianCostUsd"`
+			} `json:"efficacyRows"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rowsResp, &rowsData); err != nil {
+		t.Fatalf("decode efficacyRows: %v body=%s", err, rowsResp)
+	}
+	if got := len(rowsData.Data.EfficacyRows); got < 5 {
+		t.Fatalf("expected at least 5 efficacy rows from the 10k fixture, got %d", got)
+	}
+
+	firstRowKey := rowsData.Data.EfficacyRows[0].RowKey
+	start := time.Now()
+	attemptsResp := graphqlPOSTForTestReturningBody(t, httpHandler, fmt.Sprintf(`{ efficacyAttempts(rowKey: %q) { rowKey attempts { beadId outcome durationMs costUsd evidenceBundleUrl } } }`, firstRowKey))
+	clickInto := time.Since(start)
+	var attemptsData struct {
+		Data struct {
+			EfficacyAttempts struct {
+				RowKey   string `json:"rowKey"`
+				Attempts []struct {
+					BeadID            string   `json:"beadId"`
+					Outcome           string   `json:"outcome"`
+					DurationMs        int      `json:"durationMs"`
+					CostUsd           *float64 `json:"costUsd"`
+					EvidenceBundleURL string   `json:"evidenceBundleUrl"`
+				} `json:"attempts"`
+			} `json:"efficacyAttempts"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(attemptsResp, &attemptsData); err != nil {
+		t.Fatalf("decode efficacyAttempts: %v body=%s", err, attemptsResp)
+	}
+	if attemptsData.Data.EfficacyAttempts.RowKey != firstRowKey {
+		t.Fatalf("efficacyAttempts returned rowKey %q, want %q", attemptsData.Data.EfficacyAttempts.RowKey, firstRowKey)
+	}
+	if len(attemptsData.Data.EfficacyAttempts.Attempts) == 0 {
+		t.Fatalf("efficacyAttempts(%q) returned no attempts", firstRowKey)
+	}
+	// "Normal navigation budget": a click-into request against the already-
+	// warmed cache must stay well under one second. This is a regression
+	// ceiling, not a p95 target.
+	if clickInto > time.Second {
+		t.Fatalf("efficacyAttempts click-into took %s, exceeding the 1s navigation ceiling", clickInto)
+	}
+	t.Logf("efficacy real-backend smoke: rows=%d firstRowKey=%s clickInto=%s", len(rowsData.Data.EfficacyRows), firstRowKey, clickInto)
+}
+
 func appendSessionForTest(t *testing.T, workDir string, entry agent.SessionIndexEntry, ts time.Time) {
 	t.Helper()
 	if entry.ProjectID == "" {
@@ -290,6 +361,11 @@ func efficacyHTTPHandler(workDir string) http.Handler {
 
 func graphqlPOSTForTest(t *testing.T, h http.Handler, query string) {
 	t.Helper()
+	_ = graphqlPOSTForTestReturningBody(t, h, query)
+}
+
+func graphqlPOSTForTestReturningBody(t *testing.T, h http.Handler, query string) []byte {
+	t.Helper()
 	body, err := json.Marshal(map[string]string{"query": query})
 	if err != nil {
 		t.Fatal(err)
@@ -301,15 +377,17 @@ func graphqlPOSTForTest(t *testing.T, h http.Handler, query string) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("graphql status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	raw := rec.Body.Bytes()
 	var payload struct {
 		Errors []any `json:"errors"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := json.Unmarshal(raw, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if len(payload.Errors) > 0 {
-		t.Fatalf("graphql errors: %s", rec.Body.String())
+		t.Fatalf("graphql errors: %s", raw)
 	}
+	return raw
 }
 
 func legacyEfficacyRowKeysForTest(t *testing.T, store *bead.Store) map[string]struct{} {
