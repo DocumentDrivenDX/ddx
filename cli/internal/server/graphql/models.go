@@ -39,6 +39,8 @@ type AgentSession struct {
 	DurationMs int `json:"durationMs"`
 	// Estimated cost in USD (null if unknown)
 	Cost *float64 `json:"cost,omitempty"`
+	// Cost-basis bucket for this session: paid, subscription, or local
+	BillingMode string `json:"billingMode"`
 	// Token consumption breakdown
 	Tokens *TokenUsage `json:"tokens,omitempty"`
 	// Outcome classification (e.g. "success", "failure")
@@ -1441,6 +1443,18 @@ type SearchResultEdge struct {
 	Node *SearchResult `json:"node"`
 	// Opaque cursor for pagination
 	Cursor string `json:"cursor"`
+}
+
+// SessionsCostSummary separates cash, subscription-equivalent, and local session costs
+type SessionsCostSummary struct {
+	// Actual billed pay-per-token API spend
+	CashUsd float64 `json:"cashUsd"`
+	// Dollar-equivalent token value consumed under subscription harnesses
+	SubscriptionEquivUsd float64 `json:"subscriptionEquivUsd"`
+	// Count of sessions served locally
+	LocalSessionCount int `json:"localSessionCount"`
+	// Optional local compute estimate, present only when configured
+	LocalEstimatedUsd *float64 `json:"localEstimatedUsd,omitempty"`
 }
 
 // SourceRef explains where a derived metric fact originated

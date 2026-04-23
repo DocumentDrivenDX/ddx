@@ -448,6 +448,18 @@
         }
       },
       "additionalProperties": false
+    },
+    "cost": {
+      "type": "object",
+      "description": "Optional cost-estimation settings. DDx does not invent local compute rates when this block is absent.",
+      "properties": {
+        "local_per_1k_tokens": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Optional local compute estimate in USD per 1,000 tokens for locally served sessions."
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

@@ -142,9 +142,10 @@ func (testActionDispatcher) StopWorker(ctx context.Context, id string) (*ddxgrap
 // bead.Store at construction time. It holds snapshots loaded from disk and
 // filters them in-process to satisfy resolver queries.
 type testStateProvider struct {
-	node     ddxgraphql.NodeStateSnapshot
-	projects []*ddxgraphql.Project
-	beads    []ddxgraphql.BeadSnapshot
+	node        ddxgraphql.NodeStateSnapshot
+	projects    []*ddxgraphql.Project
+	beads       []ddxgraphql.BeadSnapshot
+	costSummary *ddxgraphql.SessionsCostSummary
 }
 
 func newTestStateProvider(workDir string, store *bead.Store) *testStateProvider {
@@ -263,6 +264,12 @@ func (p *testStateProvider) GetAgentSessionsGraphQL(_, _ *time.Time) []*ddxgraph
 }
 func (p *testStateProvider) GetAgentSessionGraphQL(_ string) (*ddxgraphql.AgentSession, bool) {
 	return nil, false
+}
+func (p *testStateProvider) GetSessionsCostSummaryGraphQL(_ string, _, _ *time.Time) *ddxgraphql.SessionsCostSummary {
+	if p.costSummary != nil {
+		return p.costSummary
+	}
+	return &ddxgraphql.SessionsCostSummary{}
 }
 func (p *testStateProvider) GetExecDefinitionsGraphQL(_ string) []*ddxgraphql.ExecutionDefinition {
 	return nil
@@ -400,6 +407,37 @@ func TestIntegration_Query_Projects(t *testing.T) {
 	}
 	if proj.Path != workDir {
 		t.Errorf("path: want %q, got %q", workDir, proj.Path)
+	}
+}
+
+func TestIntegration_Query_SessionsCostSummary(t *testing.T) {
+	workDir, store := setupIntegrationDir(t)
+	state := newTestStateProvider(workDir, store)
+	estimate := 0.012
+	state.costSummary = &ddxgraphql.SessionsCostSummary{
+		CashUsd:              1.25,
+		SubscriptionEquivUsd: 2.50,
+		LocalSessionCount:    3,
+		LocalEstimatedUsd:    &estimate,
+	}
+	h := newGQLHandler(state, workDir, nil)
+
+	resp := gqlPost(t, h, `{ sessionsCostSummary(projectId: "proj-test") { cashUsd subscriptionEquivUsd localSessionCount localEstimatedUsd } }`)
+
+	var data struct {
+		SessionsCostSummary struct {
+			CashUsd              float64  `json:"cashUsd"`
+			SubscriptionEquivUsd float64  `json:"subscriptionEquivUsd"`
+			LocalSessionCount    int      `json:"localSessionCount"`
+			LocalEstimatedUsd    *float64 `json:"localEstimatedUsd"`
+		} `json:"sessionsCostSummary"`
+	}
+	if err := json.Unmarshal(resp["data"], &data); err != nil {
+		t.Fatalf("parse data: %v", err)
+	}
+	got := data.SessionsCostSummary
+	if got.CashUsd != 1.25 || got.SubscriptionEquivUsd != 2.50 || got.LocalSessionCount != 3 || got.LocalEstimatedUsd == nil || *got.LocalEstimatedUsd != estimate {
+		t.Fatalf("sessionsCostSummary = %+v, want configured values", got)
 	}
 }
 

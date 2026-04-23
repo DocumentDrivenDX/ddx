@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
@@ -670,6 +671,49 @@ func (s *ServerState) GetAgentSessionGraphQL(id string) (*ddxgraphql.AgentSessio
 	return nil, false
 }
 
+// GetSessionsCostSummaryGraphQL implements ddxgraphql.StateProvider.
+// It reads exactly the requested project's monthly session shards.
+func (s *ServerState) GetSessionsCostSummaryGraphQL(projectID string, since, until *time.Time) *ddxgraphql.SessionsCostSummary {
+	proj, ok := s.GetProjectByID(projectID)
+	if !ok {
+		return &ddxgraphql.SessionsCostSummary{}
+	}
+	logDir := agent.SessionLogDirForWorkDir(proj.Path)
+	entries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{
+		StartedAfter:  since,
+		StartedBefore: until,
+	})
+	if err != nil {
+		return &ddxgraphql.SessionsCostSummary{}
+	}
+	summary := &ddxgraphql.SessionsCostSummary{}
+	var localTokens int
+	for _, e := range entries {
+		mode := e.BillingMode
+		if mode == "" {
+			mode = agent.BillingModeFor(e.Harness, e.Surface, e.BaseURL)
+		}
+		switch mode {
+		case agent.BillingModePaid:
+			summary.CashUsd += e.CostUSD
+		case agent.BillingModeSubscription:
+			summary.SubscriptionEquivUsd += e.CostUSD
+		case agent.BillingModeLocal:
+			summary.LocalSessionCount++
+			tokens := e.Tokens
+			if tokens == 0 {
+				tokens = e.InputTokens + e.OutputTokens
+			}
+			localTokens += tokens
+		}
+	}
+	if rate := localCostPer1KTokens(proj.Path); rate != nil {
+		estimate := *rate * float64(localTokens) / 1000
+		summary.LocalEstimatedUsd = &estimate
+	}
+	return summary
+}
+
 // readProjectSessions reads monthly session shards for one project and maps to graphql types.
 func readProjectSessions(proj ProjectEntry, startedAfter, startedBefore *time.Time) []*ddxgraphql.AgentSession {
 	logDir := agent.SessionLogDirForWorkDir(proj.Path)
@@ -689,15 +733,29 @@ func readProjectSessions(proj ProjectEntry, startedAfter, startedBefore *time.Ti
 	return out
 }
 
+func localCostPer1KTokens(projectRoot string) *float64 {
+	cfg, err := config.LoadWithWorkingDir(projectRoot)
+	if err != nil || cfg.Cost == nil || cfg.Cost.LocalPer1KTokens == nil {
+		return nil
+	}
+	rate := *cfg.Cost.LocalPer1KTokens
+	return &rate
+}
+
 func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgraphql.AgentSession {
+	billingMode := e.BillingMode
+	if billingMode == "" {
+		billingMode = agent.BillingModeFor(e.Harness, e.Surface, e.BaseURL)
+	}
 	sess := &ddxgraphql.AgentSession{
-		ID:         e.ID,
-		ProjectID:  projectID,
-		Harness:    e.Harness,
-		Model:      e.Model,
-		Effort:     e.Effort,
-		DurationMs: e.DurationMS,
-		StartedAt:  e.StartedAt.UTC().Format(time.RFC3339),
+		ID:          e.ID,
+		ProjectID:   projectID,
+		Harness:     e.Harness,
+		Model:       e.Model,
+		Effort:      e.Effort,
+		DurationMs:  e.DurationMS,
+		StartedAt:   e.StartedAt.UTC().Format(time.RFC3339),
+		BillingMode: billingMode,
 	}
 
 	// Derive status and outcome from exit code / error.

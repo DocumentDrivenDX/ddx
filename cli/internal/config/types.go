@@ -13,6 +13,12 @@ type NewConfig struct {
 	Git             *GitConfig         `yaml:"git,omitempty" json:"git,omitempty"`
 	Server          *ServerConfig      `yaml:"server,omitempty" json:"server,omitempty"`
 	Executions      *ExecutionsConfig  `yaml:"executions,omitempty" json:"executions,omitempty"`
+	Cost            *CostConfig        `yaml:"cost,omitempty" json:"cost,omitempty"`
+}
+
+// CostConfig controls optional cost estimates that DDx cannot infer safely.
+type CostConfig struct {
+	LocalPer1KTokens *float64 `yaml:"local_per_1k_tokens,omitempty" json:"local_per_1k_tokens,omitempty"`
 }
 
 // ExecutionsConfig configures the execute-bead bundle archive (mirror).

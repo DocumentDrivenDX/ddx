@@ -499,6 +499,8 @@ func TestSessionEntryTC005_NewFieldsRoundTrip(t *testing.T) {
 		Harness:         "claude",
 		Surface:         "claude",
 		CanonicalTarget: "claude-sonnet-4-6",
+		BaseURL:         "https://api.anthropic.com",
+		BillingMode:     BillingModeSubscription,
 		Tokens:          900,
 		InputTokens:     300,
 		OutputTokens:    600,
@@ -516,6 +518,8 @@ func TestSessionEntryTC005_NewFieldsRoundTrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &decoded))
 	assert.Equal(t, original.Surface, decoded.Surface)
 	assert.Equal(t, original.CanonicalTarget, decoded.CanonicalTarget)
+	assert.Equal(t, original.BaseURL, decoded.BaseURL)
+	assert.Equal(t, original.BillingMode, decoded.BillingMode)
 	assert.Equal(t, original.Tokens, decoded.Tokens)
 	assert.Equal(t, original.InputTokens, decoded.InputTokens)
 	assert.Equal(t, original.OutputTokens, decoded.OutputTokens)

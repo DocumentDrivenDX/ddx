@@ -94,6 +94,8 @@ type SessionEntry struct {
 	Provider        string            `json:"provider,omitempty"`
 	Surface         string            `json:"surface,omitempty"`
 	CanonicalTarget string            `json:"canonical_target,omitempty"`
+	BaseURL         string            `json:"base_url,omitempty"`
+	BillingMode     string            `json:"billingMode,omitempty"`
 	Model           string            `json:"model,omitempty"`
 	PromptLen       int               `json:"prompt_len"`
 	Prompt          string            `json:"prompt,omitempty"`
