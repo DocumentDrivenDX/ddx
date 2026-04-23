@@ -109,6 +109,7 @@ func buildGraph(workingDir string, roots []string) (*Graph, error) {
 		return nil, err
 	}
 
+	cleanRoot := filepath.Clean(workingDir)
 	documents := make(map[string]*Document)
 	pathToID := make(map[string]string)
 	warnings := []string{}
@@ -125,13 +126,13 @@ func buildGraph(workingDir string, roots []string) (*Graph, error) {
 			warnings = append(warnings, fmt.Sprintf("duplicate document id %q in %q", doc.ID, filePath))
 			continue
 		}
-		doc.Path = filepath.Clean(filePath)
+		doc.Path = relPath(cleanRoot, filePath)
 		documents[doc.ID] = doc
 		pathToID[doc.Path] = doc.ID
 	}
 
 	g := &Graph{
-		RootDir:   filepath.Clean(workingDir),
+		RootDir:   cleanRoot,
 		Documents: documents,
 		PathToID:  pathToID,
 		Warnings:  warnings,
@@ -212,7 +213,7 @@ func (g *Graph) applyConfig(configs []GraphConfig) {
 				continue
 			}
 			g.Documents[id] = doc
-			doc.Path = filepath.Clean(path)
+			doc.Path = relPath(g.RootDir, path)
 			g.PathToID[doc.Path] = id
 		}
 	}
@@ -262,8 +263,12 @@ func findMarkdownFiles(root string, roots []string) ([]string, error) {
 			}
 			if info.IsDir() {
 				name := filepath.Base(path)
+				// Skip tool-managed directories. .claude is the Claude Code
+				// workspace (including throwaway copies under .claude/worktrees/);
+				// a worktrees/ directory at any depth is agent-scratch and must
+				// not be surfaced as canonical documents.
 				switch name {
-				case ".git", ".ddx":
+				case ".git", ".ddx", ".claude", "worktrees":
 					return filepath.SkipDir
 				}
 				return nil
@@ -284,6 +289,27 @@ func findMarkdownFiles(root string, roots []string) ([]string, error) {
 	}
 	sort.Strings(files)
 	return files, nil
+}
+
+// relPath returns filePath expressed relative to root. If filePath cannot be
+// made relative (e.g. different volumes on Windows) the cleaned absolute path
+// is returned. Callers treat the result as the canonical document path.
+func relPath(root, filePath string) string {
+	clean := filepath.Clean(filePath)
+	if rel, err := filepath.Rel(root, clean); err == nil && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
+		return rel
+	}
+	return clean
+}
+
+// absPath returns an absolute path for a document path stored on a Graph.
+// Document paths are relative to g.RootDir; callers that need to touch the
+// file on disk (read/write/git) must join with the root first.
+func (g *Graph) absPath(docPath string) string {
+	if filepath.IsAbs(docPath) {
+		return docPath
+	}
+	return filepath.Join(g.RootDir, docPath)
 }
 
 func ParseDocument(path string) (*Document, error) {
@@ -580,7 +606,8 @@ func (g *Graph) ResolvePathsToIDs(targets []string) ([]string, error) {
 			resolved = filepath.Join(g.RootDir, resolved)
 		}
 		resolved = filepath.Clean(resolved)
-		if id, ok := g.PathToID[resolved]; ok {
+		lookupKey := relPath(g.RootDir, resolved)
+		if id, ok := g.PathToID[lookupKey]; ok {
 			if _, done := seen[id]; !done {
 				seen[id] = struct{}{}
 				ids = append(ids, id)
@@ -593,14 +620,15 @@ func (g *Graph) ResolvePathsToIDs(targets []string) ([]string, error) {
 					return nil
 				}
 				if info.IsDir() {
-					if info.Name() == ".git" || info.Name() == ".ddx" {
+					switch info.Name() {
+					case ".git", ".ddx", ".claude", "worktrees":
 						return filepath.SkipDir
 					}
 					return nil
 				}
 				if strings.EqualFold(filepath.Ext(path), ".md") {
-					cleanPath := filepath.Clean(path)
-					if id, ok := g.PathToID[cleanPath]; ok {
+					walkKey := relPath(g.RootDir, path)
+					if id, ok := g.PathToID[walkKey]; ok {
 						if _, done := seen[id]; !done {
 							seen[id] = struct{}{}
 							ids = append(ids, id)
@@ -663,7 +691,7 @@ func (g *Graph) Stamp(targets []string, now time.Time) ([]string, []string, erro
 			return stamped, warnings, err
 		}
 		updated := frontmatterSeparator + "\n" + frontmatterText + "\n" + frontmatterSeparator + "\n" + doc.body
-		if err := os.WriteFile(doc.Path, []byte(updated), 0644); err != nil {
+		if err := os.WriteFile(g.absPath(doc.Path), []byte(updated), 0644); err != nil {
 			return stamped, warnings, err
 		}
 		if doc.Review.ReviewedAt == "" || doc.Review.SelfHash != review.SelfHash {
