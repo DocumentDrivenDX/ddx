@@ -166,8 +166,12 @@ func TestGraphQLWorkers(t *testing.T) {
 		t.Error("expected non-empty cursor on worker edge")
 	}
 
-	// Query.workersByProject — scoped to the working dir.
-	body2 := gqlPost(t, srv, fmt.Sprintf(`{ workersByProject(projectID: %q) { totalCount } }`, workDir))
+	// Query.workersByProject — scoped by the registered project id (not path).
+	proj, ok := srv.state.GetProjectByPath(workDir)
+	if !ok {
+		t.Fatalf("expected workDir %q to be registered as a project", workDir)
+	}
+	body2 := gqlPost(t, srv, fmt.Sprintf(`{ workersByProject(projectID: %q) { totalCount } }`, proj.ID))
 	if errs := gqlErrors(body2); len(errs) > 0 {
 		t.Fatalf("workersByProject GraphQL errors: %v", errs)
 	}
@@ -208,6 +212,136 @@ func TestGraphQLWorkers(t *testing.T) {
 	}
 	if resp3.Data.Worker.State != "exited" {
 		t.Errorf("worker(id): expected state=exited, got %q", resp3.Data.Worker.State)
+	}
+}
+
+// TestGraphQLWorkersByProjectScopedByID verifies that workersByProject filters
+// by the project id (not path). Regression test for ddx-05b4cc9d: the resolver
+// used to compare the id argument to WorkerRecord.ProjectRoot (a path), so the
+// per-project workers view was always empty for any non-empty project id.
+func TestGraphQLWorkersByProjectScopedByID(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "gql-workers-scope-test-node")
+
+	// Project A is the server's own working dir (auto-registered by New()).
+	// Project B is a second registered project with a different path / id.
+	workDirA := setupTestDir(t)
+	workDirB := t.TempDir()
+
+	startedAt := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
+	writeWorkerRecord(t, workDirA, WorkerRecord{
+		ID:          "wk-scope-A",
+		Kind:        "execute-loop",
+		State:       "running",
+		ProjectRoot: workDirA,
+		Harness:     "claude",
+		StartedAt:   startedAt,
+	})
+	// Worker B lives under the workers dir of the server's working directory
+	// (that is where GetWorkersGraphQL reads from) but targets project B via
+	// its ProjectRoot field — mirroring how ExecuteLoopWorkerSpec.ProjectRoot
+	// redirects a worker to another registered project.
+	writeWorkerRecord(t, workDirA, WorkerRecord{
+		ID:          "wk-scope-B",
+		Kind:        "execute-loop",
+		State:       "running",
+		ProjectRoot: workDirB,
+		Harness:     "claude",
+		StartedAt:   startedAt.Add(time.Minute),
+	})
+
+	srv := New(":0", workDirA)
+	projA, ok := srv.state.GetProjectByPath(workDirA)
+	if !ok {
+		t.Fatalf("project A at %q not registered", workDirA)
+	}
+	projB := srv.state.RegisterProject(workDirB)
+
+	if projA.ID == projB.ID {
+		t.Fatalf("expected distinct project ids, got %q", projA.ID)
+	}
+
+	queryTotal := func(q string) int {
+		t.Helper()
+		body := gqlPost(t, srv, q)
+		if errs := gqlErrors(body); len(errs) > 0 {
+			t.Fatalf("GraphQL errors for %q: %v", q, errs)
+		}
+		var resp struct {
+			Data struct {
+				Workers struct {
+					TotalCount int `json:"totalCount"`
+					Edges      []struct {
+						Node struct {
+							ID string `json:"id"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"workersByProject,omitempty"`
+				Global struct {
+					TotalCount int `json:"totalCount"`
+					Edges      []struct {
+						Node struct {
+							ID string `json:"id"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"workers,omitempty"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			t.Fatalf("invalid JSON for %q: %v", q, err)
+		}
+		return resp.Data.Workers.TotalCount + resp.Data.Global.TotalCount
+	}
+
+	// workersByProject(projectID: projA.ID) must return exactly worker A.
+	workersForProject := func(id string) []string {
+		t.Helper()
+		q := fmt.Sprintf(`{ workersByProject(projectID: %q) { totalCount edges { node { id } } } }`, id)
+		body := gqlPost(t, srv, q)
+		if errs := gqlErrors(body); len(errs) > 0 {
+			t.Fatalf("GraphQL errors for %q: %v", q, errs)
+		}
+		var resp struct {
+			Data struct {
+				WorkersByProject struct {
+					TotalCount int `json:"totalCount"`
+					Edges      []struct {
+						Node struct {
+							ID string `json:"id"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"workersByProject"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			t.Fatalf("invalid JSON for %q: %v", q, err)
+		}
+		ids := make([]string, len(resp.Data.WorkersByProject.Edges))
+		for i, e := range resp.Data.WorkersByProject.Edges {
+			ids[i] = e.Node.ID
+		}
+		if resp.Data.WorkersByProject.TotalCount != len(ids) {
+			t.Fatalf("totalCount %d != edges %d", resp.Data.WorkersByProject.TotalCount, len(ids))
+		}
+		return ids
+	}
+
+	if got := workersForProject(projA.ID); len(got) != 1 || got[0] != "wk-scope-A" {
+		t.Errorf("workersByProject(%q) = %v, want [wk-scope-A]", projA.ID, got)
+	}
+	if got := workersForProject(projB.ID); len(got) != 1 || got[0] != "wk-scope-B" {
+		t.Errorf("workersByProject(%q) = %v, want [wk-scope-B]", projB.ID, got)
+	}
+
+	// Unknown project id → empty list, no error.
+	if got := workersForProject("proj-does-not-exist"); len(got) != 0 {
+		t.Errorf("workersByProject(unknown) = %v, want []", got)
+	}
+
+	// Global workers query returns both workers.
+	if total := queryTotal(`{ workers { totalCount edges { node { id } } } }`); total != 2 {
+		t.Errorf("workers (global) totalCount = %d, want 2", total)
 	}
 }
 

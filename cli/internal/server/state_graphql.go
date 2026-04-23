@@ -256,10 +256,25 @@ func projectEntryToGQL(e ProjectEntry) *ddxgraphql.Project {
 
 // GetWorkersGraphQL implements ddxgraphql.StateProvider.
 // Reads worker records from disk and returns them as GraphQL Worker values.
-// If projectID is non-empty, only workers for that project root are returned.
+// If projectID is non-empty, only workers for that project are returned.
+// An unknown projectID returns an empty list (not an error).
+//
+// WorkerRecord stores the project's filesystem path in ProjectRoot, but the
+// GraphQL argument is a project id (e.g. proj-96d7ea83). Resolve the id to a
+// path via the project registry before filtering so the two representations
+// match; previously this compared id→path directly and filtered out every
+// worker on per-project queries.
 func (s *ServerState) GetWorkersGraphQL(projectID string) []*ddxgraphql.Worker {
 	if s.workingDir == "" {
 		return nil
+	}
+	expectedPath := ""
+	if projectID != "" {
+		proj, ok := s.GetProjectByID(projectID)
+		if !ok {
+			return nil
+		}
+		expectedPath = proj.Path
 	}
 	workersDir := filepath.Join(s.workingDir, ".ddx", "workers")
 	entries, err := os.ReadDir(workersDir)
@@ -279,7 +294,7 @@ func (s *ServerState) GetWorkersGraphQL(projectID string) []*ddxgraphql.Worker {
 		if err := json.Unmarshal(data, &rec); err != nil {
 			continue
 		}
-		if projectID != "" && rec.ProjectRoot != projectID {
+		if expectedPath != "" && rec.ProjectRoot != expectedPath {
 			continue
 		}
 		out = append(out, workerFromRecord(rec))
