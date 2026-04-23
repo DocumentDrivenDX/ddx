@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
@@ -190,8 +191,8 @@ func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*Qu
 }
 
 // EfficacyRows is the resolver for the efficacyRows field.
-func (r *queryResolver) EfficacyRows(ctx context.Context) ([]*EfficacyRow, error) {
-	snap, err := r.efficacySnapshot()
+func (r *queryResolver) EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error) {
+	snap, err := r.efficacySnapshot(since, until, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +200,8 @@ func (r *queryResolver) EfficacyRows(ctx context.Context) ([]*EfficacyRow, error
 }
 
 // EfficacyAttempts is the resolver for the efficacyAttempts field.
-func (r *queryResolver) EfficacyAttempts(ctx context.Context, rowKey string) (*EfficacyAttempts, error) {
-	snap, err := r.efficacySnapshot()
+func (r *queryResolver) EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string) (*EfficacyAttempts, error) {
+	snap, err := r.efficacySnapshot(since, until, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -663,45 +664,109 @@ func scanNamedChildren(root string, relDirs []string, marker string) []string {
 }
 
 type efficacySnapshot struct {
-	key      string
 	rows     []*EfficacyRow
 	attempts map[string][]*EfficacyAttempt
 }
 
-var efficacyMemo struct {
-	sync.Mutex
-	byProject map[string]efficacySnapshot
+type sessionEfficacyCacheEntry struct {
+	fingerprint string
+	snapshot    efficacySnapshot
 }
 
-func (r *queryResolver) efficacySnapshot() (efficacySnapshot, error) {
+var sessionEfficacyCache struct {
+	sync.Mutex
+	byQuery map[string]sessionEfficacyCacheEntry
+}
+
+func (r *queryResolver) efficacySnapshot(since, until, projectID *string) (efficacySnapshot, error) {
 	projectRoot := r.WorkingDir
-	key, err := efficacyFingerprint(projectRoot)
+	if projectID != nil && strings.TrimSpace(*projectID) != "" {
+		projectRoot = r.projectRoot(strings.TrimSpace(*projectID))
+	}
+	startedAfter, err := parseOptionalEfficacyTime("since", since)
 	if err != nil {
 		return efficacySnapshot{}, err
 	}
-
-	efficacyMemo.Lock()
-	if efficacyMemo.byProject == nil {
-		efficacyMemo.byProject = map[string]efficacySnapshot{}
-	}
-	if cached, ok := efficacyMemo.byProject[projectRoot]; ok && cached.key == key {
-		efficacyMemo.Unlock()
-		return cached, nil
-	}
-	efficacyMemo.Unlock()
-
-	_, snap, err := buildEfficacySnapshot(projectRoot)
+	startedBefore, err := parseOptionalEfficacyTime("until", until)
 	if err != nil {
 		return efficacySnapshot{}, err
 	}
+	logDir := agent.SessionLogDirForWorkDir(projectRoot)
+	query := agent.SessionIndexQuery{
+		StartedAfter:  startedAfter,
+		StartedBefore: startedBefore,
+	}
+	cacheKey := sessionEfficacyCacheKey(logDir, startedAfter, startedBefore)
+	fingerprint, err := sessionEfficacyIndexFingerprint(logDir, query)
+	if err != nil {
+		return efficacySnapshot{}, err
+	}
+	sessionEfficacyCache.Lock()
+	if sessionEfficacyCache.byQuery == nil {
+		sessionEfficacyCache.byQuery = map[string]sessionEfficacyCacheEntry{}
+	}
+	if cached, ok := sessionEfficacyCache.byQuery[cacheKey]; ok && cached.fingerprint == fingerprint {
+		sessionEfficacyCache.Unlock()
+		return cached.snapshot, nil
+	}
+	sessionEfficacyCache.Unlock()
 
-	efficacyMemo.Lock()
-	defer efficacyMemo.Unlock()
-	efficacyMemo.byProject[projectRoot] = snap
+	entries, err := agent.ReadSessionIndex(logDir, query)
+	if err != nil {
+		return efficacySnapshot{}, err
+	}
+	snap := buildEfficacySnapshotFromSessionEntries(entries)
+	sessionEfficacyCache.Lock()
+	sessionEfficacyCache.byQuery[cacheKey] = sessionEfficacyCacheEntry{fingerprint: fingerprint, snapshot: snap}
+	sessionEfficacyCache.Unlock()
 	return snap, nil
 }
 
-type evidenceAttempt struct {
+func sessionEfficacyCacheKey(logDir string, startedAfter, startedBefore *time.Time) string {
+	return strings.Join([]string{logDir, timeKey(startedAfter), timeKey(startedBefore)}, "|")
+}
+
+func timeKey(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func sessionEfficacyIndexFingerprint(logDir string, query agent.SessionIndexQuery) (string, error) {
+	files, err := agent.SessionIndexShardFiles(logDir, query)
+	if err != nil {
+		return "", err
+	}
+	parts := make([]string, 0, len(files))
+	for _, file := range files {
+		info, err := os.Stat(file)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, fmt.Sprintf("%s:%d:%d", file, info.Size(), info.ModTime().UnixNano()))
+	}
+	return strings.Join(parts, "|"), nil
+}
+
+func parseOptionalEfficacyTime(name string, raw *string) (*time.Time, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil, nil
+	}
+	value := strings.TrimSpace(*raw)
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			utc := parsed.UTC()
+			return &utc, nil
+		}
+	}
+	return nil, fmt.Errorf("%s must be RFC3339 or YYYY-MM-DD, got %q", name, value)
+}
+
+type sessionEfficacyAttempt struct {
 	RowKey       string
 	BeadID       string
 	Outcome      string
@@ -716,68 +781,15 @@ type evidenceAttempt struct {
 	CreatedAt    time.Time
 }
 
-type routingEvidence struct {
-	Harness  string
-	Provider string
-	Model    string
-}
-
-func efficacyFingerprint(projectRoot string) (string, error) {
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-	beads, err := store.ReadAll()
-	if err != nil {
-		return "", err
-	}
-	var evidenceCount int
-	var maxEvidenceUnix int64
-	for _, b := range beads {
-		if b.Status != bead.StatusClosed {
+func buildEfficacySnapshotFromSessionEntries(entries []agent.SessionIndexEntry) efficacySnapshot {
+	grouped := map[string][]sessionEfficacyAttempt{}
+	for _, entry := range entries {
+		attempt := efficacyAttemptFromSession(entry)
+		if attempt.RowKey == "" {
 			continue
 		}
-		events, err := store.Events(b.ID)
-		if err != nil {
-			return "", err
-		}
-		for _, event := range events {
-			if event.Kind != "routing" && event.Kind != "cost" {
-				continue
-			}
-			evidenceCount++
-			if ts := event.CreatedAt.UnixNano(); ts > maxEvidenceUnix {
-				maxEvidenceUnix = ts
-			}
-		}
-	}
-	return fmt.Sprintf("%s|filters=none|max_event_sequence=%d|max_created_at=%d", projectRoot, evidenceCount, maxEvidenceUnix), nil
-}
-
-func buildEfficacySnapshot(projectRoot string) (string, efficacySnapshot, error) {
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-	beads, err := store.ReadAll()
-	if err != nil {
-		return "", efficacySnapshot{}, err
-	}
-
-	var attempts []evidenceAttempt
-	var evidenceCount int
-	var maxEvidenceUnix int64
-	for _, b := range beads {
-		if b.Status != bead.StatusClosed {
-			continue
-		}
-		events, err := store.Events(b.ID)
-		if err != nil {
-			return "", efficacySnapshot{}, err
-		}
-		attempts = append(attempts, attemptsFromEvidence(b.ID, events, &evidenceCount, &maxEvidenceUnix)...)
-	}
-
-	key := fmt.Sprintf("%s|filters=none|max_event_sequence=%d|max_created_at=%d", projectRoot, evidenceCount, maxEvidenceUnix)
-	grouped := map[string][]evidenceAttempt{}
-	for _, attempt := range attempts {
 		grouped[attempt.RowKey] = append(grouped[attempt.RowKey], attempt)
 	}
-
 	rows := make([]*EfficacyRow, 0, len(grouped))
 	attemptDetails := map[string][]*EfficacyAttempt{}
 	for rowKey, group := range grouped {
@@ -830,115 +842,70 @@ func buildEfficacySnapshot(projectRoot string) (string, efficacySnapshot, error)
 		return rows[i].RowKey < rows[j].RowKey
 	})
 
-	return key, efficacySnapshot{key: key, rows: rows, attempts: attemptDetails}, nil
+	return efficacySnapshot{rows: rows, attempts: attemptDetails}
 }
 
-func attemptsFromEvidence(beadID string, events []bead.BeadEvent, evidenceCount *int, maxEvidenceUnix *int64) []evidenceAttempt {
-	var out []evidenceAttempt
-	var lastRouting routingEvidence
-	for i, event := range events {
-		if event.Kind != "routing" && event.Kind != "cost" {
-			continue
-		}
-		(*evidenceCount)++
-		if ts := event.CreatedAt.UnixNano(); ts > *maxEvidenceUnix {
-			*maxEvidenceUnix = ts
-		}
-
-		switch event.Kind {
-		case "routing":
-			lastRouting = parseRoutingEvidence(event.Body)
-			if lastRouting.Provider == "" && lastRouting.Model == "" {
-				continue
-			}
-		case "cost":
-			attempt := parseCostEvidence(beadID, event, i, lastRouting)
-			out = append(out, attempt)
-		}
-	}
-	if len(out) == 0 && (lastRouting.Provider != "" || lastRouting.Model != "") {
-		out = append(out, newRoutingOnlyAttempt(beadID, len(events), lastRouting))
-	}
-	return out
-}
-
-func parseRoutingEvidence(body string) routingEvidence {
-	var raw struct {
-		Harness          string `json:"harness"`
-		Provider         string `json:"provider"`
-		Model            string `json:"model"`
-		ResolvedProvider string `json:"resolved_provider"`
-		ResolvedModel    string `json:"resolved_model"`
-	}
-	_ = json.Unmarshal([]byte(body), &raw)
-	provider := firstNonEmpty(raw.Provider, raw.ResolvedProvider)
-	model := firstNonEmpty(raw.Model, raw.ResolvedModel)
-	return routingEvidence{Harness: raw.Harness, Provider: provider, Model: model}
-}
-
-func parseCostEvidence(beadID string, event bead.BeadEvent, eventIndex int, route routingEvidence) evidenceAttempt {
-	var raw struct {
-		AttemptID    string  `json:"attempt_id"`
-		Harness      string  `json:"harness"`
-		Provider     string  `json:"provider"`
-		Model        string  `json:"model"`
-		InputTokens  int     `json:"input_tokens"`
-		OutputTokens int     `json:"output_tokens"`
-		TotalTokens  int     `json:"total_tokens"`
-		CostUSD      float64 `json:"cost_usd"`
-		DurationMS   int     `json:"duration_ms"`
-		ExitCode     int     `json:"exit_code"`
-	}
-	_ = json.Unmarshal([]byte(event.Body), &raw)
-	harness := firstNonEmpty(raw.Harness, route.Harness, raw.Provider, route.Provider, "unknown")
-	provider := firstNonEmpty(raw.Provider, route.Provider, harness)
-	model := firstNonEmpty(raw.Model, route.Model, "unknown")
-	cost := raw.CostUSD
-	var costPtr *float64
-	if cost > 0 {
-		costPtr = &cost
-	}
-	outcome := "succeeded"
-	if raw.ExitCode != 0 {
-		outcome = "failed"
-	}
-	return evidenceAttempt{
+func efficacyAttemptFromSession(entry agent.SessionIndexEntry) sessionEfficacyAttempt {
+	model := firstNonEmpty(entry.Model, "unknown")
+	provider := firstNonEmpty(entry.Provider, providerFromModel(model), entry.Harness, "unknown")
+	harness := firstNonEmpty(entry.Harness, provider, "unknown")
+	cost := efficacyCost(entry)
+	outcome := efficacyOutcome(entry)
+	return sessionEfficacyAttempt{
 		RowKey:       strings.Join([]string{harness, provider, model}, "|"),
-		BeadID:       beadID,
+		BeadID:       entry.BeadID,
 		Outcome:      outcome,
 		Harness:      harness,
 		Provider:     provider,
 		Model:        model,
-		InputTokens:  raw.InputTokens,
-		OutputTokens: raw.OutputTokens,
-		DurationMs:   raw.DurationMS,
-		CostUsd:      costPtr,
-		EvidencePath: evidencePath(beadID, raw.AttemptID, eventIndex),
-		CreatedAt:    event.CreatedAt,
+		InputTokens:  entry.InputTokens,
+		OutputTokens: entry.OutputTokens,
+		DurationMs:   entry.DurationMS,
+		CostUsd:      cost,
+		EvidencePath: efficacyEvidencePath(entry),
+		CreatedAt:    entry.StartedAt,
 	}
 }
 
-func newRoutingOnlyAttempt(beadID string, eventIndex int, route routingEvidence) evidenceAttempt {
-	harness := firstNonEmpty(route.Harness, route.Provider, "unknown")
-	provider := firstNonEmpty(route.Provider, harness)
-	model := firstNonEmpty(route.Model, "unknown")
-	return evidenceAttempt{
-		RowKey:       strings.Join([]string{harness, provider, model}, "|"),
-		BeadID:       beadID,
-		Outcome:      "succeeded",
-		Harness:      harness,
-		Provider:     provider,
-		Model:        model,
-		EvidencePath: evidencePath(beadID, "", eventIndex),
-		CreatedAt:    time.Now().UTC(),
+func providerFromModel(model string) string {
+	if before, _, ok := strings.Cut(model, "/"); ok && strings.TrimSpace(before) != "" {
+		return before
 	}
+	return ""
 }
 
-func evidencePath(beadID string, attemptID string, eventIndex int) string {
-	if attemptID != "" {
-		return filepath.ToSlash(filepath.Join(".ddx", "executions", attemptID))
+func efficacyCost(entry agent.SessionIndexEntry) *float64 {
+	if !entry.CostPresent && entry.CostUSD == 0 {
+		return nil
 	}
-	return fmt.Sprintf(".ddx/beads.jsonl#%s:%d", beadID, eventIndex)
+	cost := entry.CostUSD
+	return &cost
+}
+
+func efficacyOutcome(entry agent.SessionIndexEntry) string {
+	switch strings.ToLower(strings.TrimSpace(entry.Outcome)) {
+	case "success", "succeeded", "ok", "passed":
+		return "succeeded"
+	case "failure", "failed", "error", "timed_out", "timeout", "cancelled", "stalled":
+		return "failed"
+	}
+	if entry.ExitCode == 0 && entry.Detail == "" {
+		return "succeeded"
+	}
+	return "failed"
+}
+
+func efficacyEvidencePath(entry agent.SessionIndexEntry) string {
+	if entry.BundlePath != "" {
+		return filepath.ToSlash(entry.BundlePath)
+	}
+	if entry.NativeLogRef != "" {
+		return filepath.ToSlash(entry.NativeLogRef)
+	}
+	if entry.ID != "" {
+		return "#session:" + entry.ID
+	}
+	return ""
 }
 
 type paletteMatch struct {
