@@ -207,6 +207,15 @@ pre-commit:
           exit 0
         fi
 
+        # Strip git's local-env-vars before invoking ddx so any git commands
+        # the ddx process spawns honor cmd.Dir / -C <dir> rather than the
+        # GIT_DIR / GIT_WORK_TREE / etc. inherited from this hook's context.
+        # Without this, ddx's git invocations mutate THIS repo (the hook's),
+        # producing core.bare=true and stray core.worktree corruption.
+        # ddx-64ac553a Phase 0 (defensive triage; real fix is the central
+        # git.Command wrapper in Phase 2a).
+        unset $(git rev-parse --local-env-vars)
+
         # Check for DDx command availability
         if command -v ddx >/dev/null 2>&1; then
           ddx doctor >/dev/null 2>&1
