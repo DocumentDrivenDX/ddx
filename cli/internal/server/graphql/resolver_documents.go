@@ -208,7 +208,46 @@ func (r *queryResolver) DocGraph(ctx context.Context) (*DocGraph, error) {
 		PathToID:   string(pathToIDJSON),
 		Dependents: string(dependentsJSON),
 		Warnings:   warnings,
+		Issues:     issuesToGQL(graph.Issues),
 	}, nil
+}
+
+// DocGraphIssues is the resolver for the docGraphIssues field. It returns the
+// same structured issue list used by the full graph query so dashboards can
+// pull integrity state independently of the heavy graph payload.
+func (r *queryResolver) DocGraphIssues(ctx context.Context) ([]*GraphIssue, error) {
+	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	if err != nil {
+		return nil, fmt.Errorf("building document graph: %w", err)
+	}
+	return issuesToGQL(graph.Issues), nil
+}
+
+// issuesToGQL converts docgraph.GraphIssue values into the GraphQL model.
+// Always returns a non-nil slice so downstream clients can treat an empty
+// graph the same as a healthy one (no optional chaining required).
+func issuesToGQL(issues []docgraph.GraphIssue) []*GraphIssue {
+	out := make([]*GraphIssue, 0, len(issues))
+	for _, issue := range issues {
+		gql := &GraphIssue{
+			Kind:    string(issue.Kind),
+			Message: issue.Message,
+		}
+		if issue.Path != "" {
+			p := issue.Path
+			gql.Path = &p
+		}
+		if issue.ID != "" {
+			id := issue.ID
+			gql.ID = &id
+		}
+		if issue.RelatedPath != "" {
+			rp := issue.RelatedPath
+			gql.RelatedPath = &rp
+		}
+		out = append(out, gql)
+	}
+	return out
 }
 
 // docToGQL converts a docgraph.Document to the GraphQL Document model.

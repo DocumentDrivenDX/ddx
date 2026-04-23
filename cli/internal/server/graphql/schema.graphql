@@ -320,8 +320,24 @@ type DocGraph {
   pathToId: JSON!
   """Map of document IDs to lists of dependent IDs"""
   dependents: JSON!
-  """Warnings generated during graph construction"""
+  """Warnings generated during graph construction. Derived from issues; prefer the structured issues field when rendering UI."""
   warnings: [String!]!
+  """Structured integrity issues for the graph, grouped by kind on the client."""
+  issues: [GraphIssue!]!
+}
+
+"""GraphIssue describes one integrity problem discovered while building the document graph."""
+type GraphIssue {
+  """Machine-readable category (e.g. duplicate_id, missing_dep)."""
+  kind: String!
+  """Path of the offending document, when known."""
+  path: String
+  """Document identifier associated with the issue, when known."""
+  id: String
+  """Human-readable explanation suitable for the UI or terminal."""
+  message: String!
+  """Related document path (e.g. the pre-existing path a duplicate ID collides with)."""
+  relatedPath: String
 }
 
 """StaleReason explains why a specific document is stale"""
@@ -1654,6 +1670,9 @@ type Query {
 
   """Return the full document dependency graph (maps to GET /api/docs/graph)"""
   docGraph: DocGraph!
+
+  """Return only the structured integrity issues for the document graph."""
+  docGraphIssues: [GraphIssue!]!
 
   """Return documents that are stale (maps to GET /api/docs/stale)"""
   docStale: [StaleReason!]!

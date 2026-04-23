@@ -627,6 +627,247 @@ func TestBuildGraph_ExcludesClaudeWorktreesAndStoresRelativePaths(t *testing.T) 
 	}
 }
 
+func filterIssuesByKind(issues []GraphIssue, kind IssueKind) []GraphIssue {
+	out := []GraphIssue{}
+	for _, issue := range issues {
+		if issue.Kind == kind {
+			out = append(out, issue)
+		}
+	}
+	return out
+}
+
+func TestIssue_DuplicateID(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/a.md": "---\nddx:\n  id: shared.id\n---\n# First\n",
+		"docs/b.md": "---\nddx:\n  id: shared.id\n---\n# Second\n",
+	})
+
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dups := filterIssuesByKind(graph.Issues, IssueDuplicateID)
+	if len(dups) != 1 {
+		t.Fatalf("expected exactly 1 duplicate_id issue, got %d: %#v", len(dups), graph.Issues)
+	}
+	issue := dups[0]
+	if issue.ID != "shared.id" {
+		t.Errorf("got id %q, want shared.id", issue.ID)
+	}
+	if issue.Path == "" {
+		t.Error("expected offending path on duplicate issue")
+	}
+	if issue.RelatedPath == "" {
+		t.Error("expected related path on duplicate issue")
+	}
+	if !strings.Contains(issue.Message, "duplicate document id") {
+		t.Errorf("unexpected message: %s", issue.Message)
+	}
+}
+
+func TestIssue_ParseError(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/broken.md": "---\nddx:\n  id: good.id\n  depends_on: [unclosed\n---\n# Broken\n",
+	})
+
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parseIssues := filterIssuesByKind(graph.Issues, IssueParseError)
+	if len(parseIssues) != 1 {
+		t.Fatalf("expected exactly 1 parse_error issue, got %d: %#v", len(parseIssues), graph.Issues)
+	}
+	if parseIssues[0].Path == "" {
+		t.Error("expected path on parse_error issue")
+	}
+}
+
+func TestIssue_MissingDep(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/a.md": "---\nddx:\n  id: doc.a\n  depends_on:\n    - ghost.doc\n---\n# A\n",
+	})
+
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := filterIssuesByKind(graph.Issues, IssueMissingDep)
+	if len(missing) != 1 {
+		t.Fatalf("expected exactly 1 missing_dep issue, got %d: %#v", len(missing), graph.Issues)
+	}
+	if missing[0].ID != "ghost.doc" {
+		t.Errorf("got id %q, want ghost.doc", missing[0].ID)
+	}
+	if missing[0].Path == "" {
+		t.Error("expected declaring document path on missing_dep issue")
+	}
+}
+
+func TestIssue_IDPathMissing(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		".ddx/graphs/graph.yml": "roots:\n  - docs\nid_to_path:\n  ghost.id: docs/does-not-exist.md\n",
+	})
+
+	graph, err := BuildGraphWithConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := filterIssuesByKind(graph.Issues, IssueIDPathMissing)
+	if len(issues) != 1 {
+		t.Fatalf("expected exactly 1 id_path_missing issue, got %d: %#v", len(issues), graph.Issues)
+	}
+	if issues[0].ID != "ghost.id" {
+		t.Errorf("got id %q, want ghost.id", issues[0].ID)
+	}
+}
+
+func TestIssue_IDPathMismatch(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/real.md":          "---\nddx:\n  id: actual.id\n---\n# Real\n",
+		".ddx/graphs/graph.yml": "roots:\n  - docs\nid_to_path:\n  expected.id: docs/real.md\n",
+	})
+
+	graph, err := BuildGraphWithConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := filterIssuesByKind(graph.Issues, IssueIDPathMismatch)
+	if len(issues) != 1 {
+		t.Fatalf("expected exactly 1 id_path_mismatch issue, got %d: %#v", len(issues), graph.Issues)
+	}
+	if issues[0].ID != "expected.id" {
+		t.Errorf("got id %q, want expected.id", issues[0].ID)
+	}
+}
+
+func TestIssue_RequiredRootMissing(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/present.md":       "---\nddx:\n  id: present.id\n---\n# Present\n",
+		".ddx/graphs/graph.yml": "roots:\n  - docs\nrequired_roots:\n  - not.present.id\n",
+	})
+
+	graph, err := BuildGraphWithConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := filterIssuesByKind(graph.Issues, IssueRequiredRootMissing)
+	if len(issues) != 1 {
+		t.Fatalf("expected exactly 1 required_root_missing issue, got %d: %#v", len(issues), graph.Issues)
+	}
+	if issues[0].ID != "not.present.id" {
+		t.Errorf("got id %q, want not.present.id", issues[0].ID)
+	}
+}
+
+func TestIssue_CascadeUnknown(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/known.md":         "---\nddx:\n  id: known.id\n---\n# Known\n",
+		".ddx/graphs/graph.yml": "roots:\n  - docs\ncascade:\n  missing.src:\n    - known.id\n",
+	})
+
+	graph, err := BuildGraphWithConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := filterIssuesByKind(graph.Issues, IssueCascadeUnknown)
+	if len(issues) != 1 {
+		t.Fatalf("expected exactly 1 cascade_unknown issue, got %d: %#v", len(issues), graph.Issues)
+	}
+	if issues[0].ID != "missing.src" {
+		t.Errorf("got id %q, want missing.src", issues[0].ID)
+	}
+}
+
+func TestIssue_Cycle(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/a.md": "---\nddx:\n  id: doc.a\n  depends_on:\n    - doc.b\n---\n# A\n",
+		"docs/b.md": "---\nddx:\n  id: doc.b\n  depends_on:\n    - doc.a\n---\n# B\n",
+	})
+
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cycles := filterIssuesByKind(graph.Issues, IssueCycle)
+	if len(cycles) != 1 {
+		t.Fatalf("expected exactly 1 cycle issue, got %d: %#v", len(cycles), graph.Issues)
+	}
+}
+
+func TestGraphWarnings_DerivedFromIssues(t *testing.T) {
+	// Graph.Warnings must stay in lock-step with MessageLines(Issues) so the
+	// deprecated string surface keeps working for callers mid-migration.
+	root := setupTestRepo(t, map[string]string{
+		"docs/a.md": "---\nddx:\n  id: dup.id\n---\n# A\n",
+		"docs/b.md": "---\nddx:\n  id: dup.id\n---\n# B\n",
+	})
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := MessageLines(graph.Issues)
+	if len(graph.Warnings) != len(messages) {
+		t.Fatalf("warnings=%v messages=%v", graph.Warnings, messages)
+	}
+	for i := range messages {
+		if graph.Warnings[i] != messages[i] {
+			t.Errorf("warnings[%d]=%q, messages[%d]=%q", i, graph.Warnings[i], i, messages[i])
+		}
+	}
+}
+
+func TestGraph_CleanFixtureHasNoIssues(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/prd.md":  "---\nddx:\n  id: helix.prd\n---\n# PRD\n",
+		"docs/arch.md": "---\nddx:\n  id: helix.arch\n  depends_on:\n    - helix.prd\n---\n# Arch\n",
+	})
+
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Issues) != 0 {
+		t.Errorf("expected no issues on clean fixture, got %#v", graph.Issues)
+	}
+	if len(graph.Warnings) != 0 {
+		t.Errorf("expected no warnings on clean fixture, got %v", graph.Warnings)
+	}
+}
+
+func TestSuggestUniqueID_Stable(t *testing.T) {
+	id := "AC-AGENT-001"
+	path := ".claude/worktrees/agent-a2818c5c/docs/resources/agent-harness-ac.md"
+	first := SuggestUniqueID(id, path)
+	second := SuggestUniqueID(id, path)
+	if first != second {
+		t.Errorf("suggestion is not deterministic: %q != %q", first, second)
+	}
+	if first == id {
+		t.Errorf("suggestion should differ from original id")
+	}
+	if !strings.HasPrefix(first, id+"-") {
+		t.Errorf("suggestion %q should start with %q-", first, id)
+	}
+
+	// Different path → different suggestion.
+	other := SuggestUniqueID(id, "docs/other.md")
+	if other == first {
+		t.Error("suggestion should change with path")
+	}
+}
+
+func TestSuggestUniqueID_EmptyID(t *testing.T) {
+	s := SuggestUniqueID("", "docs/a.md")
+	if !strings.HasPrefix(s, "doc-") {
+		t.Errorf("empty-id suggestion should start with doc-: %q", s)
+	}
+	if s != SuggestUniqueID("", "docs/a.md") {
+		t.Error("suggestion must be deterministic")
+	}
+}
+
 func TestBodyLinkReverseTraversal(t *testing.T) {
 	// A depends on B via body link; C depends on B via frontmatter.
 	// DependentIDs(B) should include both A and C.
