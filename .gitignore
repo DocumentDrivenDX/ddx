@@ -443,9 +443,13 @@ cli/internal/agent/.ddx/
 !.ddx/executions/*/checks.json
 !.ddx/executions/*/usage.json
 
-# Skills target links (rewritten per-machine by skill materializer)
-.claude/skills/*/
-.agents/skills/*/
+# Skills target links (rewritten per-machine by skill materializer / ddx install)
+# Matches both directory contents (old) and symlink entries (new — entries are
+# file-mode symlinks pointing at plugin trees, unique per machine).
+.claude/skills/*
+.agents/skills/*
+cli/.claude/skills/*
+cli/.agents/skills/*
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/
