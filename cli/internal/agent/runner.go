@@ -872,6 +872,8 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 		Provider:        result.Provider,
 		Surface:         surface,
 		CanonicalTarget: canonicalTarget,
+		BaseURL:         result.ResolvedBaseURL,
+		BillingMode:     billingModeFor(result.Harness, surface, result.ResolvedBaseURL),
 		Model:           result.Model,
 		PromptLen:       promptLen,
 		Prompt:          prompt,

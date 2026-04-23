@@ -68,6 +68,7 @@ type StateProvider interface {
 	// AgentSession queries
 	GetAgentSessionsGraphQL(startedAfter, startedBefore *time.Time) []*AgentSession
 	GetAgentSessionGraphQL(id string) (*AgentSession, bool)
+	GetSessionsCostSummaryGraphQL(projectID string, since, until *time.Time) *SessionsCostSummary
 
 	// Exec queries
 	GetExecDefinitionsGraphQL(artifactID string) []*ExecutionDefinition

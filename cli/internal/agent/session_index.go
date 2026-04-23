@@ -29,6 +29,8 @@ type SessionIndexEntry struct {
 	Harness         string    `json:"harness"`
 	Provider        string    `json:"provider,omitempty"`
 	Surface         string    `json:"surface,omitempty"`
+	BaseURL         string    `json:"baseURL,omitempty"`
+	BillingMode     string    `json:"billingMode"`
 	Model           string    `json:"model,omitempty"`
 	StartedAt       time.Time `json:"startedAt"`
 	EndedAt         time.Time `json:"endedAt,omitempty"`
@@ -110,6 +112,12 @@ func AppendSessionIndex(logDir string, entry SessionIndexEntry, now time.Time) e
 			entry.Outcome = "failure"
 		}
 	}
+	if entry.BillingMode == "" {
+		entry.BillingMode = billingModeFor(entry.Harness, entry.Surface, entry.BaseURL)
+	}
+	if !ValidateBillingMode(entry.BillingMode) {
+		return fmt.Errorf("invalid billingMode %q", entry.BillingMode)
+	}
 	if err := os.MkdirAll(SessionIndexDir(logDir), 0o755); err != nil {
 		return err
 	}
@@ -183,6 +191,8 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 		WorkerID:        workerID,
 		Harness:         harness,
 		Provider:        firstNonEmpty(result.Provider, opts.Provider),
+		BaseURL:         result.ResolvedBaseURL,
+		BillingMode:     billingModeFor(harness, "", result.ResolvedBaseURL),
 		Model:           model,
 		StartedAt:       startedAt.UTC(),
 		EndedAt:         endedAt.UTC(),
@@ -212,11 +222,13 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 	effort := ""
 	bundlePath := ""
 	baseRev := e.BaseRev
+	baseURL := e.BaseURL
 	if e.Correlation != nil {
 		beadID = e.Correlation["bead_id"]
 		workerID = e.Correlation["worker_id"]
 		provider = firstNonEmpty(provider, e.Correlation["provider"], e.Correlation["resolved_provider"])
 		effort = e.Correlation["effort"]
+		baseURL = firstNonEmpty(baseURL, e.Correlation["base_url"], e.Correlation["resolved_base_url"])
 		if baseRev == "" {
 			baseRev = e.Correlation["base_rev"]
 		}
@@ -236,6 +248,10 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 	if totalTokens == 0 {
 		totalTokens = e.Tokens
 	}
+	billingMode := e.BillingMode
+	if billingMode == "" {
+		billingMode = billingModeFor(e.Harness, e.Surface, baseURL)
+	}
 	return SessionIndexEntry{
 		ID:              e.ID,
 		ProjectID:       ProjectIDForPath(projectRoot),
@@ -244,6 +260,8 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		Harness:         e.Harness,
 		Provider:        provider,
 		Surface:         e.Surface,
+		BaseURL:         baseURL,
+		BillingMode:     billingMode,
 		Model:           e.Model,
 		StartedAt:       e.Timestamp.UTC(),
 		EndedAt:         endedAt,
@@ -493,6 +511,8 @@ func SessionIndexEntryToLegacy(e SessionIndexEntry) SessionEntry {
 		Harness:         e.Harness,
 		Provider:        e.Provider,
 		Surface:         e.Surface,
+		BaseURL:         e.BaseURL,
+		BillingMode:     e.BillingMode,
 		Model:           e.Model,
 		Correlation:     corr,
 		NativeSessionID: e.NativeSessionID,

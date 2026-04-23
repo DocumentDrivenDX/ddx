@@ -37,28 +37,29 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	AgentSession struct {
-		BaseRev    func(childComplexity int) int
-		BeadID     func(childComplexity int) int
-		Cost       func(childComplexity int) int
-		Detail     func(childComplexity int) int
-		DurationMs func(childComplexity int) int
-		Effort     func(childComplexity int) int
-		EndedAt    func(childComplexity int) int
-		Harness    func(childComplexity int) int
-		ID         func(childComplexity int) int
-		Model      func(childComplexity int) int
-		Outcome    func(childComplexity int) int
-		ProjectID  func(childComplexity int) int
-		Prompt     func(childComplexity int) int
-		Response   func(childComplexity int) int
-		ResultRev  func(childComplexity int) int
-		StartedAt  func(childComplexity int) int
-		Status     func(childComplexity int) int
-		Stderr     func(childComplexity int) int
-		StderrPath func(childComplexity int) int
-		StdoutPath func(childComplexity int) int
-		Tokens     func(childComplexity int) int
-		WorkerID   func(childComplexity int) int
+		BaseRev     func(childComplexity int) int
+		BeadID      func(childComplexity int) int
+		BillingMode func(childComplexity int) int
+		Cost        func(childComplexity int) int
+		Detail      func(childComplexity int) int
+		DurationMs  func(childComplexity int) int
+		Effort      func(childComplexity int) int
+		EndedAt     func(childComplexity int) int
+		Harness     func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Model       func(childComplexity int) int
+		Outcome     func(childComplexity int) int
+		ProjectID   func(childComplexity int) int
+		Prompt      func(childComplexity int) int
+		Response    func(childComplexity int) int
+		ResultRev   func(childComplexity int) int
+		StartedAt   func(childComplexity int) int
+		Status      func(childComplexity int) int
+		Stderr      func(childComplexity int) int
+		StderrPath  func(childComplexity int) int
+		StdoutPath  func(childComplexity int) int
+		Tokens      func(childComplexity int) int
+		WorkerID    func(childComplexity int) int
 	}
 
 	AgentSessionConnection struct {
@@ -840,6 +841,7 @@ type ComplexityRoot struct {
 		QueueSummary                func(childComplexity int, projectID string) int
 		Ready                       func(childComplexity int) int
 		Search                      func(childComplexity int, query string, first *int, after *string, last *int, before *string) int
+		SessionsCostSummary         func(childComplexity int, projectID string, since *string, until *string) int
 		Worker                      func(childComplexity int, id string) int
 		WorkerLog                   func(childComplexity int, workerID string) int
 		WorkerProgress              func(childComplexity int, workerID string) int
@@ -912,6 +914,13 @@ type ComplexityRoot struct {
 	SearchResultEdge struct {
 		Cursor func(childComplexity int) int
 		Node   func(childComplexity int) int
+	}
+
+	SessionsCostSummary struct {
+		CashUsd              func(childComplexity int) int
+		LocalEstimatedUsd    func(childComplexity int) int
+		LocalSessionCount    func(childComplexity int) int
+		SubscriptionEquivUsd func(childComplexity int) int
 	}
 
 	SourceRef struct {
@@ -1103,6 +1112,7 @@ type QueryResolver interface {
 	WorkerPrompt(ctx context.Context, workerID string) (string, error)
 	AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) (*AgentSessionConnection, error)
 	AgentSession(ctx context.Context, id string) (*AgentSession, error)
+	SessionsCostSummary(ctx context.Context, projectID string, since *string, until *string) (*SessionsCostSummary, error)
 	Personas(ctx context.Context, projectID *string) ([]*Persona, error)
 	Persona(ctx context.Context, name string, projectID *string) (*Persona, error)
 	PersonaByRole(ctx context.Context, role string) (*Persona, error)
@@ -1167,6 +1177,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentSession.BeadID(childComplexity), true
+	case "AgentSession.billingMode":
+		if e.ComplexityRoot.AgentSession.BillingMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentSession.BillingMode(childComplexity), true
 	case "AgentSession.cost":
 		if e.ComplexityRoot.AgentSession.Cost == nil {
 			break
@@ -4797,6 +4813,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Search(childComplexity, args["query"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+	case "Query.sessionsCostSummary":
+		if e.ComplexityRoot.Query.SessionsCostSummary == nil {
+			break
+		}
+
+		args, err := ec.field_Query_sessionsCostSummary_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SessionsCostSummary(childComplexity, args["projectId"].(string), args["since"].(*string), args["until"].(*string)), true
 	case "Query.worker":
 		if e.ComplexityRoot.Query.Worker == nil {
 			break
@@ -5089,6 +5116,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SearchResultEdge.Node(childComplexity), true
+
+	case "SessionsCostSummary.cashUsd":
+		if e.ComplexityRoot.SessionsCostSummary.CashUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionsCostSummary.CashUsd(childComplexity), true
+	case "SessionsCostSummary.localEstimatedUsd":
+		if e.ComplexityRoot.SessionsCostSummary.LocalEstimatedUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionsCostSummary.LocalEstimatedUsd(childComplexity), true
+	case "SessionsCostSummary.localSessionCount":
+		if e.ComplexityRoot.SessionsCostSummary.LocalSessionCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionsCostSummary.LocalSessionCount(childComplexity), true
+	case "SessionsCostSummary.subscriptionEquivUsd":
+		if e.ComplexityRoot.SessionsCostSummary.SubscriptionEquivUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionsCostSummary.SubscriptionEquivUsd(childComplexity), true
 
 	case "SourceRef.beadId":
 		if e.ComplexityRoot.SourceRef.BeadID == nil {
@@ -6837,6 +6889,27 @@ func (ec *executionContext) field_Query_search_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_sessionsCostSummary_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "since", ec.unmarshalODateTime2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["since"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "until", ec.unmarshalODateTime2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["until"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_workerLog_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7440,6 +7513,35 @@ func (ec *executionContext) fieldContext_AgentSession_cost(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _AgentSession_billingMode(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentSession_billingMode,
+		func(ctx context.Context) (any, error) {
+			return obj.BillingMode, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentSession_billingMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AgentSession_tokens(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7837,6 +7939,8 @@ func (ec *executionContext) fieldContext_AgentSessionEdge_node(_ context.Context
 				return ec.fieldContext_AgentSession_durationMs(ctx, field)
 			case "cost":
 				return ec.fieldContext_AgentSession_cost(ctx, field)
+			case "billingMode":
+				return ec.fieldContext_AgentSession_billingMode(ctx, field)
 			case "tokens":
 				return ec.fieldContext_AgentSession_tokens(ctx, field)
 			case "outcome":
@@ -24177,6 +24281,8 @@ func (ec *executionContext) fieldContext_Query_agentSession(ctx context.Context,
 				return ec.fieldContext_AgentSession_durationMs(ctx, field)
 			case "cost":
 				return ec.fieldContext_AgentSession_cost(ctx, field)
+			case "billingMode":
+				return ec.fieldContext_AgentSession_billingMode(ctx, field)
 			case "tokens":
 				return ec.fieldContext_AgentSession_tokens(ctx, field)
 			case "outcome":
@@ -24205,6 +24311,57 @@ func (ec *executionContext) fieldContext_Query_agentSession(ctx context.Context,
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_agentSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_sessionsCostSummary(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_sessionsCostSummary,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SessionsCostSummary(ctx, fc.Args["projectId"].(string), fc.Args["since"].(*string), fc.Args["until"].(*string))
+		},
+		nil,
+		ec.marshalNSessionsCostSummary2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐSessionsCostSummary,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_sessionsCostSummary(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "cashUsd":
+				return ec.fieldContext_SessionsCostSummary_cashUsd(ctx, field)
+			case "subscriptionEquivUsd":
+				return ec.fieldContext_SessionsCostSummary_subscriptionEquivUsd(ctx, field)
+			case "localSessionCount":
+				return ec.fieldContext_SessionsCostSummary_localSessionCount(ctx, field)
+			case "localEstimatedUsd":
+				return ec.fieldContext_SessionsCostSummary_localEstimatedUsd(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionsCostSummary", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_sessionsCostSummary_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -27042,6 +27199,122 @@ func (ec *executionContext) fieldContext_SearchResultEdge_cursor(_ context.Conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionsCostSummary_cashUsd(ctx context.Context, field graphql.CollectedField, obj *SessionsCostSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionsCostSummary_cashUsd,
+		func(ctx context.Context) (any, error) {
+			return obj.CashUsd, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionsCostSummary_cashUsd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionsCostSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionsCostSummary_subscriptionEquivUsd(ctx context.Context, field graphql.CollectedField, obj *SessionsCostSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionsCostSummary_subscriptionEquivUsd,
+		func(ctx context.Context) (any, error) {
+			return obj.SubscriptionEquivUsd, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionsCostSummary_subscriptionEquivUsd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionsCostSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionsCostSummary_localSessionCount(ctx context.Context, field graphql.CollectedField, obj *SessionsCostSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionsCostSummary_localSessionCount,
+		func(ctx context.Context) (any, error) {
+			return obj.LocalSessionCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionsCostSummary_localSessionCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionsCostSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionsCostSummary_localEstimatedUsd(ctx context.Context, field graphql.CollectedField, obj *SessionsCostSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionsCostSummary_localEstimatedUsd,
+		func(ctx context.Context) (any, error) {
+			return obj.LocalEstimatedUsd, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionsCostSummary_localEstimatedUsd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionsCostSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
 		},
 	}
 	return fc, nil
@@ -31834,6 +32107,11 @@ func (ec *executionContext) _AgentSession(ctx context.Context, sel ast.Selection
 			}
 		case "cost":
 			out.Values[i] = ec._AgentSession_cost(ctx, field, obj)
+		case "billingMode":
+			out.Values[i] = ec._AgentSession_billingMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "tokens":
 			out.Values[i] = ec._AgentSession_tokens(ctx, field, obj)
 		case "outcome":
@@ -37400,6 +37678,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "sessionsCostSummary":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_sessionsCostSummary(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "personas":
 			field := field
 
@@ -38534,6 +38834,57 @@ func (ec *executionContext) _SearchResultEdge(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var sessionsCostSummaryImplementors = []string{"SessionsCostSummary"}
+
+func (ec *executionContext) _SessionsCostSummary(ctx context.Context, sel ast.SelectionSet, obj *SessionsCostSummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sessionsCostSummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SessionsCostSummary")
+		case "cashUsd":
+			out.Values[i] = ec._SessionsCostSummary_cashUsd(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subscriptionEquivUsd":
+			out.Values[i] = ec._SessionsCostSummary_subscriptionEquivUsd(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "localSessionCount":
+			out.Values[i] = ec._SessionsCostSummary_localSessionCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "localEstimatedUsd":
+			out.Values[i] = ec._SessionsCostSummary_localEstimatedUsd(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -41170,6 +41521,20 @@ func (ec *executionContext) marshalNSearchResultEdge2ᚖgithubᚗcomᚋDocumentD
 		return graphql.Null
 	}
 	return ec._SearchResultEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSessionsCostSummary2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐSessionsCostSummary(ctx context.Context, sel ast.SelectionSet, v SessionsCostSummary) graphql.Marshaler {
+	return ec._SessionsCostSummary(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSessionsCostSummary2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐSessionsCostSummary(ctx context.Context, sel ast.SelectionSet, v *SessionsCostSummary) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SessionsCostSummary(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSourceRef2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐSourceRef(ctx context.Context, sel ast.SelectionSet, v *SourceRef) graphql.Marshaler {

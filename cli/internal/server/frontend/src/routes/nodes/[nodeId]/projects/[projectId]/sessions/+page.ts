@@ -1,9 +1,9 @@
-import type { PageLoad } from './$types'
-import { createClient } from '$lib/gql/client'
-import { gql } from 'graphql-request'
+import type { PageLoad } from './$types';
+import { createClient } from '$lib/gql/client';
+import { gql } from 'graphql-request';
 
 const SESSIONS_QUERY = gql`
-	query AgentSessions($first: Int) {
+	query SessionsPage($first: Int, $projectId: ID!) {
 		agentSessions(first: $first) {
 			edges {
 				node {
@@ -19,6 +19,7 @@ const SESSIONS_QUERY = gql`
 					endedAt
 					durationMs
 					cost
+					billingMode
 					tokens {
 						prompt
 						completion
@@ -36,8 +37,14 @@ const SESSIONS_QUERY = gql`
 			}
 			totalCount
 		}
+		sessionsCostSummary(projectId: $projectId) {
+			cashUsd
+			subscriptionEquivUsd
+			localSessionCount
+			localEstimatedUsd
+		}
 	}
-`
+`;
 
 export const SESSION_DETAIL_QUERY = gql`
 	query AgentSessionDetail($id: ID!) {
@@ -48,57 +55,69 @@ export const SESSION_DETAIL_QUERY = gql`
 			stderr
 		}
 	}
-`
+`;
 
 interface TokenUsage {
-	prompt: number | null
-	completion: number | null
-	total: number | null
-	cached: number | null
+	prompt: number | null;
+	completion: number | null;
+	total: number | null;
+	cached: number | null;
 }
 
 export interface SessionNode {
-	id: string
-	projectId: string
-	beadId: string | null
-	workerId: string | null
-	harness: string
-	model: string
-	effort: string
-	status: string
-	startedAt: string
-	endedAt: string | null
-	durationMs: number
-	cost: number | null
-	tokens: TokenUsage | null
-	outcome: string | null
-	detail: string | null
-	prompt?: string | null
-	response?: string | null
-	stderr?: string | null
+	id: string;
+	projectId: string;
+	beadId: string | null;
+	workerId: string | null;
+	harness: string;
+	model: string;
+	effort: string;
+	status: string;
+	startedAt: string;
+	endedAt: string | null;
+	durationMs: number;
+	cost: number | null;
+	billingMode: 'paid' | 'subscription' | 'local';
+	tokens: TokenUsage | null;
+	outcome: string | null;
+	detail: string | null;
+	prompt?: string | null;
+	response?: string | null;
+	stderr?: string | null;
 }
 
 interface SessionEdge {
-	node: SessionNode
-	cursor: string
+	node: SessionNode;
+	cursor: string;
 }
 
 interface SessionConnection {
-	edges: SessionEdge[]
-	pageInfo: { hasNextPage: boolean; endCursor: string | null }
-	totalCount: number
+	edges: SessionEdge[];
+	pageInfo: { hasNextPage: boolean; endCursor: string | null };
+	totalCount: number;
 }
 
 interface SessionsResult {
-	agentSessions: SessionConnection
+	agentSessions: SessionConnection;
+	sessionsCostSummary: SessionsCostSummary;
+}
+
+export interface SessionsCostSummary {
+	cashUsd: number;
+	subscriptionEquivUsd: number;
+	localSessionCount: number;
+	localEstimatedUsd: number | null;
 }
 
 export const load: PageLoad = async ({ params, fetch }) => {
-	const client = createClient(fetch as unknown as typeof globalThis.fetch)
-	const data = await client.request<SessionsResult>(SESSIONS_QUERY, { first: 100 })
+	const client = createClient(fetch as unknown as typeof globalThis.fetch);
+	const data = await client.request<SessionsResult>(SESSIONS_QUERY, {
+		first: 100,
+		projectId: params.projectId
+	});
 	const filteredEdges = data.agentSessions.edges.filter(
 		(e) => e.node.projectId === params.projectId
-	)
+	);
 	return {
 		nodeId: params.nodeId,
 		projectId: params.projectId,
@@ -106,6 +125,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			...data.agentSessions,
 			edges: filteredEdges,
 			totalCount: filteredEdges.length
-		}
-	}
-}
+		},
+		costSummary: data.sessionsCostSummary
+	};
+};

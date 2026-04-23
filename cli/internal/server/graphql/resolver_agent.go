@@ -68,6 +68,26 @@ func (r *queryResolver) AgentSession(ctx context.Context, id string) (*AgentSess
 	return s, nil
 }
 
+// SessionsCostSummary is the resolver for the sessionsCostSummary field.
+func (r *queryResolver) SessionsCostSummary(ctx context.Context, projectID string, since *string, until *string) (*SessionsCostSummary, error) {
+	var sinceTime *time.Time
+	var untilTime *time.Time
+	if since != nil && *since != "" {
+		if parsed, err := time.Parse(time.RFC3339, *since); err == nil {
+			sinceTime = &parsed
+		}
+	}
+	if until != nil && *until != "" {
+		if parsed, err := time.Parse(time.RFC3339, *until); err == nil {
+			untilTime = &parsed
+		}
+	}
+	if summary := r.State.GetSessionsCostSummaryGraphQL(projectID, sinceTime, untilTime); summary != nil {
+		return summary, nil
+	}
+	return &SessionsCostSummary{}, nil
+}
+
 // ExecDefinitions is the resolver for the execDefinitions field.
 func (r *queryResolver) ExecDefinitions(ctx context.Context, first *int, after *string, last *int, before *string, artifactID *string) (*ExecutionDefinitionConnection, error) {
 	artifactIDVal := ""

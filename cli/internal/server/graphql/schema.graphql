@@ -654,6 +654,8 @@ type AgentSession implements Node {
   durationMs: Int!
   """Estimated cost in USD (null if unknown)"""
   cost: Float
+  """Cost-basis bucket for this session: paid, subscription, or local"""
+  billingMode: String!
   """Token consumption breakdown"""
   tokens: TokenUsage
   """Outcome classification (e.g. "success", "failure")"""
@@ -700,6 +702,18 @@ type AgentSessionConnection {
   pageInfo: PageInfo!
   """Total number of sessions matching the filter"""
   totalCount: Int!
+}
+
+"""SessionsCostSummary separates cash, subscription-equivalent, and local session costs"""
+type SessionsCostSummary {
+  """Actual billed pay-per-token API spend"""
+  cashUsd: Float!
+  """Dollar-equivalent token value consumed under subscription harnesses"""
+  subscriptionEquivUsd: Float!
+  """Count of sessions served locally"""
+  localSessionCount: Int!
+  """Optional local compute estimate, present only when configured"""
+  localEstimatedUsd: Float
 }
 
 # ============================================
@@ -1958,6 +1972,16 @@ type Query {
     """Session identifier"""
     id: ID!
   ): AgentSession
+
+  """Summarize session cost buckets for one project"""
+  sessionsCostSummary(
+    """Project identifier"""
+    projectId: ID!
+    """Only include sessions starting at or after this timestamp"""
+    since: DateTime
+    """Only include sessions starting before this timestamp"""
+    until: DateTime
+  ): SessionsCostSummary!
 
   # ==========================================
   # Persona Queries

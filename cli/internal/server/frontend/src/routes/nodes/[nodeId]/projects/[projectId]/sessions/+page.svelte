@@ -9,7 +9,9 @@
 
 	// Track which sessions are expanded
 	let expanded = $state<Set<string>>(new Set());
-	let sessionBodies = $state<Record<string, Pick<SessionNode, 'prompt' | 'response' | 'stderr'>>>({});
+	let sessionBodies = $state<Record<string, Pick<SessionNode, 'prompt' | 'response' | 'stderr'>>>(
+		{}
+	);
 
 	onMount(() => {
 		const timer = window.setInterval(() => {
@@ -61,14 +63,16 @@
 
 	// Aggregate token summary
 	const summary = $derived.by(() => {
-		let totalCost = 0;
 		let totalPrompt = 0;
 		let totalCompletion = 0;
 		let totalCached = 0;
 		let totalTokens = 0;
+		let paidSessions = 0;
+		let subscriptionSessions = 0;
 		for (const edge of data.sessions.edges) {
 			const s = edge.node;
-			if (s.cost != null) totalCost += s.cost;
+			if (s.billingMode === 'paid') paidSessions++;
+			if (s.billingMode === 'subscription') subscriptionSessions++;
 			if (s.tokens) {
 				totalPrompt += s.tokens.prompt ?? 0;
 				totalCompletion += s.tokens.completion ?? 0;
@@ -77,7 +81,15 @@
 			}
 		}
 		const cacheRate = totalTokens > 0 ? Math.round((totalCached / totalTokens) * 100) : 0;
-		return { totalCost, totalPrompt, totalCompletion, totalCached, totalTokens, cacheRate };
+		return {
+			totalPrompt,
+			totalCompletion,
+			totalCached,
+			totalTokens,
+			cacheRate,
+			paidSessions,
+			subscriptionSessions
+		};
 	});
 
 	function fmtDuration(ms: number): string {
@@ -95,6 +107,58 @@
 	function fmtCost(c: number | null): string {
 		if (c == null) return '—';
 		return `$${c.toFixed(4)}`;
+	}
+
+	function fmtCardCost(value: number, hasSessions: boolean): string {
+		if (!hasSessions) return '—';
+		return `$${value.toFixed(2)}`;
+	}
+
+	function fmtLocalValue(): string {
+		if (data.costSummary.localSessionCount === 0) return '0';
+		if (data.costSummary.localEstimatedUsd != null) {
+			return `$${data.costSummary.localEstimatedUsd.toFixed(2)} est.`;
+		}
+		return data.costSummary.localSessionCount.toLocaleString();
+	}
+
+	function billingBadge(mode: SessionNode['billingMode']): string {
+		switch (mode) {
+			case 'paid':
+				return 'cash';
+			case 'subscription':
+				return 'sub';
+			case 'local':
+				return 'local';
+			default:
+				return mode;
+		}
+	}
+
+	function billingDescription(mode: SessionNode['billingMode']): string {
+		switch (mode) {
+			case 'paid':
+				return 'Billed by pay-per-token APIs (OpenRouter, direct API keys)';
+			case 'subscription':
+				return 'Dollar-equivalent for tokens consumed under Claude Code / Codex subscriptions. Not cash out of pocket.';
+			case 'local':
+				return 'Sessions served locally. Compute cost not modeled.';
+			default:
+				return 'Cost bucket is unknown.';
+		}
+	}
+
+	function billingBadgeClass(mode: SessionNode['billingMode']): string {
+		switch (mode) {
+			case 'paid':
+				return 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200';
+			case 'subscription':
+				return 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200';
+			case 'local':
+				return 'border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200';
+			default:
+				return 'border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200';
+		}
 	}
 
 	function statusClass(status: string): string {
@@ -124,10 +188,13 @@
 		<div>
 			<h1 class="text-xl font-semibold dark:text-white">Sessions</h1>
 			<p class="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-300">
-				Sessions are immutable agent-run history; Workers are the live queue-draining
-				processes that can produce many sessions.
+				Sessions are immutable agent-run history; Workers are the live queue-draining processes that
+				can produce many sessions.
 			</p>
-			<a class="mt-2 inline-flex text-sm text-blue-600 hover:underline dark:text-blue-400" href={workersHref()}>
+			<a
+				class="mt-2 inline-flex text-sm text-blue-600 hover:underline dark:text-blue-400"
+				href={workersHref()}
+			>
 				Workers →
 			</a>
 		</div>
@@ -137,13 +204,15 @@
 	</div>
 
 	{#if recordingGap}
-		<div class="border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+		<div
+			class="border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+		>
 			{recordingGap}
 		</div>
 	{/if}
 
 	<!-- Token summary -->
-	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-8">
 		<div
 			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
 		>
@@ -151,10 +220,78 @@
 			<div class="mt-1 text-lg font-semibold dark:text-white">{data.sessions.totalCount}</div>
 		</div>
 		<div
+			aria-label="Cash paid. Billed by pay-per-token APIs (OpenRouter, direct API keys)"
 			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
 		>
-			<div class="text-xs text-gray-700 dark:text-gray-300">Total Cost</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{fmtCost(summary.totalCost)}</div>
+			<div
+				class="group relative inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300"
+			>
+				<span>Cash paid</span>
+				<span
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] dark:border-gray-600"
+					>?</span
+				>
+				<span
+					role="tooltip"
+					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-56 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+				>
+					Billed by pay-per-token APIs (OpenRouter, direct API keys)
+				</span>
+			</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">
+				{fmtCardCost(
+					data.costSummary.cashUsd,
+					summary.paidSessions > 0 || data.costSummary.cashUsd > 0
+				)}
+			</div>
+		</div>
+		<div
+			aria-label="Subscription value. Dollar-equivalent for tokens consumed under Claude Code / Codex subscriptions. Not cash out of pocket."
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div
+				class="group relative inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300"
+			>
+				<span>Subscription value</span>
+				<span
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] dark:border-gray-600"
+					>?</span
+				>
+				<span
+					role="tooltip"
+					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-64 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+				>
+					Dollar-equivalent for tokens consumed under Claude Code / Codex subscriptions. Not cash
+					out of pocket.
+				</span>
+			</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">
+				{fmtCardCost(
+					data.costSummary.subscriptionEquivUsd,
+					summary.subscriptionSessions > 0 || data.costSummary.subscriptionEquivUsd > 0
+				)}
+			</div>
+		</div>
+		<div
+			aria-label="Local sessions. Sessions served locally. Compute cost not modeled."
+			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		>
+			<div
+				class="group relative inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300"
+			>
+				<span>Local sessions</span>
+				<span
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] dark:border-gray-600"
+					>?</span
+				>
+				<span
+					role="tooltip"
+					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-56 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+				>
+					Sessions served locally. Compute cost not modeled.
+				</span>
+			</div>
+			<div class="mt-1 text-lg font-semibold dark:text-white">{fmtLocalValue()}</div>
 		</div>
 		<div
 			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
@@ -236,7 +373,23 @@
 							{fmtDuration(s.durationMs)}
 						</td>
 						<td class="px-4 py-3 text-right font-mono text-xs text-gray-600 dark:text-gray-300">
-							{fmtCost(s.cost)}
+							<div class="flex items-center justify-end gap-2">
+								<span>{fmtCost(s.cost)}</span>
+								<span
+									class="group relative inline-flex min-w-10 justify-center rounded border px-1.5 py-0.5 font-sans text-[10px] leading-none font-semibold uppercase {billingBadgeClass(
+										s.billingMode
+									)}"
+									aria-label="{billingBadge(s.billingMode)}: {billingDescription(s.billingMode)}"
+								>
+									{billingBadge(s.billingMode)}
+									<span
+										role="tooltip"
+										class="pointer-events-none absolute top-5 right-0 z-20 hidden w-64 rounded border border-gray-200 bg-white p-2 text-left text-xs font-normal text-gray-700 normal-case shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+									>
+										{billingDescription(s.billingMode)}
+									</span>
+								</span>
+							</div>
 						</td>
 						<td class="px-4 py-3 text-right font-mono text-xs text-gray-600 dark:text-gray-300">
 							{s.tokens?.total?.toLocaleString() ?? '—'}
@@ -328,19 +481,24 @@
 									{#if bodies?.prompt}
 										<div class="col-span-2 sm:col-span-4">
 											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Prompt</div>
-											<pre class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-3 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.prompt}</pre>
+											<pre
+												class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.prompt}</pre>
 										</div>
 									{/if}
 									{#if bodies?.response}
 										<div class="col-span-2 sm:col-span-4">
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Response</div>
-											<pre class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-3 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.response}</pre>
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+												Response
+											</div>
+											<pre
+												class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.response}</pre>
 										</div>
 									{/if}
 									{#if bodies?.stderr}
 										<div class="col-span-2 sm:col-span-4">
 											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Stderr</div>
-											<pre class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-3 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.stderr}</pre>
+											<pre
+												class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.stderr}</pre>
 										</div>
 									{/if}
 								</div>
