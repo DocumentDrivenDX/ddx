@@ -133,6 +133,9 @@ MCP (POST /mcp):
 	// Worker management
 	cmd.AddCommand(f.newServerWorkersCommand())
 
+	// State file utilities (prune, …)
+	cmd.AddCommand(f.newServerStateCommand())
+
 	// Service management (systemd on Linux, launchd on macOS)
 	cmd.AddCommand(f.newServerInstallCommand())
 	cmd.AddCommand(f.newServerUninstallCommand())

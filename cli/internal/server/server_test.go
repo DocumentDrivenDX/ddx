@@ -140,6 +140,7 @@ func writeSessionIndexLines(t *testing.T, workDir string, lines ...string) {
 
 func setupProcessMetricsTestDir(t *testing.T) string {
 	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
 
 	ddxDir := filepath.Join(dir, ".ddx")
@@ -629,8 +630,11 @@ func TestBeadsStatus(t *testing.T) {
 
 // setupProjectWithBeads creates a temp dir with a .ddx/beads.jsonl containing
 // one open, one in_progress, and one closed bead, all prefixed with beadPrefix.
+// Also isolates XDG_DATA_HOME so servers constructed against the returned dir
+// do not pollute the developer's real state file (ddx-15f7ee0b Fix A).
 func setupProjectWithBeads(t *testing.T, beadPrefix string) string {
 	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ".ddx")
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
@@ -3568,6 +3572,11 @@ func TestRegisterProjectLinkedWorktree(t *testing.T) {
 // tombstone timestamp. It then verifies GET /api/projects hides it by default
 // and exposes it with ?include_unreachable=true.
 func TestSweepProjectsUnreachable(t *testing.T) {
+	// The test registers a t.TempDir() path (under /tmp) — the test-dir
+	// sweep would drop it unconditionally. This test targets the tombstone
+	// semantic for missing paths, so disable the filter.
+	withTestDirFilterDisabled(t)
+
 	workDir := setupNodeTestDir(t)
 	srv := New(":0", workDir)
 
@@ -3657,6 +3666,10 @@ func TestSweepProjectsUnreachable(t *testing.T) {
 // asserts the post-startup state has exactly 1 entry for that path.
 func TestMigrateDeduplicatesDuplicateEntries(t *testing.T) {
 	t.Setenv("DDX_NODE_NAME", "test-node")
+	// Uses t.TempDir() as dupPath — the default test-dir filter would drop
+	// every duplicate. This test targets the dedupe semantic, not the
+	// filter, so disable the filter here.
+	withTestDirFilterDisabled(t)
 
 	workDir := setupTestDir(t)
 	xdgDir := os.Getenv("XDG_DATA_HOME")
