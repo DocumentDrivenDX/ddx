@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "**Missing entire implementation.** The diff at `7da22459` adds only `.ddx/executions/20260423T044433-ce3a2c9d/result.json` — execution bookkeeping, not deliverable code. The actual work commit `3102f0da` (referenced in `result_rev`) is not part of this diff. The review should be re-run against the range `9c8b2a54..3102f0da` to capture the implementation.\n**All 7 AC items unaddressable.** Without the implementation diff, every acceptance criterion — unified resolver, usage/quota fields, trend detail, perf fixtures, design note, regression safety, and dependency handling — cannot be evaluated.\n**Next step:** Re-extract the diff using `git diff 9c8b2a54..3102f0da` (base_rev to result_rev from the result.json) and re-submit for review."
+}
