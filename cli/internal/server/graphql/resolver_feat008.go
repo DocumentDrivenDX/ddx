@@ -812,7 +812,7 @@ func (r *queryResolver) efficacySnapshot(since, until, projectID *string) (effic
 	if err != nil {
 		return efficacySnapshot{}, err
 	}
-	snap := buildEfficacySnapshotFromSessionEntries(entries)
+	snap := buildSessionIndexEfficacySnapshot(entries)
 	sessionEfficacyCache.Lock()
 	sessionEfficacyCache.byQuery[cacheKey] = sessionEfficacyCacheEntry{fingerprint: fingerprint, snapshot: snap}
 	sessionEfficacyCache.Unlock()
@@ -878,7 +878,7 @@ type sessionEfficacyAttempt struct {
 	CreatedAt    time.Time
 }
 
-func buildEfficacySnapshotFromSessionEntries(entries []agent.SessionIndexEntry) efficacySnapshot {
+func buildSessionIndexEfficacySnapshot(entries []agent.SessionIndexEntry) efficacySnapshot {
 	grouped := map[string][]sessionEfficacyAttempt{}
 	for _, entry := range entries {
 		attempt := efficacyAttemptFromSession(entry)
