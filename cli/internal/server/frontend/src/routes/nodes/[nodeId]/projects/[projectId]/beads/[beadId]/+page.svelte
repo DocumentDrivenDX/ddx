@@ -29,6 +29,6 @@
 	<!-- Detail panel — keyed on bead.id so navigation between beads remounts
 	     the component and its internal $state initializers see the new bead. -->
 	{#key data.bead.id}
-		<BeadDetail bead={data.bead} onClose={handleClose} />
+		<BeadDetail bead={data.bead} onClose={handleClose} executions={data.executions} nodeId={data.nodeId} projectId={data.projectId} />
 	{/key}
 {/if}

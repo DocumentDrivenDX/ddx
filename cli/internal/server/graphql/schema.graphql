@@ -925,6 +925,129 @@ type ComparisonResult {
 }
 
 # ============================================
+# Execute-bead bundles
+# ============================================
+
+"""
+Execution represents one execute-bead attempt bundle stored under
+`.ddx/executions/<ts>-<hash>/`. It joins bead, session, prompt, verdict,
+and tool-call stream together as the canonical record of a single
+ddx agent execute-bead attempt.
+"""
+type Execution implements Node {
+  """Stable ID, equal to the bundle directory name (e.g. 20260423T002311-2ebaa669)."""
+  id: ID!
+  """Project this execution belongs to."""
+  projectId: String!
+  """Linked bead ID (manifest.bead_id)."""
+  beadId: String
+  """Bead title at the time the execution ran (when manifest carried it)."""
+  beadTitle: String
+  """Linked session ID (result.session_id) if a session was recorded."""
+  sessionId: String
+  """Worker ID if recorded in the manifest."""
+  workerId: String
+  """Harness used (e.g. claude, codex, agent)."""
+  harness: String
+  """Model identifier used."""
+  model: String
+  """Verdict / outcome reported in result.json (e.g. PASS, BLOCK, no_changes, success)."""
+  verdict: String
+  """Status from result.json (success, failure, no_changes, etc.)."""
+  status: String
+  """Human-readable rationale or detail from result.json."""
+  rationale: String
+  """When the bundle was created (manifest.created_at), ISO-8601."""
+  createdAt: DateTime!
+  """When the run started (result.started_at), ISO-8601."""
+  startedAt: DateTime
+  """When the run finished (result.finished_at), ISO-8601."""
+  finishedAt: DateTime
+  """Total duration in milliseconds."""
+  durationMs: Int
+  """Estimated cost in USD."""
+  costUsd: Float
+  """Total token count (when reported)."""
+  tokens: Int
+  """Process exit code from the harness."""
+  exitCode: Int
+  """Git revision the attempt started from."""
+  baseRev: String
+  """Git revision the attempt produced (commit SHA when one was made)."""
+  resultRev: String
+  """Bundle directory (relative to project root)."""
+  bundlePath: String!
+  """Path to the prompt file in the bundle."""
+  promptPath: String
+  """Path to the result file in the bundle."""
+  resultPath: String
+  """Path to the manifest file in the bundle."""
+  manifestPath: String
+  """Path to the agent-log file (when known) carrying tool-call frames."""
+  agentLogPath: String
+  """Prompt body (markdown). Loaded only for execution(id:)."""
+  prompt: String
+  """Manifest JSON as a single string (raw). Loaded only for execution(id:)."""
+  manifest: String
+  """Result JSON as a single string (raw). Loaded only for execution(id:)."""
+  result: String
+}
+
+"""ExecutionEdge is one edge in an ExecutionConnection."""
+type ExecutionEdge {
+  """The execution at this position."""
+  node: Execution!
+  """Opaque cursor for pagination."""
+  cursor: String!
+}
+
+"""ExecutionConnection is a Relay cursor connection of executions."""
+type ExecutionConnection {
+  """Ordered list of execution edges."""
+  edges: [ExecutionEdge!]!
+  """Pagination metadata."""
+  pageInfo: PageInfo!
+  """Total number of executions matching the filter."""
+  totalCount: Int!
+}
+
+"""ExecutionToolCall is one tool_use/tool_result pair in an execution's agent-log stream."""
+type ExecutionToolCall {
+  """Stable index within the stream (used as cursor)."""
+  id: ID!
+  """Tool name (e.g. Bash, Read, Write, Edit)."""
+  name: String!
+  """Sequence number within the stream, starting at 0."""
+  seq: Int!
+  """Frame timestamp (ISO-8601), when present."""
+  ts: DateTime
+  """Tool input as a JSON-encoded string."""
+  inputs: String
+  """Tool output as a string. May be truncated for very large outputs."""
+  output: String
+  """Whether the output payload was truncated for transport."""
+  truncated: Boolean
+}
+
+"""ExecutionToolCallEdge is one edge in an ExecutionToolCallConnection."""
+type ExecutionToolCallEdge {
+  """The tool call at this position."""
+  node: ExecutionToolCall!
+  """Opaque cursor for pagination."""
+  cursor: String!
+}
+
+"""ExecutionToolCallConnection is a Relay cursor connection of tool calls."""
+type ExecutionToolCallConnection {
+  """Ordered list of tool call edges."""
+  edges: [ExecutionToolCallEdge!]!
+  """Pagination metadata."""
+  pageInfo: PageInfo!
+  """Total number of tool calls available in the stream."""
+  totalCount: Int!
+}
+
+# ============================================
 # Coordinators
 # ============================================
 
@@ -2066,6 +2189,68 @@ type Query {
     """Run identifier"""
     runID: ID!
   ): ExecutionRunLog!
+
+  # ==========================================
+  # Execute-bead bundle Queries
+  # ==========================================
+
+  """List execute-bead execution bundles with cursor pagination and filters."""
+  executions(
+    """Project identifier whose .ddx/executions/ directory should be scanned."""
+    projectId: ID!,
+    """Return the first N edges after the cursor."""
+    first: Int,
+    """Cursor to start after."""
+    after: String,
+    """Return the last N edges before the cursor."""
+    last: Int,
+    """Cursor to end before."""
+    before: String,
+    """Filter to executions for a specific bead."""
+    beadId: String,
+    """Filter to a specific verdict (e.g. PASS, BLOCK, no_changes)."""
+    verdict: String,
+    """Filter to a specific harness."""
+    harness: String,
+    """Only include executions starting at or after this timestamp (ISO-8601)."""
+    since: DateTime,
+    """Only include executions starting before this timestamp (ISO-8601)."""
+    until: DateTime,
+    """Free-text search applied to the prompt and bead title."""
+    search: String
+  ): ExecutionConnection!
+
+  """Fetch a single execution bundle by ID, fully materialized (prompt + manifest + result)."""
+  execution(
+    """Execution identifier (bundle directory name)."""
+    id: ID!
+  ): Execution
+
+  """Look up the execution that produced a given session id."""
+  executionBySessionId(
+    """Project to scope the lookup to."""
+    projectId: ID!,
+    """Session id (e.g. eb-…)."""
+    sessionId: String!
+  ): Execution
+
+  """Look up an execution by the commit sha it produced (manifest.result_rev)."""
+  executionByResultRev(
+    """Project to scope the lookup to."""
+    projectId: ID!,
+    """Git commit SHA produced by the execution."""
+    sha: String!
+  ): Execution
+
+  """List tool-call frames for an execution bundle, paginated by sequence."""
+  executionToolCalls(
+    """Execution identifier (bundle directory name)."""
+    id: ID!,
+    """Return the first N edges after the cursor."""
+    first: Int,
+    """Cursor to start after."""
+    after: String
+  ): ExecutionToolCallConnection!
 
   # ==========================================
   # Health Queries

@@ -791,6 +791,84 @@ type Evaluation struct {
 	Thresholds *Thresholds `json:"thresholds,omitempty"`
 }
 
+// Execution represents one execute-bead attempt bundle stored under
+// `.ddx/executions/<ts>-<hash>/`. It joins bead, session, prompt, verdict,
+// and tool-call stream together as the canonical record of a single
+// ddx agent execute-bead attempt.
+type Execution struct {
+	// Stable ID, equal to the bundle directory name (e.g. 20260423T002311-2ebaa669).
+	ID string `json:"id"`
+	// Project this execution belongs to.
+	ProjectID string `json:"projectId"`
+	// Linked bead ID (manifest.bead_id).
+	BeadID *string `json:"beadId,omitempty"`
+	// Bead title at the time the execution ran (when manifest carried it).
+	BeadTitle *string `json:"beadTitle,omitempty"`
+	// Linked session ID (result.session_id) if a session was recorded.
+	SessionID *string `json:"sessionId,omitempty"`
+	// Worker ID if recorded in the manifest.
+	WorkerID *string `json:"workerId,omitempty"`
+	// Harness used (e.g. claude, codex, agent).
+	Harness *string `json:"harness,omitempty"`
+	// Model identifier used.
+	Model *string `json:"model,omitempty"`
+	// Verdict / outcome reported in result.json (e.g. PASS, BLOCK, no_changes, success).
+	Verdict *string `json:"verdict,omitempty"`
+	// Status from result.json (success, failure, no_changes, etc.).
+	Status *string `json:"status,omitempty"`
+	// Human-readable rationale or detail from result.json.
+	Rationale *string `json:"rationale,omitempty"`
+	// When the bundle was created (manifest.created_at), ISO-8601.
+	CreatedAt string `json:"createdAt"`
+	// When the run started (result.started_at), ISO-8601.
+	StartedAt *string `json:"startedAt,omitempty"`
+	// When the run finished (result.finished_at), ISO-8601.
+	FinishedAt *string `json:"finishedAt,omitempty"`
+	// Total duration in milliseconds.
+	DurationMs *int `json:"durationMs,omitempty"`
+	// Estimated cost in USD.
+	CostUsd *float64 `json:"costUsd,omitempty"`
+	// Total token count (when reported).
+	Tokens *int `json:"tokens,omitempty"`
+	// Process exit code from the harness.
+	ExitCode *int `json:"exitCode,omitempty"`
+	// Git revision the attempt started from.
+	BaseRev *string `json:"baseRev,omitempty"`
+	// Git revision the attempt produced (commit SHA when one was made).
+	ResultRev *string `json:"resultRev,omitempty"`
+	// Bundle directory (relative to project root).
+	BundlePath string `json:"bundlePath"`
+	// Path to the prompt file in the bundle.
+	PromptPath *string `json:"promptPath,omitempty"`
+	// Path to the result file in the bundle.
+	ResultPath *string `json:"resultPath,omitempty"`
+	// Path to the manifest file in the bundle.
+	ManifestPath *string `json:"manifestPath,omitempty"`
+	// Path to the agent-log file (when known) carrying tool-call frames.
+	AgentLogPath *string `json:"agentLogPath,omitempty"`
+	// Prompt body (markdown). Loaded only for execution(id:).
+	Prompt *string `json:"prompt,omitempty"`
+	// Manifest JSON as a single string (raw). Loaded only for execution(id:).
+	Manifest *string `json:"manifest,omitempty"`
+	// Result JSON as a single string (raw). Loaded only for execution(id:).
+	Result *string `json:"result,omitempty"`
+}
+
+func (Execution) IsNode() {}
+
+// Globally unique identifier
+func (this Execution) GetID() string { return this.ID }
+
+// ExecutionConnection is a Relay cursor connection of executions.
+type ExecutionConnection struct {
+	// Ordered list of execution edges.
+	Edges []*ExecutionEdge `json:"edges"`
+	// Pagination metadata.
+	PageInfo *PageInfo `json:"pageInfo"`
+	// Total number of executions matching the filter.
+	TotalCount int `json:"totalCount"`
+}
+
 // ExecutionDefinition describes a repeatable execution (check, benchmark, etc.)
 type ExecutionDefinition struct {
 	// Unique definition identifier
@@ -833,6 +911,14 @@ type ExecutionDefinitionEdge struct {
 	// The definition at this position
 	Node *ExecutionDefinition `json:"node"`
 	// Opaque cursor for pagination
+	Cursor string `json:"cursor"`
+}
+
+// ExecutionEdge is one edge in an ExecutionConnection.
+type ExecutionEdge struct {
+	// The execution at this position.
+	Node *Execution `json:"node"`
+	// Opaque cursor for pagination.
 	Cursor string `json:"cursor"`
 }
 
@@ -917,6 +1003,42 @@ type ExecutionRunLog struct {
 	Stdout string `json:"stdout"`
 	// Captured standard error
 	Stderr string `json:"stderr"`
+}
+
+// ExecutionToolCall is one tool_use/tool_result pair in an execution's agent-log stream.
+type ExecutionToolCall struct {
+	// Stable index within the stream (used as cursor).
+	ID string `json:"id"`
+	// Tool name (e.g. Bash, Read, Write, Edit).
+	Name string `json:"name"`
+	// Sequence number within the stream, starting at 0.
+	Seq int `json:"seq"`
+	// Frame timestamp (ISO-8601), when present.
+	Ts *string `json:"ts,omitempty"`
+	// Tool input as a JSON-encoded string.
+	Inputs *string `json:"inputs,omitempty"`
+	// Tool output as a string. May be truncated for very large outputs.
+	Output *string `json:"output,omitempty"`
+	// Whether the output payload was truncated for transport.
+	Truncated *bool `json:"truncated,omitempty"`
+}
+
+// ExecutionToolCallConnection is a Relay cursor connection of tool calls.
+type ExecutionToolCallConnection struct {
+	// Ordered list of tool call edges.
+	Edges []*ExecutionToolCallEdge `json:"edges"`
+	// Pagination metadata.
+	PageInfo *PageInfo `json:"pageInfo"`
+	// Total number of tool calls available in the stream.
+	TotalCount int `json:"totalCount"`
+}
+
+// ExecutionToolCallEdge is one edge in an ExecutionToolCallConnection.
+type ExecutionToolCallEdge struct {
+	// The tool call at this position.
+	Node *ExecutionToolCall `json:"node"`
+	// Opaque cursor for pagination.
+	Cursor string `json:"cursor"`
 }
 
 // ExecutorSpec describes how to invoke an execution

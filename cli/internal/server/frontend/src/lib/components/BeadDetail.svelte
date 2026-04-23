@@ -34,7 +34,40 @@
 		childCount?: number;
 	}
 
-	let { bead: initialBead, onClose }: { bead: Bead; onClose: () => void } = $props();
+	interface BeadExecutionRow {
+		id: string;
+		verdict: string | null;
+		harness: string | null;
+		createdAt: string;
+		durationMs: number | null;
+		costUsd: number | null;
+	}
+
+	let {
+		bead: initialBead,
+		onClose,
+		executions = [],
+		nodeId = '',
+		projectId = ''
+	}: {
+		bead: Bead;
+		onClose: () => void;
+		executions?: BeadExecutionRow[];
+		nodeId?: string;
+		projectId?: string;
+	} = $props();
+
+	function executionHref(executionId: string): string {
+		return `/nodes/${nodeId}/projects/${projectId}/executions/${executionId}`;
+	}
+
+	function fmtExecDate(iso: string): string {
+		try {
+			return new Date(iso).toLocaleString();
+		} catch {
+			return iso;
+		}
+	}
 
 	let bead = $state<Bead>({ ...initialBead });
 	let editing = $state(false);
@@ -376,6 +409,32 @@
 							Notes
 						</dt>
 						<dd class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">{bead.notes}</dd>
+					</div>
+				{/if}
+
+				{#if executions.length > 0}
+					<div data-testid="bead-executions">
+						<dt class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400">
+							Executions ({executions.length})
+						</dt>
+						<dd class="mt-1 space-y-1">
+							{#each executions as exec (exec.id)}
+								<a
+									href={executionHref(exec.id)}
+									class="flex items-center justify-between rounded border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+								>
+									<span class="flex items-center gap-2">
+										<span class="font-mono text-gray-700 dark:text-gray-200">{exec.id}</span>
+										{#if exec.verdict}
+											<span class="rounded border px-1 py-0.5 text-[10px] uppercase">
+												{exec.verdict}
+											</span>
+										{/if}
+									</span>
+									<span class="text-gray-500 dark:text-gray-400">{fmtExecDate(exec.createdAt)}</span>
+								</a>
+							{/each}
+						</dd>
 					</div>
 				{/if}
 

@@ -35,6 +35,19 @@ const BEAD_QUERY = gql`
 				}
 			}
 		}
+		beadExecutions: executions(projectId: $projectID, beadId: $id, first: 50) {
+			edges {
+				node {
+					id
+					verdict
+					harness
+					createdAt
+					durationMs
+					costUsd
+				}
+			}
+			totalCount
+		}
 	}
 `;
 
@@ -67,6 +80,15 @@ export interface BeadDetail {
 
 type BeadQueryDetail = Omit<BeadDetail, 'childCount'>;
 
+export interface BeadExecution {
+	id: string;
+	verdict: string | null;
+	harness: string | null;
+	createdAt: string;
+	durationMs: number | null;
+	costUsd: number | null;
+}
+
 interface BeadResult {
 	bead: BeadQueryDetail | null;
 	projectBeads?: {
@@ -76,6 +98,10 @@ interface BeadResult {
 				parent: string | null;
 			};
 		}>;
+	};
+	beadExecutions?: {
+		edges: Array<{ node: BeadExecution }>;
+		totalCount: number;
 	};
 }
 
@@ -87,7 +113,11 @@ export const load: PageLoad = async ({ params, fetch }) => {
 	});
 	const childCount =
 		data.projectBeads?.edges.filter((edge) => edge.node.parent === data.bead?.id).length ?? 0;
+	const executions = data.beadExecutions?.edges.map((e) => e.node) ?? [];
 	return {
-		bead: data.bead ? { ...data.bead, childCount } : null
+		bead: data.bead ? { ...data.bead, childCount } : null,
+		nodeId: params.nodeId,
+		projectId: params.projectId,
+		executions
 	};
 };
