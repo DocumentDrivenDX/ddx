@@ -630,6 +630,12 @@ type AgentSession implements Node {
   resultRev: String
   """Git revision the session started from"""
   baseRev: String
+  """Prompt body, loaded only for agentSession(id:)"""
+  prompt: String
+  """Response body, loaded only for agentSession(id:)"""
+  response: String
+  """Standard error body, loaded only for agentSession(id:)"""
+  stderr: String
 }
 
 """TokenUsage breaks down token consumption for a session"""
@@ -1802,6 +1808,10 @@ type Query {
     last: Int,
     """Cursor to end before"""
     before: String
+    """Only include sessions starting at or after this timestamp"""
+    startedAfter: DateTime
+    """Only include sessions starting before this timestamp"""
+    startedBefore: DateTime
   ): AgentSessionConnection!
 
   """Fetch a single agent session by ID (maps to GET /api/agent/sessions/{id})"""

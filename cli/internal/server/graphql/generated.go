@@ -49,9 +49,12 @@ type ComplexityRoot struct {
 		Model      func(childComplexity int) int
 		Outcome    func(childComplexity int) int
 		ProjectID  func(childComplexity int) int
+		Prompt     func(childComplexity int) int
+		Response   func(childComplexity int) int
 		ResultRev  func(childComplexity int) int
 		StartedAt  func(childComplexity int) int
 		Status     func(childComplexity int) int
+		Stderr     func(childComplexity int) int
 		StderrPath func(childComplexity int) int
 		StdoutPath func(childComplexity int) int
 		Tokens     func(childComplexity int) int
@@ -729,7 +732,7 @@ type ComplexityRoot struct {
 
 	Query struct {
 		AgentSession                func(childComplexity int, id string) int
-		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string) int
+		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) int
 		Bead                        func(childComplexity int, id string) int
 		BeadDepTree                 func(childComplexity int, beadID string) int
 		Beads                       func(childComplexity int, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) int
@@ -1018,7 +1021,7 @@ type QueryResolver interface {
 	WorkerProgress(ctx context.Context, workerID string) ([]*PhaseTransition, error)
 	WorkerLog(ctx context.Context, workerID string) (*WorkerLog, error)
 	WorkerPrompt(ctx context.Context, workerID string) (string, error)
-	AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string) (*AgentSessionConnection, error)
+	AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) (*AgentSessionConnection, error)
 	AgentSession(ctx context.Context, id string) (*AgentSession, error)
 	Personas(ctx context.Context) ([]*Persona, error)
 	Persona(ctx context.Context, name string) (*Persona, error)
@@ -1142,6 +1145,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentSession.ProjectID(childComplexity), true
+	case "AgentSession.prompt":
+		if e.ComplexityRoot.AgentSession.Prompt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentSession.Prompt(childComplexity), true
+	case "AgentSession.response":
+		if e.ComplexityRoot.AgentSession.Response == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentSession.Response(childComplexity), true
 	case "AgentSession.resultRev":
 		if e.ComplexityRoot.AgentSession.ResultRev == nil {
 			break
@@ -1160,6 +1175,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentSession.Status(childComplexity), true
+	case "AgentSession.stderr":
+		if e.ComplexityRoot.AgentSession.Stderr == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentSession.Stderr(childComplexity), true
 	case "AgentSession.stderrPath":
 		if e.ComplexityRoot.AgentSession.StderrPath == nil {
 			break
@@ -3932,7 +3953,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.AgentSessions(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+		return e.ComplexityRoot.Query.AgentSessions(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["startedAfter"].(*string), args["startedBefore"].(*string)), true
 	case "Query.bead":
 		if e.ComplexityRoot.Query.Bead == nil {
 			break
@@ -5554,6 +5575,16 @@ func (ec *executionContext) field_Query_agentSessions_args(ctx context.Context, 
 		return nil, err
 	}
 	args["before"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "startedAfter", ec.unmarshalODateTime2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["startedAfter"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "startedBefore", ec.unmarshalODateTime2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["startedBefore"] = arg5
 	return args, nil
 }
 
@@ -6936,6 +6967,93 @@ func (ec *executionContext) fieldContext_AgentSession_baseRev(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _AgentSession_prompt(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentSession_prompt,
+		func(ctx context.Context) (any, error) {
+			return obj.Prompt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentSession_prompt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentSession_response(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentSession_response,
+		func(ctx context.Context) (any, error) {
+			return obj.Response, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentSession_response(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentSession_stderr(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentSession_stderr,
+		func(ctx context.Context) (any, error) {
+			return obj.Stderr, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentSession_stderr(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AgentSessionConnection_edges(ctx context.Context, field graphql.CollectedField, obj *AgentSessionConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7099,6 +7217,12 @@ func (ec *executionContext) fieldContext_AgentSessionEdge_node(_ context.Context
 				return ec.fieldContext_AgentSession_resultRev(ctx, field)
 			case "baseRev":
 				return ec.fieldContext_AgentSession_baseRev(ctx, field)
+			case "prompt":
+				return ec.fieldContext_AgentSession_prompt(ctx, field)
+			case "response":
+				return ec.fieldContext_AgentSession_response(ctx, field)
+			case "stderr":
+				return ec.fieldContext_AgentSession_stderr(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AgentSession", field.Name)
 		},
@@ -22034,7 +22158,7 @@ func (ec *executionContext) _Query_agentSessions(ctx context.Context, field grap
 		ec.fieldContext_Query_agentSessions,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().AgentSessions(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().AgentSessions(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["startedAfter"].(*string), fc.Args["startedBefore"].(*string))
 		},
 		nil,
 		ec.marshalNAgentSessionConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentSessionConnection,
@@ -22136,6 +22260,12 @@ func (ec *executionContext) fieldContext_Query_agentSession(ctx context.Context,
 				return ec.fieldContext_AgentSession_resultRev(ctx, field)
 			case "baseRev":
 				return ec.fieldContext_AgentSession_baseRev(ctx, field)
+			case "prompt":
+				return ec.fieldContext_AgentSession_prompt(ctx, field)
+			case "response":
+				return ec.fieldContext_AgentSession_response(ctx, field)
+			case "stderr":
+				return ec.fieldContext_AgentSession_stderr(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AgentSession", field.Name)
 		},
@@ -29306,6 +29436,12 @@ func (ec *executionContext) _AgentSession(ctx context.Context, sel ast.Selection
 			out.Values[i] = ec._AgentSession_resultRev(ctx, field, obj)
 		case "baseRev":
 			out.Values[i] = ec._AgentSession_baseRev(ctx, field, obj)
+		case "prompt":
+			out.Values[i] = ec._AgentSession_prompt(ctx, field, obj)
+		case "response":
+			out.Values[i] = ec._AgentSession_response(ctx, field, obj)
+		case "stderr":
+			out.Values[i] = ec._AgentSession_stderr(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

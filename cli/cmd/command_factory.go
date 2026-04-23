@@ -2,10 +2,8 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -579,25 +577,18 @@ func (f *CommandFactory) resolveAgentSession(sessionID string) *agent.SessionEnt
 		sessionLogDir = cfg.Agent.SessionLogDir
 	}
 
-	logFile := filepath.Join(f.WorkingDir, sessionLogDir, "sessions.jsonl")
-	data, err := os.ReadFile(logFile)
+	logDir := agent.ResolveLogDir(f.WorkingDir, sessionLogDir)
+	idx, ok, err := agent.FindSessionIndex(logDir, sessionID)
 	if err != nil {
 		return nil
 	}
-
-	lines := strings.Split(string(data), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		var entry agent.SessionEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
-		if entry.ID == sessionID {
-			return &entry
-		}
+	if ok {
+		entry := agent.SessionIndexEntryToLegacy(idx)
+		bodies := agent.LoadSessionBodies(f.WorkingDir, idx)
+		entry.Prompt = bodies.Prompt
+		entry.Response = bodies.Response
+		entry.Stderr = bodies.Stderr
+		return &entry
 	}
 	return nil
 }

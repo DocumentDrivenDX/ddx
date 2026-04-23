@@ -28,6 +28,14 @@ func writeJSONL(t *testing.T, path string, values ...any) {
 	}
 }
 
+func writeSessionIndex(t *testing.T, projectRoot, logDir string, entries ...agent.SessionEntry) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	for _, entry := range entries {
+		require.NoError(t, agent.AppendSessionIndex(logDir, agent.SessionIndexEntryFromLegacy(projectRoot, entry), entry.Timestamp))
+	}
+}
+
 func TestAgentUsageIncludesLegacySessionsAndRoutingOutcomes(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
@@ -86,7 +94,7 @@ agent:
 		TraceID:         "trace-current",
 	}
 
-	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), legacySession, mirroredSession)
+	writeSessionIndex(t, dir, logDir, legacySession, mirroredSession)
 	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), routingOutcome)
 
 	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
@@ -162,7 +170,7 @@ agent:
 		CostUSD:         2.50,
 	}
 
-	writeJSONL(t, filepath.Join(logDir, "sessions.jsonl"), legacySession, currentSession)
+	writeSessionIndex(t, dir, logDir, legacySession, currentSession)
 	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), outcome)
 
 	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))

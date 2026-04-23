@@ -60,7 +60,7 @@ type StateProvider interface {
 	GetWorkerPromptGraphQL(id string) string
 
 	// AgentSession queries
-	GetAgentSessionsGraphQL() []*AgentSession
+	GetAgentSessionsGraphQL(startedAfter, startedBefore *time.Time) []*AgentSession
 	GetAgentSessionGraphQL(id string) (*AgentSession, bool)
 
 	// Exec queries

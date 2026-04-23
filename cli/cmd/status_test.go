@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -250,8 +250,18 @@ func TestStatusIncludesAgentUsage(t *testing.T) {
 
 		logDir := filepath.Join(testDir, ".ddx", "agent-logs")
 		require.NoError(t, os.MkdirAll(logDir, 0755))
-		entry := fmt.Sprintf(`{"id":"sess-1","timestamp":%q,"harness":"codex","model":"gpt-test","input_tokens":1234,"output_tokens":567,"cost_usd":1.23,"duration_ms":2000,"exit_code":0}`+"\n", time.Now().UTC().Format(time.RFC3339Nano))
-		require.NoError(t, os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(entry), 0644))
+		entry := agent.SessionEntry{
+			ID:           "sess-1",
+			Timestamp:    time.Now().UTC(),
+			Harness:      "codex",
+			Model:        "gpt-test",
+			InputTokens:  1234,
+			OutputTokens: 567,
+			CostUSD:      1.23,
+			Duration:     2000,
+			ExitCode:     0,
+		}
+		require.NoError(t, agent.AppendSessionIndex(logDir, agent.SessionIndexEntryFromLegacy(testDir, entry), entry.Timestamp))
 
 		factory := NewCommandFactory(testDir)
 		rootCmd := factory.NewRootCommand()

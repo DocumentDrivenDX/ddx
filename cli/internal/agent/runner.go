@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -899,18 +898,7 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 		entry.SpanID = correlation["span_id"]
 	}
 
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return
-	}
-
-	logFile := filepath.Join(dir, "sessions.jsonl")
-	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fmt.Fprintf(f, "%s\n", data)
+	_ = AppendSessionIndex(dir, SessionIndexEntryFromLegacy("", entry), entry.Timestamp)
 }
 
 func genSessionID() string {

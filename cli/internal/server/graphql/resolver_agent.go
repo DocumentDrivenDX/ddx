@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"context"
+	"time"
 )
 
 // Workers is the resolver for the workers field.
@@ -41,8 +42,20 @@ func (r *queryResolver) WorkerPrompt(ctx context.Context, workerID string) (stri
 }
 
 // AgentSessions is the resolver for the agentSessions field.
-func (r *queryResolver) AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string) (*AgentSessionConnection, error) {
-	sessions := r.State.GetAgentSessionsGraphQL()
+func (r *queryResolver) AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) (*AgentSessionConnection, error) {
+	var afterTime *time.Time
+	var beforeTime *time.Time
+	if startedAfter != nil && *startedAfter != "" {
+		if parsed, err := time.Parse(time.RFC3339, *startedAfter); err == nil {
+			afterTime = &parsed
+		}
+	}
+	if startedBefore != nil && *startedBefore != "" {
+		if parsed, err := time.Parse(time.RFC3339, *startedBefore); err == nil {
+			beforeTime = &parsed
+		}
+	}
+	sessions := r.State.GetAgentSessionsGraphQL(afterTime, beforeTime)
 	return agentSessionConnectionFrom(sessions, first, after, last, before), nil
 }
 

@@ -1,13 +1,30 @@
 package processmetrics
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/stretchr/testify/require"
 )
+
+func writeSessionIndexFixture(t *testing.T, projectRoot string, lines []string) {
+	t.Helper()
+	logDir := filepath.Join(projectRoot, agent.DefaultLogDir)
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	for _, line := range lines {
+		var entry agent.SessionEntry
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		idx := agent.SessionIndexEntryFromLegacy(projectRoot, entry)
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(line), &raw))
+		_, idx.CostPresent = raw["cost_usd"]
+		require.NoError(t, agent.AppendSessionIndex(logDir, idx, entry.Timestamp))
+	}
+}
 
 func writeMetricsFixture(t *testing.T) string {
 	t.Helper()
@@ -27,7 +44,7 @@ func writeMetricsFixture(t *testing.T) string {
 		`{"id":"as-002","timestamp":"2026-01-02T00:45:00Z","harness":"claude","model":"claude-sonnet-4-6","prompt_len":120,"input_tokens":1000,"output_tokens":1000,"total_tokens":2000,"duration_ms":2000,"exit_code":0,"correlation":{"bead_id":"bx-002"}}`,
 		`{"id":"as-003","timestamp":"2026-01-03T00:00:00Z","harness":"codex","prompt_len":50,"input_tokens":10,"output_tokens":20,"total_tokens":30,"duration_ms":150,"exit_code":0}`,
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"+sessions[2]+"\n"), 0o644))
+	writeSessionIndexFixture(t, dir, sessions)
 
 	return dir
 }
@@ -49,7 +66,7 @@ func writeZeroCostFixture(t *testing.T) string {
 		`{"id":"as-010","timestamp":"2026-02-01T00:30:00Z","harness":"codex","model":"gpt-5.4","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":0,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-010"}}`,
 		`{"id":"as-011","timestamp":"2026-02-02T00:30:00Z","harness":"codex","model":"qwen/qwen3-coder-30b","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":-1,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-011"}}`,
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"), 0o644))
+	writeSessionIndexFixture(t, dir, sessions)
 
 	return dir
 }
@@ -71,7 +88,7 @@ func writeWindowedMetricsFixture(t *testing.T) string {
 		`{"id":"as-201","timestamp":"2026-01-01T00:30:00Z","harness":"codex","model":"gpt-5.4","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":2.5,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-201"}}`,
 		`{"id":"as-202","timestamp":"2026-03-01T00:45:00Z","harness":"claude","model":"claude-sonnet-4-6","prompt_len":120,"input_tokens":1000,"output_tokens":1000,"total_tokens":2000,"cost_usd":1.0,"duration_ms":2000,"exit_code":0,"correlation":{"bead_id":"bx-202"}}`,
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"), 0o644))
+	writeSessionIndexFixture(t, dir, sessions)
 
 	return dir
 }
@@ -91,7 +108,7 @@ func writeLateUpdateNoFactsFixture(t *testing.T) string {
 	sessions := []string{
 		`{"id":"as-301","timestamp":"2026-01-01T00:30:00Z","harness":"codex","model":"gpt-5.4","prompt_len":100,"input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":2.5,"duration_ms":1000,"exit_code":0,"correlation":{"bead_id":"bx-301"}}`,
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"), 0o644))
+	writeSessionIndexFixture(t, dir, sessions)
 
 	return dir
 }

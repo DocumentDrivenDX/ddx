@@ -5,7 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -194,8 +194,7 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 				return err
 			}
 			if len(rows) == 0 {
-				logFile := filepath.Join(logDir, "sessions.jsonl")
-				rows, err = aggregateUsage(logFile, harness, sinceTime, nil)
+				rows, err = aggregateUsageFromSessionIndex(logDir, harness, sinceTime, nil)
 			}
 			if err != nil {
 				return err
@@ -243,13 +242,41 @@ func parseSince(s string) (time.Time, error) {
 	return t, nil
 }
 
-// aggregateUsage reads sessions.jsonl and returns per-harness aggregates.
+// aggregateUsage reads the sharded session index and returns per-harness aggregates.
 func aggregateUsage(logFile, harnessFilter string, since time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
 	byHarness, order, err := aggregateUsageAggs(logFile, harnessFilter, since, nil, mirrored)
 	if err != nil {
 		return nil, err
 	}
 
+	rows := make([]usageRow, 0, len(order))
+	for _, h := range order {
+		rows = append(rows, byHarness[h].toRow(h))
+	}
+	return rows, nil
+}
+
+func aggregateUsageFromSessionIndex(logDir, harnessFilter string, since time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
+	records, err := readUsageSessionIndexRecords(logDir, harnessFilter, since)
+	if err != nil {
+		return nil, err
+	}
+	byHarness := map[string]*usageAgg{}
+	order := []string{}
+	for _, record := range records {
+		if mirrored != nil && record.key != "" {
+			if _, ok := mirrored[record.key]; ok {
+				continue
+			}
+		}
+		a, exists := byHarness[record.entry.Harness]
+		if !exists {
+			a = &usageAgg{}
+			byHarness[record.entry.Harness] = a
+			order = append(order, record.entry.Harness)
+		}
+		a.addSession(record.entry)
+	}
 	rows := make([]usageRow, 0, len(order))
 	for _, h := range order {
 		rows = append(rows, byHarness[h].toRow(h))
@@ -345,7 +372,7 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 		return nil, nil
 	}
 
-	sessionRecords, err := readUsageSessionRecords(filepath.Join(logDir, "sessions.jsonl"), harnessFilter, since)
+	sessionRecords, err := readUsageSessionIndexRecords(logDir, harnessFilter, since)
 	if err != nil {
 		return nil, err
 	}
@@ -466,6 +493,28 @@ func readUsageSessionRecords(logFile, harnessFilter string, since time.Time) ([]
 		return nil
 	})
 	return records, err
+}
+
+func readUsageSessionIndexRecords(logDir, harnessFilter string, since time.Time) ([]usageSessionRecord, error) {
+	entries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{StartedAfter: &since})
+	if err != nil {
+		return nil, err
+	}
+	records := make([]usageSessionRecord, 0, len(entries))
+	for _, idx := range entries {
+		entry := agent.SessionIndexEntryToLegacy(idx)
+		if harnessFilter != "" && entry.Harness != harnessFilter {
+			continue
+		}
+		records = append(records, usageSessionRecord{
+			entry: entry,
+			key:   usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID),
+		})
+	}
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].entry.Timestamp.Before(records[j].entry.Timestamp)
+	})
+	return records, nil
 }
 
 // formatComma formats an integer with comma separators.

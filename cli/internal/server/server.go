@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -2341,17 +2340,17 @@ func (s *Server) handleAgentSessionDetail(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	sessions, err := s.loadSessionsFor(s.workingDirForRequest(r))
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no sessions found"})
+	workDir := s.workingDirForRequest(r)
+	logDir := agent.SessionLogDirForWorkDir(workDir)
+	idx, ok, err := agent.FindSessionIndex(logDir, id)
+	if err == nil && ok {
+		sess := agent.SessionIndexEntryToLegacy(idx)
+		bodies := agent.LoadSessionBodies(workDir, idx)
+		sess.Prompt = bodies.Prompt
+		sess.Response = bodies.Response
+		sess.Stderr = bodies.Stderr
+		writeJSON(w, http.StatusOK, detailAgentSession(sess))
 		return
-	}
-
-	for _, sess := range sessions {
-		if sess.ID == id {
-			writeJSON(w, http.StatusOK, detailAgentSession(sess))
-			return
-		}
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
 }
@@ -2361,27 +2360,16 @@ func (s *Server) loadSessions() ([]agent.SessionEntry, error) {
 }
 
 func (s *Server) loadSessionsFor(workDir string) ([]agent.SessionEntry, error) {
-	logFile := filepath.Join(workDir, agent.DefaultLogDir, "sessions.jsonl")
-	f, err := os.Open(logFile)
+	logDir := agent.SessionLogDirForWorkDir(workDir)
+	entries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{})
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
-	var sessions []agent.SessionEntry
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-		var entry agent.SessionEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
-		sessions = append(sessions, entry)
+	sessions := make([]agent.SessionEntry, 0, len(entries))
+	for _, entry := range entries {
+		sessions = append(sessions, agent.SessionIndexEntryToLegacy(entry))
 	}
-	return sessions, scanner.Err()
+	return sessions, nil
 }
 
 func summarizeAgentSession(sess agent.SessionEntry) agentSessionSummary {
