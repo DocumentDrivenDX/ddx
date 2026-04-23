@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Review payload is insufficient: the only commit shown is the execution-evidence chore. Re-run the review against the full branch diff (commits `9dc0a408` and any predecessors introducing the harness, `BeadsByProject` scope fix, filter pushdown, `make bench-graphql`, baseline markdown, and Playwright specs) so each AC can be graded against real code.\nExecution events in `manifest.json` also record a prior iter-1 finding (Playwright cross-project test in `beads-smoke.spec.ts:107` navigated to the per-project URL rather than the all-beads route) and a notes-cross-reference gap; confirm both are resolved in the full diff before approving AC §8 and §9."
+}
