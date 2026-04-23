@@ -1,0 +1,1 @@
+{"final":{"status":"success","exit_code":0,"final_text":"\n\nALIVE","duration_ms":62084,"usage":{"input_tokens":808,"output_tokens":24,"total_tokens":832,"source":"fallback"},"routing_actual":{"harness":"agent","provider":"lmstudio-bragi-1234","model":"qwen/qwen3.6-35b-a3b"}},"metadata":null,"time":"2026-04-23T03:55:37.850177267Z","type":"final"}
