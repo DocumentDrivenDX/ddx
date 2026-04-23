@@ -60,6 +60,9 @@ func (systemdBackend) Install(cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(envFile), 0o755); err != nil {
 		return err
 	}
+	if err := os.MkdirAll(filepath.Dir(cfg.LogPath), 0o755); err != nil {
+		return fmt.Errorf("create log dir: %w", err)
+	}
 	if err := writeEnvFile(envFile, cfg.Env); err != nil {
 		return fmt.Errorf("write env file: %w", err)
 	}
