@@ -86,7 +86,7 @@ test: copy-skills
 # Run the GraphQL perf harness (ddx-9ce6842a). Seeds a 10 × 500 bead fixture
 # and records baseline numbers under docs/helix/06-iterate/perf/. Override
 # the fixture size or the report date via BENCH_REPORT_DATE.
-BENCH_REPORT_DIR ?= ../docs/helix/06-iterate/perf
+BENCH_REPORT_DIR ?= $(abspath ../docs/helix/06-iterate/perf)
 BENCH_REPORT_DATE ?= $(shell date -u +%Y-%m-%d)
 bench-graphql:
 	@echo "Running GraphQL perf harness (fixture: 10 × 500 beads = 5,000)..."

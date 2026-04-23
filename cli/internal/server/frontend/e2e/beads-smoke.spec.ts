@@ -35,21 +35,7 @@ async function mockSmokeGraphQL(page: import('@playwright/test').Page, beadCount
 	const beads = generateBeads(beadCount);
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
-		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
-			});
-		} else if (body.query.includes('Projects')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
-				})
-			});
-		} else if (body.query.includes('BeadsByProject') || body.query.includes('beadsByProject')) {
+		if (body.query.includes('beadsByProject')) {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -63,7 +49,7 @@ async function mockSmokeGraphQL(page: import('@playwright/test').Page, beadCount
 					}
 				})
 			});
-		} else if (body.query.includes('query Beads(') || body.query.includes('Beads(')) {
+		} else if (body.query.includes('beads(')) {
 			// Cross-project list fetches the `beads` field.
 			await route.fulfill({
 				status: 200,
@@ -74,8 +60,23 @@ async function mockSmokeGraphQL(page: import('@playwright/test').Page, beadCount
 							edges: beads.map((b, i) => ({ node: b, cursor: `cursor-${i}` })),
 							pageInfo: { hasNextPage: false, endCursor: null },
 							totalCount: beads.length
-						}
+						},
+						projects: { edges: PROJECTS.map((p) => ({ node: p })) }
 					}
+				})
+			});
+		} else if (body.query.includes('nodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
 				})
 			});
 		} else {
@@ -111,7 +112,7 @@ test('smoke: cross-project /beads list is interactive within 2s on 300-bead fixt
 	await mockSmokeGraphQL(page, 300);
 
 	const start = Date.now();
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/beads`);
+	await page.goto(`/nodes/${NODE_INFO.id}/beads`);
 	await expect(page.getByRole('heading', { name: 'Beads' })).toBeVisible({ timeout: 2000 });
 	await expect(page.getByText('Smoke fixture bead 0')).toBeVisible({ timeout: 2000 });
 	const elapsed = Date.now() - start;

@@ -11,7 +11,6 @@
 package perf
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -229,33 +228,26 @@ func seedProjectDocGraph(tb testing.TB, projectPath string, projectIdx, count in
 
 func seedProjectSessions(tb testing.TB, projectPath string, projectIdx, count int) {
 	tb.Helper()
-	sessionsDir := filepath.Join(projectPath, ".ddx", "agent-logs")
-	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
-		tb.Fatalf("perf: mkdir sessions: %v", err)
-	}
-	path := filepath.Join(sessionsDir, "sessions.jsonl")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		tb.Fatalf("perf: open sessions.jsonl: %v", err)
-	}
-	defer f.Close()
-
+	logDir := agent.SessionLogDirForWorkDir(projectPath)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	enc := json.NewEncoder(f)
 	for si := 0; si < count; si++ {
-		e := agent.SessionEntry{
-			ID:        fmt.Sprintf("sess-%02d-%05d", projectIdx, si),
-			Harness:   "claude",
-			Model:     "claude-sonnet-4-6",
-			Timestamp: base.Add(time.Duration(si) * time.Minute),
-			Duration:  1000 + si*10,
-			Correlation: map[string]string{
-				"bead_id": fmt.Sprintf("ddx-perf-%02d-%04d", projectIdx, si%10),
-				"effort":  "medium",
-			},
+		started := base.Add(time.Duration(projectIdx*count+si) * time.Minute)
+		entry := agent.SessionIndexEntry{
+			ID:         fmt.Sprintf("sess-%02d-%05d", projectIdx, si),
+			ProjectID:  agent.ProjectIDForPath(projectPath),
+			BeadID:     fmt.Sprintf("ddx-perf-%02d-%04d", projectIdx, si%10),
+			Harness:    "claude",
+			Surface:    "execute-bead",
+			Model:      "claude-sonnet-4-6",
+			StartedAt:  started,
+			EndedAt:    started.Add(time.Duration(1000+si*10) * time.Millisecond),
+			DurationMS: 1000 + si*10,
+			Tokens:     1000 + si,
+			Outcome:    "success",
+			Effort:     "medium",
 		}
-		if err := enc.Encode(e); err != nil {
-			tb.Fatalf("perf: write session row: %v", err)
+		if err := agent.AppendSessionIndex(logDir, entry, started); err != nil {
+			tb.Fatalf("perf: write session index row: %v", err)
 		}
 	}
 }
