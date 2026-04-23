@@ -154,6 +154,11 @@ func TestNodeIdentityStable(t *testing.T) {
 // GET /api/projects after a fresh server is created against the same state dir.
 func TestStateFileProjectsPersistAcrossRestart(t *testing.T) {
 	t.Setenv("DDX_NODE_NAME", "persist-node")
+	// The work and extra dirs here are t.TempDir() paths under /tmp — the
+	// test-dir sweep would drop them on restart. Disable the filter for this
+	// test since the real target is the persistence mechanism, not the
+	// filter itself.
+	withTestDirFilterDisabled(t)
 
 	workDir := setupTestDir(t)
 

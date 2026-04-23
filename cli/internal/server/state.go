@@ -4,12 +4,72 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
+
+// goTestNameRegexp matches a path segment shaped like a Go test directory:
+// a function name starting with Test followed by an upper-case letter and
+// ending in digits (the numeric suffix that `t.TempDir()` appends). The
+// testing package documents this convention in `(*T).TempDir`.
+var goTestNameRegexp = regexp.MustCompile(`/Test[A-Z][A-Za-z0-9_]*\d+/`)
+
+// testDirFilterOverride is a test-only escape hatch. When set, it fully
+// overrides IsTestDirPath's default behavior so the handful of tests in this
+// package that need to exercise migration/sweep semantics against Go test
+// temp paths can opt out of the filter. Production code MUST NOT set it.
+// Access is guarded because test functions (and their sub-tests) may read
+// the variable concurrently.
+var (
+	testDirFilterOverride   func(path string) bool
+	testDirFilterOverrideMu sync.RWMutex
+)
+
+// IsTestDirPath reports whether path looks like a Go test temp directory
+// that leaked into the server's registered-project list. These entries are
+// never a real user project — they come from tests that forgot to isolate
+// XDG_DATA_HOME. The check is intentionally aggressive: any match here makes
+// the entry ineligible for long-term retention.
+//
+// Polluted state files are the hidden amplifier behind ddx-9ce6842a (beads
+// perf) and ddx-2ceb02fa (sessions feed) — both cross-project queries iterate
+// every registered project, and thousands of phantom /tmp/TestXxx/001
+// entries inflate those loops by orders of magnitude.
+//
+// The rules match the bead contract for ddx-15f7ee0b:
+//   - path starts with /tmp/, /private/tmp/, or /var/folders/ (macOS temp root)
+//   - path contains a /Test[A-Z]\w*\d+/ segment (Go test naming convention)
+func IsTestDirPath(path string) bool {
+	testDirFilterOverrideMu.RLock()
+	override := testDirFilterOverride
+	testDirFilterOverrideMu.RUnlock()
+	if override != nil {
+		return override(path)
+	}
+	if path == "" {
+		return false
+	}
+	if strings.HasPrefix(path, "/tmp/") ||
+		strings.HasPrefix(path, "/private/tmp/") ||
+		strings.HasPrefix(path, "/var/folders/") {
+		return true
+	}
+	// Normalise trailing/leading so the regex sees bounded segments.
+	probe := path
+	if !strings.HasPrefix(probe, "/") {
+		probe = "/" + probe
+	}
+	if !strings.HasSuffix(probe, "/") {
+		probe = probe + "/"
+	}
+	return goTestNameRegexp.MatchString(probe)
+}
 
 // NodeState holds persistent identity for this ddx-server instance.
 type NodeState struct {
@@ -75,7 +135,10 @@ func loadServerState(dir, nodeName string) *ServerState {
 	s.Projects = persisted.Projects
 
 	// Migration: canonicalize paths, resolve linked worktrees, dedupe, sweep.
-	s.migrate()
+	phantoms := s.migrate()
+	if phantoms > 0 {
+		log.Printf("ddx-server: pruned %d phantom test-dir projects from state file", phantoms)
+	}
 	return s
 }
 
@@ -83,10 +146,16 @@ func loadServerState(dir, nodeName string) *ServerState {
 // paths to the primary worktree, deduplicates entries with the same canonical
 // path, and marks entries whose paths no longer exist as unreachable. Entries
 // that are unreachable and whose last_seen is older than 24 h are removed.
+// Test-dir paths (matching IsTestDirPath) are dropped unconditionally — they
+// are never real user projects, only pollution from tests that forgot to
+// isolate XDG_DATA_HOME (ddx-15f7ee0b Fix B).
+//
+// Returns the number of entries dropped because they matched a test-dir
+// pattern, so callers can log the cleanup on startup.
 //
 // This runs once on startup so a state file that accumulated thousands of
 // phantom worktree paths is cleaned up automatically.
-func (s *ServerState) migrate() {
+func (s *ServerState) migrate() int {
 	now := time.Now().UTC()
 	cutoff := now.Add(-24 * time.Hour)
 
@@ -125,9 +194,17 @@ func (s *ServerState) migrate() {
 		}
 	}
 
-	// Pass 3: reachability sweep — stat each path.
+	// Pass 3: reachability + test-dir sweep.
+	phantoms := 0
 	kept := make([]ProjectEntry, 0, len(projects))
 	for _, p := range projects {
+		if IsTestDirPath(p.Path) {
+			// Test-dir pollution is never a real user project. Drop whether or
+			// not the path currently exists on disk — a transient temp dir
+			// should never survive a restart.
+			phantoms++
+			continue
+		}
 		_, statErr := os.Stat(p.Path)
 		if statErr == nil {
 			// Path exists — clear any stale tombstone.
@@ -148,6 +225,7 @@ func (s *ServerState) migrate() {
 		kept = append(kept, p)
 	}
 	s.Projects = kept
+	return phantoms
 }
 
 func (s *ServerState) save() error {
@@ -211,6 +289,8 @@ func (s *ServerState) RegisterProject(path string) ProjectEntry {
 // SweepProjects checks each registered project's path on disk.
 // Paths that no longer exist are marked unreachable with a tombstone timestamp.
 // Entries tombstoned for more than 24 h are removed.
+// Test-dir paths (matching IsTestDirPath) are dropped on every sweep whether
+// or not they still exist on disk — they are never real user projects.
 // Returns the post-sweep project list (all entries, including unreachable).
 func (s *ServerState) SweepProjects() []ProjectEntry {
 	s.mu.Lock()
@@ -221,6 +301,10 @@ func (s *ServerState) SweepProjects() []ProjectEntry {
 
 	kept := make([]ProjectEntry, 0, len(s.Projects))
 	for _, p := range s.Projects {
+		if IsTestDirPath(p.Path) {
+			// Test-dir pollution — drop unconditionally.
+			continue
+		}
 		_, err := os.Stat(p.Path)
 		if err == nil {
 			// Path exists — clear any stale tombstone.
@@ -368,4 +452,91 @@ func runGitCapture(dir string, args ...string) ([]byte, error) {
 	cmd := exec.Command("git", args...) //nolint:gosec
 	cmd.Dir = dir
 	return cmd.Output()
+}
+
+// PruneResult summarises a PruneStateFile operation so callers can print a
+// human-readable summary or write a regression assertion.
+type PruneResult struct {
+	// StateFile is the absolute path to the state file that was read.
+	StateFile string
+	// Total is the number of project entries in the input file.
+	Total int
+	// Dropped is the number of entries that matched IsTestDirPath.
+	Dropped int
+	// Kept is the number of entries that survived the prune (Total - Dropped).
+	Kept int
+	// BackupFile is the absolute path to the backup written before the state
+	// file was overwritten. Empty when DryRun is true.
+	BackupFile string
+	// DryRun, when true, indicates no files were mutated.
+	DryRun bool
+}
+
+// PruneStateFile reads an on-disk ServerState file, drops every project entry
+// whose Path matches IsTestDirPath, writes a timestamped backup alongside the
+// original file, and rewrites the state file in place. When dryRun is true
+// the function computes the counts but makes no filesystem changes beyond
+// reading the input.
+//
+// Implements ddx-15f7ee0b Fix C (`ddx server state prune`). The read-write
+// round-trip preserves every field on the kept entries, including
+// Unreachable / TombstonedAt, because we unmarshal into ServerState.
+//
+// The function is defensive: if the state file is missing or unparseable it
+// returns an error without touching anything.
+func PruneStateFile(path string, dryRun bool) (PruneResult, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return PruneResult{}, fmt.Errorf("resolve state file: %w", err)
+	}
+	res := PruneResult{StateFile: abs, DryRun: dryRun}
+
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return res, fmt.Errorf("read state file %s: %w", abs, err)
+	}
+	var state ServerState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return res, fmt.Errorf("parse state file %s: %w", abs, err)
+	}
+
+	res.Total = len(state.Projects)
+	kept := make([]ProjectEntry, 0, res.Total)
+	for _, p := range state.Projects {
+		if IsTestDirPath(p.Path) {
+			res.Dropped++
+			continue
+		}
+		kept = append(kept, p)
+	}
+	res.Kept = len(kept)
+
+	if dryRun {
+		return res, nil
+	}
+	state.Projects = kept
+
+	// Write timestamped backup next to the state file.
+	stamp := time.Now().UTC().Format("20060102T150405")
+	backup := abs + ".bak-" + stamp
+	if err := os.WriteFile(backup, data, 0o600); err != nil {
+		return res, fmt.Errorf("write backup %s: %w", backup, err)
+	}
+	res.BackupFile = backup
+
+	out, err := json.MarshalIndent(&state, "", "  ")
+	if err != nil {
+		return res, fmt.Errorf("marshal pruned state: %w", err)
+	}
+	if err := os.WriteFile(abs, out, 0o600); err != nil {
+		return res, fmt.Errorf("write state file %s: %w", abs, err)
+	}
+	return res, nil
+}
+
+// DefaultStateFilePath returns the default state file location used by the
+// running ddx-server (XDG_DATA_HOME/ddx/server-state.json). Exposed so the
+// CLI layer can show it in help text and default flag values.
+func DefaultStateFilePath() string {
+	return filepath.Join(serverAddrDir(), "server-state.json")
 }
