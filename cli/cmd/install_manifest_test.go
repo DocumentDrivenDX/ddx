@@ -128,6 +128,18 @@ func TestInstallLocalPreservesExistingProjectPluginDirUnlessForced(t *testing.T)
 	t.Setenv("HOME", homeDir)
 
 	localPlugin := t.TempDir()
+
+	// Explicit cleanup of install artifacts inside the tempdirs. Registered
+	// AFTER all t.TempDir() calls so it runs FIRST (LIFO), letting the
+	// tempdir RemoveAll find an empty tree. Defends against an observed CI
+	// flake where the Linux runner's tempdir RemoveAll occasionally fails
+	// with "directory not empty" on the symlink+yaml combination produced
+	// by the install path.
+	t.Cleanup(func() {
+		_ = os.RemoveAll(filepath.Join(homeDir, ".ddx"))
+		_ = os.RemoveAll(filepath.Join(workDir, ".ddx"))
+		_ = os.RemoveAll(filepath.Join(workDir, ".agents"))
+	})
 	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
 version: 1.0.0
 description: Sample plugin
