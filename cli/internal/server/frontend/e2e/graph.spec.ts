@@ -115,8 +115,8 @@ test('TC-032: D3Graph SVG element is rendered for non-empty graph', async ({ pag
 	await mockGraphQL(page);
 	await page.goto(BASE_URL);
 
-	// The D3Graph component renders an SVG
-	await expect(page.locator('svg')).toBeVisible();
+	// The D3Graph component renders an SVG distinct from navigation icons.
+	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
 });
 
 // TC-033: Empty state is shown when no documents are in the graph
@@ -209,6 +209,10 @@ test('TC-037: integrity panel groups issues by kind with counts and paths', asyn
 	await page.getByTestId('integrity-group-duplicate_id').click();
 	await expect(panel).toContainText('docs/alpha.md');
 	await expect(panel).toContainText('docs/beta.md');
+
+	// Expand Missing dep target group and assert the frontmatter removal snippet is visible.
+	await page.getByTestId('integrity-group-missing_dep').click();
+	await expect(panel.getByTestId('integrity-missing-dep-snippet')).toContainText('- ghost.doc');
 
 	// Clicking the path link navigates to the documents route for that file.
 	const pathLink = panel.getByTestId('integrity-path-link').first();

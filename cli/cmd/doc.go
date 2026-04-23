@@ -76,10 +76,19 @@ func (f *CommandFactory) newDocAuditCommand() *cobra.Command {
 				return err
 			}
 			asJSON, _ := cmd.Flags().GetBool("json")
+			exitZero, _ := cmd.Flags().GetBool("exit-zero")
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(graph.Issues)
+				if err := enc.Encode(graph.Issues); err != nil {
+					return err
+				}
+				if len(graph.Issues) == 0 || exitZero {
+					return nil
+				}
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+				return NewExitError(ExitCodeGeneralError, "")
 			}
 			out := cmd.OutOrStdout()
 			if len(graph.Issues) == 0 {
@@ -112,6 +121,7 @@ func (f *CommandFactory) newDocAuditCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output issues as JSON")
+	cmd.Flags().Bool("exit-zero", false, "Always exit 0 after printing audit output")
 	return cmd
 }
 

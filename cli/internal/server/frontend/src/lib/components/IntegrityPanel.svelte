@@ -95,6 +95,23 @@
 			window.prompt('Copy issue message:', issue.message);
 		}
 	}
+
+	function dependencyRemovalSnippet(issue: GraphIssue): string {
+		const id = (issue.id ?? '').trim();
+		if (!id) return '';
+		return `    - ${id}`;
+	}
+
+	async function copyDependencyRemovalSnippet(issue: GraphIssue, event: Event) {
+		event.stopPropagation();
+		const snippet = dependencyRemovalSnippet(issue);
+		if (!snippet) return;
+		try {
+			await navigator.clipboard.writeText(snippet);
+		} catch {
+			window.prompt('Copy frontmatter line to remove:', snippet);
+		}
+	}
 </script>
 
 <section
@@ -184,6 +201,30 @@
 									>
 										Copy suggested unique ID
 									</button>
+								{/if}
+								{#if group.kind === 'missing_dep' && issue.id}
+									{@const snippet = dependencyRemovalSnippet(issue)}
+									{#if snippet}
+										<div class="flex flex-wrap items-center gap-2 text-xs">
+											<span class="font-medium text-amber-800 dark:text-amber-200">
+												Remove from depends_on
+											</span>
+											<code
+												data-testid="integrity-missing-dep-snippet"
+												class="rounded bg-amber-200 px-2 py-1 font-mono dark:bg-amber-800"
+												>{snippet}</code
+											>
+											<button
+												type="button"
+												class="rounded border border-amber-300 bg-white px-2 py-1 hover:bg-amber-50 dark:border-amber-700 dark:bg-amber-900 dark:hover:bg-amber-800"
+												title="Copy removal snippet"
+												aria-label="Copy missing dependency removal snippet"
+												onclick={(e) => copyDependencyRemovalSnippet(issue, e)}
+											>
+												<Copy class="h-3 w-3" aria-hidden="true" />
+											</button>
+										</div>
+									{/if}
 								{/if}
 							</li>
 						{/each}

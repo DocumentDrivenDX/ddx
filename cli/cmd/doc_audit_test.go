@@ -84,9 +84,9 @@ func TestDocAuditCommand_IssuesExitOne(t *testing.T) {
 	}
 }
 
-// TestDocAuditCommand_JSONOutput verifies the --json flag emits an array of
-// issues consumable by CI tooling.
-func TestDocAuditCommand_JSONOutput(t *testing.T) {
+// TestDocAuditCommand_JSONOutputExitsOne verifies the --json flag emits an
+// array of issues while preserving the audit command's non-zero exit contract.
+func TestDocAuditCommand_JSONOutputExitsOne(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "docs/a.md", "---\nddx:\n  id: shared\n---\n# A\n")
 	writeTestFile(t, dir, "docs/b.md", "---\nddx:\n  id: shared\n---\n# B\n")
@@ -98,9 +98,16 @@ func TestDocAuditCommand_JSONOutput(t *testing.T) {
 	root.SetOut(out)
 	root.SetErr(&bytes.Buffer{})
 
-	// --json always succeeds (exit 0) so piping into jq works.
-	if err := root.Execute(); err != nil {
-		t.Fatalf("doc audit --json should not return error, got: %v", err)
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("doc audit --json on broken repo must return error for exit 1")
+	}
+	exitErr, ok := err.(*ExitError)
+	if !ok {
+		t.Fatalf("expected *ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != ExitCodeGeneralError {
+		t.Errorf("expected exit code %d, got %d", ExitCodeGeneralError, exitErr.Code)
 	}
 
 	outStr := out.String()
@@ -109,5 +116,44 @@ func TestDocAuditCommand_JSONOutput(t *testing.T) {
 	}
 	if !strings.Contains(outStr, `"duplicate_id"`) {
 		t.Errorf("expected duplicate_id in JSON output, got: %q", outStr)
+	}
+}
+
+func TestDocAuditCommand_JSONExitZeroOverride(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "docs/a.md", "---\nddx:\n  id: shared\n---\n# A\n")
+	writeTestFile(t, dir, "docs/b.md", "---\nddx:\n  id: shared\n---\n# B\n")
+
+	root := NewCommandFactory(dir).NewRootCommand()
+	root.SetArgs([]string{"doc", "audit", "--json", "--exit-zero"})
+
+	out := &bytes.Buffer{}
+	root.SetOut(out)
+	root.SetErr(&bytes.Buffer{})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("doc audit --json --exit-zero should succeed, got: %v", err)
+	}
+	if !strings.Contains(out.String(), `"duplicate_id"`) {
+		t.Errorf("expected duplicate_id in JSON output, got: %q", out.String())
+	}
+}
+
+func TestDocsAuditAlias(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "docs/a.md", "---\nddx:\n  id: doc.a\n---\n# A\n")
+
+	root := NewCommandFactory(dir).NewRootCommand()
+	root.SetArgs([]string{"docs", "audit"})
+
+	out := &bytes.Buffer{}
+	root.SetOut(out)
+	root.SetErr(&bytes.Buffer{})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("docs audit alias should succeed on clean repo, got: %v", err)
+	}
+	if !strings.Contains(out.String(), "clean") {
+		t.Errorf("expected clean message, got: %q", out.String())
 	}
 }

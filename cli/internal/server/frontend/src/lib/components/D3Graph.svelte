@@ -176,7 +176,11 @@
 </script>
 
 <div class="relative h-full w-full">
-	<svg bind:this={svgEl} class="h-full w-full text-gray-700 dark:text-gray-300" />
+	<svg
+		bind:this={svgEl}
+		data-testid="doc-graph-svg"
+		class="h-full w-full text-gray-700 dark:text-gray-300"
+	/>
 
 	{#if tooltipNode}
 		<div
