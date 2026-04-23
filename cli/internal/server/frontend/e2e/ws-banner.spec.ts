@@ -35,6 +35,18 @@ async function mockGraphQL(page: import('@playwright/test').Page) {
 					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
 				})
 			});
+		} else if (body.query.includes('ProviderStatuses')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						providerStatuses: [],
+						harnessStatuses: [],
+						defaultRouteStatus: null
+					}
+				})
+			});
 		} else {
 			await route.continue();
 		}

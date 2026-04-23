@@ -13,6 +13,8 @@
 				baseURL
 				model
 				status
+				reachable
+				detail
 				modelCount
 				isDefault
 				cooldownUntil
@@ -38,6 +40,8 @@
 				baseURL
 				model
 				status
+				reachable
+				detail
 				modelCount
 				isDefault
 				cooldownUntil
@@ -86,6 +90,8 @@
 		baseURL: string;
 		model: string;
 		status: string;
+		reachable: boolean;
+		detail: string;
 		modelCount: number;
 		isDefault: boolean;
 		cooldownUntil: string | null;
@@ -134,12 +140,26 @@
 		}
 	});
 
-	function statusClass(status: string): string {
-		const lower = status.toLowerCase();
-		if (lower.includes('connected') || lower === 'available' || lower.includes('api key configured')) {
+	function statusClass(row: ProviderStatus): string {
+		if (row.reachable) {
 			return 'text-green-600 dark:text-green-400';
 		}
-		if (lower.includes('cooldown') || lower.includes('unreachable') || lower.includes('error') || lower === 'unavailable' || lower.startsWith('unavailable')) {
+		const status = row.status;
+		const lower = status.toLowerCase();
+		if (
+			lower.includes('connected') ||
+			lower === 'available' ||
+			lower.includes('api key configured')
+		) {
+			return 'text-green-600 dark:text-green-400';
+		}
+		if (
+			lower.includes('cooldown') ||
+			lower.includes('unreachable') ||
+			lower.includes('error') ||
+			lower === 'unavailable' ||
+			lower.startsWith('unavailable')
+		) {
 			return 'text-red-600 dark:text-red-400';
 		}
 		return 'text-yellow-600 dark:text-yellow-400';
@@ -177,24 +197,32 @@
 		<h1 class="text-xl font-semibold dark:text-white">Agent endpoints</h1>
 		{#if !loading}
 			<span class="text-sm text-gray-500 dark:text-gray-400">
-				{rows.length} total ({rows.filter(r => r.kind === 'ENDPOINT').length} endpoints · {rows.filter(r => r.kind === 'HARNESS').length} harnesses)
+				{rows.length} total ({rows.filter((r) => r.kind === 'ENDPOINT').length} endpoints · {rows.filter(
+					(r) => r.kind === 'HARNESS'
+				).length} harnesses)
 			</span>
 		{/if}
 	</div>
 
 	<!-- Default route widget -->
 	{#if defaultRoute && defaultRoute.modelRef}
-		<div class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+		<div
+			class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50"
+		>
 			<h2 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
 				Current route for default profile
 			</h2>
 			<div class="flex flex-wrap gap-4 text-sm">
 				<span class="text-gray-500 dark:text-gray-400">
-					Model ref: <span class="font-mono font-medium text-gray-900 dark:text-white">{defaultRoute.modelRef}</span>
+					Model ref: <span class="font-mono font-medium text-gray-900 dark:text-white"
+						>{defaultRoute.modelRef}</span
+					>
 				</span>
 				{#if defaultRoute.strategy}
 					<span class="text-gray-500 dark:text-gray-400">
-						Strategy: <span class="font-medium text-gray-700 dark:text-gray-300">{defaultRoute.strategy}</span>
+						Strategy: <span class="font-medium text-gray-700 dark:text-gray-300"
+							>{defaultRoute.strategy}</span
+						>
 					</span>
 				{/if}
 				{#if defaultRoute.resolvedProvider}
@@ -205,7 +233,9 @@
 						</span>
 						{#if defaultRoute.resolvedModel}
 							/
-							<span class="font-mono text-gray-700 dark:text-gray-300">{defaultRoute.resolvedModel}</span>
+							<span class="font-mono text-gray-700 dark:text-gray-300"
+								>{defaultRoute.resolvedModel}</span
+							>
 						{/if}
 					</span>
 				{:else}
@@ -219,9 +249,13 @@
 
 	<!-- Unified table -->
 	{#if loading}
-		<div class="py-8 text-center text-sm text-gray-400 dark:text-gray-600" data-testid="loading">Loading agent endpoints…</div>
+		<div class="py-8 text-center text-sm text-gray-400 dark:text-gray-600" data-testid="loading">
+			Loading agent endpoints…
+		</div>
 	{:else if error}
-		<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div
+			class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+		>
 			Error: {error}
 		</div>
 	{:else}
@@ -234,48 +268,81 @@
 						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Type</th>
 						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Model</th>
 						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Status</th>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Tokens (1h / 24h)</th>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Utilization</th>
+						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+							>Tokens (1h / 24h)</th
+						>
+						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+							>Utilization</th
+						>
 					</tr>
 				</thead>
 				<tbody>
 					{#each rows as row (row.kind + '|' + row.name)}
-						<tr class="border-b border-gray-100 last:border-0 dark:border-gray-700" data-testid="endpoint-row-{row.name}">
+						<tr
+							class="border-b border-gray-100 last:border-0 dark:border-gray-700"
+							data-testid="endpoint-row-{row.name}"
+						>
 							<td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
-								<a class="text-blue-600 hover:underline dark:text-blue-400" href={detailHref(row)} data-testid="endpoint-link-{row.name}">{row.name}</a>
+								<a
+									class="text-blue-600 hover:underline dark:text-blue-400"
+									href={detailHref(row)}
+									data-testid="endpoint-link-{row.name}">{row.name}</a
+								>
 								{#if row.isDefault}
-									<span class="ml-1 inline-flex items-center rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+									<span
+										class="ml-1 inline-flex items-center rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+									>
 										default
 									</span>
 								{/if}
 								{#if row.cooldownUntil}
-									<span class="ml-1 inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300"
-										title="Cooldown until {row.cooldownUntil}">
+									<span
+										class="ml-1 inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300"
+										title="Cooldown until {row.cooldownUntil}"
+									>
 										cooldown
 									</span>
 								{/if}
 							</td>
-							<td class="px-4 py-3 text-xs uppercase text-gray-500 dark:text-gray-400" data-testid="endpoint-kind-{row.name}">
+							<td
+								class="px-4 py-3 text-xs text-gray-500 uppercase dark:text-gray-400"
+								data-testid="endpoint-kind-{row.name}"
+							>
 								{row.kind === 'ENDPOINT' ? 'endpoint' : 'harness'}
 							</td>
 							<td class="px-4 py-3 text-gray-600 dark:text-gray-400">
 								{row.providerType}
 							</td>
-							<td class="max-w-xs truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300"
-								title={row.model}>
+							<td
+								class="max-w-xs truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300"
+								title={row.model}
+							>
 								{row.model || '—'}
 							</td>
 							<td class="px-4 py-3">
-								<span class="font-medium {statusClass(row.status)}">
+								<span
+									class="font-medium {statusClass(row)}"
+									data-testid="endpoint-reachable-{row.name}"
+								>
+									{row.reachable ? 'reachable' : 'not reachable'}
+								</span>
+								<span class="ml-1 text-gray-500 dark:text-gray-400" title={row.detail}>
 									{row.status}
 								</span>
 								{#if row.lastCheckedAt}
-									<span class="ml-1 text-xs text-gray-400" title="Last checked {row.lastCheckedAt}">·</span>
+									<span class="ml-1 text-xs text-gray-400" title="Last checked {row.lastCheckedAt}"
+										>·</span
+									>
 								{/if}
 							</td>
-							<td class="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300" data-testid="endpoint-tokens-{row.name}">
+							<td
+								class="px-4 py-3 text-gray-600 tabular-nums dark:text-gray-300"
+								data-testid="endpoint-tokens-{row.name}"
+							>
 								{#if row.usage}
-									{formatTokens(row.usage.tokensUsedLastHour)} / {formatTokens(row.usage.tokensUsedLast24h)}
+									{formatTokens(row.usage.tokensUsedLastHour)} / {formatTokens(
+										row.usage.tokensUsedLast24h
+									)}
 								{:else}
 									<span class="text-gray-400">not reported</span>
 								{/if}
@@ -284,9 +351,12 @@
 								{#if utilizationPct(row.usage, row.quota) != null}
 									<div class="flex items-center gap-2">
 										<div class="h-2 w-20 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-											<div class="h-full bg-blue-500" style="width: {utilizationPct(row.usage, row.quota)}%"></div>
+											<div
+												class="h-full bg-blue-500"
+												style="width: {utilizationPct(row.usage, row.quota)}%"
+											></div>
 										</div>
-										<span class="text-xs tabular-nums text-gray-500 dark:text-gray-400">
+										<span class="text-xs text-gray-500 tabular-nums dark:text-gray-400">
 											{utilizationPct(row.usage, row.quota)}%
 										</span>
 									</div>
@@ -299,7 +369,8 @@
 					{#if rows.length === 0}
 						<tr>
 							<td colspan="7" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
-								No agent endpoints configured. Add providers to .ddx/config.yaml or install a harness binary.
+								No agent endpoints configured. Add providers to .ddx/config.yaml or install a
+								harness binary.
 							</td>
 						</tr>
 					{/if}

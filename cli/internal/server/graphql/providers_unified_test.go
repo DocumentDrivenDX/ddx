@@ -25,6 +25,26 @@ func writeMinimalConfig(t *testing.T, workDir string) {
 	}
 }
 
+func writeEndpointConfig(t *testing.T, workDir string) string {
+	t.Helper()
+	ddxDir := filepath.Join(workDir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `version: "1.0"
+bead:
+  id_prefix: "pt"
+agent:
+  endpoints:
+    - type: lmstudio
+      base_url: http://127.0.0.1:9/v1
+`
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return "lmstudio-127-0-0-1-9"
+}
+
 // TestHarnessStatusesIncludesSubprocessHarnesses asserts claude and codex
 // show up as kind=HARNESS when their binaries are installed on PATH.
 // Satisfies AC 1 row "Subprocess harnesses claude and codex appear in the table".
@@ -49,6 +69,9 @@ func TestHarnessStatusesIncludesSubprocessHarnesses(t *testing.T) {
 		if s.LastCheckedAt == nil || *s.LastCheckedAt == "" {
 			t.Errorf("harness %q: missing lastCheckedAt", s.Name)
 		}
+		if s.Detail == "" {
+			t.Errorf("harness %q: missing detail", s.Name)
+		}
 		byName[s.Name] = s
 	}
 
@@ -69,17 +92,30 @@ func TestHarnessStatusesIncludesSubprocessHarnesses(t *testing.T) {
 // resolver now annotates rows with kind=ENDPOINT and lastCheckedAt — AC 1.
 func TestProviderStatusesHasKindAndLastCheckedAt(t *testing.T) {
 	workDir := t.TempDir()
-	writeMinimalConfig(t, workDir)
+	endpointName := writeEndpointConfig(t, workDir)
 
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	start := time.Now()
 	statuses, err := r.ProviderStatuses(context.Background())
 	if err != nil {
 		t.Fatalf("ProviderStatuses: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("ProviderStatuses took %s; expected configured snapshot first-paint under 500ms", elapsed)
+	}
+	if len(statuses) != 1 || statuses[0].Name != endpointName {
+		t.Fatalf("expected configured endpoint %q, got %#v", endpointName, statuses)
 	}
 	// Even when zero endpoints are configured, the resolver must succeed.
 	for _, s := range statuses {
 		if s.Kind != ProviderKindEndpoint {
 			t.Errorf("endpoint row %q: got kind %q want ENDPOINT", s.Name, s.Kind)
+		}
+		if s.Reachable {
+			t.Errorf("endpoint row %q: configured snapshot must not fabricate reachability", s.Name)
+		}
+		if s.Detail == "" {
+			t.Errorf("endpoint row %q: missing detail", s.Name)
 		}
 		if s.LastCheckedAt == nil || *s.LastCheckedAt == "" {
 			t.Errorf("endpoint row %q: missing lastCheckedAt", s.Name)
@@ -94,55 +130,55 @@ func TestProviderStatusesHasKindAndLastCheckedAt(t *testing.T) {
 // usage counts populate correctly. AC 2 row "Deliverable 2 usage+quota".
 func TestProviderStatusesUsageFromSessionIndex(t *testing.T) {
 	workDir := t.TempDir()
-	writeMinimalConfig(t, workDir)
+	endpointName := writeEndpointConfig(t, workDir)
 
 	now := time.Now().UTC()
-	// 3 sessions for harness=claude in last hour, 1 more from 5h ago.
+	// 3 sessions for endpoint provider in last hour, 1 more from 5h ago.
 	appendSessionForTest(t, workDir, agent.SessionIndexEntry{
-		ID: "s1", Harness: "claude", Provider: "anthropic", Model: "m",
+		ID: "s1", Harness: "agent", Provider: endpointName, Model: "m",
 		StartedAt: now.Add(-10 * time.Minute), Tokens: 1000, Outcome: "success",
 	}, now.Add(-10*time.Minute))
 	appendSessionForTest(t, workDir, agent.SessionIndexEntry{
-		ID: "s2", Harness: "claude", Provider: "anthropic", Model: "m",
+		ID: "s2", Harness: "agent", Provider: endpointName, Model: "m",
 		StartedAt: now.Add(-30 * time.Minute), Tokens: 2000, Outcome: "success",
 	}, now.Add(-30*time.Minute))
 	appendSessionForTest(t, workDir, agent.SessionIndexEntry{
-		ID: "s3", Harness: "claude", Provider: "anthropic", Model: "m",
+		ID: "s3", Harness: "agent", Provider: endpointName, Model: "m",
 		StartedAt: now.Add(-55 * time.Minute), Tokens: 500, Outcome: "success",
 	}, now.Add(-55*time.Minute))
 	appendSessionForTest(t, workDir, agent.SessionIndexEntry{
-		ID: "s4", Harness: "claude", Provider: "anthropic", Model: "m",
+		ID: "s4", Harness: "agent", Provider: endpointName, Model: "m",
 		StartedAt: now.Add(-5 * time.Hour), Tokens: 400, Outcome: "success",
 	}, now.Add(-5*time.Hour))
 
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
-	statuses, err := r.HarnessStatuses(context.Background())
+	statuses, err := r.ProviderStatuses(context.Background())
 	if err != nil {
-		t.Fatalf("HarnessStatuses: %v", err)
+		t.Fatalf("ProviderStatuses: %v", err)
 	}
-	var claude *ProviderStatus
+	var endpoint *ProviderStatus
 	for _, s := range statuses {
-		if s.Name == "claude" {
-			claude = s
+		if s.Name == endpointName {
+			endpoint = s
 			break
 		}
 	}
-	if claude == nil {
-		t.Fatal("expected claude harness row")
+	if endpoint == nil {
+		t.Fatal("expected endpoint provider row")
 	}
-	if claude.Usage == nil {
+	if endpoint.Usage == nil {
 		t.Fatal("expected usage populated from session index")
 	}
-	if got := deref(claude.Usage.TokensUsedLastHour); got != 3500 {
+	if got := deref(endpoint.Usage.TokensUsedLastHour); got != 3500 {
 		t.Errorf("tokensUsedLastHour: got %d want 3500", got)
 	}
-	if got := deref(claude.Usage.TokensUsedLast24h); got != 3900 {
+	if got := deref(endpoint.Usage.TokensUsedLast24h); got != 3900 {
 		t.Errorf("tokensUsedLast24h: got %d want 3900", got)
 	}
-	if got := deref(claude.Usage.RequestsLastHour); got != 3 {
+	if got := deref(endpoint.Usage.RequestsLastHour); got != 3 {
 		t.Errorf("requestsLastHour: got %d want 3", got)
 	}
-	if got := deref(claude.Usage.RequestsLast24h); got != 4 {
+	if got := deref(endpoint.Usage.RequestsLast24h); got != 4 {
 		t.Errorf("requestsLast24h: got %d want 4", got)
 	}
 }
@@ -200,6 +236,24 @@ func TestProviderTrendRejectsBadWindow(t *testing.T) {
 	}
 	if _, err := r.ProviderTrend(context.Background(), "", 7); err == nil {
 		t.Error("expected error for empty name")
+	}
+}
+
+func TestProjectRunOutHoursUsesRemainingHeadroom(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Hour)
+	buckets := make([]agent.UsageBucket, 24)
+	for i := range buckets {
+		buckets[i] = agent.UsageBucket{
+			Start:  now.Add(time.Duration(i-23) * time.Hour),
+			Tokens: 1000 + i*100,
+		}
+	}
+	hours := projectRunOutHours(buckets, 10_000)
+	if hours <= 0 {
+		t.Fatalf("expected positive projection, got %f", hours)
+	}
+	if hours < 90 || hours > 110 {
+		t.Fatalf("projection hours = %f, want roughly 100", hours)
 	}
 }
 

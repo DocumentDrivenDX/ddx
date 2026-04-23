@@ -1397,6 +1397,10 @@ type ProviderStatus {
   model: String!
   """Live connectivity status message"""
   status: String!
+  """True when the last-known status says this endpoint/harness can accept work."""
+  reachable: Boolean!
+  """Human-readable detail explaining the current status."""
+  detail: String!
   """Number of models discovered via /v1/models (endpoints) or harness model count (harnesses)."""
   modelCount: Int!
   """True when this is the default provider/harness."""

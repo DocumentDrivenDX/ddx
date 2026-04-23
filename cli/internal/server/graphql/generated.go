@@ -752,6 +752,7 @@ type ComplexityRoot struct {
 		BaseURL           func(childComplexity int) int
 		CooldownUntil     func(childComplexity int) int
 		DefaultForProfile func(childComplexity int) int
+		Detail            func(childComplexity int) int
 		IsDefault         func(childComplexity int) int
 		Kind              func(childComplexity int) int
 		LastCheckedAt     func(childComplexity int) int
@@ -760,6 +761,7 @@ type ComplexityRoot struct {
 		Name              func(childComplexity int) int
 		ProviderType      func(childComplexity int) int
 		Quota             func(childComplexity int) int
+		Reachable         func(childComplexity int) int
 		Status            func(childComplexity int) int
 		Usage             func(childComplexity int) int
 	}
@@ -4146,6 +4148,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ProviderStatus.DefaultForProfile(childComplexity), true
+	case "ProviderStatus.detail":
+		if e.ComplexityRoot.ProviderStatus.Detail == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Detail(childComplexity), true
 	case "ProviderStatus.isDefault":
 		if e.ComplexityRoot.ProviderStatus.IsDefault == nil {
 			break
@@ -4194,6 +4202,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ProviderStatus.Quota(childComplexity), true
+	case "ProviderStatus.reachable":
+		if e.ComplexityRoot.ProviderStatus.Reachable == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Reachable(childComplexity), true
 	case "ProviderStatus.status":
 		if e.ComplexityRoot.ProviderStatus.Status == nil {
 			break
@@ -22185,6 +22199,64 @@ func (ec *executionContext) fieldContext_ProviderStatus_status(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _ProviderStatus_reachable(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_reachable,
+		func(ctx context.Context) (any, error) {
+			return obj.Reachable, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_reachable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_detail(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_detail,
+		func(ctx context.Context) (any, error) {
+			return obj.Detail, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_detail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ProviderStatus_modelCount(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25368,6 +25440,10 @@ func (ec *executionContext) fieldContext_Query_providerStatuses(_ context.Contex
 				return ec.fieldContext_ProviderStatus_model(ctx, field)
 			case "status":
 				return ec.fieldContext_ProviderStatus_status(ctx, field)
+			case "reachable":
+				return ec.fieldContext_ProviderStatus_reachable(ctx, field)
+			case "detail":
+				return ec.fieldContext_ProviderStatus_detail(ctx, field)
 			case "modelCount":
 				return ec.fieldContext_ProviderStatus_modelCount(ctx, field)
 			case "isDefault":
@@ -25425,6 +25501,10 @@ func (ec *executionContext) fieldContext_Query_harnessStatuses(_ context.Context
 				return ec.fieldContext_ProviderStatus_model(ctx, field)
 			case "status":
 				return ec.fieldContext_ProviderStatus_status(ctx, field)
+			case "reachable":
+				return ec.fieldContext_ProviderStatus_reachable(ctx, field)
+			case "detail":
+				return ec.fieldContext_ProviderStatus_detail(ctx, field)
 			case "modelCount":
 				return ec.fieldContext_ProviderStatus_modelCount(ctx, field)
 			case "isDefault":
@@ -36819,6 +36899,16 @@ func (ec *executionContext) _ProviderStatus(ctx context.Context, sel ast.Selecti
 			}
 		case "status":
 			out.Values[i] = ec._ProviderStatus_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reachable":
+			out.Values[i] = ec._ProviderStatus_reachable(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "detail":
+			out.Values[i] = ec._ProviderStatus_detail(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
