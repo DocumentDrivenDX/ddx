@@ -191,6 +191,13 @@ func (p *testStateProvider) GetBeadSnapshots(status, label, projectID, search st
 	return out
 }
 
+func (p *testStateProvider) GetBeadSnapshotsForProject(projectID, status, label, search string) []ddxgraphql.BeadSnapshot {
+	if projectID == "" {
+		return nil
+	}
+	return p.GetBeadSnapshots(status, label, projectID, search)
+}
+
 func (p *testStateProvider) GetBeadSnapshot(id string) (*ddxgraphql.BeadSnapshot, bool) {
 	for _, b := range p.beads {
 		if b.ID == id {

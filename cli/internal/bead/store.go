@@ -143,8 +143,32 @@ func (s *Store) GenID() (string, error) {
 
 // ReadAll loads all beads from the configured backend.
 func (s *Store) ReadAll() ([]Bead, error) {
+	return s.ReadAllFiltered(nil)
+}
+
+// ReadAllFiltered loads all beads, folds them by latest-wins, and returns only
+// those for which the predicate returns true. When the predicate is nil every
+// bead is returned (equivalent to ReadAll). The predicate is applied at the
+// per-entry parse boundary after fold — matched beads are appended directly to
+// the return slice without first being held in an intermediate full-corpus
+// list, so queries that match a small subset avoid materializing the
+// mismatches (ddx-9ce6842a Part 2 step 2: filter pushdown).
+func (s *Store) ReadAllFiltered(pred func(Bead) bool) ([]Bead, error) {
 	if s.backend != nil {
-		return s.backend.ReadAll()
+		all, err := s.backend.ReadAll()
+		if err != nil {
+			return nil, err
+		}
+		if pred == nil {
+			return all, nil
+		}
+		out := make([]Bead, 0, len(all))
+		for _, b := range all {
+			if pred(b) {
+				out = append(out, b)
+			}
+		}
+		return out, nil
 	}
 	beads, warnings, err := s.readAllRaw()
 	if err != nil {
@@ -166,7 +190,16 @@ func (s *Store) ReadAll() ([]Bead, error) {
 	if len(beads) == 0 && len(warnings) > 0 {
 		return nil, fmt.Errorf("bead: read %s: %d malformed record(s), 0 valid", s.File, len(warnings))
 	}
-	return beads, nil
+	if pred == nil {
+		return beads, nil
+	}
+	out := make([]Bead, 0, len(beads))
+	for _, b := range beads {
+		if pred(b) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
 }
 
 func (s *Store) readAllRaw() ([]Bead, []string, error) {
