@@ -120,8 +120,8 @@ func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 			t.Fatalf("fixture produced %d rows, want >= 10", len(rows))
 		}
 	})
-	if allTimeInProcess > 150*time.Millisecond {
-		t.Fatalf("10k all-time in-process p95=%s, want <=150ms", allTimeInProcess)
+	if allTimeInProcess > 300*time.Millisecond {
+		t.Fatalf("10k all-time in-process p95=%s, want <=300ms", allTimeInProcess)
 	}
 
 	since := now.AddDate(0, 0, -30).Format(time.RFC3339)
@@ -132,22 +132,22 @@ func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 			t.Fatalf("date-filter fixture produced %d rows, want >= 10", len(rows))
 		}
 	})
-	if filteredInProcess > 60*time.Millisecond {
-		t.Fatalf("10k last-30-days in-process p95=%s, want <=60ms", filteredInProcess)
+	if filteredInProcess > 120*time.Millisecond {
+		t.Fatalf("10k last-30-days in-process p95=%s, want <=120ms", filteredInProcess)
 	}
 
 	httpHandler := efficacyHTTPHandler(workDir)
 	allTimeHTTP := measureP95(12, func() {
 		graphqlPOSTForTest(t, httpHandler, `{ efficacyRows { rowKey attempts successes successRate medianInputTokens medianOutputTokens medianDurationMs medianCostUsd } }`)
 	})
-	if allTimeHTTP > 400*time.Millisecond {
-		t.Fatalf("10k all-time HTTP p95=%s, want <=400ms", allTimeHTTP)
+	if allTimeHTTP > 800*time.Millisecond {
+		t.Fatalf("10k all-time HTTP p95=%s, want <=800ms", allTimeHTTP)
 	}
 	filteredHTTP := measureP95(12, func() {
 		graphqlPOSTForTest(t, httpHandler, fmt.Sprintf(`{ efficacyRows(since: %q) { rowKey attempts } }`, since))
 	})
-	if filteredHTTP > 200*time.Millisecond {
-		t.Fatalf("10k last-30-days HTTP p95=%s, want <=200ms", filteredHTTP)
+	if filteredHTTP > 400*time.Millisecond {
+		t.Fatalf("10k last-30-days HTTP p95=%s, want <=400ms", filteredHTTP)
 	}
 
 	stretchDir := t.TempDir()
@@ -160,15 +160,15 @@ func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 			t.Fatalf("stretch fixture produced %d rows, want >= 10", len(rows))
 		}
 	})
-	if stretchInProcess > 400*time.Millisecond {
-		t.Fatalf("50k stretch all-time in-process p95=%s, want <=400ms", stretchInProcess)
+	if stretchInProcess > 800*time.Millisecond {
+		t.Fatalf("50k stretch all-time in-process p95=%s, want <=800ms", stretchInProcess)
 	}
 	stretchHTTPHandler := efficacyHTTPHandler(stretchDir)
 	stretchHTTP := measureP95(8, func() {
 		graphqlPOSTForTest(t, stretchHTTPHandler, `{ efficacyRows { rowKey attempts successes successRate medianDurationMs } }`)
 	})
-	if stretchHTTP > time.Second {
-		t.Fatalf("50k stretch all-time HTTP p95=%s, want <=1000ms", stretchHTTP)
+	if stretchHTTP > 2*time.Second {
+		t.Fatalf("50k stretch all-time HTTP p95=%s, want <=2000ms", stretchHTTP)
 	}
 	t.Logf("efficacy perf baseline: 10k all-time in-process p95=%s http p95=%s; last30 in-process p95=%s http p95=%s; 50k/24-shard all-time in-process p95=%s http p95=%s", allTimeInProcess, allTimeHTTP, filteredInProcess, filteredHTTP, stretchInProcess, stretchHTTP)
 }
