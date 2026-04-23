@@ -66,6 +66,7 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		Provider      string `json:"provider"`
 		ModelRef      string `json:"model_ref"`
 		Effort        string `json:"effort"`
+		LabelFilter   string `json:"label_filter"`
 		Once          bool   `json:"once"`
 		PollInterval  string `json:"poll_interval"`
 		NoReview      bool   `json:"no_review"`
@@ -97,6 +98,7 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		Provider:      req.Provider,
 		ModelRef:      req.ModelRef,
 		Effort:        req.Effort,
+		LabelFilter:   req.LabelFilter,
 		Once:          req.Once,
 		PollInterval:  pollInterval,
 		NoReview:      req.NoReview,
@@ -112,5 +114,26 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		ID:    record.ID,
 		State: record.State,
 		Kind:  record.Kind,
+	}, nil
+}
+
+func (a *workerDispatchAdapter) StopWorker(ctx context.Context, id string) (*ddxgraphql.WorkerLifecycleResult, error) {
+	if a == nil || a.manager == nil {
+		return nil, fmt.Errorf("worker dispatcher is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := a.manager.Stop(id); err != nil {
+		return nil, err
+	}
+	rec, err := a.manager.Show(id)
+	if err != nil {
+		return &ddxgraphql.WorkerLifecycleResult{ID: id, State: "stopping", Kind: "execute-loop"}, nil
+	}
+	return &ddxgraphql.WorkerLifecycleResult{
+		ID:    rec.ID,
+		State: rec.State,
+		Kind:  rec.Kind,
 	}, nil
 }

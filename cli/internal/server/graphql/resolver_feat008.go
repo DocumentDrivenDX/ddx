@@ -69,6 +69,44 @@ func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, proj
 	}
 }
 
+// StartWorker is the resolver for the startWorker field.
+func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInput) (*WorkerDispatchResult, error) {
+	if r.Actions == nil {
+		return nil, fmt.Errorf("execute-loop worker dispatcher is not configured")
+	}
+	args := map[string]string{}
+	if input.Harness != nil && strings.TrimSpace(*input.Harness) != "" {
+		args["harness"] = strings.TrimSpace(*input.Harness)
+	}
+	profile := "smart"
+	if input.Profile != nil && strings.TrimSpace(*input.Profile) != "" {
+		profile = strings.TrimSpace(*input.Profile)
+	}
+	args["profile"] = profile
+	effort := "medium"
+	if input.Effort != nil && strings.TrimSpace(*input.Effort) != "" {
+		effort = strings.TrimSpace(*input.Effort)
+	}
+	args["effort"] = effort
+	if input.LabelFilter != nil && strings.TrimSpace(*input.LabelFilter) != "" {
+		args["label_filter"] = strings.TrimSpace(*input.LabelFilter)
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	rawArgs := string(raw)
+	return r.Actions.DispatchWorker(ctx, "execute-loop", r.projectRoot(input.ProjectID), &rawArgs)
+}
+
+// StopWorker is the resolver for the stopWorker field.
+func (r *mutationResolver) StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error) {
+	if r.Actions == nil {
+		return nil, fmt.Errorf("execute-loop worker dispatcher is not configured")
+	}
+	return r.Actions.StopWorker(ctx, id)
+}
+
 // PluginDispatch is the resolver for the pluginDispatch field.
 func (r *mutationResolver) PluginDispatch(ctx context.Context, name string, action string, scope string) (*PluginDispatchResult, error) {
 	name = strings.TrimSpace(name)

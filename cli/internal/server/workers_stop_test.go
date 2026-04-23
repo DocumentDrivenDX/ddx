@@ -38,6 +38,11 @@ func TestWorkerManagerStopSetsStoppedState(t *testing.T) {
 		"Stop must flip WorkerRecord.State to 'stopped' (not 'exited' or 'failed')")
 	assert.Equal(t, "stopped", final.Status)
 	assert.False(t, final.FinishedAt.IsZero(), "FinishedAt must be set on stop")
+	require.Len(t, final.Lifecycle, 2)
+	assert.Equal(t, "start", final.Lifecycle[0].Action)
+	assert.Equal(t, "local-operator", final.Lifecycle[0].Actor)
+	assert.Equal(t, "stop", final.Lifecycle[1].Action)
+	assert.Equal(t, "local-operator", final.Lifecycle[1].Actor)
 }
 
 // TestWorkerManagerStopIsIdempotent verifies that a second Stop call is a
@@ -68,6 +73,27 @@ func TestWorkerManagerStopUnknownWorker(t *testing.T) {
 
 	err := m.Stop("worker-does-not-exist")
 	require.Error(t, err)
+}
+
+func TestWorkerDispatchAdapterStopWorkerUsesWorkerManagerStop(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(m.rootDir, "worker-graphql-stop"), 0o755))
+	now := time.Now().UTC()
+	handle, cancelled := newIdleHandle(t, m, "worker-graphql-stop", "", now.Add(-time.Second), now.Add(-time.Second))
+
+	result, err := (&workerDispatchAdapter{manager: m}).StopWorker(t.Context(), "worker-graphql-stop")
+	require.NoError(t, err)
+	assert.Equal(t, "worker-graphql-stop", result.ID)
+	assert.Equal(t, "stopped", result.State)
+	assert.True(t, cancelled.Load(), "GraphQL stop adapter must invoke WorkerManager.Stop cancellation")
+
+	m.mu.Lock()
+	state := handle.record.State
+	m.mu.Unlock()
+	assert.Equal(t, "stopped", state)
 }
 
 // TestWorkerManagerStopReleasesBeadClaim: when the worker has claimed a bead,

@@ -49,6 +49,42 @@ func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 	assert.Equal(t, "success", events[0].Summary)
 }
 
+func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+	require.NoError(t, store.Update(second.ID, func(b *bead.Bead) {
+		b.Labels = []string{"ui"}
+	}))
+
+	var executed []string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executed = append(executed, beadID)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "merged cleanly",
+				SessionID: "sess-filter",
+				ResultRev: "cafe",
+			}, nil
+		}),
+	}
+
+	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+		Assignee:    "worker",
+		Once:        true,
+		LabelFilter: "ui",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, []string{second.ID}, executed)
+	assert.Equal(t, 1, result.Attempts)
+
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+}
+
 func TestExecuteBeadWorkerPreservedFailureStaysOpenAndContinues(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	executed := []string{}

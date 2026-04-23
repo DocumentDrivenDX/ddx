@@ -109,11 +109,28 @@
 				return 'text-gray-500 dark:text-gray-400';
 		}
 	}
+
+	function workersHref(): string {
+		return `/nodes/${data.nodeId}/projects/${data.projectId}/workers`;
+	}
+
+	function workerHref(workerId: string): string {
+		return `/nodes/${data.nodeId}/projects/${data.projectId}/workers/${workerId}`;
+	}
 </script>
 
 <div class="space-y-4">
-	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold dark:text-white">Sessions</h1>
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+		<div>
+			<h1 class="text-xl font-semibold dark:text-white">Sessions</h1>
+			<p class="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-300">
+				Sessions are immutable agent-run history; Workers are the live queue-draining
+				processes that can produce many sessions.
+			</p>
+			<a class="mt-2 inline-flex text-sm text-blue-600 hover:underline dark:text-blue-400" href={workersHref()}>
+				Workers →
+			</a>
+		</div>
 		<span class="text-sm text-gray-700 dark:text-gray-300">
 			{data.sessions.totalCount} sessions
 		</span>
@@ -236,6 +253,22 @@
 										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Bead</div>
 										<div class="mt-1 font-mono text-xs dark:text-gray-200">
 											{s.beadId ?? '—'}
+										</div>
+									</div>
+									<div>
+										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Worker</div>
+										<div class="mt-1 font-mono text-xs dark:text-gray-200">
+											{#if s.workerId}
+												<a
+													href={workerHref(s.workerId)}
+													onclick={(event) => event.stopPropagation()}
+													class="text-blue-600 hover:underline dark:text-blue-400"
+												>
+													{s.workerId}
+												</a>
+											{:else}
+												—
+											{/if}
 										</div>
 									</div>
 									<div>

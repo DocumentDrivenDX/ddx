@@ -165,6 +165,31 @@
 		});
 	}
 
+	function fmtDate(value: string): string {
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return value;
+		return date.toLocaleString();
+	}
+
+	function fmtDuration(ms: number): string {
+		if (ms < 1000) return `${ms}ms`;
+		if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+		const m = Math.floor(ms / 60_000);
+		const s = Math.floor((ms % 60_000) / 1000);
+		return `${m}m ${s}s`;
+	}
+
+	function fmtCost(cost: number | null): string {
+		return cost == null ? '—' : `$${cost.toFixed(4)}`;
+	}
+
+	function sessionsHref(): string {
+		return `/nodes/${data.nodeId}/projects/${data.projectId}/sessions`;
+	}
+
+	const workerSessions = $derived(data.sessions ?? []);
+	const lifecycleEvents = $derived(data.worker?.lifecycleEvents ?? []);
+
 	function appendLiveEvent(event: WorkerRecentEvent) {
 		liveEvents = [...liveEvents, event];
 	}
@@ -347,6 +372,79 @@
 				</div>
 			{/if}
 		</div>
+
+		<section class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700">
+			<div class="mb-3 flex items-center justify-between gap-3">
+				<h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Sessions</h3>
+				<a class="text-xs text-blue-600 hover:underline dark:text-blue-400" href={sessionsHref()}>
+					All sessions
+				</a>
+			</div>
+			{#if workerSessions.length === 0}
+				<p class="text-xs text-gray-500 dark:text-gray-400">No sessions recorded yet.</p>
+			{:else}
+				<div class="overflow-hidden rounded border border-gray-200 dark:border-gray-700">
+					<table class="w-full text-xs">
+						<thead class="bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+							<tr>
+								<th class="px-3 py-2 text-left font-medium">Session</th>
+								<th class="px-3 py-2 text-left font-medium">Bead</th>
+								<th class="px-3 py-2 text-left font-medium">Status</th>
+								<th class="px-3 py-2 text-right font-medium">Cost</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each workerSessions as session (session.id)}
+								<tr class="border-t border-gray-100 dark:border-gray-700">
+									<td class="px-3 py-2">
+										<div class="font-mono text-gray-700 dark:text-gray-200">
+											{session.id.slice(0, 12)}
+										</div>
+										<div class="text-gray-400 dark:text-gray-500">
+											{session.harness} · {fmtDuration(session.durationMs)}
+										</div>
+									</td>
+									<td class="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">
+										{session.beadId ?? '—'}
+									</td>
+									<td class="px-3 py-2 text-gray-700 dark:text-gray-200">{session.status}</td>
+									<td class="px-3 py-2 text-right font-mono text-gray-600 dark:text-gray-300">
+										{fmtCost(session.cost)}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+
+		<section class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700">
+			<div class="mb-3 text-xs font-medium text-gray-500 dark:text-gray-400">Lifecycle audit</div>
+			{#if lifecycleEvents.length === 0}
+				<p class="text-xs text-gray-500 dark:text-gray-400">No lifecycle actions recorded.</p>
+			{:else}
+				<ul class="space-y-2">
+					{#each lifecycleEvents as event (`${event.action}-${event.timestamp}`)}
+						<li class="flex items-start justify-between gap-3 text-xs">
+							<div>
+								<span class="font-medium text-gray-800 dark:text-gray-100">{event.action}</span>
+								<span class="text-gray-500 dark:text-gray-400"> by {event.actor}</span>
+								{#if event.beadId}
+									<span class="font-mono text-gray-500 dark:text-gray-400"> · {event.beadId}</span>
+								{/if}
+								{#if event.detail}
+									<div class="mt-0.5 text-gray-500 dark:text-gray-400">{event.detail}</div>
+								{/if}
+							</div>
+							<time class="shrink-0 text-gray-400 dark:text-gray-500" datetime={event.timestamp}>
+								{fmtDate(event.timestamp)}
+							</time>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 
 		<section
 			role="region"

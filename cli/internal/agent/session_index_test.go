@@ -86,6 +86,28 @@ func TestReindexLegacySessionsSplitsShardsAndDedupes(t *testing.T) {
 	}
 }
 
+func TestSessionIndexPreservesWorkerIDCorrelation(t *testing.T) {
+	projectRoot := t.TempDir()
+	started := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
+	entry := SessionIndexEntryFromResult(projectRoot, RunOptions{
+		Harness: "codex",
+		Model:   "gpt-5.4",
+		Correlation: map[string]string{
+			"session_id": "session-worker",
+			"bead_id":    "ddx-worker",
+			"worker_id":  "worker-abc",
+		},
+	}, &Result{ExitCode: 0}, started, started.Add(time.Second))
+
+	if entry.WorkerID != "worker-abc" {
+		t.Fatalf("WorkerID=%q, want worker-abc", entry.WorkerID)
+	}
+	legacy := SessionIndexEntryToLegacy(entry)
+	if got := legacy.Correlation["worker_id"]; got != "worker-abc" {
+		t.Fatalf("legacy correlation worker_id=%q, want worker-abc", got)
+	}
+}
+
 func TestSessionIndexShardFilesSelectsOnlyIntersectingDateRange(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), ".ddx", "agent-logs")
 	for month := time.January; month <= time.June; month++ {

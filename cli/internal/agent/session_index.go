@@ -25,6 +25,7 @@ type SessionIndexEntry struct {
 	ID              string    `json:"id"`
 	ProjectID       string    `json:"projectID,omitempty"`
 	BeadID          string    `json:"beadID,omitempty"`
+	WorkerID        string    `json:"workerID,omitempty"`
 	Harness         string    `json:"harness"`
 	Provider        string    `json:"provider,omitempty"`
 	Surface         string    `json:"surface,omitempty"`
@@ -133,6 +134,7 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 	corr := opts.Correlation
 	id := ""
 	beadID := ""
+	workerID := ""
 	bundlePath := ""
 	baseRev := ""
 	nativeLogRef := ""
@@ -142,6 +144,7 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 	if corr != nil {
 		id = corr["session_id"]
 		beadID = corr["bead_id"]
+		workerID = corr["worker_id"]
 		bundlePath = corr["bundle_path"]
 		baseRev = corr["base_rev"]
 		nativeLogRef = corr["native_log_ref"]
@@ -177,6 +180,7 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 		ID:              id,
 		ProjectID:       ProjectIDForPath(projectRoot),
 		BeadID:          beadID,
+		WorkerID:        workerID,
 		Harness:         harness,
 		Provider:        firstNonEmpty(result.Provider, opts.Provider),
 		Model:           model,
@@ -203,12 +207,14 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 
 func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionIndexEntry {
 	beadID := ""
+	workerID := ""
 	provider := e.Provider
 	effort := ""
 	bundlePath := ""
 	baseRev := e.BaseRev
 	if e.Correlation != nil {
 		beadID = e.Correlation["bead_id"]
+		workerID = e.Correlation["worker_id"]
 		provider = firstNonEmpty(provider, e.Correlation["provider"], e.Correlation["resolved_provider"])
 		effort = e.Correlation["effort"]
 		if baseRev == "" {
@@ -234,6 +240,7 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		ID:              e.ID,
 		ProjectID:       ProjectIDForPath(projectRoot),
 		BeadID:          beadID,
+		WorkerID:        workerID,
 		Harness:         e.Harness,
 		Provider:        provider,
 		Surface:         e.Surface,
@@ -467,6 +474,9 @@ func SessionIndexEntryToLegacy(e SessionIndexEntry) SessionEntry {
 	corr := map[string]string{}
 	if e.BeadID != "" {
 		corr["bead_id"] = e.BeadID
+	}
+	if e.WorkerID != "" {
+		corr["worker_id"] = e.WorkerID
 	}
 	if e.Effort != "" {
 		corr["effort"] = e.Effort

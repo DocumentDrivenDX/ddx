@@ -468,6 +468,22 @@ type Worker implements Node {
   landSummary: CoordinatorMetrics
   """Recent streamed response events captured for the worker detail view"""
   recentEvents: [WorkerRecentEvent!]!
+  """Operator lifecycle actions recorded for this worker"""
+  lifecycleEvents: [WorkerLifecycleEvent!]!
+}
+
+"""WorkerLifecycleEvent records an operator lifecycle action."""
+type WorkerLifecycleEvent {
+  """Action name, such as start or stop"""
+  action: String!
+  """Actor identifier known to the server"""
+  actor: String!
+  """When the action was recorded"""
+  timestamp: DateTime!
+  """Optional action detail"""
+  detail: String
+  """Bead involved in the action, if any"""
+  beadId: String
 }
 
 """WorkerRecentEvent is one captured response frame in worker detail history"""
@@ -600,6 +616,8 @@ type AgentSession implements Node {
   projectId: String!
   """Bead being worked on (null for ad-hoc runs)"""
   beadId: String
+  """Worker that produced this session, when known"""
+  workerId: String
   """Agent harness used (e.g. "claude", "codex")"""
   harness: String!
   """Model identifier"""
@@ -1353,6 +1371,30 @@ type WorkerDispatchResult {
   kind: String!
 }
 
+"""WorkerLifecycleResult describes a lifecycle mutation result."""
+type WorkerLifecycleResult {
+  """Worker identifier"""
+  id: ID!
+  """Worker state after the mutation was accepted"""
+  state: String!
+  """Worker kind"""
+  kind: String!
+}
+
+"""StartWorkerInput configures a project execute-loop worker."""
+input StartWorkerInput {
+  """Project identifier"""
+  projectId: String!
+  """Optional harness override"""
+  harness: String
+  """Routing profile, defaulting to smart when omitted"""
+  profile: String
+  """Reasoning effort, defaulting to medium when omitted"""
+  effort: String
+  """Optional label filter for ready beads"""
+  labelFilter: String
+}
+
 """PluginDispatchResult describes the worker started by a plugin action."""
 type PluginDispatchResult {
   """Worker identifier"""
@@ -2084,6 +2126,12 @@ type Mutation {
     """Optional JSON-encoded arguments"""
     args: String
   ): WorkerDispatchResult!
+
+  """Start a project execute-loop worker."""
+  startWorker(input: StartWorkerInput!): WorkerDispatchResult!
+
+  """Stop a running worker through the same path as ddx agent workers stop."""
+  stopWorker(id: ID!): WorkerLifecycleResult!
 
   """Dispatch a plugin install/update/uninstall action."""
   pluginDispatch(

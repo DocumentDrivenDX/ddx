@@ -58,6 +58,7 @@ type ComplexityRoot struct {
 		StderrPath func(childComplexity int) int
 		StdoutPath func(childComplexity int) int
 		Tokens     func(childComplexity int) int
+		WorkerID   func(childComplexity int) int
 	}
 
 	AgentSessionConnection struct {
@@ -565,6 +566,8 @@ type ComplexityRoot struct {
 		DocumentWrite      func(childComplexity int, path string, content string) int
 		PersonaBind        func(childComplexity int, role string, persona string, projectID string) int
 		PluginDispatch     func(childComplexity int, name string, action string, scope string) int
+		StartWorker        func(childComplexity int, input StartWorkerInput) int
+		StopWorker         func(childComplexity int, id string) int
 		WorkerDispatch     func(childComplexity int, kind string, projectID string, args *string) int
 	}
 
@@ -896,33 +899,34 @@ type ComplexityRoot struct {
 	}
 
 	Worker struct {
-		Attempts       func(childComplexity int) int
-		CurrentAttempt func(childComplexity int) int
-		CurrentBead    func(childComplexity int) int
-		Effort         func(childComplexity int) int
-		Error          func(childComplexity int) int
-		Failures       func(childComplexity int) int
-		FinishedAt     func(childComplexity int) int
-		Harness        func(childComplexity int) int
-		ID             func(childComplexity int) int
-		Kind           func(childComplexity int) int
-		LandSummary    func(childComplexity int) int
-		LastAttempt    func(childComplexity int) int
-		LastError      func(childComplexity int) int
-		LastResult     func(childComplexity int) int
-		Model          func(childComplexity int) int
-		Once           func(childComplexity int) int
-		PollInterval   func(childComplexity int) int
-		ProjectRoot    func(childComplexity int) int
-		Provider       func(childComplexity int) int
-		RecentEvents   func(childComplexity int) int
-		RecentPhases   func(childComplexity int) int
-		SpecPath       func(childComplexity int) int
-		StartedAt      func(childComplexity int) int
-		State          func(childComplexity int) int
-		Status         func(childComplexity int) int
-		StdoutPath     func(childComplexity int) int
-		Successes      func(childComplexity int) int
+		Attempts        func(childComplexity int) int
+		CurrentAttempt  func(childComplexity int) int
+		CurrentBead     func(childComplexity int) int
+		Effort          func(childComplexity int) int
+		Error           func(childComplexity int) int
+		Failures        func(childComplexity int) int
+		FinishedAt      func(childComplexity int) int
+		Harness         func(childComplexity int) int
+		ID              func(childComplexity int) int
+		Kind            func(childComplexity int) int
+		LandSummary     func(childComplexity int) int
+		LastAttempt     func(childComplexity int) int
+		LastError       func(childComplexity int) int
+		LastResult      func(childComplexity int) int
+		LifecycleEvents func(childComplexity int) int
+		Model           func(childComplexity int) int
+		Once            func(childComplexity int) int
+		PollInterval    func(childComplexity int) int
+		ProjectRoot     func(childComplexity int) int
+		Provider        func(childComplexity int) int
+		RecentEvents    func(childComplexity int) int
+		RecentPhases    func(childComplexity int) int
+		SpecPath        func(childComplexity int) int
+		StartedAt       func(childComplexity int) int
+		State           func(childComplexity int) int
+		Status          func(childComplexity int) int
+		StdoutPath      func(childComplexity int) int
+		Successes       func(childComplexity int) int
 	}
 
 	WorkerConnection struct {
@@ -966,6 +970,20 @@ type ComplexityRoot struct {
 		WorkerID   func(childComplexity int) int
 	}
 
+	WorkerLifecycleEvent struct {
+		Action    func(childComplexity int) int
+		Actor     func(childComplexity int) int
+		BeadID    func(childComplexity int) int
+		Detail    func(childComplexity int) int
+		Timestamp func(childComplexity int) int
+	}
+
+	WorkerLifecycleResult struct {
+		ID    func(childComplexity int) int
+		Kind  func(childComplexity int) int
+		State func(childComplexity int) int
+	}
+
 	WorkerLog struct {
 		Stderr func(childComplexity int) int
 		Stdout func(childComplexity int) int
@@ -989,6 +1007,8 @@ type MutationResolver interface {
 	BeadClose(ctx context.Context, id string, reason *string) (*Bead, error)
 	DocumentWrite(ctx context.Context, path string, content string) (*Document, error)
 	WorkerDispatch(ctx context.Context, kind string, projectID string, args *string) (*WorkerDispatchResult, error)
+	StartWorker(ctx context.Context, input StartWorkerInput) (*WorkerDispatchResult, error)
+	StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error)
 	PluginDispatch(ctx context.Context, name string, action string, scope string) (*PluginDispatchResult, error)
 	ComparisonDispatch(ctx context.Context, arms []*ComparisonArmInput) (*ComparisonDispatchResult, error)
 	PersonaBind(ctx context.Context, role string, persona string, projectID string) (*PersonaBindResult, error)
@@ -1199,6 +1219,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentSession.Tokens(childComplexity), true
+	case "AgentSession.workerId":
+		if e.ComplexityRoot.AgentSession.WorkerID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentSession.WorkerID(childComplexity), true
 
 	case "AgentSessionConnection.edges":
 		if e.ComplexityRoot.AgentSessionConnection.Edges == nil {
@@ -3305,6 +3331,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PluginDispatch(childComplexity, args["name"].(string), args["action"].(string), args["scope"].(string)), true
+	case "Mutation.startWorker":
+		if e.ComplexityRoot.Mutation.StartWorker == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_startWorker_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.StartWorker(childComplexity, args["input"].(StartWorkerInput)), true
+	case "Mutation.stopWorker":
+		if e.ComplexityRoot.Mutation.StopWorker == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_stopWorker_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.StopWorker(childComplexity, args["id"].(string)), true
 	case "Mutation.workerDispatch":
 		if e.ComplexityRoot.Mutation.WorkerDispatch == nil {
 			break
@@ -4958,6 +5006,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Worker.LastResult(childComplexity), true
+	case "Worker.lifecycleEvents":
+		if e.ComplexityRoot.Worker.LifecycleEvents == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Worker.LifecycleEvents(childComplexity), true
 	case "Worker.model":
 		if e.ComplexityRoot.Worker.Model == nil {
 			break
@@ -5198,6 +5252,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.WorkerExecutionResult.WorkerID(childComplexity), true
 
+	case "WorkerLifecycleEvent.action":
+		if e.ComplexityRoot.WorkerLifecycleEvent.Action == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleEvent.Action(childComplexity), true
+	case "WorkerLifecycleEvent.actor":
+		if e.ComplexityRoot.WorkerLifecycleEvent.Actor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleEvent.Actor(childComplexity), true
+	case "WorkerLifecycleEvent.beadId":
+		if e.ComplexityRoot.WorkerLifecycleEvent.BeadID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleEvent.BeadID(childComplexity), true
+	case "WorkerLifecycleEvent.detail":
+		if e.ComplexityRoot.WorkerLifecycleEvent.Detail == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleEvent.Detail(childComplexity), true
+	case "WorkerLifecycleEvent.timestamp":
+		if e.ComplexityRoot.WorkerLifecycleEvent.Timestamp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleEvent.Timestamp(childComplexity), true
+
+	case "WorkerLifecycleResult.id":
+		if e.ComplexityRoot.WorkerLifecycleResult.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleResult.ID(childComplexity), true
+	case "WorkerLifecycleResult.kind":
+		if e.ComplexityRoot.WorkerLifecycleResult.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleResult.Kind(childComplexity), true
+	case "WorkerLifecycleResult.state":
+		if e.ComplexityRoot.WorkerLifecycleResult.State == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerLifecycleResult.State(childComplexity), true
+
 	case "WorkerLog.stderr":
 		if e.ComplexityRoot.WorkerLog.Stderr == nil {
 			break
@@ -5253,6 +5357,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBeadInput,
 		ec.unmarshalInputBeadUpdateInput,
 		ec.unmarshalInputComparisonArmInput,
+		ec.unmarshalInputStartWorkerInput,
 	)
 	first := true
 
@@ -5511,6 +5616,28 @@ func (ec *executionContext) field_Mutation_pluginDispatch_args(ctx context.Conte
 		return nil, err
 	}
 	args["scope"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_startWorker_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNStartWorkerInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐStartWorkerInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_stopWorker_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -6563,6 +6690,35 @@ func (ec *executionContext) fieldContext_AgentSession_beadId(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _AgentSession_workerId(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentSession_workerId,
+		func(ctx context.Context) (any, error) {
+			return obj.WorkerID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentSession_workerId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AgentSession_harness(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7228,6 +7384,8 @@ func (ec *executionContext) fieldContext_AgentSessionEdge_node(_ context.Context
 				return ec.fieldContext_AgentSession_projectId(ctx, field)
 			case "beadId":
 				return ec.fieldContext_AgentSession_beadId(ctx, field)
+			case "workerId":
+				return ec.fieldContext_AgentSession_workerId(ctx, field)
 			case "harness":
 				return ec.fieldContext_AgentSession_harness(ctx, field)
 			case "model":
@@ -17718,6 +17876,104 @@ func (ec *executionContext) fieldContext_Mutation_workerDispatch(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_startWorker(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_startWorker,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().StartWorker(ctx, fc.Args["input"].(StartWorkerInput))
+		},
+		nil,
+		ec.marshalNWorkerDispatchResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerDispatchResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_startWorker(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WorkerDispatchResult_id(ctx, field)
+			case "state":
+				return ec.fieldContext_WorkerDispatchResult_state(ctx, field)
+			case "kind":
+				return ec.fieldContext_WorkerDispatchResult_kind(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorkerDispatchResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_startWorker_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_stopWorker(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_stopWorker,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().StopWorker(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNWorkerLifecycleResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_stopWorker(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WorkerLifecycleResult_id(ctx, field)
+			case "state":
+				return ec.fieldContext_WorkerLifecycleResult_state(ctx, field)
+			case "kind":
+				return ec.fieldContext_WorkerLifecycleResult_kind(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorkerLifecycleResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_stopWorker_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_pluginDispatch(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22036,6 +22292,8 @@ func (ec *executionContext) fieldContext_Query_worker(ctx context.Context, field
 				return ec.fieldContext_Worker_landSummary(ctx, field)
 			case "recentEvents":
 				return ec.fieldContext_Worker_recentEvents(ctx, field)
+			case "lifecycleEvents":
+				return ec.fieldContext_Worker_lifecycleEvents(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Worker", field.Name)
 		},
@@ -22271,6 +22529,8 @@ func (ec *executionContext) fieldContext_Query_agentSession(ctx context.Context,
 				return ec.fieldContext_AgentSession_projectId(ctx, field)
 			case "beadId":
 				return ec.fieldContext_AgentSession_beadId(ctx, field)
+			case "workerId":
+				return ec.fieldContext_AgentSession_workerId(ctx, field)
 			case "harness":
 				return ec.fieldContext_AgentSession_harness(ctx, field)
 			case "model":
@@ -26629,6 +26889,47 @@ func (ec *executionContext) fieldContext_Worker_recentEvents(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Worker_lifecycleEvents(ctx context.Context, field graphql.CollectedField, obj *Worker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Worker_lifecycleEvents,
+		func(ctx context.Context) (any, error) {
+			return obj.LifecycleEvents, nil
+		},
+		nil,
+		ec.marshalNWorkerLifecycleEvent2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleEventᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Worker_lifecycleEvents(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Worker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "action":
+				return ec.fieldContext_WorkerLifecycleEvent_action(ctx, field)
+			case "actor":
+				return ec.fieldContext_WorkerLifecycleEvent_actor(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_WorkerLifecycleEvent_timestamp(ctx, field)
+			case "detail":
+				return ec.fieldContext_WorkerLifecycleEvent_detail(ctx, field)
+			case "beadId":
+				return ec.fieldContext_WorkerLifecycleEvent_beadId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorkerLifecycleEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkerConnection_edges(ctx context.Context, field graphql.CollectedField, obj *WorkerConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -26897,6 +27198,8 @@ func (ec *executionContext) fieldContext_WorkerEdge_node(_ context.Context, fiel
 				return ec.fieldContext_Worker_landSummary(ctx, field)
 			case "recentEvents":
 				return ec.fieldContext_Worker_recentEvents(ctx, field)
+			case "lifecycleEvents":
+				return ec.fieldContext_Worker_lifecycleEvents(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Worker", field.Name)
 		},
@@ -27445,6 +27748,238 @@ func (ec *executionContext) _WorkerExecutionResult_retryAfter(ctx context.Contex
 func (ec *executionContext) fieldContext_WorkerExecutionResult_retryAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "WorkerExecutionResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleEvent_action(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleEvent_action,
+		func(ctx context.Context) (any, error) {
+			return obj.Action, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleEvent_action(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleEvent_actor(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleEvent_actor,
+		func(ctx context.Context) (any, error) {
+			return obj.Actor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleEvent_actor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleEvent_timestamp(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleEvent_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNDateTime2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleEvent_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleEvent_detail(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleEvent_detail,
+		func(ctx context.Context) (any, error) {
+			return obj.Detail, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleEvent_detail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleEvent_beadId(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleEvent_beadId,
+		func(ctx context.Context) (any, error) {
+			return obj.BeadID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleEvent_beadId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleResult_id(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleResult_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleResult_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleResult_state(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleResult_state,
+		func(ctx context.Context) (any, error) {
+			return obj.State, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleResult_state(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerLifecycleResult_kind(ctx context.Context, field graphql.CollectedField, obj *WorkerLifecycleResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerLifecycleResult_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerLifecycleResult_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerLifecycleResult",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -29327,6 +29862,64 @@ func (ec *executionContext) unmarshalInputComparisonArmInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, obj any) (StartWorkerInput, error) {
+	var it StartWorkerInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "harness", "profile", "effort", "labelFilter"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "harness":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("harness"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Harness = data
+		case "profile":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("profile"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Profile = data
+		case "effort":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("effort"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Effort = data
+		case "labelFilter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("labelFilter"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LabelFilter = data
+		}
+	}
+	return it, nil
+}
+
 // endregion **************************** input.gotpl *****************************
 
 // region    ************************** interface.gotpl ***************************
@@ -29441,6 +30034,8 @@ func (ec *executionContext) _AgentSession(ctx context.Context, sel ast.Selection
 			}
 		case "beadId":
 			out.Values[i] = ec._AgentSession_beadId(ctx, field, obj)
+		case "workerId":
+			out.Values[i] = ec._AgentSession_workerId(ctx, field, obj)
 		case "harness":
 			out.Values[i] = ec._AgentSession_harness(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -32843,6 +33438,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "startWorker":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_startWorker(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stopWorker":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_stopWorker(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "pluginDispatch":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_pluginDispatch(ctx, field)
@@ -36110,6 +36719,11 @@ func (ec *executionContext) _Worker(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "lifecycleEvents":
+			out.Values[i] = ec._Worker_lifecycleEvents(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -36368,6 +36982,108 @@ func (ec *executionContext) _WorkerExecutionResult(ctx context.Context, sel ast.
 			out.Values[i] = ec._WorkerExecutionResult_resultRev(ctx, field, obj)
 		case "retryAfter":
 			out.Values[i] = ec._WorkerExecutionResult_retryAfter(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var workerLifecycleEventImplementors = []string{"WorkerLifecycleEvent"}
+
+func (ec *executionContext) _WorkerLifecycleEvent(ctx context.Context, sel ast.SelectionSet, obj *WorkerLifecycleEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, workerLifecycleEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WorkerLifecycleEvent")
+		case "action":
+			out.Values[i] = ec._WorkerLifecycleEvent_action(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "actor":
+			out.Values[i] = ec._WorkerLifecycleEvent_actor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timestamp":
+			out.Values[i] = ec._WorkerLifecycleEvent_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "detail":
+			out.Values[i] = ec._WorkerLifecycleEvent_detail(ctx, field, obj)
+		case "beadId":
+			out.Values[i] = ec._WorkerLifecycleEvent_beadId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var workerLifecycleResultImplementors = []string{"WorkerLifecycleResult"}
+
+func (ec *executionContext) _WorkerLifecycleResult(ctx context.Context, sel ast.SelectionSet, obj *WorkerLifecycleResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, workerLifecycleResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WorkerLifecycleResult")
+		case "id":
+			out.Values[i] = ec._WorkerLifecycleResult_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "state":
+			out.Values[i] = ec._WorkerLifecycleResult_state(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._WorkerLifecycleResult_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -38255,6 +38971,11 @@ func (ec *executionContext) marshalNStaleReason2ᚖgithubᚗcomᚋDocumentDriven
 	return ec._StaleReason(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNStartWorkerInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐStartWorkerInput(ctx context.Context, v any) (StartWorkerInput, error) {
+	res, err := ec.unmarshalInputStartWorkerInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {
 	res, err := graphql.UnmarshalString(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -38377,6 +39098,46 @@ func (ec *executionContext) marshalNWorkerEvent2ᚖgithubᚗcomᚋDocumentDriven
 		return graphql.Null
 	}
 	return ec._WorkerEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWorkerLifecycleEvent2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*WorkerLifecycleEvent) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWorkerLifecycleEvent2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleEvent(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNWorkerLifecycleEvent2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleEvent(ctx context.Context, sel ast.SelectionSet, v *WorkerLifecycleEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WorkerLifecycleEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNWorkerLifecycleResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResult(ctx context.Context, sel ast.SelectionSet, v WorkerLifecycleResult) graphql.Marshaler {
+	return ec._WorkerLifecycleResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWorkerLifecycleResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResult(ctx context.Context, sel ast.SelectionSet, v *WorkerLifecycleResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WorkerLifecycleResult(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNWorkerLog2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLog(ctx context.Context, sel ast.SelectionSet, v WorkerLog) graphql.Marshaler {

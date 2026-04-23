@@ -1,14 +1,44 @@
 <script lang="ts">
 	import type { LayoutData } from './$types';
 	import type { Snippet } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { createClient } from '$lib/gql/client';
 	import { subscribeWorkerProgress } from '$lib/gql/subscriptions';
+	import { gql } from 'graphql-request';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
+	const START_WORKER_MUTATION = gql`
+		mutation StartWorker($input: StartWorkerInput!) {
+			startWorker(input: $input) {
+				id
+				state
+				kind
+			}
+		}
+	`;
+
+	const STOP_WORKER_MUTATION = gql`
+		mutation StopWorker($id: ID!) {
+			stopWorker(id: $id) {
+				id
+				state
+				kind
+			}
+		}
+	`;
+
 	// Live phase overrides from workerProgress subscription (workerID -> phase)
 	let livePhaseOverrides = $state<Map<string, string>>(new Map());
+	let showStartForm = $state(false);
+	let starting = $state(false);
+	let stoppingId = $state<string | null>(null);
+	let actionError = $state<string | null>(null);
+	let harness = $state('');
+	let profile = $state('smart');
+	let effort = $state('medium');
+	let labelFilter = $state('');
 
 	// Subscribe to progress events for all running workers
 	$effect(() => {
@@ -37,6 +67,60 @@
 		goto(`/nodes/${p['nodeId']}/projects/${p['projectId']}/workers/${workerId}`);
 	}
 
+	function sessionsHref(): string {
+		const p = $page.params as Record<string, string>;
+		return `/nodes/${p['nodeId']}/projects/${p['projectId']}/sessions`;
+	}
+
+	function errorText(err: unknown): string {
+		return err instanceof Error ? err.message : 'Worker action failed.';
+	}
+
+	async function startWorker() {
+		actionError = null;
+		if (!profile.trim() || !effort.trim()) {
+			actionError = 'Profile and effort are required.';
+			return;
+		}
+		starting = true;
+		try {
+			const client = createClient(fetch);
+			await client.request(START_WORKER_MUTATION, {
+				input: {
+					projectId: data.projectId,
+					harness: harness.trim() || null,
+					profile: profile.trim(),
+					effort: effort.trim(),
+					labelFilter: labelFilter.trim() || null
+				}
+			});
+			showStartForm = false;
+			harness = '';
+			labelFilter = '';
+			await invalidateAll();
+		} catch (err) {
+			actionError = errorText(err);
+		} finally {
+			starting = false;
+		}
+	}
+
+	async function stopWorker(event: MouseEvent, workerId: string) {
+		event.stopPropagation();
+		actionError = null;
+		if (!window.confirm(`Stop worker ${workerId}?`)) return;
+		stoppingId = workerId;
+		try {
+			const client = createClient(fetch);
+			await client.request(STOP_WORKER_MUTATION, { id: workerId });
+			await invalidateAll();
+		} catch (err) {
+			actionError = errorText(err);
+		} finally {
+			stoppingId = null;
+		}
+	}
+
 	function stateClass(state: string): string {
 		switch (state) {
 			case 'running':
@@ -54,12 +138,106 @@
 </script>
 
 <div class="space-y-4">
-	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold dark:text-white">Workers</h1>
-		<span class="text-sm text-gray-500 dark:text-gray-400">
-			{data.workers.totalCount} total
-		</span>
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+		<div>
+			<h1 class="text-xl font-semibold dark:text-white">Workers</h1>
+			<p class="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-300">
+				Workers drain the bead queue as long-lived processes; Sessions are the history of
+				what they ran.
+			</p>
+			<a class="mt-2 inline-flex text-sm text-blue-600 hover:underline dark:text-blue-400" href={sessionsHref()}>
+				Recent sessions →
+			</a>
+		</div>
+		<div class="flex items-center gap-3">
+			<span class="text-sm text-gray-500 dark:text-gray-400">
+				{data.workers.totalCount} total
+			</span>
+			<button
+				type="button"
+				onclick={() => {
+					actionError = null;
+					showStartForm = !showStartForm;
+				}}
+				class="rounded border border-blue-600 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
+			>
+				Start worker
+			</button>
+		</div>
 	</div>
+
+	{#if showStartForm}
+		<form
+			class="grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-4"
+			onsubmit={(event) => {
+				event.preventDefault();
+				void startWorker();
+			}}
+		>
+			<label class="space-y-1">
+				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Harness</span>
+				<input
+					bind:value={harness}
+					placeholder="auto"
+					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+				/>
+			</label>
+			<label class="space-y-1">
+				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Profile</span>
+				<select
+					bind:value={profile}
+					required
+					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+				>
+					<option value="cheap">cheap</option>
+					<option value="fast">fast</option>
+					<option value="smart">smart</option>
+				</select>
+			</label>
+			<label class="space-y-1">
+				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Effort</span>
+				<select
+					bind:value={effort}
+					required
+					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+				>
+					<option value="low">low</option>
+					<option value="medium">medium</option>
+					<option value="high">high</option>
+				</select>
+			</label>
+			<label class="space-y-1">
+				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Label filter</span>
+				<input
+					bind:value={labelFilter}
+					placeholder="optional"
+					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+				/>
+			</label>
+			<div class="flex items-end gap-2 sm:col-span-4">
+				<button
+					type="submit"
+					disabled={starting || !profile.trim() || !effort.trim()}
+					class="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900"
+				>
+					{starting ? 'Starting…' : 'Start'}
+				</button>
+				<button
+					type="button"
+					onclick={() => (showStartForm = false)}
+					class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+				>
+					Cancel
+				</button>
+			</div>
+		</form>
+	{/if}
+
+	{#if actionError}
+		<div class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+			{actionError}
+		</div>
+	{/if}
 
 	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
 		<table class="w-full text-sm">
@@ -76,6 +254,7 @@
 					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300"
 						>Attempts</th
 					>
+					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Actions</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -114,12 +293,27 @@
 								—
 							{/if}
 						</td>
+						<td class="px-4 py-3 text-right">
+							{#if edge.node.state === 'running'}
+								<button
+									type="button"
+									onclick={(event) => stopWorker(event, edge.node.id)}
+									disabled={stoppingId === edge.node.id}
+									class="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+								>
+									{stoppingId === edge.node.id ? 'Stopping…' : 'Stop'}
+								</button>
+							{:else}
+								<span class="text-xs text-gray-400 dark:text-gray-600">—</span>
+							{/if}
+						</td>
 					</tr>
 				{/each}
 				{#if data.workers.edges.length === 0}
 					<tr>
-						<td colspan="5" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
-							No workers found.
+						<td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+							No workers found. Nothing is draining this queue right now; start a worker here
+							or run ddx work from a terminal.
 						</td>
 					</tr>
 				{/if}

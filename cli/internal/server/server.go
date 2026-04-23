@@ -1968,6 +1968,7 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		Provider      string `json:"provider"`
 		ModelRef      string `json:"model_ref"`
 		Effort        string `json:"effort"`
+		LabelFilter   string `json:"label_filter"`
 		Once          bool   `json:"once"`
 		PollInterval  string `json:"poll_interval"`
 		NoReview      bool   `json:"no_review"`
@@ -2012,6 +2013,7 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		Provider:      req.Provider,
 		ModelRef:      req.ModelRef,
 		Effort:        req.Effort,
+		LabelFilter:   req.LabelFilter,
 		Once:          req.Once,
 		PollInterval:  pollInterval,
 		NoReview:      req.NoReview,
