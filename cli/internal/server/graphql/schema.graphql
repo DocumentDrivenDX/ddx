@@ -1334,25 +1334,95 @@ type Provider implements Node {
   permissions: [String!]
 }
 
-"""ProviderStatus is the live connectivity status of a configured API provider,
-mirroring the output of `ddx agent providers`."""
+"""ProviderKind distinguishes endpoint providers from subprocess harnesses."""
+enum ProviderKind {
+  """API-endpoint provider configured via base URL + key (e.g. anthropic, openai-compat)."""
+  ENDPOINT
+  """Subprocess harness invoked via a local binary (e.g. claude, codex, gemini)."""
+  HARNESS
+}
+
+"""ProviderUsage is a rolling-window token/request summary computed from the sessions index."""
+type ProviderUsage {
+  """Tokens recorded in sessions whose StartedAt falls in the last 60 minutes. Null when unavailable."""
+  tokensUsedLastHour: Int
+  """Tokens recorded in sessions whose StartedAt falls in the last 24 hours. Null when unavailable."""
+  tokensUsedLast24h: Int
+  """Session count in the last 60 minutes. Null when unavailable."""
+  requestsLastHour: Int
+  """Session count in the last 24 hours. Null when unavailable."""
+  requestsLast24h: Int
+}
+
+"""ProviderQuota captures the ceiling reported by the harness/provider, when known.
+All fields are nullable; null means "not reported" (no fabrication)."""
+type ProviderQuota {
+  """Ceiling tokens for the current window. Null when the harness/provider does not report one."""
+  ceilingTokens: Int
+  """Length of the quota window in seconds (e.g. 60 for per-minute ceilings)."""
+  ceilingWindowSeconds: Int
+  """Remaining tokens in the current window, as reported by the provider."""
+  remaining: Int
+  """RFC3339 timestamp when the quota window resets."""
+  resetAt: String
+}
+
+"""ProviderStatus is the live connectivity status of a configured endpoint provider
+or subprocess harness, mirroring the output of `ddx agent providers` and
+`ddx agent list` / `ddx agent doctor`."""
 type ProviderStatus {
-  """Provider name from agent config"""
+  """Provider/harness name from agent config"""
   name: String!
-  """Provider type (e.g. "anthropic", "openai-compat")"""
+  """Kind: endpoint provider or subprocess harness."""
+  kind: ProviderKind!
+  """Provider type (e.g. "anthropic", "openai-compat") for endpoints; binary name or surface for harnesses."""
   providerType: String!
-  """API base URL; "(api)" for Anthropic providers"""
+  """API base URL for endpoints; "(subprocess)" for harnesses."""
   baseURL: String!
   """Configured model identifier"""
   model: String!
   """Live connectivity status message"""
   status: String!
-  """Number of models discovered via /v1/models (0 for Anthropic providers)"""
+  """Number of models discovered via /v1/models (endpoints) or harness model count (harnesses)."""
   modelCount: Int!
-  """True when this is the default provider"""
+  """True when this is the default provider/harness."""
   isDefault: Boolean!
   """RFC3339 timestamp when health cooldown expires, if on cooldown"""
   cooldownUntil: String
+  """RFC3339 timestamp of the last probe result (cached or live)."""
+  lastCheckedAt: String
+  """Rolling usage aggregated from the sessions index. Null when sessions index is unavailable."""
+  usage: ProviderUsage
+  """Quota ceiling + reset from the harness/provider. Null when unreported."""
+  quota: ProviderQuota
+  """Profile names where this row is the default candidate (may be empty)."""
+  defaultForProfile: [String!]!
+}
+
+"""ProviderTrendPoint is one time-bucketed data point of usage vs. ceiling."""
+type ProviderTrendPoint {
+  """RFC3339 bucket start (hour-aligned for ≤7d windows, 4-hour-aligned beyond)."""
+  bucketStart: String!
+  """Sum of tokens recorded in sessions whose StartedAt falls in this bucket."""
+  tokens: Int!
+  """Count of sessions in this bucket."""
+  requests: Int!
+}
+
+"""ProviderTrend is the trend-detail payload for `/providers/[name]`."""
+type ProviderTrend {
+  """Provider/harness name."""
+  name: String!
+  """Endpoint vs harness."""
+  kind: ProviderKind!
+  """Window in days covered by series points."""
+  windowDays: Int!
+  """Time-bucketed usage points, oldest first."""
+  series: [ProviderTrendPoint!]!
+  """Quota ceiling tokens; null when unreported."""
+  ceilingTokens: Int
+  """Projected hours until the ceiling is hit, computed from the last-24h slope. Null when ceiling is unreported or slope is non-positive."""
+  projectedRunOutHours: Float
 }
 
 """DefaultRouteStatus shows which provider/model the default model-ref resolves to."""
@@ -2044,8 +2114,19 @@ type Query {
   """List configured API providers with live connectivity status (mirrors `ddx agent providers`)"""
   providerStatuses: [ProviderStatus!]!
 
+  """List subprocess harnesses with live reachability, kind=HARNESS. Equivalent surface to `ddx agent list` + `ddx agent doctor`."""
+  harnessStatuses: [ProviderStatus!]!
+
   """Show which provider/model the default model-ref resolves to (mirrors `ddx agent route-status`)"""
   defaultRouteStatus: DefaultRouteStatus
+
+  """Return a time-bucketed trend of tokens and requests for a provider or harness."""
+  providerTrend(
+    """Provider or harness name."""
+    name: String!
+    """Window in days (7 or 30)."""
+    windowDays: Int! = 7
+  ): ProviderTrend
 
   """Return compact queue counts for a project."""
   queueSummary(
