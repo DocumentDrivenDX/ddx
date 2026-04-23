@@ -285,6 +285,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			// choosing a harness.
 			resolvedHarness := harness
 			resolvedModel := model
+			resolvedProvider := ""
 			if harness == "" && (profile != "" || model != "") {
 				if profile != "" {
 					profile = agent.NormalizeRoutingProfile(profile)
@@ -293,20 +294,31 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				if svcErr != nil {
 					return fmt.Errorf("agent: failed to initialize routing service: %w", svcErr)
 				}
+				routeModel := model
+				routeModelRef := profile
+				if routeModel == "" {
+					if override := profileModelOverrideForRun(f.WorkingDir, profile); override != "" {
+						routeModel = override
+						routeModelRef = ""
+					}
+				}
 				routeReq := agentlib.RouteRequest{
-					Model:       model,
+					Model:       routeModel,
 					Profile:     profile,
 					Reasoning:   agentlib.Reasoning(effort),
 					Permissions: permissions,
-					ModelRef:    profile,
+					ModelRef:    routeModelRef,
 				}
 				dec, routeErr := svc.ResolveRoute(cmd.Context(), routeReq)
 				if routeErr != nil {
 					return fmt.Errorf("agent: no viable harness found for profile %q: %w", profile, routeErr)
 				}
 				resolvedHarness = dec.Harness
+				resolvedProvider = dec.Provider
 				if model == "" && dec.Model != "" {
 					resolvedModel = dec.Model
+				} else if model == "" && routeModel != "" {
+					resolvedModel = routeModel
 				}
 				if resolvedHarness == "" {
 					return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
@@ -319,6 +331,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				PromptFile:   promptFile,
 				PromptSource: promptSource,
 				Model:        resolvedModel,
+				Provider:     resolvedProvider,
 				Effort:       effort,
 				Timeout:      timeout,
 				WorkDir:      workDir,
@@ -511,6 +524,23 @@ func (f *CommandFactory) newAgentListCommand() *cobra.Command {
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd
+}
+
+func profileModelOverrideForRun(workDir, profile string) string {
+	cfg, err := config.LoadWithWorkingDir(workDir)
+	if err != nil || cfg == nil || cfg.Agent == nil || cfg.Agent.Routing == nil {
+		return ""
+	}
+	tiers := agent.ResolveProfileLadder(cfg.Agent.Routing, profile, "", "")
+	if len(tiers) == 0 {
+		return ""
+	}
+	firstTier := tiers[0]
+	override := agent.ResolveTierModelRef(cfg.Agent.Routing, firstTier)
+	if override == string(firstTier) {
+		return ""
+	}
+	return override
 }
 
 func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
@@ -1686,14 +1716,18 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// singleTierAttempt runs one execution attempt with an explicit harness
 	// and model. It is called both by the non-escalating path and by each
 	// iteration of the tier escalation loop.
-	singleTierAttempt := func(ctx context.Context, beadID string, tier escalation.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
+	singleTierAttempt := func(ctx context.Context, beadID string, tier escalation.ModelTier, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
+		attemptProvider := provider
+		if resolvedProvider != "" {
+			attemptProvider = resolvedProvider
+		}
 
 		res, execErr := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
 			FromRev:    fromRev,
 			Harness:    resolvedHarness,
 			Model:      resolvedModel,
-			Provider:   provider,
+			Provider:   attemptProvider,
 			ModelRef:   modelRef,
 			Effort:     effort,
 			BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
@@ -1759,6 +1793,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				// Single-attempt path: --harness or --model was specified.
 				// Route dynamically when no harness is pinned.
 				resolvedHarness := harness
+				resolvedProvider := provider
+				resolvedModel := model
 				if resolvedHarness == "" {
 					svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
 					if svcErr == nil {
@@ -1770,10 +1806,14 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 						})
 						if routeErr == nil {
 							resolvedHarness = dec.Harness
+							resolvedProvider = dec.Provider
+							if model == "" && dec.Model != "" {
+								resolvedModel = dec.Model
+							}
 						}
 					}
 				}
-				report, err := singleTierAttempt(ctx, beadID, "", resolvedHarness, model)
+				report, err := singleTierAttempt(ctx, beadID, "", resolvedHarness, resolvedProvider, resolvedModel)
 				if err == nil {
 					accumulateBilledCost(report)
 					if cappedReport, capped := costCapTripped(); capped {
@@ -1846,7 +1886,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					continue
 				}
 
-				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Model)
+				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Provider, dec.Model)
 				if attemptErr != nil {
 					report = agent.ExecuteBeadReport{
 						BeadID:           beadID,
