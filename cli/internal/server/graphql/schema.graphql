@@ -1588,6 +1588,18 @@ type QueueSummary {
   inProgress: Int!
 }
 
+"""QueueAndWorkersSummary backs the global drain indicator. Combines the
+ready-bead count with running/total worker counts so the NavShell badge
+can render without issuing two queries per poll."""
+type QueueAndWorkersSummary {
+  """Open beads with no unmet dependencies (the drain queue depth)"""
+  readyBeads: Int!
+  """Count of workers in state `running` for this project"""
+  runningWorkers: Int!
+  """Total workers on record for this project (any state)"""
+  totalWorkers: Int!
+}
+
 """WorkerDispatchResult describes the worker started by an action."""
 type WorkerDispatchResult {
   """Worker identifier"""
@@ -2346,6 +2358,14 @@ type Query {
     """Project identifier"""
     projectId: String!
   ): QueueSummary!
+
+  """Return a lightweight ready-beads + worker-count snapshot for a project.
+  Returns zeros for unknown or empty projects. Used by the global drain
+  indicator in the nav shell."""
+  queueAndWorkersSummary(
+    """Project identifier"""
+    projectId: String!
+  ): QueueAndWorkersSummary!
 
   """Return model efficacy rows."""
   efficacyRows(

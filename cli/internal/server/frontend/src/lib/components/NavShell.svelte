@@ -18,6 +18,7 @@
 	import { page } from '$app/stores';
 	import { toggleMode, mode } from '$lib/theme';
 	import ProjectPicker from './ProjectPicker.svelte';
+	import DrainIndicator from './DrainIndicator.svelte';
 	import { nodeStore } from '$lib/stores/node.svelte';
 	import { projectStore } from '$lib/stores/project.svelte';
 	import { wsConnection } from '$lib/stores/connection.svelte';
@@ -64,7 +65,8 @@
 		<span class="text-xs text-gray-700 dark:text-gray-300">Node: {nodeName}</span>
 		<div class="mx-2 h-4 w-px bg-gray-200 dark:bg-gray-700"></div>
 		<ProjectPicker />
-		<div class="ml-auto">
+		<div class="ml-auto flex items-center gap-2">
+			<DrainIndicator />
 			<button
 				onclick={toggleMode}
 				class="rounded p-1.5 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"

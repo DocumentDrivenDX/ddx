@@ -29,6 +29,18 @@
 		}
 	`;
 
+	// + Add worker dispatches a default-spec drain worker (ddx-b6cf025c). The
+	// server honours .ddx/config.yaml workers.default_spec + workers.max_count.
+	const ADD_WORKER_MUTATION = gql`
+		mutation AddDrainWorker($projectId: String!) {
+			workerDispatch(kind: "execute-loop", projectId: $projectId) {
+				id
+				state
+				kind
+			}
+		}
+	`;
+
 	// Live phase overrides from workerProgress subscription (workerID -> phase)
 	let livePhaseOverrides = $state<Map<string, string>>(new Map());
 	let showStartForm = $state(false);
@@ -39,6 +51,15 @@
 	let profile = $state('smart');
 	let effort = $state('medium');
 	let labelFilter = $state('');
+	let adding = $state(false);
+	let removing = $state(false);
+
+	// Drain workers: count of running execute-loop workers.
+	const runningDrainCount = $derived(
+		data.workers.edges.filter(
+			(e) => e.node.state === 'running' && e.node.kind === 'execute-loop'
+		).length
+	);
 
 	// Subscribe to progress events for all running workers
 	$effect(() => {
@@ -105,6 +126,43 @@
 		}
 	}
 
+	async function addDrainWorker() {
+		actionError = null;
+		adding = true;
+		try {
+			const client = createClient(fetch);
+			await client.request(ADD_WORKER_MUTATION, { projectId: data.projectId });
+			await invalidateAll();
+		} catch (err) {
+			actionError = errorText(err);
+		} finally {
+			adding = false;
+		}
+	}
+
+	async function removeDrainWorker() {
+		actionError = null;
+		// Find the oldest running execute-loop worker (AC #4: "stops the oldest-
+		// running drain worker"). data.workers is sorted newest-first, so the
+		// last matching edge is oldest.
+		const runningDrain = data.workers.edges
+			.filter((e) => e.node.state === 'running' && e.node.kind === 'execute-loop')
+			.map((e) => e.node);
+		const target = runningDrain[runningDrain.length - 1];
+		if (!target) return;
+		if (!window.confirm(`Stop worker ${target.id}?`)) return;
+		removing = true;
+		try {
+			const client = createClient(fetch);
+			await client.request(STOP_WORKER_MUTATION, { id: target.id });
+			await invalidateAll();
+		} catch (err) {
+			actionError = errorText(err);
+		} finally {
+			removing = false;
+		}
+	}
+
 	async function stopWorker(event: MouseEvent, workerId: string) {
 		event.stopPropagation();
 		actionError = null;
@@ -138,6 +196,50 @@
 </script>
 
 <div class="space-y-4">
+	<!-- Drain-worker count control (ddx-b6cf025c). Dispatches a default-spec
+	     worker; server enforces workers.default_spec + workers.max_count. -->
+	<div
+		data-testid="drain-count-panel"
+		class="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/30 sm:flex-row sm:items-center sm:justify-between"
+	>
+		<div>
+			<div class="text-xs font-medium uppercase tracking-wide text-blue-700 dark:text-blue-300">
+				Drain workers
+			</div>
+			<div
+				data-testid="drain-worker-count"
+				class="text-3xl font-semibold text-blue-900 dark:text-blue-100"
+			>
+				{runningDrainCount}
+			</div>
+			<p class="mt-1 text-xs text-blue-800/80 dark:text-blue-200/80">
+				Adds a general-purpose drain worker. Use the per-harness picker below for custom specs.
+			</p>
+		</div>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				data-testid="add-drain-worker"
+				onclick={() => void addDrainWorker()}
+				disabled={adding}
+				class="rounded border border-blue-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
+				aria-label="Add worker"
+			>
+				{adding ? '…' : '+ Add worker'}
+			</button>
+			<button
+				type="button"
+				data-testid="remove-drain-worker"
+				onclick={() => void removeDrainWorker()}
+				disabled={removing || runningDrainCount === 0}
+				class="rounded border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+				aria-label="Remove worker"
+			>
+				{removing ? '…' : '− Remove worker'}
+			</button>
+		</div>
+	</div>
+
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 		<div>
 			<h1 class="text-xl font-semibold dark:text-white">Workers</h1>

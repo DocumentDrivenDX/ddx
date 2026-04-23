@@ -14,6 +14,25 @@ type NewConfig struct {
 	Server          *ServerConfig      `yaml:"server,omitempty" json:"server,omitempty"`
 	Executions      *ExecutionsConfig  `yaml:"executions,omitempty" json:"executions,omitempty"`
 	Cost            *CostConfig        `yaml:"cost,omitempty" json:"cost,omitempty"`
+	Workers         *WorkersConfig     `yaml:"workers,omitempty" json:"workers,omitempty"`
+}
+
+// WorkersConfig controls the Add/Remove-worker affordances on the workers
+// overview. `default_spec` supplies sane defaults for one-click worker
+// dispatch; `max_count` optionally caps concurrent drain workers per project.
+type WorkersConfig struct {
+	DefaultSpec *WorkerDefaultSpec `yaml:"default_spec,omitempty" json:"default_spec,omitempty"`
+	MaxCount    *int               `yaml:"max_count,omitempty" json:"max_count,omitempty"`
+}
+
+// WorkerDefaultSpec mirrors the knobs a one-click "+ Add worker" dispatch
+// honours. Any field left unset falls back to the built-in `ddx work` defaults.
+type WorkerDefaultSpec struct {
+	Harness string `yaml:"harness,omitempty" json:"harness,omitempty"`
+	Profile string `yaml:"profile,omitempty" json:"profile,omitempty"`
+	Effort  string `yaml:"effort,omitempty" json:"effort,omitempty"`
+	MinTier string `yaml:"min_tier,omitempty" json:"min_tier,omitempty"`
+	MaxTier string `yaml:"max_tier,omitempty" json:"max_tier,omitempty"`
 }
 
 // CostConfig controls optional cost estimates that DDx cannot infer safely.

@@ -460,6 +460,45 @@
         }
       },
       "additionalProperties": false
+    },
+    "workers": {
+      "type": "object",
+      "description": "Defaults and safety rails for the workers overview (+ Add worker / − Remove worker count control).",
+      "properties": {
+        "default_spec": {
+          "type": "object",
+          "description": "Default worker spec used by + Add worker on the workers overview. Any field left unset falls back to `ddx work` defaults.",
+          "properties": {
+            "harness": {
+              "type": "string",
+              "description": "Default harness name. Empty leaves routing to the agent profile."
+            },
+            "profile": {
+              "type": "string",
+              "description": "Default routing profile (e.g. default, cheap, fast, smart)."
+            },
+            "effort": {
+              "type": "string",
+              "description": "Default reasoning-effort tier (low, medium, high)."
+            },
+            "min_tier": {
+              "type": "string",
+              "description": "Optional minimum routing tier."
+            },
+            "max_tier": {
+              "type": "string",
+              "description": "Optional maximum routing tier."
+            }
+          },
+          "additionalProperties": false
+        },
+        "max_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional cap on running drain workers. + Add worker refuses to exceed this limit. Unset = no cap."
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

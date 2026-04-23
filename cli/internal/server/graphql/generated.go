@@ -908,6 +908,7 @@ type ComplexityRoot struct {
 		ProviderStatuses            func(childComplexity int) int
 		ProviderTrend               func(childComplexity int, name string, windowDays int) int
 		Providers                   func(childComplexity int) int
+		QueueAndWorkersSummary      func(childComplexity int, projectID string) int
 		QueueSummary                func(childComplexity int, projectID string) int
 		Ready                       func(childComplexity int) int
 		Search                      func(childComplexity int, query string, first *int, after *string, last *int, before *string) int
@@ -918,6 +919,12 @@ type ComplexityRoot struct {
 		WorkerPrompt                func(childComplexity int, workerID string) int
 		Workers                     func(childComplexity int, first *int, after *string, last *int, before *string) int
 		WorkersByProject            func(childComplexity int, projectID string, first *int, after *string, last *int, before *string) int
+	}
+
+	QueueAndWorkersSummary struct {
+		ReadyBeads     func(childComplexity int) int
+		RunningWorkers func(childComplexity int) int
+		TotalWorkers   func(childComplexity int) int
 	}
 
 	QueueSummary struct {
@@ -1211,6 +1218,7 @@ type QueryResolver interface {
 	DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error)
 	ProviderTrend(ctx context.Context, name string, windowDays int) (*ProviderTrend, error)
 	QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error)
+	QueueAndWorkersSummary(ctx context.Context, projectID string) (*QueueAndWorkersSummary, error)
 	EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error)
 	EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string) (*EfficacyAttempts, error)
 	Comparisons(ctx context.Context) ([]*ComparisonRecord, error)
@@ -5203,6 +5211,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Providers(childComplexity), true
+	case "Query.queueAndWorkersSummary":
+		if e.ComplexityRoot.Query.QueueAndWorkersSummary == nil {
+			break
+		}
+
+		args, err := ec.field_Query_queueAndWorkersSummary_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.QueueAndWorkersSummary(childComplexity, args["projectId"].(string)), true
 	case "Query.queueSummary":
 		if e.ComplexityRoot.Query.QueueSummary == nil {
 			break
@@ -5308,6 +5327,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.WorkersByProject(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
+
+	case "QueueAndWorkersSummary.readyBeads":
+		if e.ComplexityRoot.QueueAndWorkersSummary.ReadyBeads == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueAndWorkersSummary.ReadyBeads(childComplexity), true
+	case "QueueAndWorkersSummary.runningWorkers":
+		if e.ComplexityRoot.QueueAndWorkersSummary.RunningWorkers == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueAndWorkersSummary.RunningWorkers(childComplexity), true
+	case "QueueAndWorkersSummary.totalWorkers":
+		if e.ComplexityRoot.QueueAndWorkersSummary.TotalWorkers == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueAndWorkersSummary.TotalWorkers(childComplexity), true
 
 	case "QueueSummary.blocked":
 		if e.ComplexityRoot.QueueSummary.Blocked == nil {
@@ -7387,6 +7425,17 @@ func (ec *executionContext) field_Query_provider_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_queueAndWorkersSummary_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -28004,6 +28053,55 @@ func (ec *executionContext) fieldContext_Query_queueSummary(ctx context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_queueAndWorkersSummary(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_queueAndWorkersSummary,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().QueueAndWorkersSummary(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNQueueAndWorkersSummary2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐQueueAndWorkersSummary,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_queueAndWorkersSummary(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "readyBeads":
+				return ec.fieldContext_QueueAndWorkersSummary_readyBeads(ctx, field)
+			case "runningWorkers":
+				return ec.fieldContext_QueueAndWorkersSummary_runningWorkers(ctx, field)
+			case "totalWorkers":
+				return ec.fieldContext_QueueAndWorkersSummary_totalWorkers(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QueueAndWorkersSummary", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_queueAndWorkersSummary_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_efficacyRows(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -28476,6 +28574,93 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueAndWorkersSummary_readyBeads(ctx context.Context, field graphql.CollectedField, obj *QueueAndWorkersSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueAndWorkersSummary_readyBeads,
+		func(ctx context.Context) (any, error) {
+			return obj.ReadyBeads, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueAndWorkersSummary_readyBeads(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueAndWorkersSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueAndWorkersSummary_runningWorkers(ctx context.Context, field graphql.CollectedField, obj *QueueAndWorkersSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueAndWorkersSummary_runningWorkers,
+		func(ctx context.Context) (any, error) {
+			return obj.RunningWorkers, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueAndWorkersSummary_runningWorkers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueAndWorkersSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueAndWorkersSummary_totalWorkers(ctx context.Context, field graphql.CollectedField, obj *QueueAndWorkersSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueAndWorkersSummary_totalWorkers,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalWorkers, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueAndWorkersSummary_totalWorkers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueAndWorkersSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -41060,6 +41245,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "queueAndWorkersSummary":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_queueAndWorkersSummary(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "efficacyRows":
 			field := field
 
@@ -41219,6 +41426,55 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___schema(ctx, field)
 			})
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var queueAndWorkersSummaryImplementors = []string{"QueueAndWorkersSummary"}
+
+func (ec *executionContext) _QueueAndWorkersSummary(ctx context.Context, sel ast.SelectionSet, obj *QueueAndWorkersSummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, queueAndWorkersSummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("QueueAndWorkersSummary")
+		case "readyBeads":
+			out.Values[i] = ec._QueueAndWorkersSummary_readyBeads(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runningWorkers":
+			out.Values[i] = ec._QueueAndWorkersSummary_runningWorkers(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalWorkers":
+			out.Values[i] = ec._QueueAndWorkersSummary_totalWorkers(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -44361,6 +44617,20 @@ func (ec *executionContext) marshalNProviderTrendPoint2ᚖgithubᚗcomᚋDocumen
 		return graphql.Null
 	}
 	return ec._ProviderTrendPoint(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNQueueAndWorkersSummary2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐQueueAndWorkersSummary(ctx context.Context, sel ast.SelectionSet, v QueueAndWorkersSummary) graphql.Marshaler {
+	return ec._QueueAndWorkersSummary(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNQueueAndWorkersSummary2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐQueueAndWorkersSummary(ctx context.Context, sel ast.SelectionSet, v *QueueAndWorkersSummary) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._QueueAndWorkersSummary(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNQueueSummary2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐQueueSummary(ctx context.Context, sel ast.SelectionSet, v QueueSummary) graphql.Marshaler {

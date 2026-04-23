@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
@@ -80,6 +81,35 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		}
 	}
 
+	// Apply .ddx/config.yaml workers.default_spec + enforce workers.max_count
+	// (ddx-b6cf025c). The max_count cap counts currently-running drain workers
+	// for this project so the "+ Add worker" button can refuse cleanly.
+	if wc := loadWorkersConfig(projectRoot); wc != nil {
+		if spec := wc.DefaultSpec; spec != nil {
+			if req.Harness == "" {
+				req.Harness = spec.Harness
+			}
+			if req.Profile == "" {
+				req.Profile = spec.Profile
+			}
+			if req.Effort == "" {
+				req.Effort = spec.Effort
+			}
+			if req.MinTier == "" {
+				req.MinTier = spec.MinTier
+			}
+			if req.MaxTier == "" {
+				req.MaxTier = spec.MaxTier
+			}
+		}
+		if wc.MaxCount != nil && *wc.MaxCount >= 0 {
+			running := a.countRunningDrainWorkers(projectRoot)
+			if running >= *wc.MaxCount {
+				return nil, fmt.Errorf("workers.max_count cap reached: %d running (limit %d)", running, *wc.MaxCount)
+			}
+		}
+	}
+
 	var pollInterval time.Duration
 	if req.PollInterval != "" {
 		d, err := time.ParseDuration(req.PollInterval)
@@ -114,6 +144,39 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		State: record.State,
 		Kind:  record.Kind,
 	}, nil
+}
+
+// loadWorkersConfig reads .ddx/config.yaml at projectRoot and returns the
+// workers block, or nil when unset / on error. Errors are swallowed because
+// a missing or malformed config must not block the dispatch path.
+func loadWorkersConfig(projectRoot string) *config.WorkersConfig {
+	if projectRoot == "" {
+		return nil
+	}
+	cfg, err := config.LoadWithWorkingDir(projectRoot)
+	if err != nil || cfg == nil {
+		return nil
+	}
+	return cfg.Workers
+}
+
+// countRunningDrainWorkers counts execute-loop workers currently in state
+// "running" for projectRoot. Returns 0 on any error.
+func (a *workerDispatchAdapter) countRunningDrainWorkers(projectRoot string) int {
+	if a == nil || a.manager == nil {
+		return 0
+	}
+	recs, err := a.manager.List()
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, rec := range recs {
+		if rec.Kind == "execute-loop" && rec.State == "running" && rec.ProjectRoot == projectRoot {
+			count++
+		}
+	}
+	return count
 }
 
 func (a *workerDispatchAdapter) DispatchPlugin(ctx context.Context, projectRoot string, name string, action string, scope string) (*ddxgraphql.PluginDispatchResult, error) {
