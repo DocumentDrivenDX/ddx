@@ -16,7 +16,20 @@ type Persona struct {
 
 	// Content is the markdown content (body) of the persona
 	Content string `yaml:"-"` // Not included in YAML frontmatter
+
+	// Source identifies where the persona came from: "library" or "project".
+	// Library personas are read-only; project personas are editable.
+	Source string `yaml:"-"`
+
+	// FilePath is the absolute path on disk where the persona lives.
+	FilePath string `yaml:"-"`
 }
+
+// Source constants identify where a persona came from.
+const (
+	SourceLibrary = "library"
+	SourceProject = "project"
+)
 
 // PersonaLoader interface for loading and discovering personas
 type PersonaLoader interface {
@@ -103,13 +116,16 @@ func (e *PersonaError) Unwrap() error {
 
 // Error types for persona operations
 const (
-	ErrorPersonaNotFound = "persona_not_found"
-	ErrorInvalidPersona  = "invalid_persona"
-	ErrorBindingNotFound = "binding_not_found"
-	ErrorConfigNotFound  = "config_not_found"
-	ErrorInvalidConfig   = "invalid_config"
-	ErrorFileOperation   = "file_operation"
-	ErrorValidation      = "validation"
+	ErrorPersonaNotFound  = "persona_not_found"
+	ErrorInvalidPersona   = "invalid_persona"
+	ErrorBindingNotFound  = "binding_not_found"
+	ErrorConfigNotFound   = "config_not_found"
+	ErrorInvalidConfig    = "invalid_config"
+	ErrorFileOperation    = "file_operation"
+	ErrorValidation       = "validation"
+	ErrorAlreadyExists    = "persona_already_exists"
+	ErrorReadOnlyLibrary  = "persona_is_library_read_only"
+	ErrorNoProjectContext = "no_project_context"
 )
 
 // NewPersonaError creates a new persona error

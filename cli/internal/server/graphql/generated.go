@@ -573,6 +573,10 @@ type ComplexityRoot struct {
 		ComparisonDispatch func(childComplexity int, arms []*ComparisonArmInput) int
 		DocumentWrite      func(childComplexity int, path string, content string) int
 		PersonaBind        func(childComplexity int, role string, persona string, projectID string) int
+		PersonaCreate      func(childComplexity int, name string, body string, projectID string) int
+		PersonaDelete      func(childComplexity int, name string, projectID string) int
+		PersonaFork        func(childComplexity int, libraryName string, newName *string, projectID string) int
+		PersonaUpdate      func(childComplexity int, name string, body string, projectID string) int
 		PluginDispatch     func(childComplexity int, name string, action string, scope string) int
 		WorkerDispatch     func(childComplexity int, kind string, projectID string, args *string) int
 	}
@@ -652,6 +656,11 @@ type ComplexityRoot struct {
 		Edges      func(childComplexity int) int
 		PageInfo   func(childComplexity int) int
 		TotalCount func(childComplexity int) int
+	}
+
+	PersonaDeleteResult struct {
+		Name func(childComplexity int) int
+		Ok   func(childComplexity int) int
 	}
 
 	PersonaEdge struct {
@@ -779,9 +788,9 @@ type ComplexityRoot struct {
 		Node                        func(childComplexity int, id string) int
 		NodeInfo                    func(childComplexity int) int
 		PaletteSearch               func(childComplexity int, query string) int
-		Persona                     func(childComplexity int, name string) int
+		Persona                     func(childComplexity int, name string, projectID *string) int
 		PersonaByRole               func(childComplexity int, role string) int
-		Personas                    func(childComplexity int) int
+		Personas                    func(childComplexity int, projectID *string) int
 		PluginDetail                func(childComplexity int, name string) int
 		PluginsList                 func(childComplexity int) int
 		ProjectBindings             func(childComplexity int, projectID string) int
@@ -1002,6 +1011,10 @@ type MutationResolver interface {
 	PluginDispatch(ctx context.Context, name string, action string, scope string) (*PluginDispatchResult, error)
 	ComparisonDispatch(ctx context.Context, arms []*ComparisonArmInput) (*ComparisonDispatchResult, error)
 	PersonaBind(ctx context.Context, role string, persona string, projectID string) (*PersonaBindResult, error)
+	PersonaCreate(ctx context.Context, name string, body string, projectID string) (*Persona, error)
+	PersonaUpdate(ctx context.Context, name string, body string, projectID string) (*Persona, error)
+	PersonaDelete(ctx context.Context, name string, projectID string) (*PersonaDeleteResult, error)
+	PersonaFork(ctx context.Context, libraryName string, newName *string, projectID string) (*Persona, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id string) (Node, error)
@@ -1034,8 +1047,8 @@ type QueryResolver interface {
 	WorkerPrompt(ctx context.Context, workerID string) (string, error)
 	AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) (*AgentSessionConnection, error)
 	AgentSession(ctx context.Context, id string) (*AgentSession, error)
-	Personas(ctx context.Context) ([]*Persona, error)
-	Persona(ctx context.Context, name string) (*Persona, error)
+	Personas(ctx context.Context, projectID *string) ([]*Persona, error)
+	Persona(ctx context.Context, name string, projectID *string) (*Persona, error)
 	PersonaByRole(ctx context.Context, role string) (*Persona, error)
 	ExecDefinitions(ctx context.Context, first *int, after *string, last *int, before *string, artifactID *string) (*ExecutionDefinitionConnection, error)
 	ExecDefinition(ctx context.Context, id string) (*ExecutionDefinition, error)
@@ -3342,6 +3355,50 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PersonaBind(childComplexity, args["role"].(string), args["persona"].(string), args["projectId"].(string)), true
+	case "Mutation.personaCreate":
+		if e.ComplexityRoot.Mutation.PersonaCreate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_personaCreate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PersonaCreate(childComplexity, args["name"].(string), args["body"].(string), args["projectId"].(string)), true
+	case "Mutation.personaDelete":
+		if e.ComplexityRoot.Mutation.PersonaDelete == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_personaDelete_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PersonaDelete(childComplexity, args["name"].(string), args["projectId"].(string)), true
+	case "Mutation.personaFork":
+		if e.ComplexityRoot.Mutation.PersonaFork == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_personaFork_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PersonaFork(childComplexity, args["libraryName"].(string), args["newName"].(*string), args["projectId"].(string)), true
+	case "Mutation.personaUpdate":
+		if e.ComplexityRoot.Mutation.PersonaUpdate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_personaUpdate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PersonaUpdate(childComplexity, args["name"].(string), args["body"].(string), args["projectId"].(string)), true
 	case "Mutation.pluginDispatch":
 		if e.ComplexityRoot.Mutation.PluginDispatch == nil {
 			break
@@ -3639,6 +3696,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.PersonaConnection.TotalCount(childComplexity), true
+
+	case "PersonaDeleteResult.name":
+		if e.ComplexityRoot.PersonaDeleteResult.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PersonaDeleteResult.Name(childComplexity), true
+	case "PersonaDeleteResult.ok":
+		if e.ComplexityRoot.PersonaDeleteResult.Ok == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PersonaDeleteResult.Ok(childComplexity), true
 
 	case "PersonaEdge.cursor":
 		if e.ComplexityRoot.PersonaEdge.Cursor == nil {
@@ -4375,7 +4445,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Persona(childComplexity, args["name"].(string)), true
+		return e.ComplexityRoot.Query.Persona(childComplexity, args["name"].(string), args["projectId"].(*string)), true
 	case "Query.personaByRole":
 		if e.ComplexityRoot.Query.PersonaByRole == nil {
 			break
@@ -4392,7 +4462,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.ComplexityRoot.Query.Personas(childComplexity), true
+		args, err := ec.field_Query_personas_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Personas(childComplexity, args["projectId"].(*string)), true
 	case "Query.pluginDetail":
 		if e.ComplexityRoot.Query.PluginDetail == nil {
 			break
@@ -5547,6 +5622,85 @@ func (ec *executionContext) field_Mutation_personaBind_args(ctx context.Context,
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_personaCreate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "body", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["body"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_personaDelete_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_personaFork_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "libraryName", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["libraryName"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "newName", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["newName"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_personaUpdate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "body", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["body"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_pluginDispatch_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6224,6 +6378,22 @@ func (ec *executionContext) field_Query_persona_args(ctx context.Context, rawArg
 		return nil, err
 	}
 	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_personas_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -18105,6 +18275,248 @@ func (ec *executionContext) fieldContext_Mutation_personaBind(ctx context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_personaCreate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_personaCreate,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PersonaCreate(ctx, fc.Args["name"].(string), fc.Args["body"].(string), fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNPersona2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersona,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_personaCreate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Persona_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Persona_name(ctx, field)
+			case "roles":
+				return ec.fieldContext_Persona_roles(ctx, field)
+			case "description":
+				return ec.fieldContext_Persona_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_Persona_tags(ctx, field)
+			case "content":
+				return ec.fieldContext_Persona_content(ctx, field)
+			case "body":
+				return ec.fieldContext_Persona_body(ctx, field)
+			case "source":
+				return ec.fieldContext_Persona_source(ctx, field)
+			case "bindings":
+				return ec.fieldContext_Persona_bindings(ctx, field)
+			case "filePath":
+				return ec.fieldContext_Persona_filePath(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Persona_modTime(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Persona", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_personaCreate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_personaUpdate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_personaUpdate,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PersonaUpdate(ctx, fc.Args["name"].(string), fc.Args["body"].(string), fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNPersona2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersona,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_personaUpdate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Persona_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Persona_name(ctx, field)
+			case "roles":
+				return ec.fieldContext_Persona_roles(ctx, field)
+			case "description":
+				return ec.fieldContext_Persona_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_Persona_tags(ctx, field)
+			case "content":
+				return ec.fieldContext_Persona_content(ctx, field)
+			case "body":
+				return ec.fieldContext_Persona_body(ctx, field)
+			case "source":
+				return ec.fieldContext_Persona_source(ctx, field)
+			case "bindings":
+				return ec.fieldContext_Persona_bindings(ctx, field)
+			case "filePath":
+				return ec.fieldContext_Persona_filePath(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Persona_modTime(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Persona", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_personaUpdate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_personaDelete(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_personaDelete,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PersonaDelete(ctx, fc.Args["name"].(string), fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNPersonaDeleteResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersonaDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_personaDelete(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "ok":
+				return ec.fieldContext_PersonaDeleteResult_ok(ctx, field)
+			case "name":
+				return ec.fieldContext_PersonaDeleteResult_name(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PersonaDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_personaDelete_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_personaFork(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_personaFork,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PersonaFork(ctx, fc.Args["libraryName"].(string), fc.Args["newName"].(*string), fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNPersona2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersona,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_personaFork(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Persona_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Persona_name(ctx, field)
+			case "roles":
+				return ec.fieldContext_Persona_roles(ctx, field)
+			case "description":
+				return ec.fieldContext_Persona_description(ctx, field)
+			case "tags":
+				return ec.fieldContext_Persona_tags(ctx, field)
+			case "content":
+				return ec.fieldContext_Persona_content(ctx, field)
+			case "body":
+				return ec.fieldContext_Persona_body(ctx, field)
+			case "source":
+				return ec.fieldContext_Persona_source(ctx, field)
+			case "bindings":
+				return ec.fieldContext_Persona_bindings(ctx, field)
+			case "filePath":
+				return ec.fieldContext_Persona_filePath(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Persona_modTime(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Persona", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_personaFork_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NodeInfo_id(ctx context.Context, field graphql.CollectedField, obj *NodeInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19432,6 +19844,64 @@ func (ec *executionContext) fieldContext_PersonaConnection_totalCount(_ context.
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PersonaDeleteResult_ok(ctx context.Context, field graphql.CollectedField, obj *PersonaDeleteResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PersonaDeleteResult_ok,
+		func(ctx context.Context) (any, error) {
+			return obj.Ok, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PersonaDeleteResult_ok(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PersonaDeleteResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PersonaDeleteResult_name(ctx context.Context, field graphql.CollectedField, obj *PersonaDeleteResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PersonaDeleteResult_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PersonaDeleteResult_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PersonaDeleteResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -22615,7 +23085,8 @@ func (ec *executionContext) _Query_personas(ctx context.Context, field graphql.C
 		field,
 		ec.fieldContext_Query_personas,
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Query().Personas(ctx)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Personas(ctx, fc.Args["projectId"].(*string))
 		},
 		nil,
 		ec.marshalNPersona2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersonaᚄ,
@@ -22624,7 +23095,7 @@ func (ec *executionContext) _Query_personas(ctx context.Context, field graphql.C
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_personas(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_personas(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -22658,6 +23129,17 @@ func (ec *executionContext) fieldContext_Query_personas(_ context.Context, field
 			return nil, fmt.Errorf("no field named %q was found under type Persona", field.Name)
 		},
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_personas_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
 	return fc, nil
 }
 
@@ -22669,7 +23151,7 @@ func (ec *executionContext) _Query_persona(ctx context.Context, field graphql.Co
 		ec.fieldContext_Query_persona,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Persona(ctx, fc.Args["name"].(string))
+			return ec.Resolvers.Query().Persona(ctx, fc.Args["name"].(string), fc.Args["projectId"].(*string))
 		},
 		nil,
 		ec.marshalOPersona2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersona,
@@ -33202,6 +33684,34 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "personaCreate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_personaCreate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "personaUpdate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_personaUpdate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "personaDelete":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_personaDelete(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "personaFork":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_personaFork(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -33781,6 +34291,50 @@ func (ec *executionContext) _PersonaConnection(ctx context.Context, sel ast.Sele
 			}
 		case "totalCount":
 			out.Values[i] = ec._PersonaConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var personaDeleteResultImplementors = []string{"PersonaDeleteResult"}
+
+func (ec *executionContext) _PersonaDeleteResult(ctx context.Context, sel ast.SelectionSet, obj *PersonaDeleteResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, personaDeleteResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PersonaDeleteResult")
+		case "ok":
+			out.Values[i] = ec._PersonaDeleteResult_ok(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._PersonaDeleteResult_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -38207,6 +38761,10 @@ func (ec *executionContext) marshalNPaletteSearchResults2ᚖgithubᚗcomᚋDocum
 	return ec._PaletteSearchResults(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNPersona2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersona(ctx context.Context, sel ast.SelectionSet, v Persona) graphql.Marshaler {
+	return ec._Persona(ctx, sel, &v)
+}
+
 func (ec *executionContext) marshalNPersona2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersonaᚄ(ctx context.Context, sel ast.SelectionSet, v []*Persona) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -38271,6 +38829,20 @@ func (ec *executionContext) marshalNPersonaBinding2ᚖgithubᚗcomᚋDocumentDri
 		return graphql.Null
 	}
 	return ec._PersonaBinding(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNPersonaDeleteResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersonaDeleteResult(ctx context.Context, sel ast.SelectionSet, v PersonaDeleteResult) graphql.Marshaler {
+	return ec._PersonaDeleteResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNPersonaDeleteResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersonaDeleteResult(ctx context.Context, sel ast.SelectionSet, v *PersonaDeleteResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PersonaDeleteResult(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNPersonaEdge2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPersonaEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*PersonaEdge) graphql.Marshaler {

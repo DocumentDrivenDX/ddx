@@ -1156,6 +1156,14 @@ type PersonaConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
+// PersonaDeleteResult reports a project-local persona delete.
+type PersonaDeleteResult struct {
+	// True when the persona was deleted
+	Ok bool `json:"ok"`
+	// Persona name that was deleted
+	Name string `json:"name"`
+}
+
 // PersonaEdge is one edge in a PersonaConnection
 type PersonaEdge struct {
 	// The persona at this position

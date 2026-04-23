@@ -8,8 +8,8 @@ import (
 )
 
 // Personas is the resolver for the personas field.
-func (r *queryResolver) Personas(ctx context.Context) ([]*Persona, error) {
-	loader := persona.NewPersonaLoader(r.WorkingDir)
+func (r *queryResolver) Personas(ctx context.Context, projectID *string) ([]*Persona, error) {
+	loader := persona.NewPersonaLoader(r.personaProjectRoot(projectID))
 	ps, err := loader.ListPersonas()
 	if err != nil {
 		return nil, fmt.Errorf("loading personas: %w", err)
@@ -22,13 +22,23 @@ func (r *queryResolver) Personas(ctx context.Context) ([]*Persona, error) {
 }
 
 // Persona is the resolver for the persona field.
-func (r *queryResolver) Persona(ctx context.Context, name string) (*Persona, error) {
-	loader := persona.NewPersonaLoader(r.WorkingDir)
+func (r *queryResolver) Persona(ctx context.Context, name string, projectID *string) (*Persona, error) {
+	loader := persona.NewPersonaLoader(r.personaProjectRoot(projectID))
 	p, err := loader.LoadPersona(name)
 	if err != nil {
 		return nil, nil //nolint:nilerr // not-found is represented as null
 	}
 	return personaToGQL(p), nil
+}
+
+// personaProjectRoot resolves the working directory for persona loading.
+// When a project ID is provided, it resolves via projectRoot; otherwise
+// falls back to the server's working directory.
+func (r *queryResolver) personaProjectRoot(projectID *string) string {
+	if projectID != nil && *projectID != "" {
+		return r.projectRoot(*projectID)
+	}
+	return r.WorkingDir
 }
 
 // PersonaByRole is the resolver for the personaByRole field.
@@ -54,6 +64,15 @@ func (r *queryResolver) CoordinatorMetricsByProject(ctx context.Context, project
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 func personaToGQL(p *persona.Persona) *Persona {
+	source := p.Source
+	if source == "" {
+		source = persona.SourceLibrary
+	}
+	var filePath *string
+	if p.FilePath != "" {
+		fp := p.FilePath
+		filePath = &fp
+	}
 	return &Persona{
 		ID:          "persona-" + p.Name,
 		Name:        p.Name,
@@ -62,8 +81,9 @@ func personaToGQL(p *persona.Persona) *Persona {
 		Tags:        p.Tags,
 		Content:     p.Content,
 		Body:        p.Content,
-		Source:      "ddx-library",
+		Source:      source,
 		Bindings:    []*PersonaBinding{},
+		FilePath:    filePath,
 	}
 }
 
