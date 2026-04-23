@@ -146,7 +146,6 @@ type testStateProvider struct {
 	projects    []*ddxgraphql.Project
 	beads       []ddxgraphql.BeadSnapshot
 	costSummary *ddxgraphql.SessionsCostSummary
-	workers     map[string][]*ddxgraphql.Worker
 }
 
 func newTestStateProvider(workDir string, store *bead.Store) *testStateProvider {
@@ -251,12 +250,7 @@ func (p *testStateProvider) GetBeadSnapshot(id string) (*ddxgraphql.BeadSnapshot
 }
 
 // No-op implementations for resolver methods not exercised by these tests.
-func (p *testStateProvider) GetWorkersGraphQL(projectID string) []*ddxgraphql.Worker {
-	if p.workers == nil {
-		return nil
-	}
-	return p.workers[projectID]
-}
+func (p *testStateProvider) GetWorkersGraphQL(_ string) []*ddxgraphql.Worker { return nil }
 func (p *testStateProvider) GetWorkerGraphQL(_ string) (*ddxgraphql.Worker, bool) {
 	return nil, false
 }

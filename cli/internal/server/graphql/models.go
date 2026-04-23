@@ -1528,18 +1528,6 @@ type ProviderUsage struct {
 type Query struct {
 }
 
-// QueueAndWorkersSummary backs the global drain indicator. Combines the
-// ready-bead count with running/total worker counts so the NavShell badge
-// can render without issuing two queries per poll.
-type QueueAndWorkersSummary struct {
-	// Open beads with no unmet dependencies (the drain queue depth)
-	ReadyBeads int `json:"readyBeads"`
-	// Count of workers in state `running` for this project
-	RunningWorkers int `json:"runningWorkers"`
-	// Total workers on record for this project (any state)
-	TotalWorkers int `json:"totalWorkers"`
-}
-
 // QueueSummary is a compact project queue status for action dispatch.
 type QueueSummary struct {
 	// Open beads with no unmet dependencies

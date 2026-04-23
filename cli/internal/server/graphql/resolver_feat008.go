@@ -287,32 +287,6 @@ func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*Qu
 	}, nil
 }
 
-// QueueAndWorkersSummary backs the global drain indicator (ddx-b6cf025c).
-// Returns zeros — not an error — for unknown or empty projects so the nav
-// component can render without special-casing failures.
-func (r *queryResolver) QueueAndWorkersSummary(ctx context.Context, projectID string) (*QueueAndWorkersSummary, error) {
-	out := &QueueAndWorkersSummary{}
-	// Only resolve ready beads when the projectID maps to a real project.
-	// Unknown IDs return zeros rather than falling back to WorkingDir so the
-	// indicator does not surface an unrelated project's queue depth.
-	if r.State != nil {
-		if proj, ok := r.State.GetProjectSnapshotByID(projectID); ok && proj.Path != "" {
-			store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
-			if ready, err := store.Ready(); err == nil {
-				out.ReadyBeads = len(ready)
-			}
-		}
-		workers := r.State.GetWorkersGraphQL(projectID)
-		out.TotalWorkers = len(workers)
-		for _, w := range workers {
-			if w != nil && w.State == "running" {
-				out.RunningWorkers++
-			}
-		}
-	}
-	return out, nil
-}
-
 // EfficacyRows is the resolver for the efficacyRows field.
 func (r *queryResolver) EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error) {
 	snap, err := r.efficacySnapshot(since, until, projectID)
