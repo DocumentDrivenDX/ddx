@@ -869,6 +869,7 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 		ID:              id,
 		Timestamp:       time.Now().UTC(),
 		Harness:         result.Harness,
+		Provider:        result.Provider,
 		Surface:         surface,
 		CanonicalTarget: canonicalTarget,
 		Model:           result.Model,

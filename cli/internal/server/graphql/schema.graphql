@@ -1976,12 +1976,25 @@ type Query {
   ): QueueSummary!
 
   """Return model efficacy rows."""
-  efficacyRows: [EfficacyRow!]!
+  efficacyRows(
+    """Filter sessions started at or after this ISO-8601 timestamp."""
+    since: String
+    """Filter sessions started before this ISO-8601 timestamp."""
+    until: String
+    """Project identifier whose session index should be read."""
+    projectId: String
+  ): [EfficacyRow!]!
 
   """Return attempt details for one efficacy row."""
   efficacyAttempts(
     """Stable efficacy row key"""
     rowKey: String!
+    """Filter sessions started at or after this ISO-8601 timestamp."""
+    since: String
+    """Filter sessions started before this ISO-8601 timestamp."""
+    until: String
+    """Project identifier whose session index should be read."""
+    projectId: String
   ): EfficacyAttempts!
 
   """Return model comparison records."""

@@ -91,6 +91,7 @@ type SessionEntry struct {
 	ID              string            `json:"id"`
 	Timestamp       time.Time         `json:"timestamp"`
 	Harness         string            `json:"harness"`
+	Provider        string            `json:"provider,omitempty"`
 	Surface         string            `json:"surface,omitempty"`
 	CanonicalTarget string            `json:"canonical_target,omitempty"`
 	Model           string            `json:"model,omitempty"`

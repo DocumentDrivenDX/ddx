@@ -26,6 +26,7 @@ type SessionIndexEntry struct {
 	ProjectID       string    `json:"projectID,omitempty"`
 	BeadID          string    `json:"beadID,omitempty"`
 	Harness         string    `json:"harness"`
+	Provider        string    `json:"provider,omitempty"`
 	Surface         string    `json:"surface,omitempty"`
 	Model           string    `json:"model,omitempty"`
 	StartedAt       time.Time `json:"startedAt"`
@@ -177,6 +178,7 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 		ProjectID:       ProjectIDForPath(projectRoot),
 		BeadID:          beadID,
 		Harness:         harness,
+		Provider:        firstNonEmpty(result.Provider, opts.Provider),
 		Model:           model,
 		StartedAt:       startedAt.UTC(),
 		EndedAt:         endedAt.UTC(),
@@ -201,11 +203,13 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 
 func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionIndexEntry {
 	beadID := ""
+	provider := e.Provider
 	effort := ""
 	bundlePath := ""
 	baseRev := e.BaseRev
 	if e.Correlation != nil {
 		beadID = e.Correlation["bead_id"]
+		provider = firstNonEmpty(provider, e.Correlation["provider"], e.Correlation["resolved_provider"])
 		effort = e.Correlation["effort"]
 		if baseRev == "" {
 			baseRev = e.Correlation["base_rev"]
@@ -231,6 +235,7 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		ProjectID:       ProjectIDForPath(projectRoot),
 		BeadID:          beadID,
 		Harness:         e.Harness,
+		Provider:        provider,
 		Surface:         e.Surface,
 		Model:           e.Model,
 		StartedAt:       e.Timestamp.UTC(),
@@ -476,6 +481,7 @@ func SessionIndexEntryToLegacy(e SessionIndexEntry) SessionEntry {
 		ID:              e.ID,
 		Timestamp:       e.StartedAt,
 		Harness:         e.Harness,
+		Provider:        e.Provider,
 		Surface:         e.Surface,
 		Model:           e.Model,
 		Correlation:     corr,
@@ -536,6 +542,15 @@ func sessionShardMonth(name string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return month.UTC(), true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func existingSessionIndexIDs(logDir string) (map[string]struct{}, error) {

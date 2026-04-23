@@ -65,6 +65,21 @@ const ATTEMPTS_DETAIL = {
 	}))
 };
 
+const TEN_K_SESSION_FIXTURE_ROWS = Array.from({ length: 12 }, (_, i) => ({
+	rowKey: `fixture-harness-${i % 4}|fixture-provider-${i % 3}|fixture-model-${i}`,
+	harness: `fixture-harness-${i % 4}`,
+	provider: `fixture-provider-${i % 3}`,
+	model: `fixture-model-${i}`,
+	attempts: 834,
+	successes: 780,
+	successRate: 0.935,
+	medianInputTokens: 2200 + i,
+	medianOutputTokens: 700 + i,
+	medianDurationMs: 18000 + i * 100,
+	medianCostUsd: i % 5 === 0 ? null : 0.02 + i / 1000,
+	warning: null
+}));
+
 async function mockEfficacy(
 	page: import('@playwright/test').Page,
 	opts: {
@@ -213,4 +228,18 @@ test('US-096.e: row click opens detail panel with last 10 attempts and evidence 
 	// Click-through to originating bead.
 	await panel.getByRole('link', { name: /ddx-attempt-0/ }).click();
 	await expect(page).toHaveURL(/\/beads\/ddx-attempt-0/);
+});
+
+test('smoke: efficacy opens with 10k-session rollup fixture and attempt details', async ({ page }) => {
+	await mockEfficacy(page, { rows: TEN_K_SESSION_FIXTURE_ROWS });
+	await page.goto(BASE_URL);
+
+	const table = page.getByRole('table', { name: /efficacy/i });
+	await expect(table).toBeVisible();
+	await expect(table.getByRole('row')).toHaveCount(13);
+
+	await table.getByRole('row', { name: /fixture-model-0/i }).click();
+	const panel = page.getByRole('complementary', { name: /attempts|detail/i });
+	await expect(panel).toBeVisible();
+	await expect(panel.getByRole('row')).toHaveCount(11);
 });

@@ -754,8 +754,8 @@ type ComplexityRoot struct {
 		DocStale                    func(childComplexity int) int
 		DocumentByPath              func(childComplexity int, path string) int
 		Documents                   func(childComplexity int, first *int, after *string, last *int, before *string, typeArg *string) int
-		EfficacyAttempts            func(childComplexity int, rowKey string) int
-		EfficacyRows                func(childComplexity int) int
+		EfficacyAttempts            func(childComplexity int, rowKey string, since *string, until *string, projectID *string) int
+		EfficacyRows                func(childComplexity int, since *string, until *string, projectID *string) int
 		ExecDefinition              func(childComplexity int, id string) int
 		ExecDefinitions             func(childComplexity int, first *int, after *string, last *int, before *string, artifactID *string) int
 		ExecRun                     func(childComplexity int, id string) int
@@ -1044,8 +1044,8 @@ type QueryResolver interface {
 	ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error)
 	DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error)
 	QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error)
-	EfficacyRows(ctx context.Context) ([]*EfficacyRow, error)
-	EfficacyAttempts(ctx context.Context, rowKey string) (*EfficacyAttempts, error)
+	EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error)
+	EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string) (*EfficacyAttempts, error)
 	Comparisons(ctx context.Context) ([]*ComparisonRecord, error)
 	PluginsList(ctx context.Context) ([]*PluginInfo, error)
 	PluginDetail(ctx context.Context, name string) (*PluginInfo, error)
@@ -4165,13 +4165,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.EfficacyAttempts(childComplexity, args["rowKey"].(string)), true
+		return e.ComplexityRoot.Query.EfficacyAttempts(childComplexity, args["rowKey"].(string), args["since"].(*string), args["until"].(*string), args["projectId"].(*string)), true
 	case "Query.efficacyRows":
 		if e.ComplexityRoot.Query.EfficacyRows == nil {
 			break
 		}
 
-		return e.ComplexityRoot.Query.EfficacyRows(childComplexity), true
+		args, err := ec.field_Query_efficacyRows_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.EfficacyRows(childComplexity, args["since"].(*string), args["until"].(*string), args["projectId"].(*string)), true
 	case "Query.execDefinition":
 		if e.ComplexityRoot.Query.ExecDefinition == nil {
 			break
@@ -5931,6 +5936,42 @@ func (ec *executionContext) field_Query_efficacyAttempts_args(ctx context.Contex
 		return nil, err
 	}
 	args["rowKey"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "since", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["since"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "until", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["until"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_efficacyRows_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "since", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["since"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "until", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["until"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg2
 	return args, nil
 }
 
@@ -23378,7 +23419,8 @@ func (ec *executionContext) _Query_efficacyRows(ctx context.Context, field graph
 		field,
 		ec.fieldContext_Query_efficacyRows,
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Query().EfficacyRows(ctx)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().EfficacyRows(ctx, fc.Args["since"].(*string), fc.Args["until"].(*string), fc.Args["projectId"].(*string))
 		},
 		nil,
 		ec.marshalNEfficacyRow2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐEfficacyRowᚄ,
@@ -23387,7 +23429,7 @@ func (ec *executionContext) _Query_efficacyRows(ctx context.Context, field graph
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_efficacyRows(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_efficacyRows(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -23423,6 +23465,17 @@ func (ec *executionContext) fieldContext_Query_efficacyRows(_ context.Context, f
 			return nil, fmt.Errorf("no field named %q was found under type EfficacyRow", field.Name)
 		},
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_efficacyRows_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
 	return fc, nil
 }
 
@@ -23434,7 +23487,7 @@ func (ec *executionContext) _Query_efficacyAttempts(ctx context.Context, field g
 		ec.fieldContext_Query_efficacyAttempts,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().EfficacyAttempts(ctx, fc.Args["rowKey"].(string))
+			return ec.Resolvers.Query().EfficacyAttempts(ctx, fc.Args["rowKey"].(string), fc.Args["since"].(*string), fc.Args["until"].(*string), fc.Args["projectId"].(*string))
 		},
 		nil,
 		ec.marshalNEfficacyAttempts2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐEfficacyAttempts,

@@ -3,8 +3,8 @@ import { createClient } from '$lib/gql/client';
 import { gql } from 'graphql-request';
 
 const EFFICACY_ROWS_QUERY = gql`
-	query EfficacyRows {
-		efficacyRows {
+	query EfficacyRows($projectId: String) {
+		efficacyRows(projectId: $projectId) {
 			rowKey
 			harness
 			provider
@@ -71,14 +71,15 @@ interface ComparisonsResult {
 	comparisons: ComparisonRecord[];
 }
 
-export const load: PageLoad = async ({ url, fetch }) => {
+export const load: PageLoad = async ({ params, url, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch);
 	const [rowsData, comparisonsData] = await Promise.all([
-		client.request<EfficacyRowsResult>(EFFICACY_ROWS_QUERY),
+		client.request<EfficacyRowsResult>(EFFICACY_ROWS_QUERY, { projectId: params.projectId }),
 		client.request<ComparisonsResult>(COMPARISONS_QUERY)
 	]);
 
 	return {
+		projectId: params.projectId,
 		rows: rowsData.efficacyRows,
 		comparisons: comparisonsData.comparisons,
 		activeTier: url.searchParams.get('tier') ?? '',

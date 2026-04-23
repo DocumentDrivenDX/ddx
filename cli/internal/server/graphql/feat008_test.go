@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 )
@@ -97,6 +98,26 @@ install:
 	if err := store.Close(closed.ID); err != nil {
 		t.Fatal(err)
 	}
+	started := time.Date(2026, 4, 22, 14, 0, 0, 0, time.UTC)
+	if err := agent.AppendSessionIndex(agent.SessionLogDirForWorkDir(workDir), agent.SessionIndexEntry{
+		ID:           "session-closed",
+		ProjectID:    agent.ProjectIDForPath(workDir),
+		BeadID:       closed.ID,
+		Harness:      "codex",
+		Provider:     "openai",
+		Model:        "gpt-5",
+		StartedAt:    started,
+		EndedAt:      started.Add(34 * time.Second),
+		DurationMS:   34000,
+		CostUSD:      0.0123,
+		CostPresent:  true,
+		InputTokens:  1200,
+		OutputTokens: 450,
+		Outcome:      "success",
+		BundlePath:   filepath.ToSlash(filepath.Join(".ddx", "executions", "attempt-001")),
+	}, started); err != nil {
+		t.Fatal(err)
+	}
 
 	state := newTestStateProvider(workDir, store)
 	projectID := state.projects[0].ID
@@ -180,7 +201,7 @@ install:
 		t.Fatalf("queueSummary.inProgress: want 1, got %d", data.QueueSummary.InProgress)
 	}
 	if len(data.EfficacyRows) == 0 {
-		t.Fatal("expected efficacy rows from bead evidence")
+		t.Fatal("expected efficacy rows from session index")
 	}
 	row := data.EfficacyRows[0]
 	if row.RowKey != "codex|openai|gpt-5" || row.Attempts != 1 || row.Successes != 1 || row.MedianInputTokens != 1200 || row.MedianOutputTokens != 450 || row.MedianDurationMs != 34000 {

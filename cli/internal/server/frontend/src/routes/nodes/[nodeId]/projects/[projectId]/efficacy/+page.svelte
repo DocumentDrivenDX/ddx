@@ -8,8 +8,8 @@
 	import { BarChart3, GitCompareArrows, Link2, Plus, X } from 'lucide-svelte';
 
 	const EFFICACY_ATTEMPTS_QUERY = gql`
-		query EfficacyAttempts($rowKey: String!) {
-			efficacyAttempts(rowKey: $rowKey) {
+		query EfficacyAttempts($rowKey: String!, $projectId: String) {
+			efficacyAttempts(rowKey: $rowKey, projectId: $projectId) {
 				rowKey
 				attempts {
 					beadId
@@ -128,7 +128,8 @@
 		try {
 			const client = createClient();
 			const result = await client.request<EfficacyAttemptsResult>(EFFICACY_ATTEMPTS_QUERY, {
-				rowKey: key
+				rowKey: key,
+				projectId: data.projectId
 			});
 			if (selectedRowKey === key) {
 				attempts = result.efficacyAttempts.attempts.slice(0, 10);
