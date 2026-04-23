@@ -342,6 +342,54 @@ func TestSymlinkSkills_NoPreExistingTargetDir(t *testing.T) {
 	assert.NoError(t, err, "should create target dir and symlink even when .claude/ doesn't exist")
 }
 
+// Bug B regression (ddx-6365b2b3): when the plugin root is itself a
+// symlink pointing outside the project tree, link-target computation must
+// stay logical (in-repo). EvalSymlinks-resolved paths escape the project
+// and produce repo-leaving committed links that oscillate per-machine.
+func TestSymlinkSkills_PluginRootSymlinkDoesNotEscape(t *testing.T) {
+	// Layout:
+	//   <project>/.ddx/plugins/foo  → /tmp/<global>/.ddx/plugins/foo (symlink)
+	//   /tmp/<global>/.ddx/plugins/foo/.agents/skills/sample/SKILL.md (real)
+	//   <project>/.agents/skills/   (link target)
+	//
+	// Expected: <project>/.agents/skills/sample → ../../.ddx/plugins/foo/.agents/skills/sample
+	// Bug: <project>/.agents/skills/sample → ../../../../<absolute>/skills/sample
+	project := t.TempDir()
+	global := t.TempDir()
+
+	realPluginRoot := filepath.Join(global, ".ddx", "plugins", "foo")
+	skillDir := filepath.Join(realPluginRoot, ".agents", "skills", "sample")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"),
+		[]byte("---\nname: sample\ndescription: Sample\n---\n"), 0o644))
+
+	// Project-local plugin path is a symlink → global plugin root.
+	projectPluginParent := filepath.Join(project, ".ddx", "plugins")
+	require.NoError(t, os.MkdirAll(projectPluginParent, 0o755))
+	projectPluginRoot := filepath.Join(projectPluginParent, "foo")
+	require.NoError(t, os.Symlink(realPluginRoot, projectPluginRoot))
+
+	dstDir := filepath.Join(project, ".agents", "skills")
+	written, err := symlinkSkills(projectPluginRoot, &InstallMapping{
+		Source: ".agents/skills/",
+		Target: dstDir,
+	})
+	require.NoError(t, err)
+	require.Len(t, written, 1)
+
+	linkPath := filepath.Join(dstDir, "sample")
+	target, err := os.Readlink(linkPath)
+	require.NoError(t, err)
+	assert.False(t, filepath.IsAbs(target),
+		"link target should be relative; absolute paths leak the build machine: %q", target)
+	assert.NotContains(t, target, global,
+		"link target should NOT reference the global plugin root path %q (escapes project): %q", global, target)
+	// Resolved logical path stays inside the project.
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(linkPath), target))
+	assert.True(t, strings.HasPrefix(resolved, project),
+		"resolved link target %q should stay within project %q", resolved, project)
+}
+
 func TestVerifyFiles_AllMissing(t *testing.T) {
 	entry := InstalledEntry{
 		Name:  "phantom",

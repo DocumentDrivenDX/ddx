@@ -361,56 +361,39 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 		src := filepath.Join(srcDir, e.Name())
 		dst := filepath.Join(dstDir, e.Name())
 
-		// Resolve through all symlinks to get the real, absolute target
-		// path. This prevents broken symlinks when:
-		//  - the source entry is itself a relative symlink
-		//  - the target directory is outside the project (e.g. ~/.claude/skills/)
-		//
-		// GitHub tarballs resolve relative symlinks to absolute paths from
-		// the build machine (e.g. ../../skills/helix-align becomes
-		// /home/user/Projects/helix/skills/helix-align). These are broken
-		// on any other machine. When EvalSymlinks fails, read the link
-		// target and try to resolve it relative to the installed root.
-		realSrc, err := filepath.EvalSymlinks(src)
-		if err != nil {
-			// Try to recover broken symlinks from tarballs.
-			linkTarget, readErr := os.Readlink(src)
-			if readErr != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return nil, fmt.Errorf("resolving symlinks for %s: %w", src, err)
-			}
+		// Compute link target from the LOGICAL src path, NOT from the
+		// EvalSymlinks-resolved real path on disk (ddx-6365b2b3).
+		// Resolving real path follows indirections like
+		// <project>/.ddx/plugins/helix → ~/.ddx/plugins/helix, then
+		// filepath.Rel produces a repo-escaping link like
+		// ../../../../../../home/erik/.ddx/plugins/helix/.agents/skills/X
+		// which gets committed and re-rewritten to each machine's $HOME.
+		// Using the logical src keeps the link inside the project /
+		// inside the package's logical layout regardless of where the
+		// plugin physically lives.
+		logicalSrc := src
 
-			// The link target may be absolute (broken from tarball) or relative.
-			// For relative targets like ../../skills/helix-align, resolve
-			// against the directory containing the symlink.
-			if !filepath.IsAbs(linkTarget) {
-				resolved := filepath.Join(filepath.Dir(src), linkTarget)
-				resolved = filepath.Clean(resolved)
-				if info, statErr := os.Stat(resolved); statErr == nil && info.IsDir() {
-					realSrc = resolved
-				}
-			}
-			// If still unresolved, try matching the basename in the installed
-			// root's skills/ directory (the real location).
-			if realSrc == "" {
-				candidate := filepath.Join(installedRoot, "skills", e.Name())
-				if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-					realSrc = candidate
-				}
-			}
-			if realSrc == "" {
+		// Verify the source actually resolves to a directory. os.Stat
+		// follows symlinks for this check; we only use it to gate
+		// existence + recover broken tarball links, never to mutate
+		// linkTarget.
+		if info, statErr := os.Stat(logicalSrc); statErr != nil || !info.IsDir() {
+			// Tarball-build recovery: GitHub's archive tool sometimes
+			// bakes absolute paths from the build machine into symlink
+			// targets (e.g. /home/user/Projects/helix/skills/X), which
+			// break on every other machine. Fall back to looking up the
+			// entry by basename under installedRoot/skills/ (the canonical
+			// storage location for plugin skills).
+			candidate := filepath.Join(installedRoot, "skills", e.Name())
+			if cInfo, cErr := os.Stat(candidate); cErr == nil && cInfo.IsDir() {
+				logicalSrc = candidate
+			} else {
 				// Truly broken — skip this entry.
 				continue
 			}
 		}
-		realSrc, err = filepath.Abs(realSrc)
-		if err != nil {
-			return nil, fmt.Errorf("resolving absolute path %s: %w", realSrc, err)
-		}
 
-		// Remove existing file/symlink/directory.
+		// Remove existing file/symlink/directory at dst.
 		if _, err := os.Lstat(dst); err == nil {
 			if err := os.RemoveAll(dst); err != nil {
 				return nil, fmt.Errorf("removing existing %s: %w", dst, err)
@@ -422,9 +405,11 @@ func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error
 		// directory moves, and tarball rebuilds on a different machine.
 		// Fall back to the absolute path only when filepath.Rel refuses
 		// (different filesystem roots; extremely rare on Linux/macOS).
-		linkTarget := realSrc
-		if absDstDir, absErr := filepath.Abs(filepath.Dir(dst)); absErr == nil {
-			if rel, relErr := filepath.Rel(absDstDir, realSrc); relErr == nil {
+		linkTarget := logicalSrc
+		absDstDir, dstAbsErr := filepath.Abs(filepath.Dir(dst))
+		absSrc, srcAbsErr := filepath.Abs(logicalSrc)
+		if dstAbsErr == nil && srcAbsErr == nil {
+			if rel, relErr := filepath.Rel(absDstDir, absSrc); relErr == nil {
 				linkTarget = rel
 			}
 		}
