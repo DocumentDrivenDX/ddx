@@ -627,8 +627,10 @@ type DocGraph struct {
 	PathToID string `json:"pathToId"`
 	// Map of document IDs to lists of dependent IDs
 	Dependents string `json:"dependents"`
-	// Warnings generated during graph construction
+	// Warnings generated during graph construction. Derived from issues; prefer the structured issues field when rendering UI.
 	Warnings []string `json:"warnings"`
+	// Structured integrity issues for the graph, grouped by kind on the client.
+	Issues []*GraphIssue `json:"issues"`
 }
 
 // Document represents a docgraph document with dependency tracking
@@ -938,6 +940,20 @@ type FeatureCostRow struct {
 	CostUsd *float64 `json:"costUsd,omitempty"`
 	// Number of beads with unknown cost
 	UnknownBeads *int `json:"unknownBeads,omitempty"`
+}
+
+// GraphIssue describes one integrity problem discovered while building the document graph.
+type GraphIssue struct {
+	// Machine-readable category (e.g. duplicate_id, missing_dep).
+	Kind string `json:"kind"`
+	// Path of the offending document, when known.
+	Path *string `json:"path,omitempty"`
+	// Document identifier associated with the issue, when known.
+	ID *string `json:"id,omitempty"`
+	// Human-readable explanation suitable for the UI or terminal.
+	Message string `json:"message"`
+	// Related document path (e.g. the pre-existing path a duplicate ID collides with).
+	RelatedPath *string `json:"relatedPath,omitempty"`
 }
 
 // HealthStatus represents the server health response

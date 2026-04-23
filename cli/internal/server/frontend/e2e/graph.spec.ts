@@ -31,12 +31,25 @@ const GRAPH_DOCS = [
 	}
 ];
 
-function makeGraphResponse(docs = GRAPH_DOCS, warnings: string[] = []) {
+interface GraphIssueFixture {
+	kind: string;
+	path: string | null;
+	id: string | null;
+	message: string;
+	relatedPath: string | null;
+}
+
+function makeGraphResponse(
+	docs = GRAPH_DOCS,
+	warnings: string[] = [],
+	issues: GraphIssueFixture[] = []
+) {
 	return {
 		docGraph: {
 			rootDir: '/repos/alpha',
 			documents: docs,
-			warnings
+			warnings,
+			issues
 		}
 	};
 }
@@ -47,7 +60,8 @@ function makeGraphResponse(docs = GRAPH_DOCS, warnings: string[] = []) {
 async function mockGraphQL(
 	page: import('@playwright/test').Page,
 	docs = GRAPH_DOCS,
-	warnings: string[] = []
+	warnings: string[] = [],
+	issues: GraphIssueFixture[] = []
 ) {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
@@ -70,7 +84,7 @@ async function mockGraphQL(
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify({ data: makeGraphResponse(docs, warnings) })
+				body: JSON.stringify({ data: makeGraphResponse(docs, warnings, issues) })
 			});
 		} else {
 			await route.continue();
@@ -117,26 +131,142 @@ test('TC-033: graph page shows empty state when no documents', async ({ page }) 
 	await expect(page.getByText(/0 edges/)).toBeVisible();
 });
 
-// TC-034: Graph warnings are displayed in the warning banner
-test('TC-034: graph warnings appear in the warning banner', async ({ page }) => {
-	const warnings = [
-		'Circular dependency detected: doc-001 → doc-002 → doc-001',
-		'Orphaned document: docs/orphan.md'
+// TC-034: Structured issues are surfaced in the integrity panel.
+test('TC-034: structured issue messages appear in the integrity panel', async ({ page }) => {
+	const issues: GraphIssueFixture[] = [
+		{
+			kind: 'cycle',
+			path: null,
+			id: null,
+			message: 'cycle detected: doc-001 -> doc-002 -> doc-001',
+			relatedPath: null
+		},
+		{
+			kind: 'missing_dep',
+			path: 'docs/orphan.md',
+			id: 'ghost',
+			message: 'document "docs/orphan.md" declares dependency "ghost" which is not in the graph',
+			relatedPath: null
+		}
 	];
-	await mockGraphQL(page, GRAPH_DOCS, warnings);
+	await mockGraphQL(page, GRAPH_DOCS, [], issues);
 	await page.goto(BASE_URL);
 
-	await expect(page.getByText('Circular dependency detected: doc-001 → doc-002 → doc-001')).toBeVisible();
-	await expect(page.getByText('Orphaned document: docs/orphan.md')).toBeVisible();
+	// Expand groups to reveal messages.
+	await page.getByTestId('integrity-group-cycle').click();
+	await page.getByTestId('integrity-group-missing_dep').click();
+
+	await expect(page.getByText('cycle detected: doc-001 -> doc-002 -> doc-001')).toBeVisible();
+	await expect(
+		page.getByText(
+			'document "docs/orphan.md" declares dependency "ghost" which is not in the graph'
+		)
+	).toBeVisible();
 });
 
-// TC-035: No warning banner when graph has no warnings
-test('TC-035: warning banner is absent when no warnings are returned', async ({ page }) => {
-	await mockGraphQL(page, GRAPH_DOCS, []);
+// TC-035: No amber surface when graph has no issues
+test('TC-035: integrity surface is absent when no issues are returned', async ({ page }) => {
+	await mockGraphQL(page, GRAPH_DOCS, [], []);
 	await page.goto(BASE_URL);
 
-	// The warning container should not be present
-	await expect(page.locator('.bg-amber-50, .bg-amber-950')).toHaveCount(0);
+	// The integrity panel container should not be present
+	await expect(page.getByTestId('integrity-panel')).toHaveCount(0);
+});
+
+// TC-037: Integrity panel groups structured issues by kind with counts.
+test('TC-037: integrity panel groups issues by kind with counts and paths', async ({ page }) => {
+	const issues: GraphIssueFixture[] = [
+		{
+			kind: 'duplicate_id',
+			path: 'docs/alpha.md',
+			id: 'shared.id',
+			message: 'duplicate document id "shared.id" in "docs/alpha.md"',
+			relatedPath: 'docs/beta.md'
+		},
+		{
+			kind: 'missing_dep',
+			path: 'docs/gamma.md',
+			id: 'ghost.doc',
+			message: 'document "doc.gamma" declares dependency "ghost.doc" which is not in the graph',
+			relatedPath: null
+		}
+	];
+
+	await mockGraphQL(page, GRAPH_DOCS, [], issues);
+	await page.goto(BASE_URL);
+
+	const panel = page.getByTestId('integrity-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('Duplicate ID');
+	await expect(panel).toContainText('(1)');
+	await expect(panel).toContainText('Missing dep target');
+
+	const badge = page.getByTestId('integrity-badge');
+	await expect(badge).toBeVisible();
+	await expect(badge).toContainText('2');
+
+	// Expand Duplicate ID group and assert both paths are visible.
+	await page.getByTestId('integrity-group-duplicate_id').click();
+	await expect(panel).toContainText('docs/alpha.md');
+	await expect(panel).toContainText('docs/beta.md');
+
+	// Clicking the path link navigates to the documents route for that file.
+	const pathLink = panel.getByTestId('integrity-path-link').first();
+	const href = await pathLink.getAttribute('href');
+	expect(href).toBe(`/nodes/node-abc/projects/${PROJECT_ID}/documents/docs/alpha.md`);
+
+	// Follow the link to assert routing. Override the GraphQL mock to stub
+	// DocumentByPath so SvelteKit's client-side router can render the target.
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('DocumentByPath')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						documentByPath: {
+							id: 'shared.id',
+							path: 'docs/alpha.md',
+							title: 'Alpha',
+							content: '# Alpha',
+							dependsOn: [],
+							inputs: [],
+							dependents: []
+						}
+					}
+				})
+			});
+		} else if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+		} else {
+			await route.continue();
+		}
+	});
+	await pathLink.click();
+	await expect(page).toHaveURL(href!);
+});
+
+// TC-038: Clean graph hides both the badge and the integrity panel.
+test('TC-038: clean graph hides the integrity badge and panel', async ({ page }) => {
+	await mockGraphQL(page, GRAPH_DOCS, [], []);
+	await page.goto(BASE_URL);
+
+	await expect(page.getByRole('heading', { name: 'Document Graph' })).toBeVisible();
+	await expect(page.getByTestId('integrity-panel')).toHaveCount(0);
+	await expect(page.getByTestId('integrity-badge')).toHaveCount(0);
 });
 
 // TC-036: Graph page re-fetches DocGraph query on navigation (interaction with query)

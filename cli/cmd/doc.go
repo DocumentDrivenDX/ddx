@@ -56,7 +56,62 @@ Examples:
 	cmd.AddCommand(f.newDocHistoryCommand())
 	cmd.AddCommand(f.newDocDiffCommand())
 	cmd.AddCommand(f.newDocChangedCommand())
+	cmd.AddCommand(f.newDocAuditCommand())
 
+	return cmd
+}
+
+// newDocAuditCommand surfaces structured integrity issues for CI and
+// terminal use. Exits 0 when the graph is clean and 1 when any issue is
+// detected, so CI can gate merges on a healthy graph.
+func (f *CommandFactory) newDocAuditCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "audit",
+		Short:   "Audit document graph integrity (duplicates, missing deps, broken id_to_path)",
+		Aliases: []string{"integrity"},
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			graph, err := f.buildDocGraph()
+			if err != nil {
+				return err
+			}
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(graph.Issues)
+			}
+			out := cmd.OutOrStdout()
+			if len(graph.Issues) == 0 {
+				fmt.Fprintln(out, "Document graph is clean.")
+				return nil
+			}
+			groups := map[docgraph.IssueKind][]docgraph.GraphIssue{}
+			order := []docgraph.IssueKind{}
+			for _, issue := range graph.Issues {
+				if _, ok := groups[issue.Kind]; !ok {
+					order = append(order, issue.Kind)
+				}
+				groups[issue.Kind] = append(groups[issue.Kind], issue)
+			}
+			sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+			for _, kind := range order {
+				bucket := groups[kind]
+				fmt.Fprintf(out, "%s (%d):\n", kind, len(bucket))
+				for _, issue := range bucket {
+					fmt.Fprintf(out, "  - %s\n", issue.Message)
+				}
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "\n%d integrity issue(s) found\n", len(graph.Issues))
+			// Return a typed ExitError so main() exits 1 without Cobra
+			// reprinting the (empty) error message or usage summary; the
+			// grouped issue list above is the user-facing report.
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			return NewExitError(ExitCodeGeneralError, "")
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output issues as JSON")
 	return cmd
 }
 

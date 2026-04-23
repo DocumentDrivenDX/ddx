@@ -342,6 +342,7 @@ type ComplexityRoot struct {
 	DocGraph struct {
 		Dependents func(childComplexity int) int
 		Documents  func(childComplexity int) int
+		Issues     func(childComplexity int) int
 		PathToID   func(childComplexity int) int
 		RootDir    func(childComplexity int) int
 		Warnings   func(childComplexity int) int
@@ -512,6 +513,14 @@ type ComplexityRoot struct {
 		SpecID       func(childComplexity int) int
 		TotalTokens  func(childComplexity int) int
 		UnknownBeads func(childComplexity int) int
+	}
+
+	GraphIssue struct {
+		ID          func(childComplexity int) int
+		Kind        func(childComplexity int) int
+		Message     func(childComplexity int) int
+		Path        func(childComplexity int) int
+		RelatedPath func(childComplexity int) int
 	}
 
 	HealthStatus struct {
@@ -750,6 +759,7 @@ type ComplexityRoot struct {
 		DocDeps                     func(childComplexity int, documentID string) int
 		DocDiff                     func(childComplexity int, documentID string, ref *string) int
 		DocGraph                    func(childComplexity int) int
+		DocGraphIssues              func(childComplexity int) int
 		DocHistory                  func(childComplexity int, documentID string, first *int, after *string, last *int, before *string) int
 		DocStale                    func(childComplexity int) int
 		DocumentByPath              func(childComplexity int, path string) int
@@ -1007,6 +1017,7 @@ type QueryResolver interface {
 	Documents(ctx context.Context, first *int, after *string, last *int, before *string, typeArg *string) (*DocumentConnection, error)
 	DocumentByPath(ctx context.Context, path string) (*Document, error)
 	DocGraph(ctx context.Context) (*DocGraph, error)
+	DocGraphIssues(ctx context.Context) ([]*GraphIssue, error)
 	DocStale(ctx context.Context) ([]*StaleReason, error)
 	DocDeps(ctx context.Context, documentID string) ([]string, error)
 	DocDependents(ctx context.Context, documentID string) ([]string, error)
@@ -2359,6 +2370,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DocGraph.Documents(childComplexity), true
+	case "DocGraph.issues":
+		if e.ComplexityRoot.DocGraph.Issues == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DocGraph.Issues(childComplexity), true
 	case "DocGraph.pathToId":
 		if e.ComplexityRoot.DocGraph.PathToID == nil {
 			break
@@ -3039,6 +3056,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.FeatureCostRow.UnknownBeads(childComplexity), true
+
+	case "GraphIssue.id":
+		if e.ComplexityRoot.GraphIssue.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GraphIssue.ID(childComplexity), true
+	case "GraphIssue.kind":
+		if e.ComplexityRoot.GraphIssue.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GraphIssue.Kind(childComplexity), true
+	case "GraphIssue.message":
+		if e.ComplexityRoot.GraphIssue.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GraphIssue.Message(childComplexity), true
+	case "GraphIssue.path":
+		if e.ComplexityRoot.GraphIssue.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GraphIssue.Path(childComplexity), true
+	case "GraphIssue.relatedPath":
+		if e.ComplexityRoot.GraphIssue.RelatedPath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GraphIssue.RelatedPath(childComplexity), true
 
 	case "HealthStatus.startedAt":
 		if e.ComplexityRoot.HealthStatus.StartedAt == nil {
@@ -4116,6 +4164,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.DocGraph(childComplexity), true
+	case "Query.docGraphIssues":
+		if e.ComplexityRoot.Query.DocGraphIssues == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.DocGraphIssues(childComplexity), true
 	case "Query.docHistory":
 		if e.ComplexityRoot.Query.DocHistory == nil {
 			break
@@ -13066,6 +13120,47 @@ func (ec *executionContext) fieldContext_DocGraph_warnings(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _DocGraph_issues(ctx context.Context, field graphql.CollectedField, obj *DocGraph) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DocGraph_issues,
+		func(ctx context.Context) (any, error) {
+			return obj.Issues, nil
+		},
+		nil,
+		ec.marshalNGraphIssue2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐGraphIssueᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DocGraph_issues(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DocGraph",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "kind":
+				return ec.fieldContext_GraphIssue_kind(ctx, field)
+			case "path":
+				return ec.fieldContext_GraphIssue_path(ctx, field)
+			case "id":
+				return ec.fieldContext_GraphIssue_id(ctx, field)
+			case "message":
+				return ec.fieldContext_GraphIssue_message(ctx, field)
+			case "relatedPath":
+				return ec.fieldContext_GraphIssue_relatedPath(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GraphIssue", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Document_id(ctx context.Context, field graphql.CollectedField, obj *Document) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16416,6 +16511,151 @@ func (ec *executionContext) fieldContext_FeatureCostRow_unknownBeads(_ context.C
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GraphIssue_kind(ctx context.Context, field graphql.CollectedField, obj *GraphIssue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GraphIssue_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GraphIssue_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GraphIssue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GraphIssue_path(ctx context.Context, field graphql.CollectedField, obj *GraphIssue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GraphIssue_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GraphIssue_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GraphIssue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GraphIssue_id(ctx context.Context, field graphql.CollectedField, obj *GraphIssue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GraphIssue_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GraphIssue_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GraphIssue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GraphIssue_message(ctx context.Context, field graphql.CollectedField, obj *GraphIssue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GraphIssue_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GraphIssue_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GraphIssue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GraphIssue_relatedPath(ctx context.Context, field graphql.CollectedField, obj *GraphIssue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GraphIssue_relatedPath,
+		func(ctx context.Context) (any, error) {
+			return obj.RelatedPath, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GraphIssue_relatedPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GraphIssue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -21480,8 +21720,51 @@ func (ec *executionContext) fieldContext_Query_docGraph(_ context.Context, field
 				return ec.fieldContext_DocGraph_dependents(ctx, field)
 			case "warnings":
 				return ec.fieldContext_DocGraph_warnings(ctx, field)
+			case "issues":
+				return ec.fieldContext_DocGraph_issues(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type DocGraph", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_docGraphIssues(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_docGraphIssues,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().DocGraphIssues(ctx)
+		},
+		nil,
+		ec.marshalNGraphIssue2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐGraphIssueᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_docGraphIssues(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "kind":
+				return ec.fieldContext_GraphIssue_kind(ctx, field)
+			case "path":
+				return ec.fieldContext_GraphIssue_path(ctx, field)
+			case "id":
+				return ec.fieldContext_GraphIssue_id(ctx, field)
+			case "message":
+				return ec.fieldContext_GraphIssue_message(ctx, field)
+			case "relatedPath":
+				return ec.fieldContext_GraphIssue_relatedPath(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GraphIssue", field.Name)
 		},
 	}
 	return fc, nil
@@ -31379,6 +31662,11 @@ func (ec *executionContext) _DocGraph(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "issues":
+			out.Values[i] = ec._DocGraph_issues(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -32474,6 +32762,56 @@ func (ec *executionContext) _FeatureCostRow(ctx context.Context, sel ast.Selecti
 			out.Values[i] = ec._FeatureCostRow_costUsd(ctx, field, obj)
 		case "unknownBeads":
 			out.Values[i] = ec._FeatureCostRow_unknownBeads(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var graphIssueImplementors = []string{"GraphIssue"}
+
+func (ec *executionContext) _GraphIssue(ctx context.Context, sel ast.SelectionSet, obj *GraphIssue) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, graphIssueImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GraphIssue")
+		case "kind":
+			out.Values[i] = ec._GraphIssue_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "path":
+			out.Values[i] = ec._GraphIssue_path(ctx, field, obj)
+		case "id":
+			out.Values[i] = ec._GraphIssue_id(ctx, field, obj)
+		case "message":
+			out.Values[i] = ec._GraphIssue_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "relatedPath":
+			out.Values[i] = ec._GraphIssue_relatedPath(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -34320,6 +34658,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_docGraph(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "docGraphIssues":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_docGraphIssues(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -37605,6 +37965,32 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 		}
 	}
 	return graphql.WrapContextMarshaler(ctx, res)
+}
+
+func (ec *executionContext) marshalNGraphIssue2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐGraphIssueᚄ(ctx context.Context, sel ast.SelectionSet, v []*GraphIssue) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNGraphIssue2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐGraphIssue(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNGraphIssue2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐGraphIssue(ctx context.Context, sel ast.SelectionSet, v *GraphIssue) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GraphIssue(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNHealthStatus2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v HealthStatus) graphql.Marshaler {

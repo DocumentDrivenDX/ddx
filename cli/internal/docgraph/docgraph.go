@@ -1,6 +1,8 @@
 package docgraph
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -21,6 +23,48 @@ const (
 var (
 	ErrNotDocGraphDocument = errors.New("not a doc graph document")
 )
+
+// IssueKind is the machine-readable category for a GraphIssue.
+type IssueKind string
+
+const (
+	IssueDuplicateID         IssueKind = "duplicate_id"
+	IssueParseError          IssueKind = "parse_error"
+	IssueMissingDep          IssueKind = "missing_dep"
+	IssueIDPathMissing       IssueKind = "id_path_missing"
+	IssueIDPathMismatch      IssueKind = "id_path_mismatch"
+	IssueRequiredRootMissing IssueKind = "required_root_missing"
+	IssueCascadeUnknown      IssueKind = "cascade_unknown"
+	IssueCycle               IssueKind = "cycle"
+)
+
+// GraphIssue is a structured description of a problem in the document graph.
+// Kind groups issues for UI rollups; Path and ID locate the offending document
+// (both may be empty when the issue is not tied to a single file, e.g. a
+// cycle). RelatedPath points at a second file when the issue describes a
+// relationship, e.g. the pre-existing document a duplicate ID collides with.
+type GraphIssue struct {
+	Kind        IssueKind `json:"kind"`
+	Path        string    `json:"path,omitempty"`
+	ID          string    `json:"id,omitempty"`
+	Message     string    `json:"message"`
+	RelatedPath string    `json:"relatedPath,omitempty"`
+}
+
+// SuggestUniqueID returns a deterministic unique ID suggestion for a duplicate.
+// Given the same (id, path) inputs it always returns the same output. The
+// suggestion appends a short 8-character hex hash of the path so operators can
+// copy-paste a drop-in replacement without collision anxiety.
+func SuggestUniqueID(id, path string) string {
+	trimmedID := strings.TrimSpace(id)
+	trimmedPath := strings.TrimSpace(path)
+	sum := sha1.Sum([]byte(trimmedPath))
+	suffix := hex.EncodeToString(sum[:])[:8]
+	if trimmedID == "" {
+		return "doc-" + suffix
+	}
+	return trimmedID + "-" + suffix
+}
 
 type ReviewMetadata struct {
 	SelfHash   string            `yaml:"self_hash" json:"self_hash"`
@@ -58,7 +102,25 @@ type Graph struct {
 	Documents  map[string]*Document
 	PathToID   map[string]string
 	Dependents map[string][]string
-	Warnings   []string
+	Issues     []GraphIssue
+	// Warnings is kept for callers still rendering the flat string list; it is
+	// derived from Issues at the end of graph construction via MessageLines().
+	Warnings []string
+}
+
+// MessageLines returns the human-readable message strings for a set of issues,
+// sorted for stable output. Callers that historically consumed
+// Graph.Warnings can use issues.MessageLines() once migrated.
+func MessageLines(issues []GraphIssue) []string {
+	if len(issues) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		out = append(out, issue.Message)
+	}
+	sort.Strings(out)
+	return out
 }
 
 type GraphConfig struct {
@@ -112,18 +174,28 @@ func buildGraph(workingDir string, roots []string) (*Graph, error) {
 	cleanRoot := filepath.Clean(workingDir)
 	documents := make(map[string]*Document)
 	pathToID := make(map[string]string)
-	warnings := []string{}
+	issues := []GraphIssue{}
 	for _, filePath := range files {
 		doc, err := ParseDocument(filePath)
 		if err != nil {
 			if errors.Is(err, ErrNotDocGraphDocument) {
 				continue
 			}
-			warnings = append(warnings, fmt.Sprintf("%s: %v", filePath, err))
+			issues = append(issues, GraphIssue{
+				Kind:    IssueParseError,
+				Path:    relPath(cleanRoot, filePath),
+				Message: fmt.Sprintf("%s: %v", filePath, err),
+			})
 			continue
 		}
-		if _, exists := documents[doc.ID]; exists {
-			warnings = append(warnings, fmt.Sprintf("duplicate document id %q in %q", doc.ID, filePath))
+		if existing, exists := documents[doc.ID]; exists {
+			issues = append(issues, GraphIssue{
+				Kind:        IssueDuplicateID,
+				Path:        relPath(cleanRoot, filePath),
+				ID:          doc.ID,
+				Message:     fmt.Sprintf("duplicate document id %q in %q", doc.ID, filePath),
+				RelatedPath: existing.Path,
+			})
 			continue
 		}
 		doc.Path = relPath(cleanRoot, filePath)
@@ -135,13 +207,63 @@ func buildGraph(workingDir string, roots []string) (*Graph, error) {
 		RootDir:   cleanRoot,
 		Documents: documents,
 		PathToID:  pathToID,
-		Warnings:  warnings,
+		Issues:    issues,
 	}
 	g.resolveBodyLinks()
 	g.buildDependents()
+	g.detectMissingDeps()
 	g.detectCycles()
 	g.applyConfigDefaults()
+	g.finalizeWarnings()
 	return g, nil
+}
+
+// detectMissingDeps emits missing_dep issues for every declared dependency
+// that does not resolve to a document in the graph. Runs after body-link
+// resolution so link targets are already promoted to DependsOn.
+func (g *Graph) detectMissingDeps() {
+	for _, id := range sortedDocIDs(g.Documents) {
+		doc := g.Documents[id]
+		if doc == nil {
+			continue
+		}
+		for _, dep := range doc.DependsOn {
+			if _, ok := g.Documents[dep]; ok {
+				continue
+			}
+			g.Issues = append(g.Issues, GraphIssue{
+				Kind:    IssueMissingDep,
+				Path:    doc.Path,
+				ID:      dep,
+				Message: fmt.Sprintf("document %q declares dependency %q which is not in the graph", doc.ID, dep),
+			})
+		}
+	}
+}
+
+// sortedDocIDs returns the IDs of docs sorted for stable issue ordering.
+func sortedDocIDs(docs map[string]*Document) []string {
+	ids := make([]string, 0, len(docs))
+	for id := range docs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// finalizeWarnings rebuilds the deprecated Warnings string slice from Issues
+// and sorts Issues deterministically so downstream callers see stable output.
+func (g *Graph) finalizeWarnings() {
+	sort.SliceStable(g.Issues, func(i, j int) bool {
+		if g.Issues[i].Kind != g.Issues[j].Kind {
+			return g.Issues[i].Kind < g.Issues[j].Kind
+		}
+		return g.Issues[i].Message < g.Issues[j].Message
+	})
+	g.Warnings = MessageLines(g.Issues)
+	if g.Warnings == nil {
+		g.Warnings = []string{}
+	}
 }
 
 func (g *Graph) applyConfigDefaults() {
@@ -184,7 +306,11 @@ func (g *Graph) applyConfig(configs []GraphConfig) {
 		if len(cfg.Required) > 0 {
 			for _, id := range cfg.Required {
 				if _, ok := g.Documents[id]; !ok {
-					g.Warnings = append(g.Warnings, fmt.Sprintf("required root document %q not found", id))
+					g.Issues = append(g.Issues, GraphIssue{
+						Kind:    IssueRequiredRootMissing,
+						ID:      id,
+						Message: fmt.Sprintf("required root document %q not found", id),
+					})
 				}
 			}
 		}
@@ -196,20 +322,40 @@ func (g *Graph) applyConfig(configs []GraphConfig) {
 				continue
 			}
 			if _, err := os.Stat(path); err != nil {
-				g.Warnings = append(g.Warnings, fmt.Sprintf("id_to_path entry %q -> %q does not exist", id, path))
+				g.Issues = append(g.Issues, GraphIssue{
+					Kind:    IssueIDPathMissing,
+					ID:      id,
+					Path:    relPath(g.RootDir, path),
+					Message: fmt.Sprintf("id_to_path entry %q -> %q does not exist", id, path),
+				})
 				continue
 			}
 			doc, err := ParseDocument(path)
 			if err != nil {
 				if errors.Is(err, ErrNotDocGraphDocument) {
-					g.Warnings = append(g.Warnings, fmt.Sprintf("id_to_path entry %q -> %q is not a doc graph document", id, path))
+					g.Issues = append(g.Issues, GraphIssue{
+						Kind:    IssueIDPathMissing,
+						ID:      id,
+						Path:    relPath(g.RootDir, path),
+						Message: fmt.Sprintf("id_to_path entry %q -> %q is not a doc graph document", id, path),
+					})
 					continue
 				}
-				g.Warnings = append(g.Warnings, fmt.Sprintf("id_to_path entry %q -> %q could not be loaded: %v", id, path, err))
+				g.Issues = append(g.Issues, GraphIssue{
+					Kind:    IssueIDPathMissing,
+					ID:      id,
+					Path:    relPath(g.RootDir, path),
+					Message: fmt.Sprintf("id_to_path entry %q -> %q could not be loaded: %v", id, path, err),
+				})
 				continue
 			}
 			if doc.ID != id {
-				g.Warnings = append(g.Warnings, fmt.Sprintf("id_to_path mismatch for %q: %q declares %q", id, path, doc.ID))
+				g.Issues = append(g.Issues, GraphIssue{
+					Kind:    IssueIDPathMismatch,
+					ID:      id,
+					Path:    relPath(g.RootDir, path),
+					Message: fmt.Sprintf("id_to_path mismatch for %q: %q declares %q", id, path, doc.ID),
+				})
 				continue
 			}
 			g.Documents[id] = doc
@@ -220,7 +366,11 @@ func (g *Graph) applyConfig(configs []GraphConfig) {
 
 	for from, toIDs := range cascade {
 		if _, ok := g.Documents[from]; !ok {
-			g.Warnings = append(g.Warnings, fmt.Sprintf("cascade rule refers to unknown dependency root %q", from))
+			g.Issues = append(g.Issues, GraphIssue{
+				Kind:    IssueCascadeUnknown,
+				ID:      from,
+				Message: fmt.Sprintf("cascade rule refers to unknown dependency root %q", from),
+			})
 			continue
 		}
 		for _, to := range dedupeSortedStrings(toIDs) {
@@ -229,7 +379,11 @@ func (g *Graph) applyConfig(configs []GraphConfig) {
 			}
 			child, ok := g.Documents[to]
 			if !ok {
-				g.Warnings = append(g.Warnings, fmt.Sprintf("cascade rule refers to unknown target doc %q", to))
+				g.Issues = append(g.Issues, GraphIssue{
+					Kind:    IssueCascadeUnknown,
+					ID:      to,
+					Message: fmt.Sprintf("cascade rule refers to unknown target doc %q", to),
+				})
 				continue
 			}
 			if !containsString(child.DependsOn, from) {
@@ -242,7 +396,28 @@ func (g *Graph) applyConfig(configs []GraphConfig) {
 		g.Documents[id].DependsOn = dedupeSortedStrings(g.Documents[id].DependsOn)
 	}
 	g.buildDependents()
+	// Re-run integrity scans that can change after id_to_path/cascade apply.
+	g.rescanAfterConfig()
 	g.detectCycles()
+	g.finalizeWarnings()
+}
+
+// rescanAfterConfig refreshes integrity detections that depend on the final
+// document set. Currently this just re-runs missing-dep detection so deps
+// pulled in by cascade rules or id_to_path entries are evaluated, and dedupes
+// any duplicate issues introduced by the rescan.
+func (g *Graph) rescanAfterConfig() {
+	// Wipe prior missing_dep entries because applyConfig may have resolved
+	// some of them by promoting id_to_path targets into Documents.
+	filtered := g.Issues[:0]
+	for _, issue := range g.Issues {
+		if issue.Kind == IssueMissingDep {
+			continue
+		}
+		filtered = append(filtered, issue)
+	}
+	g.Issues = filtered
+	g.detectMissingDeps()
 }
 
 func findMarkdownFiles(root string, roots []string) ([]string, error) {
@@ -434,25 +609,30 @@ func (g *Graph) detectCycles() {
 				}
 				warned[warnKey] = struct{}{}
 				label := renderCycle(cycle)
-				g.Warnings = append(g.Warnings, fmt.Sprintf("cycle detected: %s", label))
+				g.Issues = append(g.Issues, GraphIssue{
+					Kind:    IssueCycle,
+					Message: fmt.Sprintf("cycle detected: %s", label),
+				})
 			} else {
 				parent := g.Documents[id]
 				selfDepends := containsString(parent.DependsOn, id)
 				if selfDepends {
 					label := fmt.Sprintf("%s -> %s", id, id)
-					g.Warnings = append(g.Warnings, fmt.Sprintf("cycle detected: %s", label))
+					g.Issues = append(g.Issues, GraphIssue{
+						Kind:    IssueCycle,
+						ID:      id,
+						Message: fmt.Sprintf("cycle detected: %s", label),
+					})
 				}
 			}
 		}
 	}
 
-	for id := range g.Documents {
+	for _, id := range sortedDocIDs(g.Documents) {
 		if _, ok := indexes[id]; !ok {
 			visit(id)
 		}
 	}
-
-	sort.Strings(g.Warnings)
 }
 
 func cycleKey(ids []string) string {
