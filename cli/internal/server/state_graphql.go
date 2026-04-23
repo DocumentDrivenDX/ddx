@@ -544,12 +544,12 @@ func (s *ServerState) GetCoordinatorMetricsByProjectGraphQL(projectRoot string) 
 // ─── AgentSession queries ─────────────────────────────────────────────────────
 
 // GetAgentSessionsGraphQL implements ddxgraphql.StateProvider.
-// Reads sessions.jsonl from every registered project's agent-logs directory.
-func (s *ServerState) GetAgentSessionsGraphQL() []*ddxgraphql.AgentSession {
+// Reads pointer-only monthly session shards from every registered project.
+func (s *ServerState) GetAgentSessionsGraphQL(startedAfter, startedBefore *time.Time) []*ddxgraphql.AgentSession {
 	projects := s.GetProjects(false)
 	var out []*ddxgraphql.AgentSession
 	for _, proj := range projects {
-		sessions := readProjectSessions(proj)
+		sessions := readProjectSessions(proj, startedAfter, startedBefore)
 		out = append(out, sessions...)
 	}
 	// Newest first.
@@ -563,47 +563,67 @@ func (s *ServerState) GetAgentSessionsGraphQL() []*ddxgraphql.AgentSession {
 
 // GetAgentSessionGraphQL implements ddxgraphql.StateProvider.
 func (s *ServerState) GetAgentSessionGraphQL(id string) (*ddxgraphql.AgentSession, bool) {
-	sessions := s.GetAgentSessionsGraphQL()
-	for _, sess := range sessions {
-		if sess.ID == id {
-			return sess, true
+	projects := s.GetProjects(false)
+	for _, proj := range projects {
+		logDir := agent.SessionLogDirForWorkDir(proj.Path)
+		entry, ok, err := agent.FindSessionIndex(logDir, id)
+		if err != nil || !ok {
+			continue
 		}
+		sess := agentSessionFromIndex(proj.ID, entry)
+		bodies := agent.LoadSessionBodies(proj.Path, entry)
+		if bodies.Prompt != "" {
+			sess.Prompt = &bodies.Prompt
+		}
+		if bodies.Response != "" {
+			sess.Response = &bodies.Response
+		}
+		if bodies.Stderr != "" {
+			sess.Stderr = &bodies.Stderr
+		}
+		return sess, true
 	}
 	return nil, false
 }
 
-// readProjectSessions reads sessions.jsonl for one project and maps to graphql types.
-func readProjectSessions(proj ProjectEntry) []*ddxgraphql.AgentSession {
-	path := filepath.Join(proj.Path, ".ddx", "agent-logs", "sessions.jsonl")
-	entries, err := agent.ReadAllJSONL[agent.SessionEntry](path)
+// readProjectSessions reads monthly session shards for one project and maps to graphql types.
+func readProjectSessions(proj ProjectEntry, startedAfter, startedBefore *time.Time) []*ddxgraphql.AgentSession {
+	logDir := agent.SessionLogDirForWorkDir(proj.Path)
+	entries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{
+		StartedAfter:  startedAfter,
+		StartedBefore: startedBefore,
+		DefaultRecent: startedAfter == nil && startedBefore == nil,
+	})
 	if err != nil {
 		return nil
 	}
 	out := make([]*ddxgraphql.AgentSession, 0, len(entries))
 	for _, e := range entries {
-		sess := agentSessionFromEntry(proj.ID, e)
+		sess := agentSessionFromIndex(proj.ID, e)
 		out = append(out, sess)
 	}
 	return out
 }
 
-func agentSessionFromEntry(projectID string, e agent.SessionEntry) *ddxgraphql.AgentSession {
+func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgraphql.AgentSession {
 	sess := &ddxgraphql.AgentSession{
 		ID:         e.ID,
 		ProjectID:  projectID,
 		Harness:    e.Harness,
 		Model:      e.Model,
-		Effort:     e.Correlation["effort"],
-		DurationMs: e.Duration,
-		StartedAt:  e.Timestamp.UTC().Format(time.RFC3339),
+		Effort:     e.Effort,
+		DurationMs: e.DurationMS,
+		StartedAt:  e.StartedAt.UTC().Format(time.RFC3339),
 	}
 
 	// Derive status and outcome from exit code / error.
-	if e.Error != "" {
+	if e.ExitCode != 0 || e.Outcome == "failure" {
 		sess.Status = "failed"
 		outcome := "failure"
 		sess.Outcome = &outcome
-		sess.Detail = &e.Error
+		if e.Detail != "" {
+			sess.Detail = &e.Detail
+		}
 	} else {
 		sess.Status = "completed"
 		outcome := "success"
@@ -611,8 +631,11 @@ func agentSessionFromEntry(projectID string, e agent.SessionEntry) *ddxgraphql.A
 	}
 
 	// EndedAt = StartedAt + duration.
-	if e.Duration > 0 {
-		endedAt := e.Timestamp.Add(time.Duration(e.Duration) * time.Millisecond).UTC().Format(time.RFC3339)
+	if !e.EndedAt.IsZero() {
+		endedAt := e.EndedAt.UTC().Format(time.RFC3339)
+		sess.EndedAt = &endedAt
+	} else if e.DurationMS > 0 {
+		endedAt := e.StartedAt.Add(time.Duration(e.DurationMS) * time.Millisecond).UTC().Format(time.RFC3339)
 		sess.EndedAt = &endedAt
 	}
 
@@ -621,13 +644,10 @@ func agentSessionFromEntry(projectID string, e agent.SessionEntry) *ddxgraphql.A
 	}
 
 	// Token breakdown.
-	if e.InputTokens > 0 || e.OutputTokens > 0 || e.TotalTokens > 0 {
+	if e.InputTokens > 0 || e.OutputTokens > 0 || e.Tokens > 0 {
 		prompt := e.InputTokens
 		completion := e.OutputTokens
-		total := e.TotalTokens
-		if total == 0 {
-			total = e.Tokens
-		}
+		total := e.Tokens
 		sess.Tokens = &ddxgraphql.TokenUsage{
 			Prompt:     &prompt,
 			Completion: &completion,
@@ -635,8 +655,8 @@ func agentSessionFromEntry(projectID string, e agent.SessionEntry) *ddxgraphql.A
 		}
 	}
 
-	if beadID, ok := e.Correlation["bead_id"]; ok && beadID != "" {
-		sess.BeadID = &beadID
+	if e.BeadID != "" {
+		sess.BeadID = &e.BeadID
 	}
 	if e.NativeLogRef != "" {
 		sess.StdoutPath = &e.NativeLogRef

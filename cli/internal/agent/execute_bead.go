@@ -489,7 +489,7 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 
 // costEventBody is the JSON shape persisted in a kind:cost evidence event.
 // `ddx bead metrics aggregate` reads these directly so cost rollup never
-// has to join against sessions.jsonl.
+// has to join against the session index.
 type costEventBody struct {
 	AttemptID    string  `json:"attempt_id"`
 	Harness      string  `json:"harness,omitempty"`
@@ -655,10 +655,12 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 		Permissions:   "unrestricted", // isolated worktree; writes must not require approval
 		SessionLogDir: embeddedStateDir,
 		Correlation: map[string]string{
-			"bead_id":    beadID,
-			"base_rev":   baseRev,
-			"attempt_id": attemptID,
-			"session_id": sessionID,
+			"bead_id":     beadID,
+			"base_rev":    baseRev,
+			"attempt_id":  attemptID,
+			"session_id":  sessionID,
+			"bundle_path": artifacts.DirRel,
+			"prompt_file": artifacts.PromptRel,
 		},
 	}
 
@@ -876,7 +878,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	appendBeadRoutingEvidence(opts.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL)
 
 	// Record per-attempt cost evidence so cost rollup never has to join
-	// against sessions.jsonl. Best-effort; errors are discarded.
+	// against the session index. Best-effort; errors are discarded.
 	appendBeadCostEvidence(opts.BeadEvents, beadID, attemptID, costEventBody{
 		Harness:      resultHarness,
 		Provider:     resultProvider,

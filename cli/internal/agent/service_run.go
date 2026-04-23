@@ -141,14 +141,15 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	start := time.Now()
+	start := time.Now().UTC()
 	events, err := svc.Execute(cancelCtx, req)
 	if err != nil {
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
 	final, toolCalls, routing := drainServiceEvents(events)
-	elapsed := time.Since(start)
+	finishedAt := time.Now().UTC()
+	elapsed := finishedAt.Sub(start)
 
 	result := &Result{
 		Harness:    harness,
@@ -221,6 +222,8 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 			result.AgentSessionID = final.SessionLogPath
 		}
 	}
+	entry := SessionIndexEntryFromResult(workDir, opts, result, start, finishedAt)
+	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
 }
 

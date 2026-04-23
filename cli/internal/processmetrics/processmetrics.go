@@ -695,6 +695,21 @@ func (r *sessionLoadRecord) UnmarshalJSON(data []byte) error {
 }
 
 func readSessions(path string) ([]agent.SessionEntry, map[string]bool, error) {
+	if filepath.Base(path) == "sessions.jsonl" {
+		logDir := filepath.Dir(path)
+		indexEntries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{})
+		if err != nil {
+			return nil, nil, err
+		}
+		sessions := make([]agent.SessionEntry, 0, len(indexEntries))
+		costPresent := make(map[string]bool, len(indexEntries))
+		for _, idx := range indexEntries {
+			entry := agent.SessionIndexEntryToLegacy(idx)
+			sessions = append(sessions, entry)
+			costPresent[entry.ID] = idx.CostPresent || idx.CostUSD != 0
+		}
+		return sessions, costPresent, nil
+	}
 	records, err := readJSONLRecords[sessionLoadRecord](path)
 	if err != nil {
 		return nil, nil, err

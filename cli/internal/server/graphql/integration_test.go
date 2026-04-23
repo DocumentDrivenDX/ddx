@@ -210,8 +210,10 @@ func (p *testStateProvider) GetWorkerLogGraphQL(_ string) *ddxgraphql.WorkerLog 
 func (p *testStateProvider) GetWorkerProgressGraphQL(_ string) []*ddxgraphql.PhaseTransition {
 	return nil
 }
-func (p *testStateProvider) GetWorkerPromptGraphQL(_ string) string              { return "" }
-func (p *testStateProvider) GetAgentSessionsGraphQL() []*ddxgraphql.AgentSession { return nil }
+func (p *testStateProvider) GetWorkerPromptGraphQL(_ string) string { return "" }
+func (p *testStateProvider) GetAgentSessionsGraphQL(_, _ *time.Time) []*ddxgraphql.AgentSession {
+	return nil
+}
 func (p *testStateProvider) GetAgentSessionGraphQL(_ string) (*ddxgraphql.AgentSession, bool) {
 	return nil, false
 }

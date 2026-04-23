@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
@@ -40,24 +41,25 @@ func writeWorkerRecord(t *testing.T, workDir string, rec WorkerRecord) {
 	}
 }
 
-// writeSessionsJSONL writes session entries to .ddx/agent-logs/sessions.jsonl.
+// writeSessionsJSONL writes session entries to the sharded session index.
 func writeSessionsJSONL(t *testing.T, workDir string, entries []map[string]any) {
 	t.Helper()
 	dir := filepath.Join(workDir, ".ddx", "agent-logs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	var buf bytes.Buffer
 	for _, e := range entries {
-		line, err := json.Marshal(e)
+		data, err := json.Marshal(e)
 		if err != nil {
 			t.Fatal(err)
 		}
-		buf.Write(line)
-		buf.WriteByte('\n')
-	}
-	if err := os.WriteFile(filepath.Join(dir, "sessions.jsonl"), buf.Bytes(), 0o644); err != nil {
-		t.Fatal(err)
+		var entry agent.SessionEntry
+		if err := json.Unmarshal(data, &entry); err != nil {
+			t.Fatal(err)
+		}
+		if err := agent.AppendSessionIndex(dir, agent.SessionIndexEntryFromLegacy(workDir, entry), entry.Timestamp); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -212,7 +214,7 @@ func TestGraphQLWorkers(t *testing.T) {
 // ─── TC-GQL-021: agentSessions / agentSession(id) ────────────────────────────
 
 // TC-GQL-021: agentSessions and agentSession(id) return real entries read from
-// the per-project .ddx/agent-logs/sessions.jsonl file.
+// the per-project monthly session index shards.
 func TestGraphQLAgentSessions(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdgDir)

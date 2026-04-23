@@ -38,6 +38,17 @@ const SESSIONS_QUERY = gql`
 	}
 `
 
+export const SESSION_DETAIL_QUERY = gql`
+	query AgentSessionDetail($id: ID!) {
+		agentSession(id: $id) {
+			id
+			prompt
+			response
+			stderr
+		}
+	}
+`
+
 interface TokenUsage {
 	prompt: number | null
 	completion: number | null
@@ -60,6 +71,9 @@ export interface SessionNode {
 	tokens: TokenUsage | null
 	outcome: string | null
 	detail: string | null
+	prompt?: string | null
+	response?: string | null
+	stderr?: string | null
 }
 
 interface SessionEdge {

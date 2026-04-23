@@ -47,6 +47,12 @@ type AgentSession struct {
 	ResultRev *string `json:"resultRev,omitempty"`
 	// Git revision the session started from
 	BaseRev *string `json:"baseRev,omitempty"`
+	// Prompt body, loaded only for agentSession(id:)
+	Prompt *string `json:"prompt,omitempty"`
+	// Response body, loaded only for agentSession(id:)
+	Response *string `json:"response,omitempty"`
+	// Standard error body, loaded only for agentSession(id:)
+	Stderr *string `json:"stderr,omitempty"`
 }
 
 func (AgentSession) IsNode() {}

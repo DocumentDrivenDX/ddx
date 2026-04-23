@@ -455,19 +455,18 @@ func TestSessionLogging(t *testing.T) {
 	_, err := r.Run(RunOptions{Harness: "codex", Prompt: "test prompt"})
 	require.NoError(t, err)
 
-	// Verify session log was written
-	data, err := os.ReadFile(filepath.Join(logDir, "sessions.jsonl"))
+	// Verify the pointer-only sharded session index was written.
+	entries, err := ReadSessionIndex(logDir, SessionIndexQuery{})
 	require.NoError(t, err)
+	require.Len(t, entries, 1)
 
-	var entry SessionEntry
-	require.NoError(t, json.Unmarshal(data[:len(data)-1], &entry)) // strip trailing newline
+	entry := entries[0]
 	assert.Equal(t, "codex", entry.Harness)
 	assert.Equal(t, 42, entry.Tokens)
-	assert.Equal(t, 11, entry.PromptLen) // len("test prompt")
-	assert.Equal(t, "test prompt", entry.Prompt)
-	assert.Equal(t, jsonOutput, entry.Response)
-	assert.Equal(t, "inline", entry.PromptSource)
 	assert.True(t, strings.HasPrefix(entry.ID, "as-"))
+
+	_, err = os.Stat(filepath.Join(logDir, "sessions.jsonl"))
+	assert.True(t, os.IsNotExist(err), "legacy sessions.jsonl should not be appended")
 }
 
 func TestSessionEntryLegacyRowCompatibility(t *testing.T) {

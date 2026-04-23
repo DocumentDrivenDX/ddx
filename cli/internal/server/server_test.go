@@ -90,6 +90,54 @@ library:
 	return dir
 }
 
+func writeSessionIndexLines(t *testing.T, workDir string, lines ...string) {
+	t.Helper()
+	logDir := filepath.Join(workDir, agent.DefaultLogDir)
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range lines {
+		var entry agent.SessionEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatal(err)
+		}
+		if entry.Prompt != "" || entry.Response != "" {
+			if entry.Correlation == nil {
+				entry.Correlation = map[string]string{}
+			}
+			attemptID := entry.Correlation["attempt_id"]
+			if attemptID == "" {
+				attemptID = "session-" + entry.ID
+				entry.Correlation["attempt_id"] = attemptID
+			}
+			bundleDir := filepath.Join(workDir, agent.ExecuteBeadArtifactDir, attemptID)
+			if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(bundleDir, "prompt.md"), []byte(entry.Prompt), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			result := map[string]string{"response": entry.Response}
+			data, err := json.Marshal(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		idx := agent.SessionIndexEntryFromLegacy(workDir, entry)
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+			t.Fatal(err)
+		}
+		_, idx.CostPresent = raw["cost_usd"]
+		if err := agent.AppendSessionIndex(logDir, idx, entry.Timestamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func setupProcessMetricsTestDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -112,9 +160,7 @@ func setupProcessMetricsTestDir(t *testing.T) string {
 		`{"id":"as-002","timestamp":"2026-01-02T00:45:00Z","harness":"claude","model":"claude-sonnet-4-6","prompt_len":120,"input_tokens":1000,"output_tokens":1000,"total_tokens":2000,"duration_ms":2000,"exit_code":0,"correlation":{"bead_id":"bx-002"}}`,
 		`{"id":"as-003","timestamp":"2026-01-03T00:00:00Z","harness":"codex","prompt_len":50,"input_tokens":10,"output_tokens":20,"total_tokens":30,"duration_ms":150,"exit_code":0}`,
 	}
-	if err := os.WriteFile(filepath.Join(dir, agent.DefaultLogDir, "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"+sessions[2]+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSessionIndexLines(t, dir, sessions...)
 
 	return dir
 }
@@ -994,15 +1040,9 @@ func TestReady(t *testing.T) {
 func TestAgentSessions(t *testing.T) {
 	dir := setupTestDir(t)
 
-	logDir := filepath.Join(dir, ".ddx", "agent-logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	session1 := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","surface":"codex","canonical_target":"gpt-4","model":"gpt-4","prompt_len":100,"prompt_source":"stdin","native_session_id":"native-001","native_log_ref":"log-001","trace_id":"trace-001","span_id":"span-001","tokens":500,"input_tokens":350,"output_tokens":150,"total_tokens":500,"duration_ms":2000,"exit_code":0}`
 	session2 := `{"id":"as-0002","timestamp":"2026-01-01T11:00:00Z","harness":"claude","surface":"claude","canonical_target":"sonnet","model":"sonnet","prompt_len":200,"prompt_source":"file","native_session_id":"native-002","native_log_ref":"log-002","trace_id":"trace-002","span_id":"span-002","tokens":800,"input_tokens":450,"output_tokens":350,"total_tokens":800,"duration_ms":3000,"exit_code":0}`
-	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session1+"\n"+session2+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSessionIndexLines(t, dir, session1, session2)
 
 	srv := New(":0", dir)
 
@@ -1040,15 +1080,9 @@ func TestAgentSessions(t *testing.T) {
 func TestAgentSessionsFilterByHarness(t *testing.T) {
 	dir := setupTestDir(t)
 
-	logDir := filepath.Join(dir, ".ddx", "agent-logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	session1 := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"tokens":500,"duration_ms":2000,"exit_code":0}`
 	session2 := `{"id":"as-0002","timestamp":"2026-01-01T11:00:00Z","harness":"claude","model":"sonnet","prompt_len":200,"tokens":800,"duration_ms":3000,"exit_code":0}`
-	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session1+"\n"+session2+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSessionIndexLines(t, dir, session1, session2)
 
 	srv := New(":0", dir)
 
@@ -1079,14 +1113,8 @@ func TestAgentSessionsFilterByHarness(t *testing.T) {
 func TestAgentSessionDetail(t *testing.T) {
 	dir := setupTestDir(t)
 
-	logDir := filepath.Join(dir, ".ddx", "agent-logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	session := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","surface":"codex","canonical_target":"gpt-4","model":"gpt-4","prompt_len":100,"prompt_source":"stdin","prompt":"inspect me","response":"done","correlation":{"bead_id":"hx-123"},"native_session_id":"native-123","native_log_ref":"log-123","trace_id":"trace-123","span_id":"span-123","tokens":500,"duration_ms":2000,"exit_code":0}`
-	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSessionIndexLines(t, dir, session)
 
 	srv := New(":0", dir)
 
@@ -1139,14 +1167,8 @@ func TestAgentSessionDetail(t *testing.T) {
 func TestAgentSessionDetailUnavailableContent(t *testing.T) {
 	dir := setupTestDir(t)
 
-	logDir := filepath.Join(dir, ".ddx", "agent-logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	session := `{"id":"as-0002","timestamp":"2026-01-01T10:05:00Z","harness":"claude","surface":"claude","canonical_target":"sonnet","model":"sonnet","prompt_len":0,"native_session_id":"native-456","trace_id":"trace-456","span_id":"span-456","duration_ms":1500,"exit_code":0}`
-	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSessionIndexLines(t, dir, session)
 
 	srv := New(":0", dir)
 
@@ -1469,14 +1491,8 @@ func TestMCPSearch(t *testing.T) {
 func TestMCPAgentSessions(t *testing.T) {
 	dir := setupTestDir(t)
 
-	logDir := filepath.Join(dir, ".ddx", "agent-logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	session := `{"id":"as-0001","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"tokens":500,"duration_ms":2000,"exit_code":0}`
-	if err := os.WriteFile(filepath.Join(logDir, "sessions.jsonl"), []byte(session+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSessionIndexLines(t, dir, session)
 
 	srv := New(":0", dir)
 
@@ -3873,15 +3889,9 @@ func TestProjectScopedExecRoutes(t *testing.T) {
 func TestProjectScopedAgentSessionsAndMetrics(t *testing.T) {
 	// Project 1 has sessions; project 2 has no sessions.
 	dir1 := setupTestDir(t)
-	logDir1 := filepath.Join(dir1, ".ddx", "agent-logs")
-	if err := os.MkdirAll(logDir1, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	s1 := `{"id":"as-P1-A","timestamp":"2026-01-01T10:00:00Z","harness":"codex","model":"gpt-4","prompt_len":100,"duration_ms":1000,"exit_code":0}`
 	s2 := `{"id":"as-P1-B","timestamp":"2026-01-01T11:00:00Z","harness":"claude","model":"sonnet","prompt_len":200,"duration_ms":2000,"exit_code":0}`
-	if err := os.WriteFile(filepath.Join(logDir1, "sessions.jsonl"), []byte(s1+"\n"+s2+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSessionIndexLines(t, dir1, s1, s2)
 
 	dir2 := setupTestDir(t)
 

@@ -176,7 +176,7 @@ func collectStatusUsage(workingDir string) []usageRow {
 		return nil
 	}
 	if len(rows) == 0 {
-		rows, err = aggregateUsage(filepath.Join(logDir, "sessions.jsonl"), "", since, nil)
+		rows, err = aggregateUsageFromSessionIndex(logDir, "", since, nil)
 	}
 	if err != nil || len(rows) == 0 {
 		return nil

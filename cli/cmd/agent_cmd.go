@@ -982,30 +982,22 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logDir := agent.SessionLogDirForWorkDir(f.WorkingDir)
-			logFile := logDir + "/sessions.jsonl"
-
-			data, err := os.ReadFile(logFile)
-			if os.IsNotExist(err) {
-				fmt.Fprintln(cmd.OutOrStdout(), "No agent sessions recorded.")
-				return nil
-			}
+			indexEntries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{})
 			if err != nil {
 				return err
 			}
-
-			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-			if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
+			if len(indexEntries) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No agent sessions recorded.")
 				return nil
+			}
+			sessions := make([]agent.SessionEntry, 0, len(indexEntries))
+			for _, entry := range indexEntries {
+				sessions = append(sessions, agent.SessionIndexEntryToLegacy(entry))
 			}
 
 			// If session ID specified, show that one
 			if len(args) > 0 {
-				for _, line := range lines {
-					var entry agent.SessionEntry
-					if err := json.Unmarshal([]byte(line), &entry); err != nil {
-						continue
-					}
+				for _, entry := range sessions {
 					if entry.ID == args[0] {
 						enc := json.NewEncoder(cmd.OutOrStdout())
 						enc.SetIndent("", "  ")
@@ -1021,11 +1013,7 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 			// --bead filter: show per-bead attempt history
 			if beadID != "" {
 				var filtered []agent.SessionEntry
-				for _, line := range lines {
-					var entry agent.SessionEntry
-					if err := json.Unmarshal([]byte(line), &entry); err != nil {
-						continue
-					}
+				for _, entry := range sessions {
 					if entry.Correlation["bead_id"] == beadID {
 						filtered = append(filtered, entry)
 					}
@@ -1128,16 +1116,11 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 
 			// Show recent sessions
 			limit, _ := cmd.Flags().GetInt("limit")
-			start := 0
-			if len(lines) > limit {
-				start = len(lines) - limit
+			if len(sessions) > limit {
+				sessions = sessions[:limit]
 			}
 
-			for _, line := range lines[start:] {
-				var entry agent.SessionEntry
-				if err := json.Unmarshal([]byte(line), &entry); err != nil {
-					continue
-				}
+			for _, entry := range sessions {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s  %-8s  %-10s  %dms  %d tokens  rc=%d\n",
 					entry.Timestamp.Format("2006-01-02 15:04:05"),
 					entry.ID, entry.Harness, entry.Duration, entry.Tokens, entry.ExitCode)
@@ -1148,6 +1131,20 @@ func (f *CommandFactory) newAgentLogCommand() *cobra.Command {
 	cmd.Flags().Int("limit", 20, "Number of recent sessions to show")
 	cmd.Flags().String("bead", "", "Filter sessions by bead ID and show attempt history")
 	cmd.Flags().Bool("json", false, "Output as JSON (with --bead)")
+	cmd.AddCommand(&cobra.Command{
+		Use:   "reindex",
+		Short: "Migrate legacy sessions.jsonl into monthly session shards",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logDir := agent.SessionLogDirForWorkDir(f.WorkingDir)
+			count, err := agent.ReindexLegacySessions(f.WorkingDir, logDir)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "indexed %d legacy sessions\n", count)
+			return nil
+		},
+	})
 	return cmd
 }
 

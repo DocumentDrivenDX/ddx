@@ -18,12 +18,8 @@ func writeSessionsJSONL(t *testing.T, dir string, entries []agent.SessionEntry) 
 	t.Helper()
 	logDir := filepath.Join(dir, ".ddx", "agent-logs")
 	require.NoError(t, os.MkdirAll(logDir, 0755))
-	f, err := os.Create(filepath.Join(logDir, "sessions.jsonl"))
-	require.NoError(t, err)
-	defer f.Close()
-	enc := json.NewEncoder(f)
 	for _, e := range entries {
-		require.NoError(t, enc.Encode(e))
+		require.NoError(t, agent.AppendSessionIndex(logDir, agent.SessionIndexEntryFromLegacy(dir, e), e.Timestamp))
 	}
 }
 
@@ -207,6 +203,37 @@ func TestAgentLog_DefaultBehavior_Unchanged(t *testing.T) {
 	assert.Contains(t, out, "sess-defa")
 	// No table header — default mode
 	assert.NotContains(t, out, "ATTEMPT")
+}
+
+func TestAgentLogReindexMigratesLegacyFile(t *testing.T) {
+	dir := t.TempDir()
+	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	entries := []agent.SessionEntry{
+		{ID: "sess-jan", Timestamp: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Harness: "agent"},
+		{ID: "sess-feb", Timestamp: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), Harness: "agent"},
+	}
+	f, err := os.Create(filepath.Join(logDir, "sessions.jsonl"))
+	require.NoError(t, err)
+	enc := json.NewEncoder(f)
+	for _, entry := range entries {
+		require.NoError(t, enc.Encode(entry))
+	}
+	require.NoError(t, f.Close())
+
+	out, err := runAgentLogCmd(t, dir, "reindex")
+	require.NoError(t, err)
+	assert.Contains(t, out, "indexed 2 legacy sessions")
+	_, err = os.Stat(filepath.Join(logDir, "sessions.jsonl.legacy"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(logDir, "sessions", "sessions-2026-01.jsonl"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(logDir, "sessions", "sessions-2026-02.jsonl"))
+	require.NoError(t, err)
+
+	out, err = runAgentLogCmd(t, dir, "reindex")
+	require.NoError(t, err)
+	assert.Contains(t, out, "indexed 0 legacy sessions")
 }
 
 func TestAgentLogFormatElapsed(t *testing.T) {

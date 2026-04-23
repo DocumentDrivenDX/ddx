@@ -1,20 +1,63 @@
 <script lang="ts">
+	import { createClient } from '$lib/gql/client';
+	import { invalidateAll } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
+	import { SESSION_DETAIL_QUERY, type SessionNode } from './+page';
 
 	let { data }: { data: PageData } = $props();
 
 	// Track which sessions are expanded
 	let expanded = $state<Set<string>>(new Set());
+	let sessionBodies = $state<Record<string, Pick<SessionNode, 'prompt' | 'response' | 'stderr'>>>({});
 
-	function toggle(id: string) {
+	onMount(() => {
+		const timer = window.setInterval(() => {
+			void invalidateAll();
+		}, 2000);
+		return () => window.clearInterval(timer);
+	});
+
+	async function toggle(id: string) {
 		const next = new Set(expanded);
 		if (next.has(id)) {
 			next.delete(id);
 		} else {
 			next.add(id);
+			if (!sessionBodies[id]) {
+				const client = createClient(fetch);
+				const detail = await client.request<{ agentSession: SessionNode | null }>(
+					SESSION_DETAIL_QUERY,
+					{ id }
+				);
+				if (detail.agentSession) {
+					sessionBodies = {
+						...sessionBodies,
+						[id]: {
+							prompt: detail.agentSession.prompt,
+							response: detail.agentSession.response,
+							stderr: detail.agentSession.stderr
+						}
+					};
+				}
+			}
 		}
 		expanded = next;
 	}
+
+	const recordingGap = $derived.by(() => {
+		const sorted = [...data.sessions.edges].sort(
+			(a, b) => new Date(a.node.startedAt).getTime() - new Date(b.node.startedAt).getTime()
+		);
+		for (let i = 1; i < sorted.length; i++) {
+			const prev = new Date(sorted[i - 1].node.startedAt);
+			const next = new Date(sorted[i].node.startedAt);
+			if (next.getTime() - prev.getTime() > 24 * 60 * 60 * 1000) {
+				return `No sessions recorded between ${prev.toLocaleDateString()} and ${next.toLocaleDateString()}`;
+			}
+		}
+		return null;
+	});
 
 	// Aggregate token summary
 	const summary = $derived.by(() => {
@@ -75,6 +118,12 @@
 			{data.sessions.totalCount} sessions
 		</span>
 	</div>
+
+	{#if recordingGap}
+		<div class="border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+			{recordingGap}
+		</div>
+	{/if}
 
 	<!-- Token summary -->
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -177,6 +226,7 @@
 						</td>
 					</tr>
 					{#if isExpanded}
+						{@const bodies = sessionBodies[s.id]}
 						<tr
 							class="border-b border-gray-100 bg-blue-50/50 dark:border-gray-700 dark:bg-blue-900/10"
 						>
@@ -240,6 +290,24 @@
 										<div class="col-span-2 sm:col-span-4">
 											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Detail</div>
 											<div class="mt-1 text-xs text-gray-700 dark:text-gray-300">{s.detail}</div>
+										</div>
+									{/if}
+									{#if bodies?.prompt}
+										<div class="col-span-2 sm:col-span-4">
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Prompt</div>
+											<pre class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-3 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.prompt}</pre>
+										</div>
+									{/if}
+									{#if bodies?.response}
+										<div class="col-span-2 sm:col-span-4">
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Response</div>
+											<pre class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-3 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.response}</pre>
+										</div>
+									{/if}
+									{#if bodies?.stderr}
+										<div class="col-span-2 sm:col-span-4">
+											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Stderr</div>
+											<pre class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-3 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.stderr}</pre>
 										</div>
 									{/if}
 								</div>

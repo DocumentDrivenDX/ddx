@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +28,15 @@ func writeProcessMetricsFixture(t *testing.T, workingDir string) {
 		`{"id":"as-002","timestamp":"2026-01-02T00:45:00Z","harness":"claude","model":"claude-sonnet-4-6","prompt_len":120,"input_tokens":1000,"output_tokens":1000,"total_tokens":2000,"duration_ms":2000,"exit_code":0,"correlation":{"bead_id":"bx-002"}}`,
 		`{"id":"as-003","timestamp":"2026-01-03T00:00:00Z","harness":"codex","prompt_len":50,"input_tokens":10,"output_tokens":20,"total_tokens":30,"duration_ms":150,"exit_code":0}`,
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "agent-logs", "sessions.jsonl"), []byte(sessions[0]+"\n"+sessions[1]+"\n"+sessions[2]+"\n"), 0o644))
+	for _, line := range sessions {
+		var entry agent.SessionEntry
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		idx := agent.SessionIndexEntryFromLegacy(workingDir, entry)
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(line), &raw))
+		_, idx.CostPresent = raw["cost_usd"]
+		require.NoError(t, agent.AppendSessionIndex(filepath.Join(ddxDir, "agent-logs"), idx, entry.Timestamp))
+	}
 }
 
 func TestMetricsCommandsExposeDerivedProcessMetrics(t *testing.T) {
