@@ -65,8 +65,8 @@ func BuiltinRegistry() *Registry {
 		Packages: []Package{
 			{
 				Name:        "ddx",
-				Version:     "0.4.6",
-				Description: "DDx default library: prompts, personas, MCP configs, environments",
+				Version:     "0.4.7",
+				Description: "DDx default library: prompts, personas, MCP configs, environments, skills",
 				Type:        PackageTypePlugin,
 				Source:      "https://github.com/DocumentDrivenDX/ddx",
 				Install: PackageInstall{
@@ -74,8 +74,14 @@ func BuiltinRegistry() *Registry {
 						Source: "library",
 						Target: ".ddx/plugins/ddx",
 					},
+					Skills: []InstallMapping{
+						{Source: ".agents/skills/", Target: ".agents/skills/"},
+						{Source: ".agents/skills/", Target: ".claude/skills/"},
+						{Source: ".agents/skills/", Target: "~/.agents/skills/"},
+						{Source: ".agents/skills/", Target: "~/.claude/skills/"},
+					},
 				},
-				Keywords: []string{"library", "prompts", "personas", "mcp", "default"},
+				Keywords: []string{"library", "prompts", "personas", "mcp", "default", "skills"},
 			},
 			{
 				Name:        "helix",

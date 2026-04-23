@@ -65,9 +65,9 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 	if pkg.Install.Root.Target != ".ddx/plugins/ddx" {
 		t.Errorf("expected root target=.ddx/plugins/ddx, got %q", pkg.Install.Root.Target)
 	}
-	// ddx plugin has no skills or scripts — it's just library resources
-	if len(pkg.Install.Skills) != 0 {
-		t.Errorf("expected no skills, got %d", len(pkg.Install.Skills))
+	// ddx plugin ships skills to project-local and global skill dirs.
+	if len(pkg.Install.Skills) != 4 {
+		t.Errorf("expected 4 skill mappings, got %d", len(pkg.Install.Skills))
 	}
 	if pkg.Install.Scripts != nil {
 		t.Error("expected no scripts")
