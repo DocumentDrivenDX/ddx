@@ -195,6 +195,22 @@ function fallbackDataForQuery(query: string): object | null {
 		data.paletteSearch = { documents: [], beads: [], actions: [], navigation: [] };
 	}
 
+	if (query.includes('providerStatuses')) {
+		data.providerStatuses = [];
+	}
+
+	if (query.includes('harnessStatuses')) {
+		data.harnessStatuses = [];
+	}
+
+	if (query.includes('defaultRouteStatus')) {
+		data.defaultRouteStatus = null;
+	}
+
+	if (query.includes('providerTrend')) {
+		data.providerTrend = null;
+	}
+
 	if (query.includes('beadClose')) {
 		data.beadClose = {
 			id: 'preview-bead',

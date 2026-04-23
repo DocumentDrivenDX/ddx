@@ -740,15 +740,49 @@ type ComplexityRoot struct {
 		TimeoutMs     func(childComplexity int) int
 	}
 
+	ProviderQuota struct {
+		CeilingTokens        func(childComplexity int) int
+		CeilingWindowSeconds func(childComplexity int) int
+		Remaining            func(childComplexity int) int
+		ResetAt              func(childComplexity int) int
+	}
+
 	ProviderStatus struct {
-		BaseURL       func(childComplexity int) int
-		CooldownUntil func(childComplexity int) int
-		IsDefault     func(childComplexity int) int
-		Model         func(childComplexity int) int
-		ModelCount    func(childComplexity int) int
-		Name          func(childComplexity int) int
-		ProviderType  func(childComplexity int) int
-		Status        func(childComplexity int) int
+		BaseURL           func(childComplexity int) int
+		CooldownUntil     func(childComplexity int) int
+		DefaultForProfile func(childComplexity int) int
+		IsDefault         func(childComplexity int) int
+		Kind              func(childComplexity int) int
+		LastCheckedAt     func(childComplexity int) int
+		Model             func(childComplexity int) int
+		ModelCount        func(childComplexity int) int
+		Name              func(childComplexity int) int
+		ProviderType      func(childComplexity int) int
+		Quota             func(childComplexity int) int
+		Status            func(childComplexity int) int
+		Usage             func(childComplexity int) int
+	}
+
+	ProviderTrend struct {
+		CeilingTokens        func(childComplexity int) int
+		Kind                 func(childComplexity int) int
+		Name                 func(childComplexity int) int
+		ProjectedRunOutHours func(childComplexity int) int
+		Series               func(childComplexity int) int
+		WindowDays           func(childComplexity int) int
+	}
+
+	ProviderTrendPoint struct {
+		BucketStart func(childComplexity int) int
+		Requests    func(childComplexity int) int
+		Tokens      func(childComplexity int) int
+	}
+
+	ProviderUsage struct {
+		RequestsLast24h    func(childComplexity int) int
+		RequestsLastHour   func(childComplexity int) int
+		TokensUsedLast24h  func(childComplexity int) int
+		TokensUsedLastHour func(childComplexity int) int
 	}
 
 	Query struct {
@@ -783,6 +817,7 @@ type ComplexityRoot struct {
 		ExecRun                     func(childComplexity int, id string) int
 		ExecRunLog                  func(childComplexity int, runID string) int
 		ExecRuns                    func(childComplexity int, first *int, after *string, last *int, before *string, artifactID *string, definitionID *string) int
+		HarnessStatuses             func(childComplexity int) int
 		Health                      func(childComplexity int) int
 		MetricsCost                 func(childComplexity int, since *string, bead *string, feature *string) int
 		MetricsCycleTime            func(childComplexity int, since *string) int
@@ -800,6 +835,7 @@ type ComplexityRoot struct {
 		Projects                    func(childComplexity int, first *int, after *string, last *int, before *string, includeUnreachable *bool) int
 		Provider                    func(childComplexity int, name string) int
 		ProviderStatuses            func(childComplexity int) int
+		ProviderTrend               func(childComplexity int, name string, windowDays int) int
 		Providers                   func(childComplexity int) int
 		QueueSummary                func(childComplexity int, projectID string) int
 		Ready                       func(childComplexity int) int
@@ -1086,7 +1122,9 @@ type QueryResolver interface {
 	Providers(ctx context.Context) ([]*Provider, error)
 	Provider(ctx context.Context, name string) (*Provider, error)
 	ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error)
+	HarnessStatuses(ctx context.Context) ([]*ProviderStatus, error)
 	DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error)
+	ProviderTrend(ctx context.Context, name string, windowDays int) (*ProviderTrend, error)
 	QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error)
 	EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error)
 	EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string) (*EfficacyAttempts, error)
@@ -4049,6 +4087,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Provider.TimeoutMs(childComplexity), true
 
+	case "ProviderQuota.ceilingTokens":
+		if e.ComplexityRoot.ProviderQuota.CeilingTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderQuota.CeilingTokens(childComplexity), true
+	case "ProviderQuota.ceilingWindowSeconds":
+		if e.ComplexityRoot.ProviderQuota.CeilingWindowSeconds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderQuota.CeilingWindowSeconds(childComplexity), true
+	case "ProviderQuota.remaining":
+		if e.ComplexityRoot.ProviderQuota.Remaining == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderQuota.Remaining(childComplexity), true
+	case "ProviderQuota.resetAt":
+		if e.ComplexityRoot.ProviderQuota.ResetAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderQuota.ResetAt(childComplexity), true
+
 	case "ProviderStatus.baseURL":
 		if e.ComplexityRoot.ProviderStatus.BaseURL == nil {
 			break
@@ -4061,12 +4124,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ProviderStatus.CooldownUntil(childComplexity), true
+	case "ProviderStatus.defaultForProfile":
+		if e.ComplexityRoot.ProviderStatus.DefaultForProfile == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.DefaultForProfile(childComplexity), true
 	case "ProviderStatus.isDefault":
 		if e.ComplexityRoot.ProviderStatus.IsDefault == nil {
 			break
 		}
 
 		return e.ComplexityRoot.ProviderStatus.IsDefault(childComplexity), true
+	case "ProviderStatus.kind":
+		if e.ComplexityRoot.ProviderStatus.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Kind(childComplexity), true
+	case "ProviderStatus.lastCheckedAt":
+		if e.ComplexityRoot.ProviderStatus.LastCheckedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.LastCheckedAt(childComplexity), true
 	case "ProviderStatus.model":
 		if e.ComplexityRoot.ProviderStatus.Model == nil {
 			break
@@ -4091,12 +4172,105 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ProviderStatus.ProviderType(childComplexity), true
+	case "ProviderStatus.quota":
+		if e.ComplexityRoot.ProviderStatus.Quota == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Quota(childComplexity), true
 	case "ProviderStatus.status":
 		if e.ComplexityRoot.ProviderStatus.Status == nil {
 			break
 		}
 
 		return e.ComplexityRoot.ProviderStatus.Status(childComplexity), true
+	case "ProviderStatus.usage":
+		if e.ComplexityRoot.ProviderStatus.Usage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Usage(childComplexity), true
+
+	case "ProviderTrend.ceilingTokens":
+		if e.ComplexityRoot.ProviderTrend.CeilingTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrend.CeilingTokens(childComplexity), true
+	case "ProviderTrend.kind":
+		if e.ComplexityRoot.ProviderTrend.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrend.Kind(childComplexity), true
+	case "ProviderTrend.name":
+		if e.ComplexityRoot.ProviderTrend.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrend.Name(childComplexity), true
+	case "ProviderTrend.projectedRunOutHours":
+		if e.ComplexityRoot.ProviderTrend.ProjectedRunOutHours == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrend.ProjectedRunOutHours(childComplexity), true
+	case "ProviderTrend.series":
+		if e.ComplexityRoot.ProviderTrend.Series == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrend.Series(childComplexity), true
+	case "ProviderTrend.windowDays":
+		if e.ComplexityRoot.ProviderTrend.WindowDays == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrend.WindowDays(childComplexity), true
+
+	case "ProviderTrendPoint.bucketStart":
+		if e.ComplexityRoot.ProviderTrendPoint.BucketStart == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrendPoint.BucketStart(childComplexity), true
+	case "ProviderTrendPoint.requests":
+		if e.ComplexityRoot.ProviderTrendPoint.Requests == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrendPoint.Requests(childComplexity), true
+	case "ProviderTrendPoint.tokens":
+		if e.ComplexityRoot.ProviderTrendPoint.Tokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderTrendPoint.Tokens(childComplexity), true
+
+	case "ProviderUsage.requestsLast24h":
+		if e.ComplexityRoot.ProviderUsage.RequestsLast24h == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderUsage.RequestsLast24h(childComplexity), true
+	case "ProviderUsage.requestsLastHour":
+		if e.ComplexityRoot.ProviderUsage.RequestsLastHour == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderUsage.RequestsLastHour(childComplexity), true
+	case "ProviderUsage.tokensUsedLast24h":
+		if e.ComplexityRoot.ProviderUsage.TokensUsedLast24h == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderUsage.TokensUsedLast24h(childComplexity), true
+	case "ProviderUsage.tokensUsedLastHour":
+		if e.ComplexityRoot.ProviderUsage.TokensUsedLastHour == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderUsage.TokensUsedLastHour(childComplexity), true
 
 	case "Query.agentSession":
 		if e.ComplexityRoot.Query.AgentSession == nil {
@@ -4404,6 +4578,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ExecRuns(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["artifactID"].(*string), args["definitionID"].(*string)), true
+	case "Query.harnessStatuses":
+		if e.ComplexityRoot.Query.HarnessStatuses == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.HarnessStatuses(childComplexity), true
 	case "Query.health":
 		if e.ComplexityRoot.Query.Health == nil {
 			break
@@ -4572,6 +4752,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ProviderStatuses(childComplexity), true
+	case "Query.providerTrend":
+		if e.ComplexityRoot.Query.ProviderTrend == nil {
+			break
+		}
+
+		args, err := ec.field_Query_providerTrend_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ProviderTrend(childComplexity, args["name"].(string), args["windowDays"].(int)), true
 	case "Query.providers":
 		if e.ComplexityRoot.Query.Providers == nil {
 			break
@@ -6574,6 +6765,22 @@ func (ec *executionContext) field_Query_projects_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["includeUnreachable"] = arg4
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_providerTrend_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "windowDays", ec.unmarshalNInt2int)
+	if err != nil {
+		return nil, err
+	}
+	args["windowDays"] = arg1
 	return args, nil
 }
 
@@ -21584,6 +21791,122 @@ func (ec *executionContext) fieldContext_Provider_permissions(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _ProviderQuota_ceilingTokens(ctx context.Context, field graphql.CollectedField, obj *ProviderQuota) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderQuota_ceilingTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CeilingTokens, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderQuota_ceilingTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderQuota",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderQuota_ceilingWindowSeconds(ctx context.Context, field graphql.CollectedField, obj *ProviderQuota) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderQuota_ceilingWindowSeconds,
+		func(ctx context.Context) (any, error) {
+			return obj.CeilingWindowSeconds, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderQuota_ceilingWindowSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderQuota",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderQuota_remaining(ctx context.Context, field graphql.CollectedField, obj *ProviderQuota) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderQuota_remaining,
+		func(ctx context.Context) (any, error) {
+			return obj.Remaining, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderQuota_remaining(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderQuota",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderQuota_resetAt(ctx context.Context, field graphql.CollectedField, obj *ProviderQuota) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderQuota_resetAt,
+		func(ctx context.Context) (any, error) {
+			return obj.ResetAt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderQuota_resetAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderQuota",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ProviderStatus_name(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -21608,6 +21931,35 @@ func (ec *executionContext) fieldContext_ProviderStatus_name(_ context.Context, 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_kind(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNProviderKind2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderKind,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ProviderKind does not have child fields")
 		},
 	}
 	return fc, nil
@@ -21811,6 +22163,527 @@ func (ec *executionContext) fieldContext_ProviderStatus_cooldownUntil(_ context.
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_lastCheckedAt(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_lastCheckedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.LastCheckedAt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_lastCheckedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_usage(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalOProviderUsage2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderUsage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "tokensUsedLastHour":
+				return ec.fieldContext_ProviderUsage_tokensUsedLastHour(ctx, field)
+			case "tokensUsedLast24h":
+				return ec.fieldContext_ProviderUsage_tokensUsedLast24h(ctx, field)
+			case "requestsLastHour":
+				return ec.fieldContext_ProviderUsage_requestsLastHour(ctx, field)
+			case "requestsLast24h":
+				return ec.fieldContext_ProviderUsage_requestsLast24h(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderUsage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_quota(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_quota,
+		func(ctx context.Context) (any, error) {
+			return obj.Quota, nil
+		},
+		nil,
+		ec.marshalOProviderQuota2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderQuota,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_quota(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "ceilingTokens":
+				return ec.fieldContext_ProviderQuota_ceilingTokens(ctx, field)
+			case "ceilingWindowSeconds":
+				return ec.fieldContext_ProviderQuota_ceilingWindowSeconds(ctx, field)
+			case "remaining":
+				return ec.fieldContext_ProviderQuota_remaining(ctx, field)
+			case "resetAt":
+				return ec.fieldContext_ProviderQuota_resetAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderQuota", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderStatus_defaultForProfile(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_defaultForProfile,
+		func(ctx context.Context) (any, error) {
+			return obj.DefaultForProfile, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_defaultForProfile(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrend_name(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrend_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrend_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrend_kind(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrend_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNProviderKind2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderKind,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrend_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ProviderKind does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrend_windowDays(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrend_windowDays,
+		func(ctx context.Context) (any, error) {
+			return obj.WindowDays, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrend_windowDays(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrend_series(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrend_series,
+		func(ctx context.Context) (any, error) {
+			return obj.Series, nil
+		},
+		nil,
+		ec.marshalNProviderTrendPoint2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderTrendPointᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrend_series(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "bucketStart":
+				return ec.fieldContext_ProviderTrendPoint_bucketStart(ctx, field)
+			case "tokens":
+				return ec.fieldContext_ProviderTrendPoint_tokens(ctx, field)
+			case "requests":
+				return ec.fieldContext_ProviderTrendPoint_requests(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderTrendPoint", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrend_ceilingTokens(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrend_ceilingTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CeilingTokens, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrend_ceilingTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrend_projectedRunOutHours(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrend_projectedRunOutHours,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectedRunOutHours, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrend_projectedRunOutHours(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrendPoint_bucketStart(ctx context.Context, field graphql.CollectedField, obj *ProviderTrendPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrendPoint_bucketStart,
+		func(ctx context.Context) (any, error) {
+			return obj.BucketStart, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrendPoint_bucketStart(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrendPoint",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrendPoint_tokens(ctx context.Context, field graphql.CollectedField, obj *ProviderTrendPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrendPoint_tokens,
+		func(ctx context.Context) (any, error) {
+			return obj.Tokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrendPoint_tokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrendPoint",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderTrendPoint_requests(ctx context.Context, field graphql.CollectedField, obj *ProviderTrendPoint) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderTrendPoint_requests,
+		func(ctx context.Context) (any, error) {
+			return obj.Requests, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderTrendPoint_requests(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderTrendPoint",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderUsage_tokensUsedLastHour(ctx context.Context, field graphql.CollectedField, obj *ProviderUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderUsage_tokensUsedLastHour,
+		func(ctx context.Context) (any, error) {
+			return obj.TokensUsedLastHour, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderUsage_tokensUsedLastHour(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderUsage_tokensUsedLast24h(ctx context.Context, field graphql.CollectedField, obj *ProviderUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderUsage_tokensUsedLast24h,
+		func(ctx context.Context) (any, error) {
+			return obj.TokensUsedLast24h, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderUsage_tokensUsedLast24h(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderUsage_requestsLastHour(ctx context.Context, field graphql.CollectedField, obj *ProviderUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderUsage_requestsLastHour,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestsLastHour, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderUsage_requestsLastHour(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderUsage_requestsLast24h(ctx context.Context, field graphql.CollectedField, obj *ProviderUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderUsage_requestsLast24h,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestsLast24h, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderUsage_requestsLast24h(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -24328,6 +25201,8 @@ func (ec *executionContext) fieldContext_Query_providerStatuses(_ context.Contex
 			switch field.Name {
 			case "name":
 				return ec.fieldContext_ProviderStatus_name(ctx, field)
+			case "kind":
+				return ec.fieldContext_ProviderStatus_kind(ctx, field)
 			case "providerType":
 				return ec.fieldContext_ProviderStatus_providerType(ctx, field)
 			case "baseURL":
@@ -24342,6 +25217,71 @@ func (ec *executionContext) fieldContext_Query_providerStatuses(_ context.Contex
 				return ec.fieldContext_ProviderStatus_isDefault(ctx, field)
 			case "cooldownUntil":
 				return ec.fieldContext_ProviderStatus_cooldownUntil(ctx, field)
+			case "lastCheckedAt":
+				return ec.fieldContext_ProviderStatus_lastCheckedAt(ctx, field)
+			case "usage":
+				return ec.fieldContext_ProviderStatus_usage(ctx, field)
+			case "quota":
+				return ec.fieldContext_ProviderStatus_quota(ctx, field)
+			case "defaultForProfile":
+				return ec.fieldContext_ProviderStatus_defaultForProfile(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_harnessStatuses(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_harnessStatuses,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().HarnessStatuses(ctx)
+		},
+		nil,
+		ec.marshalNProviderStatus2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderStatusᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_harnessStatuses(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_ProviderStatus_name(ctx, field)
+			case "kind":
+				return ec.fieldContext_ProviderStatus_kind(ctx, field)
+			case "providerType":
+				return ec.fieldContext_ProviderStatus_providerType(ctx, field)
+			case "baseURL":
+				return ec.fieldContext_ProviderStatus_baseURL(ctx, field)
+			case "model":
+				return ec.fieldContext_ProviderStatus_model(ctx, field)
+			case "status":
+				return ec.fieldContext_ProviderStatus_status(ctx, field)
+			case "modelCount":
+				return ec.fieldContext_ProviderStatus_modelCount(ctx, field)
+			case "isDefault":
+				return ec.fieldContext_ProviderStatus_isDefault(ctx, field)
+			case "cooldownUntil":
+				return ec.fieldContext_ProviderStatus_cooldownUntil(ctx, field)
+			case "lastCheckedAt":
+				return ec.fieldContext_ProviderStatus_lastCheckedAt(ctx, field)
+			case "usage":
+				return ec.fieldContext_ProviderStatus_usage(ctx, field)
+			case "quota":
+				return ec.fieldContext_ProviderStatus_quota(ctx, field)
+			case "defaultForProfile":
+				return ec.fieldContext_ProviderStatus_defaultForProfile(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ProviderStatus", field.Name)
 		},
@@ -24384,6 +25324,61 @@ func (ec *executionContext) fieldContext_Query_defaultRouteStatus(_ context.Cont
 			}
 			return nil, fmt.Errorf("no field named %q was found under type DefaultRouteStatus", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_providerTrend(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_providerTrend,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ProviderTrend(ctx, fc.Args["name"].(string), fc.Args["windowDays"].(int))
+		},
+		nil,
+		ec.marshalOProviderTrend2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderTrend,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_providerTrend(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_ProviderTrend_name(ctx, field)
+			case "kind":
+				return ec.fieldContext_ProviderTrend_kind(ctx, field)
+			case "windowDays":
+				return ec.fieldContext_ProviderTrend_windowDays(ctx, field)
+			case "series":
+				return ec.fieldContext_ProviderTrend_series(ctx, field)
+			case "ceilingTokens":
+				return ec.fieldContext_ProviderTrend_ceilingTokens(ctx, field)
+			case "projectedRunOutHours":
+				return ec.fieldContext_ProviderTrend_projectedRunOutHours(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderTrend", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_providerTrend_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -35466,6 +36461,48 @@ func (ec *executionContext) _Provider(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var providerQuotaImplementors = []string{"ProviderQuota"}
+
+func (ec *executionContext) _ProviderQuota(ctx context.Context, sel ast.SelectionSet, obj *ProviderQuota) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, providerQuotaImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ProviderQuota")
+		case "ceilingTokens":
+			out.Values[i] = ec._ProviderQuota_ceilingTokens(ctx, field, obj)
+		case "ceilingWindowSeconds":
+			out.Values[i] = ec._ProviderQuota_ceilingWindowSeconds(ctx, field, obj)
+		case "remaining":
+			out.Values[i] = ec._ProviderQuota_remaining(ctx, field, obj)
+		case "resetAt":
+			out.Values[i] = ec._ProviderQuota_resetAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var providerStatusImplementors = []string{"ProviderStatus"}
 
 func (ec *executionContext) _ProviderStatus(ctx context.Context, sel ast.SelectionSet, obj *ProviderStatus) graphql.Marshaler {
@@ -35479,6 +36516,11 @@ func (ec *executionContext) _ProviderStatus(ctx context.Context, sel ast.Selecti
 			out.Values[i] = graphql.MarshalString("ProviderStatus")
 		case "name":
 			out.Values[i] = ec._ProviderStatus_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._ProviderStatus_kind(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -35514,6 +36556,166 @@ func (ec *executionContext) _ProviderStatus(ctx context.Context, sel ast.Selecti
 			}
 		case "cooldownUntil":
 			out.Values[i] = ec._ProviderStatus_cooldownUntil(ctx, field, obj)
+		case "lastCheckedAt":
+			out.Values[i] = ec._ProviderStatus_lastCheckedAt(ctx, field, obj)
+		case "usage":
+			out.Values[i] = ec._ProviderStatus_usage(ctx, field, obj)
+		case "quota":
+			out.Values[i] = ec._ProviderStatus_quota(ctx, field, obj)
+		case "defaultForProfile":
+			out.Values[i] = ec._ProviderStatus_defaultForProfile(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var providerTrendImplementors = []string{"ProviderTrend"}
+
+func (ec *executionContext) _ProviderTrend(ctx context.Context, sel ast.SelectionSet, obj *ProviderTrend) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, providerTrendImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ProviderTrend")
+		case "name":
+			out.Values[i] = ec._ProviderTrend_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._ProviderTrend_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "windowDays":
+			out.Values[i] = ec._ProviderTrend_windowDays(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "series":
+			out.Values[i] = ec._ProviderTrend_series(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ceilingTokens":
+			out.Values[i] = ec._ProviderTrend_ceilingTokens(ctx, field, obj)
+		case "projectedRunOutHours":
+			out.Values[i] = ec._ProviderTrend_projectedRunOutHours(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var providerTrendPointImplementors = []string{"ProviderTrendPoint"}
+
+func (ec *executionContext) _ProviderTrendPoint(ctx context.Context, sel ast.SelectionSet, obj *ProviderTrendPoint) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, providerTrendPointImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ProviderTrendPoint")
+		case "bucketStart":
+			out.Values[i] = ec._ProviderTrendPoint_bucketStart(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tokens":
+			out.Values[i] = ec._ProviderTrendPoint_tokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requests":
+			out.Values[i] = ec._ProviderTrendPoint_requests(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var providerUsageImplementors = []string{"ProviderUsage"}
+
+func (ec *executionContext) _ProviderUsage(ctx context.Context, sel ast.SelectionSet, obj *ProviderUsage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, providerUsageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ProviderUsage")
+		case "tokensUsedLastHour":
+			out.Values[i] = ec._ProviderUsage_tokensUsedLastHour(ctx, field, obj)
+		case "tokensUsedLast24h":
+			out.Values[i] = ec._ProviderUsage_tokensUsedLast24h(ctx, field, obj)
+		case "requestsLastHour":
+			out.Values[i] = ec._ProviderUsage_requestsLastHour(ctx, field, obj)
+		case "requestsLast24h":
+			out.Values[i] = ec._ProviderUsage_requestsLast24h(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -36598,6 +37800,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "harnessStatuses":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_harnessStatuses(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "defaultRouteStatus":
 			field := field
 
@@ -36608,6 +37832,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_defaultRouteStatus(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "providerTrend":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_providerTrend(ctx, field)
 				return res
 			}
 
@@ -39729,6 +40972,16 @@ func (ec *executionContext) marshalNProvider2ᚖgithubᚗcomᚋDocumentDrivenDX�
 	return ec._Provider(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNProviderKind2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderKind(ctx context.Context, v any) (ProviderKind, error) {
+	var res ProviderKind
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNProviderKind2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderKind(ctx context.Context, sel ast.SelectionSet, v ProviderKind) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNProviderStatus2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []*ProviderStatus) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -39753,6 +41006,32 @@ func (ec *executionContext) marshalNProviderStatus2ᚖgithubᚗcomᚋDocumentDri
 		return graphql.Null
 	}
 	return ec._ProviderStatus(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNProviderTrendPoint2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderTrendPointᚄ(ctx context.Context, sel ast.SelectionSet, v []*ProviderTrendPoint) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNProviderTrendPoint2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderTrendPoint(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNProviderTrendPoint2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderTrendPoint(ctx context.Context, sel ast.SelectionSet, v *ProviderTrendPoint) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ProviderTrendPoint(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNQueueSummary2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐQueueSummary(ctx context.Context, sel ast.SelectionSet, v QueueSummary) graphql.Marshaler {
@@ -40682,6 +41961,27 @@ func (ec *executionContext) marshalOProvider2ᚖgithubᚗcomᚋDocumentDrivenDX�
 		return graphql.Null
 	}
 	return ec._Provider(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOProviderQuota2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderQuota(ctx context.Context, sel ast.SelectionSet, v *ProviderQuota) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ProviderQuota(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOProviderTrend2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderTrend(ctx context.Context, sel ast.SelectionSet, v *ProviderTrend) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ProviderTrend(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOProviderUsage2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderUsage(ctx context.Context, sel ast.SelectionSet, v *ProviderUsage) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ProviderUsage(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOResultSpec2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐResultSpec(ctx context.Context, sel ast.SelectionSet, v *ResultSpec) graphql.Marshaler {

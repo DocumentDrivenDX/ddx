@@ -2,6 +2,13 @@
 
 package graphql
 
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
+)
+
 // Node is the Relay global object identification interface
 type Node interface {
 	IsNode()
@@ -1306,25 +1313,87 @@ func (Provider) IsNode() {}
 // Globally unique identifier
 func (this Provider) GetID() string { return this.ID }
 
-// ProviderStatus is the live connectivity status of a configured API provider,
-// mirroring the output of `ddx agent providers`.
+// ProviderQuota captures the ceiling reported by the harness/provider, when known.
+// All fields are nullable; null means "not reported" (no fabrication).
+type ProviderQuota struct {
+	// Ceiling tokens for the current window. Null when the harness/provider does not report one.
+	CeilingTokens *int `json:"ceilingTokens,omitempty"`
+	// Length of the quota window in seconds (e.g. 60 for per-minute ceilings).
+	CeilingWindowSeconds *int `json:"ceilingWindowSeconds,omitempty"`
+	// Remaining tokens in the current window, as reported by the provider.
+	Remaining *int `json:"remaining,omitempty"`
+	// RFC3339 timestamp when the quota window resets.
+	ResetAt *string `json:"resetAt,omitempty"`
+}
+
+// ProviderStatus is the live connectivity status of a configured endpoint provider
+// or subprocess harness, mirroring the output of `ddx agent providers` and
+// `ddx agent list` / `ddx agent doctor`.
 type ProviderStatus struct {
-	// Provider name from agent config
+	// Provider/harness name from agent config
 	Name string `json:"name"`
-	// Provider type (e.g. "anthropic", "openai-compat")
+	// Kind: endpoint provider or subprocess harness.
+	Kind ProviderKind `json:"kind"`
+	// Provider type (e.g. "anthropic", "openai-compat") for endpoints; binary name or surface for harnesses.
 	ProviderType string `json:"providerType"`
-	// API base URL; "(api)" for Anthropic providers
+	// API base URL for endpoints; "(subprocess)" for harnesses.
 	BaseURL string `json:"baseURL"`
 	// Configured model identifier
 	Model string `json:"model"`
 	// Live connectivity status message
 	Status string `json:"status"`
-	// Number of models discovered via /v1/models (0 for Anthropic providers)
+	// Number of models discovered via /v1/models (endpoints) or harness model count (harnesses).
 	ModelCount int `json:"modelCount"`
-	// True when this is the default provider
+	// True when this is the default provider/harness.
 	IsDefault bool `json:"isDefault"`
 	// RFC3339 timestamp when health cooldown expires, if on cooldown
 	CooldownUntil *string `json:"cooldownUntil,omitempty"`
+	// RFC3339 timestamp of the last probe result (cached or live).
+	LastCheckedAt *string `json:"lastCheckedAt,omitempty"`
+	// Rolling usage aggregated from the sessions index. Null when sessions index is unavailable.
+	Usage *ProviderUsage `json:"usage,omitempty"`
+	// Quota ceiling + reset from the harness/provider. Null when unreported.
+	Quota *ProviderQuota `json:"quota,omitempty"`
+	// Profile names where this row is the default candidate (may be empty).
+	DefaultForProfile []string `json:"defaultForProfile"`
+}
+
+// ProviderTrend is the trend-detail payload for `/providers/[name]`.
+type ProviderTrend struct {
+	// Provider/harness name.
+	Name string `json:"name"`
+	// Endpoint vs harness.
+	Kind ProviderKind `json:"kind"`
+	// Window in days covered by series points.
+	WindowDays int `json:"windowDays"`
+	// Time-bucketed usage points, oldest first.
+	Series []*ProviderTrendPoint `json:"series"`
+	// Quota ceiling tokens; null when unreported.
+	CeilingTokens *int `json:"ceilingTokens,omitempty"`
+	// Projected hours until the ceiling is hit, computed from the last-24h slope. Null when ceiling is unreported or slope is non-positive.
+	ProjectedRunOutHours *float64 `json:"projectedRunOutHours,omitempty"`
+}
+
+// ProviderTrendPoint is one time-bucketed data point of usage vs. ceiling.
+type ProviderTrendPoint struct {
+	// RFC3339 bucket start (hour-aligned for ≤7d windows, 4-hour-aligned beyond).
+	BucketStart string `json:"bucketStart"`
+	// Sum of tokens recorded in sessions whose StartedAt falls in this bucket.
+	Tokens int `json:"tokens"`
+	// Count of sessions in this bucket.
+	Requests int `json:"requests"`
+}
+
+// ProviderUsage is a rolling-window token/request summary computed from the sessions index.
+type ProviderUsage struct {
+	// Tokens recorded in sessions whose StartedAt falls in the last 60 minutes. Null when unavailable.
+	TokensUsedLastHour *int `json:"tokensUsedLastHour,omitempty"`
+	// Tokens recorded in sessions whose StartedAt falls in the last 24 hours. Null when unavailable.
+	TokensUsedLast24h *int `json:"tokensUsedLast24h,omitempty"`
+	// Session count in the last 60 minutes. Null when unavailable.
+	RequestsLastHour *int `json:"requestsLastHour,omitempty"`
+	// Session count in the last 24 hours. Null when unavailable.
+	RequestsLast24h *int `json:"requestsLast24h,omitempty"`
 }
 
 // Query is the root entry point for all read operations
@@ -1696,4 +1765,62 @@ type WorkerRecentEvent struct {
 	Inputs *string `json:"inputs,omitempty"`
 	// Tool call output text
 	Output *string `json:"output,omitempty"`
+}
+
+// ProviderKind distinguishes endpoint providers from subprocess harnesses.
+type ProviderKind string
+
+const (
+	// API-endpoint provider configured via base URL + key (e.g. anthropic, openai-compat).
+	ProviderKindEndpoint ProviderKind = "ENDPOINT"
+	// Subprocess harness invoked via a local binary (e.g. claude, codex, gemini).
+	ProviderKindHarness ProviderKind = "HARNESS"
+)
+
+var AllProviderKind = []ProviderKind{
+	ProviderKindEndpoint,
+	ProviderKindHarness,
+}
+
+func (e ProviderKind) IsValid() bool {
+	switch e {
+	case ProviderKindEndpoint, ProviderKindHarness:
+		return true
+	}
+	return false
+}
+
+func (e ProviderKind) String() string {
+	return string(e)
+}
+
+func (e *ProviderKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ProviderKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ProviderKind", str)
+	}
+	return nil
+}
+
+func (e ProviderKind) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ProviderKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ProviderKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
