@@ -3,7 +3,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
-	import { SESSION_DETAIL_QUERY, type SessionNode } from './+page';
+	import { SESSION_DETAIL_QUERY, SESSION_EXECUTION_QUERY, type SessionNode } from './+page';
 
 	let { data }: { data: PageData } = $props();
 
@@ -12,6 +12,11 @@
 	let sessionBodies = $state<Record<string, Pick<SessionNode, 'prompt' | 'response' | 'stderr'>>>(
 		{}
 	);
+	let sessionExecutions = $state<Record<string, string | null>>({});
+
+	function executionHref(executionId: string): string {
+		return `/nodes/${data.nodeId}/projects/${data.projectId}/executions/${executionId}`;
+	}
 
 	onMount(() => {
 		const timer = window.setInterval(() => {
@@ -41,6 +46,21 @@
 							stderr: detail.agentSession.stderr
 						}
 					};
+				}
+			}
+			if (sessionExecutions[id] === undefined) {
+				try {
+					const client2 = createClient(fetch);
+					const exec = await client2.request<{ executionBySessionId: { id: string } | null }>(
+						SESSION_EXECUTION_QUERY,
+						{ projectID: data.projectId, sessionID: id }
+					);
+					sessionExecutions = {
+						...sessionExecutions,
+						[id]: exec.executionBySessionId?.id ?? null
+					};
+				} catch {
+					sessionExecutions = { ...sessionExecutions, [id]: null };
 				}
 			}
 		}
@@ -431,6 +451,22 @@
 									<div>
 										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Outcome</div>
 										<div class="mt-1 dark:text-gray-200">{s.outcome ?? '—'}</div>
+									</div>
+									<div>
+										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Execution</div>
+										<div class="mt-1 font-mono text-xs dark:text-gray-200">
+											{#if sessionExecutions[s.id]}
+												<a
+													href={executionHref(sessionExecutions[s.id] as string)}
+													onclick={(event) => event.stopPropagation()}
+													class="text-blue-600 hover:underline dark:text-blue-400"
+												>
+													{(sessionExecutions[s.id] as string).slice(0, 18)}…
+												</a>
+											{:else}
+												—
+											{/if}
+										</div>
 									</div>
 									<div>
 										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Ended</div>

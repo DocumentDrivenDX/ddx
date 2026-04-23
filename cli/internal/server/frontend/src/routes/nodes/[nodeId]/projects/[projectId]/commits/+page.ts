@@ -28,6 +28,14 @@ const COMMITS_QUERY = gql`
 	}
 `
 
+export const COMMIT_EXECUTION_QUERY = gql`
+	query ExecutionByResultRev($projectID: ID!, $sha: String!) {
+		executionByResultRev(projectId: $projectID, sha: $sha) {
+			id
+		}
+	}
+`
+
 export interface CommitNode {
 	sha: string
 	shortSha: string

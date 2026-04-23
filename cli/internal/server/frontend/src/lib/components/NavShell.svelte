@@ -12,7 +12,8 @@
 		Sun,
 		Radio,
 		Layers,
-		BarChart3
+		BarChart3,
+		PlayCircle
 	} from 'lucide-svelte';
 	import { page } from '$app/stores';
 	import { toggleMode, mode } from '$lib/theme';
@@ -29,6 +30,7 @@
 		{ page: 'graph', label: 'Graph', Icon: GitBranch },
 		{ page: 'workers', label: 'Workers', Icon: Cpu },
 		{ page: 'sessions', label: 'Sessions', Icon: Terminal },
+		{ page: 'executions', label: 'Executions', Icon: PlayCircle },
 		{ page: 'personas', label: 'Personas', Icon: Users },
 		{ page: 'plugins', label: 'Plugins', Icon: Package },
 		{ page: 'commits', label: 'Commits', Icon: GitCommit },

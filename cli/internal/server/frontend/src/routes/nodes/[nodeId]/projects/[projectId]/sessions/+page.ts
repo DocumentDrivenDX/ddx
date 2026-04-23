@@ -57,6 +57,14 @@ export const SESSION_DETAIL_QUERY = gql`
 	}
 `;
 
+export const SESSION_EXECUTION_QUERY = gql`
+	query SessionExecution($projectID: ID!, $sessionID: String!) {
+		executionBySessionId(projectId: $projectID, sessionId: $sessionID) {
+			id
+		}
+	}
+`;
+
 interface TokenUsage {
 	prompt: number | null;
 	completion: number | null;

@@ -2,8 +2,39 @@
 	import type { PageData } from './$types';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { createClient } from '$lib/gql/client';
+	import { COMMIT_EXECUTION_QUERY } from './+page';
 
 	let { data }: { data: PageData } = $props();
+
+	let executionBySha = $state<Record<string, string | null>>({});
+
+	onMount(async () => {
+		const client = createClient(fetch);
+		const params = $page.params as Record<string, string>;
+		const projectID = params['projectId'];
+		await Promise.all(
+			data.commits.edges.map(async (edge) => {
+				const sha = edge.node.sha;
+				if (executionBySha[sha] !== undefined) return;
+				try {
+					const result = await client.request<{ executionByResultRev: { id: string } | null }>(
+						COMMIT_EXECUTION_QUERY,
+						{ projectID, sha }
+					);
+					executionBySha = { ...executionBySha, [sha]: result.executionByResultRev?.id ?? null };
+				} catch {
+					executionBySha = { ...executionBySha, [sha]: null };
+				}
+			})
+		);
+	});
+
+	function executionHref(executionId: string): string {
+		const params = $page.params as Record<string, string>;
+		return `/nodes/${params['nodeId']}/projects/${params['projectId']}/executions/${executionId}`;
+	}
 
 	function fmtDate(iso: string): string {
 		return new Date(iso).toLocaleString();
@@ -47,6 +78,7 @@
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Author</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Date</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Beads</th>
+					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Execution</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -84,11 +116,23 @@
 								<span class="text-gray-300 dark:text-gray-600">—</span>
 							{/if}
 						</td>
+						<td class="px-4 py-3 text-xs">
+							{#if executionBySha[c.sha]}
+								<a
+									href={executionHref(executionBySha[c.sha] as string)}
+									class="font-mono text-blue-600 hover:underline dark:text-blue-400"
+								>
+									{(executionBySha[c.sha] as string).slice(0, 18)}
+								</a>
+							{:else}
+								<span class="text-gray-300 dark:text-gray-600">—</span>
+							{/if}
+						</td>
 					</tr>
 				{/each}
 				{#if data.commits.edges.length === 0}
 					<tr>
-						<td colspan="5" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+						<td colspan="6" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
 							No commits found.
 						</td>
 					</tr>
