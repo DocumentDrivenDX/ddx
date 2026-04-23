@@ -39,10 +39,11 @@ Personas can live in two places:
 ### Override rule
 
 When a project-local persona has the same name as a library persona, the
-project-local file wins for that project's bindings and list views. The
-library version is still visible in the list with its own source badge so
-the reader can see what was overridden. Load order: project wins on name
-collision; both appear in `ListPersonas` with correct source labels.
+project-local file wins for that project's bindings and list views. List
+views expose one effective persona per name; the source badge becomes
+`project` for an override so the reader can see that project-local content
+is active. Load order: project first, then library; duplicate names collapse
+to the project-local file.
 
 ### What this does not decide
 

@@ -15,12 +15,25 @@ const libraryPersona = {
 	modTime: null
 };
 
+const initialProjectPersona = {
+	...libraryPersona,
+	id: 'persona-team-reviewer',
+	name: 'team-reviewer',
+	roles: ['code-reviewer'],
+	description: 'Project reviewer',
+	body: '# Team Reviewer\n',
+	source: 'project',
+	filePath: '/proj/.ddx/personas/team-reviewer.md'
+};
+
 let projectPersonas: typeof libraryPersona[] = [];
+let boundBinding: { role: string; persona: string; projectId: string } | null = null;
 
 type GqlBody = { query: string; variables?: Record<string, unknown> };
 
 async function mockGraphQL(page: Page) {
-	projectPersonas = [];
+	projectPersonas = [{ ...initialProjectPersona }];
+	boundBinding = null;
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as GqlBody;
 		const q = body.query;
@@ -66,14 +79,31 @@ async function mockGraphQL(page: Page) {
 			});
 			return;
 		}
+		if (q.includes('PersonaBind')) {
+			boundBinding = body.variables as { role: string; persona: string; projectId: string };
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						personaBind: {
+							ok: true,
+							role: boundBinding.role,
+							persona: boundBinding.persona
+						}
+					}
+				})
+			});
+			return;
+		}
 		if (q.includes('PersonaCreate')) {
-			const vars = body.variables as { name: string };
+			const vars = body.variables as { name: string; body: string };
 			projectPersonas.push({
 				...libraryPersona,
 				id: `persona-${vars.name}`,
 				name: vars.name,
 				description: `Project persona ${vars.name}`,
-				body: `# ${vars.name}\n`,
+				body: vars.body,
 				source: 'project',
 				filePath: `/proj/.ddx/personas/${vars.name}.md`
 			});
@@ -93,9 +123,12 @@ async function mockGraphQL(page: Page) {
 			return;
 		}
 		if (q.includes('PersonaUpdate')) {
-			const vars = body.variables as { name: string };
+			const vars = body.variables as { name: string; body: string };
 			const p = projectPersonas.find((p) => p.name === vars.name);
-			if (p) p.description = `Updated ${vars.name}`;
+			if (p) {
+				p.description = `Updated ${vars.name}`;
+				p.body = vars.body;
+			}
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -152,10 +185,17 @@ test('personas page shows explainer and source badges', async ({ page }) => {
 	await expect(explainer).toContainText('project personas live with this project');
 
 	await expect(page.getByTestId('persona-source-architect')).toHaveText('library');
+	await expect(page.getByTestId('persona-source-team-reviewer')).toHaveText('project');
+	await expect(page.getByTestId('persona-fork-architect')).toBeVisible();
+	await expect(page.getByTestId('persona-edit-architect')).toHaveCount(0);
+	await expect(page.getByTestId('persona-delete-architect')).toHaveCount(0);
+	await expect(page.getByTestId('persona-edit-team-reviewer')).toBeVisible();
+	await expect(page.getByTestId('persona-delete-team-reviewer')).toBeVisible();
 });
 
 test('empty project state shows hint', async ({ page }) => {
 	await mockGraphQL(page);
+	projectPersonas = [];
 	await page.goto('/nodes/node-abc/projects/proj-1/personas');
 	await expect(page.getByTestId('no-project-personas-hint')).toBeVisible();
 });
@@ -176,6 +216,7 @@ test('create edit delete project persona', async ({ page }) => {
 	await page.getByTestId('persona-edit-our-reviewer').click();
 	await page.getByTestId('persona-editor-body').fill(`---\nname: our-reviewer\nroles: [code-reviewer]\ndescription: Updated\ntags: []\n---\n\n# Updated\n`);
 	await page.getByTestId('persona-editor-save').click();
+	await expect(page.getByTestId('persona-row-our-reviewer')).toContainText('Updated our-reviewer');
 
 	// Delete.
 	await page.getByTestId('persona-delete-our-reviewer').click();
@@ -190,4 +231,20 @@ test('fork library persona to project', async ({ page }) => {
 
 	await page.getByTestId('persona-fork-architect').click();
 	await expect(page.getByTestId('persona-source-architect-local')).toHaveText('project');
+	await expect(page.getByTestId('persona-editor')).toBeVisible();
+	await expect(page.getByTestId('persona-editor-body')).toHaveValue(/# Architect/);
+});
+
+test('pre-existing bind flow still saves a role binding', async ({ page }) => {
+	await mockGraphQL(page);
+
+	await page.goto('/nodes/node-abc/projects/proj-1/personas/architect');
+	await page.getByRole('button', { name: 'Bind to role' }).click();
+	await page.getByRole('button', { name: 'Bind', exact: true }).click();
+
+	await expect.poll(() => boundBinding).toEqual({
+		role: 'architect',
+		persona: 'architect',
+		projectId: 'proj-1'
+	});
 });

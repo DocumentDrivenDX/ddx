@@ -677,11 +677,7 @@ func personaLoad(workingDir string, personas ...string) ([]string, error) {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	// Get library path
-	libPath, err := getPersonaLibraryPath(workingDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get library path: %w", err)
-	}
+	loader := persona.NewPersonaLoader(workingDir)
 
 	// Read CLAUDE.md if it exists
 	claudePath := "CLAUDE.md"
@@ -720,36 +716,40 @@ func personaLoad(workingDir string, personas ...string) ([]string, error) {
 	if len(personas) > 0 {
 		// Load specific personas
 		for _, personaName := range personas {
-			personaPath := filepath.Join(libPath, "personas", personaName+".md")
-			if content, err := os.ReadFile(personaPath); err == nil {
-				// Validate persona content if it has frontmatter
-				if err := validatePersonaContent(string(content), personaName); err != nil {
-					return nil, err
+			content, err := personaInjectionContent(loader, personaName)
+			if err != nil {
+				if isPersonaNotFound(err) {
+					return nil, fmt.Errorf("persona '%s' not found", personaName)
 				}
-				// Just add the content - personas have their own titles
-				personaSection.WriteString(string(content) + "\n")
-				loadedPersonas = append(loadedPersonas, personaName)
-			} else if os.IsNotExist(err) {
-				return nil, fmt.Errorf("persona '%s' not found", personaName)
+				return nil, err
 			}
+			if err := validatePersonaContent(content, personaName); err != nil {
+				return nil, err
+			}
+			// Just add the content - personas have their own titles
+			personaSection.WriteString(content + "\n")
+			loadedPersonas = append(loadedPersonas, personaName)
 		}
 	} else {
 		// Load all bound personas from config
 		if cfg.PersonaBindings != nil {
 			for role, personaName := range cfg.PersonaBindings {
-				personaPath := filepath.Join(libPath, "personas", personaName+".md")
-				if content, err := os.ReadFile(personaPath); err == nil {
-					// Validate persona content if it has frontmatter
-					if err := validatePersonaContent(string(content), personaName); err != nil {
-						return nil, err
+				content, err := personaInjectionContent(loader, personaName)
+				if err != nil {
+					if isPersonaNotFound(err) {
+						continue
 					}
-					// Add role header with proper capitalization
-					caser := cases.Title(language.English)
-					capitalizedRole := caser.String(strings.ReplaceAll(role, "-", " "))
-					personaSection.WriteString(fmt.Sprintf("### %s: %s\n", capitalizedRole, personaName))
-					personaSection.WriteString(string(content) + "\n")
-					loadedPersonas = append(loadedPersonas, personaName)
+					return nil, err
 				}
+				if err := validatePersonaContent(content, personaName); err != nil {
+					return nil, err
+				}
+				// Add role header with proper capitalization
+				caser := cases.Title(language.English)
+				capitalizedRole := caser.String(strings.ReplaceAll(role, "-", " "))
+				personaSection.WriteString(fmt.Sprintf("### %s: %s\n", capitalizedRole, personaName))
+				personaSection.WriteString(content + "\n")
+				loadedPersonas = append(loadedPersonas, personaName)
 			}
 		}
 	}
@@ -765,6 +765,26 @@ func personaLoad(workingDir string, personas ...string) ([]string, error) {
 	}
 
 	return loadedPersonas, nil
+}
+
+func personaInjectionContent(loader persona.PersonaLoader, personaName string) (string, error) {
+	loaded, err := loader.LoadPersona(personaName)
+	if err != nil {
+		return "", err
+	}
+	if loaded.FilePath == "" {
+		return loaded.Content, nil
+	}
+	content, err := os.ReadFile(loaded.FilePath)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+func isPersonaNotFound(err error) bool {
+	var pe *persona.PersonaError
+	return errors.As(err, &pe) && pe.Type == persona.ErrorPersonaNotFound
 }
 
 // =============================================================================

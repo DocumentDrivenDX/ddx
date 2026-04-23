@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
 const (
@@ -205,7 +207,7 @@ func (r *mutationResolver) PersonaCreate(ctx context.Context, name string, body 
 	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
 	p, err := writer.Create(name, body)
 	if err != nil {
-		return nil, err
+		return nil, personaGraphQLError(err)
 	}
 	return personaToGQL(p), nil
 }
@@ -215,7 +217,7 @@ func (r *mutationResolver) PersonaUpdate(ctx context.Context, name string, body 
 	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
 	p, err := writer.Update(name, body)
 	if err != nil {
-		return nil, err
+		return nil, personaGraphQLError(err)
 	}
 	return personaToGQL(p), nil
 }
@@ -224,7 +226,7 @@ func (r *mutationResolver) PersonaUpdate(ctx context.Context, name string, body 
 func (r *mutationResolver) PersonaDelete(ctx context.Context, name string, projectID string) (*PersonaDeleteResult, error) {
 	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
 	if err := writer.Delete(name); err != nil {
-		return nil, err
+		return nil, personaGraphQLError(err)
 	}
 	return &PersonaDeleteResult{Ok: true, Name: name}, nil
 }
@@ -238,9 +240,23 @@ func (r *mutationResolver) PersonaFork(ctx context.Context, libraryName string, 
 	}
 	p, err := writer.Fork(libraryName, target)
 	if err != nil {
-		return nil, err
+		return nil, personaGraphQLError(err)
 	}
 	return personaToGQL(p), nil
+}
+
+func personaGraphQLError(err error) error {
+	var personaErr *persona.PersonaError
+	if !errors.As(err, &personaErr) {
+		return err
+	}
+	return &gqlerror.Error{
+		Message: personaErr.Message,
+		Err:     err,
+		Extensions: map[string]any{
+			"code": personaErr.Type,
+		},
+	}
 }
 
 // QueueSummary is the resolver for the queueSummary field.

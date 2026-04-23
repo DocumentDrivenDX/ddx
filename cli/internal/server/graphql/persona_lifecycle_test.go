@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	ddxcmd "github.com/DocumentDrivenDX/ddx/cmd"
 )
 
 // TestIntegration_PersonaLifecycle covers AC #3 and AC #4:
@@ -90,8 +92,8 @@ bead:
 		"body": updatedBody,
 		"pid":  projectID,
 	})
-	if !bytes.Contains([]byte(resp["errors"]), []byte("library")) {
-		t.Fatalf("expected library error, got: %s", resp["errors"])
+	if !bytes.Contains([]byte(resp["errors"]), []byte("persona_is_library_read_only")) {
+		t.Fatalf("expected typed library error, got: %s", resp["errors"])
 	}
 
 	// AC#3: library persona cannot be deleted.
@@ -102,17 +104,18 @@ bead:
 		"name": "architect",
 		"pid":  projectID,
 	})
-	if !bytes.Contains([]byte(resp["errors"]), []byte("library")) {
-		t.Fatalf("expected library error, got: %s", resp["errors"])
+	if !bytes.Contains([]byte(resp["errors"]), []byte("persona_is_library_read_only")) {
+		t.Fatalf("expected typed library error, got: %s", resp["errors"])
 	}
 
 	// AC#4: CLI parity — create a persona using the writer directly, then
-	// verify GraphQL personas query sees it. We use os.WriteFile as the
-	// proxy for the CLI since the CLI uses the same filesystem path.
-	cliBody := "---\nname: cli-made\nroles: [implementer]\ndescription: Made via CLI\ntags: []\n---\n\n# CLI\n"
-	if err := os.WriteFile(filepath.Join(workDir, ".ddx", "personas", "cli-made.md"), []byte(cliBody), 0o644); err != nil {
+	// verify GraphQL personas query sees it.
+	cliBodyPath := filepath.Join(workDir, "cli-persona.md")
+	cliBody := "---\nname: ignored\nroles: [implementer]\ndescription: Made via CLI\ntags: []\n---\n\n# CLI\n"
+	if err := os.WriteFile(cliBodyPath, []byte(cliBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	runPersonaCommand(t, workDir, "persona", "new", "cli-made", "--body", cliBodyPath)
 
 	listQuery := `query($pid: String) { personas(projectId: $pid) { name source } }`
 	resp = gqlMutation(t, h, listQuery, map[string]any{"pid": projectID})
@@ -153,6 +156,18 @@ bead:
 		t.Fatalf("fork error: %s", resp["errors"])
 	}
 	assertFileExists(t, filepath.Join(workDir, ".ddx", "personas", "architect-local.md"))
+}
+
+func runPersonaCommand(t *testing.T, workDir string, args ...string) {
+	t.Helper()
+	root := ddxcmd.NewCommandFactory(workDir).NewRootCommand()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ddx %s failed: %v\n%s", strings.Join(args, " "), err, out.String())
+	}
 }
 
 func assertFileExists(t *testing.T, path string) {

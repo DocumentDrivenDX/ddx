@@ -130,3 +130,50 @@ func TestPersonaCLI_GraphQLParity(t *testing.T) {
 	assert.Equal(t, persona.SourceLibrary, names["architect"],
 		"library architect still visible with library source")
 }
+
+func TestPersonaCLI_LoadUsesProjectOverride(t *testing.T) {
+	workDir := t.TempDir()
+	libraryRoot := filepath.Join(workDir, "library")
+	libPersonasDir := filepath.Join(libraryRoot, "personas")
+	projectPersonasDir := filepath.Join(workDir, ".ddx", "personas")
+	require.NoError(t, os.MkdirAll(libPersonasDir, 0o755))
+	require.NoError(t, os.MkdirAll(projectPersonasDir, 0o755))
+
+	cfg := `version: "2.0"
+library:
+  path: library
+persona_bindings:
+  code-reviewer: code-reviewer
+`
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, ".ddx", "config.yaml"), []byte(cfg), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(libPersonasDir, "code-reviewer.md"), []byte(`---
+name: code-reviewer
+roles: [code-reviewer]
+description: Library reviewer
+tags: []
+---
+
+# Library Reviewer
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectPersonasDir, "code-reviewer.md"), []byte(`---
+name: code-reviewer
+roles: [code-reviewer]
+description: Project reviewer
+tags: []
+---
+
+# Project Reviewer
+`), 0o644))
+
+	rootCmd := getPersonaIntegrationTestRootCommand(workDir)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+	rootCmd.SetArgs([]string{"persona", "load"})
+	require.NoError(t, rootCmd.Execute(), buf.String())
+
+	claude, err := os.ReadFile(filepath.Join(workDir, "CLAUDE.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(claude), "Project Reviewer")
+	assert.NotContains(t, string(claude), "Library Reviewer")
+}
