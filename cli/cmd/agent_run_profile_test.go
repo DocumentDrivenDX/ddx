@@ -43,6 +43,35 @@ func agentTestDirWithHarness(t *testing.T, harness string) string {
 	return dir
 }
 
+func TestAgentRunProfileUsesConfiguredTierModelOverride(t *testing.T) {
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	cfg := `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+agent:
+  routing:
+    profile_ladders:
+      default: [cheap, standard, smart]
+      cheap: [cheap]
+    model_overrides:
+      cheap: qwen/qwen3.6
+`
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
+
+	assert.Equal(t, "qwen/qwen3.6", profileModelOverrideForRun(dir, "cheap"))
+	assert.Equal(t, "qwen/qwen3.6", profileModelOverrideForRun(dir, "default"))
+}
+
+func TestAgentRunProfileWithoutConfiguredOverrideLeavesModelToUpstreamProfile(t *testing.T) {
+	dir := agentTestDir(t)
+	assert.Empty(t, profileModelOverrideForRun(dir, "cheap"))
+}
+
 // TestAgentRunProfileFlagWithVirtualHarness verifies that --profile is accepted as a
 // valid flag and does not interfere with an explicit --harness virtual invocation.
 func TestAgentRunProfileFlagWithVirtualHarness(t *testing.T) {

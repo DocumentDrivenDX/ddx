@@ -369,12 +369,16 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		coordinator := m.LandCoordinators.Get(projectRoot)
 
 		// singleTierAttempt runs one execution at a specific harness/model.
-		singleTierAttempt := func(ctx context.Context, beadID string, tier escalation.ModelTier, resolvedHarness, resolvedModel string) (agent.ExecuteBeadReport, error) {
+		singleTierAttempt := func(ctx context.Context, beadID string, tier escalation.ModelTier, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 			gitOps := &agent.RealGitOps{}
+			attemptProvider := spec.Provider
+			if resolvedProvider != "" {
+				attemptProvider = resolvedProvider
+			}
 			res, err := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
 				Harness:    resolvedHarness,
 				Model:      resolvedModel,
-				Provider:   spec.Provider,
+				Provider:   attemptProvider,
 				ModelRef:   spec.ModelRef,
 				Effort:     spec.Effort,
 				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
@@ -476,7 +480,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				return cappedReport, nil
 			}
 			if !escalationEnabled {
-				report, err := singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Model)
+				report, err := singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Provider, spec.Model)
 				if err == nil {
 					accumulateBilledCost(report)
 					if cappedReport, capped := costCapTripped(); capped {
@@ -542,7 +546,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 					continue
 				}
 
-				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Model)
+				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Provider, dec.Model)
 				if attemptErr != nil {
 					report = agent.ExecuteBeadReport{
 						BeadID:           beadID,
