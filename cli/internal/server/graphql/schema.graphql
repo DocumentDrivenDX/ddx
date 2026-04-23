@@ -1431,6 +1431,14 @@ type PersonaBindResult {
   persona: String!
 }
 
+"""PersonaDeleteResult reports a project-local persona delete."""
+type PersonaDeleteResult {
+  """True when the persona was deleted"""
+  ok: Boolean!
+  """Persona name that was deleted"""
+  name: String!
+}
+
 """EfficacyWarning flags a model row that needs operator attention."""
 type EfficacyWarning {
   """Warning kind"""
@@ -1885,13 +1893,22 @@ type Query {
   # Persona Queries
   # ==========================================
 
-  """List all personas as a flat array (maps to GET /api/personas)"""
-  personas: [Persona!]!
+  """List all personas as a flat array (maps to GET /api/personas).
+
+  When projectId is provided, project-local personas under the given
+  project's `.ddx/personas` are included and override library personas
+  of the same name."""
+  personas(
+    """Optional project identifier to scope project-local personas"""
+    projectId: String
+  ): [Persona!]!
 
   """Fetch a single persona by name (maps to GET /api/personas)"""
   persona(
     """Persona name"""
-    name: String!
+    name: String!,
+    """Optional project identifier to prefer project-local lookup"""
+    projectId: String
   ): Persona
 
   """Resolve the persona bound to a role (maps to GET /api/personas/{role})"""
@@ -2177,6 +2194,44 @@ type Mutation {
     """Project identifier"""
     projectId: String!
   ): PersonaBindResult!
+
+  """Create a new project-local persona. Library personas cannot be created via this API."""
+  personaCreate(
+    """Unique persona name (also used as the file name)"""
+    name: String!,
+    """Markdown body including YAML frontmatter"""
+    body: String!,
+    """Project identifier to create the persona under"""
+    projectId: String!
+  ): Persona!
+
+  """Update an existing project-local persona. Errors on library personas."""
+  personaUpdate(
+    """Persona name to update"""
+    name: String!,
+    """Markdown body including YAML frontmatter"""
+    body: String!,
+    """Project identifier whose persona to update"""
+    projectId: String!
+  ): Persona!
+
+  """Delete a project-local persona. Errors on library personas."""
+  personaDelete(
+    """Persona name to delete"""
+    name: String!,
+    """Project identifier whose persona to delete"""
+    projectId: String!
+  ): PersonaDeleteResult!
+
+  """Fork a library persona into the project-local directory. Returns the new project persona."""
+  personaFork(
+    """Library persona name to copy"""
+    libraryName: String!,
+    """Optional new persona name; defaults to the library name"""
+    newName: String,
+    """Project identifier to fork into"""
+    projectId: String!
+  ): Persona!
 }
 
 # ============================================

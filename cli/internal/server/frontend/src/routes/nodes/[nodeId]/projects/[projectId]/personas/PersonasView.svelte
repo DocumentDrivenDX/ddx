@@ -1,11 +1,18 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { invalidateAll } from '$app/navigation';
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
 	import DOMPurify from 'isomorphic-dompurify';
 	import { marked } from 'marked';
 	import type { PageData } from './$types';
 	import type { PersonaNode, ProjectOption } from './data';
+	import {
+		PERSONA_CREATE_MUTATION,
+		PERSONA_UPDATE_MUTATION,
+		PERSONA_DELETE_MUTATION,
+		PERSONA_FORK_MUTATION
+	} from './data';
 
 	let { data }: { data: PageData } = $props();
 
@@ -29,6 +36,7 @@
 		projectBindings: unknown;
 	};
 
+	// Binding dialog state.
 	let bindOpen = $state(false);
 	let bindRole = $state('');
 	let bindProjectId = $state('');
@@ -40,10 +48,26 @@
 	let loadingBindings = $state(false);
 	let savingBinding = $state(false);
 
+	// Editor dialog state.
+	let editorOpen = $state(false);
+	let editorMode = $state<'create' | 'edit'>('create');
+	let editorName = $state('');
+	let editorBody = $state('');
+	let editorError = $state('');
+	let editorSaving = $state(false);
+
+	// Delete confirmation state.
+	let deleteTarget = $state<string | null>(null);
+	let deleteError = $state('');
+
 	const selected = $derived.by<PersonaNode | null>(() => {
 		if (!data.selectedName) return null;
 		return data.personas.find((p) => p.name === data.selectedName) ?? null;
 	});
+
+	const hasProjectPersonas = $derived.by(() =>
+		data.personas.some((p) => p.source === 'project')
+	);
 
 	const projects = $derived.by<ProjectOption[]>(() => {
 		if ('projects' in data && Array.isArray(data.projects) && data.projects.length > 0) {
@@ -153,6 +177,106 @@
 			savingBinding = false;
 		}
 	}
+
+	// ── Project-local persona lifecycle ────────────────────────────────────
+
+	function scaffoldBody(name: string): string {
+		return `---\nname: ${name}\nroles: [general]\ndescription: Project persona ${name}\ntags: []\n---\n\n# ${name}\n\nTODO: describe what this persona does.\n`;
+	}
+
+	function openNewEditor(): void {
+		editorMode = 'create';
+		editorName = '';
+		editorBody = scaffoldBody('new-persona');
+		editorError = '';
+		editorOpen = true;
+	}
+
+	function openEditEditor(persona: PersonaNode): void {
+		editorMode = 'edit';
+		editorName = persona.name;
+		editorBody = persona.body ?? '';
+		editorError = '';
+		editorOpen = true;
+	}
+
+	async function submitEditor(): Promise<void> {
+		editorError = '';
+		editorSaving = true;
+		try {
+			const client = createClient(fetch);
+			if (editorMode === 'create') {
+				await client.request(PERSONA_CREATE_MUTATION, {
+					name: editorName,
+					body: editorBody,
+					projectId: data.projectId
+				});
+				status = `Created project persona '${editorName}'.`;
+			} else {
+				await client.request(PERSONA_UPDATE_MUTATION, {
+					name: editorName,
+					body: editorBody,
+					projectId: data.projectId
+				});
+				status = `Updated project persona '${editorName}'.`;
+			}
+			editorOpen = false;
+			await invalidateAll();
+		} catch (err) {
+			editorError = err instanceof Error ? err.message : 'Unable to save persona.';
+		} finally {
+			editorSaving = false;
+		}
+	}
+
+	function confirmDelete(name: string): void {
+		deleteTarget = name;
+		deleteError = '';
+	}
+
+	async function runDelete(): Promise<void> {
+		if (!deleteTarget) return;
+		try {
+			const client = createClient(fetch);
+			await client.request(PERSONA_DELETE_MUTATION, {
+				name: deleteTarget,
+				projectId: data.projectId
+			});
+			status = `Deleted project persona '${deleteTarget}'.`;
+			deleteTarget = null;
+			await invalidateAll();
+		} catch (err) {
+			deleteError = err instanceof Error ? err.message : 'Unable to delete persona.';
+		}
+	}
+
+	async function forkLibrary(persona: PersonaNode): Promise<void> {
+		const existingNames = new Set(data.personas.filter((p) => p.source === 'project').map((p) => p.name));
+		let target = persona.name;
+		if (existingNames.has(target)) {
+			target = `${persona.name}-local`;
+		}
+		const entered = typeof window !== 'undefined' ? window.prompt(`Name for the forked persona?`, target) : target;
+		if (!entered) return;
+		try {
+			const client = createClient(fetch);
+			await client.request(PERSONA_FORK_MUTATION, {
+				libraryName: persona.name,
+				newName: entered,
+				projectId: data.projectId
+			});
+			status = `Forked '${persona.name}' to '${entered}'.`;
+			await invalidateAll();
+			// Navigate to the newly forked persona's editor.
+			editorMode = 'edit';
+			editorName = entered;
+			editorBody = (data.personas.find((p) => p.name === entered)?.body) ?? persona.body ?? '';
+			editorError = '';
+			editorOpen = true;
+		} catch (err) {
+			status = err instanceof Error ? err.message : 'Unable to fork persona.';
+		}
+	}
 </script>
 
 <div class="min-h-full bg-stone-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
@@ -167,10 +291,29 @@
 					Persona Library
 				</p>
 				<h1 class="mt-1 text-3xl font-semibold tracking-tight">Personas</h1>
+				<p
+					class="mt-3 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-300"
+					data-testid="personas-explainer"
+				>
+					Personas are AI personality templates that get injected into agent prompts when
+					a persona is bound to a role.
+					Library personas are shared across projects and are read-only; project personas
+					live with this project under <code>.ddx/personas</code> and are fully editable.
+				</p>
 			</div>
-			<div class="text-sm text-zinc-600 dark:text-zinc-300">
-				{data.personas.length}
-				{data.personas.length === 1 ? 'persona' : 'personas'}
+			<div class="flex flex-col items-end gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+				<button
+					type="button"
+					data-testid="persona-new-button"
+					class="inline-flex items-center justify-center rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:outline-none dark:bg-teal-300 dark:text-zinc-950 dark:hover:bg-teal-200"
+					onclick={openNewEditor}
+				>
+					New persona
+				</button>
+				<span>
+					{data.personas.length}
+					{data.personas.length === 1 ? 'persona' : 'personas'}
+				</span>
 			</div>
 		</header>
 
@@ -183,11 +326,21 @@
 			</div>
 		{/if}
 
+		{#if !hasProjectPersonas}
+			<div
+				data-testid="no-project-personas-hint"
+				class="rounded-md border border-dashed border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+			>
+				No project personas yet. Fork a library persona or create a new one.
+			</div>
+		{/if}
+
 		<div class="grid gap-6 xl:grid-cols-[minmax(280px,380px)_1fr]">
 			<section aria-label="Installed personas" class="grid gap-3 self-start">
 				{#each data.personas as persona (persona.name)}
 					<article
 						aria-label={persona.name}
+						data-testid={`persona-row-${persona.name}`}
 						class="group relative rounded-md border border-zinc-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-500 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-teal-400 {selected?.name ===
 						persona.name
 							? 'border-teal-600 ring-1 ring-teal-600 dark:border-teal-300 dark:ring-teal-300'
@@ -215,7 +368,10 @@
 							</div>
 							{#if persona.source}
 								<span
-									class="shrink-0 rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+									data-testid={`persona-source-${persona.name}`}
+									class="shrink-0 rounded border px-2 py-1 text-[11px] font-medium {persona.source === 'project'
+										? 'border-teal-400 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-200'
+										: 'border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300'}"
 								>
 									{persona.source}
 								</span>
@@ -232,6 +388,45 @@
 								{/each}
 							</div>
 						{/if}
+
+						<div class="relative z-10 mt-3 flex flex-wrap gap-2">
+							{#if persona.source === 'project'}
+								<button
+									type="button"
+									data-testid={`persona-edit-${persona.name}`}
+									class="rounded border border-zinc-300 px-2 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+									onclick={(event) => {
+										event.stopPropagation();
+										openEditEditor(persona);
+									}}
+								>
+									Edit
+								</button>
+								<button
+									type="button"
+									data-testid={`persona-delete-${persona.name}`}
+									class="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+									onclick={(event) => {
+										event.stopPropagation();
+										confirmDelete(persona.name);
+									}}
+								>
+									Delete
+								</button>
+							{:else}
+								<button
+									type="button"
+									data-testid={`persona-fork-${persona.name}`}
+									class="rounded border border-zinc-300 px-2 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+									onclick={(event) => {
+										event.stopPropagation();
+										void forkLibrary(persona);
+									}}
+								>
+									Fork to project
+								</button>
+							{/if}
+						</div>
 					</article>
 				{/each}
 
@@ -341,6 +536,134 @@
 		</div>
 	</div>
 </div>
+
+{#if editorOpen}
+	<dialog
+		open
+		aria-labelledby="editor-dialog-title"
+		data-testid="persona-editor"
+		class="fixed top-1/2 left-1/2 z-50 w-[min(92vw,40rem)] -translate-x-1/2 -translate-y-1/2 rounded-md border border-zinc-200 bg-white p-0 text-zinc-950 shadow-2xl backdrop:bg-zinc-950/50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+	>
+		<form
+			class="space-y-4 p-5"
+			onsubmit={(event) => {
+				event.preventDefault();
+				void submitEditor();
+			}}
+		>
+			<div class="flex items-start justify-between gap-4">
+				<div>
+					<h2 id="editor-dialog-title" class="text-lg font-semibold">
+						{editorMode === 'create' ? 'New persona' : `Edit ${editorName}`}
+					</h2>
+					<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+						Project personas live with this project under <code>.ddx/personas</code>.
+					</p>
+				</div>
+				<button
+					type="button"
+					class="rounded px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+					onclick={() => (editorOpen = false)}
+				>
+					Close
+				</button>
+			</div>
+
+			{#if editorMode === 'create'}
+				<label class="block text-sm font-medium" for="editor-name">
+					Name
+					<input
+						id="editor-name"
+						type="text"
+						data-testid="persona-editor-name"
+						class="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+						bind:value={editorName}
+						placeholder="our-reviewer"
+					/>
+				</label>
+			{/if}
+
+			<label class="block text-sm font-medium" for="editor-body">
+				Body (markdown with YAML frontmatter)
+				<textarea
+					id="editor-body"
+					data-testid="persona-editor-body"
+					class="mt-1 h-72 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-950"
+					bind:value={editorBody}
+				></textarea>
+			</label>
+
+			{#if editorError}
+				<div
+					role="alert"
+					class="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100"
+				>
+					{editorError}
+				</div>
+			{/if}
+
+			<div class="flex justify-end gap-2 pt-2">
+				<button
+					type="button"
+					class="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+					onclick={() => (editorOpen = false)}
+				>
+					Cancel
+				</button>
+				<button
+					type="submit"
+					data-testid="persona-editor-save"
+					class="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+					disabled={editorSaving || !editorBody.trim() || (editorMode === 'create' && !editorName.trim())}
+				>
+					{editorSaving ? 'Saving...' : 'Save'}
+				</button>
+			</div>
+		</form>
+	</dialog>
+{/if}
+
+{#if deleteTarget}
+	<dialog
+		open
+		aria-labelledby="delete-dialog-title"
+		data-testid="persona-delete-dialog"
+		class="fixed top-1/2 left-1/2 z-50 w-[min(92vw,28rem)] -translate-x-1/2 -translate-y-1/2 rounded-md border border-zinc-200 bg-white p-0 text-zinc-950 shadow-2xl backdrop:bg-zinc-950/50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+	>
+		<div class="space-y-4 p-5">
+			<h2 id="delete-dialog-title" class="text-lg font-semibold">Delete persona?</h2>
+			<p class="text-sm text-zinc-600 dark:text-zinc-300">
+				This removes <code>.ddx/personas/{deleteTarget}.md</code>. Existing bindings that
+				point at it will continue to reference the name; update them as needed.
+			</p>
+			{#if deleteError}
+				<div
+					role="alert"
+					class="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100"
+				>
+					{deleteError}
+				</div>
+			{/if}
+			<div class="flex justify-end gap-2 pt-2">
+				<button
+					type="button"
+					class="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+					onclick={() => (deleteTarget = null)}
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					data-testid="persona-delete-confirm"
+					class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+					onclick={() => void runDelete()}
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</dialog>
+{/if}
 
 {#if bindOpen && selected}
 	<dialog
@@ -483,5 +806,4 @@
 	.persona-body :global(ol) {
 		padding-left: 1.25rem;
 	}
-
 </style>

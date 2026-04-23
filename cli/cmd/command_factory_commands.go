@@ -213,6 +213,8 @@ Examples:
 	cmd.Flags().String("bind", "", "Bind a persona to a role")
 	cmd.Flags().String("role", "", "Role to bind persona to or filter by")
 	cmd.Flags().String("tag", "", "Filter personas by tag")
+	cmd.Flags().String("body", "", "Path to a markdown file with the persona body (new/edit)")
+	cmd.Flags().String("as", "", "Optional new name when forking a library persona")
 
 	return cmd
 }

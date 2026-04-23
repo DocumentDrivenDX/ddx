@@ -1,13 +1,16 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -25,6 +28,8 @@ type PersonaInfo struct {
 	Tags        []string
 	Content     string
 	FilePath    string
+	// Source is either "library" or "project".
+	Source string
 }
 
 // deprecatedPersonas lists personas from the pre-consolidation roster
@@ -117,6 +122,48 @@ func runPersonaWithWorkingDir(cmd *cobra.Command, args []string, workingDir stri
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✅ Bound role '%s' to persona '%s'\n", args[1], args[2])
 			return nil
+		case "new":
+			if len(args) < 2 {
+				return fmt.Errorf("persona name required")
+			}
+			bodyFlag, _ := cmd.Flags().GetString("body")
+			created, err := personaNew(workingDir, args[1], bodyFlag)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✅ Created project persona '%s' at %s\n", created.Name, created.FilePath)
+			return nil
+		case "edit":
+			if len(args) < 2 {
+				return fmt.Errorf("persona name required")
+			}
+			bodyFlag, _ := cmd.Flags().GetString("body")
+			updated, err := personaEdit(cmd, workingDir, args[1], bodyFlag)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✅ Updated project persona '%s' at %s\n", updated.Name, updated.FilePath)
+			return nil
+		case "fork":
+			if len(args) < 2 {
+				return fmt.Errorf("persona name required")
+			}
+			asFlag, _ := cmd.Flags().GetString("as")
+			forked, err := personaFork(workingDir, args[1], asFlag)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✅ Forked library persona '%s' to project persona '%s' at %s\n", args[1], forked.Name, forked.FilePath)
+			return nil
+		case "delete":
+			if len(args) < 2 {
+				return fmt.Errorf("persona name required")
+			}
+			if err := personaDelete(workingDir, args[1]); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✅ Deleted project persona '%s'\n", args[1])
+			return nil
 		case "load":
 			loadedPersonas, err := personaLoad(workingDir, args[1:]...)
 			if err != nil {
@@ -180,21 +227,25 @@ func displayPersonaList(cmd *cobra.Command, personas []PersonaInfo) error {
 
 	// Create tabwriter for aligned output
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "PERSONA\tROLE\tDESCRIPTION")
-	_, _ = fmt.Fprintln(w, "-------\t----\t-----------")
+	_, _ = fmt.Fprintln(w, "PERSONA\tSOURCE\tROLE\tDESCRIPTION")
+	_, _ = fmt.Fprintln(w, "-------\t------\t----\t-----------")
 
 	var deprecatedSeen []string
-	for _, persona := range personas {
+	for _, p := range personas {
 		roleStr := "general"
-		if len(persona.Roles) > 0 {
-			roleStr = persona.Roles[0]
+		if len(p.Roles) > 0 {
+			roleStr = p.Roles[0]
 		}
-		displayName := persona.Name
-		if _, deprecated := deprecatedPersonas[persona.Name]; deprecated {
-			displayName = persona.Name + " (deprecated)"
-			deprecatedSeen = append(deprecatedSeen, persona.Name)
+		displayName := p.Name
+		if _, deprecated := deprecatedPersonas[p.Name]; deprecated {
+			displayName = p.Name + " (deprecated)"
+			deprecatedSeen = append(deprecatedSeen, p.Name)
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", displayName, roleStr, persona.Description)
+		source := p.Source
+		if source == "" {
+			source = "library"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", displayName, source, roleStr, p.Description)
 	}
 
 	_ = w.Flush()
@@ -324,150 +375,164 @@ func displayLoadResult(cmd *cobra.Command, requestedPersonas []string, loadedPer
 // Business Logic Layer - Pure functions that operate on working directory
 // =============================================================================
 
-// personaList returns a list of available personas
+// personaList returns a list of available personas, merging the library
+// directory and project-local `.ddx/personas`. Project personas override
+// library personas on name collision.
 func personaList(workingDir string, roleFilter, tagFilter string) ([]PersonaInfo, error) {
-	// Get library path
 	libPath, err := getPersonaLibraryPath(workingDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get library path: %w", err)
+	libraryDir := ""
+	if err == nil {
+		libraryDir = filepath.Join(libPath, "personas")
+	}
+	projectDir := ""
+	if workingDir != "" {
+		projectDir = filepath.Join(workingDir, ".ddx", "personas")
 	}
 
-	personasDir := filepath.Join(libPath, "personas")
-
-	// Check if personas directory exists
-	if _, err := os.Stat(personasDir); os.IsNotExist(err) {
-		return []PersonaInfo{}, nil
-	}
-
-	// Read personas directory
-	entries, err := os.ReadDir(personasDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read personas directory: %w", err)
-	}
-
+	seen := map[string]bool{}
 	var personas []PersonaInfo
 
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+	// Project first so it wins on collision.
+	for _, src := range []struct {
+		dir    string
+		source string
+	}{
+		{projectDir, persona.SourceProject},
+		{libraryDir, persona.SourceLibrary},
+	} {
+		if src.dir == "" {
 			continue
 		}
-
-		name := strings.TrimSuffix(entry.Name(), ".md")
-		filePath := filepath.Join(personasDir, entry.Name())
-
-		// Read and parse persona file
-		content, err := os.ReadFile(filePath)
+		entries, err := os.ReadDir(src.dir)
+		if os.IsNotExist(err) {
+			continue
+		}
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("failed to read personas directory %s: %w", src.dir, err)
 		}
-
-		// Parse frontmatter
-		metadata := parsePersonaMetadata(string(content))
-		if metadata == nil {
-			// Fallback to simple parsing
-			metadata = &PersonaMetadata{
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			name := strings.TrimSuffix(entry.Name(), ".md")
+			if seen[name] {
+				continue
+			}
+			filePath := filepath.Join(src.dir, entry.Name())
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				continue
+			}
+			metadata := parsePersonaMetadata(string(content))
+			if metadata == nil {
+				metadata = &PersonaMetadata{Name: name, Roles: []string{"general"}, Description: name}
+			}
+			if roleFilter != "" {
+				hasRole := false
+				for _, role := range metadata.Roles {
+					if role == roleFilter {
+						hasRole = true
+						break
+					}
+				}
+				if !hasRole {
+					continue
+				}
+			}
+			if tagFilter != "" {
+				hasTag := false
+				for _, tag := range metadata.Tags {
+					if tag == tagFilter {
+						hasTag = true
+						break
+					}
+				}
+				if !hasTag {
+					continue
+				}
+			}
+			personas = append(personas, PersonaInfo{
 				Name:        name,
-				Roles:       []string{"general"},
-				Description: name,
-			}
+				Roles:       metadata.Roles,
+				Description: metadata.Description,
+				Tags:        metadata.Tags,
+				Content:     string(content),
+				FilePath:    filePath,
+				Source:      src.source,
+			})
+			seen[name] = true
 		}
-
-		// Apply role filter
-		if roleFilter != "" {
-			hasRole := false
-			for _, role := range metadata.Roles {
-				if role == roleFilter {
-					hasRole = true
-					break
-				}
-			}
-			if !hasRole {
-				continue
-			}
-		}
-
-		// Apply tag filter
-		if tagFilter != "" {
-			hasTag := false
-			for _, tag := range metadata.Tags {
-				if tag == tagFilter {
-					hasTag = true
-					break
-				}
-			}
-			if !hasTag {
-				continue
-			}
-		}
-
-		// Create persona info
-		personaInfo := PersonaInfo{
-			Name:        name,
-			Roles:       metadata.Roles,
-			Description: metadata.Description,
-			Tags:        metadata.Tags,
-			Content:     string(content),
-			FilePath:    filePath,
-		}
-		personas = append(personas, personaInfo)
 	}
 
 	return personas, nil
 }
 
-// personaShow returns detailed information about a specific persona
+// personaShow returns detailed information about a specific persona,
+// preferring the project-local file when a name collision exists.
 func personaShow(workingDir string, personaName string) (*PersonaInfo, error) {
-	// Get library path
-	libPath, err := getPersonaLibraryPath(workingDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get library path: %w", err)
+	candidates := []struct {
+		path   string
+		source string
+	}{}
+	if workingDir != "" {
+		candidates = append(candidates, struct {
+			path   string
+			source string
+		}{filepath.Join(workingDir, ".ddx", "personas", personaName+".md"), persona.SourceProject})
+	}
+	if libPath, err := getPersonaLibraryPath(workingDir); err == nil {
+		candidates = append(candidates, struct {
+			path   string
+			source string
+		}{filepath.Join(libPath, "personas", personaName+".md"), persona.SourceLibrary})
 	}
 
-	personaPath := filepath.Join(libPath, "personas", personaName+".md")
-
-	// Check if persona exists
-	if _, err := os.Stat(personaPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("persona '%s' not found", personaName)
-	}
-
-	// Read persona content
-	content, err := os.ReadFile(personaPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read persona: %w", err)
-	}
-
-	// Parse metadata
-	metadata := parsePersonaMetadata(string(content))
-	if metadata == nil {
-		metadata = &PersonaMetadata{
-			Name:        personaName,
-			Roles:       []string{"general"},
-			Description: personaName,
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate.path); err == nil {
+			content, err := os.ReadFile(candidate.path)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read persona: %w", err)
+			}
+			metadata := parsePersonaMetadata(string(content))
+			if metadata == nil {
+				metadata = &PersonaMetadata{Name: personaName, Roles: []string{"general"}, Description: personaName}
+			}
+			return &PersonaInfo{
+				Name:        personaName,
+				Roles:       metadata.Roles,
+				Description: metadata.Description,
+				Tags:        metadata.Tags,
+				Content:     string(content),
+				FilePath:    candidate.path,
+				Source:      candidate.source,
+			}, nil
 		}
 	}
-
-	return &PersonaInfo{
-		Name:        personaName,
-		Roles:       metadata.Roles,
-		Description: metadata.Description,
-		Tags:        metadata.Tags,
-		Content:     string(content),
-		FilePath:    personaPath,
-	}, nil
+	return nil, fmt.Errorf("persona '%s' not found", personaName)
 }
 
-// personaBind binds a role to a persona
+// personaBind binds a role to a persona. Project-local personas satisfy
+// existence checks alongside library personas.
 func personaBind(workingDir string, role, personaName string) error {
-	// Check if persona exists first
+	projectPath := ""
+	if workingDir != "" {
+		projectPath = filepath.Join(workingDir, ".ddx", "personas", personaName+".md")
+	}
 	libPath, err := getPersonaLibraryPath(workingDir)
 	if err != nil {
 		return fmt.Errorf("failed to get library path: %w", err)
 	}
+	libraryPath := filepath.Join(libPath, "personas", personaName+".md")
 
-	personaPath := filepath.Join(libPath, "personas", personaName+".md")
-	if _, err := os.Stat(personaPath); os.IsNotExist(err) {
-		return fmt.Errorf("persona '%s' not found at path %s", personaName, personaPath)
+	if projectPath != "" {
+		if _, perr := os.Stat(projectPath); perr == nil {
+			goto foundPersona
+		}
 	}
+	if _, perr := os.Stat(libraryPath); perr != nil {
+		return fmt.Errorf("persona '%s' not found (project: %s, library: %s)", personaName, projectPath, libraryPath)
+	}
+foundPersona:
 
 	// Emit a stderr deprecation warning when binding a role to a deprecated
 	// persona. Non-fatal — users migrate on their own timeline during the
@@ -807,6 +872,120 @@ func savePersonaConfig(workingDir string, cfg *config.Config) error {
 	}
 
 	return os.WriteFile(configPath, data, 0644)
+}
+
+// personaNew creates a new project-local persona. If bodyFile is empty, a
+// scaffold is generated from the default template.
+func personaNew(workingDir, name, bodyFile string) (*persona.Persona, error) {
+	if workingDir == "" {
+		return nil, fmt.Errorf("working directory must be provided")
+	}
+	body, err := readBodyInput(bodyFile, name)
+	if err != nil {
+		return nil, err
+	}
+	writer := persona.NewProjectPersonaWriter(workingDir)
+	return writer.Create(name, body)
+}
+
+// personaEdit updates a project-local persona. If bodyFile is empty, it
+// opens $EDITOR on the file.
+func personaEdit(cmd *cobra.Command, workingDir, name, bodyFile string) (*persona.Persona, error) {
+	if workingDir == "" {
+		return nil, fmt.Errorf("working directory must be provided")
+	}
+	writer := persona.NewProjectPersonaWriter(workingDir)
+
+	if bodyFile != "" {
+		body, err := os.ReadFile(bodyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read body file %s: %w", bodyFile, err)
+		}
+		return writer.Update(name, string(body))
+	}
+
+	// Interactive edit: open $EDITOR on the project file in place, then
+	// re-read to validate.
+	projectFile := filepath.Join(writer.ProjectDir(), name+".md")
+	if _, err := os.Stat(projectFile); os.IsNotExist(err) {
+		// Surface the same error the writer would.
+		if _, err := writer.Update(name, ""); err != nil {
+			return nil, err
+		}
+	}
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+	editCmd := exec.Command(editor, projectFile) // #nosec G204 — intentional $EDITOR invocation
+	editCmd.Stdin = cmd.InOrStdin()
+	editCmd.Stdout = cmd.OutOrStdout()
+	editCmd.Stderr = cmd.ErrOrStderr()
+	if err := editCmd.Run(); err != nil {
+		return nil, fmt.Errorf("editor exited with error: %w", err)
+	}
+	data, err := os.ReadFile(projectFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to re-read persona after edit: %w", err)
+	}
+	return writer.Update(name, string(data))
+}
+
+// personaFork copies a library persona into the project-local dir.
+func personaFork(workingDir, libraryName, newName string) (*persona.Persona, error) {
+	if workingDir == "" {
+		return nil, fmt.Errorf("working directory must be provided")
+	}
+	writer := persona.NewProjectPersonaWriter(workingDir)
+	return writer.Fork(libraryName, newName)
+}
+
+// personaDelete removes a project-local persona.
+func personaDelete(workingDir, name string) error {
+	if workingDir == "" {
+		return fmt.Errorf("working directory must be provided")
+	}
+	writer := persona.NewProjectPersonaWriter(workingDir)
+	return writer.Delete(name)
+}
+
+// readBodyInput resolves the body for `ddx persona new`. If the caller
+// supplies a path, read it; otherwise fall back to the scaffold template.
+func readBodyInput(bodyFile, name string) (string, error) {
+	if bodyFile == "" {
+		return scaffoldPersonaBody(name), nil
+	}
+	data, err := os.ReadFile(bodyFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read body file %s: %w", bodyFile, err)
+	}
+	return string(data), nil
+}
+
+// scaffoldPersonaBody returns a minimal but valid persona markdown body.
+func scaffoldPersonaBody(name string) string {
+	return fmt.Sprintf(`---
+name: %s
+roles: [general]
+description: Project persona %s
+tags: []
+---
+
+# %s
+
+TODO: describe what this persona does for your team.
+`, name, name, name)
+}
+
+// IsLibraryReadOnly returns true if err represents a read-only library
+// persona rejection from the persona package.
+func IsLibraryReadOnly(err error) bool {
+	var pe *persona.PersonaError
+	if errors.As(err, &pe) {
+		return pe.Type == persona.ErrorReadOnlyLibrary
+	}
+	return false
 }
 
 // addPersonaBindingToNode adds or updates a persona binding in a YAML node tree

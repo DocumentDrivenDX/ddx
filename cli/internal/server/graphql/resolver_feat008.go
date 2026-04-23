@@ -200,6 +200,49 @@ func (r *mutationResolver) PersonaBind(ctx context.Context, role string, persona
 	return &PersonaBindResult{Ok: true, Role: role, Persona: personaName}, nil
 }
 
+// PersonaCreate is the resolver for the personaCreate field.
+func (r *mutationResolver) PersonaCreate(ctx context.Context, name string, body string, projectID string) (*Persona, error) {
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	p, err := writer.Create(name, body)
+	if err != nil {
+		return nil, err
+	}
+	return personaToGQL(p), nil
+}
+
+// PersonaUpdate is the resolver for the personaUpdate field.
+func (r *mutationResolver) PersonaUpdate(ctx context.Context, name string, body string, projectID string) (*Persona, error) {
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	p, err := writer.Update(name, body)
+	if err != nil {
+		return nil, err
+	}
+	return personaToGQL(p), nil
+}
+
+// PersonaDelete is the resolver for the personaDelete field.
+func (r *mutationResolver) PersonaDelete(ctx context.Context, name string, projectID string) (*PersonaDeleteResult, error) {
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	if err := writer.Delete(name); err != nil {
+		return nil, err
+	}
+	return &PersonaDeleteResult{Ok: true, Name: name}, nil
+}
+
+// PersonaFork is the resolver for the personaFork field.
+func (r *mutationResolver) PersonaFork(ctx context.Context, libraryName string, newName *string, projectID string) (*Persona, error) {
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	target := ""
+	if newName != nil {
+		target = *newName
+	}
+	p, err := writer.Fork(libraryName, target)
+	if err != nil {
+		return nil, err
+	}
+	return personaToGQL(p), nil
+}
+
 // QueueSummary is the resolver for the queueSummary field.
 func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error) {
 	store := bead.NewStore(filepath.Join(r.projectRoot(projectID), ".ddx"))

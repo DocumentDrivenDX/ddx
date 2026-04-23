@@ -12,124 +12,173 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// PersonaLoaderImpl implements the PersonaLoader interface
+// PersonaLoaderImpl implements the PersonaLoader interface.
+//
+// A loader can own up to two source directories:
+//   - libraryDir: read-only, shared across projects.
+//   - projectDir: project-local (`.ddx/personas`). When a project persona has
+//     the same name as a library persona, the project persona wins for that
+//     project's bindings.
 type PersonaLoaderImpl struct {
+	// libraryDir is the legacy single directory and remains in use when the
+	// loader is constructed via NewPersonaLoaderWithDir for test fixtures.
 	personasDir string
+	projectDir  string
 }
 
-// NewPersonaLoader creates a new persona loader with the default personas directory
+// NewPersonaLoader creates a new persona loader rooted at the project's
+// working directory. It discovers the library path from config and the
+// project-local `.ddx/personas` directory.
 func NewPersonaLoader(workingDir string) PersonaLoader {
-	// Use the config system to get the library path, then append personas
-	cfg, err := config.LoadWithWorkingDir(workingDir)
-	var personasDir string
-	if err != nil || cfg.Library == nil || cfg.Library.Path == "" {
-		// Fallback to a reasonable default if there's an error
-		homeDir, _ := os.UserHomeDir()
-		personasDir = filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
-	} else {
-		personasDir = filepath.Join(cfg.Library.Path, "personas")
-	}
-
+	libraryDir := resolveLibraryPersonasDir(workingDir)
+	projectDir := resolveProjectPersonasDir(workingDir)
 	return &PersonaLoaderImpl{
-		personasDir: personasDir,
+		personasDir: libraryDir,
+		projectDir:  projectDir,
 	}
 }
 
-// NewPersonaLoaderWithDir creates a new persona loader with a specific directory
+// NewPersonaLoaderWithDir creates a new persona loader with a specific
+// library directory. Kept for tests and back-compat callers that only need
+// the library source.
 func NewPersonaLoaderWithDir(dir string) PersonaLoader {
 	return &PersonaLoaderImpl{
 		personasDir: dir,
 	}
 }
 
-// LoadPersona loads a persona by name from the file system
+// NewPersonaLoaderWithDirs creates a loader with explicit library and project
+// directories. Either may be empty to disable that source.
+func NewPersonaLoaderWithDirs(libraryDir, projectDir string) PersonaLoader {
+	return &PersonaLoaderImpl{
+		personasDir: libraryDir,
+		projectDir:  projectDir,
+	}
+}
+
+// resolveLibraryPersonasDir resolves the library persona directory.
+func resolveLibraryPersonasDir(workingDir string) string {
+	cfg, err := config.LoadWithWorkingDir(workingDir)
+	if err != nil || cfg.Library == nil || cfg.Library.Path == "" {
+		homeDir, _ := os.UserHomeDir()
+		return filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
+	}
+	libPath := cfg.Library.Path
+	if !filepath.IsAbs(libPath) && workingDir != "" {
+		libPath = filepath.Join(workingDir, libPath)
+	}
+	return filepath.Join(libPath, "personas")
+}
+
+// resolveProjectPersonasDir returns the project-local persona directory.
+func resolveProjectPersonasDir(workingDir string) string {
+	if workingDir == "" {
+		return ""
+	}
+	return filepath.Join(workingDir, ".ddx", "personas")
+}
+
+// LoadPersona loads a persona by name. Project-local personas override
+// library personas with the same name.
 func (l *PersonaLoaderImpl) LoadPersona(name string) (*Persona, error) {
 	if name == "" {
 		return nil, NewPersonaError(ErrorValidation, "persona name cannot be empty", nil)
 	}
 
-	// Construct file path
-	fileName := name + PersonaFileExtension
-	filePath := filepath.Join(l.personasDir, fileName)
-
-	// Check if file exists
-	if !fileExists(filePath) {
-		return nil, NewPersonaError(ErrorPersonaNotFound,
-			fmt.Sprintf("persona '%s' not found at %s", name, filePath), nil)
+	if l.projectDir != "" {
+		candidate := filepath.Join(l.projectDir, name+PersonaFileExtension)
+		if fileExists(candidate) {
+			return readPersonaFile(candidate, SourceProject)
+		}
 	}
 
-	// Read file content
+	if l.personasDir != "" {
+		candidate := filepath.Join(l.personasDir, name+PersonaFileExtension)
+		if fileExists(candidate) {
+			return readPersonaFile(candidate, SourceLibrary)
+		}
+	}
+
+	return nil, NewPersonaError(ErrorPersonaNotFound,
+		fmt.Sprintf("persona '%s' not found", name), nil)
+}
+
+// readPersonaFile reads a single persona file and tags it with its source.
+func readPersonaFile(filePath, source string) (*Persona, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, NewPersonaError(ErrorFileOperation,
 			fmt.Sprintf("failed to read persona file %s", filePath), err)
 	}
-
-	// Check file size
 	if len(content) > MaxPersonaFileSize {
 		return nil, NewPersonaError(ErrorValidation,
-			fmt.Sprintf("persona file %s exceeds maximum size of %d bytes", fileName, MaxPersonaFileSize), nil)
+			fmt.Sprintf("persona file %s exceeds maximum size of %d bytes", filePath, MaxPersonaFileSize), nil)
 	}
-
-	// Parse persona from content
 	persona, err := parsePersona(content)
 	if err != nil {
 		return nil, NewPersonaError(ErrorInvalidPersona,
-			fmt.Sprintf("failed to parse persona %s", name), err)
+			fmt.Sprintf("failed to parse persona %s", filePath), err)
 	}
-
+	persona.Source = source
+	persona.FilePath = filePath
 	return persona, nil
 }
 
-// ListPersonas returns all available personas
+// ListPersonas returns all available personas. Project personas override
+// library personas of the same name; both sets are listed, with the project
+// persona taking precedence when names collide.
 func (l *PersonaLoaderImpl) ListPersonas() ([]*Persona, error) {
-	if !dirExists(l.personasDir) {
-		return []*Persona{}, nil // Return empty list if directory doesn't exist
-	}
+	// Project personas first so they win on collision.
+	byName := map[string]*Persona{}
+	var ordered []string
 
-	// Read directory contents
-	entries, err := os.ReadDir(l.personasDir)
-	if err != nil {
-		return nil, NewPersonaError(ErrorFileOperation,
-			fmt.Sprintf("failed to read personas directory %s", l.personasDir), err)
-	}
-
-	var personas []*Persona
-
-	// Process each markdown file
-	for _, entry := range entries {
-		if entry.IsDir() {
+	for _, dir := range []struct {
+		path   string
+		source string
+	}{
+		{l.projectDir, SourceProject},
+		{l.personasDir, SourceLibrary},
+	} {
+		if dir.path == "" || !dirExists(dir.path) {
 			continue
 		}
-
-		// Only process .md files
-		if !strings.HasSuffix(entry.Name(), PersonaFileExtension) {
-			continue
-		}
-
-		// Skip README.md and other documentation files
-		if entry.Name() == "README.md" || entry.Name() == "readme.md" {
-			continue
-		}
-
-		// Extract persona name from filename
-		personaName := strings.TrimSuffix(entry.Name(), PersonaFileExtension)
-
-		// Load persona (this will handle validation)
-		persona, err := l.LoadPersona(personaName)
+		entries, err := os.ReadDir(dir.path)
 		if err != nil {
-			// Log warning but continue processing other personas
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: Skipping invalid persona %s: %v\n", entry.Name(), err)
-			continue
+			return nil, NewPersonaError(ErrorFileOperation,
+				fmt.Sprintf("failed to read personas directory %s", dir.path), err)
 		}
-
-		personas = append(personas, persona)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if !strings.HasSuffix(entry.Name(), PersonaFileExtension) {
+				continue
+			}
+			if entry.Name() == "README.md" || entry.Name() == "readme.md" {
+				continue
+			}
+			personaName := strings.TrimSuffix(entry.Name(), PersonaFileExtension)
+			if _, seen := byName[personaName]; seen {
+				continue
+			}
+			persona, err := readPersonaFile(filepath.Join(dir.path, entry.Name()), dir.source)
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Warning: Skipping invalid persona %s: %v\n", entry.Name(), err)
+				continue
+			}
+			byName[personaName] = persona
+			ordered = append(ordered, personaName)
+		}
 	}
 
-	return personas, nil
+	result := make([]*Persona, 0, len(byName))
+	for _, name := range ordered {
+		result = append(result, byName[name])
+	}
+	return result, nil
 }
 
-// FindByRole returns personas that can fulfill the specified role
+// FindByRole returns personas that can fulfill the specified role.
 func (l *PersonaLoaderImpl) FindByRole(role string) ([]*Persona, error) {
 	if role == "" {
 		return nil, NewPersonaError(ErrorValidation, "role cannot be empty", nil)
@@ -146,7 +195,7 @@ func (l *PersonaLoaderImpl) FindByRole(role string) ([]*Persona, error) {
 		for _, personaRole := range persona.Roles {
 			if personaRole == role {
 				matchingPersonas = append(matchingPersonas, persona)
-				break // Avoid duplicate entries
+				break
 			}
 		}
 	}
@@ -154,7 +203,7 @@ func (l *PersonaLoaderImpl) FindByRole(role string) ([]*Persona, error) {
 	return matchingPersonas, nil
 }
 
-// FindByTags returns personas that have all the specified tags
+// FindByTags returns personas that have all the specified tags.
 func (l *PersonaLoaderImpl) FindByTags(tags []string) ([]*Persona, error) {
 	if len(tags) == 0 {
 		return nil, NewPersonaError(ErrorValidation, "at least one tag must be specified", nil)
@@ -176,24 +225,20 @@ func (l *PersonaLoaderImpl) FindByTags(tags []string) ([]*Persona, error) {
 	return matchingPersonas, nil
 }
 
-// parsePersona parses a persona from markdown content with YAML frontmatter
+// parsePersona parses a persona from markdown content with YAML frontmatter.
 func parsePersona(content []byte) (*Persona, error) {
-	// Split frontmatter and content
 	frontmatter, markdownContent, err := splitFrontmatter(content)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse YAML frontmatter
 	var persona Persona
 	if err := yaml.Unmarshal(frontmatter, &persona); err != nil {
 		return nil, NewPersonaError(ErrorInvalidPersona, "failed to parse YAML frontmatter", err)
 	}
 
-	// Set content
 	persona.Content = string(markdownContent)
 
-	// Validate required fields
 	if err := validatePersona(&persona); err != nil {
 		return nil, err
 	}
@@ -201,7 +246,7 @@ func parsePersona(content []byte) (*Persona, error) {
 	return &persona, nil
 }
 
-// splitFrontmatter splits YAML frontmatter from markdown content
+// splitFrontmatter splits YAML frontmatter from markdown content.
 func splitFrontmatter(content []byte) (frontmatter []byte, markdown []byte, err error) {
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 
@@ -214,12 +259,10 @@ func splitFrontmatter(content []byte) (frontmatter []byte, markdown []byte, err 
 		return nil, nil, NewPersonaError(ErrorInvalidPersona, "file too short to contain frontmatter", nil)
 	}
 
-	// Check for frontmatter start
 	if lines[0] != "---" {
 		return nil, nil, NewPersonaError(ErrorInvalidPersona, "missing YAML frontmatter (must start with ---)", nil)
 	}
 
-	// Find frontmatter end
 	frontmatterEnd := -1
 	for i := 1; i < len(lines); i++ {
 		if lines[i] == "---" {
@@ -232,15 +275,12 @@ func splitFrontmatter(content []byte) (frontmatter []byte, markdown []byte, err 
 		return nil, nil, NewPersonaError(ErrorInvalidPersona, "unclosed YAML frontmatter (missing closing ---)", nil)
 	}
 
-	// Extract frontmatter (excluding delimiters)
 	frontmatterLines := lines[1:frontmatterEnd]
 	frontmatter = []byte(strings.Join(frontmatterLines, "\n"))
 
-	// Extract markdown content (after frontmatter)
 	var markdownLines []string
 	if frontmatterEnd+1 < len(lines) {
 		markdownLines = lines[frontmatterEnd+1:]
-		// Remove leading empty lines
 		for len(markdownLines) > 0 && strings.TrimSpace(markdownLines[0]) == "" {
 			markdownLines = markdownLines[1:]
 		}
@@ -251,7 +291,7 @@ func splitFrontmatter(content []byte) (frontmatter []byte, markdown []byte, err 
 	return frontmatter, markdown, nil
 }
 
-// validatePersona validates that a persona has all required fields
+// validatePersona validates that a persona has all required fields.
 func validatePersona(persona *Persona) error {
 	if persona.Name == "" {
 		return NewPersonaError(ErrorValidation, "persona name is required", nil)
@@ -265,7 +305,6 @@ func validatePersona(persona *Persona) error {
 		return NewPersonaError(ErrorValidation, "persona description is required", nil)
 	}
 
-	// Validate limits
 	if len(persona.Roles) > MaxRolesPerPersona {
 		return NewPersonaError(ErrorValidation,
 			fmt.Sprintf("persona cannot have more than %d roles", MaxRolesPerPersona), nil)
@@ -276,7 +315,6 @@ func validatePersona(persona *Persona) error {
 			fmt.Sprintf("persona cannot have more than %d tags", MaxTagsPerPersona), nil)
 	}
 
-	// Ensure tags is not nil (should be empty slice if not provided)
 	if persona.Tags == nil {
 		persona.Tags = []string{}
 	}
@@ -284,7 +322,7 @@ func validatePersona(persona *Persona) error {
 	return nil
 }
 
-// hasAllTags checks if a persona has all the specified tags
+// hasAllTags checks if a persona has all the specified tags.
 func hasAllTags(personaTags []string, requiredTags []string) bool {
 	personaTagMap := make(map[string]bool)
 	for _, tag := range personaTags {
@@ -300,16 +338,19 @@ func hasAllTags(personaTags []string, requiredTags []string) bool {
 	return true
 }
 
-// fileExists checks if a file exists
+// fileExists checks if a file exists.
 func fileExists(filePath string) bool {
 	_, err := os.Stat(filePath)
 	return !os.IsNotExist(err)
 }
 
-// dirExists checks if a directory exists
+// dirExists checks if a directory exists.
 func dirExists(dirPath string) bool {
 	info, err := os.Stat(dirPath)
 	if os.IsNotExist(err) {
+		return false
+	}
+	if err != nil {
 		return false
 	}
 	return info.IsDir()
