@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "**AC §8 — Playwright cross-project test routes wrong path**: `beads-smoke.spec.ts:107` navigates to `/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/beads` for the \"cross-project\" test, which is the same per-project URL as the 1s test. A cross-project smoke test should hit the all-beads route (e.g., `/nodes/${NODE_INFO.id}/beads` or whatever the actual cross-project URL is) and mock the `beads` query, not `beadsByProject`. The mock for `beads` exists (lines 76-89) but is never exercised because both tests navigate to the project-scoped path.\n**AC §9 — Bead notes cross-reference**: The acceptance criteria require this bead's notes to list `ddx-ad0db8fd` and `ddx-2ceb02fa`. The baseline `.md` and code comments mention them, but no `ddx bead update` call or notes update appears in the diff. If the notes were updated via a separate mechanism not captured in this branch, this finding can be dismissed."
+}
