@@ -2342,48 +2342,132 @@ func TestExecuteBeadModelFlagPassthrough(t *testing.T) {
 	})
 }
 
+// TestExecuteBeadStatusMapping exercises the real (agent, orchestrator, Land)
+// stack through the script harness for every status the classifier produces.
+// Each subtest sets up an isolated real git repo, drives the script harness
+// with a per-attempt directive file that encodes the scenario (no commits,
+// dirty worktree, failing exit, conflicting sibling), and asserts that the
+// Status written onto the ExecuteBeadResult by ApplyLandingToResult matches
+// the expected supervisor-visible status.
+//
+// Migrated off fakeExecuteBeadGit / fakeAgentRunner per concerns.md §testing
+// ("no mocks, period"; "never mock the thing you are testing"). Parent bead
+// ddx-d9df348d.
 func TestExecuteBeadStatusMapping(t *testing.T) {
-	cases := []struct {
-		name     string
-		result   agent.ExecuteBeadResult
-		expected string
-	}{
-		{
-			name:     "merged success",
-			result:   agent.ExecuteBeadResult{Outcome: "merged", ExitCode: 0},
-			expected: agent.ExecuteBeadStatusSuccess,
-		},
-		{
-			name:     "no changes stays non-success",
-			result:   agent.ExecuteBeadResult{Outcome: "no-changes", ExitCode: 0},
-			expected: agent.ExecuteBeadStatusNoChanges,
-		},
-		{
-			name:     "execution failure dominates preserved outcome",
-			result:   agent.ExecuteBeadResult{Outcome: "preserved", ExitCode: 1, Reason: "agent execution failed"},
-			expected: agent.ExecuteBeadStatusExecutionFailed,
-		},
-		{
-			name:     "error outcome stays execution failure",
-			result:   agent.ExecuteBeadResult{Outcome: "error", ExitCode: -1, Reason: "timeout after 5m"},
-			expected: agent.ExecuteBeadStatusExecutionFailed,
-		},
-		{
-			name:     "land conflict",
-			result:   agent.ExecuteBeadResult{Outcome: "preserved", ExitCode: 0, Reason: "merge failed"},
-			expected: agent.ExecuteBeadStatusLandConflict,
-		},
+	// setupRepo builds a real git repo with one seed commit, then commits a
+	// single open bead on top so the execute-bead command can find it.
+	// Returns (workDir, baseSHA, runGit).
+	setupRepo := func(t *testing.T) (string, string, func(args ...string) string) {
+		t.Helper()
+		workDir := t.TempDir()
+
+		scrubEnv := func() []string {
+			parent := os.Environ()
+			env := make([]string, 0, len(parent))
+			for _, kv := range parent {
+				if strings.HasPrefix(kv, "GIT_") {
+					continue
+				}
+				env = append(env, kv)
+			}
+			return env
+		}
+		runGit := func(args ...string) string {
+			t.Helper()
+			cmd := exec.Command("git", args...)
+			cmd.Dir = workDir
+			cmd.Env = scrubEnv()
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "git %v: %s", args, string(out))
+			return strings.TrimSpace(string(out))
+		}
+
+		runGit("init", "-b", "main")
+		runGit("config", "user.email", "test@ddx.test")
+		runGit("config", "user.name", "DDx Test")
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+		runGit("add", ".")
+		runGit("commit", "-m", "chore: initial seed")
+
+		seedExecuteBead(t, workDir, &bead.Bead{
+			ID:        "status-bead",
+			Title:     "Test status mapping",
+			Status:    bead.StatusOpen,
+			IssueType: bead.DefaultType,
+		})
+		runGit("add", ".ddx/beads.jsonl")
+		runGit("commit", "-m", "chore: seed bead")
+		baseSHA := runGit("rev-parse", "HEAD")
+		return workDir, baseSHA, runGit
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := tc.result
-			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-			res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
-			assert.Equal(t, tc.expected, res.Status)
-			assert.NotEmpty(t, res.Detail)
-		})
+	// runWithDirective writes a directive file, invokes execute-bead with the
+	// real agent runner and the script harness, and returns the parsed result.
+	// No fake git or runner — the full ExecuteBead → LandBeadResult → Land
+	// pipeline runs against the real repo.
+	runWithDirective := func(t *testing.T, workDir, baseSHA, directives string) agent.ExecuteBeadResult {
+		t.Helper()
+		directivePath := filepath.Join(t.TempDir(), "directives.txt")
+		require.NoError(t, os.WriteFile(directivePath, []byte(directives), 0o644))
+		f := NewCommandFactory(workDir)
+		f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+		return runExecuteBead(t, f, nil, "status-bead",
+			"--from", baseSHA,
+			"--harness", "script", "--model", directivePath)
 	}
+
+	t.Run("merged success", func(t *testing.T) {
+		workDir, baseSHA, _ := setupRepo(t)
+		// Real commit + clean fast-forward → outcome "merged" → status success.
+		res := runWithDirective(t, workDir, baseSHA,
+			"create-file out.txt content\ncommit feat: add out\n")
+		assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
+		assert.NotEmpty(t, res.Detail)
+	})
+
+	t.Run("no changes stays non-success", func(t *testing.T) {
+		workDir, baseSHA, _ := setupRepo(t)
+		// Harness does nothing → worktree HEAD == BaseRev → outcome "no-changes".
+		res := runWithDirective(t, workDir, baseSHA, "no-op\n")
+		assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
+		assert.NotEmpty(t, res.Detail)
+	})
+
+	t.Run("execution failure dominates preserved outcome", func(t *testing.T) {
+		workDir, baseSHA, _ := setupRepo(t)
+		// Real commit + non-zero exit: LandBeadResult preserves (commits
+		// exist) but ClassifyExecuteBeadStatus must still report
+		// execution_failed because ExitCode != 0 dominates.
+		res := runWithDirective(t, workDir, baseSHA,
+			"create-file out.txt content\ncommit feat: add out\nset-exit 1\n")
+		assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
+		assert.NotEmpty(t, res.Detail)
+	})
+
+	t.Run("error outcome stays execution failure", func(t *testing.T) {
+		workDir, baseSHA, _ := setupRepo(t)
+		// Pin ExitCode=-1 (canonical timeout shape), then trip a synthetic
+		// harness failure before any commit is made. LandBeadResult maps
+		// (ExitCode!=0, no commits) to outcome "error".
+		res := runWithDirective(t, workDir, baseSHA,
+			"set-exit -1\nfail-during 1\n")
+		assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
+		assert.NotEmpty(t, res.Detail)
+	})
+
+	t.Run("land conflict", func(t *testing.T) {
+		workDir, baseSHA, runGit := setupRepo(t)
+		// Advance main with a sibling edit to out.txt, then have the worker
+		// commit a conflicting version starting from baseSHA. Real Land()
+		// hits a merge conflict and preserves with reason "merge conflict".
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, "out.txt"), []byte("sibling\n"), 0o644))
+		runGit("add", "out.txt")
+		runGit("commit", "-m", "feat: sibling conflicting change")
+		res := runWithDirective(t, workDir, baseSHA,
+			"create-file out.txt worker\ncommit feat: worker add out\n")
+		assert.Equal(t, agent.ExecuteBeadStatusLandConflict, res.Status)
+		assert.NotEmpty(t, res.Detail)
+	})
 }
 
 // seedGateDocs writes a governing spec doc and a required execution gate doc
