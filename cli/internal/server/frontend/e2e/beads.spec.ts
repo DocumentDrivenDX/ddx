@@ -691,3 +691,142 @@ test('US-085c: delete button triggers typed-confirmation modal and BeadClose mut
 	// URL should redirect to list; detail panel should be gone.
 	await expect(page).toHaveURL(new RegExp(`${BASE_URL}/?$`));
 });
+
+// -----------------------------------------------------------------------
+// Detail header: long bead ids truncate cleanly and do not overlap actions
+// -----------------------------------------------------------------------
+
+const LONG_ID = '.execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-526efaf1';
+const LONG_BEAD_DETAIL = { ...BEAD_DETAIL, id: LONG_ID };
+const LONG_BEAD_ROW = {
+	id: LONG_ID,
+	title: 'First bead',
+	status: 'open',
+	priority: 1,
+	labels: ['ddx', 'ui']
+};
+
+async function mockLongIdGraphQL(
+	page: import('@playwright/test').Page,
+	overrideId?: string
+) {
+	const beadId = overrideId ?? LONG_ID;
+	const row = { ...LONG_BEAD_ROW, id: beadId };
+	const detail = { ...LONG_BEAD_DETAIL, id: beadId };
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+		} else if (body.query.includes('BeadsByProject')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse([row], PAGE_INFO_NO_NEXT, 1) })
+			});
+		} else if (body.query.includes('query Bead(')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { bead: detail } })
+			});
+		} else {
+			await route.continue();
+		}
+	});
+}
+
+test('detail header: long bead id truncates, exposes full id on hover, and does not overlap action buttons', async ({
+	page,
+	context
+}) => {
+	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+	await mockLongIdGraphQL(page);
+	await page.goto(`${BASE_URL}/${encodeURIComponent(LONG_ID)}`);
+
+	const idEl = page.getByTestId('bead-detail-id');
+	await expect(idEl).toBeVisible();
+	await expect(idEl).toHaveText(LONG_ID);
+
+	// AC 1 + 2: truncate class + title attribute
+	await expect(idEl).toHaveClass(/truncate/);
+	await expect(idEl).toHaveClass(/min-w-0/);
+	await expect(idEl).toHaveAttribute('title', LONG_ID);
+
+	// AC 4: Delete button remains visible and clickable; its rect does not intersect the id span.
+	const deleteBtn = page.getByRole('button', { name: 'Delete', exact: true });
+	await expect(deleteBtn).toBeVisible();
+
+	const idBox = await idEl.boundingBox();
+	const delBox = await deleteBtn.boundingBox();
+	expect(idBox).not.toBeNull();
+	expect(delBox).not.toBeNull();
+	// Rects must not overlap (id must end before delete button begins).
+	expect(idBox!.x + idBox!.width).toBeLessThanOrEqual(delBox!.x);
+
+	// Click should not throw (button is fully clickable, not covered).
+	await deleteBtn.click();
+	await expect(page.getByRole('dialog', { name: /delete bead/i })).toBeVisible();
+	await page.keyboard.press('Escape');
+
+	// AC 5: id rendered width ≤ parent container width minus action-button group width.
+	const parent = idEl.locator('xpath=..');
+	const parentBox = await parent.boundingBox();
+	// The action-button group is the sibling of parent; grab it via the Delete button's
+	// closest flex container.
+	const actionGroup = deleteBtn.locator('xpath=..');
+	const actionBox = await actionGroup.boundingBox();
+	expect(parentBox).not.toBeNull();
+	expect(actionBox).not.toBeNull();
+	expect(idBox!.width).toBeLessThanOrEqual(parentBox!.width);
+	// Combined id + action group fits within the panel's width.
+	const panel = page.locator('div.max-w-xl').first();
+	const panelBox = await panel.boundingBox();
+	expect(panelBox).not.toBeNull();
+	expect(idBox!.width + actionBox!.width).toBeLessThanOrEqual(panelBox!.width);
+
+	// AC 5: copy button writes full id to clipboard.
+	const copyBtn = page.getByTestId('bead-detail-copy-id');
+	await expect(copyBtn).toBeVisible();
+	await copyBtn.click();
+	const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+	expect(clipboardText).toBe(LONG_ID);
+});
+
+test('detail header: renders without horizontal scroll or clipped action buttons for id lengths 8, 32, 60, 120', async ({
+	page
+}) => {
+	const LENGTHS = [8, 32, 60, 120];
+	for (const len of LENGTHS) {
+		const id = 'b' + 'x'.repeat(len - 1);
+		await page.unroute('/graphql').catch(() => {});
+		await mockLongIdGraphQL(page, id);
+		await page.goto(`${BASE_URL}/${encodeURIComponent(id)}`);
+
+		const idEl = page.getByTestId('bead-detail-id');
+		await expect(idEl).toBeVisible();
+		const deleteBtn = page.getByRole('button', { name: 'Delete', exact: true });
+		await expect(deleteBtn).toBeVisible();
+
+		// No horizontal overflow inside the panel.
+		const panel = page.locator('div.max-w-xl').first();
+		const overflow = await panel.evaluate((el) => el.scrollWidth - el.clientWidth);
+		expect(overflow).toBeLessThanOrEqual(1);
+
+		// id span must not overlap delete button.
+		const idBox = await idEl.boundingBox();
+		const delBox = await deleteBtn.boundingBox();
+		expect(idBox!.x + idBox!.width).toBeLessThanOrEqual(delBox!.x);
+	}
+});

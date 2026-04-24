@@ -3,7 +3,7 @@
 	import { createClient } from '$lib/gql/client';
 	import { invalidateAll } from '$app/navigation';
 	import { nodeStore } from '$lib/stores/node.svelte';
-	import { X, UserPlus, UserMinus, Pencil, Trash2 } from 'lucide-svelte';
+	import { X, UserPlus, UserMinus, Pencil, Trash2, Copy, Check } from 'lucide-svelte';
 	import BeadForm from './BeadForm.svelte';
 	import TypedConfirmDialog from './TypedConfirmDialog.svelte';
 
@@ -76,7 +76,22 @@
 	let deleteDialogOpen = $state(false);
 	let cascadeToChildren = $state(false);
 	let deleteButton = $state<HTMLButtonElement | null>(null);
+	let idCopied = $state(false);
+	let idCopyTimer: ReturnType<typeof setTimeout> | null = null;
 	const hasChildBeads = $derived((bead.childCount ?? 0) > 0);
+
+	async function handleCopyId() {
+		try {
+			await navigator.clipboard.writeText(bead.id);
+			idCopied = true;
+			if (idCopyTimer) clearTimeout(idCopyTimer);
+			idCopyTimer = setTimeout(() => {
+				idCopied = false;
+			}, 1500);
+		} catch {
+			// clipboard may be unavailable; silently fail
+		}
+	}
 
 	const CLAIM_MUTATION = gql`
 		mutation BeadClaim($id: ID!, $assignee: String!) {
@@ -246,10 +261,28 @@
 		class="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700"
 	>
 		<div class="flex min-w-0 items-center gap-3">
-			<span class="shrink-0 font-mono text-xs text-gray-500 dark:text-gray-400">{bead.id}</span>
+			<span
+				title={bead.id}
+				data-testid="bead-detail-id"
+				class="min-w-0 truncate font-mono text-xs text-gray-500 dark:text-gray-400"
+				>{bead.id}</span
+			>
+			<button
+				type="button"
+				onclick={handleCopyId}
+				aria-label="Copy bead id"
+				data-testid="bead-detail-copy-id"
+				class="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+			>
+				{#if idCopied}
+					<Check class="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+				{:else}
+					<Copy class="h-3.5 w-3.5" />
+				{/if}
+			</button>
 			<span class="shrink-0 font-medium {statusClass(bead.status)}">{bead.status}</span>
 			{#if bead.owner}
-				<span class="truncate text-xs text-gray-500 dark:text-gray-400">@ {bead.owner}</span>
+				<span class="shrink-0 truncate text-xs text-gray-500 dark:text-gray-400">@ {bead.owner}</span>
 			{/if}
 		</div>
 		<div class="ml-3 flex shrink-0 items-center gap-2">
