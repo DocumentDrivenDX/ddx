@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -638,29 +637,95 @@ func TestExecuteBeadNoMerge(t *testing.T) {
 
 // TestExecuteBeadHiddenRefUniqueness verifies that two runs on the same bead-id
 // produce distinct preserve refs (concurrent hidden-ref uniqueness).
+// Exercises real git plumbing and the script harness producing actual
+// conflicting commits — no fakes for the components under test.
 func TestExecuteBeadHiddenRefUniqueness(t *testing.T) {
-	makeRun := func(ts time.Time) agent.ExecuteBeadResult {
-		oldNow := agent.NowFunc
-		agent.NowFunc = func() time.Time { return ts }
-		defer func() { agent.NowFunc = oldNow }()
+	workDir := t.TempDir()
 
-		git := &fakeExecuteBeadGit{
-			mainHeadRev: "aaaa1111",
-			wtHeadRev:   "eeee5555",
-			mergeErr:    fmt.Errorf("diverged"),
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
 		}
-		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-		f := newExecuteBeadFactory(t, git, runner)
-		return runExecuteBead(t, f, git, "shared-bead")
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
 	}
 
-	res1 := makeRun(time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC))
-	res2 := makeRun(time.Date(2026, 4, 10, 0, 0, 1, 0, time.UTC))
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
 
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "shared-bead",
+		Title:     "Test execute-bead hidden-ref uniqueness",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Sibling commit conflicts with the worker's hello.txt content, forcing
+	// every run to take the merge-conflict preserve path.
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "hello.txt"), []byte("sibling-content\n"), 0o644))
+	runGit("add", "hello.txt")
+	runGit("commit", "-m", "feat: sibling conflicting change")
+	siblingSHA := runGit("rev-parse", "HEAD")
+
+	// Each run drives the script harness to emit a real commit touching the
+	// same file as the sibling, so Land() must preserve under a hidden ref.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file hello.txt worker-content\n"+
+			"commit feat: worker add hello\n",
+	), 0o644))
+
+	makeRun := func() agent.ExecuteBeadResult {
+		t.Helper()
+		f := NewCommandFactory(workDir)
+		f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+		root := f.NewRootCommand()
+		out, err := executeCommand(root, "agent", "execute-bead", "shared-bead", "--json",
+			"--from", baseSHA,
+			"--harness", "script", "--model", directivePath)
+		require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+		return parseExecuteBeadJSON(t, out)
+	}
+
+	res1 := makeRun()
+	res2 := makeRun()
+
+	assert.Equal(t, "preserved", res1.Outcome)
+	assert.Equal(t, "preserved", res2.Outcome)
 	assert.NotEqual(t, res1.PreserveRef, res2.PreserveRef,
 		"concurrent runs must produce distinct preserve refs")
-	assertPreserveRef(t, res1.PreserveRef, "shared-bead", "aaaa1111")
-	assertPreserveRef(t, res2.PreserveRef, "shared-bead", "aaaa1111")
+	// Real Land() records the ref as refs/ddx/iterations/<bead>/<attempt>-<currentTip[:12]>.
+	// The first run's currentTip is siblingSHA; the second run's tip differs
+	// because execute-bead checkpoints tracker/worktree state between runs.
+	require.Regexp(t,
+		fmt.Sprintf(`^refs/ddx/iterations/shared-bead/.+-%s$`, regexp.QuoteMeta(siblingSHA[:12])),
+		res1.PreserveRef)
+	require.Regexp(t, `^refs/ddx/iterations/shared-bead/.+-[0-9a-f]{12}$`, res2.PreserveRef)
+
+	// Both hidden refs must exist in the real repo and resolve to their
+	// respective worker commits.
+	assert.Equal(t, res1.ResultRev, runGit("rev-parse", res1.PreserveRef))
+	assert.Equal(t, res2.ResultRev, runGit("rev-parse", res2.PreserveRef))
 }
 
 // TestExecuteBeadNoChanges verifies that when the agent makes no commits the
