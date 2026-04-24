@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration. The test now exercises real `ExecuteBead → LandBeadResult → Land` against an isolated real-git repo, with a script-harness directive file bracketing the simulated embedded-agent write with `ls -A` snapshots — a faithful substitute for the prior in-process `sideEffect` callback. The script.go change (adding `DDX_SESSION_LOG_DIR` to the interpolation map) is a minimal enabling edit required for directives to reference the override dir and is outside the \"only this test in the same file\" scope restriction."
+}

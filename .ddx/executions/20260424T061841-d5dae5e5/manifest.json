@@ -1,0 +1,9 @@
+{
+  "harness": "claude",
+  "model": "opus",
+  "base_rev": "088c2e7c31ab3ffcbe8953009967c836e7c11a92",
+  "result_rev": "56676659c559344fc9f207b49296c8b9818b1615",
+  "verdict": "APPROVE",
+  "bead_id": "ddx-c55119a7",
+  "execution_dir": ".ddx/executions/20260424T061841-d5dae5e5"
+}
