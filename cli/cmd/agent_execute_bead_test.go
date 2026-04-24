@@ -1895,40 +1895,103 @@ func TestExecuteBeadAgentErrorMessageInOutput(t *testing.T) {
 // TestExecuteBeadHeadRevFailure verifies that when HeadRev fails after the agent
 // runs, the outcome is "error" and the reason contains the original error message.
 // This covers the path at agent_execute_bead.go lines 282-309.
+//
+// Exercises real git + RealLandingGitOps via the script harness — no fakes for
+// the components under test. The script directive deletes the worktree's .git
+// pointer file as its only action, so the agent reports success but the
+// post-agent `git rev-parse HEAD` against the worktree fails for real.
 func TestExecuteBeadHeadRevFailure(t *testing.T) {
-	t.Run("json output", func(t *testing.T) {
-		git := &fakeExecuteBeadGit{
-			mainHeadRev:  "aaaa1111",
-			wtHeadRevErr: fmt.Errorf("disk read error"),
+	setup := func(t *testing.T) (workDir, baseSHA, directivePath string) {
+		t.Helper()
+		workDir = t.TempDir()
+
+		scrubEnv := func() []string {
+			parent := os.Environ()
+			env := make([]string, 0, len(parent))
+			for _, kv := range parent {
+				if strings.HasPrefix(kv, "GIT_") {
+					continue
+				}
+				env = append(env, kv)
+			}
+			return env
 		}
-		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-		f := newExecuteBeadFactory(t, git, runner)
+		runGit := func(args ...string) string {
+			t.Helper()
+			cmd := exec.Command("git", args...)
+			cmd.Dir = workDir
+			cmd.Env = scrubEnv()
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "git %v: %s", args, string(out))
+			return strings.TrimSpace(string(out))
+		}
+
+		runGit("init", "-b", "main")
+		runGit("config", "user.email", "test@ddx.test")
+		runGit("config", "user.name", "DDx Test")
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+		runGit("add", ".")
+		runGit("commit", "-m", "chore: initial seed")
+
+		seedExecuteBead(t, workDir, &bead.Bead{
+			ID:        "my-bead",
+			Title:     "Test execute-bead HeadRev failure",
+			Status:    bead.StatusOpen,
+			IssueType: bead.DefaultType,
+		})
+		runGit("add", ".ddx/beads.jsonl")
+		runGit("commit", "-m", "chore: seed bead")
+		baseSHA = runGit("rev-parse", "HEAD")
+
+		// Script directive: delete the worktree's .git pointer file. The agent
+		// itself reports success (no error directive), but the post-agent
+		// `git rev-parse HEAD` against the worktree must fail because there is
+		// no longer a discoverable git directory at that path. Mirrors the
+		// original fakeExecuteBeadGit{wtHeadRevErr: ...} contract using real
+		// git instead of a hand-rolled error string.
+		directivePath = filepath.Join(t.TempDir(), "directives.txt")
+		require.NoError(t, os.WriteFile(directivePath, []byte(
+			"delete-file .git\n",
+		), 0o644))
+		return
+	}
+
+	t.Run("json output", func(t *testing.T) {
+		workDir, baseSHA, directivePath := setup(t)
+
+		// Real runner + real git ops: no overrides that fake the thing under test.
+		f := NewCommandFactory(workDir)
+		f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
 		root := f.NewRootCommand()
-		out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead", "--json")
+		out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+			"--from", baseSHA,
+			"--harness", "script", "--model", directivePath)
 		require.Error(t, cmdErr)
 		res := parseExecuteBeadJSON(t, out)
 
 		assert.Equal(t, "error", res.Outcome)
 		assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
-		assert.Contains(t, res.Reason, "disk read error")
+		assert.Contains(t, res.Reason, "rev-parse",
+			"Reason must reflect the real git rev-parse failure on the corrupted worktree")
 		assert.Equal(t, 1, res.ExitCode)
 	})
 
 	t.Run("text output", func(t *testing.T) {
-		git := &fakeExecuteBeadGit{
-			mainHeadRev:  "aaaa1111",
-			wtHeadRevErr: fmt.Errorf("disk read error"),
-		}
-		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-		f := newExecuteBeadFactory(t, git, runner)
+		workDir, baseSHA, directivePath := setup(t)
+
+		f := NewCommandFactory(workDir)
+		f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
 		root := f.NewRootCommand()
-		out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead")
+		out, cmdErr := executeCommand(root, "agent", "execute-bead",
+			"my-bead",
+			"--from", baseSHA,
+			"--harness", "script", "--model", directivePath)
 		require.Error(t, cmdErr)
 
 		assert.Contains(t, out, "outcome: error")
-		assert.Contains(t, out, "disk read error")
+		assert.Contains(t, out, "rev-parse")
 	})
 }
 
