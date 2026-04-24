@@ -127,10 +127,17 @@ async function mockGraphQL(page: Page) {
 				body: JSON.stringify({
 					data: {
 						providerStatuses: ENDPOINT_ROWS,
-						harnessStatuses: HARNESS_ROWS,
-						defaultRouteStatus: null
+						harnessStatuses: HARNESS_ROWS
 					}
 				})
+			});
+			return;
+		}
+		if (q.includes('DefaultRouteStatus')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { defaultRouteStatus: null } })
 			});
 			return;
 		}

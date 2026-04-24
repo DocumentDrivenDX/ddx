@@ -136,6 +136,7 @@
 	{/if}
 
 	{#if trend7}
+		{@const max7 = maxTokens(trend7.series, trend7.ceilingTokens)}
 		<section class="rounded-lg border border-gray-200 p-4 dark:border-gray-700" data-testid="series-7d">
 			<div class="mb-2 flex items-center justify-between">
 				<h2 class="text-sm font-semibold dark:text-white">Last 7 days · hourly buckets</h2>
@@ -143,23 +144,35 @@
 					{formatN(totalTokens(trend7.series))} tokens · {formatN(totalRequests(trend7.series))} requests
 				</span>
 			</div>
-			<div class="flex items-end gap-[1px] h-24" role="img" aria-label="7-day tokens-per-hour series">
-				{#each trend7.series as point (point.bucketStart)}
+			<div class="relative h-24" role="img" aria-label="7-day tokens-per-hour series">
+				<div class="flex h-full items-end gap-[1px]">
+					{#each trend7.series as point (point.bucketStart)}
+						<div
+							class="w-full bg-blue-500"
+							style="height: {barHeight(point.tokens, max7)}"
+							title="{point.bucketStart}: {point.tokens} tokens, {point.requests} requests"></div>
+					{/each}
+				</div>
+				{#if trend7.ceilingTokens != null && trend7.ceilingTokens > 0}
 					<div
-						class="w-full bg-blue-500"
-						style="height: {barHeight(point.tokens, maxTokens(trend7.series, trend7.ceilingTokens))}"
-						title="{point.bucketStart}: {point.tokens} tokens, {point.requests} requests"></div>
-				{/each}
+						class="pointer-events-none absolute right-0 left-0 border-t-2 border-dashed border-red-500/70"
+						style="bottom: {Math.min(100, Math.round((trend7.ceilingTokens * 100) / max7))}%"
+						data-testid="ceiling-overlay-7d"
+						title="Quota ceiling: {formatN(trend7.ceilingTokens)} tokens"
+					>
+						<span
+							class="absolute -top-4 right-0 rounded bg-red-500/80 px-1 text-[10px] font-medium text-white"
+						>
+							ceiling {formatN(trend7.ceilingTokens)}
+						</span>
+					</div>
+				{/if}
 			</div>
-			{#if trend7.ceilingTokens != null}
-				<p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-					Ceiling: {formatN(trend7.ceilingTokens)} tokens/window
-				</p>
-			{/if}
 		</section>
 	{/if}
 
 	{#if trend30}
+		{@const max30 = maxTokens(trend30.series, trend30.ceilingTokens)}
 		<section class="rounded-lg border border-gray-200 p-4 dark:border-gray-700" data-testid="series-30d">
 			<div class="mb-2 flex items-center justify-between">
 				<h2 class="text-sm font-semibold dark:text-white">Last 30 days · 4-hour buckets</h2>
@@ -167,13 +180,23 @@
 					{formatN(totalTokens(trend30.series))} tokens · {formatN(totalRequests(trend30.series))} requests
 				</span>
 			</div>
-			<div class="flex items-end gap-[1px] h-24" role="img" aria-label="30-day tokens-per-4h series">
-				{#each trend30.series as point (point.bucketStart)}
+			<div class="relative h-24" role="img" aria-label="30-day tokens-per-4h series">
+				<div class="flex h-full items-end gap-[1px]">
+					{#each trend30.series as point (point.bucketStart)}
+						<div
+							class="w-full bg-indigo-500"
+							style="height: {barHeight(point.tokens, max30)}"
+							title="{point.bucketStart}: {point.tokens} tokens, {point.requests} requests"></div>
+					{/each}
+				</div>
+				{#if trend30.ceilingTokens != null && trend30.ceilingTokens > 0}
 					<div
-						class="w-full bg-indigo-500"
-						style="height: {barHeight(point.tokens, maxTokens(trend30.series, trend30.ceilingTokens))}"
-						title="{point.bucketStart}: {point.tokens} tokens, {point.requests} requests"></div>
-				{/each}
+						class="pointer-events-none absolute right-0 left-0 border-t-2 border-dashed border-red-500/70"
+						style="bottom: {Math.min(100, Math.round((trend30.ceilingTokens * 100) / max30))}%"
+						data-testid="ceiling-overlay-30d"
+						title="Quota ceiling: {formatN(trend30.ceilingTokens)} tokens"
+					></div>
+				{/if}
 			</div>
 		</section>
 	{/if}

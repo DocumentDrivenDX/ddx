@@ -60,6 +60,11 @@
 					resetAt
 				}
 			}
+		}
+	`;
+
+	const DEFAULT_ROUTE_QUERY = gql`
+		query DefaultRouteStatus {
 			defaultRouteStatus {
 				modelRef
 				resolvedProvider
@@ -123,21 +128,56 @@
 		}
 	});
 
-	onMount(async () => {
-		try {
-			const client = createClient();
-			const result = await client.request<{
-				providerStatuses: ProviderStatus[];
-				harnessStatuses: ProviderStatus[];
-				defaultRouteStatus: DefaultRouteStatus | null;
-			}>(PROVIDER_STATUSES_QUERY);
-			rows = [...(result.providerStatuses ?? []), ...(result.harnessStatuses ?? [])];
-			defaultRoute = result.defaultRouteStatus ?? null;
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		} finally {
-			loading = false;
-		}
+	// Polling interval for live row patching after first paint. Chosen to be
+	// short enough that probe results surface within the 5s AC budget but long
+	// enough to not hammer the server. AC 1: rows patch within 5s of probe
+	// completion — since the resolver returns cached rows updated asynchronously
+	// by refreshProviderStatuses, polling here is sufficient to reflect them.
+	const POLL_INTERVAL_MS = 2500;
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+	async function refresh(client: ReturnType<typeof createClient>) {
+		const result = await client.request<{
+			providerStatuses: ProviderStatus[];
+			harnessStatuses: ProviderStatus[];
+		}>(PROVIDER_STATUSES_QUERY);
+		rows = [...(result.providerStatuses ?? []), ...(result.harnessStatuses ?? [])];
+	}
+
+	onMount(() => {
+		const client = createClient();
+		// First paint: provider + harness rows. defaultRouteStatus fires in
+		// parallel via a separate query so a slow route-resolver can't delay
+		// the table from rendering. AC 1: table interactive within 500ms.
+		refresh(client)
+			.catch((e) => {
+				error = e instanceof Error ? e.message : String(e);
+			})
+			.finally(() => {
+				loading = false;
+			});
+
+		client
+			.request<{ defaultRouteStatus: DefaultRouteStatus | null }>(DEFAULT_ROUTE_QUERY)
+			.then((res) => {
+				defaultRoute = res.defaultRouteStatus ?? null;
+			})
+			.catch(() => {
+				// Non-fatal: the default-route widget is informational only.
+			});
+
+		pollTimer = setInterval(() => {
+			refresh(client).catch(() => {
+				// Polling errors are transient; keep the last-known rows.
+			});
+		}, POLL_INTERVAL_MS);
+
+		return () => {
+			if (pollTimer != null) {
+				clearInterval(pollTimer);
+				pollTimer = null;
+			}
+		};
 	});
 
 	function statusClass(row: ProviderStatus): string {

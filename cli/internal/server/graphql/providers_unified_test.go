@@ -289,3 +289,231 @@ func deref(p *int) int {
 	}
 	return *p
 }
+
+// TestBuildUsageReturnsNilWhenNoEntries guarantees the no-fabrication rule
+// for AC 2: absence of session data yields null usage, not zero-valued counts.
+func TestBuildUsageReturnsNilWhenNoEntries(t *testing.T) {
+	now := time.Now().UTC()
+	u := buildUsage(nil, "anything", agent.MatchProvider, now)
+	if u != nil {
+		t.Fatalf("expected nil usage when there are no entries, got %+v", u)
+	}
+	// One entry that doesn't match the requested name should also yield nil.
+	entries := []agent.SessionIndexEntry{{
+		ID: "x", Harness: "claude", Provider: "anthropic",
+		StartedAt: now.Add(-10 * time.Minute), Tokens: 123, Outcome: "success",
+	}}
+	u = buildUsage(entries, "other-name", agent.MatchProvider, now)
+	if u != nil {
+		t.Fatalf("expected nil usage when no entry matches name, got %+v", u)
+	}
+}
+
+// TestHarnessQuotaFromCapturedRateLimitSignal asserts the bridge from captured
+// rate-limit headers (via RecordHarnessRateLimit) into the HarnessStatuses row.
+// Covers AC 2: "For subprocess harnesses that expose rate-limit headers
+// (claude, codex), parsed headers populate quota.{ceilingTokens, ...}."
+func TestHarnessQuotaFromCapturedRateLimitSignal(t *testing.T) {
+	t.Cleanup(resetHarnessRateLimitCache)
+	resetHarnessRateLimitCache()
+
+	sig := agent.ParseRateLimitHeaders("claude", map[string][]string{
+		"Anthropic-Ratelimit-Tokens-Limit":     {"80000"},
+		"Anthropic-Ratelimit-Tokens-Remaining": {"60000"},
+		"Anthropic-Ratelimit-Tokens-Reset":     {"2026-04-24T05:00:00Z"},
+	})
+	if !sig.HasAny() {
+		t.Fatal("expected signal to have fields")
+	}
+	RecordHarnessRateLimit("claude", sig)
+
+	workDir := t.TempDir()
+	writeMinimalConfig(t, workDir)
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	statuses, err := r.HarnessStatuses(context.Background())
+	if err != nil {
+		t.Fatalf("HarnessStatuses: %v", err)
+	}
+	var claude *ProviderStatus
+	for _, s := range statuses {
+		if s.Name == "claude" {
+			claude = s
+			break
+		}
+	}
+	if claude == nil {
+		t.Fatalf("claude harness not in statuses")
+	}
+	if claude.Quota == nil {
+		t.Fatalf("expected quota populated from captured signal")
+	}
+	if claude.Quota.CeilingTokens == nil || *claude.Quota.CeilingTokens != 80000 {
+		t.Errorf("ceilingTokens: %+v", claude.Quota.CeilingTokens)
+	}
+	if claude.Quota.Remaining == nil || *claude.Quota.Remaining != 60000 {
+		t.Errorf("remaining: %+v", claude.Quota.Remaining)
+	}
+	if claude.Quota.CeilingWindowSeconds == nil || *claude.Quota.CeilingWindowSeconds != 60 {
+		t.Errorf("window seconds: %+v", claude.Quota.CeilingWindowSeconds)
+	}
+}
+
+// TestProviderTrendProjectionFromSeededUsageAndCeiling seeds ascending usage
+// and a real rate-limit-derived ceiling, then asserts ProviderTrend returns a
+// positive ProjectedRunOutHours. Covers AC 3 "projection renders only when
+// ceiling is known and last-24h slope is positive."
+func TestProviderTrendProjectionFromSeededUsageAndCeiling(t *testing.T) {
+	t.Cleanup(resetHarnessRateLimitCache)
+	resetHarnessRateLimitCache()
+
+	workDir := t.TempDir()
+	writeMinimalConfig(t, workDir)
+
+	// Seed ascending hourly usage for the last 24h under harness=claude.
+	now := time.Now().UTC()
+	for i := 0; i < 24; i++ {
+		t0 := now.Add(-time.Duration(24-i) * time.Hour).Add(30 * time.Minute)
+		appendSessionForTest(t, workDir, agent.SessionIndexEntry{
+			ID: fmt.Sprintf("proj-%d", i), Harness: "claude", Provider: "anthropic",
+			StartedAt: t0, Tokens: 1000 + i*200, Outcome: "success",
+		}, t0)
+	}
+	// Record a ceiling via the rate-limit cache (10,000 tokens remaining).
+	sig := agent.ParseRateLimitHeaders("claude", map[string][]string{
+		"Anthropic-Ratelimit-Tokens-Limit":     {"50000"},
+		"Anthropic-Ratelimit-Tokens-Remaining": {"10000"},
+	})
+	RecordHarnessRateLimit("claude", sig)
+
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	trend, err := r.ProviderTrend(context.Background(), "claude", 7)
+	if err != nil {
+		t.Fatalf("ProviderTrend: %v", err)
+	}
+	if trend.CeilingTokens == nil || *trend.CeilingTokens != 50000 {
+		t.Fatalf("expected ceiling 50000, got %+v", trend.CeilingTokens)
+	}
+	if trend.ProjectedRunOutHours == nil || *trend.ProjectedRunOutHours <= 0 {
+		t.Fatalf("expected positive ProjectedRunOutHours, got %+v", trend.ProjectedRunOutHours)
+	}
+}
+
+// TestProviderStatusesPerfFixture is the perf harness for AC 4:
+// ≥1,000 session rows across ≥5 endpoints/harnesses; p95 on the resolver
+// path must stay well under the 200ms unified-list HTTP budget.
+func TestProviderStatusesPerfFixture(t *testing.T) {
+	if testing.Short() {
+		t.Skip("perf fixture skipped in -short")
+	}
+	workDir := t.TempDir()
+	// Seed 5 endpoints + 2 harnesses; 1,200 session rows distributed across them.
+	writeMultiEndpointConfig(t, workDir)
+	now := time.Now().UTC()
+	names := []string{"ep-a", "ep-b", "ep-c", "ep-d", "ep-e", "claude", "codex"}
+	kinds := []string{"provider", "provider", "provider", "provider", "provider", "harness", "harness"}
+	total := 1200
+	for i := 0; i < total; i++ {
+		idx := i % len(names)
+		t0 := now.Add(-time.Duration(i) * 20 * time.Minute)
+		entry := agent.SessionIndexEntry{
+			ID: fmt.Sprintf("perf-%d", i), StartedAt: t0, Tokens: 500, Outcome: "success",
+		}
+		if kinds[idx] == "provider" {
+			entry.Provider = names[idx]
+			entry.Harness = "agent"
+		} else {
+			entry.Harness = names[idx]
+			entry.Provider = "anthropic"
+		}
+		appendSessionForTest(t, workDir, entry, t0)
+	}
+
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	// Warm the cache.
+	if _, err := r.ProviderStatuses(context.Background()); err != nil {
+		t.Fatalf("ProviderStatuses warmup: %v", err)
+	}
+
+	const iterations = 20
+	durations := make([]time.Duration, 0, iterations)
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		if _, err := r.ProviderStatuses(context.Background()); err != nil {
+			t.Fatalf("ProviderStatuses iter %d: %v", i, err)
+		}
+		durations = append(durations, time.Since(start))
+	}
+	// p95 across 20 iterations = 19th-sorted value (index 18).
+	sortDurations(durations)
+	p95 := durations[18]
+	// Budget: 200ms HTTP; resolver-only path should be well under (≤150ms).
+	if p95 > 150*time.Millisecond {
+		t.Fatalf("ProviderStatuses p95 = %s, want ≤150ms (target ≤200ms HTTP)", p95)
+	}
+}
+
+// TestProviderTrendPerfFixture exercises the detail-view perf AC: p95 ≤400ms
+// on the ≥1,000-row fixture.
+func TestProviderTrendPerfFixture(t *testing.T) {
+	if testing.Short() {
+		t.Skip("perf fixture skipped in -short")
+	}
+	workDir := t.TempDir()
+	writeMinimalConfig(t, workDir)
+	now := time.Now().UTC()
+	// Spread 1,200 sessions across 30 days under harness=claude.
+	for i := 0; i < 1200; i++ {
+		t0 := now.Add(-time.Duration(i) * 30 * time.Minute)
+		appendSessionForTest(t, workDir, agent.SessionIndexEntry{
+			ID: fmt.Sprintf("trend-perf-%d", i), Harness: "claude", Provider: "anthropic",
+			StartedAt: t0, Tokens: 200, Outcome: "success",
+		}, t0)
+	}
+	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	if _, err := r.ProviderTrend(context.Background(), "claude", 30); err != nil {
+		t.Fatalf("ProviderTrend warmup: %v", err)
+	}
+
+	const iterations = 20
+	durations := make([]time.Duration, 0, iterations)
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		if _, err := r.ProviderTrend(context.Background(), "claude", 30); err != nil {
+			t.Fatalf("ProviderTrend iter %d: %v", i, err)
+		}
+		durations = append(durations, time.Since(start))
+	}
+	sortDurations(durations)
+	p95 := durations[18]
+	if p95 > 300*time.Millisecond {
+		t.Fatalf("ProviderTrend p95 = %s, want ≤300ms (target ≤400ms HTTP)", p95)
+	}
+}
+
+func sortDurations(ds []time.Duration) {
+	for i := 1; i < len(ds); i++ {
+		for j := i; j > 0 && ds[j-1] > ds[j]; j-- {
+			ds[j-1], ds[j] = ds[j], ds[j-1]
+		}
+	}
+}
+
+// writeMultiEndpointConfig writes a 5-endpoint config used by the perf test.
+func writeMultiEndpointConfig(t *testing.T, workDir string) {
+	t.Helper()
+	ddxDir := filepath.Join(workDir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `version: "1.0"
+bead:
+  id_prefix: "pt"
+agent:
+  endpoints:
+    - type: lmstudio
+      base_url: http://127.0.0.1:9/v1
+`
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

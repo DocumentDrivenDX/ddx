@@ -20,6 +20,44 @@ var providerStatusCache = struct {
 	inFlight: make(map[string]bool),
 }
 
+// harnessRateLimitCache holds the most recently observed rate-limit signal per
+// harness name. The server invocation path (or tests) populates it via
+// RecordHarnessRateLimit; quotaFromHarnessInfo reads it when the upstream
+// HarnessInfo.Quota does not carry token-level ceilings.
+var harnessRateLimitCache = struct {
+	sync.RWMutex
+	byName map[string]agent.RateLimitSignal
+}{byName: make(map[string]agent.RateLimitSignal)}
+
+// RecordHarnessRateLimit stores the latest parsed rate-limit signal for a
+// harness invocation. Intended for the server's harness-dispatch path to call
+// after each response; tests use it directly.
+func RecordHarnessRateLimit(name string, sig agent.RateLimitSignal) {
+	name = strings.TrimSpace(name)
+	if name == "" || !sig.HasAny() {
+		return
+	}
+	harnessRateLimitCache.Lock()
+	harnessRateLimitCache.byName[name] = sig
+	harnessRateLimitCache.Unlock()
+}
+
+// LookupHarnessRateLimit returns the last-observed signal for a harness, or
+// ok=false if none has been recorded.
+func LookupHarnessRateLimit(name string) (agent.RateLimitSignal, bool) {
+	harnessRateLimitCache.RLock()
+	defer harnessRateLimitCache.RUnlock()
+	sig, ok := harnessRateLimitCache.byName[name]
+	return sig, ok
+}
+
+// resetHarnessRateLimitCache is a test seam.
+func resetHarnessRateLimitCache() {
+	harnessRateLimitCache.Lock()
+	harnessRateLimitCache.byName = make(map[string]agent.RateLimitSignal)
+	harnessRateLimitCache.Unlock()
+}
+
 // ProviderStatuses is the resolver for the providerStatuses field.
 // It mirrors the output of `ddx agent providers`, annotating each row with
 // kind=ENDPOINT, a lastCheckedAt timestamp, and rolling usage derived from
@@ -411,6 +449,13 @@ func (r *queryResolver) sessionIndexEntries() []agent.SessionIndexEntry {
 
 func buildUsage(entries []agent.SessionIndexEntry, name string, kind agent.UsageMatchKind, now time.Time) *ProviderUsage {
 	counts := agent.AggregateUsageCounts(entries, name, kind, now)
+	// FEAT-014 no-fabrication: when the session index has no rows attributable
+	// to this name, return nil so the UI renders "not reported" instead of
+	// fabricated "0 / 0" counts.
+	if counts.TokensLastHour == 0 && counts.TokensLast24h == 0 &&
+		counts.RequestsLastHour == 0 && counts.RequestsLast24h == 0 {
+		return nil
+	}
 	u := &ProviderUsage{}
 	v := counts.TokensLastHour
 	u.TokensUsedLastHour = &v
@@ -433,8 +478,18 @@ func quotaFromProviderInfo(p agentlib.ProviderInfo) *ProviderQuota {
 }
 
 // quotaFromHarnessInfo derives a ProviderQuota from the upstream HarnessInfo.
-// Returns nil when no token-level ceiling is published.
+// When a rate-limit signal has been captured for this harness (via
+// RecordHarnessRateLimit — typically on the server's harness-dispatch path
+// after parsing response headers with agent.ParseRateLimitHeaders), that
+// signal takes precedence because it carries absolute token ceilings. The
+// upstream HarnessInfo.Quota only exposes percent-used windows without an
+// absolute ceiling. Returns nil when nothing usable is published.
 func quotaFromHarnessInfo(info agentlib.HarnessInfo) *ProviderQuota {
+	if sig, ok := LookupHarnessRateLimit(info.Name); ok {
+		if q := QuotaFromRateLimitSignal(sig); q != nil {
+			return q
+		}
+	}
 	if info.Quota == nil {
 		return nil
 	}
