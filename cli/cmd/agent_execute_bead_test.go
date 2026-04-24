@@ -2716,84 +2716,119 @@ func TestExecuteBeadNoGatesWhenNoChanges(t *testing.T) {
 // invokes the embedded-agent harness, its session/telemetry runtime state is
 // redirected into a DDx-owned directory inside the execution bundle instead
 // of being written at the worktree root. Regression guard for ddx-cba2dc64.
+//
+// Migrated off fakeExecuteBeadGit / fakeAgentRunner per concerns.md §testing
+// ("no mocks, period"; "never mock the thing you are testing"). Drives the
+// real ExecuteBead → LandBeadResult → Land pipeline against an isolated
+// real-git repo. A script-harness directive file simulates the embedded
+// agent: it records worktree-root contents before and after writing runtime
+// state, and writes that state to $DDX_SESSION_LOG_DIR — which the script
+// harness interpolates from opts.SessionLogDir. If execute-bead's wiring is
+// broken and SessionLogDir is empty or points at the worktree root, the
+// assertions below fail. Parent: ddx-d9df348d.
 func TestExecuteBeadEmbeddedAgentStateRedirected(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111cafe",
-		wtHeadRev:   "bbbb2222beef",
+	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
 	}
 
-	// Snapshot of wtPath root contents captured during Run so the assertion
-	// can run before ExecuteBead removes the worktree on return.
-	var wtPathDuringRun string
-	var wtRootBefore []string
-	var wtRootAfter []string
-	var sessionLogDirSeen string
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "embedded-state-bead",
+		Title:     "Bead for embedded-state redirection test",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Out-of-worktree record dir: the directive writes `ls -A` of the worktree
+	// root to before.txt/after.txt, bracketing the simulated embedded-agent
+	// write, so the test can compare worktree-root contents mid-run even
+	// though the worktree is cleaned up after ExecuteBead returns.
+	recordDir := t.TempDir()
+	beforePath := filepath.Join(recordDir, "before.txt")
+	afterPath := filepath.Join(recordDir, "after.txt")
+
 	simulatedSessionFile := "agent-embedded-session.jsonl"
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	directive := strings.Join([]string{
+		// Force a result commit so ExecuteBead lands "merged".
+		"create-file feature.txt hello",
+		`commit "feat: embedded redirect hello"`,
+		// Capture worktree-root listing before simulated embedded writes.
+		"run ls -A > " + beforePath,
+		// Simulate the embedded-agent harness writing runtime state to
+		// $DDX_SESSION_LOG_DIR (interpolated by the script harness from
+		// opts.SessionLogDir). Empty/unset SessionLogDir collapses to
+		// writing at "/" which sh will reject — any wiring regression is
+		// caught by the bundle/embedded existence check below.
+		`run mkdir -p "$DDX_SESSION_LOG_DIR" && printf '{"event":"started"}\n' > "$DDX_SESSION_LOG_DIR/` + simulatedSessionFile + `"`,
+		// Capture worktree-root listing after simulated embedded writes.
+		"run ls -A > " + afterPath,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(directivePath, []byte(directive), 0o644))
 
-	runner := &fakeAgentRunner{
-		result: &agent.Result{ExitCode: 0, Harness: "agent"},
-		sideEffect: func(opts agent.RunOptions) error {
-			wtPathDuringRun = opts.WorkDir
-			sessionLogDirSeen = opts.SessionLogDir
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
-			// Capture worktree root listing before simulating writes.
-			entries, err := os.ReadDir(opts.WorkDir)
-			if err != nil {
-				return err
-			}
-			for _, e := range entries {
-				wtRootBefore = append(wtRootBefore, e.Name())
-			}
-
-			// Simulate the embedded-agent harness writing runtime state.
-			// It MUST land in opts.SessionLogDir, not opts.WorkDir. If the
-			// execute-bead wiring is broken and SessionLogDir is empty or the
-			// worktree root, this write will land at the worktree root and
-			// the post-check below will catch it.
-			if opts.SessionLogDir == "" {
-				return fmt.Errorf("embedded agent runner received empty SessionLogDir; runtime state would land at worktree root")
-			}
-			if err := os.MkdirAll(opts.SessionLogDir, 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(filepath.Join(opts.SessionLogDir, simulatedSessionFile), []byte(`{"event":"started"}`+"\n"), 0o644); err != nil {
-				return err
-			}
-
-			// Capture worktree root listing after simulated writes.
-			entries, err = os.ReadDir(opts.WorkDir)
-			if err != nil {
-				return err
-			}
-			for _, e := range entries {
-				wtRootAfter = append(wtRootAfter, e.Name())
-			}
-			return nil
-		},
-	}
-	f := newExecuteBeadFactory(t, git, runner)
-
-	res := runExecuteBead(t, f, git, "my-bead", "--harness", "agent")
+	res := runExecuteBead(t, f, nil, "embedded-state-bead",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
 	require.Equal(t, "merged", res.Outcome, "execute-bead should succeed for this test")
 
-	// The runner must have received a SessionLogDir override.
-	require.NotEmpty(t, sessionLogDirSeen, "execute-bead must pass a SessionLogDir to the embedded harness")
-
-	// The override must point inside the tracked execution bundle, not at
-	// the worktree root.
+	// The execution bundle must exist and contain an embedded/ subdirectory —
+	// the concrete effect of runOpts.SessionLogDir being set to
+	// <bundle>/embedded in execute_bead.go.
 	require.NotEmpty(t, res.ExecutionDir, "execute-bead must record an execution bundle dir")
-	bundleAbs := filepath.Join(f.WorkingDir, filepath.FromSlash(res.ExecutionDir))
-	absLog, err := filepath.Abs(sessionLogDirSeen)
+	bundleAbs, err := filepath.Abs(filepath.Join(workDir, filepath.FromSlash(res.ExecutionDir)))
 	require.NoError(t, err)
-	absBundle, err := filepath.Abs(bundleAbs)
-	require.NoError(t, err)
-	assert.Truef(t, strings.HasPrefix(absLog, absBundle+string(filepath.Separator)),
-		"SessionLogDir (%s) must be inside the execution bundle (%s)", absLog, absBundle)
-	assert.Equal(t, "embedded", filepath.Base(absLog),
+	embeddedDir := filepath.Join(bundleAbs, "embedded")
+	info, statErr := os.Stat(embeddedDir)
+	require.NoError(t, statErr, "execution bundle must contain an embedded/ subdir")
+	require.True(t, info.IsDir(), "embedded path must be a directory")
+	assert.Equal(t, "embedded", filepath.Base(embeddedDir),
 		"SessionLogDir must be the bundle's embedded/ subdirectory")
 
-	// The worktree root must not gain any files during the run.
-	require.NotEmpty(t, wtPathDuringRun)
+	// The simulated embedded-agent session file must exist under <bundle>/embedded
+	// — proves runOpts.SessionLogDir propagated to the harness and pointed there.
+	assert.FileExists(t, filepath.Join(embeddedDir, simulatedSessionFile))
+
+	// Worktree-root listings captured mid-run must match: the simulated
+	// embedded write must not have leaked any new entry into the worktree root.
+	beforeRaw, err := os.ReadFile(beforePath)
+	require.NoError(t, err, "before-run worktree listing must have been written")
+	afterRaw, err := os.ReadFile(afterPath)
+	require.NoError(t, err, "after-run worktree listing must have been written")
+	wtRootBefore := strings.Fields(string(beforeRaw))
+	wtRootAfter := strings.Fields(string(afterRaw))
+	require.NotEmpty(t, wtRootBefore, "worktree root must have at least one entry at checkpoint")
 	assert.Equal(t, wtRootBefore, wtRootAfter,
 		"worktree root entries must not change while the embedded harness runs (before=%v after=%v)",
 		wtRootBefore, wtRootAfter)
@@ -2801,9 +2836,6 @@ func TestExecuteBeadEmbeddedAgentStateRedirected(t *testing.T) {
 		"simulated embedded session file must not land at the worktree root")
 	assert.NotContains(t, wtRootAfter, ".agent-session.json",
 		"embedded agent must not write .agent-session.json at the worktree root")
-
-	// The simulated session file must exist at the redirected location.
-	assert.FileExists(t, filepath.Join(sessionLogDirSeen, simulatedSessionFile))
 }
 
 // TestExecuteBeadPromptIsXMLTagged verifies that the synthesized execute-bead

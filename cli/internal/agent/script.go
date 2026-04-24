@@ -47,9 +47,10 @@ func runScriptFn(r *Runner, opts RunOptions) (*Result, error) {
 
 	// Build env interpolation map from Correlation.
 	envMap := map[string]string{
-		"DDX_BEAD_ID":    "",
-		"DDX_ATTEMPT_ID": "",
-		"DDX_WORKER_ID":  "",
+		"DDX_BEAD_ID":         "",
+		"DDX_ATTEMPT_ID":      "",
+		"DDX_WORKER_ID":       "",
+		"DDX_SESSION_LOG_DIR": opts.SessionLogDir,
 	}
 	if opts.Correlation != nil {
 		if v, ok := opts.Correlation["bead_id"]; ok {
