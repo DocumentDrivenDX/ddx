@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, mechanical migration: all 21 `exec.CommandContext(ctx, \"git\", …)` callsites were replaced with `git.Command(ctx, dir, …)` and the `internal/git` import was added. Diff is 24 insertions / 24 deletions in a single file, matching the scope promised by the bead."
+}
