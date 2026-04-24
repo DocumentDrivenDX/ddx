@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, scope-respecting migration. The canned `agent.Result{ExitCode:-1, Error:\"timeout after 5m\"}` is now reproduced via `set-exit -1` + `fail-during 1` directives against the real script harness, and the test asserts against a real git HEAD that cannot advance. Assertions were preserved in spirit while correctly adapting the error string (`\"timeout after 5m\"` → `contains \"script harness\"`) to match the new real-harness signal."
+}
