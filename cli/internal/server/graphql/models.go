@@ -1538,6 +1538,10 @@ type QueueAndWorkersSummary struct {
 	RunningWorkers int `json:"runningWorkers"`
 	// Total workers on record for this project (any state)
 	TotalWorkers int `json:"totalWorkers"`
+	// Optional safety-rail cap from .ddx/config.yaml workers.max_count. When
+	//   set, the UI disables the `+ Add worker` affordance past this limit. Null
+	//   means no cap.
+	MaxCount *int `json:"maxCount,omitempty"`
 }
 
 // QueueSummary is a compact project queue status for action dispatch.

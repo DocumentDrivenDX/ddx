@@ -79,13 +79,17 @@ const WORKER_DETAIL = {
 
 const WORKER_LOG = { stdout: 'Starting execution...\nStep 1 complete\nStep 2 complete', stderr: '' };
 
-function makeWorkersResponse(workers: Record<string, unknown>[] = WORKERS) {
+function makeWorkersResponse(
+	workers: Record<string, unknown>[] = WORKERS,
+	maxCount: number | null = null
+) {
 	return {
 		workersByProject: {
 			edges: workers.map((w, i) => ({ node: w, cursor: `cursor-${i}` })),
 			pageInfo: { hasNextPage: false, endCursor: null },
 			totalCount: workers.length
-		}
+		},
+		queueAndWorkersSummary: { maxCount }
 	};
 }
 
@@ -653,20 +657,85 @@ test('workers overview shows drain count control, indicator, and +/- buttons', a
 	await expect(panel.getByText(/Adds a general-purpose drain worker/)).toBeVisible();
 
 	// Global nav indicator is visible on every page (ddx-b6cf025c AC #1).
+	// Idle state: "Queue: X ready" (0 workers, 3 ready).
 	const indicator = page.getByTestId('drain-indicator');
 	await expect(indicator).toBeVisible();
-	await expect(indicator).toHaveText(/Queue: 3 ready|0 workers/);
+	await expect(indicator).toHaveText(/Queue: 3 ready/);
 
-	// + Add worker dispatches.
+	// + Add worker dispatches (AC #6: first add -> "1 worker · 3 ready").
 	await page.getByTestId('add-drain-worker').click();
 	await expect.poll(() => dispatchCalled, { timeout: 3000 }).toBe(true);
 	await expect(panel.getByTestId('drain-worker-count')).toHaveText('1');
+	await expect(indicator).toHaveText(/1 worker · 3 ready/, { timeout: 5000 });
 
-	// − Remove worker stops the oldest running drain worker.
+	// + Add worker again (AC #6: second add -> "2 workers · 3 ready").
+	await page.getByTestId('add-drain-worker').click();
+	await expect(panel.getByTestId('drain-worker-count')).toHaveText('2');
+	await expect(indicator).toHaveText(/2 workers · 3 ready/, { timeout: 5000 });
+
+	// − Remove worker stops the oldest running drain worker and the indicator
+	// transitions back to a single-worker state (AC #6).
 	await page.getByTestId('remove-drain-worker').click();
 	await expect.poll(() => stopCalled, { timeout: 3000 }).toBe(true);
+	await expect(panel.getByTestId('drain-worker-count')).toHaveText('1');
+	await expect(indicator).toHaveText(/1 worker · 3 ready/, { timeout: 5000 });
 
 	// Indicator survives navigation to another route.
 	await page.goto(`/nodes/node-abc/projects/${PROJECT_ID}/beads`);
 	await expect(page.getByTestId('drain-indicator')).toBeVisible();
+});
+
+// ddx-b6cf025c AC #5: workers.max_count safety rail. When the running count
+// equals the cap, `+ Add worker` is disabled and its tooltip surfaces the
+// limit. No cap configured (maxCount null) leaves the button enabled.
+test('workers overview respects workers.max_count cap on + Add worker', async ({ page }) => {
+	const workers = [
+		{
+			id: 'worker-cap-1',
+			kind: 'execute-loop',
+			state: 'running',
+			status: 'running',
+			harness: 'codex',
+			model: null,
+			currentBead: null,
+			attempts: 0,
+			successes: 0,
+			failures: 0,
+			startedAt: '2026-04-23T10:00:00Z'
+		}
+	];
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('WorkersByProject')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeWorkersResponse(workers, 1) })
+			});
+		} else if (body.query.includes('QueueAndWorkersSummary') || body.query.includes('queueAndWorkersSummary')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { queueAndWorkersSummary: { readyBeads: 0, runningWorkers: 1, totalWorkers: 1, maxCount: 1 } }
+				})
+			});
+		} else if (body.query.includes('AgentSessions') || body.query.includes('agentSessions')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeSessionsResponse() }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(BASE_URL);
+
+	const addBtn = page.getByTestId('add-drain-worker');
+	await expect(addBtn).toBeVisible();
+	await expect(addBtn).toBeDisabled();
+	await expect(addBtn).toHaveAttribute('title', 'at workers.max_count limit');
 });

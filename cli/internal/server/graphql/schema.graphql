@@ -1598,6 +1598,10 @@ type QueueAndWorkersSummary {
   runningWorkers: Int!
   """Total workers on record for this project (any state)"""
   totalWorkers: Int!
+  """Optional safety-rail cap from .ddx/config.yaml workers.max_count. When
+  set, the UI disables the `+ Add worker` affordance past this limit. Null
+  means no cap."""
+  maxCount: Int
 }
 
 """WorkerDispatchResult describes the worker started by an action."""

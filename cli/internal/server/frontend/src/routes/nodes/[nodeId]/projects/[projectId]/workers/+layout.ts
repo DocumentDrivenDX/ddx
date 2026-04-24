@@ -27,6 +27,9 @@ const WORKERS_QUERY = gql`
 			}
 			totalCount
 		}
+		queueAndWorkersSummary(projectId: $projectID) {
+			maxCount
+		}
 	}
 `
 
@@ -57,6 +60,7 @@ interface WorkerConnection {
 
 interface WorkersResult {
 	workersByProject: WorkerConnection
+	queueAndWorkersSummary: { maxCount: number | null }
 }
 
 export const load: LayoutLoad = async ({ params, fetch }) => {
@@ -66,6 +70,7 @@ export const load: LayoutLoad = async ({ params, fetch }) => {
 	})
 	return {
 		projectId: params.projectId,
-		workers: data.workersByProject
+		workers: data.workersByProject,
+		maxCount: data.queueAndWorkersSummary?.maxCount ?? null
 	}
 }

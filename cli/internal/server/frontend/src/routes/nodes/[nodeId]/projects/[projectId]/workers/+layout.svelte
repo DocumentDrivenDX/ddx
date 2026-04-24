@@ -61,6 +61,16 @@
 		).length
 	);
 
+	// workers.max_count safety rail (ddx-b6cf025c). Null = no cap configured.
+	const maxCount = $derived(data.maxCount);
+	const atMaxCount = $derived(
+		typeof maxCount === 'number' && maxCount >= 0 && runningDrainCount >= maxCount
+	);
+	const addDisabled = $derived(adding || atMaxCount);
+	const addTooltip = $derived(
+		atMaxCount ? 'at workers.max_count limit' : 'Add a general-purpose drain worker'
+	);
+
 	// Subscribe to progress events for all running workers
 	$effect(() => {
 		const runningIds = data.workers.edges
@@ -221,7 +231,8 @@
 				type="button"
 				data-testid="add-drain-worker"
 				onclick={() => void addDrainWorker()}
-				disabled={adding}
+				disabled={addDisabled}
+				title={addTooltip}
 				class="rounded border border-blue-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
 				aria-label="Add worker"
 			>

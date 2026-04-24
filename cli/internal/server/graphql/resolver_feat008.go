@@ -310,6 +310,13 @@ func (r *queryResolver) QueueAndWorkersSummary(ctx context.Context, projectID st
 			}
 		}
 	}
+	// Surface the optional workers.max_count cap so the UI can pre-emptively
+	// disable the `+ Add worker` affordance rather than relying on a server
+	// error from workerDispatch (ddx-b6cf025c review finding).
+	if cfg, err := config.LoadWithWorkingDir(r.projectRoot(projectID)); err == nil && cfg != nil && cfg.Workers != nil && cfg.Workers.MaxCount != nil {
+		v := *cfg.Workers.MaxCount
+		out.MaxCount = &v
+	}
 	return out, nil
 }
 

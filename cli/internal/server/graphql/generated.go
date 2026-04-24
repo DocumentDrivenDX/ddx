@@ -922,6 +922,7 @@ type ComplexityRoot struct {
 	}
 
 	QueueAndWorkersSummary struct {
+		MaxCount       func(childComplexity int) int
 		ReadyBeads     func(childComplexity int) int
 		RunningWorkers func(childComplexity int) int
 		TotalWorkers   func(childComplexity int) int
@@ -5328,6 +5329,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.WorkersByProject(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 
+	case "QueueAndWorkersSummary.maxCount":
+		if e.ComplexityRoot.QueueAndWorkersSummary.MaxCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueAndWorkersSummary.MaxCount(childComplexity), true
 	case "QueueAndWorkersSummary.readyBeads":
 		if e.ComplexityRoot.QueueAndWorkersSummary.ReadyBeads == nil {
 			break
@@ -28084,6 +28091,8 @@ func (ec *executionContext) fieldContext_Query_queueAndWorkersSummary(ctx contex
 				return ec.fieldContext_QueueAndWorkersSummary_runningWorkers(ctx, field)
 			case "totalWorkers":
 				return ec.fieldContext_QueueAndWorkersSummary_totalWorkers(ctx, field)
+			case "maxCount":
+				return ec.fieldContext_QueueAndWorkersSummary_maxCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type QueueAndWorkersSummary", field.Name)
 		},
@@ -28654,6 +28663,35 @@ func (ec *executionContext) _QueueAndWorkersSummary_totalWorkers(ctx context.Con
 }
 
 func (ec *executionContext) fieldContext_QueueAndWorkersSummary_totalWorkers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueAndWorkersSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueAndWorkersSummary_maxCount(ctx context.Context, field graphql.CollectedField, obj *QueueAndWorkersSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueAndWorkersSummary_maxCount,
+		func(ctx context.Context) (any, error) {
+			return obj.MaxCount, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueAndWorkersSummary_maxCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "QueueAndWorkersSummary",
 		Field:      field,
@@ -41475,6 +41513,8 @@ func (ec *executionContext) _QueueAndWorkersSummary(ctx context.Context, sel ast
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "maxCount":
+			out.Values[i] = ec._QueueAndWorkersSummary_maxCount(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
