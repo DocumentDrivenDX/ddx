@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration: removed the fake git/runner overrides, replaced with a real git init + script-harness directive that produces a real commit, and kept every meaningful assertion (manifest contents, worktree prefix, recorded result fields, worktree cleanup). The worktree-cleanup assertion was faithfully translated from `git.addedWTs[0]` to reading the worktree path from the emitted manifest, which is a real-state check rather than fake bookkeeping."
+}
