@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, scoped migration that mirrors the established real-git + script-harness pattern used by neighboring tests in the same file. The original intent — verifying that a runner error propagates into the JSON Error field — is preserved, now exercised against real git and a real runner with the error synthesized by the script harness rather than a canned Result struct."
+}
