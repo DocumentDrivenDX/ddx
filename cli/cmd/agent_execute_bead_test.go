@@ -1265,18 +1265,76 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 }
 
 // TestExecuteBeadFromRevFlag verifies that --from resolves a custom revision
-// and uses it as the base for the worktree.
+// and uses it as the base for the worktree. Exercises real git + the script
+// harness: the --from tag points to an earlier commit than HEAD, and the
+// script directive is a no-op so we avoid merge logic. BaseRev in the result
+// must equal the SHA that the custom ref resolves to.
 func TestExecuteBeadFromRevFlag(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "custom-sha-123",
-		wtHeadRev:   "custom-sha-123", // no-changes so we don't need merge logic
+	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
 	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
 
-	res := runExecuteBead(t, f, git, "my-bead", "--from", "custom-rev")
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
 
-	assert.Equal(t, "custom-sha-123", res.BaseRev)
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test --from flag resolves custom revision",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+
+	// Tag this commit as the custom ref --from will resolve against. The
+	// worktree snapshot at this tag contains the bead. HEAD will advance past
+	// this commit below, so BaseRev != HEAD unless --from is honored.
+	customSHA := runGit("rev-parse", "HEAD")
+	runGit("tag", "custom-rev")
+
+	// Advance HEAD past the custom ref with an unrelated commit so --from is
+	// observable: if it were ignored, BaseRev would equal the newer HEAD.
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "after.txt"), []byte("after\n"), 0o644))
+	runGit("add", "after.txt")
+	runGit("commit", "-m", "chore: after tag")
+
+	// no-op directive: agent makes no commits, so no merge logic is triggered.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", "custom-rev",
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
+
+	assert.Equal(t, customSHA, res.BaseRev, "BaseRev must equal SHA resolved from --from tag")
 }
 
 // TestExecuteBeadOrphanRecovery verifies that worktrees matching the bead's
