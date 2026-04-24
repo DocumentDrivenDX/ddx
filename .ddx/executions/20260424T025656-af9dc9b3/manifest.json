@@ -1,0 +1,257 @@
+{
+  "attempt_id": "20260424T025656-af9dc9b3",
+  "bead_id": "ddx-7de0ce80",
+  "base_rev": "83b98c1c3e1c43e2e131635eef19f0861760439c",
+  "created_at": "2026-04-24T02:56:56.755216966Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7de0ce80",
+    "title": "Plugins page doesn't refresh after update/install: worker completes, card still shows outdated",
+    "description": "## Observed\n\nOn `/nodes/.../projects/.../plugins`, clicking Update on the outdated `helix` card:\n\n1. Fires the mutation — works.\n2. Shows a link to the dispatched worker — helpful.\n3. Worker completes and the plugin is actually updated on disk — verified.\n4. **Card still shows `update-available`.** The UI never closes the loop.\n\nThe user has no in-UI signal that the update succeeded. They must reload the page (or navigate away and back) to see the new state. Worse, nothing prevents them from clicking the button again during the gap — firing a second update.\n\n## Root cause\n\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:74-89` —\n\n```js\nasync function dispatchPlugin(name, action, scope = 'project') {\n  const result = await client.request(PLUGIN_DISPATCH_MUTATION, { name, action, scope });\n  workerId = result.pluginDispatch.id;\n}\n```\n\nThat is the entire post-dispatch behavior. `data.plugins` is the snapshot from `+page.ts` at load time. There is no:\n\n- subscription to the dispatched worker's progress,\n- polling of the plugin list,\n- refetch on worker terminal event,\n- optimistic card state while the worker runs,\n- per-card in-flight tracking (only a single `workerId: string | null` at module scope, which means dispatching a second plugin overwrites the first worker link).\n\nThe workers layout already has `subscribeWorkerProgress(workerID, cb)` (`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:22-30`) — the plugins page just doesn't use it.\n\n## Proposed direction\n\nTwo changes, smallest first:\n\n### Fix A — Close the loop on the dispatched worker.\n\n- Per-card in-flight tracking: replace the singleton `workerId` with a `Map\u003cpluginName, workerId\u003e`. Each card shows its own worker link + in-flight state; clicking Install/Update is disabled while that plugin is in flight.\n- Subscribe to `subscribeWorkerProgress` for each in-flight plugin. On a terminal phase event (`completed`, `failed`, etc. — whatever the existing worker event vocabulary uses), refetch the plugins list and clear that plugin's in-flight entry.\n- If the existing worker-progress stream doesn't emit a terminal event with enough detail, fall back to polling `plugins { name status installedVersion }` every 2s while any card is in flight, stopping when none are.\n\n### Fix B — Optimistic card state (optional polish).\n\n- While a card is in-flight, show \"Updating…\" / \"Installing…\" with a spinner in place of the status badge, and disable the action button. This is orthogonal to Fix A and can ship with it.\n\n### Fix C — Persistent failure surfacing.\n\n- Currently `dispatchError` is a single string. If the worker terminates with a failure phase, surface that per-card (error badge + tooltip with detail link to the worker page) rather than relying on `dispatchError` which only covers the synchronous mutation error.\n\n## Out of scope\n\n- Designing new worker terminal events. Use whatever the workers layout already consumes.\n- Cancelling an in-flight plugin update — follow-up if needed.\n- Bulk update (\"update all outdated\"). Follow-up.",
+    "acceptance": "**User story:** As a developer on the plugins page, I want clicking Update or Install to give me continuous feedback until the operation completes, and I want the card to reflect the new installed state automatically — without a page reload.\n\n**Acceptance criteria:**\n\n1. **Per-card in-flight tracking.** Clicking Update/Install records the workerId under the plugin's name in a `Map\u003cstring, string\u003e`. The same plugin cannot be dispatched again while it is in flight (button disabled; tooltip shows the worker link). A different plugin can be dispatched concurrently and tracks its own worker.\n\n2. **Worker-driven refresh.** For each in-flight plugin, the page subscribes to that worker's progress via the existing `subscribeWorkerProgress` channel. On a terminal event, the page refetches the plugins list and clears that plugin's entry from the in-flight map. Within 2s of worker terminal event, the card reflects the new status (e.g., `update-available` → `installed`, new `installedVersion`).\n\n3. **Fallback polling.** If no terminal event arrives within 30s of dispatch, the page begins polling `plugins { name status installedVersion }` every 2s until the card's status or installedVersion changes, then stops. Integration test simulates a stream dropout and asserts the card eventually refreshes via the poll path.\n\n4. **In-flight visual state.** While a card is in flight, its status badge is replaced by a spinner + \"Updating…\" or \"Installing…\" text. The action button is disabled with a tooltip pointing to the worker.\n\n5. **Failure surfacing.** If the worker terminates in a failure phase, the card shows an error badge + tooltip \"Update failed — view worker\" linking to the worker page. The card's status/version remains whatever it was before dispatch (no false success). The global `dispatchError` stays for synchronous mutation errors only.\n\n6. **Concurrent dispatch.** Dispatching Update on two different cards at once shows two active worker links (a row or small stack in the header instead of the single slot), and each card tracks its own state. Playwright asserts.\n\n7. **No extra refetch overhead.** Refetch is scoped to the plugins list, not the full page data. Manual verification is enough; no specific perf test required.\n\n8. **Playwright e2e.**\n   - Seeds a fixture with one outdated plugin.\n   - Clicks Update.\n   - Asserts the card enters the in-flight visual state and the action button is disabled.\n   - Simulates the worker completing successfully.\n   - Asserts within 2s the card shows `installed` and a newer `installedVersion`.\n   - Runs a second scenario where the simulated worker fails; asserts the failure badge and that status stays `update-available`.\n\n9. **No regressions.** Install-from-registry flow (the ConfirmDialog path) adopts the same in-flight tracking; existing Playwright install flow still passes.",
+    "labels": [
+      "feat-008",
+      "plugins",
+      "ui"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-24T02:56:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:00:47.754032895Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T21:00:47.949919182Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"codex/gpt-5.4\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:00:50.670643912Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=codex/gpt-5.4"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=claude model=codex/gpt-5.4 probe=ok\nunsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+          "created_at": "2026-04-22T21:00:50.876439305Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"gemini\",\"resolved_model\":\"minimax/minimax-m2.7\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:00:53.472161525Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=gemini model=minimax/minimax-m2.7"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness=gemini model=minimax/minimax-m2.7 probe=ok\nunsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+          "created_at": "2026-04-22T21:00:53.672297417Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"harness\":\"agent\",\"model\":\"qwen/qwen3.6-35b-a3b\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2352},{\"tier\":\"standard\",\"harness\":\"claude\",\"model\":\"codex/gpt-5.4\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2013},{\"tier\":\"smart\",\"harness\":\"gemini\",\"model\":\"minimax/minimax-m2.7\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2020}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-22T21:00:53.732416622Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite\ntier=smart\nprobe_result=ok\nresult_rev=69b2fee075bc8dd4bab049d01ede4ce489cfc757\nbase_rev=69b2fee075bc8dd4bab049d01ede4ce489cfc757\nretry_after=2026-04-23T03:00:53Z",
+          "created_at": "2026-04-22T21:00:53.902013954Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T03:15:41.125241269Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T030311-161fbf53\",\"harness\":\"codex\",\"input_tokens\":6678968,\"output_tokens\":28328,\"total_tokens\":6707296,\"cost_usd\":0,\"duration_ms\":748797,\"exit_code\":0}",
+          "created_at": "2026-04-23T03:15:41.194342273Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6707296"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-23T03:15:44.240005706Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "`cli/internal/server/graphql/resolver_feat008.go`, `PluginDispatch`: this resolver calls `dispatchPluginAction` synchronously at line 122 and creates a `.ddx/plugin-dispatches` record id at line 126. It does not start a `WorkerManager` worker or emit `workerProgress`, so `+page.svelte:225` subscribes to an id that will never produce terminal events.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, failure handling: the per-card failure badge at lines 391-403 depends on receiving a `failed`/`error` worker phase, but plugin install/update failures currently return as synchronous GraphQL errors from `resolver_feat008.go:123`, leaving only the global `dispatchError` path.",
+          "created_at": "2026-04-23T03:19:58.861638541Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-23T03:19:58.944047747Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\n`cli/internal/server/graphql/resolver_feat008.go`, `PluginDispatch`: this resolver calls `dispatchPluginAction` synchronously at line 122 and creates a `.ddx/plugin-dispatches` record id at line 126. It does not start a `WorkerManager` worker or emit `workerProgress`, so `+page.svelte:225` subscribes to an id that will never produce terminal events.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, failure handling: the per-card failure badge at lines 391-403 depends on receiving a `failed`/`error` worker phase, but plugin install/update failures currently return as synchronous GraphQL errors from `resolver_feat008.go:123`, leaving only the global `dispatchError` path.\nresult_rev=0e938c9f884c38b588e60827aaff176603103f20\nbase_rev=5ee80367ffeece02bc77ce34ec790d56a828faf2",
+          "created_at": "2026-04-23T03:19:59.019064956Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T04:54:02.350049176Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T044247-894a735f\",\"harness\":\"codex\",\"input_tokens\":8260082,\"output_tokens\":19978,\"total_tokens\":8280060,\"cost_usd\":0,\"duration_ms\":674066,\"exit_code\":0}",
+          "created_at": "2026-04-23T04:54:02.42300075Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=8280060"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-23T04:54:05.796809043Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "REQUEST_CHANGES\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, `handleWorkerTerminal`: on failure phases, the function calls `refreshPlugins()` before `clearInFlight()` and `workerFailures.set(...)`. Preserve the stored `dispatchSnapshots` state for that plugin on failure, or skip/apply refresh only for success phases, so a failed worker cannot make the card appear successfully upda…\nartifact: .ddx/executions/20260423T044247-894a735f/reviewer-stream.log",
+          "created_at": "2026-04-23T04:56:13.244154038Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-23T04:56:13.313951434Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: REQUEST_CHANGES\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, `handleWorkerTerminal`: on failure phases, the function calls `refreshPlugins()` before `clearInFlight()` and `workerFailures.set(...)`. Preserve the stored `dispatchSnapshots` state for that plugin on failure, or skip/apply refresh only for success phases, so a failed worker cannot make the card appear successfully updated.\nresult_rev=3d4fe1b2581627984d611295126603683e5f9aee\nbase_rev=158e1b283043cce22e7f058f79fc800677e78586",
+          "created_at": "2026-04-23T04:56:13.380924072Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T05:28:22.439521439Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T051638-b555afb8\",\"harness\":\"claude\",\"input_tokens\":68,\"output_tokens\":18657,\"total_tokens\":18725,\"cost_usd\":3.7455392499999993,\"duration_ms\":703053,\"exit_code\":0}",
+          "created_at": "2026-04-23T05:28:22.512830023Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=18725 cost_usd=3.7455"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-23T05:28:25.589201443Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "**No source changes at all.** The diff adds one JSON file recording execution metadata. The plugins page (`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`) is untouched.\n**The `result.json` reports `\"outcome\": \"task_succeeded\"`**, but the merged commit (`92e12099`) that it references (`fix(plugins): skip plugin refresh on worker failure phases`) appears to be a narrow fix unrelated to the full AC scope — and even that commit's changes are not included in this diff.\n**All 9 ACs require frontend implementation** (Map-based tracking, subscribeWorkerProgress integration, polling fallback, spinner UI, error badges, Playwright tests). None of this work is present.",
+          "created_at": "2026-04-23T05:28:43.573326079Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-23T05:28:43.642149448Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\n**No source changes at all.** The diff adds one JSON file recording execution metadata. The plugins page (`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`) is untouched.\n**The `result.json` reports `\"outcome\": \"task_succeeded\"`**, but the merged commit (`92e12099`) that it references (`fix(plugins): skip plugin refresh on worker failure phases`) appears to be a narrow fix unrelated to the full AC scope — and even that commit's changes are not included in this diff.\n**All 9 ACs require frontend implementation** (Map-based tracking, subscribeWorkerProgress integration, polling fallback, spinner UI, error badges, Playwright tests). None of this work is present.\nresult_rev=e15cdecb5cd2b117c4d9b5eaf51a3e9837c2f346\nbase_rev=27f579fdd430a277b5916456795e5c6e86895489",
+          "created_at": "2026-04-23T05:28:43.707229277Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "pre-execute-bead checkpoint: staging changes: exit status 128",
+          "created_at": "2026-04-23T07:19:45.308027601Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-24T02:56:56.346291986Z",
+      "execute-loop-last-detail": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+      "execute-loop-last-status": "execution_failed",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T025656-af9dc9b3",
+    "prompt": ".ddx/executions/20260424T025656-af9dc9b3/prompt.md",
+    "manifest": ".ddx/executions/20260424T025656-af9dc9b3/manifest.json",
+    "result": ".ddx/executions/20260424T025656-af9dc9b3/result.json",
+    "checks": ".ddx/executions/20260424T025656-af9dc9b3/checks.json",
+    "usage": ".ddx/executions/20260424T025656-af9dc9b3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7de0ce80-20260424T025656-af9dc9b3"
+  }
+}
