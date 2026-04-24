@@ -181,23 +181,69 @@ func TestExecuteBead_RequiredGateFail_Preserves(t *testing.T) {
 // when the bead has no spec-id (and therefore the manifest declares no
 // governing IDs), the interactive path merges without running gate eval
 // and writes no checks.json.
+//
+// Migrated off fakeExecuteBeadGit / fakeAgentRunner per concerns.md §testing
+// ("no mocks, period"; "never mock the thing you are testing"). Exercises the
+// real ExecuteBead → LandBeadResult → Land pipeline against an isolated real
+// git repo, with the script harness driving an actual commit via a per-attempt
+// directive file. Parent: ddx-d9df348d.
 func TestExecuteBead_NoGoverningIDs_Merges(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222",
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	seedExecuteBead(t, f.WorkingDir, &bead.Bead{
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
 		ID:        "no-govern-bead",
 		Title:     "Bead with no governing IDs",
 		Status:    bead.StatusOpen,
 		IssueType: bead.DefaultType,
 		// no spec-id => no governing IDs in the manifest
 	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
 
-	res := runExecuteBead(t, f, git, "no-govern-bead")
+	// Directive file drives the script harness to make one real commit in the
+	// worker worktree — replaces fakeAgentRunner's canned Result struct.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file out.txt content\n"+
+			"commit feat: add out\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	res := runExecuteBead(t, f, nil, "no-govern-bead",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
 
 	assert.Equal(t, "merged", res.Outcome, "merge proceeds when there are no governing IDs to gate")
 	assert.Empty(t, res.GateResults, "gate eval must be skipped when no governing IDs")
