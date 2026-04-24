@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration: the fake git+runner pair is replaced with a real `git init` repo (GIT_* env scrubbed) and the script harness driven by a no-op directive file, and every original assertion is preserved (including a tighter BaseRev check against the real seeded SHA). Scope stays within the single test. Minor note — the implementation uses an inline `runGit`/`scrubEnv` rather than `newScriptHarnessRepo`, but AC explicitly allows \"equivalent real-git harness,\" so this is within bounds."
+}
