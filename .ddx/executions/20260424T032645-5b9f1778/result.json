@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "**`DrainIndicator.svelte:75-85`** — poll-only refresh via 3s `setInterval`. AC #2 requires subscription-driven updates (`subscribeWorkerProgress`) so worker-state changes reflect within 2s. Add a `workerProgress` subscription (filtered to the current project) that triggers `refresh(projectId)` on every event, keeping the 3s poll only as a backstop for ready-bead count changes."
+}
