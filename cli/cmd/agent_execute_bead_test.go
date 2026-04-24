@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -352,33 +353,94 @@ func copyTestFile(src, dst string) error {
 	return os.Chmod(dst, info.Mode())
 }
 
-// TestExecuteBeadMerge verifies that when merge succeeds the outcome is "merged".
+// TestExecuteBeadMerge verifies that when the agent produces a real commit and
+// the target branch can advance, the outcome is "merged". Exercises real git
+// plumbing (worktree add/remove, ref update, file sync) and the script harness
+// driving an actual commit — no fakes for the components under test.
 func TestExecuteBeadMerge(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222", // agent made a new commit
-		mergeErr:    nil,        // merge succeeds
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead merge",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Directive file drives the script harness to make one real commit in the
+	// worker worktree, replacing fakeAgentRunner's canned Result struct.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file hello.txt hello-content\n"+
+			"commit feat: add hello\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, "merged", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
-	assert.Equal(t, "bbbb2222", res.ResultRev)
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.NotEmpty(t, res.ResultRev)
+	assert.NotEqual(t, res.BaseRev, res.ResultRev)
 	assert.Empty(t, res.PreserveRef)
 	assert.Equal(t, "my-bead", res.BeadID)
 	assert.NotEmpty(t, res.SessionID)
 
-	// Worktree should have been created and cleaned up.
-	require.Len(t, git.addedWTs, 1)
-	assert.Contains(t, git.addedWTs[0], agent.ExecuteBeadWtPrefix+"my-bead-")
-	require.Len(t, git.removedWTs, 1)
-	assert.Equal(t, git.addedWTs[0], git.removedWTs[0])
-	assert.Equal(t, 1, git.mergeCalls)
-	assert.Equal(t, "bbbb2222", git.mergeRev)
+	// Real-git assertion: main must have advanced to ResultRev via Land().
+	assert.Equal(t, res.ResultRev, runGit("rev-parse", "HEAD"),
+		"main should advance to ResultRev after a successful merge")
+
+	// The worker worktree must have been created and cleaned up: no entries
+	// under the execute-bead prefix remain in `git worktree list`.
+	wtList := runGit("worktree", "list", "--porcelain")
+	assert.NotContains(t, wtList, agent.ExecuteBeadWtPrefix+"my-bead-",
+		"execute-bead worktree should be removed after the run")
+
+	// File from the agent's commit must be materialized on main through real
+	// merge/ff semantics (regression guard for ddx-eaebaffb: update-ref
+	// bypassing the working tree).
+	content, err := os.ReadFile(filepath.Join(workDir, "hello.txt"))
+	require.NoError(t, err, "hello.txt should materialize on main after Land()")
+	assert.Equal(t, "hello-content", string(content))
 }
 
 // TestExecuteBeadPreserveOnMergeFailure verifies that when merge fails
