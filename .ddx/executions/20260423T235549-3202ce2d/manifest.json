@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260423T235549-3202ce2d",
+  "bead_id": "ddx-65b88ae1",
+  "base_rev": "2c5753f720904d6096be7116b2d5e51b60e0fc9e",
+  "created_at": "2026-04-23T23:55:49.564219299Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-65b88ae1",
+    "title": "migrate cli/internal/agent/* + cmd/install.go to git.Command (Phase 2a)",
+    "description": "Migrate the highest-blast-radius git callsites to git.Command from internal/git (ddx-aa8a5fb3 wrapper).\n\nScope (~50 callsites):\n- cli/internal/agent/execute_bead*.go — worktree add/remove, update-ref, add, commit, fetch operations (most damaging if env-contaminated)\n- cli/internal/agent/compare_adapter.go — worktree add/remove/prune; replace internal cleanGitEnv() with calls to git.CleanEnv()\n- cli/cmd/install.go:commitPluginChanges — git add/diff/commit (this is the path that committed Bug B's bad symlinks)\n\nFor non-git child processes spawned in worktrees (executor.go, claude_stream.go), set cmd.Env = git.CleanEnv() so harness binaries don't inherit GIT_DIR either.\n\nReplace at each callsite:\n- Before: exec.Command(\"git\", args...) with cmd.Dir = X\n- After:  git.Command(ctx, X, args...)\n\nDelete cleanGitEnv() helper in compare_adapter.go after migration.",
+    "acceptance": "Regression test: simulate hook env (GIT_DIR=fake bare repo, GIT_WORK_TREE=fake) and run an end-to-end execute-bead path (with no-op harness reaching WorktreeAdd, SynthesizeCommit, CommitTracker, landing/preserve refs); assert fake bare .git/config is byte-identical after. No remaining bare exec.Command(\"git\"...) in cli/internal/agent/. cleanGitEnv removed from compare_adapter.go.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "claimed-at": "2026-04-23T23:55:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-23T23:55:49.122160614Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260423T235549-3202ce2d",
+    "prompt": ".ddx/executions/20260423T235549-3202ce2d/prompt.md",
+    "manifest": ".ddx/executions/20260423T235549-3202ce2d/manifest.json",
+    "result": ".ddx/executions/20260423T235549-3202ce2d/result.json",
+    "checks": ".ddx/executions/20260423T235549-3202ce2d/checks.json",
+    "usage": ".ddx/executions/20260423T235549-3202ce2d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-65b88ae1-20260423T235549-3202ce2d"
+  }
+}
