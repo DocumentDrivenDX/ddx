@@ -2222,6 +2222,22 @@ func TestExecuteBeadEvidenceFields(t *testing.T) {
 	assert.NotEqual(t, res.BaseRev, res.ResultRev, "agent commit must produce a distinct ResultRev")
 }
 
+// modelPassthroughCapture is a passthrough wrapper around an agent.AgentRunner
+// that records the most recent RunOptions before forwarding to the underlying
+// runner. It instruments TestExecuteBeadModelFlagPassthrough so the test can
+// assert what ExecuteBead handed the runner without itself faking the runner —
+// every Run call is forwarded to the real script harness so production routing
+// semantics still execute end-to-end.
+type modelPassthroughCapture struct {
+	inner agent.AgentRunner
+	last  agent.RunOptions
+}
+
+func (c *modelPassthroughCapture) Run(opts agent.RunOptions) (*agent.Result, error) {
+	c.last = opts
+	return c.inner.Run(opts)
+}
+
 // TestExecuteBeadModelFlagPassthrough locks in the resolution contract for
 // execute-bead's model option: the value supplied via ExecuteBeadOptions.Model
 // is passed verbatim to the runner, and an empty value is not silently replaced
@@ -2231,35 +2247,97 @@ func TestExecuteBeadEvidenceFields(t *testing.T) {
 // harness resolves from ~/.config/agent/config.yaml must be preserved by
 // ExecuteBead handing the runner an empty Model so the harness's own
 // resolution chain runs.
+//
+// The test runs against a real git repo and the script harness (wrapped in a
+// passthrough capture so the test can observe opts.Model). The script harness
+// resolves its directive file from opts.PromptFile when opts.Model is empty or
+// not a readable file, so both the empty-model and the explicit-non-path-model
+// subtests exercise the real runner end-to-end.
 func TestExecuteBeadModelFlagPassthrough(t *testing.T) {
-	t.Run("empty model stays empty through ExecuteBead", func(t *testing.T) {
-		git := &fakeExecuteBeadGit{
-			mainHeadRev: "aaaa1111",
-			wtHeadRev:   "bbbb2222",
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
 		}
-		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-		f := newExecuteBeadFactory(t, git, runner)
+		return env
+	}
+	setupRepo := func(t *testing.T) string {
+		t.Helper()
+		workDir := t.TempDir()
+		runGit := func(args ...string) {
+			t.Helper()
+			cmd := exec.Command("git", args...)
+			cmd.Dir = workDir
+			cmd.Env = scrubEnv()
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "git %v: %s", args, string(out))
+		}
+		runGit("init", "-b", "main")
+		runGit("config", "user.email", "test@ddx.test")
+		runGit("config", "user.name", "DDx Test")
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+		runGit("add", ".")
+		runGit("commit", "-m", "chore: initial seed")
+		seedExecuteBead(t, workDir, &bead.Bead{
+			ID:        "my-bead",
+			Title:     "Test execute-bead model passthrough",
+			Status:    bead.StatusOpen,
+			IssueType: bead.DefaultType,
+		})
+		runGit("add", ".ddx/beads.jsonl")
+		runGit("commit", "-m", "chore: seed bead")
+		return workDir
+	}
 
-		// No --model flag supplied to execute-bead.
-		runExecuteBead(t, f, git, "my-bead")
+	t.Run("empty model stays empty through ExecuteBead", func(t *testing.T) {
+		workDir := setupRepo(t)
+		// PromptFile fallback drives the script harness when --model is empty.
+		// A no-op directive file at PromptFile would require routing internals
+		// the test does not control; instead, supply a directive via PromptFile
+		// override on the command line so the script harness has something
+		// parseable. The capture still records opts.Model="" because that is
+		// what ExecuteBead forwarded.
+		directivePath := filepath.Join(t.TempDir(), "directives.txt")
+		require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
 
-		assert.Equal(t, "", runner.last.Model,
+		capture := &modelPassthroughCapture{inner: agent.NewRunner(agent.Config{})}
+		f := NewCommandFactory(workDir)
+		f.AgentRunnerOverride = capture
+
+		root := f.NewRootCommand()
+		// No --model flag supplied. --prompt-file feeds the script harness.
+		out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+			"--harness", "script", "--prompt", directivePath)
+		require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+
+		assert.Equal(t, "", capture.last.Model,
 			"runner must receive an empty Model when no --model flag is provided; "+
 				"any non-empty value here indicates a routing layer injected a default, "+
 				"which would override the harness's own config-driven resolution")
 	})
 
 	t.Run("explicit model is forwarded verbatim", func(t *testing.T) {
-		git := &fakeExecuteBeadGit{
-			mainHeadRev: "aaaa1111",
-			wtHeadRev:   "bbbb2222",
-		}
-		runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-		f := newExecuteBeadFactory(t, git, runner)
+		workDir := setupRepo(t)
+		// Pass a non-path string as --model. The script harness sees Model is
+		// not a readable file and falls back to PromptFile for directives.
+		directivePath := filepath.Join(t.TempDir(), "directives.txt")
+		require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
 
-		runExecuteBead(t, f, git, "my-bead", "--model", "qwen3.5-27b")
+		capture := &modelPassthroughCapture{inner: agent.NewRunner(agent.Config{})}
+		f := NewCommandFactory(workDir)
+		f.AgentRunnerOverride = capture
 
-		assert.Equal(t, "qwen3.5-27b", runner.last.Model,
+		root := f.NewRootCommand()
+		out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+			"--harness", "script", "--model", "qwen3.5-27b",
+			"--prompt", directivePath)
+		require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+
+		assert.Equal(t, "qwen3.5-27b", capture.last.Model,
 			"runner must receive the exact --model value the caller passed")
 	})
 }
