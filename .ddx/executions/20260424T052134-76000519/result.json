@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, scoped migration. The compound-error path is now reproduced with real failures: a script directive corrupts `.git` so `git rev-parse HEAD` fails for real, while a second directive returns a synthetic agent error — together exercising the real RealLandingGitOps + agent dispatch code paths the original fakes were stubbing. Assertions were preserved in spirit (now matching real error strings instead of canned text)."
+}
