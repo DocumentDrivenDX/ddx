@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260424T064858-c781c184",
+  "bead_id": "ddx-d3119355",
+  "base_rev": "a196b40f161ebeb579e050f196d60d38ede90747",
+  "created_at": "2026-04-24T06:48:59.26334337Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d3119355",
+    "title": "migrate read-only callsites + delete duplicate helpers (Phase 2c)",
+    "description": "Migrate the read-only/server git callsites to git.Command, and remove the now-redundant duplicate scrub helpers.\n\nRead-only callsites:\n- cli/internal/processmetrics/processmetrics.go\n- cli/internal/server/server.go (3647, 3701, 3750, 3762)\n- cli/internal/server/graphql/resolver_commits.go\n- cli/internal/server/state.go\n\nDelete duplicate helpers (now redundant with git.CleanEnv):\n- gitEnvForDir() in cli/cmd/init.go (move callers to git.CleanEnv if any)\n- scrubbedGitEnv() in cli/internal/server/server.go (replace callers with git.CleanEnv)",
+    "acceptance": "No bare exec.Command(\"git\"...) anywhere in non-test code. gitEnvForDir and scrubbedGitEnv functions removed. All tests pass.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "blocked-by": "ddx-aa8a5fb3",
+      "claimed-at": "2026-04-24T06:48:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-24T06:48:58.7211581Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T064858-c781c184",
+    "prompt": ".ddx/executions/20260424T064858-c781c184/prompt.md",
+    "manifest": ".ddx/executions/20260424T064858-c781c184/manifest.json",
+    "result": ".ddx/executions/20260424T064858-c781c184/result.json",
+    "checks": ".ddx/executions/20260424T064858-c781c184/checks.json",
+    "usage": ".ddx/executions/20260424T064858-c781c184/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d3119355-20260424T064858-c781c184"
+  }
+}
