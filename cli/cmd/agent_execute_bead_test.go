@@ -2844,6 +2844,47 @@ func TestExecuteBeadEmbeddedAgentStateRedirected(t *testing.T) {
 // to the old markdown-heading-only prompt structure.
 func TestExecuteBeadPromptIsXMLTagged(t *testing.T) {
 	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	specPath := filepath.Join(workDir, "docs", "feat-xml.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
+	require.NoError(t, os.WriteFile(specPath, []byte(`---
+ddx:
+  id: FEAT-XML-TEST
+  title: XML Test Spec
+---
+# XML Test Spec
+`), 0o644))
+	runGit("add", "docs/feat-xml.md")
+	runGit("commit", "-m", "docs: add xml spec")
+
 	seedExecuteBead(t, workDir, &bead.Bead{
 		ID:          "xml-bead",
 		Title:       "Adopt XML-tagged execute-bead prompt template",
@@ -2856,32 +2897,26 @@ func TestExecuteBeadPromptIsXMLTagged(t *testing.T) {
 		Labels:      []string{"area:agent", "area:docs"},
 		Extra:       map[string]any{"spec-id": "FEAT-XML-TEST"},
 	})
-	specPath := filepath.Join(workDir, "docs", "feat-xml.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
-	require.NoError(t, os.WriteFile(specPath, []byte(`---
-ddx:
-  id: FEAT-XML-TEST
-  title: XML Test Spec
----
-# XML Test Spec
-`), 0o644))
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
 
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111cafe",
-		wtHeadRev:   "bbbb2222beef",
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	// Script harness directive: no-op. The assertion target is the synthesized
+	// prompt file, not worker output.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
 	f := NewCommandFactory(workDir)
-	seedDefaultExecuteBeads(t, workDir)
-	f.AgentRunnerOverride = runner
-	f.executeBeadGitOverride = git
-	f.executeBeadOrchestratorGitOverride = git
-	f.executeBeadLandingAdvancerOverride = fakeLandingAdvancerFromGit(git)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
-	_ = runExecuteBead(t, f, git, "xml-bead")
+	res := runExecuteBead(t, f, nil, "xml-bead",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
 
-	require.NotEmpty(t, runner.last.PromptFile)
-	promptRaw, err := os.ReadFile(runner.last.PromptFile)
+	require.NotEmpty(t, res.PromptFile)
+	promptPath := filepath.Join(workDir, filepath.FromSlash(res.PromptFile))
+	promptRaw, err := os.ReadFile(promptPath)
 	require.NoError(t, err)
 	promptText := string(promptRaw)
 
@@ -2898,7 +2933,7 @@ ddx:
 	assert.Contains(t, promptText, "<labels>area:agent, area:docs</labels>")
 	assert.Contains(t, promptText, `parent="ddx-parent"`)
 	assert.Contains(t, promptText, `spec-id="FEAT-XML-TEST"`)
-	assert.Contains(t, promptText, `base-rev="aaaa1111cafe"`)
+	assert.Contains(t, promptText, fmt.Sprintf(`base-rev="%s"`, baseSHA))
 	assert.Contains(t, promptText, `<metadata `)
 	assert.Contains(t, promptText, "<governing>")
 	assert.Contains(t, promptText, "</governing>")
