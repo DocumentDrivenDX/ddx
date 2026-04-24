@@ -1826,18 +1826,70 @@ func TestExecuteBeadAgentErrorWithCommitsPreserves(t *testing.T) {
 
 // TestExecuteBeadAgentErrorMessageInOutput verifies that when the agent runner
 // returns an error, the error message appears in the JSON output Error field.
+// Exercises real git + RealLandingGitOps via the script harness — no fakes for
+// the components under test.
 func TestExecuteBeadAgentErrorMessageInOutput(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "aaaa1111", // no commits made
-	}
-	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed with detail"), result: nil}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead agent error message in output",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Script harness: fail immediately on the first directive so the runner
+	// returns (result, execErr) with no commits made. Mirrors the original
+	// fakeAgentRunner{err: ..., result: nil} with no commits.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"fail-during 0\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	root := f.NewRootCommand()
+	out, _ := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, 1, res.ExitCode)
-	assert.Equal(t, "agent crashed with detail", res.Error)
+	// Agent runner's error message must appear in the JSON Error field.
+	assert.Equal(t, "script harness: synthetic failure at directive 0", res.Error)
 }
 
 // TestExecuteBeadHeadRevFailure verifies that when HeadRev fails after the agent
