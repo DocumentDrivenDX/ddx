@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration. The test now exercises real git (init, commit, rev-parse with scrubbed GIT_* env) and the real script harness driven by a `fail-during 0` directive, so the error-path classification (`outcome=error`, `status=execution_failed`) comes from actual landing logic rather than a canned `Result`. Assertions are preserved and strengthened (BaseRev now checked against the real `baseSHA`, plus an added real-git assertion that `main` HEAD did not advance). Scope is limited to the single target test."
+}
