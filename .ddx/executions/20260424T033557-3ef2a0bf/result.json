@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff scope is wrong: only the evidence bundle (two JSON files under `.ddx/executions/`) is shown. To evaluate ACs 1–6, the review needs the implementation commit 588f1ae3, which presumably touches `cli/cmd/agent_execute_bead.go` / `agent_execute_loop.go` and associated `*_test.go` files.\nNo `.ddx/run-state.json` writer/remover code visible.\nNo unit test for write/read/cleanup cycle visible.\nNo integration test for orphan recovery of stale run-state visible.\nRe-run the review with the diff range `a7427cae..fca9ba16` (or at minimum include 588f1ae3) so the source changes are present."
+}
