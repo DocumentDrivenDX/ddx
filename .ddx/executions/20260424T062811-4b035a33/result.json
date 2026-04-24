@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration: the test now seeds bead + gate docs into a real git repo, commits them so the worker worktree at `baseSHA` materializes them, and drives a real script-harness commit via a per-attempt directive file. Fakes gone, assertions preserved (outcome, status, GateResults, ChecksFile), scope limited to the one target test."
+}
