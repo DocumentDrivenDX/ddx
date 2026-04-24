@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260424T123118-4cf0c28e",
+  "bead_id": "ddx-217666e0",
+  "base_rev": "8f2c8deb31196543ab9ffa9f7fb970667a5244db",
+  "created_at": "2026-04-24T12:31:19.049335572Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-217666e0",
+    "title": "migrate execute_bead.go to git.Command",
+    "description": "Split from timed-out ddx-65b88ae1. Migrate the 21 bare git exec callsites in cli/internal/agent/execute_bead.go to cli/internal/git.Command. Replace 'exec.CommandContext(ctx, \"git\", args...)' (and any 'exec.Command(\"git\", args...)') with 'git.Command(ctx, dir, args...)' where dir is the original cmd.Dir (or -C target). Import \"github.com/DocumentDrivenDX/ddx/internal/git\".",
+    "acceptance": "grep on execute_bead.go returns no bare git exec.Command matches. All existing *_test.go files in cli/internal/agent/ pass. Build green.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "claimed-at": "2026-04-24T12:31:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-24T12:31:18.484665532Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T123118-4cf0c28e",
+    "prompt": ".ddx/executions/20260424T123118-4cf0c28e/prompt.md",
+    "manifest": ".ddx/executions/20260424T123118-4cf0c28e/manifest.json",
+    "result": ".ddx/executions/20260424T123118-4cf0c28e/result.json",
+    "checks": ".ddx/executions/20260424T123118-4cf0c28e/checks.json",
+    "usage": ".ddx/executions/20260424T123118-4cf0c28e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-217666e0-20260424T123118-4cf0c28e"
+  }
+}
