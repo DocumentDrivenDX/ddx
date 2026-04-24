@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Phase 2c migration is complete and surgical: the five listed read-only callsites (processmetrics, server.go MCP handlers + HTTP handlers, resolver_commits, state) now route through `internalgit.Command`/`internalgit.CleanEnv`, and both duplicate scrub helpers (`gitEnvForDir`, `scrubbedGitEnv`) are deleted. Note: AC item 1 read literally (\"anywhere in non-test code\") is broader than the bead scope — ~50 bare `exec.Command(\"git\"...)` calls remain in mutating paths (execute_bead*, compare_adapter, bead/store, install.go, init.go write paths), which are explicitly out of scope for this phase. Interpreted per the Phase 2c scope listed in the description, the work is complete."
+}
