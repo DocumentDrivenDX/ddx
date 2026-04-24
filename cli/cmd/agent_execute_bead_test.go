@@ -1567,27 +1567,85 @@ func TestExecuteBeadAgentErrorNoCommits(t *testing.T) {
 		"main HEAD must not advance when the agent failed with no commits")
 }
 
+// TestExecuteBeadTimeoutNoCommitsReportsExecutionFailure verifies that when the
+// agent exits with a negative status (canonical timeout shape: ExitCode=-1 with
+// a non-empty Error) and makes no commits, the outcome is an execution error
+// rather than a misleading no-change result. Exercises real git + script
+// harness: the directive first pins exit=-1, then triggers a synthetic harness
+// failure, producing (result{ExitCode:-1}, err!=nil) with no commits in the
+// worker worktree — the same observable shape the old fakeAgentRunner canned
+// Result struct used to fabricate.
 func TestExecuteBeadTimeoutNoCommitsReportsExecutionFailure(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "aaaa1111",
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{
-		ExitCode: -1,
-		Error:    "timeout after 5m",
-		Harness:  "codex",
-	}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test timeout no commits",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Pin ExitCode=-1 (canonical timeout shape) and then trigger a synthetic
+	// failure. The script harness emits a result with ExitCode=-1 and a
+	// non-empty Error, without making any commits in the worker worktree —
+	// replacing the fakeAgentRunner's canned Result{ExitCode:-1, Error:"timeout after 5m"}.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("set-exit -1\nfail-during 1\n"), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	res := runExecuteBead(t, f, nil, "my-bead",
+		"--harness", "script", "--model", directivePath)
 
 	assert.Equal(t, -1, res.ExitCode)
 	assert.Equal(t, "error", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
-	assert.Equal(t, "timeout after 5m", res.Reason)
-	assert.Equal(t, "timeout after 5m", res.Error)
-	assert.Equal(t, "aaaa1111", res.ResultRev)
+	assert.NotEmpty(t, res.Error, "Error must carry the harness failure message")
+	assert.Contains(t, res.Error, "script harness",
+		"Error should carry the script-harness failure message")
+	assert.Equal(t, res.Error, res.Reason,
+		"Reason must mirror Error when the agent failed with no commits")
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.Equal(t, baseSHA, res.ResultRev,
+		"ResultRev must equal BaseRev when no commits were made")
 	assert.Empty(t, res.PreserveRef)
+
+	// Real-git assertion: no commits made, main must not advance.
+	assert.Equal(t, baseSHA, runGit("rev-parse", "HEAD"),
+		"main HEAD must not advance when the agent timed out with no commits")
 }
 
 // TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand verifies that a
