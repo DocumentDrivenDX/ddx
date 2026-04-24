@@ -1338,28 +1338,77 @@ func TestExecuteBeadFromRevFlag(t *testing.T) {
 }
 
 // TestExecuteBeadOrphanRecovery verifies that worktrees matching the bead's
-// prefix are cleaned up at the start of a new run.
+// prefix are cleaned up at the start of a new run. Exercises real git: an
+// orphan worktree is registered via `git worktree add` under a basename
+// matching ExecuteBeadWtPrefix+"my-bead-"; after execute-bead runs, the
+// orphan must no longer be listed by `git worktree list` and its directory
+// must be gone from disk.
 func TestExecuteBeadOrphanRecovery(t *testing.T) {
 	workDir := t.TempDir()
-	orphanPath := workDir + "/.ddx/" + agent.ExecuteBeadWtPrefix + "my-bead-old-attempt"
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "aaaa1111",
-		worktrees:   []string{orphanPath},
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := NewCommandFactory(workDir)
-	seedDefaultExecuteBeads(t, workDir)
-	f.AgentRunnerOverride = runner
-	f.executeBeadGitOverride = git
 
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test orphan recovery",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+
+	// Register a real orphan worktree whose basename matches the
+	// execute-bead prefix for "my-bead". RecoverOrphans discovers it via
+	// `git worktree list` and must remove it before the new attempt runs.
+	orphanPath := filepath.Join(workDir, ".ddx", agent.ExecuteBeadWtPrefix+"my-bead-old-attempt")
+	require.NoError(t, os.MkdirAll(filepath.Dir(orphanPath), 0o755))
+	runGit("worktree", "add", "--detach", orphanPath, "HEAD")
+	require.DirExists(t, orphanPath, "orphan worktree must exist before execute-bead runs")
+
+	// no-op directive: agent makes no commits, so the new attempt produces
+	// a no-changes outcome and doesn't interfere with the orphan assertion.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 	root := f.NewRootCommand()
-	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json")
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--harness", "script", "--model", directivePath)
 	require.NoError(t, err, "output: %s", out)
 
-	// The orphan worktree should have been removed.
-	assert.Contains(t, git.removedWTs, orphanPath,
-		"orphan worktree should be removed before the new run")
+	// The orphan worktree must be gone from disk and from git's worktree list.
+	assert.NoDirExists(t, orphanPath,
+		"orphan worktree directory should be removed before the new run")
+	wtList := runGit("worktree", "list", "--porcelain")
+	assert.NotContains(t, wtList, orphanPath,
+		"orphan worktree should be unregistered from git worktree list")
 }
 
 // TestExecuteBeadHarnessNoiseNotSynthesized verifies that when the agent makes no
