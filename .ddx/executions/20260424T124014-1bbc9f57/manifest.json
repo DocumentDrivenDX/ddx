@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260424T124014-1bbc9f57",
+  "bead_id": "ddx-1c46a4f8",
+  "base_rev": "96acf2de3775b9ff9df8322e9a7b600f91afb6ba",
+  "created_at": "2026-04-24T12:40:15.247423984Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1c46a4f8",
+    "title": "migrate compare_adapter.go, remaining agent files, and cmd/install.go to git.Command; delete cleanGitEnv helper",
+    "description": "Split from timed-out ddx-65b88ae1. Migrate the remaining 13 git callsites (in compare_adapter.go=6, execute_bead_review.go=2, execute_bead_orchestrator.go=1, script.go=1, cmd/install.go:commitPluginChanges=3) to cli/internal/git.Command.\n\nAdditionally: delete the now-redundant cleanGitEnv() helper in cli/internal/agent/compare_adapter.go and its callers. Replace 'cmd.Env = cleanGitEnv()' with 'cmd.Env = git.CleanEnv()' then remove the function definition and its strings/os imports if they become unused.",
+    "acceptance": "grep returns no bare git exec.Command matches in compare_adapter.go, execute_bead_review.go, execute_bead_orchestrator.go, script.go, or cmd/install.go. cleanGitEnv function removed from compare_adapter.go. Build + tests green.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "claimed-at": "2026-04-24T12:40:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-24T12:40:14.670034118Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T124014-1bbc9f57",
+    "prompt": ".ddx/executions/20260424T124014-1bbc9f57/prompt.md",
+    "manifest": ".ddx/executions/20260424T124014-1bbc9f57/manifest.json",
+    "result": ".ddx/executions/20260424T124014-1bbc9f57/result.json",
+    "checks": ".ddx/executions/20260424T124014-1bbc9f57/checks.json",
+    "usage": ".ddx/executions/20260424T124014-1bbc9f57/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1c46a4f8-20260424T124014-1bbc9f57"
+  }
+}
