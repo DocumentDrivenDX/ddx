@@ -9,7 +9,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // ExecuteBeadResult captures the outcome of an execute-bead worker run.
@@ -256,7 +256,7 @@ func (r *RealGitOps) HeadRev(dir string) (string, error) {
 }
 
 func (r *RealGitOps) ResolveRev(dir, rev string) (string, error) {
-	out, err := osexec.Command("git", "-C", dir, "rev-parse", rev).Output()
+	out, err := internalgit.Command(context.Background(), dir, "rev-parse", rev).Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse %s: %w", rev, err)
 	}
@@ -264,7 +264,7 @@ func (r *RealGitOps) ResolveRev(dir, rev string) (string, error) {
 }
 
 func (r *RealGitOps) WorktreeAdd(dir, wtPath, rev string) error {
-	out, err := osexec.Command("git", "-C", dir, "worktree", "add", "--detach", wtPath, rev).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "worktree", "add", "--detach", wtPath, rev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree add: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -272,12 +272,12 @@ func (r *RealGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 }
 
 func (r *RealGitOps) WorktreeRemove(dir, wtPath string) error {
-	_ = osexec.Command("git", "-C", dir, "worktree", "remove", "--force", wtPath).Run()
+	_ = internalgit.Command(context.Background(), dir, "worktree", "remove", "--force", wtPath).Run()
 	return nil
 }
 
 func (r *RealGitOps) WorktreeList(dir string) ([]string, error) {
-	out, err := osexec.Command("git", "-C", dir, "worktree", "list", "--porcelain").Output()
+	out, err := internalgit.Command(context.Background(), dir, "worktree", "list", "--porcelain").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list: %w", err)
 	}
@@ -291,12 +291,12 @@ func (r *RealGitOps) WorktreeList(dir string) ([]string, error) {
 }
 
 func (r *RealGitOps) WorktreePrune(dir string) error {
-	return osexec.Command("git", "-C", dir, "worktree", "prune").Run()
+	return internalgit.Command(context.Background(), dir, "worktree", "prune").Run()
 }
 
 // UpdateRef updates ref in dir to sha via `git update-ref`.
 func (r *RealGitOps) UpdateRef(dir, ref, sha string) error {
-	out, err := osexec.Command("git", "-C", dir, "update-ref", ref, sha).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "update-ref", ref, sha).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
 	}
@@ -305,7 +305,7 @@ func (r *RealGitOps) UpdateRef(dir, ref, sha string) error {
 
 // DeleteRef removes ref from dir via `git update-ref -d`.
 func (r *RealGitOps) DeleteRef(dir, ref string) error {
-	out, err := osexec.Command("git", "-C", dir, "update-ref", "-d", ref).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "update-ref", "-d", ref).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git update-ref -d %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
 	}
@@ -314,7 +314,7 @@ func (r *RealGitOps) DeleteRef(dir, ref string) error {
 
 // IsDirty reports whether dir has any uncommitted changes (tracked modifications or untracked files).
 func (r *RealGitOps) IsDirty(dir string) (bool, error) {
-	out, _ := osexec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	out, _ := internalgit.Command(context.Background(), dir, "status", "--porcelain").Output()
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
@@ -369,21 +369,21 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	// excluded by default; excludes here are only for paths that would
 	// otherwise be tracked.
 	addArgs := []string{
-		"-C", dir, "add", "-A", "--",
+		"add", "-A", "--",
 		".",
 	}
 	addArgs = append(addArgs, synthesizeCommitExcludePathspecs(dir)...)
-	if err := osexec.Command("git", addArgs...).Run(); err != nil {
+	if err := internalgit.Command(context.Background(), dir, addArgs...).Run(); err != nil {
 		return false, fmt.Errorf("staging changes: %w", err)
 	}
-	statusOut, _ := osexec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
+	statusOut, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").Output()
 	if len(bytes.TrimSpace(statusOut)) == 0 {
 		return false, nil
 	}
 	if msg == "" {
 		msg = "chore: execute-bead synthesized result commit"
 	}
-	out, err := osexec.Command("git", "-C", dir, "commit", "-m", msg).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "commit", "-m", msg).CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -424,7 +424,7 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 }
 
 func isGitIgnored(dir, path string) bool {
-	err := osexec.Command("git", "-C", dir, "check-ignore", "-q", "--", path).Run()
+	err := internalgit.Command(context.Background(), dir, "check-ignore", "-q", "--", path).Run()
 	return err == nil
 }
 
@@ -981,17 +981,17 @@ func CommitTracker(projectRoot string) error {
 		return nil
 	}
 
-	out, err := osexec.Command("git", "-C", projectRoot, "rev-parse", "--is-inside-work-tree").Output()
+	out, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Output()
 	if err != nil || strings.TrimSpace(string(out)) != "true" {
 		return nil
 	}
 
-	out, err = osexec.Command("git", "-C", projectRoot, "diff", "--", ".ddx/beads.jsonl").Output()
+	out, err = internalgit.Command(context.Background(), projectRoot, "diff", "--", ".ddx/beads.jsonl").Output()
 	if err != nil {
 		return fmt.Errorf("checking tracker diff: %w", err)
 	}
 	if strings.TrimSpace(string(out)) == "" {
-		out, err = osexec.Command("git", "-C", projectRoot, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
+		out, err = internalgit.Command(context.Background(), projectRoot, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
 		if err != nil {
 			return fmt.Errorf("checking tracker untracked: %w", err)
 		}
@@ -1001,11 +1001,11 @@ func CommitTracker(projectRoot string) error {
 	}
 
 	msg := fmt.Sprintf("chore: update tracker (execute-bead %s)", time.Now().UTC().Format("20060102T150405"))
-	commitOut, err := osexec.Command("git", "-C", projectRoot, "add", ".ddx/beads.jsonl").CombinedOutput()
+	commitOut, err := internalgit.Command(context.Background(), projectRoot, "add", ".ddx/beads.jsonl").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
-	commitOut, err = osexec.Command("git", "-C", projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
+	commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
@@ -1412,7 +1412,7 @@ func VerifyCleanWorktree(projectRoot, attemptID string) error {
 	}
 	evidenceDir := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
 
-	out, _ := osexec.Command("git", "-C", projectRoot, "status", "--porcelain", "--", evidenceDir).Output()
+	out, _ := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain", "--", evidenceDir).Output()
 	if len(strings.TrimSpace(string(out))) == 0 {
 		return nil
 	}
@@ -1423,17 +1423,17 @@ func VerifyCleanWorktree(projectRoot, attemptID string) error {
 	// (retry prompts ballooning past provider context limits).
 	// manifest.json, result.json, prompt.md, usage.json remain tracked
 	// per the existing audit-trail contract (gitignore un-ignores them).
-	addArgs := append([]string{"-C", projectRoot, "add", "--", evidenceDir}, EvidenceLandExcludePathspecs()...)
-	addOut, addErr := osexec.Command("git", addArgs...).CombinedOutput()
+	addArgs := append([]string{"add", "--", evidenceDir}, EvidenceLandExcludePathspecs()...)
+	addOut, addErr := internalgit.Command(context.Background(), projectRoot, addArgs...).CombinedOutput()
 	if addErr != nil {
 		return fmt.Errorf("staging leftover evidence: %s: %w", strings.TrimSpace(string(addOut)), addErr)
 	}
-	diffOut, _ := osexec.Command("git", "-C", projectRoot, "diff", "--cached", "--name-only", "--", evidenceDir).Output()
+	diffOut, _ := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--name-only", "--", evidenceDir).Output()
 	if len(strings.TrimSpace(string(diffOut))) == 0 {
 		return nil
 	}
 	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(attemptID))
-	commitOut, commitErr := osexec.Command("git", "-C", projectRoot,
+	commitOut, commitErr := internalgit.Command(context.Background(), projectRoot,
 		"-c", "user.name=ddx-land-coordinator",
 		"-c", "user.email=coordinator@ddx.local",
 		"commit", "-m", msg,
