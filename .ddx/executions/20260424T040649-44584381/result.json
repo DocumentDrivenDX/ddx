@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration: the test now builds a real git repo, forces a real merge conflict via a sibling commit, drives the script harness through a directive file to produce a real worker commit, and asserts both preserve refs exist in the repo and resolve to the recorded ResultRev. The assertion surface is preserved and strengthened (regex against real ref format + rev-parse equality)."
+}
