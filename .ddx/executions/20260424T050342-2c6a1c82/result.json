@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration. The new test exercises real git + RealLandingGitOps via the script harness, preserves every original assertion (exit code, outcome, status, preserve ref, no merge), and adds stronger checks (preserve ref resolves to worker SHA, main unchanged, no merge commit on main). Scope held to the single target test."
+}
