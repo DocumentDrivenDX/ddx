@@ -1066,19 +1066,97 @@ ddx:
 	assert.True(t, strings.HasSuffix(res.ResultFile, "result.json"))
 }
 
+// TestExecuteBeadResolvesPathStyleSpecID verifies that a bead whose spec-id is
+// a relative path (e.g. "workflows/README.md") — not an ID from the docgraph —
+// is resolved into a governing reference whose ID and Path both equal the given
+// path, and that the synthesized prompt surfaces that path. Exercises real git
+// + RealLandingGitOps via the script harness — no fakes for the components
+// under test. The script harness is driven by a no-op directive; the
+// orchestrator synthesizes the prompt from the seeded bead.
 func TestExecuteBeadResolvesPathStyleSpecID(t *testing.T) {
 	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	// Path-style spec target: a file at workflows/README.md with NO docgraph
+	// id frontmatter, so ResolveGoverningRefs must fall through to the path
+	// resolver rather than matching against docgraph.BuildGraphWithConfig.
 	specPath := filepath.Join(workDir, "workflows", "README.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 	require.NoError(t, os.WriteFile(specPath, []byte("# Workflow\n"), 0o644))
-	refs := agent.ResolveGoverningRefs(workDir, &bead.Bead{
-		ID:    "path-bead",
-		Title: "Resolve path style spec ids",
-		Extra: map[string]any{"spec-id": "workflows/README.md"},
+	runGit("add", "workflows/README.md")
+	runGit("commit", "-m", "docs: add workflow readme")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:          "path-bead",
+		Title:       "Resolve path style spec ids",
+		Status:      bead.StatusOpen,
+		Priority:    0,
+		IssueType:   bead.DefaultType,
+		Description: "Make sure path-style spec-ids resolve to the on-disk file.",
+		Acceptance:  "Governing reference carries the relative path unchanged.",
+		Extra:       map[string]any{"spec-id": "workflows/README.md"},
 	})
-	require.Len(t, refs, 1)
-	assert.Equal(t, "workflows/README.md", refs[0].ID)
-	assert.Equal(t, "workflows/README.md", refs[0].Path)
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Script harness directive: no-op. The assertion target is the synthesized
+	// prompt file, not any worker output.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "path-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
+
+	require.NotEmpty(t, res.PromptFile)
+	promptPath := filepath.Join(workDir, filepath.FromSlash(res.PromptFile))
+	require.FileExists(t, promptPath)
+	promptRaw, err := os.ReadFile(promptPath)
+	require.NoError(t, err)
+	promptText := string(promptRaw)
+	// The path-style spec-id must appear unchanged in the synthesized prompt
+	// (both as ID and Path — ResolveGoverningRefs sets them equal for path
+	// resolution). The bead title and description round out the synthesis
+	// assertions so a regression in prompt building is also caught here.
+	assert.Contains(t, promptText, "workflows/README.md")
+	assert.Contains(t, promptText, "Resolve path style spec ids")
+	assert.Contains(t, promptText, "Make sure path-style spec-ids resolve to the on-disk file.")
+	assert.Contains(t, promptText, "Governing reference carries the relative path unchanged.")
 }
 
 func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
