@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, scoped migration. The target test now exercises real git (with GIT_* env scrubbed via `scrubEnv`) and the real agent runner dispatching to the `script` harness with a per-attempt directive file, matching the pattern in the two previously-migrated sibling tests. Assertions are preserved and the change is contained to the single function named in the bead."
+}
