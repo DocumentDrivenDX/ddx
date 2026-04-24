@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration: the test now seeds a real repo, commits a bead, runs the actual `agent execute-bead` command with `--harness script` and a directive file that dirties a tracked file without committing, and asserts the synthesize-commit path produces a merged result on main — stronger than the prior fake-based assertions (it now verifies the synthesized edit actually reaches `seed.txt`). Scope is tight; only the targeted test function changed."
+}
