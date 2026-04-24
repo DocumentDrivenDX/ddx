@@ -2000,26 +2000,84 @@ func TestExecuteBeadHeadRevFailure(t *testing.T) {
 // Error field (agent message) and the Reason field (rev error) are present in
 // the JSON output. This covers the path at agent_execute_bead.go that
 // previously dropped the agent error message when revErr was non-nil.
+//
+// Exercises real git + RealLandingGitOps via the script harness — no fakes
+// for the components under test. The script directive first deletes the
+// worktree's .git pointer (so the post-agent `git rev-parse HEAD` fails for
+// real) and then triggers a synthetic agent failure, producing the compound
+// error the test asserts against.
 func TestExecuteBeadCompoundErrorAgentAndHeadRevFailure(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev:  "aaaa1111",
-		wtHeadRevErr: fmt.Errorf("worktree HEAD unreadable"),
+	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
 	}
-	runner := &fakeAgentRunner{err: fmt.Errorf("agent exploded"), result: nil}
-	f := newExecuteBeadFactory(t, git, runner)
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead compound agent and HeadRev failure",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Script directives:
+	//   directive 0 — delete-file .git: corrupts the worktree so post-agent
+	//                 `git rev-parse HEAD` fails for real.
+	//   directive 1 — fail-during 1: returns an agent-level error to the
+	//                 worker, populating res.Error.
+	// Together these reproduce the compound (agentErr + revErr) path without
+	// any fakes of the components under test.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"delete-file .git\n"+
+			"fail-during 1\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
 	root := f.NewRootCommand()
-	out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead", "--json")
+	out, cmdErr := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
 	require.Error(t, cmdErr)
 	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, 1, res.ExitCode)
 	assert.Equal(t, "error", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
-	assert.Equal(t, "agent exploded", res.Error,
+	assert.Contains(t, res.Error, "synthetic failure at directive 1",
 		"agent error message must be preserved even when HeadRev also fails")
-	assert.Contains(t, res.Reason, "worktree HEAD unreadable",
-		"Reason must reflect the HeadRev failure")
+	assert.Contains(t, res.Reason, "rev-parse",
+		"Reason must reflect the real git rev-parse failure on the corrupted worktree")
 }
 
 // TestExecuteBeadInvalidBeadID verifies that beadIDs with characters illegal
