@@ -1744,25 +1744,84 @@ func TestExecuteBeadAgentErrorWithCommitsPreservesBeforeLand(t *testing.T) {
 }
 
 // TestExecuteBeadAgentErrorWithCommitsPreserves verifies that when the agent
-// runner returns an error, commits exist but merge fails, exitCode=1 and
-// outcome="preserved" with a non-empty preserve ref.
+// runner returns an error and commits exist, exitCode=1 and outcome="preserved"
+// with a non-empty, correctly-formatted preserve ref. Exercises real git +
+// RealLandingGitOps via the script harness — no fakes for the components under
+// test.
 func TestExecuteBeadAgentErrorWithCommitsPreserves(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222",
-		mergeErr:    fmt.Errorf("merge conflict"),
-	}
-	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed"), result: nil}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead agent error with commits preserves",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Script harness: create a real commit in the worker worktree, then
+	// trip a synthetic failure so runScriptFn returns (result, execErr).
+	// Mirrors the original fakeAgentRunner{err: ..., result: nil} with
+	// commits present.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file crashfile.txt pre-crash-content\n"+
+			"commit feat: partial work before crash\n"+
+			"fail-during 2\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, 1, res.ExitCode)
 	assert.Equal(t, "preserved", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
-	assert.Equal(t, "bbbb2222", res.ResultRev)
+	assert.NotEmpty(t, res.ResultRev)
+	assert.NotEqual(t, baseSHA, res.ResultRev, "worker must have produced a commit before the failure")
 	assert.NotEmpty(t, res.PreserveRef)
-	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
+	assertPreserveRef(t, res.PreserveRef, "my-bead", baseSHA)
+
+	// Preserve ref must resolve to the worker's commit.
+	preservedSHA := runGit("rev-parse", res.PreserveRef)
+	assert.Equal(t, res.ResultRev, preservedSHA, "preserve ref must resolve to the worker commit")
 }
 
 // TestExecuteBeadAgentErrorMessageInOutput verifies that when the agent runner
