@@ -548,27 +548,92 @@ func TestExecuteBeadPreserveOnMergeFailure(t *testing.T) {
 }
 
 // TestExecuteBeadNoMerge verifies that --no-merge skips merge and
-// always preserves under a hidden ref.
+// always preserves under a hidden ref. Exercises real git plumbing and
+// the script harness producing an actual worker commit — no fakes for
+// the components under test.
 func TestExecuteBeadNoMerge(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "dddd4444",
-		mergeErr:    nil, // merge would succeed, but --no-merge suppresses it
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead", "--no-merge")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead no-merge",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Directive file drives the script harness to make one real commit in
+	// the worker worktree — replacing fakeAgentRunner's canned Result struct
+	// with an actual worker commit. The merge would succeed, but --no-merge
+	// must suppress it.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file hello.txt hello-content\n"+
+			"commit feat: add hello\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--no-merge",
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, "preserved", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
 	assert.Equal(t, "--no-merge specified", res.Reason)
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.NotEmpty(t, res.ResultRev)
+	assert.NotEqual(t, res.BaseRev, res.ResultRev)
+	workerSHA := res.ResultRev
 	assert.NotEmpty(t, res.PreserveRef)
-	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
-	assert.Equal(t, 0, git.mergeCalls) // merge should not be called
+	assertPreserveRef(t, res.PreserveRef, "my-bead", baseSHA)
 
-	// Hidden ref should be recorded.
-	require.Contains(t, git.refs, res.PreserveRef)
+	// Real-git assertion: the hidden ref must exist and resolve to the
+	// worker commit (pre-refactor: git.refs[preserveRef] == "dddd4444").
+	preservedSHA := runGit("rev-parse", res.PreserveRef)
+	assert.Equal(t, workerSHA, preservedSHA, "preserve ref must resolve to the worker commit")
+
+	// Target branch must not advance — merge was suppressed, not applied.
+	// (Pre-refactor equivalent: assert.Equal(t, 0, git.mergeCalls).)
+	assert.Equal(t, baseSHA, runGit("rev-parse", "refs/heads/main"),
+		"main must be unchanged when --no-merge preserves")
+	mergeCommits := runGit("log", "--merges", "--format=%H", "refs/heads/main")
+	assert.Empty(t, mergeCommits, "no-merge path must not produce a merge commit on main")
 }
 
 // TestExecuteBeadHiddenRefUniqueness verifies that two runs on the same bead-id
