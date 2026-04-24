@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "`cli/cmd/init.go:307` — `gitAdd := exec.Command(\"git\", \"add\", ...)` not migrated to `gitpkg.Command`.\n`cli/cmd/init.go:314` — `gitCommit := exec.Command(\"git\", \"commit\", ...)` not migrated.\n`cli/cmd/init.go:326` — `gitWorktreeCfg := exec.Command(\"git\", \"config\", ...)` not migrated.\n`cli/cmd/init.go:711` — `gitCmd := exec.Command(\"git\", \"rev-parse\", \"--git-dir\")` not migrated.\nEither migrate these four callsites in `init.go`, or amend the bead AC/description to explicitly exclude `init.go` alongside `install.go`."
+}
