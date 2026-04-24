@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Migration cleanly replaces both fakes with real git + the script harness driven by a directive file, and preserves every original assertion while strengthening them (preserve-ref resolution check, base-SHA inequality). Scope is tight to the single test, and the execution evidence records a successful run."
+}
