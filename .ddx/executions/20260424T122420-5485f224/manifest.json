@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260424T122420-5485f224",
+  "bead_id": "ddx-ae1d617e",
+  "base_rev": "f863e352fb050d94efe9d42dec5839c866dbbc8e",
+  "created_at": "2026-04-24T12:24:20.748644765Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ae1d617e",
+    "title": "migrate execute_bead_land.go to git.Command",
+    "description": "Split from timed-out ddx-65b88ae1. Migrate the 27 bare exec.Command(\"git\"...) and exec.CommandContext(...\"git\"...) callsites in cli/internal/agent/execute_bead_land.go to use cli/internal/git.Command (the wrapper from ddx-aa8a5fb3). Each: replace 'exec.CommandContext(ctx, \"git\", args...)' with 'git.Command(ctx, dir, args...)' where dir is the cmd.Dir the original code set (or the -C target). Import path: \"github.com/DocumentDrivenDX/ddx/internal/git\".",
+    "acceptance": "grep -n 'exec\\.Command(\\s*\"git\"\\|exec\\.CommandContext(.*\"git\"' cli/internal/agent/execute_bead_land.go returns no matches. All existing execute_bead_land_test.go tests still pass. Build green.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "claimed-at": "2026-04-24T12:24:20Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-24T12:24:20.010661103Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T122420-5485f224",
+    "prompt": ".ddx/executions/20260424T122420-5485f224/prompt.md",
+    "manifest": ".ddx/executions/20260424T122420-5485f224/manifest.json",
+    "result": ".ddx/executions/20260424T122420-5485f224/result.json",
+    "checks": ".ddx/executions/20260424T122420-5485f224/checks.json",
+    "usage": ".ddx/executions/20260424T122420-5485f224/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ae1d617e-20260424T122420-5485f224"
+  }
+}
