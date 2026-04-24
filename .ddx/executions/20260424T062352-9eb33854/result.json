@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, scope-respecting migration. The fakes are gone, `baseSHA` now comes from real HEAD rather than the canned `aaaa1111cafe`, and the prompt assertions run against the actual synthesized prompt file produced by the real ExecuteBead pipeline. The test uses an inline `runGit` helper with GIT_* scrubbed rather than `newScriptHarnessRepo`/`runGitInteg`, which is acceptable under AC2's \"or equivalent real-git harness\" and keeps blast radius at a single test."
+}
