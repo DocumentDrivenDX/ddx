@@ -1,16 +1,17 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -213,8 +214,7 @@ func getVersionInfoFromDir(workingDir string) (version, hash string, err error) 
 		return version, "unknown", nil
 	}
 
-	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
-	cmd.Dir = ddxDir
+	cmd := gitpkg.Command(context.Background(), ddxDir, "rev-parse", "--short", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		hash = "unknown"
@@ -264,8 +264,7 @@ func getLocalModificationsFromDir(workingDir string) ([]ModifiedFile, error) {
 	}
 
 	// Use git status to detect modifications
-	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = ddxDir
+	cmd := gitpkg.Command(context.Background(), ddxDir, "status", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
 		// If git not available, scan for recent modifications

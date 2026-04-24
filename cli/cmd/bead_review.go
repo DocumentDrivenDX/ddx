@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -165,8 +164,8 @@ func (f *CommandFactory) runBeadReview(cmd *cobra.Command, args []string) error 
 func beadReviewGitShow(projectRoot, rev string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	args := append([]string{"-C", projectRoot, "show", rev, "--", "."}, agent.EvidenceReviewExcludePathspecs()...)
-	out, err := exec.CommandContext(ctx, "git", args...).Output()
+	args := append([]string{"show", rev, "--", "."}, agent.EvidenceReviewExcludePathspecs()...)
+	out, err := gitpkg.Command(ctx, projectRoot, args...).Output()
 	if err != nil {
 		return "", err
 	}

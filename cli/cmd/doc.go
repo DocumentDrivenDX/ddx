@@ -561,8 +561,7 @@ func (f *CommandFactory) newDocHistoryCommand() *cobra.Command {
 			}
 			gitArgs = append(gitArgs, "--", doc.Path)
 
-			gitCmd := exec.Command("git", gitArgs...)
-			gitCmd.Dir = f.docRoot()
+			gitCmd := internalgit.Command(cmd.Context(), f.docRoot(), gitArgs...)
 			out, gitErr := gitCmd.Output()
 			if gitErr != nil {
 				if exitErr, ok2 := gitErr.(*exec.ExitError); ok2 {
@@ -652,8 +651,7 @@ func (f *CommandFactory) newDocDiffCommand() *cobra.Command {
 				gitArgs = []string{"diff", args[1], args[2], "--", doc.Path}
 			}
 
-			gitCmd := exec.Command("git", gitArgs...)
-			gitCmd.Dir = f.docRoot()
+			gitCmd := internalgit.Command(cmd.Context(), f.docRoot(), gitArgs...)
 			out, gitErr := gitCmd.Output()
 			if gitErr != nil {
 				if exitErr, ok2 := gitErr.(*exec.ExitError); ok2 {
@@ -686,7 +684,7 @@ func (f *CommandFactory) newDocChangedCommand() *cobra.Command {
 			}
 			asJSON, _ := cmd.Flags().GetBool("json")
 
-			out, gitErr := exec.Command("git", "diff", "--name-status", since, "HEAD").Output()
+			out, gitErr := internalgit.Command(cmd.Context(), "", "diff", "--name-status", since, "HEAD").Output()
 			if gitErr != nil {
 				if exitErr, ok := gitErr.(*exec.ExitError); ok {
 					if strings.Contains(string(exitErr.Stderr), "not a git repository") {
@@ -696,7 +694,7 @@ func (f *CommandFactory) newDocChangedCommand() *cobra.Command {
 				return fmt.Errorf("git diff failed: %w", gitErr)
 			}
 
-			rootOut, gitErr := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+			rootOut, gitErr := internalgit.Command(cmd.Context(), "", "rev-parse", "--show-toplevel").Output()
 			if gitErr != nil {
 				return fmt.Errorf("could not determine git root: %w", gitErr)
 			}

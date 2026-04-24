@@ -1,12 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -441,7 +441,7 @@ func agentLocalWorktreePath(beadID, attemptID string) string {
 // agentActiveWorktrees returns a set of absolute worktree paths currently
 // registered in the git repository at projectRoot.
 func agentActiveWorktrees(projectRoot string) map[string]bool {
-	out, err := exec.Command("git", "-C", projectRoot, "worktree", "list", "--porcelain").Output()
+	out, err := gitpkg.Command(context.Background(), projectRoot, "worktree", "list", "--porcelain").Output()
 	if err != nil {
 		return nil
 	}

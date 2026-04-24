@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -1397,7 +1396,7 @@ Examples:
 					if sha, ok := b.Extra["closing_commit_sha"]; ok && sha != "" {
 						// Use parent of closing commit
 						shaStr := fmt.Sprint(sha)
-						out, err := exec.Command("git", "rev-parse", shaStr+"^").Output()
+						out, err := gitpkg.Command(cmd.Context(), "", "rev-parse", shaStr+"^").Output()
 						if err == nil {
 							baseCommit = strings.TrimSpace(string(out))
 							fmt.Fprintf(cmd.OutOrStdout(), "Base commit: %s (parent of %s)\n", baseCommit, shaStr)
@@ -1408,7 +1407,7 @@ Examples:
 
 			// If no base commit determined, use current HEAD
 			if baseCommit == "" {
-				out, err := exec.Command("git", "rev-parse", "HEAD").Output()
+				out, err := gitpkg.Command(cmd.Context(), "", "rev-parse", "HEAD").Output()
 				if err == nil {
 					baseCommit = strings.TrimSpace(string(out))
 					fmt.Fprintf(cmd.OutOrStdout(), "Base commit: %s (current HEAD)\n", baseCommit)
@@ -1428,8 +1427,7 @@ Examples:
 
 				// Checkout base commit in worktree
 				if baseCommit != "" {
-					gitCmd := exec.Command("git", "checkout", baseCommit)
-					gitCmd.Dir = workDir
+					gitCmd := gitpkg.Command(cmd.Context(), workDir, "checkout", baseCommit)
 					if out, err := gitCmd.CombinedOutput(); err != nil {
 						return fmt.Errorf("checkout %s: %w\n%s", baseCommit, err, string(out))
 					}
@@ -1470,8 +1468,7 @@ Examples:
 			if sandbox && workDir != "" {
 				fmt.Fprintln(cmd.OutOrStdout())
 				fmt.Fprintln(cmd.OutOrStdout(), "Changes:")
-				gitCmd := exec.Command("git", "diff", "--stat")
-				gitCmd.Dir = workDir
+				gitCmd := gitpkg.Command(cmd.Context(), workDir, "diff", "--stat")
 				out, _ := gitCmd.CombinedOutput()
 				if len(out) > 0 {
 					_, _ = cmd.OutOrStderr().Write(out)
@@ -2291,7 +2288,7 @@ func newLocalServerClient() *http.Client {
 func resolveWorktree(repoRoot, name string) (string, error) {
 	if repoRoot == "" {
 		// Detect from git
-		out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		out, err := gitpkg.Command(context.Background(), "", "rev-parse", "--show-toplevel").Output()
 		if err != nil {
 			return "", fmt.Errorf("cannot detect repo root: %w", err)
 		}
@@ -2306,12 +2303,10 @@ func resolveWorktree(repoRoot, name string) (string, error) {
 	}
 
 	// Create the worktree with a branch of the same name
-	cmd := exec.Command("git", "worktree", "add", wtDir, "-b", name)
-	cmd.Dir = repoRoot
+	cmd := gitpkg.Command(context.Background(), repoRoot, "worktree", "add", wtDir, "-b", name)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		// If branch already exists, try without -b
-		cmd2 := exec.Command("git", "worktree", "add", wtDir, name)
-		cmd2.Dir = repoRoot
+		cmd2 := gitpkg.Command(context.Background(), repoRoot, "worktree", "add", wtDir, name)
 		if out2, err2 := cmd2.CombinedOutput(); err2 != nil {
 			return "", fmt.Errorf("git worktree add failed: %s\n%s", string(out), string(out2))
 		}

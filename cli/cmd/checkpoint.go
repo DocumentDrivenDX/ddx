@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -68,7 +68,7 @@ func runCheckpointCreate(cmd *cobra.Command, prefix, name string) error {
 		return err
 	}
 	tag := prefix + name
-	out, err := exec.Command("git", "tag", tag).CombinedOutput()
+	out, err := gitpkg.Command(cmd.Context(), "", "tag", tag).CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if strings.Contains(msg, "not a git repository") {
@@ -85,7 +85,7 @@ func runCheckpointCreate(cmd *cobra.Command, prefix, name string) error {
 
 func runCheckpointList(cmd *cobra.Command, prefix string) error {
 	pattern := prefix + "*"
-	out, err := exec.Command("git", "tag", "-l", pattern).CombinedOutput()
+	out, err := gitpkg.Command(cmd.Context(), "", "tag", "-l", pattern).CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if strings.Contains(msg, "not a git repository") {
@@ -107,7 +107,7 @@ func runCheckpointRestore(cmd *cobra.Command, prefix, name string) error {
 		return err
 	}
 	tag := prefix + name
-	out, err := exec.Command("git", "checkout", tag).CombinedOutput()
+	out, err := gitpkg.Command(cmd.Context(), "", "checkout", tag).CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if strings.Contains(msg, "not a git repository") {

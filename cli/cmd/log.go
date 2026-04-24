@@ -1,16 +1,17 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -220,8 +221,7 @@ func getGitLogData(ddxDir string, opts LogOptions) ([]LogEntry, error) {
 	}
 
 	// Execute git log command
-	gitCmd := exec.Command("git", args...)
-	gitCmd.Dir = ddxDir
+	gitCmd := gitpkg.Command(context.Background(), ddxDir, args...)
 	output, err := gitCmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log failed: %w", err)
@@ -258,8 +258,7 @@ func getGitLogData(ddxDir string, opts LogOptions) ([]LogEntry, error) {
 
 // getGitDiffForCommit gets the diff for a specific commit
 func getGitDiffForCommit(ddxDir, hash string) (string, error) {
-	cmd := exec.Command("git", "show", "--stat", hash)
-	cmd.Dir = ddxDir
+	cmd := gitpkg.Command(context.Background(), ddxDir, "show", "--stat", hash)
 	output, err := cmd.Output()
 	return string(output), err
 }

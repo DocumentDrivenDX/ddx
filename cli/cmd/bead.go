@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -109,7 +108,7 @@ func (f *CommandFactory) resolveCommitSHA(commitSHA string) (string, error) {
 		return commitSHA, nil
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "rev-parse", "--verify", commitSHA+"^{commit}")
+	cmd := gitpkg.Command(ctx, repoDir, "rev-parse", "--verify", commitSHA+"^{commit}")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse %s: %w", commitSHA, err)
@@ -159,8 +158,7 @@ func (f *CommandFactory) commitIsMetadataOnlyTrackerBackfill(commitSHA string) b
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "show", "--pretty=format:", "--name-only", commitSHA)
-	cmd.Dir = f.WorkingDir
+	cmd := gitpkg.Command(ctx, f.WorkingDir, "show", "--pretty=format:", "--name-only", commitSHA)
 	out, err := cmd.Output()
 	if err != nil {
 		return false
