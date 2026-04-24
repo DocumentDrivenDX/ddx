@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration: real git repo via `git init` + scrubbed env, script harness invoked through the normal factory, and the noise scenario is expressed through a pathspec-excluded path (`.claude/skills/noise.md`) rather than a canned `Result` struct. Assertions are preserved and upgraded — `mergeCalls==0` is now verified by checking main's HEAD didn't advance and no merge commits landed, which is strictly stronger than the old fake-counter check. One tiny doc/comment drift (the header still references `.ddx/executions/\u003cattempt\u003e/embedded/*` while the directive actually writes under `.claude/skills`) — not worth blocking."
+}
