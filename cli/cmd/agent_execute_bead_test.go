@@ -2093,17 +2093,60 @@ func TestExecuteBeadInvalidBeadID(t *testing.T) {
 	}
 	for _, id := range invalidIDs {
 		t.Run(id, func(t *testing.T) {
-			git := &fakeExecuteBeadGit{mainHeadRev: "aaaa1111"}
-			runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-			f := newExecuteBeadFactory(t, git, runner)
+			workDir := t.TempDir()
+
+			scrubEnv := func() []string {
+				parent := os.Environ()
+				env := make([]string, 0, len(parent))
+				for _, kv := range parent {
+					if strings.HasPrefix(kv, "GIT_") {
+						continue
+					}
+					env = append(env, kv)
+				}
+				return env
+			}
+			runGit := func(args ...string) string {
+				t.Helper()
+				cmd := exec.Command("git", args...)
+				cmd.Dir = workDir
+				cmd.Env = scrubEnv()
+				out, err := cmd.CombinedOutput()
+				require.NoError(t, err, "git %v: %s", args, string(out))
+				return strings.TrimSpace(string(out))
+			}
+
+			runGit("init", "-b", "main")
+			runGit("config", "user.email", "test@ddx.test")
+			runGit("config", "user.name", "DDx Test")
+			require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+			runGit("add", ".")
+			runGit("commit", "-m", "chore: initial seed")
+			baseSHA := runGit("rev-parse", "HEAD")
+
+			// Real runner + real git ops: no overrides that fake the thing
+			// under test. The script harness would be driven by a per-attempt
+			// directive file if execution reached the agent, but the invalid
+			// bead ID must be rejected before any git or agent work occurs.
+			directivePath := filepath.Join(t.TempDir(), "directives.txt")
+			require.NoError(t, os.WriteFile(directivePath, []byte(""), 0o644))
+
+			f := NewCommandFactory(workDir)
+			f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
 			root := f.NewRootCommand()
-			_, cmdErr := executeCommand(root, "agent", "execute-bead", id)
+			_, cmdErr := executeCommand(root, "agent", "execute-bead", id,
+				"--harness", "script", "--model", directivePath)
 			require.Error(t, cmdErr)
 			assert.Contains(t, cmdErr.Error(), "invalid bead ID")
 
-			// No git or agent operations should have been attempted.
-			assert.Empty(t, git.addedWTs, "no worktree should be created for invalid bead ID")
+			// No git or agent operations should have been attempted: no
+			// execute-bead worktree was created, and main did not advance.
+			wtList := runGit("worktree", "list", "--porcelain")
+			assert.NotContains(t, wtList, agent.ExecuteBeadWtPrefix,
+				"no worktree should be created for invalid bead ID")
+			assert.Equal(t, baseSHA, runGit("rev-parse", "HEAD"),
+				"main must not advance when the bead ID is rejected")
 		})
 	}
 }
