@@ -1493,24 +1493,78 @@ func TestExecuteBeadHarnessNoiseNotSynthesized(t *testing.T) {
 
 // TestExecuteBeadAgentErrorNoCommits verifies that when the agent runner returns
 // an error and makes no commits, the outcome is an execution error rather than
-// a misleading no-change result.
+// a misleading no-change result. Exercises real git + script harness: the
+// directive forces a synthetic script-harness failure at the first step, so the
+// runner returns a non-nil error with no commits, and the orchestrator classifies
+// the landing as outcome="error" / status=execution_failed.
 func TestExecuteBeadAgentErrorNoCommits(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "aaaa1111", // no commits made
-	}
-	runner := &fakeAgentRunner{err: fmt.Errorf("agent crashed"), result: nil}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test agent error no commits",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Directive triggers a synthetic script-harness failure at directive 0.
+	// The runner returns (result, err) with a non-nil error and no commits
+	// made in the worker worktree, replacing fakeAgentRunner's canned error.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("fail-during 0\n"), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	res := runExecuteBead(t, f, nil, "my-bead",
+		"--harness", "script", "--model", directivePath)
 
 	assert.Equal(t, 1, res.ExitCode)
 	assert.Equal(t, "error", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, res.Status)
-	assert.Equal(t, "agent crashed", res.Reason)
-	assert.Equal(t, "agent crashed", res.Error)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
+	assert.NotEmpty(t, res.Error, "Error must carry the agent failure message")
+	assert.Contains(t, res.Error, "script harness",
+		"Error should carry the script-harness failure message")
+	assert.Equal(t, res.Error, res.Reason,
+		"Reason must mirror Error when the agent failed with no commits")
+	assert.Equal(t, baseSHA, res.BaseRev)
 	assert.Empty(t, res.PreserveRef)
+
+	// Real-git assertion: no commits made, main must not advance.
+	assert.Equal(t, baseSHA, runGit("rev-parse", "HEAD"),
+		"main HEAD must not advance when the agent failed with no commits")
 }
 
 func TestExecuteBeadTimeoutNoCommitsReportsExecutionFailure(t *testing.T) {
