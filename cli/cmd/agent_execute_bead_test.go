@@ -1159,8 +1159,42 @@ func TestExecuteBeadResolvesPathStyleSpecID(t *testing.T) {
 	assert.Contains(t, promptText, "Governing reference carries the relative path unchanged.")
 }
 
+// TestExecuteBeadWritesResultArtifactBundle exercises real git + RealLandingGitOps
+// via the script harness — no fakes for the components under test. The script
+// harness emits a single real commit; the orchestrator synthesizes the prompt
+// from the seeded bead and writes the manifest/result bundle. Assertions target
+// the on-disk artifact bundle and worktree cleanup, not the fake's bookkeeping.
 func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
 	seedExecuteBead(t, workDir, &bead.Bead{
 		ID:         "my-bead",
 		Title:      "Record execution artifacts",
@@ -1169,27 +1203,29 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 		IssueType:  bead.DefaultType,
 		Acceptance: "Artifacts are written for later inspection.",
 	})
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222",
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{
-		ExitCode: 0,
-		Harness:  "mock",
-		Model:    "gpt-test",
-		Tokens:   17,
-	}}
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+
+	// Directive drives the real script harness to emit one real commit so the
+	// result bundle records a non-trivial execution, replacing fakeAgentRunner.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file artifact.txt artifact-content\n"+
+			"commit feat: add artifact\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
 	f := NewCommandFactory(workDir)
-	seedDefaultExecuteBeads(t, workDir)
-	f.AgentRunnerOverride = runner
-	f.executeBeadGitOverride = git
-	f.executeBeadOrchestratorGitOverride = git
-	f.executeBeadLandingAdvancerOverride = fakeLandingAdvancerFromGit(git)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
 	t.Setenv("DDX_WORKER_ID", "worker-test")
-	res := runExecuteBead(t, f, git, "my-bead")
 
-	require.Len(t, git.addedWTs, 1)
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
+
 	manifestPath := filepath.Join(workDir, filepath.FromSlash(res.ManifestFile))
 	resultPath := filepath.Join(workDir, filepath.FromSlash(res.ResultFile))
 	require.FileExists(t, manifestPath)
@@ -1200,11 +1236,20 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	assert.Contains(t, string(manifestRaw), `"bead_id": "my-bead"`)
 	assert.Contains(t, string(manifestRaw), `"worker_id": "worker-test"`)
 	assert.Contains(t, string(manifestRaw), `"prompt": "synthesized"`)
-	// Worktree path is now under $TMPDIR/ddx-exec-wt/ — moved from .ddx/
-	// so test runs inside the worktree don't corrupt the parent repo via
-	// GIT_DIR inheritance. The leaf name still starts with
-	// .execute-bead-wt- for orphan recovery via git worktree list.
+	// Worktree path is under $TMPDIR/ddx-exec-wt/ so test runs inside the
+	// worktree don't corrupt the parent repo via GIT_DIR inheritance. The
+	// leaf name still starts with .execute-bead-wt- for orphan recovery
+	// via git worktree list.
 	assert.Contains(t, string(manifestRaw), agent.ExecuteBeadWtPrefix+"my-bead-")
+
+	// Extract the worktree path from the manifest to assert cleanup.
+	var manifest struct {
+		Paths struct {
+			Worktree string `json:"worktree"`
+		} `json:"paths"`
+	}
+	require.NoError(t, json.Unmarshal(manifestRaw, &manifest))
+	require.NotEmpty(t, manifest.Paths.Worktree)
 
 	resultRaw, err := os.ReadFile(resultPath)
 	require.NoError(t, err)
@@ -1215,7 +1260,8 @@ func TestExecuteBeadWritesResultArtifactBundle(t *testing.T) {
 	assert.Equal(t, res.AttemptID, recorded.AttemptID)
 	assert.Equal(t, res.Status, recorded.Status)
 	assert.Equal(t, res.ResultFile, recorded.ResultFile)
-	assert.NoDirExists(t, git.addedWTs[0])
+	assert.NoDirExists(t, manifest.Paths.Worktree,
+		"execute-bead worktree must be removed after the run")
 }
 
 // TestExecuteBeadFromRevFlag verifies that --from resolves a custom revision
