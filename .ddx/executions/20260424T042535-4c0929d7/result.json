@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, scoped migration. The test now drives `ddx agent execute-bead` end-to-end against a freshly-init'd real git repo with GIT_* scrubbed, uses the real `agent.Runner`, drives the script harness via a no-op directive, and asserts behavior by reading the synthesized prompt from disk — preserving all original assertions (path unchanged as both ID and Path) while strengthening them with prompt-synthesis checks. Blast radius stayed inside the target test."
+}
