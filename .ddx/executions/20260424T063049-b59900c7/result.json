@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, scope-respecting migration. The Preserves test now drives the real `ExecuteBead → Land` pipeline against a fresh real-git repo and the `script` harness (with a directive file for the agent commit), exactly matching the bead's intent. The single-test scope limit was honored — fakes still exist in the file but only for the sibling test that this bead intentionally left alone."
+}
