@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean scope-bounded migration. The test now builds a real git repo, tags a pre-HEAD commit, advances HEAD past it, and asserts that `--from custom-rev` makes `BaseRev` equal the tagged SHA rather than the newer HEAD — a stronger assertion than the original fake-based test, which only echoed back the canned `mainHeadRev`. Script harness invoked with a legitimate `no-op` directive, env scrubbed for `GIT_*`, and no neighboring tests touched."
+}
