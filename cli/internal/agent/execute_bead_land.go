@@ -37,11 +37,13 @@ package agent
 // so Land() itself does not take any locks.
 
 import (
+	"context"
 	"fmt"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"strings"
+
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // LandRequest is one submission to the land coordinator: "here is the worker's
@@ -239,7 +241,7 @@ type LandingGitOps interface {
 type RealLandingGitOps struct{}
 
 func (RealLandingGitOps) HasRemote(dir, remote string) bool {
-	out, err := osexec.Command("git", "-C", dir, "remote").Output()
+	out, err := internalgit.Command(context.Background(), dir, "remote").Output()
 	if err != nil {
 		return false
 	}
@@ -252,7 +254,7 @@ func (RealLandingGitOps) HasRemote(dir, remote string) bool {
 }
 
 func (RealLandingGitOps) CurrentBranch(dir string) (string, error) {
-	out, err := osexec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "symbolic-ref", "--short", "HEAD").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git symbolic-ref HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -260,7 +262,7 @@ func (RealLandingGitOps) CurrentBranch(dir string) (string, error) {
 }
 
 func (RealLandingGitOps) FetchBranch(dir, remote, branch string) error {
-	out, err := osexec.Command("git", "-C", dir, "fetch", remote, branch).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "fetch", remote, branch).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git fetch %s %s: %s: %w", remote, branch, strings.TrimSpace(string(out)), err)
 	}
@@ -268,7 +270,7 @@ func (RealLandingGitOps) FetchBranch(dir, remote, branch string) error {
 }
 
 func (RealLandingGitOps) ResolveRef(dir, ref string) (string, error) {
-	out, err := osexec.Command("git", "-C", dir, "rev-parse", "--verify", ref).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "rev-parse", "--verify", ref).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
 	}
@@ -276,11 +278,11 @@ func (RealLandingGitOps) ResolveRef(dir, ref string) (string, error) {
 }
 
 func (RealLandingGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
-	args := []string{"-C", dir, "update-ref", ref, sha}
+	args := []string{"update-ref", ref, sha}
 	if oldSHA != "" {
 		args = append(args, oldSHA)
 	}
-	out, err := osexec.Command("git", args...).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
 	}
@@ -291,7 +293,7 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 	// Step 1: sync the index to HEAD. This is required before checkout-index
 	// below will do anything useful, and also keeps subsequent CommitTracker
 	// calls from building stale trees.
-	out, err := osexec.Command("git", "-C", dir, "read-tree", "HEAD").CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "read-tree", "HEAD").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -307,7 +309,7 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 		// that cannot reconstruct fromRev.
 		return nil
 	}
-	diffOut, diffErr := osexec.Command("git", "-C", dir, "diff", "--name-only", fromRev, "HEAD").CombinedOutput()
+	diffOut, diffErr := internalgit.Command(context.Background(), dir, "diff", "--name-only", fromRev, "HEAD").CombinedOutput()
 	if diffErr != nil {
 		// Diff failed (bad fromRev, shallow history, etc.) — leave the
 		// worktree stale rather than risk a broken checkout. The CommitTracker
@@ -326,7 +328,7 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 	var indexFiles []string
 	var removedFiles []string
 	for _, f := range changed {
-		probe := osexec.Command("git", "-C", dir, "ls-files", "--error-unmatch", "--", f)
+		probe := internalgit.Command(context.Background(), dir, "ls-files", "--error-unmatch", "--", f)
 		if probe.Run() == nil {
 			indexFiles = append(indexFiles, f)
 		} else {
@@ -338,9 +340,9 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 	// -f overwrites any stale content at these exact paths. Unrelated files
 	// are untouched because we pass the specific path list.
 	if len(indexFiles) > 0 {
-		args := []string{"-C", dir, "checkout-index", "-f", "--"}
+		args := []string{"checkout-index", "-f", "--"}
 		args = append(args, indexFiles...)
-		out2, err2 := osexec.Command("git", args...).CombinedOutput()
+		out2, err2 := internalgit.Command(context.Background(), dir, args...).CombinedOutput()
 		if err2 != nil {
 			return fmt.Errorf("git checkout-index -f: %s: %w", strings.TrimSpace(string(out2)), err2)
 		}
@@ -359,7 +361,7 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 
 func (RealLandingGitOps) AddWorktree(dir, path, rev string) error {
 	// --detach so the worktree does not create a persistent branch.
-	out, err := osexec.Command("git", "-C", dir, "worktree", "add", "--force", "--detach", path, rev).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "worktree", "add", "--force", "--detach", path, rev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree add %s %s: %s: %w", path, rev, strings.TrimSpace(string(out)), err)
 	}
@@ -367,8 +369,8 @@ func (RealLandingGitOps) AddWorktree(dir, path, rev string) error {
 }
 
 func (RealLandingGitOps) RemoveWorktree(dir, path string) error {
-	_ = osexec.Command("git", "-C", dir, "worktree", "remove", "--force", path).Run()
-	_ = osexec.Command("git", "-C", dir, "worktree", "prune").Run()
+	_ = internalgit.Command(context.Background(), dir, "worktree", "remove", "--force", path).Run()
+	_ = internalgit.Command(context.Background(), dir, "worktree", "prune").Run()
 	return nil
 }
 
@@ -379,21 +381,21 @@ func (RealLandingGitOps) MergeInto(wtDir, srcRev, msg string) error {
 	// We inject user.name/user.email via -c so the merge commit can be
 	// created even when the worktree inherited no git config; the
 	// coordinator is a machine actor and should not adopt a human's identity.
-	out, err := osexec.Command(
-		"git", "-C", wtDir,
+	out, err := internalgit.Command(
+		context.Background(), wtDir,
 		"-c", "user.name=ddx-land-coordinator",
 		"-c", "user.email=coordinator@ddx.local",
 		"merge", "--no-ff", "-m", msg, srcRev,
 	).CombinedOutput()
 	if err != nil {
-		_ = osexec.Command("git", "-C", wtDir, "merge", "--abort").Run()
+		_ = internalgit.Command(context.Background(), wtDir, "merge", "--abort").Run()
 		return fmt.Errorf("git merge --no-ff %s: %s: %w", srcRev, strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func (RealLandingGitOps) HeadRevAt(dir string) (string, error) {
-	out, err := osexec.Command("git", "-C", dir, "rev-parse", "HEAD").CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "rev-parse", "HEAD").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -403,7 +405,7 @@ func (RealLandingGitOps) HeadRevAt(dir string) (string, error) {
 func (RealLandingGitOps) PushFFOnly(dir, remote, localRef, targetBranch string) error {
 	// Refspec "<local>:<remote>" with no '+' prefix → fast-forward only.
 	refspec := fmt.Sprintf("%s:refs/heads/%s", localRef, targetBranch)
-	out, err := osexec.Command("git", "-C", dir, "push", remote, refspec).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "push", remote, refspec).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git push %s %s: %s: %w", remote, refspec, strings.TrimSpace(string(out)), err)
 	}
@@ -411,7 +413,7 @@ func (RealLandingGitOps) PushFFOnly(dir, remote, localRef, targetBranch string) 
 }
 
 func (RealLandingGitOps) CountCommits(dir, base, tip string) int {
-	out, err := osexec.Command("git", "-C", dir, "rev-list", "--count", base+".."+tip).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "rev-list", "--count", base+".."+tip).CombinedOutput()
 	if err != nil {
 		return 0
 	}
@@ -432,8 +434,8 @@ func (RealLandingGitOps) StageDir(dir, relPath string) error {
 	// (ddx-39e27896). manifest.json, result.json, prompt.md, and
 	// usage.json remain tracked for audit; the raw session log lives on
 	// disk, not in git history.
-	args := append([]string{"-C", dir, "add", "--", relPath}, EvidenceLandExcludePathspecs()...)
-	out, err := osexec.Command("git", args...).CombinedOutput()
+	args := append([]string{"add", "--", relPath}, EvidenceLandExcludePathspecs()...)
+	out, err := internalgit.Command(context.Background(), dir, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git add %s: %s: %w", relPath, strings.TrimSpace(string(out)), err)
 	}
@@ -441,11 +443,11 @@ func (RealLandingGitOps) StageDir(dir, relPath string) error {
 }
 
 func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
-	out, _ := osexec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
+	out, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").Output()
 	if len(strings.TrimSpace(string(out))) == 0 {
 		return "", nil
 	}
-	commitOut, err := osexec.Command("git", "-C", dir,
+	commitOut, err := internalgit.Command(context.Background(), dir,
 		"-c", "user.name=ddx-land-coordinator",
 		"-c", "user.email=coordinator@ddx.local",
 		"commit", "-m", msg,
@@ -453,7 +455,7 @@ func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("git commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
-	shaOut, err := osexec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	shaOut, err := internalgit.Command(context.Background(), dir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("rev-parse HEAD after evidence commit: %w", err)
 	}
@@ -463,7 +465,7 @@ func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
 // FetchOriginAncestryCheck implements LandingGitOps.FetchOriginAncestryCheck.
 func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
 	// Step 1: check for origin remote.
-	out, err := osexec.Command("git", "-C", dir, "remote", "get-url", "origin").CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "remote", "get-url", "origin").CombinedOutput()
 	if err != nil {
 		// No origin remote — single-machine case; skip check.
 		return PreClaimResult{Action: "no-origin"}, nil
@@ -471,19 +473,19 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 	_ = out // remote URL not needed
 
 	// Step 2: fetch origin/targetBranch (best-effort; failure is non-fatal but surfaced).
-	if fetchOut, fetchErr := osexec.Command("git", "-C", dir, "fetch", "origin", targetBranch).CombinedOutput(); fetchErr != nil {
+	if fetchOut, fetchErr := internalgit.Command(context.Background(), dir, "fetch", "origin", targetBranch).CombinedOutput(); fetchErr != nil {
 		return PreClaimResult{}, fmt.Errorf("git fetch origin %s: %s: %w", targetBranch, strings.TrimSpace(string(fetchOut)), fetchErr)
 	}
 
 	// Step 3: resolve local tip.
-	localOut, localErr := osexec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/heads/"+targetBranch).CombinedOutput()
+	localOut, localErr := internalgit.Command(context.Background(), dir, "rev-parse", "--verify", "refs/heads/"+targetBranch).CombinedOutput()
 	if localErr != nil {
 		return PreClaimResult{}, fmt.Errorf("resolving local %s: %s: %w", targetBranch, strings.TrimSpace(string(localOut)), localErr)
 	}
 	localSHA := strings.TrimSpace(string(localOut))
 
 	// Step 4: resolve origin tip.
-	originOut, originErr := osexec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/remotes/origin/"+targetBranch).CombinedOutput()
+	originOut, originErr := internalgit.Command(context.Background(), dir, "rev-parse", "--verify", "refs/remotes/origin/"+targetBranch).CombinedOutput()
 	if originErr != nil {
 		return PreClaimResult{}, fmt.Errorf("resolving origin/%s: %s: %w", targetBranch, strings.TrimSpace(string(originOut)), originErr)
 	}
@@ -495,11 +497,11 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 	}
 
 	// Is local an ancestor of origin? (origin is ahead)
-	localAncestorErr := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", localSHA, originSHA).Run()
+	localAncestorErr := internalgit.Command(context.Background(), dir, "merge-base", "--is-ancestor", localSHA, originSHA).Run()
 	if localAncestorErr == nil {
 		// Origin is ahead: fast-forward local branch via update-ref + sync worktree.
 		targetRef := "refs/heads/" + targetBranch
-		if upErr := osexec.Command("git", "-C", dir, "update-ref", targetRef, originSHA, localSHA).Run(); upErr != nil {
+		if upErr := internalgit.Command(context.Background(), dir, "update-ref", targetRef, originSHA, localSHA).Run(); upErr != nil {
 			return PreClaimResult{}, fmt.Errorf("fast-forwarding %s to %s: %w", targetRef, originSHA, upErr)
 		}
 		// Sync index + working tree to new HEAD so the main worktree files
@@ -511,7 +513,7 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 	}
 
 	// Is origin an ancestor of local? (local is ahead)
-	originAncestorErr := osexec.Command("git", "-C", dir, "merge-base", "--is-ancestor", originSHA, localSHA).Run()
+	originAncestorErr := internalgit.Command(context.Background(), dir, "merge-base", "--is-ancestor", originSHA, localSHA).Run()
 	if originAncestorErr == nil {
 		return PreClaimResult{Action: "local-ahead", LocalSHA: localSHA, OriginSHA: originSHA}, nil
 	}
