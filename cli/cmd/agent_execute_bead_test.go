@@ -962,8 +962,58 @@ func TestExecuteBeadMergePreservesContext(t *testing.T) {
 	assert.Equal(t, "step2-content", string(step2))
 }
 
+// TestExecuteBeadSynthesizesPromptAndArtifacts verifies that execute-bead
+// synthesizes a prompt with the bead's description, acceptance, and governing
+// references, and emits the expected artifact bundle. Exercises real git +
+// RealLandingGitOps via the script harness — no fakes for the components
+// under test. The script harness is driven by a no-op directive; the prompt
+// file synthesized by the orchestrator is read directly from the execution
+// bundle on disk.
 func TestExecuteBeadSynthesizesPromptAndArtifacts(t *testing.T) {
 	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	// Spec referenced via spec-id must exist in the committed tree so the
+	// worker worktree (created by real `git worktree add`) sees it when the
+	// orchestrator resolves governing refs.
+	specPath := filepath.Join(workDir, "docs", "feature.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
+	require.NoError(t, os.WriteFile(specPath, []byte(`---
+ddx:
+  id: FEAT-006
+---
+# Agent Service
+`), 0o644))
+	runGit("add", "docs/feature.md")
+	runGit("commit", "-m", "docs: add feature spec")
+
 	seedExecuteBead(t, workDir, &bead.Bead{
 		ID:          "my-bead",
 		Title:       "Improve execute-bead prompt synthesis",
@@ -975,32 +1025,31 @@ func TestExecuteBeadSynthesizesPromptAndArtifacts(t *testing.T) {
 		Labels:      []string{"area:agent", "phase:build"},
 		Extra:       map[string]any{"spec-id": "FEAT-006"},
 	})
-	specPath := filepath.Join(workDir, "docs", "feature.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
-	require.NoError(t, os.WriteFile(specPath, []byte(`---
-ddx:
-  id: FEAT-006
----
-# Agent Service
-`), 0o644))
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
 
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222",
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
+	// Script harness directive: no-op. The assertion target is the synthesized
+	// prompt file, not any worker output. A no-op directive keeps the run
+	// deterministic while still exercising the real runner + real git path.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
 	f := NewCommandFactory(workDir)
-	seedDefaultExecuteBeads(t, workDir)
-	f.AgentRunnerOverride = runner
-	f.executeBeadGitOverride = git
-	f.executeBeadOrchestratorGitOverride = git
-	f.executeBeadLandingAdvancerOverride = fakeLandingAdvancerFromGit(git)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
 
-	require.NotEmpty(t, runner.last.PromptFile)
-	require.FileExists(t, runner.last.PromptFile)
-	promptRaw, err := os.ReadFile(runner.last.PromptFile)
+	require.NotEmpty(t, res.PromptFile)
+	promptPath := filepath.Join(workDir, filepath.FromSlash(res.PromptFile))
+	require.FileExists(t, promptPath)
+	promptRaw, err := os.ReadFile(promptPath)
 	require.NoError(t, err)
 	promptText := string(promptRaw)
 	assert.Contains(t, promptText, "Improve execute-bead prompt synthesis")
@@ -1010,7 +1059,6 @@ ddx:
 	assert.NotContains(t, promptText, "Work on bead my-bead.")
 
 	require.NotEmpty(t, res.ExecutionDir)
-	require.NotEmpty(t, res.PromptFile)
 	require.NotEmpty(t, res.ManifestFile)
 	require.NotEmpty(t, res.ResultFile)
 	assert.True(t, strings.HasSuffix(res.PromptFile, "prompt.md"))
