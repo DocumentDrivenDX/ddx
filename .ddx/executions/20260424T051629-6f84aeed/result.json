@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Migration cleanly removes the fakes from TestExecuteBeadHeadRevFailure and drives the failure via a real script-harness directive (`delete-file .git`) that corrupts the worktree, so the post-agent `git rev-parse HEAD` fails for real. Assertions updated from the synthetic `\"disk read error\"` string to `\"rev-parse\"`, which is stricter because it reflects the actual failing git command. Scope is confined to this one test."
+}
