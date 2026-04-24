@@ -868,23 +868,98 @@ func TestExecuteBeadDirtyWorktreeWithoutCommits(t *testing.T) {
 	assert.Contains(t, string(seedContent), "agent-edit")
 }
 
+// TestExecuteBeadMergePreservesContext verifies that when the agent produces
+// multiple real commits and the merge lands, every intermediate commit on the
+// worker branch remains reachable from main — i.e., the merge preserves the
+// worker's commit context rather than collapsing or rewriting it. Exercises
+// real git + RealLandingGitOps via the script harness driving actual commits;
+// no fakes for the components under test.
 func TestExecuteBeadMergePreservesContext(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222",
-		mergeErr:    nil,
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead merge preserves context",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Script harness emits two distinct commits on the worker branch. After
+	// landing, both commits must remain reachable from main — that's the
+	// "preserves context" property.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file step1.txt step1-content\n"+
+			"commit feat: step 1\n"+
+			"create-file step2.txt step2-content\n"+
+			"commit feat: step 2\n",
+	), 0o644))
+
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, "merged", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
-	assert.Equal(t, "bbbb2222", res.ResultRev)
-	assert.Equal(t, 1, git.mergeCalls)
-	assert.Equal(t, "bbbb2222", git.mergeRev)
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.NotEmpty(t, res.ResultRev)
+	assert.NotEqual(t, baseSHA, res.ResultRev)
+	assert.Empty(t, res.PreserveRef)
+
+	// Main must have advanced to include ResultRev through real land semantics.
+	mainHead := runGit("rev-parse", "HEAD")
+	assert.Equal(t, res.ResultRev, mainHead, "main HEAD should advance to ResultRev")
+
+	// Context-preservation: ResultRev must still point to the worker's final
+	// commit with its full parent chain intact. Both worker commits must be
+	// reachable from main, proving the merge didn't squash or rewrite them.
+	log := runGit("log", "--format=%s", baseSHA+"..HEAD")
+	assert.Contains(t, log, "feat: step 1")
+	assert.Contains(t, log, "feat: step 2")
+
+	// Files from both worker commits must materialize on main.
+	step1, err := os.ReadFile(filepath.Join(workDir, "step1.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "step1-content", string(step1))
+	step2, err := os.ReadFile(filepath.Join(workDir, "step2.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "step2-content", string(step2))
 }
 
 func TestExecuteBeadSynthesizesPromptAndArtifacts(t *testing.T) {
