@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration. The test now bootstraps a real repo, advances main with a conflicting sibling commit, drives the script harness to emit a real worker commit on a worktree rooted at baseSHA, and asserts the real preserve path: ref pattern includes the current-tip prefix, `git rev-parse` resolves the hidden ref to the worker SHA, and main carries no merge commit. Assertions strictly strengthen the prior fake-based ones rather than weaken them. Scope held — other tests in the file still use the fakes (out of scope per the bead)."
+}
