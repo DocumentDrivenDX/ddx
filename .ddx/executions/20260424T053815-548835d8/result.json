@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Migration replaces the two fakes with a real temp git repo and a passthrough wrapper around the production `agent.NewRunner`, preserving both subtests' assertions on `opts.Model` while letting the real script harness run end-to-end. Scope is tight to the one test plus a small local helper type."
+}
