@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260424T033612-690dec51",
+  "bead_id": "ddx-3984a48e",
+  "base_rev": "73d93746bb31d18103b0905c99ae6f7ffc274b8e",
+  "created_at": "2026-04-24T03:36:13.175011967Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3984a48e",
+    "title": "migrate remaining cli/cmd/* to git.Command (Phase 2b)",
+    "description": "Migrate remaining cli/cmd/ git callsites to git.Command. Excludes install.go which is in B5.\n\nFiles: agent_cmd.go, agent_workers.go, checkpoint.go, status.go, bead.go, doc.go, bead_review.go, log.go.\n\nEach: replace exec.Command(\"git\", args...) with git.Command(ctx, dir, args...). Pass appropriate dir (cmd.Dir value, or '-C \u003cpath\u003e' arg target).",
+    "acceptance": "No bare exec.Command(\"git\"...) in cli/cmd/ except in test helpers. All existing cli/cmd/ tests pass.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "blocked-by": "ddx-aa8a5fb3",
+      "claimed-at": "2026-04-24T03:36:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-24T03:36:12.663424968Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T033612-690dec51",
+    "prompt": ".ddx/executions/20260424T033612-690dec51/prompt.md",
+    "manifest": ".ddx/executions/20260424T033612-690dec51/manifest.json",
+    "result": ".ddx/executions/20260424T033612-690dec51/result.json",
+    "checks": ".ddx/executions/20260424T033612-690dec51/checks.json",
+    "usage": ".ddx/executions/20260424T033612-690dec51/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3984a48e-20260424T033612-690dec51"
+  }
+}
