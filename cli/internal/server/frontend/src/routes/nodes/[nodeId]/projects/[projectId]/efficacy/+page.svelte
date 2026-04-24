@@ -5,7 +5,7 @@
 	import { page } from '$app/stores';
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
-	import { BarChart3, GitCompareArrows, Link2, Plus, X } from 'lucide-svelte';
+	import { BarChart3, GitCompareArrows, Link2, X } from 'lucide-svelte';
 
 	const EFFICACY_ATTEMPTS_QUERY = gql`
 		query EfficacyAttempts($rowKey: String!, $projectId: String) {
@@ -32,6 +32,13 @@
 		}
 	`;
 
+	interface ComparisonArm {
+		harness: string;
+		provider: string;
+		model: string;
+		prompt: string;
+	}
+
 	interface EfficacyAttempt {
 		beadId: string;
 		outcome: string;
@@ -45,11 +52,6 @@
 			rowKey: string;
 			attempts: EfficacyAttempt[];
 		};
-	}
-
-	interface ComparisonArm {
-		model: string;
-		prompt: string;
 	}
 
 	interface ComparisonDispatchResult {
@@ -67,12 +69,10 @@
 	let attemptsLoading = $state(false);
 	let compareOpen = $state(false);
 	let comparisonArms = $state<ComparisonArm[]>([]);
+	let comparisonPrompt = $state('');
 	let comparisonResults = $state<ComparisonRecord[]>([]);
 	let dispatching = $state(false);
-
-	const modelOptions = $derived(
-		Array.from(new Set(data.rows.map((row) => row.model))).sort((a, b) => a.localeCompare(b))
-	);
+	let selectedRowKeys = $state<Set<string>>(new Set());
 
 	const filteredRows = $derived(
 		data.rows.filter((row) => {
@@ -141,31 +141,43 @@
 		}
 	}
 
-	function openCompare() {
-		comparisonArms = [];
+	function toggleRowSelection(row: EfficacyRow, checked: boolean) {
+		const key = rowKey(row);
+		const next = new Set(selectedRowKeys);
+		if (checked) {
+			next.add(key);
+		} else {
+			next.delete(key);
+		}
+		selectedRowKeys = next;
+	}
+
+	function openCompareSelected() {
+		const selectedRows = filteredRows.filter((row) => selectedRowKeys.has(rowKey(row)));
+		if (selectedRows.length < 2) return;
+		comparisonArms = selectedRows.map((row) => ({
+			harness: row.harness,
+			provider: row.provider,
+			model: row.model,
+			prompt: ''
+		}));
+		comparisonPrompt = '';
 		compareOpen = true;
 	}
 
-	function addArm() {
-		comparisonArms = [...comparisonArms, { model: modelOptions[0] ?? '', prompt: '' }];
-	}
-
-	function removeArm(index: number) {
-		comparisonArms = comparisonArms.filter((_, i) => i !== index);
-	}
-
-	function setArmModel(index: number, model: string) {
-		comparisonArms = comparisonArms.map((arm, i) => (i === index ? { ...arm, model } : arm));
-	}
-
-	function setArmPrompt(index: number, prompt: string) {
-		comparisonArms = comparisonArms.map((arm, i) => (i === index ? { ...arm, prompt } : arm));
+	function setPromptForAllArms(prompt: string) {
+		comparisonPrompt = prompt;
 	}
 
 	async function submitComparison() {
-		const arms = comparisonArms
-			.map((arm) => ({ model: arm.model.trim(), prompt: arm.prompt.trim() }))
-			.filter((arm) => arm.model && arm.prompt);
+		const prompt = comparisonPrompt.trim();
+		if (!prompt) return;
+		const arms = comparisonArms.map((arm) => ({
+			harness: arm.harness,
+			provider: arm.provider,
+			model: arm.model,
+			prompt
+		}));
 		if (arms.length === 0) return;
 
 		dispatching = true;
@@ -218,14 +230,22 @@
 			</div>
 			<h1 class="text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">Efficacy</h1>
 		</div>
-		<button
-			type="button"
-			onclick={openCompare}
-			class="inline-flex items-center gap-2 rounded-md bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:outline-none dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:focus:ring-offset-gray-950"
-		>
-			<GitCompareArrows class="h-4 w-4" />
-			Compare
-		</button>
+		{#if filteredRows.length > 0}
+			{@const selectionCount = filteredRows.filter((r) => selectedRowKeys.has(rowKey(r))).length}
+			{@const canCompare = selectionCount >= 2}
+			<button
+				type="button"
+				onclick={openCompareSelected}
+				disabled={!canCompare}
+				title={canCompare
+					? `Compare ${selectionCount} selected rows`
+					: 'Select 2 or more rows to compare'}
+				class="inline-flex items-center gap-2 rounded-md bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:focus:ring-offset-gray-950"
+			>
+				<GitCompareArrows class="h-4 w-4" />
+				Compare selected{selectionCount >= 2 ? ` (${selectionCount})` : ''}
+			</button>
+		{/if}
 	</header>
 
 	<form class="grid gap-3 md:grid-cols-[12rem_1fr_1fr]" aria-label="Efficacy filters">
@@ -283,6 +303,9 @@
 		<table aria-label="Efficacy table" class="w-full text-sm">
 			<thead>
 				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+					<th scope="col" class="w-10 px-4 py-3 text-left">
+						<span class="sr-only">Select row for comparison</span>
+					</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Harness</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Provider</th>
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Model</th>
@@ -306,6 +329,16 @@
 						onclick={() => openAttempts(row)}
 						class="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-emerald-50/60 dark:border-gray-800 dark:hover:bg-emerald-950/20"
 					>
+						<td class="px-4 py-3" onclick={(e) => e.stopPropagation()}>
+							<input
+								type="checkbox"
+								aria-label={`Select ${row.harness} / ${row.provider} / ${row.model} for comparison`}
+								checked={selectedRowKeys.has(rowKey(row))}
+								onchange={(e) =>
+									toggleRowSelection(row, (e.currentTarget as HTMLInputElement).checked)}
+								class="h-4 w-4 cursor-pointer rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-700"
+							/>
+						</td>
 						<td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{row.harness}</td>
 						<td class="px-4 py-3 text-gray-700 dark:text-gray-300">{row.provider}</td>
 						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
@@ -362,7 +395,7 @@
 				{/each}
 				{#if filteredRows.length === 0}
 					<tr>
-						<td colspan="8" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
+						<td colspan="9" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
 							No efficacy rows match the current filters.
 						</td>
 					</tr>
@@ -489,64 +522,41 @@
 				</button>
 			</div>
 
-			<div class="space-y-3">
-				{#each comparisonArms as arm, index}
-					<div
-						data-testid="comparison-arm"
-						class="grid gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800"
-					>
-						<div class="flex items-center justify-between gap-3">
-							<label class="flex-1 space-y-1 text-sm font-medium text-gray-700 dark:text-gray-300">
-								<span>Model</span>
-								<select
-									name="model"
-									value={arm.model}
-									onchange={(event) =>
-										setArmModel(index, (event.currentTarget as HTMLSelectElement).value)}
-									class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
-								>
-									{#each modelOptions as model}
-										<option value={model}>{model}</option>
-									{/each}
-								</select>
-							</label>
-							<button
-								type="button"
-								onclick={() => removeArm(index)}
-								aria-label="Remove comparison arm"
-								class="mt-6 rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-900 dark:hover:text-white"
-							>
-								<X class="h-4 w-4" />
-							</button>
-						</div>
-						<label class="space-y-1 text-sm font-medium text-gray-700 dark:text-gray-300">
-							<span>Prompt</span>
-							<textarea
-								name="prompt"
-								rows="3"
-								value={arm.prompt}
-								oninput={(event) =>
-									setArmPrompt(index, (event.currentTarget as HTMLTextAreaElement).value)}
-								class="w-full resize-y rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
-							></textarea>
-						</label>
-					</div>
-				{/each}
-			</div>
+			<p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
+				Comparing {comparisonArms.length} selected rows. They will all run the same prompt.
+			</p>
 
-			<div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-				<button
-					type="button"
-					onclick={addArm}
-					class="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:outline-none dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-900 dark:focus:ring-offset-gray-950"
-				>
-					<Plus class="h-4 w-4" />
-					Add arm
-				</button>
+			<ul class="mb-4 space-y-2">
+				{#each comparisonArms as arm (`${arm.harness}|${arm.provider}|${arm.model}`)}
+					<li
+						data-testid="comparison-arm"
+						class="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm dark:border-gray-800"
+					>
+						<span class="font-mono text-xs text-gray-800 dark:text-gray-200">
+							{arm.harness} / {arm.provider} / {arm.model}
+						</span>
+					</li>
+				{/each}
+			</ul>
+
+			<label class="block space-y-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+				<span>Prompt</span>
+				<textarea
+					name="prompt"
+					rows="4"
+					value={comparisonPrompt}
+					oninput={(event) =>
+						setPromptForAllArms((event.currentTarget as HTMLTextAreaElement).value)}
+					placeholder="Prompt run against every selected arm"
+					class="w-full resize-y rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+				></textarea>
+			</label>
+
+			<div class="mt-4 flex items-center justify-end gap-3">
 				<button
 					type="button"
 					onclick={submitComparison}
-					disabled={dispatching || comparisonArms.length === 0}
+					disabled={dispatching || comparisonArms.length === 0 || !comparisonPrompt.trim()}
 					class="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500"
 				>
 					{dispatching ? 'Starting...' : 'Start'}

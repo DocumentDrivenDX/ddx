@@ -116,27 +116,56 @@ async function mockEfficacy(
 			variables?: Record<string, unknown>;
 		};
 		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else if (body.query.includes('EfficacyRows') || body.query.includes('efficacyRows')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { efficacyRows: opts.rows ?? EFFICACY_ROWS } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { efficacyRows: opts.rows ?? EFFICACY_ROWS } })
+			});
 		} else if (body.query.includes('EfficacyAttempts') || body.query.includes('efficacyAttempts')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { efficacyAttempts: ATTEMPTS_DETAIL } }) });
-		} else if (body.query.includes('ComparisonDispatch') || body.query.includes('comparisonDispatch')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { efficacyAttempts: ATTEMPTS_DETAIL } })
+			});
+		} else if (
+			body.query.includes('ComparisonDispatch') ||
+			body.query.includes('comparisonDispatch')
+		) {
 			const result = opts.compareFn
 				? opts.compareFn(body.variables ?? {})
 				: { id: 'cmp-001', state: 'queued' };
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { comparisonDispatch: result } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { comparisonDispatch: result } })
+			});
 		} else if (body.query.includes('Comparisons')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { comparisons: [] } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { comparisons: [] } })
+			});
 		} else {
 			await route.continue();
 		}
 	});
 }
 
-test('US-096.a: efficacy table lists every (harness, provider, model) tuple with required columns', async ({ page }) => {
+test('US-096.a: efficacy table lists every (harness, provider, model) tuple with required columns', async ({
+	page
+}) => {
 	await mockEfficacy(page);
 	await page.goto(BASE_URL);
 
@@ -144,7 +173,16 @@ test('US-096.a: efficacy table lists every (harness, provider, model) tuple with
 	await expect(table).toBeVisible();
 
 	// Column headers that MUST be present.
-	for (const header of [/harness/i, /provider/i, /model/i, /attempts/i, /success/i, /tokens/i, /duration/i, /cost/i]) {
+	for (const header of [
+		/harness/i,
+		/provider/i,
+		/model/i,
+		/attempts/i,
+		/success/i,
+		/tokens/i,
+		/duration/i,
+		/cost/i
+	]) {
 		await expect(table.getByRole('columnheader', { name: header })).toBeVisible();
 	}
 
@@ -160,7 +198,9 @@ test('US-096.a: efficacy table lists every (harness, provider, model) tuple with
 	await expect(noCostRow).toContainText('—');
 });
 
-test('US-096.b: filtering by tier / label / spec-id updates table and encodes to URL', async ({ page }) => {
+test('US-096.b: filtering by tier / label / spec-id updates table and encodes to URL', async ({
+	page
+}) => {
 	await mockEfficacy(page);
 	await page.goto(BASE_URL);
 
@@ -176,7 +216,9 @@ test('US-096.b: filtering by tier / label / spec-id updates table and encodes to
 	await expect(page.getByRole('textbox', { name: /spec[- ]id/i })).toHaveValue('FEAT-008');
 });
 
-test('US-096.c: Compare dispatches ddx agent compare and records appear under Comparisons', async ({ page }) => {
+test('US-096.c: selection-driven Compare dispatches pre-seeded arms and records appear under Comparisons', async ({
+	page
+}) => {
 	let dispatched: Record<string, unknown> | null = null;
 	await mockEfficacy(page, {
 		compareFn: (req) => {
@@ -186,37 +228,71 @@ test('US-096.c: Compare dispatches ddx agent compare and records appear under Co
 	});
 
 	await page.goto(BASE_URL);
-	await page.getByRole('button', { name: /^compare$/i }).click();
+
+	// No selection: Compare button is disabled.
+	const compareBtn = page.getByRole('button', { name: /compare selected/i });
+	await expect(compareBtn).toBeVisible();
+	await expect(compareBtn).toBeDisabled();
+
+	// One selection: still disabled.
+	await page.getByRole('checkbox', { name: /select codex \/ openai \/ gpt-5/i }).check();
+	await expect(compareBtn).toBeDisabled();
+
+	// Two selections: enabled.
+	await page
+		.getByRole('checkbox', { name: /select claude \/ anthropic \/ claude-sonnet-4-6/i })
+		.check();
+	await expect(compareBtn).toBeEnabled();
+
+	await compareBtn.click();
 
 	const dialog = page.getByRole('dialog', { name: /compare/i });
 	await expect(dialog).toBeVisible();
 
-	// Pick two (model, prompt) arms.
-	await dialog.getByRole('button', { name: /add arm/i }).click();
-	await dialog.getByRole('button', { name: /add arm/i }).click();
-
+	// Arms pre-populated; only prompt is empty.
 	const arms = dialog.getByTestId('comparison-arm');
 	await expect(arms).toHaveCount(2);
+	await expect(arms.nth(0)).toContainText(/gpt-5/);
+	await expect(arms.nth(1)).toContainText(/claude-sonnet-4-6/);
 
-	await arms.nth(0).getByRole('combobox', { name: /model/i }).selectOption('gpt-5');
-	await arms.nth(0).getByRole('textbox', { name: /prompt/i }).fill('Summarize file X');
-	await arms.nth(1).getByRole('combobox', { name: /model/i }).selectOption('claude-sonnet-4-6');
-	await arms.nth(1).getByRole('textbox', { name: /prompt/i }).fill('Summarize file X');
+	// Start is disabled until prompt is filled.
+	const startBtn = dialog.getByRole('button', { name: /start|submit/i });
+	await expect(startBtn).toBeDisabled();
 
-	await dialog.getByRole('button', { name: /submit|start/i }).click();
+	await dialog.getByRole('textbox', { name: /prompt/i }).fill('Summarize file X');
+	await expect(startBtn).toBeEnabled();
+	await startBtn.click();
 
 	await expect.poll(() => dispatched).not.toBeNull();
 	expect(dispatched).toMatchObject({
 		arms: expect.arrayContaining([
-			expect.objectContaining({ model: 'gpt-5' }),
-			expect.objectContaining({ model: 'claude-sonnet-4-6' })
+			expect.objectContaining({
+				harness: 'codex',
+				provider: 'openai',
+				model: 'gpt-5',
+				prompt: 'Summarize file X'
+			}),
+			expect.objectContaining({
+				harness: 'claude',
+				provider: 'anthropic',
+				model: 'claude-sonnet-4-6',
+				prompt: 'Summarize file X'
+			})
 		])
 	});
 
 	await expect(page.getByRole('link', { name: /cmp-777/ })).toBeVisible();
 });
 
-test('US-096.d: success rate below adaptive floor shows warning badge with tooltip', async ({ page }) => {
+test('US-096.c2: Compare button is hidden when the efficacy table is empty', async ({ page }) => {
+	await mockEfficacy(page, { rows: [] });
+	await page.goto(BASE_URL);
+	await expect(page.getByRole('button', { name: /compare selected/i })).toHaveCount(0);
+});
+
+test('US-096.d: success rate below adaptive floor shows warning badge with tooltip', async ({
+	page
+}) => {
 	await mockEfficacy(page);
 	await page.goto(BASE_URL);
 
@@ -227,10 +303,15 @@ test('US-096.d: success rate below adaptive floor shows warning badge with toolt
 	await badge.hover();
 	const tooltip = page.getByRole('tooltip');
 	await expect(tooltip).toContainText(/below.*(floor|threshold)/i);
-	await expect(tooltip.getByRole('link', { name: /routing metrics/i })).toHaveAttribute('href', /routing/);
+	await expect(tooltip.getByRole('link', { name: /routing metrics/i })).toHaveAttribute(
+		'href',
+		/routing/
+	);
 });
 
-test('US-096.e: row click opens detail panel with last 10 attempts and evidence links', async ({ page }) => {
+test('US-096.e: row click opens detail panel with last 10 attempts and evidence links', async ({
+	page
+}) => {
 	await mockEfficacy(page);
 	await page.goto(BASE_URL);
 
@@ -253,7 +334,9 @@ test('US-096.e: row click opens detail panel with last 10 attempts and evidence 
 	await expect(page).toHaveURL(/\/beads\/ddx-attempt-0/);
 });
 
-test('smoke: efficacy opens with 10k-session rollup fixture and attempt details', async ({ page }) => {
+test('smoke: efficacy opens with 10k-session rollup fixture and attempt details', async ({
+	page
+}) => {
 	// AC §8 UI half. Renders the aggregated shape the 10k-session fixture
 	// produces (see TEN_K_SESSION_FIXTURE_ROWS above) and exercises the
 	// click-into EfficacyAttempts flow. The matching real-backend smoke —
@@ -270,7 +353,10 @@ test('smoke: efficacy opens with 10k-session rollup fixture and attempt details'
 	await expect(dataRows).toHaveCount(TEN_K_SESSION_FIXTURE_ROWS.length);
 	expect(TEN_K_SESSION_FIXTURE_ROWS.length).toBeGreaterThanOrEqual(5);
 
-	await table.getByRole('row', { name: /gpt-5\.4/i }).first().click();
+	await table
+		.getByRole('row', { name: /gpt-5\.4/i })
+		.first()
+		.click();
 	const panel = page.getByRole('complementary', { name: /attempts|detail/i });
 	await expect(panel).toBeVisible();
 	await expect(panel.getByRole('row')).toHaveCount(11);
