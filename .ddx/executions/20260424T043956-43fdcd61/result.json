@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The migration cleanly replaces the fake git + fake runner with a real git-init'd repo and a scripted agent driven by a per-attempt directive file, asserting orphan removal via both on-disk absence and `git worktree list --porcelain`. Scope is held to the one test; siblings are untouched."
+}
