@@ -794,26 +794,78 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 
 // TestExecuteBeadDirtyWorktreeWithoutCommits verifies that tracked file edits
 // left uncommitted by the agent are synthesized into a commit and treated as
-// real output rather than being discarded as "no-changes".
+// real output rather than being discarded as "no-changes". Exercises real git
+// + the script harness: the directive file edits a tracked file without
+// committing, so the worktree HEAD is unchanged but dirty, and execute-bead's
+// synthesize-commit path lands the edit onto main.
 func TestExecuteBeadDirtyWorktreeWithoutCommits(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "aaaa1111", // agent made no commits
-		wtDirty:     true,       // but left tracked file edits
-		synthRev:    "cccc3333", // SynthesizeCommit produces this rev
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead dirty-worktree synthesis",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Script harness edits a tracked file but never commits — worktree is
+	// dirty, HEAD is unchanged.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("append-line seed.txt agent-edit\n"), 0o644))
+
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.NotEqual(t, "no-changes", res.Outcome, "dirty worktree should not be classified as no-changes")
-	assert.Equal(t, "cccc3333", res.ResultRev)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
 	assert.Equal(t, "merged", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusSuccess, res.Status)
-	assert.Equal(t, 1, git.mergeCalls)
-	assert.Equal(t, "cccc3333", git.mergeRev)
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.NotEmpty(t, res.ResultRev)
+	assert.NotEqual(t, baseSHA, res.ResultRev, "synthesized commit must advance past base")
+
+	// The synthesized edit must have landed on main.
+	mainHead := runGit("rev-parse", "HEAD")
+	assert.Equal(t, res.ResultRev, mainHead, "merged result rev must be main HEAD")
+	seedContent, err := os.ReadFile(filepath.Join(workDir, "seed.txt"))
+	require.NoError(t, err)
+	assert.Contains(t, string(seedContent), "agent-edit")
 }
 
 func TestExecuteBeadMergePreservesContext(t *testing.T) {
