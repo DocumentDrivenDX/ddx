@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/spf13/cobra"
@@ -28,6 +30,7 @@ type DiagnosticIssue struct {
 // runDoctor implements the doctor command logic
 func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	fix, _ := cmd.Flags().GetBool("fix")
 
 	fmt.Println("🩺 DDx Installation Diagnostics")
 	fmt.Println("=====================================")
@@ -103,6 +106,26 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Println("❌ Git Not Found")
 		fmt.Println("   Git is required for DDX synchronization features")
 		allGood = false
+	}
+
+	// Check 4b: Git Repo Health (core.bare / core.worktree corruption)
+	fmt.Print("✓ Checking Git Repo Health... ")
+	repoIssues := checkGitRepoHealth(f.WorkingDir, fix)
+	if len(repoIssues) == 0 {
+		fmt.Println("✅ Git Repo Clean")
+	} else {
+		if fix {
+			fmt.Printf("🔧 Git Repo Issues Fixed (%d)\n", len(repoIssues))
+		} else {
+			fmt.Printf("⚠️  Git Repo Issues (%d) — re-run with --fix to remediate\n", len(repoIssues))
+		}
+		for _, issue := range repoIssues {
+			fmt.Printf("   ⚠️  %s\n", issue.Description)
+			for _, r := range issue.Remediation {
+				fmt.Printf("   💡 %s\n", r)
+			}
+		}
+		issues = append(issues, repoIssues...)
 	}
 
 	// Check 5: Network Connectivity
@@ -618,6 +641,134 @@ func installedEntryRootCandidate(entry registry.InstalledEntry) string {
 		return entry.Files[0]
 	}
 	return strings.TrimSpace(entry.Source)
+}
+
+// checkGitRepoHealth detects git-repo corruption from prior ddx incidents:
+//  1. core.bare=true on a repo that has a working tree (not actually bare)
+//  2. Stray core.worktree that does not match the actual toplevel
+//  3. extensions.worktreeConfig not enabled (warning only)
+//
+// If fix is true, conditions (1) and (2) are remediated with `git config --unset`.
+// (3) is always a warning — never auto-fixed, since enabling per-worktree config
+// is a user-facing choice.
+func checkGitRepoHealth(workingDir string, fix bool) []DiagnosticIssue {
+	var issues []DiagnosticIssue
+	ctx := context.Background()
+
+	// Bail out quietly if this directory isn't a git repo at all. We can't rely
+	// on `--is-inside-work-tree` here because the corruption we're looking for
+	// (core.bare=true on a repo that has a working tree) causes git to report
+	// "false" for that query. Instead, probe `--git-dir`, which succeeds on both
+	// bare and non-bare repos.
+	gitDirProbe := gitpkg.Command(ctx, workingDir, "rev-parse", "--git-dir")
+	gdOut, err := gitDirProbe.Output()
+	if err != nil {
+		return nil
+	}
+	gitDirRaw := strings.TrimSpace(string(gdOut))
+	if gitDirRaw == "" {
+		return nil
+	}
+
+	// A "real" working tree on disk: either .git is a directory/file at
+	// workingDir, or git reports a separate work-tree via --show-toplevel.
+	// If neither holds, this is a genuinely bare repo → skip the checks.
+	hasWorkTreeOnDisk := false
+	if _, statErr := os.Stat(filepath.Join(workingDir, ".git")); statErr == nil {
+		hasWorkTreeOnDisk = true
+	}
+	if !hasWorkTreeOnDisk {
+		// Maybe we're inside a linked worktree where git treats us normally.
+		inWT := gitpkg.Command(ctx, workingDir, "rev-parse", "--is-inside-work-tree")
+		if b, err := inWT.Output(); err == nil && strings.TrimSpace(string(b)) == "true" {
+			hasWorkTreeOnDisk = true
+		}
+	}
+	if !hasWorkTreeOnDisk {
+		return nil
+	}
+
+	gitConfigValue := func(key string) (string, bool) {
+		c := gitpkg.Command(ctx, workingDir, "config", "--local", "--get", key)
+		b, err := c.Output()
+		if err != nil {
+			return "", false
+		}
+		return strings.TrimSpace(string(b)), true
+	}
+	gitConfigUnset := func(key string) error {
+		c := gitpkg.Command(ctx, workingDir, "config", "--local", "--unset", key)
+		return c.Run()
+	}
+
+	// (1) core.bare=true on a repo with a working tree → corruption.
+	if val, ok := gitConfigValue("core.bare"); ok && val == "true" {
+		desc := "core.bare=true is set on a repository that has a working tree (not actually bare)"
+		rem := []string{"git config --unset core.bare"}
+		if fix {
+			if err := gitConfigUnset("core.bare"); err == nil {
+				desc += " — removed"
+			} else {
+				desc += fmt.Sprintf(" — unset failed: %v", err)
+			}
+		}
+		issues = append(issues, DiagnosticIssue{
+			Type:        "git_core_bare_corruption",
+			Description: desc,
+			Remediation: rem,
+		})
+	}
+
+	// (2) Stray core.worktree that doesn't match the directory we're running
+	// against. Compare to workingDir directly — asking git for --show-toplevel
+	// would just echo back core.worktree.
+	if worktreeVal, ok := gitConfigValue("core.worktree"); ok && worktreeVal != "" {
+		actual := workingDir
+
+		cmpVal := worktreeVal
+		if !filepath.IsAbs(cmpVal) {
+			cmpVal = filepath.Clean(filepath.Join(gitDirRaw, worktreeVal))
+		}
+		resolvedCmp, _ := filepath.EvalSymlinks(cmpVal)
+		if resolvedCmp == "" {
+			resolvedCmp = cmpVal
+		}
+		resolvedActual, _ := filepath.EvalSymlinks(actual)
+		if resolvedActual == "" {
+			resolvedActual = actual
+		}
+
+		if actual != "" && resolvedCmp != resolvedActual {
+			desc := fmt.Sprintf("core.worktree=%q does not match actual worktree %q", worktreeVal, actual)
+			rem := []string{"git config --unset core.worktree"}
+			if fix {
+				if err := gitConfigUnset("core.worktree"); err == nil {
+					desc += " — removed"
+				} else {
+					desc += fmt.Sprintf(" — unset failed: %v", err)
+				}
+			}
+			issues = append(issues, DiagnosticIssue{
+				Type:        "git_stray_core_worktree",
+				Description: desc,
+				Remediation: rem,
+			})
+		}
+	}
+
+	// (3) extensions.worktreeConfig not enabled → warning only.
+	val, ok := gitConfigValue("extensions.worktreeConfig")
+	if !ok || val != "true" {
+		issues = append(issues, DiagnosticIssue{
+			Type:        "git_worktree_config_disabled",
+			Description: "extensions.worktreeConfig is not enabled; per-worktree config changes can corrupt the shared .git/config",
+			Remediation: []string{
+				"git config extensions.worktreeConfig true",
+			},
+		})
+	}
+
+	return issues
 }
 
 // checkMetaPromptSync checks if the meta-prompt in CLAUDE.md is in sync with library
