@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration. The fake structs are gone and replaced by a real git repo + script-harness directive file driving an actual worker commit, with assertions promoted from `git.mergeCalls == 0` / `git.refs[ref]` map lookups to real `git rev-parse` / `git log --merges` checks against `refs/heads/main` and the preserve ref. Scope was held to the single target test."
+}
