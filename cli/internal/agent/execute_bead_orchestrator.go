@@ -376,12 +376,27 @@ func RecoverOrphans(gitOps GitOps, workDir, beadID string) {
 	// Match by basename prefix so orphans are found regardless of their parent
 	// directory (legacy .ddx/ vs new $TMPDIR/ddx-exec-wt/).
 	basenamePrefix := ExecuteBeadWtPrefix + beadID + "-"
+	orphanRemoved := false
 	for _, p := range paths {
 		if strings.HasPrefix(filepath.Base(p), basenamePrefix) {
 			_ = gitOps.WorktreeRemove(workDir, p)
+			orphanRemoved = true
 		}
 	}
 	_ = gitOps.WorktreePrune(workDir)
+
+	// Sweep stale run-state left by a crashed worker. We clear it whenever we
+	// just reaped an orphan for this bead, or when run-state points at a bead
+	// whose worktree no longer exists.
+	if state, _ := ReadRunState(workDir); state != nil {
+		if orphanRemoved || state.BeadID == beadID {
+			_ = ClearRunState(workDir)
+		} else if state.WorktreePath != "" {
+			if _, err := os.Stat(state.WorktreePath); os.IsNotExist(err) {
+				_ = ClearRunState(workDir)
+			}
+		}
+	}
 }
 
 // evaluateRequiredGates resolves graph-authored execution documents that are

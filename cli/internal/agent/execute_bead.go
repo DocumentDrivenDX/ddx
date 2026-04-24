@@ -601,6 +601,22 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
 	}()
 
+	// Publish the live run-state so operators and HELIX can observe what is
+	// executing without polling the bead tracker (CONTRACT-001 §5). The file
+	// is removed on completion; a crashed worker leaves a stale file that
+	// RecoverOrphans sweeps before the next attempt.
+	_ = WriteRunState(projectRoot, RunState{
+		BeadID:       beadID,
+		AttemptID:    attemptID,
+		Harness:      opts.Harness,
+		Model:        opts.Model,
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: wtPath,
+	})
+	defer func() {
+		_ = ClearRunState(projectRoot)
+	}()
+
 	// Repair project-local skill symlinks whose targets do not resolve inside
 	// the freshly created worktree.
 	_ = materializeWorktreeSkills(wtPath)
