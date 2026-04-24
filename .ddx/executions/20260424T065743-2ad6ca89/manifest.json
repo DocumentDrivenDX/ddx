@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260424T065743-2ad6ca89",
+  "bead_id": "ddx-6f876b36",
+  "base_rev": "b264b257c09baee6775497386b37482d5531eb62",
+  "created_at": "2026-04-24T06:57:44.252066454Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6f876b36",
+    "title": "feat(doctor): detect+fix core.bare and stray core.worktree (Phase 3)",
+    "description": "ddx doctor needs to detect existing repo corruption from prior incidents and offer auto-fix.\n\nAdd checks to cli/cmd/doctor.go (or wherever doctor lives):\n1. core.bare = true on a repo with a working tree (not actually bare) — flag + offer 'git config --unset core.bare'\n2. Stray core.worktree entries that don't match the actual worktree path — flag + offer 'git config --unset core.worktree'\n3. extensions.worktreeConfig missing → warning (not fail), with note that it prevents per-worktree config corruption",
+    "acceptance": "Test: deliberately corrupt a test repo with 'git config core.bare true', run doctor, assert it's detected. With --fix flag (or interactive), assert the bad config gets removed. Doctor still passes on a clean repo.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "claimed-at": "2026-04-24T06:57:43Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-24T06:57:43.736910693Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T065743-2ad6ca89",
+    "prompt": ".ddx/executions/20260424T065743-2ad6ca89/prompt.md",
+    "manifest": ".ddx/executions/20260424T065743-2ad6ca89/manifest.json",
+    "result": ".ddx/executions/20260424T065743-2ad6ca89/result.json",
+    "checks": ".ddx/executions/20260424T065743-2ad6ca89/checks.json",
+    "usage": ".ddx/executions/20260424T065743-2ad6ca89/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6f876b36-20260424T065743-2ad6ca89"
+  }
+}
