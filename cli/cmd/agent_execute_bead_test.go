@@ -2152,32 +2152,74 @@ func TestExecuteBeadInvalidBeadID(t *testing.T) {
 }
 
 // TestExecuteBeadEvidenceFields verifies that runtime evidence fields are
-// populated in the JSON output.
+// populated in the JSON output. Exercises real git plumbing + the script
+// harness so the fields are filled by the real runner, not a canned Result.
 func TestExecuteBeadEvidenceFields(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "bbbb2222",
+	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
 	}
-	runner := &fakeAgentRunner{result: &agent.Result{
-		ExitCode: 0,
-		Harness:  "testharness",
-		Model:    "test-model",
-		Tokens:   42,
-		CostUSD:  0.001,
-	}}
-	f := newExecuteBeadFactory(t, git, runner)
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
 
-	assert.Equal(t, "testharness", res.Harness)
-	assert.Equal(t, "test-model", res.Model)
-	assert.Equal(t, 42, res.Tokens)
-	assert.InDelta(t, 0.001, res.CostUSD, 1e-9)
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead evidence fields",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file evidence.txt evidence-content\n"+
+			"commit feat: add evidence\n",
+	), 0o644))
+
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
+
+	assert.Equal(t, "script", res.Harness)
+	assert.Equal(t, directivePath, res.Model)
+	assert.Equal(t, 0, res.Tokens, "script harness reports no token usage")
+	assert.Equal(t, 0.0, res.CostUSD, "script harness reports no cost")
 	assert.NotEmpty(t, res.SessionID)
 	assert.False(t, res.StartedAt.IsZero())
 	assert.False(t, res.FinishedAt.IsZero())
-	assert.Equal(t, "aaaa1111", res.BaseRev)
-	assert.Equal(t, "bbbb2222", res.ResultRev)
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.NotEmpty(t, res.ResultRev)
+	assert.NotEqual(t, res.BaseRev, res.ResultRev, "agent commit must produce a distinct ResultRev")
 }
 
 // TestExecuteBeadModelFlagPassthrough locks in the resolution contract for
