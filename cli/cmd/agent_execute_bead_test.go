@@ -1413,26 +1413,82 @@ func TestExecuteBeadOrphanRecovery(t *testing.T) {
 
 // TestExecuteBeadHarnessNoiseNotSynthesized verifies that when the agent makes no
 // real commits but the worktree is dirty with only harness bookkeeping files
-// (e.g. .ddx/agent-logs), SynthesizeCommit returns (false, nil) and the outcome
-// is "no-changes", not "merged" or "success". ResultRev must equal BaseRev.
+// (e.g. .ddx/executions/<attempt>/embedded/*), SynthesizeCommit returns
+// (false, nil) and the outcome is "no-changes", not "merged" or "success".
+// ResultRev must equal BaseRev. Exercises real git + script harness: the
+// directive writes a noise file under the embedded/ pathspec that
+// RealGitOps.SynthesizeCommit excludes, so IsDirty=true but nothing stages
+// and no iteration commit lands on main.
 func TestExecuteBeadHarnessNoiseNotSynthesized(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "aaaa1111", // agent made no real commits
-		wtDirty:     true,       // worktree is dirty (e.g. agent-logs written)
-		// synthRev is intentionally empty: SynthesizeCommit returns (false, nil)
-		// simulating that all dirty files were harness noise.
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test harness-noise no-synthesis",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+
+	// Capture main HEAD before the run so we can assert that no iteration
+	// commit or merge advanced main (the fake's mergeCalls==0 invariant).
+	mainBefore := runGit("rev-parse", "HEAD")
+
+	// Directive writes a noise file under .claude/skills, which
+	// RealGitOps.synthesizeCommitExcludePathspecs excludes from staging.
+	// IsDirty(wtPath) reports true (untracked file in worktree), but
+	// SynthesizeCommit stages nothing and returns (false, nil) — the
+	// all-noise worktree case.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file .claude/skills/noise.md harness-noise-content\n",
+	), 0o644))
+
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+	res := runExecuteBead(t, f, nil, "my-bead",
+		"--harness", "script", "--model", directivePath)
 
 	assert.Equal(t, "no-changes", res.Outcome, "harness-noise-only dirty worktree must not produce a synthesis commit")
 	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
-	assert.Equal(t, "aaaa1111", res.ResultRev, "ResultRev must equal BaseRev when no real commit was made")
-	assert.Equal(t, 0, git.mergeCalls, "merge must not be called when outcome is no-changes")
+	assert.NotEmpty(t, res.BaseRev, "BaseRev must be set to real HEAD SHA")
+	assert.Equal(t, res.BaseRev, res.ResultRev, "ResultRev must equal BaseRev when no real commit was made")
+
+	// merge must not be called when outcome is no-changes: main HEAD must
+	// not advance and no merge commit must land.
+	mainAfter := runGit("rev-parse", "HEAD")
+	assert.Equal(t, mainBefore, mainAfter, "main HEAD must not advance when outcome is no-changes")
+	mergeLog := runGit("log", "--merges", "--format=%H", mainBefore+"..HEAD")
+	assert.Empty(t, mergeLog, "no merge commit must land when outcome is no-changes")
 }
 
 // TestExecuteBeadAgentErrorNoCommits verifies that when the agent runner returns
