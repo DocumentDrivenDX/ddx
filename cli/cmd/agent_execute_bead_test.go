@@ -444,30 +444,107 @@ func TestExecuteBeadMerge(t *testing.T) {
 }
 
 // TestExecuteBeadPreserveOnMergeFailure verifies that when merge fails
-// the result is preserved under a hidden ref.
+// the result is preserved under a hidden ref. Exercises real git plumbing
+// and the script harness producing an actual conflicting commit — no fakes
+// for the components under test.
 func TestExecuteBeadPreserveOnMergeFailure(t *testing.T) {
-	git := &fakeExecuteBeadGit{
-		mainHeadRev: "aaaa1111",
-		wtHeadRev:   "cccc3333",
-		mergeErr:    fmt.Errorf("merge conflict"),
-	}
-	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0}}
-	f := newExecuteBeadFactory(t, git, runner)
+	workDir := t.TempDir()
 
-	res := runExecuteBead(t, f, git, "my-bead")
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead preserve on merge failure",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	// Advance main past baseSHA with a sibling commit that writes hello.txt
+	// with content different from what the agent will produce. Once the
+	// agent commits its own hello.txt on a worktree rooted at baseSHA,
+	// Land() must attempt a merge and hit a content conflict, triggering
+	// the preserve path.
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "hello.txt"), []byte("sibling-content\n"), 0o644))
+	runGit("add", "hello.txt")
+	runGit("commit", "-m", "feat: sibling conflicting change")
+	siblingSHA := runGit("rev-parse", "HEAD")
+
+	// Directive drives the real script harness to emit one real commit
+	// touching the same file as the sibling — replacing fakeAgentRunner's
+	// canned Result struct with an actual worker commit.
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte(
+		"create-file hello.txt worker-content\n"+
+			"commit feat: worker add hello\n",
+	), 0o644))
+
+	// Real runner + real git ops: no overrides that fake the thing under test.
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
 
 	assert.Equal(t, "preserved", res.Outcome)
-	assert.Equal(t, "aaaa1111", res.BaseRev)
-	assert.Equal(t, "cccc3333", res.ResultRev)
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.NotEmpty(t, res.ResultRev)
+	assert.NotEqual(t, res.BaseRev, res.ResultRev)
+	workerSHA := res.ResultRev
 	assert.NotEmpty(t, res.PreserveRef)
-	assertPreserveRef(t, res.PreserveRef, "my-bead", "aaaa1111")
-	assert.Equal(t, "merge failed", res.Reason)
+	// Real Land() records the ref as refs/ddx/iterations/<bead>/<attempt>-<currentTip[:12]>,
+	// where currentTip is the sibling commit that made the merge conflict.
+	require.Regexp(t,
+		fmt.Sprintf(`^refs/ddx/iterations/my-bead/.+-%s$`, regexp.QuoteMeta(siblingSHA[:12])),
+		res.PreserveRef,
+	)
+	assert.NotEmpty(t, res.Reason, "merge-conflict preserve must carry a reason")
 
-	// Hidden ref should be recorded in the mock.
-	require.Contains(t, git.refs, res.PreserveRef)
-	assert.Equal(t, "cccc3333", git.refs[res.PreserveRef])
-	assert.Equal(t, 1, git.mergeCalls)
-	assert.Equal(t, "cccc3333", git.mergeRev)
+	// Real-git assertion: the hidden ref must exist and resolve to the worker
+	// commit (pre-refactor: git.refs[preserveRef] == "cccc3333").
+	preservedSHA := runGit("rev-parse", res.PreserveRef)
+	assert.Equal(t, workerSHA, preservedSHA, "preserve ref must resolve to the worker commit")
+
+	// Target branch must be untouched — merge was refused, not applied.
+	// (Pre-refactor equivalent: assert.Equal(t, 1, git.mergeCalls) confirmed
+	// a merge was attempted; with real git, the observable outcome is that
+	// main never advances past the sibling and no merge commit exists.)
+	assert.Equal(t, siblingSHA, runGit("rev-parse", "refs/heads/main"),
+		"main must be unchanged when merge preserves")
+	mergeCommits := runGit("log", "--merges", "--format=%H", "refs/heads/main")
+	assert.Empty(t, mergeCommits, "preserve path must not produce a merge commit on main")
 }
 
 // TestExecuteBeadNoMerge verifies that --no-merge skips merge and
