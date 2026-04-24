@@ -13,7 +13,8 @@
 		Radio,
 		Layers,
 		BarChart3,
-		PlayCircle
+		PlayCircle,
+		Home
 	} from 'lucide-svelte';
 	import { page } from '$app/stores';
 	import { toggleMode, mode } from '$lib/theme';
@@ -26,6 +27,7 @@
 	let { children } = $props();
 
 	const pages = [
+		{ page: '', label: 'Overview', Icon: Home, exact: true },
 		{ page: 'beads', label: 'Beads', Icon: LayoutDashboard },
 		{ page: 'documents', label: 'Documents', Icon: FileText },
 		{ page: 'graph', label: 'Graph', Icon: GitBranch },
@@ -39,12 +41,19 @@
 	];
 
 	const navLinks = $derived(
-		pages.map(({ page, label, Icon }) => {
+		pages.map(({ page, label, Icon, exact }) => {
 			const nodeId = nodeStore.value?.id;
 			const projectId = projectStore.value?.id;
-			const href = nodeId && projectId ? `/nodes/${nodeId}/projects/${projectId}/${page}` : null;
-			return { href, label, Icon };
+			const base = nodeId && projectId ? `/nodes/${nodeId}/projects/${projectId}` : null;
+			const href = base ? (page ? `${base}/${page}` : base) : null;
+			return { href, label, Icon, exact: Boolean(exact) };
 		})
+	);
+
+	const brandHref = $derived(
+		nodeStore.value?.id && projectStore.value?.id
+			? `/nodes/${nodeStore.value.id}/projects/${projectStore.value.id}`
+			: '/'
 	);
 
 	const allBeadsHref = $derived(nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/beads` : null);
@@ -61,7 +70,12 @@
 	<header
 		class="flex shrink-0 items-center gap-4 border-b border-gray-200 px-4 py-2 dark:border-gray-800 dark:bg-gray-900"
 	>
-		<span class="text-lg font-semibold tracking-tight dark:text-white">DDx</span>
+		<a
+			href={brandHref}
+			class="text-lg font-semibold tracking-tight text-gray-950 hover:text-gray-700 dark:text-white dark:hover:text-gray-300"
+		>
+			DDx
+		</a>
 		<span class="text-xs text-gray-700 dark:text-gray-300">Node: {nodeName}</span>
 		<div class="mx-2 h-4 w-px bg-gray-200 dark:bg-gray-700"></div>
 		<ProjectPicker />
@@ -96,9 +110,11 @@
 		<nav
 			class="flex w-48 shrink-0 flex-col gap-1 border-r border-gray-200 p-2 dark:border-gray-800 dark:bg-gray-900"
 		>
-			{#each navLinks as { href, label, Icon }}
+			{#each navLinks as { href, label, Icon, exact }}
 				{#if href}
-					{@const active = $page.url.pathname.startsWith(href)}
+					{@const active = exact
+						? $page.url.pathname === href || $page.url.pathname === href + '/'
+						: $page.url.pathname.startsWith(href)}
 					<a
 						{href}
 						aria-current={active ? 'page' : undefined}

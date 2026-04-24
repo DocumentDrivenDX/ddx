@@ -113,3 +113,82 @@ test('TC-007: sidebar nav links activate after project selection', async ({ page
 	await expect(nav.locator('a', { hasText: 'Beads' })).toBeVisible();
 	await expect(nav.locator('a', { hasText: 'Documents' })).toBeVisible();
 });
+
+/**
+ * Extended mock that also answers the project overview page's GraphQL needs.
+ */
+async function mockGraphQLForOverview(page: import('@playwright/test').Page) {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+		} else if (body.query.includes('ProjectQueueSummary')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { queueSummary: { ready: 2, blocked: 1, inProgress: 0 } }
+				})
+			});
+		} else if (body.query.includes('beadsByProject') || body.query.includes('beads(')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						beadsByProject: {
+							edges: [],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 0
+						},
+						beads: {
+							edges: [],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 0
+						}
+					}
+				})
+			});
+		} else {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: {} })
+			});
+		}
+	});
+}
+
+// TC-008: Overview sidebar entry routes to project home and DDx brand is a link
+test('TC-008: overview entry and DDx brand return to project home', async ({ page }) => {
+	await mockGraphQLForOverview(page);
+	await page.goto('/nodes/node-abc/projects/proj-1/beads');
+
+	const nav = page.locator('nav');
+	const overview = nav.locator('a', { hasText: 'Overview' });
+	await expect(overview).toBeVisible();
+	await overview.click();
+
+	await expect(page).toHaveURL(/\/nodes\/node-abc\/projects\/proj-1\/?$/);
+	await expect(page.getByText('Project overview')).toBeVisible();
+	await expect(page.getByLabel('Queue summary')).toBeVisible();
+
+	// Now go into a sub-page and click the DDx brand to return home.
+	await page.goto('/nodes/node-abc/projects/proj-1/sessions');
+	const brand = page.locator('header a', { hasText: 'DDx' });
+	await expect(brand).toBeVisible();
+	await brand.click();
+	await expect(page).toHaveURL(/\/nodes\/node-abc\/projects\/proj-1\/?$/);
+});
