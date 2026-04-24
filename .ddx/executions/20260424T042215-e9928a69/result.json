@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The migration cleanly replaces the fake GitOps + fake Runner with real git (init + two seed commits via GIT_*-scrubbed env), the real `agent.Runner`, and the script harness driven by a directive file. Assertions are preserved — the synthesized prompt is now read from the on-disk execution bundle path returned in the JSON result rather than captured from the fake runner's opts. Scope is tight; only the target test is modified."
+}
