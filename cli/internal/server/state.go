@@ -1,17 +1,19 @@
 package server
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // goTestNameRegexp matches a path segment shaped like a Go test directory:
@@ -449,9 +451,7 @@ func trimNL(s string) string {
 
 // runGitCapture runs a git command in dir and returns its stdout.
 func runGitCapture(dir string, args ...string) ([]byte, error) {
-	cmd := exec.Command("git", args...) //nolint:gosec
-	cmd.Dir = dir
-	return cmd.Output()
+	return internalgit.Command(context.Background(), dir, args...).Output()
 }
 
 // PruneResult summarises a PruneStateFile operation so callers can print a

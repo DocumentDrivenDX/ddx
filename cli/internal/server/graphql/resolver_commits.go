@@ -3,11 +3,11 @@ package graphql
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // beadRefPattern matches bead IDs of the form ddx-<8 hex chars>.
@@ -21,7 +21,7 @@ func (r *queryResolver) Commits(ctx context.Context, projectID string, first *in
 		return nil, fmt.Errorf("project not found: %s", projectID)
 	}
 
-	snaps, err := gitLogCommits(proj.Path, since, author)
+	snaps, err := gitLogCommits(ctx, proj.Path, since, author)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +89,12 @@ func (r *queryResolver) Commits(ctx context.Context, projectID string, first *in
 
 // gitLogCommits runs git log for the given project path and returns parsed commits.
 // Up to 500 commits are fetched. Optionally filtered by since (ISO-8601) and author.
-func gitLogCommits(path string, since, author *string) ([]*Commit, error) {
+func gitLogCommits(ctx context.Context, path string, since, author *string) ([]*Commit, error) {
 	const sep = "\x1f"
 	const recSep = "\x1e"
 	format := "--pretty=format:%H" + sep + "%h" + sep + "%an" + sep + "%aI" + sep + "%s" + sep + "%b" + recSep
 
-	args := []string{"-C", path, "log", format, "-n", strconv.Itoa(500)}
+	args := []string{"log", format, "-n", strconv.Itoa(500)}
 	if since != nil && *since != "" {
 		args = append(args, "--since="+*since)
 	}
@@ -102,8 +102,7 @@ func gitLogCommits(path string, since, author *string) ([]*Commit, error) {
 		args = append(args, "--author="+*author)
 	}
 
-	cmd := exec.Command("git", args...) //nolint:gosec
-	cmd.Env = graphqlScrubbedGitEnv()
+	cmd := internalgit.Command(ctx, path, args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log failed: %w", err)
@@ -139,18 +138,4 @@ func gitLogCommits(path string, since, author *string) ([]*Commit, error) {
 		commits = append(commits, c)
 	}
 	return commits, nil
-}
-
-// graphqlScrubbedGitEnv returns the current process environment with GIT_*
-// variables removed so git subcommands honour explicit -C flags.
-func graphqlScrubbedGitEnv() []string {
-	src := os.Environ()
-	out := make([]string, 0, len(src))
-	for _, kv := range src {
-		if strings.HasPrefix(kv, "GIT_") {
-			continue
-		}
-		out = append(out, kv)
-	}
-	return out
 }

@@ -2,10 +2,10 @@ package processmetrics
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 const (
@@ -1167,7 +1168,7 @@ func commitTimeWithWorkingDir(workingDir, sha string) (time.Time, bool) {
 	if sha == "" {
 		return time.Time{}, false
 	}
-	cmd := exec.Command("git", "-C", workingDir, "show", "-s", "--format=%cI", sha)
+	cmd := internalgit.Command(context.Background(), workingDir, "show", "-s", "--format=%cI", sha)
 	out, err := cmd.Output()
 	if err != nil {
 		return time.Time{}, false

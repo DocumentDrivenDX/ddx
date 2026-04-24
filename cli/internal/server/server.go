@@ -806,7 +806,7 @@ func (s *Server) handleProjectCommits(w http.ResponseWriter, r *http.Request) {
 	cmd := exec.Command("git", args...) //nolint:gosec
 	// Scrub inherited GIT_* env vars so `-C` takes effect reliably even when
 	// running inside a parent git hook context.
-	cmd.Env = scrubbedGitEnv()
+	cmd.Env = internalgit.CleanEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed: " + err.Error()})
@@ -1669,7 +1669,7 @@ func (s *Server) handleDocHistory(w http.ResponseWriter, r *http.Request) {
 	gitArgs := []string{"log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path}
 	gitCmd := exec.Command("git", gitArgs...)
 	gitCmd.Dir = s.workingDirForRequest(r)
-	gitCmd.Env = scrubbedGitEnv()
+	gitCmd.Env = internalgit.CleanEnv()
 	out, gitErr := gitCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed"})
@@ -1741,7 +1741,7 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 
 	diffCmd := exec.Command("git", gitArgs...)
 	diffCmd.Dir = s.workingDirForRequest(r)
-	diffCmd.Env = scrubbedGitEnv()
+	diffCmd.Env = internalgit.CleanEnv()
 	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git diff failed"})
@@ -3644,8 +3644,7 @@ func (s *Server) mcpDocHistory(workingDir, id string) mcpToolResult {
 	if !ok {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
 	}
-	logCmd := exec.Command("git", "log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path)
-	logCmd.Dir = workingDir
+	logCmd := internalgit.Command(context.Background(), workingDir, "log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path)
 	out, gitErr := logCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git log failed"}}, IsError: true}
@@ -3698,8 +3697,7 @@ func (s *Server) mcpDocDiff(workingDir, id, ref string) mcpToolResult {
 	} else {
 		gitArgs = []string{"diff", "--", doc.Path}
 	}
-	mcpDiffCmd := exec.Command("git", gitArgs...)
-	mcpDiffCmd.Dir = workingDir
+	mcpDiffCmd := internalgit.Command(context.Background(), workingDir, gitArgs...)
 	out, gitErr := mcpDiffCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
@@ -3747,8 +3745,7 @@ func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 	if since == "" {
 		since = "HEAD~5"
 	}
-	diffCmd := exec.Command("git", "diff", "--name-status", since, "HEAD")
-	diffCmd.Dir = workingDir
+	diffCmd := internalgit.Command(context.Background(), workingDir, "diff", "--name-status", since, "HEAD")
 	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
@@ -3759,8 +3756,7 @@ func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
 	}
 
-	rootCmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	rootCmd.Dir = workingDir
+	rootCmd := internalgit.Command(context.Background(), workingDir, "rev-parse", "--show-toplevel")
 	rootOut, rootErr := rootCmd.Output()
 	if rootErr != nil {
 		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "could not determine git root"}}, IsError: true}
@@ -3815,22 +3811,6 @@ func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 }
 
 // --- Helpers ---
-
-// scrubbedGitEnv returns the current process environment with GIT_* variables
-// removed. This ensures git subcommands invoked by the server honour explicit
-// -C <dir>/cmd.Dir settings instead of inheriting e.g. GIT_DIR / GIT_WORK_TREE
-// from a parent git hook.
-func scrubbedGitEnv() []string {
-	src := os.Environ()
-	out := make([]string, 0, len(src))
-	for _, kv := range src {
-		if strings.HasPrefix(kv, "GIT_") {
-			continue
-		}
-		out = append(out, kv)
-	}
-	return out
-}
 
 func (s *Server) libraryPath() string {
 	return s.libraryPathFor(s.WorkingDir)

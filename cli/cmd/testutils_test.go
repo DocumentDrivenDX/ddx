@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -257,7 +258,7 @@ func (te *TestEnvironment) initGit() {
 	// Strip inherited git env vars so git commands operate on the test
 	// directory's own repository, not any repository inherited from a
 	// hook or parent process (e.g. GIT_DIR set by lefthook).
-	cleanEnv := gitEnvForDir()
+	cleanEnv := gitpkg.CleanEnv()
 
 	// git init
 	gitInit := exec.Command("git", "init")
@@ -344,7 +345,7 @@ func (te *TestEnvironment) InitWithDDx(flags ...string) {
 
 	// If git is initialized and we're not using --no-git, create initial commit
 	if te.GitInitialized && !hasNoGitFlag {
-		cleanEnv := gitEnvForDir()
+		cleanEnv := gitpkg.CleanEnv()
 		te.CreateFile("README.md", "# Test Project")
 		gitAdd := exec.Command("git", "add", ".")
 		gitAdd.Dir = te.Dir
