@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260424T052619-473eb803",
+  "bead_id": "ddx-2a53fb75",
+  "base_rev": "e35dc62787b325b08a9e130fde4af9919ff20191",
+  "created_at": "2026-04-24T05:26:20.182155307Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2a53fb75",
+    "title": "test: migrate TestExecuteBeadEvidenceFields to real git + script harness",
+    "description": "Migrate cli/cmd/agent_execute_bead_test.go TestExecuteBeadEvidenceFields() from fakeExecuteBeadGit + fakeAgentRunner to real git + script harness.\n\nPattern:\n- Use cli/internal/agent/integration_helper_test.go newScriptHarnessRepo(t, beadCount) to build an isolated repo with real git.\n- Use runGitInteg (from cli/internal/git/git_basic_test.go) for any supplemental git invocations, so GIT_* env is scrubbed.\n- Replace fakeExecuteBeadGit with the RealLandingGitOps flow used in cli/internal/agent/execute_bead_land_test.go.\n- Replace fakeAgentRunner with the script harness (cli/internal/agent/script.go) driven by a per-attempt directive file. When the test needs to simulate 'agent emits no commits' or 'agent emits a dirty worktree', encode that as script directives rather than a canned Result struct.\n- Preserve every assertion — the point is that the test now exercises real git + real merge/preserve semantics, not that the surface shrinks.\n\nScope limit: ONLY this test. Do not migrate any other test in the same file; touching another test expands blast radius outside the bead.\n\nVerification: cd cli \u0026\u0026 go test ./cmd -run '^TestExecuteBeadEvidenceFields$' -count=1 passes. No struct ending in -GitOps or -Runner that fakes the thing under test is referenced from this test after the migration.\n\nGoverning concern: concerns.md §testing 'no mocks, period' + 'never mock the thing you are testing'. Parent: ddx-d9df348d.",
+    "acceptance": "1) TestExecuteBeadEvidenceFields no longer references fakeExecuteBeadGit or fakeAgentRunner. 2) Test dispatches through RealLandingGitOps + newScriptHarnessRepo (or equivalent real-git harness). 3) cd cli \u0026\u0026 go test ./cmd -run '^TestExecuteBeadEvidenceFields$' -count=1 green. 4) No other test in agent_execute_bead_test.go is modified.",
+    "parent": "ddx-d9df348d",
+    "labels": [
+      "phase:test",
+      "area:cli",
+      "area:agent",
+      "kind:refactor",
+      "workstream:fake-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-24T05:26:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"openrouter\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-21T17:36:56.530737283Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=openrouter model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260421T173651-5c608835\",\"harness\":\"agent\",\"provider\":\"openrouter\",\"model\":\"qwen3.5-27b\",\"input_tokens\":1824,\"output_tokens\":310,\"total_tokens\":2134,\"cost_usd\":0.0012912,\"duration_ms\":4627,\"exit_code\":0}",
+          "created_at": "2026-04-21T17:36:56.599748603Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2134 cost_usd=0.0013 model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen3.5-27b probe=ok\nno_changes",
+          "created_at": "2026-04-21T17:36:56.810764601Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"harness\":\"agent\",\"model\":\"qwen3.5-27b\",\"status\":\"no_changes\",\"cost_usd\":0.0012912,\"duration_ms\":4627}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0.0012912,\"wasted_cost_usd\":0.0012912}",
+          "created_at": "2026-04-21T17:36:56.870867553Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=1 total_cost_usd=0.0013 wasted_cost_usd=0.0013"
+        },
+        {
+          "actor": "ddx",
+          "body": "escalation exhausted: no_changes\ntier=cheap\nprobe_result=ok\nresult_rev=41c66b9dfa4216c83c08ee4e64c239a01ae7147b\nbase_rev=41c66b9dfa4216c83c08ee4e64c239a01ae7147b\nretry_after=2026-04-21T23:36:57Z",
+          "created_at": "2026-04-21T17:36:57.094087457Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-24T05:26:19.628423901Z",
+      "execute-loop-last-detail": "escalation exhausted: no_changes",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-no-changes-count": 1,
+      "execute-loop-retry-after": "2026-04-21T23:36:57Z",
+      "spec-id": "concerns.testing"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260424T052619-473eb803",
+    "prompt": ".ddx/executions/20260424T052619-473eb803/prompt.md",
+    "manifest": ".ddx/executions/20260424T052619-473eb803/manifest.json",
+    "result": ".ddx/executions/20260424T052619-473eb803/result.json",
+    "checks": ".ddx/executions/20260424T052619-473eb803/checks.json",
+    "usage": ".ddx/executions/20260424T052619-473eb803/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2a53fb75-20260424T052619-473eb803"
+  }
+}
