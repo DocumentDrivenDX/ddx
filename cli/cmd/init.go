@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -303,17 +303,13 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		generateAgentsMD(workingDir)
 
 		// Commit config and versions files
-		cleanEnv := gitpkg.CleanEnv()
-		gitAdd := exec.Command("git", "add", ".ddx/config.yaml", ".ddx/versions.yaml", "AGENTS.md", ".gitignore")
-		gitAdd.Dir = workingDir
-		gitAdd.Env = cleanEnv
+		ctx := context.Background()
+		gitAdd := gitpkg.Command(ctx, workingDir, "add", ".ddx/config.yaml", ".ddx/versions.yaml", "AGENTS.md", ".gitignore")
 		if err := gitAdd.Run(); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to stage config file: %v", err))
 		}
 
-		gitCommit := exec.Command("git", "commit", "-m", "chore: add DDx configuration")
-		gitCommit.Dir = workingDir
-		gitCommit.Env = cleanEnv
+		gitCommit := gitpkg.Command(ctx, workingDir, "commit", "-m", "chore: add DDx configuration")
 		if err := gitCommit.Run(); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to commit config file: %v", err))
 		}
@@ -323,9 +319,7 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		// worktree-specific file rather than the shared .git/config. This
 		// prevents agents from accidentally corrupting repo-level settings like
 		// core.bare when running in an isolated worktree.
-		gitWorktreeCfg := exec.Command("git", "config", "extensions.worktreeConfig", "true")
-		gitWorktreeCfg.Dir = workingDir
-		gitWorktreeCfg.Env = cleanEnv
+		gitWorktreeCfg := gitpkg.Command(ctx, workingDir, "config", "extensions.worktreeConfig", "true")
 		_ = gitWorktreeCfg.Run() // best-effort; older git versions may not support it
 	}
 
@@ -706,11 +700,9 @@ func containsExactLine(content, target string) bool {
 // validateGitRepo is the pure business logic for git repository validation
 func validateGitRepo(workingDir string) error {
 	// Use git rev-parse --git-dir to check if we're in a git repository.
-	// Use gitpkg.CleanEnv to strip inherited GIT_DIR / GIT_WORK_TREE so the
-	// check reflects the actual directory, not an inherited git context.
-	gitCmd := exec.Command("git", "rev-parse", "--git-dir")
-	gitCmd.Dir = workingDir
-	gitCmd.Env = gitpkg.CleanEnv()
+	// gitpkg.Command strips inherited GIT_DIR / GIT_WORK_TREE so the check
+	// reflects the actual directory, not an inherited git context.
+	gitCmd := gitpkg.Command(context.Background(), workingDir, "rev-parse", "--git-dir")
 	gitCmd.Stderr = nil // Suppress error output
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("Error: ddx init must be run inside a git repository. Please run 'git init' first")
