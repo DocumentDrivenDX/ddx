@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage D1 implementation. All 5 in-scope readers are routed through a single `readPromptFileBounded` helper backed by `evidence.ReadFileClamped`, the error message carries all four required substrings, and both the per-site oversize tests and the AST drift gate are present. Test cap injection via package-level variable keeps fixtures small without compromising the production cap."
+}
