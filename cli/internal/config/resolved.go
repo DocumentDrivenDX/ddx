@@ -100,6 +100,25 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	return r
 }
 
+// LoadAndResolve is the canonical production entry point that produces
+// a sealed ResolvedConfig. It loads the project's .ddx/config.yaml from
+// projectRoot, layers overrides on top, and returns the immutable
+// ResolvedConfig.
+//
+// On load error, LoadAndResolve still returns a usable, sealed
+// ResolvedConfig populated from package defaults plus the supplied
+// overrides, alongside the underlying error. Callers decide whether to
+// surface the error or proceed with the defaults-backed config.
+//
+// If projectRoot is empty, the process working directory is used.
+func LoadAndResolve(projectRoot string, overrides CLIOverrides) (ResolvedConfig, error) {
+	cfg, err := LoadWithWorkingDir(projectRoot)
+	if err != nil {
+		return DefaultNewConfig().Resolve(overrides), err
+	}
+	return cfg.Resolve(overrides), nil
+}
+
 // ResolvedConfig is the loop/runner/reviewer's view of merged project
 // config plus per-invocation overrides. It is constructed only by
 // (*Config).Resolve / config.LoadAndResolve and is safe to share across

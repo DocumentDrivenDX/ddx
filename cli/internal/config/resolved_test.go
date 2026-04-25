@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -415,6 +417,110 @@ func TestResolveDeepCopy(t *testing.T) {
 	}
 	if rcfg.MirrorConfig().Kind != "fs" {
 		t.Fatalf("post-source-mutation mirror kind = %q", rcfg.MirrorConfig().Kind)
+	}
+}
+
+func TestLoadAndResolveSuccess(t *testing.T) {
+	tempDir := t.TempDir()
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	yaml := `version: "1.0"
+library:
+  path: ./library
+  repository:
+    url: https://github.com/example/repo
+    branch: main
+agent:
+  harness: claude
+  permissions: unrestricted
+`
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	rcfg, err := LoadAndResolve(tempDir, CLIOverrides{Profile: "fast"})
+	if err != nil {
+		t.Fatalf("LoadAndResolve: %v", err)
+	}
+	if got := rcfg.Harness(); got != "claude" {
+		t.Fatalf("Harness = %q, want claude (from .ddx/config.yaml)", got)
+	}
+	if got := rcfg.Permissions(); got != "unrestricted" {
+		t.Fatalf("Permissions = %q, want unrestricted", got)
+	}
+	if got := rcfg.Profile(); got != "fast" {
+		t.Fatalf("Profile = %q, want fast (override)", got)
+	}
+}
+
+func TestLoadAndResolveOverridesWinOverConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	yaml := `version: "1.0"
+library:
+  path: ./library
+  repository:
+    url: https://github.com/example/repo
+    branch: main
+agent:
+  harness: claude
+`
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	rcfg, err := LoadAndResolve(tempDir, CLIOverrides{Harness: "codex"})
+	if err != nil {
+		t.Fatalf("LoadAndResolve: %v", err)
+	}
+	if got := rcfg.Harness(); got != "codex" {
+		t.Fatalf("Harness = %q, want codex (override)", got)
+	}
+}
+
+func TestLoadAndResolveLoadError(t *testing.T) {
+	tempDir := t.TempDir()
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Invalid YAML triggers a load error.
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("::not valid yaml::\n  - [\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	timeout := 12 * time.Second
+	overrides := CLIOverrides{
+		Harness:  "claude",
+		Profile:  "fast",
+		Assignee: "bot",
+		Timeout:  &timeout,
+	}
+	rcfg, err := LoadAndResolve(tempDir, overrides)
+	if err == nil {
+		t.Fatalf("LoadAndResolve: expected error from invalid yaml, got nil")
+	}
+	// Returned ResolvedConfig must be sealed and usable, populated from
+	// defaults + overrides.
+	if got := rcfg.Harness(); got != "claude" {
+		t.Fatalf("Harness = %q, want claude (override)", got)
+	}
+	if got := rcfg.Profile(); got != "fast" {
+		t.Fatalf("Profile = %q, want fast (override)", got)
+	}
+	if got := rcfg.Assignee(); got != "bot" {
+		t.Fatalf("Assignee = %q, want bot (override)", got)
+	}
+	if got := rcfg.Timeout(); got != timeout {
+		t.Fatalf("Timeout = %v, want %v", got, timeout)
+	}
+	if got := rcfg.ReviewMaxRetries(); got != 3 {
+		t.Fatalf("ReviewMaxRetries = %d, want 3 (default)", got)
 	}
 }
 
