@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260425T101225-a1869f2d",
+  "bead_id": "ddx-da995601",
+  "base_rev": "6ab50d99e67d2d59aaa50a4436f3fa0fc2e11e66",
+  "created_at": "2026-04-25T10:12:26.412340284Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-da995601",
+    "title": "clean up leftovers B7 missed: cmd/init.go + server/state.go + bead/ + delete gitEnvForDir",
+    "description": "B7 (ddx-d3119355) closed but left work undone. Finish it.\n\nRemaining bare git exec callsites per audit:\n- cli/cmd/init.go (4 callsites) — migrate, then delete gitEnvForDir() helper and update callers to use git.CleanEnv if any remain\n- cli/internal/server/ (3 callsites)\n- cli/internal/bead/ (2 callsites)\n- cli/internal/git/ (16 callsites — most are inside the wrapper's own implementation; review and migrate only the ones that are NOT the wrapper calling git internally)\n\nFor init.go: the legacy gitEnvForDir() from the pre-B4 partial fix should be removed. Any callers switch to passing through git.Command (which scrubs automatically) or git.CleanEnv if spawning non-git processes.",
+    "acceptance": "grep shows no bare git exec.Command in cli/cmd/init.go, cli/internal/server/, cli/internal/bead/. gitEnvForDir function removed. cli/internal/git/ callsites reviewed and any outside the wrapper's self-use migrated. Build + tests green.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "claimed-at": "2026-04-25T10:12:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:35.973550648Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:36.077156978Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-25T02:23:36.13877431Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-25T02:23:36.264812557Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T10:12:25.440495533Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260425T101225-a1869f2d",
+    "prompt": ".ddx/executions/20260425T101225-a1869f2d/prompt.md",
+    "manifest": ".ddx/executions/20260425T101225-a1869f2d/manifest.json",
+    "result": ".ddx/executions/20260425T101225-a1869f2d/result.json",
+    "checks": ".ddx/executions/20260425T101225-a1869f2d/checks.json",
+    "usage": ".ddx/executions/20260425T101225-a1869f2d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-da995601-20260425T101225-a1869f2d"
+  }
+}
