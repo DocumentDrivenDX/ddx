@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, minimal Stage 3 foundation: adds `ContextBudget` field to `EvidenceCapsConfig` with `omitempty` YAML/JSON tags and a nil-safe `ResolveContextBudget()` resolver, plus a focused test covering nil receiver, default, and override cases. Scope matches the bead exactly — no wiring into ExecuteBeadOptions yet, which is consistent with the staged migration discipline in SD-024."
+}
