@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260425T092410-e9991cad",
+  "bead_id": "ddx-021bd69b",
+  "base_rev": "7820e2fc78c7c199e63f9d6aea898bf4cf506313",
+  "created_at": "2026-04-25T09:24:11.446777923Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-021bd69b",
+    "title": "review: machine-readable JSON verdict contract + replace markdown extractor",
+    "description": "Upstream report (\"ddx execute-loop: post-merge reviewer silently fails on large prompts\", suggested fix #5) flags that even when the reviewer returns content, the markdown verdict extractor mis-parses it: when Claude responds with '### Verdict: APPROVE' the extractor pulls 'BLOCK' from the options header line in the prompt template that the model echoes back, logging '{\"verdict\":\"BLOCK\"}' for an actual APPROVE. This silently lets regressions land.\n\nFEAT-022 (parent ddx-0c35470e) is scoped to prompt assembly and size invariants; response parsing is out of scope there. File this as a sibling.\n\nSwitch the reviewer contract to a machine-readable JSON object emitted as the model's final response:\n\n  {\n    \"verdict\": \"APPROVE\" | \"REQUEST_CHANGES\" | \"BLOCK\",\n    \"findings\": [\n      { \"severity\": \"info\"|\"warn\"|\"block\", \"summary\": \"…\", \"location\": \"path:line?\" }\n    ],\n    \"summary\": \"≤300 char human-readable verdict justification\"\n  }\n\nReplace the existing markdown extractor with a strict JSON parser:\n1. Update the reviewer prompt template (post-collapse: agent.BuildReviewPrompt) to instruct the model to emit ONLY a JSON object matching the schema, fenced as ```json … ``` for robustness against models that won't emit raw JSON.\n2. Add internal/agent/review_verdict.go with a typed ReviewVerdict struct and a ParseReviewVerdict([]byte) (ReviewVerdict, error) that strips an optional ```json fence and decodes; reject on unknown verdict values.\n3. Replace the regex-based extractor call site in execute_bead_review.go with ParseReviewVerdict; on parse error, emit the existing 'unparseable' review-error class (introduced by ddx-70c1d2e2) — do NOT close the bead.\n4. Schema-version the contract: include schema_version: 1 in the prompt; the parser tolerates unknown fields but rejects unknown verdict values.\n\nIn-scope files:\n- cli/internal/agent/execute_bead_review.go (prompt template, extractor call site)\n- cli/internal/agent/review_verdict.go (new)\n- cli/internal/agent/review_verdict_test.go (new)\n- prompt template asset under cli/internal/agent/assets/ if separated\n\nOut of scope:\n- Bounded retry / error-class taxonomy (ddx-70c1d2e2 owns this; this bead emits 'unparseable' into that taxonomy)\n- Prompt size invariants (FEAT-022)\n- Grading verdicts (separate bead if needed; this is review-only)\n\nCross-reference: This bead's `unparseable` emission feeds into ddx-70c1d2e2's bounded-retry logic. ddx-70c1d2e2 should be reviewed once both land to confirm the unparseable retry budget is sane (the upstream report observed real APPROVE verdicts being lost, so unparseable should retry, not terminal-escalate immediately).",
+    "acceptance": "1. New cli/internal/agent/review_verdict.go defines ReviewVerdict struct with Verdict (string, enum-validated), Findings ([]Finding), Summary (string), and SchemaVersion (int) fields.\n2. ParseReviewVerdict accepts: raw JSON; ```json …``` fenced JSON; mixed prose+JSON where the JSON is the last fenced block. Rejects: unknown verdict values; missing verdict field; truncated JSON.\n3. cd cli \u0026\u0026 go test -run TestParseReviewVerdict ./internal/agent/... passes with one subtest per accepted/rejected case above.\n4. cd cli \u0026\u0026 go test -run TestReviewerEmitsJSONContract ./internal/agent/... passes: uses a fixture reviewer transcript with '### Verdict: APPROVE' wrapped markdown and asserts the extractor call site rejects it with the 'unparseable' class — confirming the markdown path is gone.\n5. cd cli \u0026\u0026 go test -run TestReviewerJSONHappyPath ./internal/agent/... passes: a fixture transcript containing the JSON contract parses to a ReviewVerdict with verdict=APPROVE.\n6. The reviewer prompt template (in execute_bead_review.go or its asset file) requests JSON-only output and includes a schema example; cd cli \u0026\u0026 go test -run TestReviewPromptRequestsJSON ./internal/agent/... passes by string-matching the template.\n7. The previously-observed regression — extractor parsing 'BLOCK' from the options header line — has a regression test: cd cli \u0026\u0026 go test -run TestReviewerNoOptionsHeaderRegression ./internal/agent/... feeds a transcript that includes only the prompt template's options header echoed back and asserts the parser rejects it (unparseable), not parses it as BLOCK.",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "area:review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T09:24:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T09:24:10.972399113Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260425T092410-e9991cad",
+    "prompt": ".ddx/executions/20260425T092410-e9991cad/prompt.md",
+    "manifest": ".ddx/executions/20260425T092410-e9991cad/manifest.json",
+    "result": ".ddx/executions/20260425T092410-e9991cad/result.json",
+    "checks": ".ddx/executions/20260425T092410-e9991cad/checks.json",
+    "usage": ".ddx/executions/20260425T092410-e9991cad/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-021bd69b-20260425T092410-e9991cad"
+  }
+}
