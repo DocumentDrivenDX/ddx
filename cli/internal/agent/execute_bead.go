@@ -92,44 +92,12 @@ type BeadEventAppender interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 }
 
-// ExecuteBeadOptions holds all parameters for an execute-bead worker run.
-type ExecuteBeadOptions struct {
-	FromRev       string // base git revision (default: HEAD)
-	Harness       string
-	Model         string
-	Provider      string // explicit provider name; passed through to agent as -provider
-	ModelRef      string // catalog model-ref; passed through to agent as -model-ref
-	Effort        string
-	ContextBudget string // prompt budget: "", "minimal" (omits large governing docs for cheap-tier)
-	PromptFile    string // override prompt file (auto-generated if empty)
-	WorkerID      string // from DDX_WORKER_ID env or caller
-	// BeadEvents, when non-nil, receives a kind:routing evidence entry after
-	// the agent run completes. This is the hook that feeds the cost-tiered
-	// routing analytics described in FEAT-routing-visibility.
-	BeadEvents BeadEventAppender
-	// MirrorCfg, when non-nil and configured, enables mirroring the
-	// finalized .ddx/executions/<attempt>/ bundle to an out-of-band archive
-	// after the worker writes the result. Failures never affect the bead
-	// outcome — see executions_mirror.go.
-	MirrorCfg *config.ExecutionsMirrorConfig
-	// Service, when non-nil, is the agentlib.DdxAgent used to dispatch the
-	// agent invocation. Production callers leave this nil — ExecuteBead
-	// constructs a fresh service from projectRoot via NewServiceFromWorkDir.
-	// Tests may inject a pre-built service to avoid loading provider config.
-	Service agentlib.DdxAgent
-	// AgentRunner, when non-nil, replaces the service-based dispatch path for
-	// the agent invocation. Production callers leave this nil. Tests use this
-	// seam to return canned *Result values without spinning up a real service
-	// or provider chain. When set, it takes precedence over Service.
-	AgentRunner AgentRunner
-}
-
-// ExecuteBeadRuntime is the SD-024 successor to ExecuteBeadOptions.
+// ExecuteBeadRuntime carries the non-durable plumbing for an execute-bead
+// run: per-invocation intent (FromRev, PromptFile, WorkerID) and
+// non-serializable injection seams (BeadEvents, Service, AgentRunner).
 // Durable knobs (Harness, Model, Provider, ModelRef, Effort,
-// ContextBudget, MirrorCfg) are stripped — they live on
-// config.ResolvedConfig and are passed via ExecuteBeadWithConfig's
-// rcfg argument. Only non-serializable plumbing and per-invocation
-// runtime intent remain.
+// ContextBudget, MirrorCfg) live on config.ResolvedConfig and are passed
+// via ExecuteBeadWithConfig's rcfg argument.
 //
 // See SD-024 / TD-024 §Runtime structs and §Stage 3.
 type ExecuteBeadRuntime struct {
@@ -139,34 +107,6 @@ type ExecuteBeadRuntime struct {
 	BeadEvents  BeadEventAppender
 	Service     agentlib.DdxAgent
 	AgentRunner AgentRunner
-}
-
-// ExecuteBeadWithConfig is the SD-024 successor to ExecuteBead. It
-// accepts a sealed ResolvedConfig (durable knobs) and an
-// ExecuteBeadRuntime (plumbing + per-invocation intent), assembles an
-// equivalent ExecuteBeadOptions, and delegates to ExecuteBead.
-// Behavior is identical to ExecuteBead with an equivalently-populated
-// ExecuteBeadOptions.
-//
-// Stage 3 of SD-024: this function exists alongside ExecuteBead;
-// production callers have not migrated yet.
-func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime, gitOps GitOps) (*ExecuteBeadResult, error) {
-	opts := ExecuteBeadOptions{
-		FromRev:       runtime.FromRev,
-		Harness:       rcfg.Harness(),
-		Model:         rcfg.Model(),
-		Provider:      rcfg.Provider(),
-		ModelRef:      rcfg.ModelRef(),
-		Effort:        rcfg.Effort(),
-		ContextBudget: rcfg.ContextBudget(),
-		PromptFile:    runtime.PromptFile,
-		WorkerID:      runtime.WorkerID,
-		BeadEvents:    runtime.BeadEvents,
-		MirrorCfg:     rcfg.MirrorConfig(),
-		Service:       runtime.Service,
-		AgentRunner:   runtime.AgentRunner,
-	}
-	return ExecuteBead(ctx, projectRoot, beadID, opts, gitOps)
 }
 
 // GitOps abstracts the git operations required by the worker.
@@ -586,10 +526,11 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 	})
 }
 
-// ExecuteBead is the thin worker: it creates an isolated worktree, constructs
-// the agent prompt from bead context, runs the agent harness, synthesizes a
-// commit if the agent left uncommitted changes, then cleans up the worktree
-// and returns the result. It classifies outcomes as exactly one of:
+// ExecuteBeadWithConfig is the thin worker: it creates an isolated worktree,
+// constructs the agent prompt from bead context, runs the agent harness,
+// synthesizes a commit if the agent left uncommitted changes, then cleans up
+// the worktree and returns the result. It classifies outcomes as exactly one
+// of:
 //
 //   - task_succeeded: agent exited 0 and produced one or more commits
 //   - task_failed:    agent exited non-zero
@@ -598,18 +539,18 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 // Merge, UpdateRef, gate evaluation, preserve-ref management, and orphan
 // recovery are the parent's responsibility (see LandBeadResult, RecoverOrphans).
 //
-// Agent dispatch: production callers leave opts.Service and opts.AgentRunner
-// nil. ExecuteBead constructs a fresh agentlib.DdxAgent from projectRoot via
-// NewServiceFromWorkDir and dispatches via RunViaServiceWith. Tests may set
-// opts.AgentRunner to inject a fake that returns canned Result values; when
-// set, it takes precedence over the service path.
-func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts ExecuteBeadOptions, gitOps GitOps) (*ExecuteBeadResult, error) {
+// Agent dispatch: production callers leave runtime.Service and runtime.AgentRunner
+// nil. ExecuteBeadWithConfig constructs a fresh agentlib.DdxAgent from
+// projectRoot via NewServiceFromWorkDir and dispatches via RunViaServiceWith.
+// Tests may set runtime.AgentRunner to inject a fake that returns canned
+// Result values; when set, it takes precedence over the service path.
+func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime, gitOps GitOps) (*ExecuteBeadResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	attemptID := GenerateAttemptID()
-	if opts.WorkerID == "" {
-		opts.WorkerID = os.Getenv("DDX_WORKER_ID")
+	if runtime.WorkerID == "" {
+		runtime.WorkerID = os.Getenv("DDX_WORKER_ID")
 	}
 
 	wtPath := executeBeadWorktreePath(beadID, attemptID)
@@ -632,7 +573,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	}
 
 	// Resolve base revision after the tracker + checkpoint commits.
-	baseRev, err := resolveBase(gitOps, projectRoot, opts.FromRev)
+	baseRev, err := resolveBase(gitOps, projectRoot, runtime.FromRev)
 	if err != nil {
 		return nil, err
 	}
@@ -653,8 +594,8 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	_ = WriteRunState(projectRoot, RunState{
 		BeadID:       beadID,
 		AttemptID:    attemptID,
-		Harness:      opts.Harness,
-		Model:        opts.Model,
+		Harness:      rcfg.Harness(),
+		Model:        rcfg.Model(),
 		StartedAt:    time.Now().UTC(),
 		WorktreePath: wtPath,
 	})
@@ -667,12 +608,12 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	_ = materializeWorktreeSkills(wtPath)
 
 	// Prepare artifacts (context load, prompt generation).
-	artifacts, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, opts)
+	artifacts, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, rcfg, runtime)
 	if err != nil {
 		res := &ExecuteBeadResult{
 			BeadID:    beadID,
 			AttemptID: attemptID,
-			WorkerID:  opts.WorkerID,
+			WorkerID:  runtime.WorkerID,
 			BaseRev:   baseRev,
 			ResultRev: baseRev, // no commits; ResultRev == BaseRev signals no output
 			ExitCode:  1,
@@ -705,13 +646,13 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 
 	runOpts := RunOptions{
 		Context:       ctx,
-		Harness:       opts.Harness,
+		Harness:       rcfg.Harness(),
 		Prompt:        "",
 		PromptFile:    artifacts.PromptAbs,
-		Model:         opts.Model,
-		Provider:      opts.Provider,
-		ModelRef:      opts.ModelRef,
-		Effort:        opts.Effort,
+		Model:         rcfg.Model(),
+		Provider:      rcfg.Provider(),
+		ModelRef:      rcfg.ModelRef(),
+		Effort:        rcfg.Effort(),
 		WorkDir:       wtPath,
 		Permissions:   "unrestricted", // isolated worktree; writes must not require approval
 		SessionLogDir: embeddedStateDir,
@@ -720,13 +661,13 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 			"base_rev":    baseRev,
 			"attempt_id":  attemptID,
 			"session_id":  sessionID,
-			"worker_id":   opts.WorkerID,
+			"worker_id":   runtime.WorkerID,
 			"bundle_path": artifacts.DirRel,
 			"prompt_file": artifacts.PromptRel,
 		},
 	}
 
-	agentResult, agentErr := dispatchAgentRun(ctx, projectRoot, opts, runOpts)
+	agentResult, agentErr := dispatchAgentRun(ctx, projectRoot, runtime.Service, runtime.AgentRunner, runOpts)
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
@@ -734,8 +675,8 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	inputTokens := 0
 	outputTokens := 0
 	costUSD := 0.0
-	resultModel := opts.Model
-	resultHarness := opts.Harness
+	resultModel := rcfg.Model()
+	resultHarness := rcfg.Harness()
 	resultProvider := ""
 	agentErrMsg := ""
 	if agentResult != nil {
@@ -779,7 +720,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 		res := &ExecuteBeadResult{
 			BeadID:       beadID,
 			AttemptID:    attemptID,
-			WorkerID:     opts.WorkerID,
+			WorkerID:     runtime.WorkerID,
 			BaseRev:      baseRev,
 			ResultRev:    baseRev, // no commits readable; treat as no output
 			Harness:      resultHarness,
@@ -846,7 +787,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 			prelimRes := &ExecuteBeadResult{
 				BeadID:       beadID,
 				AttemptID:    attemptID,
-				WorkerID:     opts.WorkerID,
+				WorkerID:     runtime.WorkerID,
 				BaseRev:      baseRev,
 				ResultRev:    "", // unknown until commit is made
 				Harness:      resultHarness,
@@ -887,7 +828,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	res := &ExecuteBeadResult{
 		BeadID:       beadID,
 		AttemptID:    attemptID,
-		WorkerID:     opts.WorkerID,
+		WorkerID:     runtime.WorkerID,
 		BaseRev:      baseRev,
 		ResultRev:    resultRev,
 		Harness:      resultHarness,
@@ -937,11 +878,11 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 	}
 
 	// Record routing evidence on the bead (best-effort; errors are discarded).
-	appendBeadRoutingEvidence(opts.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL)
+	appendBeadRoutingEvidence(runtime.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL)
 
 	// Record per-attempt cost evidence so cost rollup never has to join
 	// against the session index. Best-effort; errors are discarded.
-	appendBeadCostEvidence(opts.BeadEvents, beadID, attemptID, costEventBody{
+	appendBeadCostEvidence(runtime.BeadEvents, beadID, attemptID, costEventBody{
 		Harness:      resultHarness,
 		Provider:     resultProvider,
 		Model:        resultModel,
@@ -967,7 +908,7 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 		AttemptID:   attemptID,
 		BeadID:      beadID,
 		BundleDir:   artifacts.DirAbs,
-		Cfg:         opts.MirrorCfg,
+		Cfg:         rcfg.MirrorConfig(),
 	})
 
 	return res, nil
@@ -975,19 +916,18 @@ func ExecuteBead(ctx context.Context, projectRoot string, beadID string, opts Ex
 
 // dispatchAgentRun resolves how the agent invocation should be executed and
 // returns the resulting *Result. Resolution order:
-//  1. opts.AgentRunner (test injection seam) — used directly via runner.Run.
-//  2. opts.Service (pre-built service) — used via RunViaServiceWith.
+//  1. runner (test injection seam) — used directly via runner.Run.
+//  2. svc (pre-built service) — used via RunViaServiceWith.
 //  3. Fallback: construct a fresh service via NewServiceFromWorkDir(projectRoot)
 //     and dispatch via RunViaServiceWith.
 //
 // The script and virtual harnesses are DDx-side helpers that the agent service
 // does not implement; RunViaService and RunViaServiceWith both delegate those
 // to a private Runner internally, so they continue to work through this path.
-func dispatchAgentRun(ctx context.Context, projectRoot string, opts ExecuteBeadOptions, runOpts RunOptions) (*Result, error) {
-	if opts.AgentRunner != nil {
-		return opts.AgentRunner.Run(runOpts)
+func dispatchAgentRun(ctx context.Context, projectRoot string, svc agentlib.DdxAgent, runner AgentRunner, runOpts RunOptions) (*Result, error) {
+	if runner != nil {
+		return runner.Run(runOpts)
 	}
-	svc := opts.Service
 	if svc == nil {
 		built, err := NewServiceFromWorkDir(projectRoot)
 		if err != nil {
@@ -1072,7 +1012,7 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 	return rev, nil
 }
 
-func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, opts ExecuteBeadOptions) (*executeBeadArtifacts, error) {
+func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, error) {
 	b, refs, err := loadBeadContext(wtPath, beadID)
 	if err != nil {
 		return nil, err
@@ -1082,7 +1022,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, op
 		return nil, err
 	}
 
-	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, opts.PromptFile, opts.Harness, opts.ContextBudget)
+	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.Harness(), rcfg.ContextBudget())
 	if err != nil {
 		return nil, err
 	}
@@ -1092,16 +1032,16 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, op
 
 	manifest := executeBeadManifest{
 		AttemptID: attemptID,
-		WorkerID:  opts.WorkerID,
+		WorkerID:  runtime.WorkerID,
 		BeadID:    beadID,
 		BaseRev:   baseRev,
 		CreatedAt: time.Now().UTC(),
 		Requested: executeBeadRequested{
-			Harness:  opts.Harness,
-			Model:    opts.Model,
-			Provider: opts.Provider,
-			ModelRef: opts.ModelRef,
-			Effort:   opts.Effort,
+			Harness:  rcfg.Harness(),
+			Model:    rcfg.Model(),
+			Provider: rcfg.Provider(),
+			ModelRef: rcfg.ModelRef(),
+			Effort:   rcfg.Effort(),
 			Prompt:   promptSource,
 		},
 		Bead: executeBeadManifestBead{
