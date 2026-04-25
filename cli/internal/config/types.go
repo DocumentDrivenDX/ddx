@@ -44,6 +44,20 @@ type EvidenceCapsConfig struct {
 	MaxDiffBytes         *int                             `yaml:"max_diff_bytes,omitempty" json:"max_diff_bytes,omitempty"`
 	MaxGoverningDocBytes *int                             `yaml:"max_governing_doc_bytes,omitempty" json:"max_governing_doc_bytes,omitempty"`
 	PerHarness           map[string]*EvidenceCapsOverride `yaml:"per_harness,omitempty" json:"per_harness,omitempty"`
+	// ContextBudget is the prompt budget label that execute-bead consults
+	// when assembling the bead prompt. Empty string means "full budget";
+	// "minimal" omits large governing documents (cheap-tier path). See
+	// SD-024 §Stage 3 — ExecuteBeadOptions migration.
+	ContextBudget string `yaml:"context_budget,omitempty" json:"context_budget,omitempty"`
+}
+
+// ResolveContextBudget returns the effective context-budget label for this
+// config. Defaults to "" (full budget) when unset.
+func (e *EvidenceCapsConfig) ResolveContextBudget() string {
+	if e == nil {
+		return ""
+	}
+	return e.ContextBudget
 }
 
 // EvidenceCapsOverride is the per-harness override shape inside

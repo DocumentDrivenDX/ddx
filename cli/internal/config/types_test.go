@@ -103,3 +103,27 @@ func TestWorkersConfigResolvers(t *testing.T) {
 		}
 	})
 }
+
+// TestEvidenceCapsContextBudget covers SD-024 Stage 3: the new
+// EvidenceCapsConfig.ContextBudget field resolves to "" by default and to
+// the configured value when set.
+func TestEvidenceCapsContextBudget(t *testing.T) {
+	t.Run("default_when_nil_receiver", func(t *testing.T) {
+		var e *EvidenceCapsConfig
+		if got := e.ResolveContextBudget(); got != "" {
+			t.Errorf("nil receiver = %q, want empty", got)
+		}
+	})
+	t.Run("default_when_unset", func(t *testing.T) {
+		e := &EvidenceCapsConfig{}
+		if got := e.ResolveContextBudget(); got != "" {
+			t.Errorf("unset = %q, want empty", got)
+		}
+	})
+	t.Run("override", func(t *testing.T) {
+		e := &EvidenceCapsConfig{ContextBudget: "minimal"}
+		if got := e.ResolveContextBudget(); got != "minimal" {
+			t.Errorf("override = %q, want minimal", got)
+		}
+	})
+}
