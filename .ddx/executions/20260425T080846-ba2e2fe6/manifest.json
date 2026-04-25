@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T080846-ba2e2fe6",
+  "bead_id": "ddx-c924af97",
+  "base_rev": "1a66092925495f2571201748111c689f3cbcf81a",
+  "created_at": "2026-04-25T08:08:46.887939954Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c924af97",
+    "title": "review: collapse cmd/bead_review.go into agent.BuildReviewPrompt",
+    "description": "Stage B of FEAT-022. Collapse the duplicate review-prompt assembler in\ncli/cmd/bead_review.go into agent.BuildReviewPrompt. A byte-equivalence\ngolden fixture, CAPTURED BEFORE THE DUPLICATE IS DELETED, gates the\nremoval.\n\nImplements FEAT-022 requirement §4. Satisfies US-227.\n\nDepends on Stage A1 (ddx-64299657) — evidence primitives must exist so\nthe golden-fixture test can import them cleanly (though this bead does\nNOT yet change behavior via caps — that's Stage C1).\n\nWorkflow (non-negotiable, prevents half-done landings):\n\n1. BEFORE touching any code, run the current (pre-collapse) CLI review\n   path against a committed fixture bead/rev/refs and write the\n   resulting prompt bytes to a golden file at\n   cli/cmd/testdata/bead_review/collapse_golden.txt. Commit that\n   golden as the first commit on this bead's branch. The fixture MUST\n   include `\u003c`, `\u003e`, `\u0026`, `\\\"`, and `'` characters in bead notes and\n   governing-doc content so the escape-semantics divergence\n   (xml.EscapeText in cmd vs NewReplacer in agent) is forced to\n   surface.\n\n2. Now collapse: delete cli/cmd/bead_review.go's buildBeadReviewPrompt\n   (at :150), beadReviewInstructions const (at :43), and\n   beadReviewXMLEscape (at :240). Rewire the CLI handler to call\n   agent.BuildReviewPrompt directly.\n\n3. If escape semantics differ between old and new on the committed\n   fixture: converge on agent.reviewXMLEscape's behavior unless a\n   specific failure mode requires the CLI's quote-escape. In that\n   case extend BuildReviewPrompt with a typed flag parameter (e.g.\n   EscapeQuotes bool). Do NOT keep a duplicate escape helper.\n\n4. The post-collapse CLI review path MUST produce bytes identical to\n   the golden file when run against the same fixture inputs.\n\nIn-scope files:\n- cli/cmd/bead_review.go (deletions + rewire to agent package)\n- cli/internal/agent/execute_bead_review.go (only if a typed flag is\n  needed per step 3; document and justify any addition)\n- cli/cmd/testdata/bead_review/ (new golden fixture)\n- cli/cmd/bead_review_test.go (new): golden-file diff test +\n  CLI-handler wiring test\n\nOut-of-scope (do NOT touch):\n- cli/cmd/bead_review.go's beadReviewGitShow helper at :164 — this is\n  git invocation, not prompt assembly. KEEP IT.\n- Adding any cap / evidence-primitive usage to BuildReviewPrompt's\n  assembly logic — that's Stage C1. This bead is pure deduplication.\n\nRollback: revert the deletions, restore duplicate symbols. Golden\nfixture can be retained regardless.",
+    "acceptance": "rg 'buildBeadReviewPrompt|beadReviewInstructions|beadReviewXMLEscape' cli/cmd/bead_review.go exits 1 (zero matches). cli/cmd/testdata/bead_review/collapse_golden.txt exists and contains XML-escape-sensitive characters (\u003c, \u003e, \u0026, double-quote, single-quote). cd cli \u0026\u0026 go test -run TestBeadReviewCollapseGolden ./cmd/... passes: the test invokes the post-collapse CLI review path against the fixture and diffs output against collapse_golden.txt. cd cli \u0026\u0026 go test ./... passes. cd cli \u0026\u0026 go vet ./... passes. grep -c 'beadReviewGitShow' cli/cmd/bead_review.go returns a positive integer (helper retained). Commits on this bead's branch include one that adds collapse_golden.txt BEFORE any commit that deletes the duplicate symbols (verifiable via git log --diff-filter=D of the duplicate-symbol lines vs git log --diff-filter=A of the golden file).",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:refactor",
+      "area:agent",
+      "stage:B"
+    ],
+    "metadata": {
+      "blocked-by": "ddx-64299657",
+      "claimed-at": "2026-04-25T08:08:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T08:08:46.298861521Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T080846-ba2e2fe6",
+    "prompt": ".ddx/executions/20260425T080846-ba2e2fe6/prompt.md",
+    "manifest": ".ddx/executions/20260425T080846-ba2e2fe6/manifest.json",
+    "result": ".ddx/executions/20260425T080846-ba2e2fe6/result.json",
+    "checks": ".ddx/executions/20260425T080846-ba2e2fe6/checks.json",
+    "usage": ".ddx/executions/20260425T080846-ba2e2fe6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c924af97-20260425T080846-ba2e2fe6"
+  }
+}
