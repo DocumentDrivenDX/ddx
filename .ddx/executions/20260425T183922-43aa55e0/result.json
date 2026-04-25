@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The Mirror config now flows from `*Config` → `Resolve` → `ResolvedConfig.MirrorConfig()` → `ExecuteBeadWithConfig` → `ExecuteBeadOptions.MirrorCfg` (execute_bead.go:165), and the new behavioral test seeds a real `ExecutionsMirrorConfig`, runs through `ExecuteBeadWithConfig`, and asserts the mirrored bundle plus mirror-index entry exist on disk. The committed diff itself only adds the test (the wiring was already in place at HEAD), but both AC items are satisfied."
+}
