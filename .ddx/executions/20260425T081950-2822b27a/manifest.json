@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260425T081950-2822b27a",
+  "bead_id": "ddx-12934d66",
+  "base_rev": "c6ce204c2cef215531ececf22aa5bf498ede2020",
+  "created_at": "2026-04-25T08:19:51.390613812Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-12934d66",
+    "title": "review: bounded evidence assembly with minimum floor + pre-dispatch short-circuit",
+    "description": "Stage C1 of FEAT-022. Modify the single review-prompt assembler\n(post-collapse agent.BuildReviewPrompt) to use cli/internal/evidence\nprimitives for bounded assembly with a minimum evidence floor and\npre-dispatch short-circuit on residual oversize.\n\nImplements FEAT-022 requirements §5 and §7 for the reviewer path.\nSatisfies US-220 and contributes to US-225.\n\nDepends on Stage B (ddx-c924af97) for the single assembler and Stage A\n(ddx-64299657) for primitives.\n\nIn-scope files:\n- cli/internal/agent/execute_bead_review.go (BuildReviewPrompt and\n  gitShow: route governing-doc reads through evidence.ReadFileClamped,\n  route diff through evidence.ClampDiff + evidence.DecomposeDiff,\n  extend EvidenceReviewExcludePathspecs as needed, implement priority-\n  ordered assembly)\n- cli/internal/agent/execute_bead_loop.go (wire pre-dispatch short-\n  circuit: if assembled prompt exceeds MaxPromptBytes after all\n  trimming, skip provider dispatch and emit review-error:\n  context_overflow directly; do NOT close the bead)\n- Tests with multi-MB synthetic governing docs and multi-MB synthetic\n  diffs exercising: minimum floor preservation (bead title, description,\n  AC, notes, full changed-file inventory always present); governing-doc\n  degradation to outline + first-N-lines when content exceeds cap; diff\n  ranking (files named in AC \u003e files matching governing ref paths \u003e\n  others); large-file degradation to stat + hunk headers; pre-dispatch\n  short-circuit path.\n\nOut-of-scope:\n- Grading path (Stage C2, separate bead)\n- Section-level telemetry (Stage F)\n- Error-class distinction for non-overflow classes (Stage G); this bead\n  introduces context_overflow as the only new class it needs\n- Markdown-aware heading extraction (deferred per FEAT-022 §1; use\n  line-based type-agnostic FitSections)\n\nPreserve invariant: reviewer failure does NOT close the bead. The\npre-dispatch short-circuit emits the event and leaves the bead in the\nsame state as any other review-error (closed status gated elsewhere).",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestBuildReviewPrompt ./internal/agent/... passes including new tests for: governing-doc trimming (fixture doc = 10× MaxGoverningDocBytes, assert output bounded + truncation marker present), diff trimming (fixture diff = 10× MaxDiffBytes), minimum floor preservation under extreme pressure (fixture total input = 20× MaxPromptBytes; output still contains bead.Title, .Description, .Acceptance, .Notes, and full changed-file inventory verbatim), ranked diff inclusion (AC-referenced files appear before unreferenced files in output order), large-file stat+hunk-header degradation (single fixture file \u003e MaxInlinedFileBytes → output contains stat line and hunk headers but not full content), pre-dispatch short-circuit. cd cli \u0026\u0026 go test -run TestReviewContextOverflow ./internal/agent/... passes: given a fixture that forces residual overflow, the executor emits a review-error event whose body contains the literal substring 'context_overflow' and the event's recorded provider-dispatch count remains 0 (no provider call happened). cd cli \u0026\u0026 go test -run TestReviewFailureNotCloseBead ./internal/agent/... still passes (the existing execute_bead_review_failure_modes_test.go must remain green — preservation of the non-close invariant). AST/import check (not a grep): cd cli \u0026\u0026 go test -run TestEvidencePrimitiveUsage ./internal/agent/... asserts that execute_bead_review.go imports cli/internal/evidence and that the file's AST contains no direct calls to os.ReadFile or osexec.Command(\"git\", \"show\", ...) unless a parent node carries an //evidence:allow-unbounded directive comment.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "area:review",
+      "stage:C1"
+    ],
+    "metadata": {
+      "blocked-by": "ddx-c924af97",
+      "claimed-at": "2026-04-25T08:19:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T08:19:50.644187852Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T081950-2822b27a",
+    "prompt": ".ddx/executions/20260425T081950-2822b27a/prompt.md",
+    "manifest": ".ddx/executions/20260425T081950-2822b27a/manifest.json",
+    "result": ".ddx/executions/20260425T081950-2822b27a/result.json",
+    "checks": ".ddx/executions/20260425T081950-2822b27a/checks.json",
+    "usage": ".ddx/executions/20260425T081950-2822b27a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-12934d66-20260425T081950-2822b27a"
+  }
+}
