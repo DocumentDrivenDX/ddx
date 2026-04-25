@@ -3,18 +3,40 @@ package config
 // NewConfig represents the simplified DDx configuration structure
 // This aligns with the schema defined in ADR-005 and SD-003
 type NewConfig struct {
-	Version         string             `yaml:"version" json:"version"`
-	Library         *LibraryConfig     `yaml:"library" json:"library"`
-	Bead            *BeadConfig        `yaml:"bead,omitempty" json:"bead,omitempty"`
-	System          *SystemConfig      `yaml:"system,omitempty" json:"system,omitempty"`
-	PersonaBindings map[string]string  `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
-	UpdateCheck     *UpdateCheckConfig `yaml:"update_check,omitempty" json:"update_check,omitempty"`
-	Agent           *AgentConfig       `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Git             *GitConfig         `yaml:"git,omitempty" json:"git,omitempty"`
-	Server          *ServerConfig      `yaml:"server,omitempty" json:"server,omitempty"`
-	Executions      *ExecutionsConfig  `yaml:"executions,omitempty" json:"executions,omitempty"`
-	Cost            *CostConfig        `yaml:"cost,omitempty" json:"cost,omitempty"`
-	Workers         *WorkersConfig     `yaml:"workers,omitempty" json:"workers,omitempty"`
+	Version         string              `yaml:"version" json:"version"`
+	Library         *LibraryConfig      `yaml:"library" json:"library"`
+	Bead            *BeadConfig         `yaml:"bead,omitempty" json:"bead,omitempty"`
+	System          *SystemConfig       `yaml:"system,omitempty" json:"system,omitempty"`
+	PersonaBindings map[string]string   `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
+	UpdateCheck     *UpdateCheckConfig  `yaml:"update_check,omitempty" json:"update_check,omitempty"`
+	Agent           *AgentConfig        `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Git             *GitConfig          `yaml:"git,omitempty" json:"git,omitempty"`
+	Server          *ServerConfig       `yaml:"server,omitempty" json:"server,omitempty"`
+	Executions      *ExecutionsConfig   `yaml:"executions,omitempty" json:"executions,omitempty"`
+	Cost            *CostConfig         `yaml:"cost,omitempty" json:"cost,omitempty"`
+	Workers         *WorkersConfig      `yaml:"workers,omitempty" json:"workers,omitempty"`
+	EvidenceCaps    *EvidenceCapsConfig `yaml:"evidence_caps,omitempty" json:"evidence_caps,omitempty"`
+}
+
+// EvidenceCapsConfig configures byte-size caps used by the shared
+// evidence-assembly primitives (FEAT-022 §1a). Project-level fields
+// override the binary defaults; entries in `per_harness` further
+// override the project-level values for a specific harness name.
+type EvidenceCapsConfig struct {
+	MaxPromptBytes       *int                             `yaml:"max_prompt_bytes,omitempty" json:"max_prompt_bytes,omitempty"`
+	MaxInlinedFileBytes  *int                             `yaml:"max_inlined_file_bytes,omitempty" json:"max_inlined_file_bytes,omitempty"`
+	MaxDiffBytes         *int                             `yaml:"max_diff_bytes,omitempty" json:"max_diff_bytes,omitempty"`
+	MaxGoverningDocBytes *int                             `yaml:"max_governing_doc_bytes,omitempty" json:"max_governing_doc_bytes,omitempty"`
+	PerHarness           map[string]*EvidenceCapsOverride `yaml:"per_harness,omitempty" json:"per_harness,omitempty"`
+}
+
+// EvidenceCapsOverride is the per-harness override shape inside
+// `evidence_caps.per_harness`.
+type EvidenceCapsOverride struct {
+	MaxPromptBytes       *int `yaml:"max_prompt_bytes,omitempty" json:"max_prompt_bytes,omitempty"`
+	MaxInlinedFileBytes  *int `yaml:"max_inlined_file_bytes,omitempty" json:"max_inlined_file_bytes,omitempty"`
+	MaxDiffBytes         *int `yaml:"max_diff_bytes,omitempty" json:"max_diff_bytes,omitempty"`
+	MaxGoverningDocBytes *int `yaml:"max_governing_doc_bytes,omitempty" json:"max_governing_doc_bytes,omitempty"`
 }
 
 // WorkersConfig controls the Add/Remove-worker affordances on the workers
