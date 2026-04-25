@@ -1,0 +1,80 @@
+{
+  "attempt_id": "20260425T080011-a894c2cb",
+  "bead_id": "ddx-64299657",
+  "base_rev": "987605505e0f458b628a111b8f58d69805c072c1",
+  "created_at": "2026-04-25T08:00:11.975681653Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-64299657",
+    "title": "evidence: shared caps + clamping primitives + config (Stage A1)",
+    "description": "Stage A1 of FEAT-022. Lands the shared cli/internal/evidence package\nand the evidence-caps config section. Ships with permissive default\ncaps so no existing behavior changes on land. Blocks all subsequent\nFEAT-022 stages.\n\nImplements FEAT-022 requirements §1 and §1a.\n\nIn-scope files:\n- cli/internal/evidence/ (new package): caps.go, read.go, clamp.go,\n  sections.go, diff.go, strategy.go, marker.go (with _test.go siblings).\n  Exports capabilities enumerated in FEAT-022 §1; concrete Go\n  identifiers finalized during implementation.\n- cli/internal/config/schema/config.schema.json: add evidence_caps\n  section with per-harness override precedence.\n- cli/internal/config/ config struct extension for evidence_caps.\n\nOut-of-scope (do NOT touch):\n- The structural sink lint rule — separate bead (Stage A2).\n- Any existing prompt-building call site. Those migrate in Stages B–E.\n\nConcrete defaults shipped (permissive on purpose — Stage F telemetry\ninforms tuning):\n- MaxPromptBytes = 4 MiB\n- MaxInlinedFileBytes = 512 KiB\n- MaxDiffBytes = 2 MiB\n- MaxGoverningDocBytes = 256 KiB\n\nPinned contracts (so downstream stages can consume without drift):\n- `EvidenceAssemblySection` struct shape for telemetry (consumed by\n  Stages C1, C2, F): { name: string, bytes_included: int,\n  bytes_omitted: int, truncation_reason: string,\n  selected_items: []string, omitted_items: []string }\n- `TruncationMarker` canonical string: exported constant; downstream\n  parsers check equality against this constant.\n- Pre-dispatch-overflow outcome classes that Stages C1 and C2 emit:\n  \"review-error: context_overflow\" (review), \"compare-error:\n  context_overflow\" (grading). Stage G consumes the review class name.\n\nRollback: delete cli/internal/evidence/, revert config schema and\nstruct extensions. No existing behavior depends on this bead on land.",
+    "acceptance": "cd cli \u0026\u0026 go build ./internal/evidence/... passes. cd cli \u0026\u0026 go test ./internal/evidence/... passes; every exported primitive has at least one behavioral test that asserts its contract. cd cli \u0026\u0026 go test ./internal/config/... passes with a new test that sets per-harness overrides in .ddx/config.yaml and verifies evidence_caps resolution. grep -rE 'os\\.ReadFile|ioutil\\.ReadFile' cli/internal/evidence/ returns matches ONLY inside the body of ReadFileClamped. EvidenceAssemblySection struct and TruncationMarker constant exist as exported symbols: cd cli \u0026\u0026 go doc ./internal/evidence EvidenceAssemblySection TruncationMarker returns non-empty. Prose acceptance: cli/internal/evidence/ is self-contained and importable from cli/cmd/, cli/internal/agent/, and cli/internal/server/ without import cycles.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:evidence",
+      "stage:A1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T08:00:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:23.090897731Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:23.167627271Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-25T02:23:23.233562103Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-25T02:23:23.362569974Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T08:00:11.399970542Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T080011-a894c2cb",
+    "prompt": ".ddx/executions/20260425T080011-a894c2cb/prompt.md",
+    "manifest": ".ddx/executions/20260425T080011-a894c2cb/manifest.json",
+    "result": ".ddx/executions/20260425T080011-a894c2cb/result.json",
+    "checks": ".ddx/executions/20260425T080011-a894c2cb/checks.json",
+    "usage": ".ddx/executions/20260425T080011-a894c2cb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-64299657-20260425T080011-a894c2cb"
+  }
+}
