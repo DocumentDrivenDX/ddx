@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,13 +170,17 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 	// don't race on the git index or on Land()'s CAS UpdateRefTo.
 	repoMu := landMutexFor(projectRoot)
 
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "script",
+		Model:   directivePath,
+	})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+
 	return ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 		repoMu.Lock()
 		defer repoMu.Unlock()
 
-		res, err := ExecuteBead(ctx, projectRoot, beadID, ExecuteBeadOptions{
-			Harness:     "script",
-			Model:       directivePath,
+		res, err := ExecuteBeadWithConfig(ctx, projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 			AgentRunner: runner,
 		}, gitOps)
 		if err != nil {
