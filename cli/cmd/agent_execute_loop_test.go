@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +67,8 @@ func TestInvokeExecuteBeadFromLoopParsesJSONAmidWarnings(t *testing.T) {
 	}
 	runner := &fakeAgentRunner{result: &agent.Result{ExitCode: 0, Harness: "mock"}}
 
-	res, err := agent.ExecuteBead(context.Background(), workDir, "my-bead", agent.ExecuteBeadOptions{AgentRunner: runner}, git)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := agent.ExecuteBeadWithConfig(context.Background(), workDir, "my-bead", rcfg, agent.ExecuteBeadRuntime{AgentRunner: runner}, git)
 	require.NoError(t, err)
 	assert.Equal(t, "my-bead", res.BeadID)
 	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)

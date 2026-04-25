@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // gateTestGitOps is a minimal GitOps mock for execute-bead gate enforcement tests.
@@ -353,7 +354,8 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 
 	runner := &rationaleTestRunner{rationale: rationale}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{AgentRunner: runner}, gitOps)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead returned error: %v", err)
 	}
@@ -397,7 +399,8 @@ func TestExecuteBead_NoChangesRationaleAbsentWhenNotWritten(t *testing.T) {
 	// Runner that does NOT write the rationale file.
 	runner := &gateTestAgentRunner{exitCode: 0}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{AgentRunner: runner}, gitOps)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead returned error: %v", err)
 	}
