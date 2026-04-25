@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Minor (non-blocking): `rcfg, _ := config.LoadAndResolve(f.WorkingDir, overrides)` at `cli/cmd/agent_cmd.go:336` swallows the error. Per SD-024's sealed-construction design, a failed resolve returns a zero-value `ResolvedConfig` whose accessors panic — a future bead should propagate this error rather than rely on the panic path."
+}
