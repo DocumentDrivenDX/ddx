@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Iter 1 closes the gap flagged by the prior review by migrating the four remaining `exec.Command(\"git\", …)` callsites in `cli/cmd/init.go` to `gitpkg.Command`. Combined with the earlier 8481ade6 commit (agent_cmd, agent_workers, checkpoint, status, bead, doc, bead_review, log), all non-test cli/cmd/ git callsites now go through `gitpkg.Command`."
+}
