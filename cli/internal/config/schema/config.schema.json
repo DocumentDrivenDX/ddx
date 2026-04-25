@@ -496,6 +496,19 @@
           "type": "integer",
           "minimum": 0,
           "description": "Optional cap on running drain workers. + Add worker refuses to exceed this limit. Unset = no cap."
+        },
+        "no_progress_cooldown": {
+          "type": "string",
+          "description": "Cooldown applied to a bead that returns no_changes (or another no-progress status) so the queue can move on. Parsed via time.ParseDuration (e.g. \"6h\"). Empty or unparseable falls back to the built-in default (6h)."
+        },
+        "max_no_changes_before_close": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of consecutive no_changes attempts the execute-loop tolerates before closing the bead as already_satisfied. Unset or non-positive falls back to the built-in default (3)."
+        },
+        "heartbeat_interval": {
+          "type": "string",
+          "description": "How often a claim owner refreshes its heartbeat while holding a bead. Parsed via time.ParseDuration (e.g. \"15s\"). Empty or unparseable falls back to the built-in default (30s)."
         }
       },
       "additionalProperties": false
