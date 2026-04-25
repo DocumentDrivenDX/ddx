@@ -1,16 +1,17 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/spf13/cobra"
@@ -193,21 +194,22 @@ func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
 func commitPluginChanges(name, version string) {
 	// Stage skill symlinks and any other trackable plugin artifacts.
 	paths := []string{".agents/skills/", ".claude/skills/"}
+	ctx := context.Background()
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
-			gitAdd := exec.Command("git", "add", p)
+			gitAdd := internalgit.Command(ctx, "", "add", p)
 			_ = gitAdd.Run()
 		}
 	}
 
 	// Check if there's anything to commit.
-	status := exec.Command("git", "diff", "--cached", "--quiet")
+	status := internalgit.Command(ctx, "", "diff", "--cached", "--quiet")
 	if status.Run() == nil {
 		return // nothing staged
 	}
 
 	msg := fmt.Sprintf("chore: install %s %s", name, version)
-	gitCommit := exec.Command("git", "commit", "-m", msg)
+	gitCommit := internalgit.Command(ctx, "", "commit", "-m", msg)
 	_ = gitCommit.Run()
 }
 

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // runScriptFn executes a directive file against opts.WorkDir using real filesystem
@@ -334,9 +337,7 @@ func gitCommitAll(dir, msg string) error {
 		{"add", "-A"},
 		{"commit", "-m", msg},
 	} {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = scrubbedGitEnvScript()
+		cmd := internalgit.Command(context.Background(), dir, args...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git %v: %w\n%s", args, err, out)
 		}

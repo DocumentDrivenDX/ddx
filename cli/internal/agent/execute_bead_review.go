@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // ReviewVerdict is the outcome of a post-merge bead review.
@@ -635,8 +635,8 @@ func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runOpts Run
 func (r *DefaultBeadReviewer) gitShow(rev string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	args := append([]string{"-C", r.ProjectRoot, "show", rev, "--", "."}, EvidenceReviewExcludePathspecs()...)
-	out, err := osexec.CommandContext(ctx, "git", args...).Output()
+	args := append([]string{"show", rev, "--", "."}, EvidenceReviewExcludePathspecs()...)
+	out, err := internalgit.Command(ctx, r.ProjectRoot, args...).Output()
 	if err != nil {
 		return "", err
 	}
@@ -647,7 +647,7 @@ func resolveReviewBaseRev(projectRoot, resultRev string) string {
 	if resultRev == "" {
 		return ""
 	}
-	out, err := osexec.Command("git", "-C", projectRoot, "rev-parse", resultRev+"^").Output()
+	out, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", resultRev+"^").Output()
 	if err != nil {
 		return ""
 	}

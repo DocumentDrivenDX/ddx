@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // NowFunc allows tests to override time.Now for deterministic PreserveRef output.
@@ -102,7 +103,7 @@ type RealOrchestratorGitOps struct{}
 
 // UpdateRef updates a git ref to point at sha.
 func (r *RealOrchestratorGitOps) UpdateRef(dir, ref, sha string) error {
-	out, err := osexec.Command("git", "-C", dir, "update-ref", ref, sha).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "update-ref", ref, sha).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
 	}

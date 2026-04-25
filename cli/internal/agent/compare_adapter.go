@@ -28,6 +28,7 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // BenchmarkPrompt is a single test case in a benchmark suite.
@@ -257,9 +258,7 @@ func createCompareWorktree(workDir, compareID, harnessName string) (string, erro
 		return "", fmt.Errorf("resolving git root: %w", err)
 	}
 	wtDir := filepath.Join(gitRoot, ".worktrees", fmt.Sprintf("%s-%s", compareID, harnessName))
-	cmd := exec.Command("git", "worktree", "add", "--detach", wtDir, "HEAD")
-	cmd.Dir = gitRoot
-	cmd.Env = cleanGitEnv()
+	cmd := internalgit.Command(context.Background(), gitRoot, "worktree", "add", "--detach", wtDir, "HEAD")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git worktree add: %s\n%s", err, string(out))
 	}
@@ -267,9 +266,7 @@ func createCompareWorktree(workDir, compareID, harnessName string) (string, erro
 }
 
 func resolveGitRoot(dir string) (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	cmd.Dir = dir
-	cmd.Env = cleanGitEnv()
+	cmd := internalgit.Command(context.Background(), dir, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("not a git repository: %s", dir)
@@ -278,18 +275,14 @@ func resolveGitRoot(dir string) (string, error) {
 }
 
 func captureGitDiff(worktreePath string) string {
-	cmd := exec.Command("git", "diff", "HEAD")
-	cmd.Dir = worktreePath
-	cmd.Env = cleanGitEnv()
+	cmd := internalgit.Command(context.Background(), worktreePath, "diff", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
 	diff := string(out)
 
-	cmd3 := exec.Command("git", "ls-files", "--others", "--exclude-standard")
-	cmd3.Dir = worktreePath
-	cmd3.Env = cleanGitEnv()
+	cmd3 := internalgit.Command(context.Background(), worktreePath, "ls-files", "--others", "--exclude-standard")
 	untrackedOut, _ := cmd3.Output()
 	untracked := strings.TrimSpace(string(untrackedOut))
 	if untracked != "" {
@@ -311,29 +304,6 @@ func captureGitDiff(worktreePath string) string {
 		}
 	}
 	return strings.TrimSpace(diff)
-}
-
-// cleanGitEnv returns the current environment with git hook-specific vars removed.
-func cleanGitEnv() []string {
-	blocked := map[string]bool{
-		"GIT_DIR":                          true,
-		"GIT_INDEX_FILE":                   true,
-		"GIT_WORK_TREE":                    true,
-		"GIT_OBJECT_DIRECTORY":             true,
-		"GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
-	}
-	env := os.Environ()
-	out := make([]string, 0, len(env))
-	for _, e := range env {
-		key := e
-		if i := strings.Index(e, "="); i >= 0 {
-			key = e[:i]
-		}
-		if !blocked[key] {
-			out = append(out, e)
-		}
-	}
-	return out
 }
 
 func runPostCommand(dir, command string) (string, bool) {
@@ -358,15 +328,11 @@ func cleanupCompareWorktrees(repoDir, compareID string) {
 	for _, e := range entries {
 		if e.IsDir() && strings.HasPrefix(e.Name(), compareID) {
 			wtPath := filepath.Join(wtBase, e.Name())
-			cmd := exec.Command("git", "worktree", "remove", "--force", wtPath)
-			cmd.Dir = repoDir
-			cmd.Env = cleanGitEnv()
+			cmd := internalgit.Command(context.Background(), repoDir, "worktree", "remove", "--force", wtPath)
 			_ = cmd.Run()
 		}
 	}
-	cmd := exec.Command("git", "worktree", "prune")
-	cmd.Dir = repoDir
-	cmd.Env = cleanGitEnv()
+	cmd := internalgit.Command(context.Background(), repoDir, "worktree", "prune")
 	_ = cmd.Run()
 }
 
