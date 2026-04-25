@@ -88,6 +88,55 @@ func NewTestConfigForRun(opts TestRunConfigOpts) *Config {
 	}
 }
 
+// TestBeadConfigOpts names every durable knob the execute-bead worker
+// reads via ResolvedConfig (per SD-024 §ExecuteBeadOptions →
+// ExecuteBeadRuntime field classification). Tests must specify each
+// field explicitly; there are no zero-value defaults that silently
+// bypass real config.
+//
+// See SD-024 / TD-024 §Test config constructors and §Stage 3.
+type TestBeadConfigOpts struct {
+	Harness  string
+	Model    string
+	Provider string // CLI-only override, no durable home on AgentConfig
+	ModelRef string // CLI-only override, no durable home on AgentConfig
+	Effort   string // CLI-only override, no durable home on AgentConfig
+	Mirror   *ExecutionsMirrorConfig
+}
+
+// NewTestConfigForBead returns a *Config that, when Resolve()d with
+// the matching CLIOverrides, produces a ResolvedConfig whose
+// execute-bead-relevant accessors return the values supplied in opts.
+// Pure CLI-override fields (Provider, ModelRef, Effort) have no
+// durable home on AgentConfig and must be applied at Resolve time via
+// CLIOverrides.
+func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
+	cfg := &Config{
+		Version: "1.0",
+		Agent: &AgentConfig{
+			Harness: opts.Harness,
+			Model:   opts.Model,
+		},
+	}
+	if opts.Mirror != nil {
+		cfg.Executions = &ExecutionsConfig{Mirror: opts.Mirror}
+	}
+	return cfg
+}
+
+// TestBeadOverrides returns the CLIOverrides that, combined with the
+// *Config produced by NewTestConfigForBead(opts), drive a Resolve call
+// to a ResolvedConfig matching opts. Pure-override fields (Provider,
+// ModelRef, Effort) have no durable home on *Config; they are applied
+// at Resolve time only.
+func TestBeadOverrides(opts TestBeadConfigOpts) CLIOverrides {
+	return CLIOverrides{
+		Provider: opts.Provider,
+		ModelRef: opts.ModelRef,
+		Effort:   opts.Effort,
+	}
+}
+
 // TestLoopOverrides returns the CLIOverrides that, combined with the
 // *Config produced by NewTestConfigForLoop(opts), drive a Resolve call
 // to a ResolvedConfig matching opts. Pure-override fields (Assignee,

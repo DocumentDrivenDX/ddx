@@ -124,6 +124,51 @@ type ExecuteBeadOptions struct {
 	AgentRunner AgentRunner
 }
 
+// ExecuteBeadRuntime is the SD-024 successor to ExecuteBeadOptions.
+// Durable knobs (Harness, Model, Provider, ModelRef, Effort,
+// ContextBudget, MirrorCfg) are stripped — they live on
+// config.ResolvedConfig and are passed via ExecuteBeadWithConfig's
+// rcfg argument. Only non-serializable plumbing and per-invocation
+// runtime intent remain.
+//
+// See SD-024 / TD-024 §Runtime structs and §Stage 3.
+type ExecuteBeadRuntime struct {
+	FromRev     string // base git revision (default: HEAD)
+	PromptFile  string // override prompt file (auto-generated if empty)
+	WorkerID    string // from DDX_WORKER_ID env or caller
+	BeadEvents  BeadEventAppender
+	Service     agentlib.DdxAgent
+	AgentRunner AgentRunner
+}
+
+// ExecuteBeadWithConfig is the SD-024 successor to ExecuteBead. It
+// accepts a sealed ResolvedConfig (durable knobs) and an
+// ExecuteBeadRuntime (plumbing + per-invocation intent), assembles an
+// equivalent ExecuteBeadOptions, and delegates to ExecuteBead.
+// Behavior is identical to ExecuteBead with an equivalently-populated
+// ExecuteBeadOptions.
+//
+// Stage 3 of SD-024: this function exists alongside ExecuteBead;
+// production callers have not migrated yet.
+func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime, gitOps GitOps) (*ExecuteBeadResult, error) {
+	opts := ExecuteBeadOptions{
+		FromRev:       runtime.FromRev,
+		Harness:       rcfg.Harness(),
+		Model:         rcfg.Model(),
+		Provider:      rcfg.Provider(),
+		ModelRef:      rcfg.ModelRef(),
+		Effort:        rcfg.Effort(),
+		ContextBudget: rcfg.ContextBudget(),
+		PromptFile:    runtime.PromptFile,
+		WorkerID:      runtime.WorkerID,
+		BeadEvents:    runtime.BeadEvents,
+		MirrorCfg:     rcfg.MirrorConfig(),
+		Service:       runtime.Service,
+		AgentRunner:   runtime.AgentRunner,
+	}
+	return ExecuteBead(ctx, projectRoot, beadID, opts, gitOps)
+}
+
 // GitOps abstracts the git operations required by the worker.
 // Merge is intentionally excluded — that belongs to the parent-side
 // orchestrator (OrchestratorGitOps). UpdateRef/DeleteRef are exposed here
