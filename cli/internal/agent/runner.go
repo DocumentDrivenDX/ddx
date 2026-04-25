@@ -14,6 +14,7 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 func containsString(slice []string, s string) bool {
@@ -168,6 +169,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 
 	// Build args with the resolved prompt (may have come from file)
 	resolvedOpts := opts
+	// evidence:allow-unbounded reason="prompt is the bounded output of r.resolvePrompt → readPromptFileBounded (FEAT-022 §3)"
 	resolvedOpts.Prompt = prompt
 	resolvedOpts.Permissions = resolvePermissions(r.Config.Permissions, opts.Permissions)
 	args := BuildArgs(harness, resolvedOpts, model)
@@ -228,6 +230,39 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	r.logSession(result, len(prompt), prompt, promptSource, opts.Correlation)
 	r.recordRoutingOutcome(result, elapsed, opts)
 	return result, nil
+}
+
+// RunWithConfig is the SD-024 successor to Run. It accepts a sealed
+// ResolvedConfig (durable knobs) and an AgentRunRuntime (plumbing +
+// per-invocation intent), assembles an equivalent RunOptions, and
+// delegates to Run. Behavior is identical to Run with an
+// equivalently-populated RunOptions.
+//
+// Stage 2 of SD-024: this method exists alongside Run; production
+// callers have not migrated yet.
+func (r *Runner) RunWithConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+	sessionLogDir := runtime.SessionLogDirOverride
+	if sessionLogDir == "" {
+		sessionLogDir = rcfg.SessionLogDir()
+	}
+	opts := RunOptions{
+		Context:       ctx,
+		Harness:       rcfg.Harness(),
+		Prompt:        runtime.Prompt,
+		PromptFile:    runtime.PromptFile,
+		PromptSource:  runtime.PromptSource,
+		Correlation:   runtime.Correlation,
+		Model:         rcfg.Model(),
+		Provider:      rcfg.Provider(),
+		ModelRef:      rcfg.ModelRef(),
+		Effort:        rcfg.Effort(),
+		Timeout:       rcfg.Timeout(),
+		WallClock:     rcfg.WallClock(),
+		WorkDir:       runtime.WorkDir,
+		Permissions:   rcfg.Permissions(),
+		SessionLogDir: sessionLogDir,
+	}
+	return r.Run(opts)
 }
 
 // ValidateForExecuteLoop checks harness availability and model compatibility

@@ -52,6 +52,42 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 	}
 }
 
+// TestRunConfigOpts names every durable knob the agent run path reads
+// via ResolvedConfig (per SD-024 §RunOptions → AgentRunRuntime field
+// classification). Tests must specify each field explicitly; there are
+// no zero-value defaults that silently bypass real config.
+//
+// See SD-024 / TD-024 §Test config constructors and §Stage 2 bead 17.
+type TestRunConfigOpts struct {
+	Harness       string
+	Model         string
+	Provider      string
+	ModelRef      string
+	Effort        string
+	Permissions   string
+	Timeout       time.Duration
+	WallClock     time.Duration
+	SessionLogDir string
+}
+
+// NewTestConfigForRun returns a *Config that, when Resolve()d with the
+// matching CLIOverrides, produces a ResolvedConfig whose run-path
+// accessors return the values supplied in opts. Pure CLI-override
+// fields (Provider, ModelRef, Effort) have no durable home on
+// AgentConfig and must be applied at Resolve time via CLIOverrides.
+func NewTestConfigForRun(opts TestRunConfigOpts) *Config {
+	return &Config{
+		Version: "1.0",
+		Agent: &AgentConfig{
+			Harness:       opts.Harness,
+			Model:         opts.Model,
+			TimeoutMS:     int(opts.Timeout / time.Millisecond),
+			SessionLogDir: opts.SessionLogDir,
+			Permissions:   opts.Permissions,
+		},
+	}
+}
+
 // TestLoopOverrides returns the CLIOverrides that, combined with the
 // *Config produced by NewTestConfigForLoop(opts), drive a Resolve call
 // to a ResolvedConfig matching opts. Pure-override fields (Assignee,

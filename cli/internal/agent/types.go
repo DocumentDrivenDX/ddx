@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"time"
 )
@@ -52,6 +53,28 @@ type RunOptions struct {
 	WorkDir       string
 	Permissions   string // permission level override: safe, supervised, unrestricted
 	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
+}
+
+// AgentRunRuntime is the SD-024 successor to RunOptions for the agent
+// run path. Durable knobs (Harness, Model, Provider, ModelRef, Effort,
+// Permissions, Timeout, WallClock, SessionLogDir) are stripped — they
+// live on config.ResolvedConfig and are passed via RunWithConfig's
+// rcfg argument. Only non-serializable plumbing and per-invocation
+// runtime intent remain.
+//
+// See SD-024 / TD-024 §Runtime structs and §Stage 2 bead 17.
+type AgentRunRuntime struct {
+	Prompt                string
+	PromptFile            string
+	PromptSource          string
+	Output                io.Writer
+	Correlation           map[string]string
+	Record                bool
+	Replay                bool
+	WorkDir               string
+	EstimatedPromptTokens int
+	RequiresTools         bool
+	SessionLogDirOverride string
 }
 
 // QuorumOptions extends RunOptions for multi-agent consensus.
