@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-0b382233",
+  "attempt_id": "20260425T191054-47f9c9ea",
+  "base_rev": "843d2c08e5c1ccdcf64135f66347cd6186cc3603",
+  "result_rev": "b5c95254a7d9f62727f8f5a59fbea9180720e654",
+  "outcome": "task_succeeded",
+  "status": "success",
+  "detail": "success",
+  "harness": "omlx",
+  "provider": "omlx-vidar-1235",
+  "model": "Qwen3.6-27B-MLX-8bit",
+  "session_id": "eb-4bf2347f",
+  "duration_ms": 2487506,
+  "tokens": 2654020,
+  "exit_code": 0,
+  "execution_dir": ".ddx/executions/20260425T191054-47f9c9ea",
+  "prompt_file": ".ddx/executions/20260425T191054-47f9c9ea/prompt.md",
+  "manifest_file": ".ddx/executions/20260425T191054-47f9c9ea/manifest.json",
+  "result_file": ".ddx/executions/20260425T191054-47f9c9ea/result.json",
+  "usage_file": ".ddx/executions/20260425T191054-47f9c9ea/usage.json",
+  "started_at": "2026-04-25T19:10:55.310799335Z",
+  "finished_at": "2026-04-25T19:52:22.817793556Z"
+}
