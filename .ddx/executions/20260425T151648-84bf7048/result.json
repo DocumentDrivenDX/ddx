@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage 1 add-alongside implementation: ExecuteBeadLoopRuntime strips all durable fields (Assignee, ReviewMaxRetries, cooldowns, harness/model/tier) and RunWithConfig translates rcfg+runtime back into ExecuteBeadLoopOptions before delegating to the existing Run. Test asserts observable behavior via the event sink (loop.start, execute-bead Actor, routing body) rather than synthetic telemetry, matching SD-024's test-coverage commitment, and a bonus zero-value-panics test verifies the sealed-construction invariant flows through."
+}
