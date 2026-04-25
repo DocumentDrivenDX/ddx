@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T111752-c108bda9",
+  "bead_id": "ddx-d33377a5",
+  "base_rev": "bbdc8626bb3c9c1b9753844e19621203cee59cfd",
+  "created_at": "2026-04-25T11:17:53.054830413Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d33377a5",
+    "title": "review+grading: metrics surface exposes prompt-size quantiles + failure-class breakdown (Stage F2)",
+    "description": "Stage F2 of FEAT-022. Extend the review-outcomes metrics surface to\nexpose prompt-size quantiles and the four-class review-failure\nbreakdown over a configurable time window.\n\nImplements FEAT-022 requirement §17. Satisfies the metrics-surface\ncriterion of US-221.\n\nDepends on Stage F1 (ddx-76e83e7f) — needs telemetry fields present on\nartifacts and events. Also depends on Stage G (ddx-70c1d2e2) for the\nfailure-class labels; if Stage G has not shipped, this bead can still\ncompute the quantiles and surface existing single-class counts, then\nbe extended when G lands.\n\nIn-scope files:\n- cli/cmd/agent_metrics.go (extend the review-outcomes subcommand's\n  JSON output and human-readable output with the new fields).\n- cli/internal/agent/metrics_review.go (or equivalent package that\n  aggregates the review-outcomes data from bead events and attempt\n  bundles): compute prompt_size_p50, prompt_size_p95, prompt_size_p99\n  over input_bytes values collected from review events in the window;\n  compute failure_classes counts keyed on context_overflow,\n  provider_empty, unparseable, transport.\n\nOut-of-scope:\n- A new CLI command (FEAT-022 §17 explicitly says \"no new command\").\n- Any web UI consumer of the new fields.\n- GraphQL exposure of the aggregated metrics — separate work if\n  needed.\n\nRollback: revert the extensions; existing review-outcomes fields\nremain unchanged.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestReviewOutcomesMetrics ./... passes: fixture bead history with varied prompt sizes and failure classes; assert ddx agent metrics review-outcomes --json produces output containing keys prompt_size_p50, prompt_size_p95, prompt_size_p99, failure_classes (object keyed on context_overflow, provider_empty, unparseable, transport with integer counts). ddx agent metrics review-outcomes --json | jq -e '.prompt_size_p95 | type == \"number\"' exits 0. ddx agent metrics review-outcomes --json | jq -e '.failure_classes | has(\"context_overflow\") and has(\"provider_empty\") and has(\"unparseable\") and has(\"transport\")' exits 0. Human-readable output (without --json) renders a table that includes the new columns. cd cli \u0026\u0026 go test ./cmd/... passes; existing metrics tests unchanged.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "area:metrics",
+      "stage:F2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T11:17:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T11:17:52.567408924Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T111752-c108bda9",
+    "prompt": ".ddx/executions/20260425T111752-c108bda9/prompt.md",
+    "manifest": ".ddx/executions/20260425T111752-c108bda9/manifest.json",
+    "result": ".ddx/executions/20260425T111752-c108bda9/result.json",
+    "checks": ".ddx/executions/20260425T111752-c108bda9/checks.json",
+    "usage": ".ddx/executions/20260425T111752-c108bda9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d33377a5-20260425T111752-c108bda9"
+  }
+}
