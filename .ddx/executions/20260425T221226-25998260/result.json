@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "BLOCK: The acceptance item `cd cli \u0026\u0026 go test ./... passes` is not substantiated by the supplied execution evidence. The execution directory for attempt `20260425T220004-1249030c` does not contain a `checks.json` or similar artifact proving test success on commit `73d201f628a7416dc2e5c69f0da7e5d1984ff331`.\nBLOCK: A local rerun of `cd cli \u0026\u0026 go test ./...` does not pass in this environment, failing in [cli/cmd/agent_check_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_check_test.go:12) / [cli/cmd/agent_providers_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_providers_test.go:34). If the intended AC is “tests pass in a normal developer environment,” that needs to be attached as explicit evidence to the bead."
+}
