@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage 3 foundation: `ExecuteBeadRuntime` carries only plumbing/per-invocation intent, `ExecuteBeadWithConfig` sources durable knobs (Harness, Model, Provider, ModelRef, Effort, ContextBudget, MirrorCfg) from `ResolvedConfig` and delegates to existing `ExecuteBead`, and `NewTestConfigForBead`/`TestBeadOverrides` mirror the loop/run test constructors. Bonus zero-value-panic test enforces the SD-024 sealed-construction invariant on the new path. No callers migrated, consistent with the \"add alongside\" discipline."
+}
