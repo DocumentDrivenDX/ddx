@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260425T105546-e5825bd5",
+  "bead_id": "ddx-76e83e7f",
+  "base_rev": "7d79c18c2cc5e8c730cefa6dd862fdfde3fabf06",
+  "created_at": "2026-04-25T10:55:47.40164313Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-76e83e7f",
+    "title": "review+grading: section-level assembly telemetry on artifacts + events (Stage F1)",
+    "description": "Stage F1 of FEAT-022. Emit the evidence-assembly telemetry block onto\nattempt bundles for review and grading attempts. Add a compact summary\nto bead event bodies for review, review-error, and compare-result.\n\nImplements FEAT-022 requirements §15 and §16. Satisfies the event-body\ncriterion of US-220 and the per-field criterion of US-221.\n\nDepends on Stage C1 (ddx-12934d66) and Stage C2 (ddx-0bbf8563) —\nF1 serializes the EvidenceAssemblySection struct pinned in Stage A1,\nwhich C1 and C2 populate during assembly.\n\nIn-scope files:\n- cli/internal/agent/execute_bead_review.go: during and after\n  assembly, collect per-section EvidenceAssemblySection records\n  (struct shape pinned in Stage A1). Write them into result.json /\n  manifest.json under an evidence_assembly key (additive to FEAT-014\n  §19/§20 runtime-metrics block; does not replace).\n- cli/internal/agent/grade.go: same for grading attempts.\n- cli/internal/agent/execute_bead_loop.go: on the review and\n  review-error events emitted by the loop, populate event body fields\n  input_bytes, output_bytes, elapsed_ms, harness, model. Respect the\n  existing event-body size cap at cli/internal/bead/store.go:747;\n  never include section detail in the event body (that lives only on\n  the artifact).\n- Similar event-body update for compare-result events emitted by the\n  grading flow.\n\nOut-of-scope:\n- CLI metrics surface extension — separate Stage F2 bead.\n- Any UI or dashboard consumer of the new fields.\n- Primary execute-bead event telemetry mirroring (explicitly OOS per\n  FEAT-022 Out of Scope).\n\nRollback: revert telemetry writes; attempt bundles and event bodies\nreturn to prior shape. Artifact-schema compatibility: new key on\nresult.json is additive; consumers that don't know about it continue\nto work.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestEvidenceAssemblyTelemetry ./internal/agent/... passes: given a fixture review attempt that trims governing docs and diff, the generated result.json contains an evidence_assembly object whose fields match the EvidenceAssemblySection struct pinned by Stage A1 — at minimum: per-section bytes_included / bytes_omitted, truncation_reason, selected_items, omitted_items, and total input_bytes + output_bytes. Same for grading attempts. cd cli \u0026\u0026 go test -run TestReviewEventBodySummary ./internal/agent/... passes: review, review-error, and compare-result events carry input_bytes, output_bytes, elapsed_ms, harness, model. cd cli \u0026\u0026 go test -run TestReviewEventBodyCap ./internal/agent/... passes: event body with maximum-sized summary fields still respects the cap at cli/internal/bead/store.go:747. cd cli \u0026\u0026 go test ./... passes. jq -e '.evidence_assembly | type == \"object\"' on a fresh fixture result.json exits 0.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "area:telemetry",
+      "stage:F1"
+    ],
+    "metadata": {
+      "blocked-by": "ddx-12934d66",
+      "claimed-at": "2026-04-25T10:55:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T10:55:46.888126148Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T105546-e5825bd5",
+    "prompt": ".ddx/executions/20260425T105546-e5825bd5/prompt.md",
+    "manifest": ".ddx/executions/20260425T105546-e5825bd5/manifest.json",
+    "result": ".ddx/executions/20260425T105546-e5825bd5/result.json",
+    "checks": ".ddx/executions/20260425T105546-e5825bd5/checks.json",
+    "usage": ".ddx/executions/20260425T105546-e5825bd5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-76e83e7f-20260425T105546-e5825bd5"
+  }
+}
