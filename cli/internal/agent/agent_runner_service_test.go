@@ -11,6 +11,7 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,8 +72,11 @@ func TestExecuteBeadResultDetailReportsNoopCompactionWallClockBreaker(t *testing
 		},
 	}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Harness: "agent",
+	})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		Service: &noopCompactionDdxAgent{
 			interval: 3 * time.Second,
 			total:    serviceNoopCompactionWallClockLimit + time.Minute,

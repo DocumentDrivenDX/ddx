@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,9 +25,12 @@ func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "script",
-		Model:       dirFile,
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "script",
+		Model:   dirFile,
+	})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,
 	}, gitOps)
@@ -71,9 +75,12 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "script",
-		Model:       dirFile,
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "script",
+		Model:   dirFile,
+	})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  nil,
 		AgentRunner: runner,
 	}, gitOps)
@@ -99,9 +106,12 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealOrchestratorGitOps{}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "script",
-		Model:       dirFile,
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "script",
+		Model:   dirFile,
+	})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,
 	}, gitOps)

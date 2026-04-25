@@ -208,7 +208,7 @@ func TestExecuteBead_TriggersMirror(t *testing.T) {
 	projectRoot := setupArtifactTestProjectRoot(t)
 	mirrorRoot := t.TempDir()
 	async := false
-	cfg := &config.ExecutionsMirrorConfig{
+	mirrorCfg := &config.ExecutionsMirrorConfig{
 		Kind:  "local",
 		Path:  filepath.Join(mirrorRoot, "{attempt_id}"),
 		Async: &async,
@@ -221,8 +221,12 @@ func TestExecuteBead_TriggersMirror(t *testing.T) {
 			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
 		},
 	}
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID,
-		ExecuteBeadOptions{MirrorCfg: cfg, AgentRunner: &artifactTestAgentRunner{}}, gitOps)
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Mirror: mirrorCfg,
+	})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg,
+		ExecuteBeadRuntime{AgentRunner: &artifactTestAgentRunner{}}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
