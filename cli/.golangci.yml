@@ -79,6 +79,7 @@ linters:
       - third_party$
       - builtin$
       - examples$
+      - tools/lint/evidencelint/testdata
     rules:
       # Exclude errcheck for test files (intentional test setup/cleanup)
       - linters:
@@ -98,3 +99,4 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      - tools/lint/evidencelint/testdata

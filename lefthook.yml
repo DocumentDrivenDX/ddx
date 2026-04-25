@@ -97,8 +97,12 @@ pre-commit:
           echo "Run: scripts/dev-setup.sh"
           exit 1
         fi
-        # Run on packages containing staged files, not individual files
-        packages=$(echo {staged_files} | xargs -n1 dirname | sort -u | sed 's|^cli/|./|')
+        # Run on packages containing staged files, not individual files.
+        # Skip Go testdata directories — these contain analyzer fixtures
+        # that intentionally reference stub packages and only typecheck
+        # under analysistest's GOPATH-style loader.
+        packages=$(echo {staged_files} | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '/testdata/' || true)
+        [ -z "$packages" ] && exit 0
         for pkg in $packages; do
           golangci-lint run --timeout=60s --new-from-rev=HEAD~1 "$pkg"
         done
@@ -115,6 +119,40 @@ pre-commit:
       skip:
         - merge
         - rebase
+
+    # FEAT-022 evidence-lint: structural sink coverage for the
+    # no-unbounded-prompts invariant. Scoped to packages containing
+    # staged files, with diagnostics filtered to only those staged
+    # files so existing violations in untouched packages don't block
+    # unrelated commits. Stages B–E migrate the remaining historical
+    # sites; full-tree enforcement lives in the `ci` block below.
+    evidence-lint:
+      <<: *go_checks
+      name: "Evidence Lint (no-unbounded-prompts)"
+      glob: "cli/**/*.go"
+      run: |
+        staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/.+\.go$' || true)
+        [ -z "$staged" ] && exit 0
+        pkgs=$(printf '%s\n' "$staged" | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '^\./tools/lint/evidencelint' || true)
+        [ -z "$pkgs" ] && exit 0
+        out=$(go run ./tools/lint/evidencelint/cmd/evidencelint $pkgs 2>&1) || true
+        violations=""
+        for f in $staged; do
+          bare="${f#cli/}"
+          m=$(printf '%s\n' "$out" | grep "/$bare:" || true)
+          if [ -n "$m" ]; then
+            violations="$violations$m"$'\n'
+          fi
+        done
+        if [ -n "$violations" ]; then
+          printf '%s' "$violations"
+          exit 1
+        fi
+        exit 0
+      skip:
+        - merge
+        - rebase
+      fail_text: "Unbounded prompt sink detected in staged file. Route through internal/evidence or add `// evidence:allow-unbounded reason=\"...\"`."
 
     # Go tests - targeted testing
     go-test:
@@ -345,6 +383,15 @@ ci:
       name: "Build all targets"
       root: "cli/"
       run: 'go build -v ./...'
+
+    # FEAT-022 evidence-lint: structural sink coverage. Repo-wide
+    # invariant check; runs in CI even when no Go files were staged
+    # in the triggering commit so historical regressions still surface.
+    evidence-lint-all:
+      <<: *go_checks
+      name: "Evidence Lint (no-unbounded-prompts) — full tree"
+      root: "cli/"
+      run: 'go run ./tools/lint/evidencelint/cmd/evidencelint ./...'
 
     # YAML validation
     yaml-validate:
