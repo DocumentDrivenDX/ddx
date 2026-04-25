@@ -740,10 +740,13 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 
 	durationMS := int(time.Since(start).Milliseconds())
 	if runErr != nil {
+		// Transport-class failure (FEAT-022 §12): network or provider-side
+		// error. Surface as a typed review-error so the loop classifies and
+		// counts it correctly, rather than masquerading as a BLOCK verdict.
 		reviewRes := &ReviewResult{
 			Verdict:         VerdictBlock,
 			Rationale:       runErr.Error(),
-			Error:           runErr.Error(),
+			Error:           evidence.OutcomeReviewTransport,
 			ReviewerHarness: reviewHarness,
 			ReviewerModel:   reviewModel,
 			BaseRev:         resolveReviewBaseRev(r.ProjectRoot, resultRev),
@@ -764,7 +767,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 			Rationale: reviewRes.Rationale,
 			Error:     reviewRes.Error,
 		})
-		return reviewRes, nil
+		return reviewRes, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewTransport, runErr)
 	}
 
 	actualHarness := reviewHarness
@@ -826,11 +829,17 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		Error:     reviewRes.Error,
 	})
 	if parseErr != nil {
-		// Return the review result alongside the parse error so the caller
-		// can surface the full rationale + raw output as review-error event
-		// body (loop's reviewErr path) while still having access to the
-		// reviewer text for operator forensics.
-		return reviewRes, fmt.Errorf("reviewer: %w (raw output %d bytes; see %s)", parseErr, len(output), artifacts.DirRel)
+		// FEAT-022 §12: distinguish provider_empty (zero bytes) from
+		// unparseable (text without a recognizable verdict line). Operators
+		// triage these differently — provider_empty often signals a context-
+		// window or backend availability issue, while unparseable signals a
+		// reviewer-prompt or output-format drift.
+		class := evidence.OutcomeReviewUnparseable
+		if strings.TrimSpace(output) == "" {
+			class = evidence.OutcomeReviewProviderEmpty
+		}
+		reviewRes.Error = class
+		return reviewRes, fmt.Errorf("reviewer: %s: %w (raw output %d bytes; see %s)", class, parseErr, len(output), artifacts.DirRel)
 	}
 	return reviewRes, nil
 }

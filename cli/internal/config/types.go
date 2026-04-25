@@ -16,6 +16,20 @@ type NewConfig struct {
 	Cost            *CostConfig         `yaml:"cost,omitempty" json:"cost,omitempty"`
 	Workers         *WorkersConfig      `yaml:"workers,omitempty" json:"workers,omitempty"`
 	EvidenceCaps    *EvidenceCapsConfig `yaml:"evidence_caps,omitempty" json:"evidence_caps,omitempty"`
+	// ReviewMaxRetries caps reviewer attempts per committed result_rev before
+	// the execute-loop emits a terminal `review-manual-required` event and
+	// parks the bead (FEAT-022 §14). Zero or unset uses the binary default
+	// (3). Negative values are treated as unset.
+	ReviewMaxRetries *int `yaml:"review_max_retries,omitempty" json:"review_max_retries,omitempty"`
+}
+
+// ResolveReviewMaxRetries returns the effective reviewer retry cap for this
+// config. Defaults to 3 when unset (matching agent.DefaultReviewMaxRetries).
+func (c *NewConfig) ResolveReviewMaxRetries() int {
+	if c == nil || c.ReviewMaxRetries == nil || *c.ReviewMaxRetries <= 0 {
+		return 3
+	}
+	return *c.ReviewMaxRetries
 }
 
 // EvidenceCapsConfig configures byte-size caps used by the shared

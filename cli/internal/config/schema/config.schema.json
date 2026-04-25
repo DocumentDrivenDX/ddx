@@ -540,6 +540,11 @@
         }
       },
       "additionalProperties": false
+    },
+    "review_max_retries": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Cap on reviewer attempts per committed result_rev before the execute-loop emits a terminal `review-manual-required` event and parks the bead (FEAT-022 §14). Defaults to 3 when unset; non-positive values fall back to the default."
     }
   },
   "additionalProperties": false,

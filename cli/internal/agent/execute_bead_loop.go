@@ -11,7 +11,13 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
+
+// DefaultReviewMaxRetries is the number of reviewer attempts allowed per
+// committed result_rev before the loop emits a terminal
+// `review-manual-required` event and stops re-executing primary. FEAT-022 §14.
+const DefaultReviewMaxRetries = 3
 
 type ExecuteBeadReport struct {
 	BeadID      string `json:"bead_id"`
@@ -91,6 +97,7 @@ type ExecuteBeadLoopStore interface {
 	Heartbeat(id string) error
 	CloseWithEvidence(id, sessionID, commitSHA string) error
 	AppendEvent(id string, event bead.BeadEvent) error
+	Events(id string) ([]bead.BeadEvent, error)
 	SetExecutionCooldown(id string, until time.Time, status, detail string) error
 	IncrNoChangesCount(id string) (int, error)
 	// Reopen sets a closed bead back to open, appending notes to the bead's
@@ -154,6 +161,15 @@ type ExecuteBeadLoopOptions struct {
 	// ExecuteBeadWorker.Reviewer is configured. Use for doc-only beads or
 	// tight iteration loops where review latency is not acceptable.
 	NoReview bool
+
+	// ReviewMaxRetries caps the number of reviewer attempts per committed
+	// result_rev before the loop emits a terminal `review-manual-required`
+	// event and parks the bead (FEAT-022 §14). Zero or negative falls back
+	// to DefaultReviewMaxRetries (3). The counter is scoped to a single
+	// result_rev: a fresh result_rev resets the counter, and iterations
+	// without a committed result_rev (--no-merge, execution-failed) do not
+	// consume the budget because the reviewer is not invoked.
+	ReviewMaxRetries int
 
 	// EventSink receives structured JSONL progress events emitted at
 	// loop.start, bead.claimed, bead.result, and loop.end milestones.
@@ -458,15 +474,46 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			if w.Reviewer != nil && !opts.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
 				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, report.Harness, report.Model)
 				if reviewErr != nil {
-					// Review error: log event but leave bead closed (don't block on reviewer failures).
-					_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-						Kind:      "review-error",
-						Summary:   "review agent error",
-						Body:      reviewErr.Error(),
-						Actor:     assignee,
-						Source:    "ddx agent execute-loop",
-						CreatedAt: now().UTC(),
-					})
+					// FEAT-022 §12+§14: classify the failure into the four-class
+					// taxonomy and count prior review-error events scoped to the
+					// current result_rev. On the Nth failure emit a terminal
+					// review-manual-required event instead of yet another
+					// review-error, parking the bead so a subsequent loop
+					// iteration does NOT re-execute primary.
+					class := classifyReviewError(reviewErr, reviewRes)
+					prior := countPriorReviewErrors(w.Store, candidate.ID, report.ResultRev)
+					attemptCount := prior + 1
+					maxRetries := opts.ReviewMaxRetries
+					if maxRetries <= 0 {
+						maxRetries = DefaultReviewMaxRetries
+					}
+					if attemptCount >= maxRetries {
+						body := reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
+						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+							Kind:      "review-manual-required",
+							Summary:   class,
+							Body:      body,
+							Actor:     assignee,
+							Source:    "ddx agent execute-loop",
+							CreatedAt: now().UTC(),
+						})
+						// Park the bead with a long cooldown so subsequent
+						// loop iterations do NOT re-pick it for primary
+						// re-execution. Reviewer-failure invariant (§13) is
+						// preserved: the bead is NOT closed.
+						parkUntil := now().UTC().Add(365 * 24 * time.Hour)
+						_ = w.Store.SetExecutionCooldown(candidate.ID, parkUntil, "review-manual-required", class)
+					} else {
+						body := reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
+						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+							Kind:      "review-error",
+							Summary:   class,
+							Body:      body,
+							Actor:     assignee,
+							Source:    "ddx agent execute-loop",
+							CreatedAt: now().UTC(),
+						})
+					}
 				} else {
 					report.ReviewVerdict = string(reviewRes.Verdict)
 					report.ReviewRationale = reviewRes.Rationale
@@ -892,6 +939,96 @@ func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
 		return false
 	}
 	return report.BaseRev == report.ResultRev
+}
+
+// classifyReviewError maps a reviewer error and partial result into one of the
+// four FEAT-022 §12 taxonomy classes. Resolution order:
+//  1. reviewRes.Error if it's already one of the canonical class identifiers
+//     (the reviewer set it explicitly — preferred path).
+//  2. The error string text (for backwards-compatible reviewers that only
+//     embed the class in their message).
+//  3. ErrReviewVerdictUnparseable as a fallback when the strict-parse error
+//     leaks through a reviewer that did not set Error.
+//  4. Default to transport (network/provider-side failure) when nothing else
+//     matches.
+func classifyReviewError(reviewErr error, reviewRes *ReviewResult) string {
+	if reviewRes != nil {
+		switch reviewRes.Error {
+		case evidence.OutcomeReviewContextOverflow,
+			evidence.OutcomeReviewProviderEmpty,
+			evidence.OutcomeReviewUnparseable,
+			evidence.OutcomeReviewTransport:
+			return reviewRes.Error
+		}
+	}
+	msg := ""
+	if reviewErr != nil {
+		msg = reviewErr.Error()
+	}
+	switch {
+	case strings.Contains(msg, evidence.OutcomeReviewContextOverflow):
+		return evidence.OutcomeReviewContextOverflow
+	case strings.Contains(msg, evidence.OutcomeReviewProviderEmpty):
+		return evidence.OutcomeReviewProviderEmpty
+	case strings.Contains(msg, evidence.OutcomeReviewUnparseable):
+		return evidence.OutcomeReviewUnparseable
+	case strings.Contains(msg, evidence.OutcomeReviewTransport):
+		return evidence.OutcomeReviewTransport
+	case reviewErr != nil && strings.Contains(msg, ErrReviewVerdictUnparseable.Error()):
+		return evidence.OutcomeReviewUnparseable
+	}
+	return evidence.OutcomeReviewTransport
+}
+
+// reResultRevField extracts the result_rev value from a structured review-error
+// event body (one `result_rev=<sha>` line per event, written by
+// reviewErrorEventBody). The format is intentionally line-oriented so it
+// survives the AppendEvent body cap without losing the rev association.
+var reResultRevField = regexp.MustCompile(`(?m)^result_rev=([^\s]+)\s*$`)
+
+// countPriorReviewErrors returns the number of `review-error` events already
+// recorded against this bead whose body cites the given result_rev. This is
+// the FEAT-022 §14 retry counter — it is event-scoped (no separate counter
+// field on the bead) so a fresh result_rev naturally resets the count.
+func countPriorReviewErrors(store ExecuteBeadLoopStore, beadID, resultRev string) int {
+	if resultRev == "" {
+		return 0
+	}
+	events, err := store.Events(beadID)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, ev := range events {
+		if ev.Kind != "review-error" {
+			continue
+		}
+		m := reResultRevField.FindStringSubmatch(ev.Body)
+		if m == nil {
+			continue
+		}
+		if m[1] == resultRev {
+			n++
+		}
+	}
+	return n
+}
+
+// reviewErrorEventBody is the canonical body shape for review-error and
+// review-manual-required events. It carries the failure class, attempt count,
+// and result_rev as discrete lines so operators can grep without parsing the
+// full reviewer error text. The trailing free-form message is the raw
+// reviewer-error string for forensics.
+func reviewErrorEventBody(class string, attemptCount int, resultRev, message string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "failure_class=%s\n", class)
+	fmt.Fprintf(&b, "attempt_count=%d\n", attemptCount)
+	fmt.Fprintf(&b, "result_rev=%s\n", resultRev)
+	if message != "" {
+		b.WriteString("\n")
+		b.WriteString(message)
+	}
+	return b.String()
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {
