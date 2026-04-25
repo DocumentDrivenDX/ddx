@@ -874,26 +874,38 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		}
 	}
 
+	// SD-024 Stage 1: server dispatch flows through LoadAndResolve +
+	// RunWithConfig so .ddx/config.yaml's durable knobs (review_max_retries,
+	// no_progress_cooldown, max_no_changes_before_close, heartbeat_interval,
+	// agent.harness/model/permissions) reach the running loop without
+	// per-knob plumbing. Spec fields layer onto config as overrides via
+	// CLIOverrides — when set they win over the on-disk config. Each
+	// request reloads the target project's config fresh (no cache).
+	overrides := config.CLIOverrides{
+		Assignee: "ddx",
+		Harness:  spec.Harness,
+		Model:    spec.Model,
+		Provider: spec.Provider,
+		ModelRef: spec.ModelRef,
+		Profile:  agent.NormalizeRoutingProfile(spec.Profile),
+		Effort:   spec.Effort,
+		MinTier:  spec.MinTier,
+		MaxTier:  spec.MaxTier,
+	}
+	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
+
 	landingOps := agent.RealLandingGitOps{}
-	loopResult, err := worker.Run(ctx, agent.ExecuteBeadLoopOptions{
-		Assignee:     "ddx",
+	loopResult, err := worker.RunWithConfig(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
 		Once:         spec.Once,
 		PollInterval: spec.PollInterval,
 		Log:          log,
 		EventSink:    eventSink,
 		WorkerID:     id,
 		ProjectRoot:  projectRoot,
-		Harness:      spec.Harness,
-		Model:        spec.Model,
-		Profile:      agent.NormalizeRoutingProfile(spec.Profile),
-		Provider:     spec.Provider,
-		ModelRef:     spec.ModelRef,
 		LabelFilter:  spec.LabelFilter,
 		ProgressCh:   progressCh,
 		PreClaimHook: buildPreClaimHook(projectRoot, landingOps),
 		NoReview:     spec.NoReview,
-		MinTier:      spec.MinTier,
-		MaxTier:      spec.MaxTier,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
