@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T154703-2181fe93",
+  "bead_id": "ddx-9be994d2",
+  "base_rev": "8bec9b60a9f2585714e3b875d1b3b3e55756a6f6",
+  "created_at": "2026-04-25T15:47:03.89930944Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9be994d2",
+    "title": "server/graphql: migrate StartWorker resolver to LoadAndResolve + behavioral e2e",
+    "description": "Stage 1 of SD-024. Migrates the GraphQL StartWorker resolver at cli/internal/server/graphql/resolver_feat008.go:77 to use config.LoadAndResolve. Without this bead the GraphQL surface remains a bypass.\n\nIn-scope:\n- cli/internal/server/graphql/resolver_feat008.go (around line 77 — StartWorker)\n- cli/internal/server/graphql/resolver_feat008_e2e_test.go (new) — TestReviewRetryThresholdFromConfigGraphQL\n\nOut-of-scope:\n- CLI dispatch (bead 7)\n- Server worker dispatch (bead 8)\n\nDepends on bead 6.5.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestReviewRetryThresholdFromConfigGraphQL ./internal/server/graphql/... passes. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:graphql",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T15:47:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T15:47:03.304043433Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T154703-2181fe93",
+    "prompt": ".ddx/executions/20260425T154703-2181fe93/prompt.md",
+    "manifest": ".ddx/executions/20260425T154703-2181fe93/manifest.json",
+    "result": ".ddx/executions/20260425T154703-2181fe93/result.json",
+    "checks": ".ddx/executions/20260425T154703-2181fe93/checks.json",
+    "usage": ".ddx/executions/20260425T154703-2181fe93/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9be994d2-20260425T154703-2181fe93"
+  }
+}
