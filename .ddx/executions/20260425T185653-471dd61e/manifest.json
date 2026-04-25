@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T185653-471dd61e",
+  "bead_id": "ddx-bc330514",
+  "base_rev": "ffa9d381923f068044a1d11625254f82cdc54725",
+  "created_at": "2026-04-25T18:56:54.565636769Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bc330514",
+    "title": "config/test: write fresh library-path-resolution tests; delete config_library_test.go.disabled",
+    "description": "Stage 4 of SD-024 test debt cleanup. Library path resolution is alive via cfg.Library.Path (cli/internal/config/config.go:180 — ResolveLibraryResource), but the disabled file references a removed function name. Write fresh tests against the current API + delete the .disabled file with a one-line rationale.\n\nIn-scope:\n- cli/internal/config/config_library_test.go (new — fresh tests against ResolveLibraryResource)\n- delete cli/internal/config/config_library_test.go.disabled",
+    "acceptance": "ls cli/internal/config/config_library_test.go.disabled returns no-such-file. cd cli \u0026\u0026 go test -run 'ResolveLibrary' ./internal/config/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:test-debt",
+      "area:config",
+      "sd-024",
+      "stage:4"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T18:56:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T18:56:53.921739207Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T185653-471dd61e",
+    "prompt": ".ddx/executions/20260425T185653-471dd61e/prompt.md",
+    "manifest": ".ddx/executions/20260425T185653-471dd61e/manifest.json",
+    "result": ".ddx/executions/20260425T185653-471dd61e/result.json",
+    "checks": ".ddx/executions/20260425T185653-471dd61e/checks.json",
+    "usage": ".ddx/executions/20260425T185653-471dd61e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bc330514-20260425T185653-471dd61e"
+  }
+}
