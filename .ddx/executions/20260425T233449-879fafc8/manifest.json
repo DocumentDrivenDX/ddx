@@ -1,0 +1,99 @@
+{
+  "attempt_id": "20260425T233449-879fafc8",
+  "bead_id": "ddx-a8eaef0a",
+  "base_rev": "3ebbafc0ec5313e2f1e4a694c324d0b6f8bcbb83",
+  "created_at": "2026-04-25T23:34:49.805369641Z",
+  "requested": {
+    "harness": "pi",
+    "model": "Qwen3.6-27B-MLX-8bit",
+    "provider": "omlx-vidar-1235",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a8eaef0a",
+    "title": "agent: retire ExecuteBeadOptions + legacy method",
+    "description": "Stage 3 of SD-024 cleanup. Removes the legacy ExecuteBeadOptions struct and the legacy ExecuteBead method.\n\nDepends on bead 16 (Stage 1 cleanup) + beads 23-27c (every Stage 3 caller migrated).",
+    "acceptance": "rg 'type ExecuteBeadOptions ' cli/ returns 0. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:cleanup",
+      "area:agent",
+      "sd-024",
+      "stage:3"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T23:34:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T23:09:11.156077303Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T230049-c8b73bb2\",\"harness\":\"claude\",\"input_tokens\":48,\"output_tokens\":17596,\"total_tokens\":17644,\"cost_usd\":2.671591999999999,\"duration_ms\":500890,\"exit_code\":0}",
+          "created_at": "2026-04-25T23:09:11.240162083Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=17644 cost_usd=2.6716"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-25T23:09:14.809422503Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "`cli/internal/agent/execute_bead.go`: the implementation change is present, but the acceptance contract also requires `cd cli \u0026\u0026 go build ./...` and `cd cli \u0026\u0026 go test ./...` to pass, and the submitted evidence bundle contains no command logs or check artifact demonstrating either command.\n`.ddx/executions/20260425T230049-c8b73bb2/`: add explicit verification evidence for the two required commands, or include a recorded checks artifact; `result.json` only shows the agent process succeeded, which is insufficient to validate the build/test AC items.",
+          "created_at": "2026-04-25T23:10:11.361279104Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-25T23:10:11.451690251Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\n`cli/internal/agent/execute_bead.go`: the implementation change is present, but the acceptance contract also requires `cd cli \u0026\u0026 go build ./...` and `cd cli \u0026\u0026 go test ./...` to pass, and the submitted evidence bundle contains no command logs or check artifact demonstrating either command.\n`.ddx/executions/20260425T230049-c8b73bb2/`: add explicit verification evidence for the two required commands, or include a recorded checks artifact; `result.json` only shows the agent process succeeded, which is insufficient to validate the build/test AC items.\nresult_rev=ba7a3f2f3c2c2f1b601c608505493e466ba4d31a\nbase_rev=50d6acc5d39b1344ec699a6c60a6a114c1591f08",
+          "created_at": "2026-04-25T23:10:11.525711543Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T23:34:49.085991626Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T233449-879fafc8",
+    "prompt": ".ddx/executions/20260425T233449-879fafc8/prompt.md",
+    "manifest": ".ddx/executions/20260425T233449-879fafc8/manifest.json",
+    "result": ".ddx/executions/20260425T233449-879fafc8/result.json",
+    "checks": ".ddx/executions/20260425T233449-879fafc8/checks.json",
+    "usage": ".ddx/executions/20260425T233449-879fafc8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a8eaef0a-20260425T233449-879fafc8"
+  }
+}
