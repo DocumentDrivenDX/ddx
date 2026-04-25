@@ -1735,15 +1735,16 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			attemptProvider = resolvedProvider
 		}
 
-		res, execErr := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
+		attemptRcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+			Harness:  resolvedHarness,
+			Model:    resolvedModel,
+			Provider: attemptProvider,
+			ModelRef: modelRef,
+			Effort:   effort,
+		})
+		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 			FromRev:    fromRev,
-			Harness:    resolvedHarness,
-			Model:      resolvedModel,
-			Provider:   attemptProvider,
-			ModelRef:   modelRef,
-			Effort:     effort,
 			BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-			MirrorCfg:  loadExecutionsMirrorConfig(projectRoot),
 		}, gitOps)
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr

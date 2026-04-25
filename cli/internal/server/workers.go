@@ -583,12 +583,14 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if resolvedProvider != "" {
 				attemptProvider = resolvedProvider
 			}
-			res, err := agent.ExecuteBead(ctx, projectRoot, beadID, agent.ExecuteBeadOptions{
-				Harness:    resolvedHarness,
-				Model:      resolvedModel,
-				Provider:   attemptProvider,
-				ModelRef:   spec.ModelRef,
-				Effort:     spec.Effort,
+			attemptRcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+				Harness:  resolvedHarness,
+				Model:    resolvedModel,
+				Provider: attemptProvider,
+				ModelRef: spec.ModelRef,
+				Effort:   spec.Effort,
+			})
+			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			}, gitOps)
 			if err != nil && res == nil {

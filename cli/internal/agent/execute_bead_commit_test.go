@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // minimalResult returns an ExecuteBeadResult with all required fields set to
@@ -279,9 +281,11 @@ func TestSynthesizeCommitMessage_InExecuteBead(t *testing.T) {
 		},
 	}
 
-	_, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "test-harness",
-		Model:       "test-model",
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "test-harness",
+		Model:   "test-model",
+	}).Resolve(config.CLIOverrides{})
+	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: &artifactTestAgentRunner{},
 	}, gitOps)
 	if err != nil {
