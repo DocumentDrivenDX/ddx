@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/itchyny/gojq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -327,8 +328,9 @@ func TestAgentMetricsReviewOutcomes(t *testing.T) {
 	output, err := executeCommand(rootCmd, "agent", "metrics", "review-outcomes", "--json")
 	require.NoError(t, err)
 
-	var rows []reviewOutcomesRow
-	require.NoError(t, json.Unmarshal([]byte(output), &rows))
+	var report reviewOutcomesReport
+	require.NoError(t, json.Unmarshal([]byte(output), &report))
+	rows := report.Rows
 
 	byTier := map[string]reviewOutcomesRow{}
 	for _, r := range rows {
@@ -381,9 +383,132 @@ func TestAgentMetricsReviewOutcomes(t *testing.T) {
 	emptyCmd := NewCommandFactory(empty).NewRootCommand()
 	emptyOut, err := executeCommand(emptyCmd, "agent", "metrics", "review-outcomes", "--json")
 	require.NoError(t, err)
-	var emptyRows []reviewOutcomesRow
-	require.NoError(t, json.Unmarshal([]byte(emptyOut), &emptyRows))
-	assert.Empty(t, emptyRows)
+	var emptyReport reviewOutcomesReport
+	require.NoError(t, json.Unmarshal([]byte(emptyOut), &emptyReport))
+	assert.Empty(t, emptyReport.Rows)
+	// FEAT-022 §17: the four canonical failure classes are always present
+	// (zero-valued when nothing has been observed) so consumers can rely
+	// on `has(...)` checks without conditionals.
+	require.NotNil(t, emptyReport.FailureClasses)
+	for _, c := range []string{"context_overflow", "provider_empty", "unparseable", "transport"} {
+		assert.Contains(t, emptyReport.FailureClasses, c)
+	}
+}
+
+// TestReviewOutcomesMetrics is the FEAT-022 §17 acceptance: the
+// review-outcomes JSON surface carries prompt-size quantiles
+// (prompt_size_p50/p95/p99) and a four-class failure_classes breakdown
+// (context_overflow, provider_empty, unparseable, transport) computed from
+// review and review-error events on the bead store.
+func TestReviewOutcomesMetrics(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	dir := t.TempDir()
+
+	// Bead A — three successful reviews with varied input_bytes so the
+	// quantile aggregator has distinct values to choose from. Sizes
+	// 1000/2000/3000/4000/5000/6000/7000/8000/9000/10000 across two beads
+	// give P50=5000, P95=10000, P99=10000 under nearest-rank with N=10.
+	beadAEvents := []string{
+		`{"kind":"routing","summary":"r","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\"}","created_at":"2026-04-15T00:01:00Z"}`,
+		`{"kind":"review","summary":"APPROVE","body":"### Verdict: APPROVE\nharness=claude\nmodel=sonnet\ninput_bytes=1000\noutput_bytes=10\nelapsed_ms=5","created_at":"2026-04-15T00:02:00Z"}`,
+		`{"kind":"review","summary":"APPROVE","body":"### Verdict: APPROVE\nharness=claude\nmodel=sonnet\ninput_bytes=2000\noutput_bytes=10\nelapsed_ms=5","created_at":"2026-04-15T00:03:00Z"}`,
+		`{"kind":"review","summary":"APPROVE","body":"### Verdict: APPROVE\nharness=claude\nmodel=sonnet\ninput_bytes=3000\noutput_bytes=10\nelapsed_ms=5","created_at":"2026-04-15T00:04:00Z"}`,
+		`{"kind":"review","summary":"APPROVE","body":"### Verdict: APPROVE\nharness=claude\nmodel=sonnet\ninput_bytes=4000\noutput_bytes=10\nelapsed_ms=5","created_at":"2026-04-15T00:05:00Z"}`,
+		`{"kind":"review","summary":"APPROVE","body":"### Verdict: APPROVE\nharness=claude\nmodel=sonnet\ninput_bytes=5000\noutput_bytes=10\nelapsed_ms=5","created_at":"2026-04-15T00:06:00Z"}`,
+	}
+	writeBeadJSONL(t, dir, `{"id":"bead-a","title":"a","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[`+strings.Join(beadAEvents, ",")+`]}`)
+
+	// Bead B — review-error events of every failure class plus a
+	// review-manual-required event on the terminal class. Each carries
+	// its own input_bytes to feed the quantile pool.
+	beadBEvents := []string{
+		`{"kind":"review-error","summary":"context_overflow","body":"failure_class=context_overflow\nattempt_count=1\nresult_rev=aaaa\nharness=claude\nmodel=sonnet\ninput_bytes=6000\noutput_bytes=0\nelapsed_ms=1","created_at":"2026-04-15T01:00:00Z"}`,
+		`{"kind":"review-error","summary":"provider_empty","body":"failure_class=provider_empty\nattempt_count=1\nresult_rev=bbbb\nharness=claude\nmodel=sonnet\ninput_bytes=7000\noutput_bytes=0\nelapsed_ms=2","created_at":"2026-04-15T01:01:00Z"}`,
+		`{"kind":"review-error","summary":"unparseable","body":"failure_class=unparseable\nattempt_count=1\nresult_rev=cccc\nharness=claude\nmodel=sonnet\ninput_bytes=8000\noutput_bytes=12\nelapsed_ms=3","created_at":"2026-04-15T01:02:00Z"}`,
+		`{"kind":"review-error","summary":"transport","body":"failure_class=transport\nattempt_count=1\nresult_rev=dddd\nharness=claude\nmodel=sonnet\ninput_bytes=9000\noutput_bytes=0\nelapsed_ms=4","created_at":"2026-04-15T01:03:00Z"}`,
+		`{"kind":"review-manual-required","summary":"transport","body":"failure_class=transport\nattempt_count=3\nresult_rev=dddd\nharness=claude\nmodel=sonnet\ninput_bytes=10000\noutput_bytes=0\nelapsed_ms=4","created_at":"2026-04-15T01:04:00Z"}`,
+	}
+	writeBeadJSONL(t, dir, `{"id":"bead-b","title":"b","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[`+strings.Join(beadBEvents, ",")+`]}`)
+
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "agent", "metrics", "review-outcomes", "--json")
+	require.NoError(t, err)
+
+	// Assert the JSON output contains the FEAT-022 §17 keys.
+	for _, key := range []string{"prompt_size_p50", "prompt_size_p95", "prompt_size_p99", "failure_classes"} {
+		assert.Contains(t, output, `"`+key+`"`, "json output must include %s key", key)
+	}
+
+	var report reviewOutcomesReport
+	require.NoError(t, json.Unmarshal([]byte(output), &report))
+
+	// Quantiles: 10 input_bytes samples (1000..10000 step 1000).
+	// Nearest-rank: P50 -> rank ceil(0.5*10)=5 -> 5000.
+	// P95 -> rank ceil(0.95*10)=10 -> 10000. P99 -> rank 10 -> 10000.
+	assert.Equal(t, 5000, report.PromptSizeP50)
+	assert.Equal(t, 10000, report.PromptSizeP95)
+	assert.Equal(t, 10000, report.PromptSizeP99)
+
+	require.NotNil(t, report.FailureClasses)
+	assert.Equal(t, 1, report.FailureClasses["context_overflow"])
+	assert.Equal(t, 1, report.FailureClasses["provider_empty"])
+	assert.Equal(t, 1, report.FailureClasses["unparseable"])
+	// Both review-error: transport AND review-manual-required: transport
+	// contribute to the transport class — the class survives the manual-
+	// required terminal event.
+	assert.Equal(t, 2, report.FailureClasses["transport"])
+
+	// jq -e checks specified by the bead's acceptance criteria. The
+	// p95 type assertion confirms the quantile is encoded as a JSON
+	// number (not a string), and the failure_classes has(...) chain
+	// confirms all four canonical keys are present even when zero-valued.
+	assertJqTruthy(t, output, `.prompt_size_p95 | type == "number"`)
+	assertJqTruthy(t, output,
+		`.failure_classes | has("context_overflow") and has("provider_empty") and has("unparseable") and has("transport")`)
+
+	// Per-tier rows still aggregate correctly: bead-a has 5 APPROVE
+	// reviews under claude/sonnet.
+	byTier := map[string]reviewOutcomesRow{}
+	for _, r := range report.Rows {
+		byTier[r.Tier] = r
+	}
+	require.Contains(t, byTier, "claude/sonnet")
+	assert.Equal(t, 5, byTier["claude/sonnet"].Reviews)
+	assert.Equal(t, 5, byTier["claude/sonnet"].Approvals)
+
+	// Human-readable output (without --json) renders both new sections.
+	tableCmd := NewCommandFactory(dir).NewRootCommand()
+	tableOut, err := executeCommand(tableCmd, "agent", "metrics", "review-outcomes")
+	require.NoError(t, err)
+	for _, col := range []string{"PROMPT_SIZE_P50", "PROMPT_SIZE_P95", "PROMPT_SIZE_P99",
+		"CONTEXT_OVERFLOW", "PROVIDER_EMPTY", "UNPARSEABLE", "TRANSPORT"} {
+		assert.Contains(t, tableOut, col, "table output must include %s column", col)
+	}
+}
+
+// assertJqTruthy fails the test when filter, evaluated against jsonInput
+// via the same embedded gojq engine that powers `ddx jq -e`, produces a
+// falsy or error result. This mirrors the `jq -e` exit-status contract
+// from the bead's acceptance criteria without relying on the CLI's
+// os.Exit-on-falsy behavior (which would terminate the test binary).
+func assertJqTruthy(t *testing.T, jsonInput, filter string) {
+	t.Helper()
+	query, err := gojq.Parse(filter)
+	require.NoError(t, err, "parse jq filter %q", filter)
+	code, err := gojq.Compile(query)
+	require.NoError(t, err, "compile jq filter %q", filter)
+	var input any
+	require.NoError(t, json.Unmarshal([]byte(jsonInput), &input))
+	iter := code.Run(input)
+	v, ok := iter.Next()
+	require.True(t, ok, "jq filter %q produced no output", filter)
+	if err, isErr := v.(error); isErr {
+		t.Fatalf("jq filter %q errored: %v", filter, err)
+	}
+	if v == nil || v == false {
+		t.Fatalf("jq filter %q is falsy (%v) — `jq -e` would exit non-zero", filter, v)
+	}
 }
 
 // TestCostEfficiency verifies the cost-efficiency subcommand aggregates

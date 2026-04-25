@@ -3,9 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -268,6 +271,28 @@ type reviewOutcomesRow struct {
 	ApprovalRate float64 `json:"approval_rate"`
 }
 
+// reviewOutcomesReport is the FEAT-022 §17 review-outcomes surface: the
+// existing per-tier rows plus prompt-size quantiles and the four-class
+// failure breakdown computed across all review and review-error events in
+// the configured window.
+type reviewOutcomesReport struct {
+	Rows           []reviewOutcomesRow `json:"rows"`
+	PromptSizeP50  int                 `json:"prompt_size_p50"`
+	PromptSizeP95  int                 `json:"prompt_size_p95"`
+	PromptSizeP99  int                 `json:"prompt_size_p99"`
+	FailureClasses map[string]int      `json:"failure_classes"`
+}
+
+// reviewFailureClasses is the canonical, ordered set of FEAT-022 §12 review-
+// error class identifiers. The metrics surface always emits all four keys
+// (zero-valued when unobserved) so consumers can rely on `has(...)` checks.
+var reviewFailureClasses = []string{
+	"context_overflow",
+	"provider_empty",
+	"unparseable",
+	"transport",
+}
+
 func (f *CommandFactory) newAgentMetricsReviewOutcomesCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "review-outcomes",
@@ -280,8 +305,9 @@ provider/model that produced the work being reviewed.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonOut, _ := cmd.Flags().GetBool("json")
+			window, _ := cmd.Flags().GetDuration("window")
 
-			rows, err := computeReviewOutcomes(f.WorkingDir)
+			report, err := computeReviewOutcomesReport(f.WorkingDir, window, time.Now().UTC())
 			if err != nil {
 				return err
 			}
@@ -289,12 +315,13 @@ provider/model that produced the work being reviewed.`,
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(rows)
+				return enc.Encode(report)
 			}
-			return renderReviewOutcomesTable(cmd, rows)
+			return renderReviewOutcomesTable(cmd, report)
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output JSON")
+	cmd.Flags().Duration("window", 0, "Limit aggregation to events whose created_at is within this duration before now (0 = all)")
 	return cmd
 }
 
@@ -316,16 +343,39 @@ func reviewVerdictCategory(summary string) string {
 	return ""
 }
 
-// computeReviewOutcomes scans every bead in workingDir/.ddx, attributes each
-// kind:review event to the most recent kind:routing event that precedes it on
-// the same bead, and aggregates per-tier counts of approvals vs rejections.
-// Reviews on beads without any preceding routing event are bucketed under an
-// "unknown" tier so they are surfaced rather than silently dropped.
+// computeReviewOutcomes is a thin wrapper that returns only the per-tier
+// rows of the review-outcomes report. Retained for callers that pre-date the
+// FEAT-022 §17 metrics surface (prompt-size quantiles + failure classes).
 func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
+	report, err := computeReviewOutcomesReport(workingDir, 0, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	return report.Rows, nil
+}
+
+// computeReviewOutcomesReport scans every bead in workingDir/.ddx and
+// produces the FEAT-022 §17 review-outcomes report:
+//   - per-tier verdict aggregates (Rows): each kind:review event is
+//     attributed to the most recent kind:routing event that precedes it on
+//     the same bead. Reviews on beads without any preceding routing event
+//     are bucketed under an "unknown" tier.
+//   - prompt-size quantiles (P50/P95/P99) computed over input_bytes parsed
+//     from the canonical event-body summary on every kind:review,
+//     review-error, and review-manual-required event.
+//   - failure_classes: counts of context_overflow, provider_empty,
+//     unparseable, and transport from review-error and review-manual-required
+//     events. All four keys are always present (zero-valued when unobserved)
+//     so downstream `jq -e 'has(...)'` consumers are stable.
+//
+// When window > 0, events whose CreatedAt is older than now-window are
+// ignored. now is the reference time the window is measured from; pass
+// time.Time{} (zero) to disable windowing regardless of the window value.
+func computeReviewOutcomesReport(workingDir string, window time.Duration, now time.Time) (reviewOutcomesReport, error) {
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	beads, err := store.ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("read beads: %w", err)
+		return reviewOutcomesReport{}, fmt.Errorf("read beads: %w", err)
 	}
 
 	type agg struct {
@@ -337,6 +387,18 @@ func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
 	}
 	byTier := map[string]*agg{}
 	order := []string{}
+
+	failureClasses := map[string]int{}
+	for _, c := range reviewFailureClasses {
+		failureClasses[c] = 0
+	}
+	var promptSizes []int
+
+	var cutoff time.Time
+	hasCutoff := window > 0 && !now.IsZero()
+	if hasCutoff {
+		cutoff = now.Add(-window)
+	}
 
 	for _, b := range beads {
 		events := allBeadEventsFromExtra(b.Extra)
@@ -350,6 +412,21 @@ func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
 		var curHarness, curModel string
 		haveRouting := false
 		for _, e := range events {
+			if hasCutoff && !e.CreatedAt.IsZero() && e.CreatedAt.Before(cutoff) {
+				// Routing events outside the window still update tier
+				// attribution context for in-window reviews on the same
+				// bead — quantiles and class counts are window-scoped, but
+				// per-tier attribution should reflect the most recent
+				// routing decision known at review time.
+				if e.Kind == "routing" {
+					if h, m, ok := parseRoutingHarnessModel(e); ok {
+						curHarness = h
+						curModel = m
+						haveRouting = true
+					}
+				}
+				continue
+			}
 			switch e.Kind {
 			case "routing":
 				if h, m, ok := parseRoutingHarnessModel(e); ok {
@@ -358,6 +435,9 @@ func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
 					haveRouting = true
 				}
 			case "review":
+				if size, ok := parseInputBytesFromBody(e.Body); ok {
+					promptSizes = append(promptSizes, size)
+				}
 				cat := reviewVerdictCategory(e.Summary)
 				if cat == "" {
 					continue
@@ -380,6 +460,14 @@ func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
 				case "approve_with_edits", "reject":
 					a.rejections++
 				}
+			case "review-error", "review-manual-required":
+				if size, ok := parseInputBytesFromBody(e.Body); ok {
+					promptSizes = append(promptSizes, size)
+				}
+				class := strings.TrimSpace(e.Summary)
+				if _, known := failureClasses[class]; known {
+					failureClasses[class]++
+				}
 			}
 		}
 	}
@@ -401,7 +489,61 @@ func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Tier < rows[j].Tier })
-	return rows, nil
+
+	return reviewOutcomesReport{
+		Rows:           rows,
+		PromptSizeP50:  quantile(promptSizes, 0.50),
+		PromptSizeP95:  quantile(promptSizes, 0.95),
+		PromptSizeP99:  quantile(promptSizes, 0.99),
+		FailureClasses: failureClasses,
+	}, nil
+}
+
+// reInputBytesField extracts the input_bytes value emitted by
+// formatEventBodySummary into review/review-error/review-manual-required
+// event bodies.
+var reInputBytesField = regexp.MustCompile(`(?m)^input_bytes=(\d+)\s*$`)
+
+// parseInputBytesFromBody returns the input_bytes value carried by an event
+// body's canonical summary line. ok=false when the line is absent or
+// malformed.
+func parseInputBytesFromBody(body string) (int, bool) {
+	m := reInputBytesField.FindStringSubmatch(body)
+	if m == nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+// quantile returns the integer-rounded q-th quantile of values using the
+// nearest-rank method. Returns 0 for an empty slice so the metrics surface
+// is always serialisable. q is clamped to [0,1].
+func quantile(values []int, q float64) int {
+	if len(values) == 0 {
+		return 0
+	}
+	if q < 0 {
+		q = 0
+	}
+	if q > 1 {
+		q = 1
+	}
+	sorted := make([]int, len(values))
+	copy(sorted, values)
+	sort.Ints(sorted)
+	// Nearest-rank: rank = ceil(q * N), 1-indexed.
+	rank := int(math.Ceil(q * float64(len(sorted))))
+	if rank < 1 {
+		rank = 1
+	}
+	if rank > len(sorted) {
+		rank = len(sorted)
+	}
+	return sorted[rank-1]
 }
 
 // allBeadEventsFromExtra returns every BeadEvent stored on a bead, regardless
@@ -471,11 +613,11 @@ func parseRoutingHarnessModel(e bead.BeadEvent) (string, string, bool) {
 	return body.ResolvedProvider, body.ResolvedModel, true
 }
 
-func renderReviewOutcomesTable(cmd *cobra.Command, rows []reviewOutcomesRow) error {
+func renderReviewOutcomesTable(cmd *cobra.Command, report reviewOutcomesReport) error {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%-40s  %7s  %9s  %10s  %13s\n",
 		"TIER", "REVIEWS", "APPROVALS", "REJECTIONS", "APPROVAL_RATE")
-	for _, r := range rows {
+	for _, r := range report.Rows {
 		fmt.Fprintf(out, "%-40s  %7d  %9d  %10d  %13s\n",
 			truncateTier(r.Tier, 40),
 			r.Reviews,
@@ -484,6 +626,24 @@ func renderReviewOutcomesTable(cmd *cobra.Command, rows []reviewOutcomesRow) err
 			fmt.Sprintf("%.3f", r.ApprovalRate),
 		)
 	}
+	// FEAT-022 §17: prompt-size quantiles and the four-class failure
+	// breakdown follow the per-tier table so operators triaging a wave of
+	// reviewer failures see both surfaces in one shot.
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "%-18s  %15s  %15s  %15s\n",
+		"PROMPT_SIZE", "PROMPT_SIZE_P50", "PROMPT_SIZE_P95", "PROMPT_SIZE_P99")
+	fmt.Fprintf(out, "%-18s  %15d  %15d  %15d\n",
+		"bytes", report.PromptSizeP50, report.PromptSizeP95, report.PromptSizeP99)
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "%-18s  %16s  %14s  %11s  %9s\n",
+		"FAILURE_CLASSES", "CONTEXT_OVERFLOW", "PROVIDER_EMPTY", "UNPARSEABLE", "TRANSPORT")
+	fmt.Fprintf(out, "%-18s  %16d  %14d  %11d  %9d\n",
+		"count",
+		report.FailureClasses["context_overflow"],
+		report.FailureClasses["provider_empty"],
+		report.FailureClasses["unparseable"],
+		report.FailureClasses["transport"],
+	)
 	return nil
 }
 
