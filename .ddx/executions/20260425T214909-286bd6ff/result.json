@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Minimal, on-target fix: per-command `SilenceUsage` on both `agent run` and `agent doctor` matching the init.go/doc.go precedent, plus a focused regression test in a neutrally named file that also covers the optional polish (asserting suppressed Usage/Flags blocks). Tests pass per the recorded execution result."
+}
