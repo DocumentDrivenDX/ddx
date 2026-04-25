@@ -116,7 +116,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
-	rcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+	rcfg, err := config.LoadAndResolve(projectRoot, config.CLIOverrides{
 		Harness:       harness,
 		Model:         model,
 		Provider:      provider,
@@ -124,6 +124,9 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		Effort:        effort,
 		ContextBudget: contextBudget,
 	})
+	if err != nil {
+		return fmt.Errorf("load config at %s: %w", projectRoot, err)
+	}
 	runtime := agent.ExecuteBeadRuntime{
 		FromRev:    fromRev,
 		PromptFile: promptFile,
