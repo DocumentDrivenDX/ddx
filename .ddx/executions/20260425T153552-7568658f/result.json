@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "cli/cmd/agent_cmd.go:2010 — `rcfg, _ := config.LoadAndResolve(projectRoot, overrides)` silently swallows the error. If LoadAndResolve fails (malformed YAML, etc.), a zero-value ResolvedConfig flows into RunWithConfig and SD-024's sealed-construction sentinel will panic at first accessor read instead of surfacing a clean CLI error. Capture and return/log the error.\nAC #2 verification: produce a `go test ./...` run (or scope exclusion list) demonstrating the cmd-package failures are byte-identical pre/post this bead, or fix them in-scope. Pointing at LEFTHOOK_EXCLUDE in the commit body is not a substitute for the AC's literal requirement.\nTest pragmatics: `store.Unclaim(beadID)` between iterations is a hand-driven re-pickup that the production poll loop would do naturally. Acceptable for a unit-style e2e but worth a one-line comment that this stands in for the poll-loop reclaim, not a behavior under test."
+}
