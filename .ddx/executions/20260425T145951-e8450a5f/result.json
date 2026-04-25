@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage 1 implementation: three fields added to WorkersConfig with proper yaml/json tags, three resolver methods with documented defaults (6h, 3, 30s) matching today's hardcoded constants. The 30s default for HeartbeatInterval correctly mirrors `bead.HeartbeatInterval` (cli/internal/bead/store.go:531). Tests cover nil-receiver, empty, unparseable, non-positive, and override paths for each resolver. Loop wiring is correctly deferred to beads 6/7 per scope."
+}
