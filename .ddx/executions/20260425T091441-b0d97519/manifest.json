@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T091441-b0d97519",
+  "bead_id": "ddx-91347caa",
+  "base_rev": "bda4eff4d5676dd6316cc83793ba84d1c94f2ec6",
+  "created_at": "2026-04-25T09:14:42.392777936Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-91347caa",
+    "title": "prompt-ingress: hard-fail oversize on server-side inline ingress (Stage D2)",
+    "description": "Stage D2 of FEAT-022. Hard-fail oversize inline prompt bodies on\nserver-side ingress surfaces (REST request body, exec env var,\ndocgraph metadata).\n\nImplements FEAT-022 requirement §9. Satisfies US-223 for the\nnon-CLI paths.\n\nDepends on Stage A1 (ddx-64299657) only. Parallel-safe with D1.\n\nIn-scope files (3 sites):\n- cli/internal/server/server.go (POST /api/agent/run body.Prompt at\n  :1860): check len([]byte(body.Prompt)) against\n  evidence.MaxPromptBytes; on oversize, return HTTP 413 Payload Too\n  Large with a JSON body { error, observed_bytes, cap_bytes,\n  config_hint }. Do NOT silently truncate.\n- cli/internal/exec/store.go (DDX_AGENT_PROMPT env var at :180):\n  on exec-definition load, check length of the resolved env value;\n  on oversize, fail at startup with an error naming the exec\n  definition, the env var, observed size, and cap.\n- cli/internal/docgraph/docgraph.go (docgraph prompt metadata at\n  :520): on graph build, cap prompt-metadata string lengths the same\n  way; oversize values fail the graph build with an actionable error.\n\nOut-of-scope:\n- Agent-side file readers — Stage D1.\n- Server text egress — Stage E1/E2.\n- Any client-side UI for the new 413 response code — separate work.\n\nRollback: revert the cap checks and error returns at each site;\nbehavior returns to prior (unbounded) state.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestServerInlinePromptOversize ./internal/server/... passes: httptest-driven test posts a JSON body with a 2× MaxPromptBytes prompt field to /api/agent/run; asserts response status is 413; asserts response body JSON contains error, observed_bytes, cap_bytes, config_hint fields. cd cli \u0026\u0026 go test -run TestExecStoreOversizePromptEnv ./internal/exec/... passes: fixture exec definition with DDX_AGENT_PROMPT = 2× MaxPromptBytes; assert store.Load returns a non-nil error whose message names the exec definition, the env var, observed size, cap. cd cli \u0026\u0026 go test -run TestDocgraphOversizePromptMetadata ./internal/docgraph/... passes: fixture docgraph entry with prompt metadata = 2× MaxPromptBytes; assert graph build fails with an actionable error. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:server",
+      "area:ingress",
+      "stage:D2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T09:14:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T09:14:41.895329843Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T091441-b0d97519",
+    "prompt": ".ddx/executions/20260425T091441-b0d97519/prompt.md",
+    "manifest": ".ddx/executions/20260425T091441-b0d97519/manifest.json",
+    "result": ".ddx/executions/20260425T091441-b0d97519/result.json",
+    "checks": ".ddx/executions/20260425T091441-b0d97519/checks.json",
+    "usage": ".ddx/executions/20260425T091441-b0d97519/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-91347caa-20260425T091441-b0d97519"
+  }
+}
