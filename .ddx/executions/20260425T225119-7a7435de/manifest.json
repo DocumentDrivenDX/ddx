@@ -1,0 +1,97 @@
+{
+  "attempt_id": "20260425T225119-7a7435de",
+  "bead_id": "ddx-edbfa046",
+  "base_rev": "1b1d79dfff42383e1d593992d926ed0ab762fe00",
+  "created_at": "2026-04-25T22:51:20.260871618Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-edbfa046",
+    "title": "agent: retire ExecuteBeadLoopOptions + Run legacy method",
+    "description": "Stage 1 of SD-024 cleanup. Removes the legacy ExecuteBeadLoopOptions struct and ExecuteBeadWorker.Run method now that all callers use ExecuteBeadLoopRuntime + RunWithConfig.\n\nIn-scope:\n- cli/internal/agent/execute_bead_loop.go — delete ExecuteBeadLoopOptions struct, delete Run method, rename RunWithConfig to Run\n- Any transitional shims introduced in beads 6, 11a-15b\n\nOut-of-scope:\n- RunOptions / ExecuteBeadOptions retirement (Stages 2/3)",
+    "acceptance": "rg 'type ExecuteBeadLoopOptions ' cli/ returns 0 matches. rg 'ExecuteBeadLoopOptions' cli/ returns 0 matches. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:cleanup",
+      "area:agent",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T22:51:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T22:12:23.086981781Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T220004-1249030c\",\"harness\":\"claude\",\"input_tokens\":45,\"output_tokens\":21774,\"total_tokens\":21819,\"cost_usd\":2.860484499999999,\"duration_ms\":738190,\"exit_code\":0}",
+          "created_at": "2026-04-25T22:12:23.164087403Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=21819 cost_usd=2.8605"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-25T22:12:25.956085747Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "BLOCK: The acceptance item `cd cli \u0026\u0026 go test ./... passes` is not substantiated by the supplied execution evidence. The execution directory for attempt `20260425T220004-1249030c` does not contain a `checks.json` or similar artifact proving test success on commit `73d201f628a7416dc2e5c69f0da7e5d1984ff331`.\nBLOCK: A local rerun of `cd cli \u0026\u0026 go test ./...` does not pass in this environment, failing in [cli/cmd/agent_check_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_check_test.go:12) / [cli/cmd/agent_providers_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_providers_test.go:34). If the intended AC is “tests pass in a normal developer environment,” that needs to be attached as explicit evidence to the bead.",
+          "created_at": "2026-04-25T22:14:59.386012054Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-25T22:14:59.460310594Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nBLOCK: The acceptance item `cd cli \u0026\u0026 go test ./... passes` is not substantiated by the supplied execution evidence. The execution directory for attempt `20260425T220004-1249030c` does not contain a `checks.json` or similar artifact proving test success on commit `73d201f628a7416dc2e5c69f0da7e5d1984ff331`.\nBLOCK: A local rerun of `cd cli \u0026\u0026 go test ./...` does not pass in this environment, failing in [cli/cmd/agent_check_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_check_test.go:12) / [cli/cmd/agent_providers_test.go](/Users/erik/Projects/ddx/cli/cmd/agent_providers_test.go:34). If the intended AC is “tests pass in a normal developer environment,” that needs to be attached as explicit evidence to the bead.\nresult_rev=6826656f8a58364b7678277cdd5516bbbf4d1275\nbase_rev=5b7fa586936fc037c55d59f88461a583a5062bab",
+          "created_at": "2026-04-25T22:14:59.531277595Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T22:51:19.703782069Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T225119-7a7435de",
+    "prompt": ".ddx/executions/20260425T225119-7a7435de/prompt.md",
+    "manifest": ".ddx/executions/20260425T225119-7a7435de/manifest.json",
+    "result": ".ddx/executions/20260425T225119-7a7435de/result.json",
+    "checks": ".ddx/executions/20260425T225119-7a7435de/checks.json",
+    "usage": ".ddx/executions/20260425T225119-7a7435de/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-edbfa046-20260425T225119-7a7435de"
+  }
+}
