@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -184,4 +185,17 @@ func (s *noopCompactionDdxAgent) ProfileAliases(ctx context.Context) (map[string
 
 func (s *noopCompactionDdxAgent) RecordRouteAttempt(ctx context.Context, attempt agentlib.RouteAttempt) error {
 	return nil
+}
+
+func (s *noopCompactionDdxAgent) ListSessionLogs(ctx context.Context) ([]agentlib.SessionLogEntry, error) {
+	return nil, nil
+}
+func (s *noopCompactionDdxAgent) WriteSessionLog(ctx context.Context, sessionID string, w io.Writer) error {
+	return nil
+}
+func (s *noopCompactionDdxAgent) ReplaySession(ctx context.Context, sessionID string, w io.Writer) error {
+	return nil
+}
+func (s *noopCompactionDdxAgent) UsageReport(ctx context.Context, opts agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
+	return nil, nil
 }

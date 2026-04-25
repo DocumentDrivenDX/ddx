@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
@@ -56,6 +57,18 @@ func (s *catalogStubAgent) RecordRouteAttempt(_ context.Context, _ agentlib.Rout
 	return nil
 }
 func (s *catalogStubAgent) RouteStatus(_ context.Context) (*agentlib.RouteStatusReport, error) {
+	return nil, nil
+}
+func (s *catalogStubAgent) ListSessionLogs(_ context.Context) ([]agentlib.SessionLogEntry, error) {
+	return nil, nil
+}
+func (s *catalogStubAgent) WriteSessionLog(_ context.Context, _ string, _ io.Writer) error {
+	return fmt.Errorf("not implemented")
+}
+func (s *catalogStubAgent) ReplaySession(_ context.Context, _ string, _ io.Writer) error {
+	return fmt.Errorf("not implemented")
+}
+func (s *catalogStubAgent) UsageReport(_ context.Context, _ agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
 	return nil, nil
 }
 

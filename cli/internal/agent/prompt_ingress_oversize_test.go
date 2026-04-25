@@ -11,6 +11,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -173,6 +174,18 @@ func (s *promptIngressStubAgent) RecordRouteAttempt(ctx context.Context, attempt
 	return nil
 }
 func (s *promptIngressStubAgent) RouteStatus(ctx context.Context) (*agentlib.RouteStatusReport, error) {
+	return nil, nil
+}
+func (s *promptIngressStubAgent) ListSessionLogs(ctx context.Context) ([]agentlib.SessionLogEntry, error) {
+	return nil, nil
+}
+func (s *promptIngressStubAgent) WriteSessionLog(ctx context.Context, sessionID string, w io.Writer) error {
+	return nil
+}
+func (s *promptIngressStubAgent) ReplaySession(ctx context.Context, sessionID string, w io.Writer) error {
+	return nil
+}
+func (s *promptIngressStubAgent) UsageReport(ctx context.Context, opts agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
 	return nil, nil
 }
 
