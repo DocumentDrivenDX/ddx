@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean implementation: typed ReviewVerdict struct, strict ParseReviewVerdict with sentinel ErrReviewVerdictUnparseable, prompt template rewritten to request JSON-only output (with \"must NOT still request `### AC Grades`\" assertion guarding regression). Old markdown extractor and its supporting helpers (`reVerdictLine`, `parseReviewACTable`, `extractReviewRationale`, `synthesizeReviewACsFromRationale`) are deleted. Type rename `ReviewVerdict` → `Verdict` cleanly separates the enum from the new struct. Result manifest reports task_succeeded with the expected test names."
+}
