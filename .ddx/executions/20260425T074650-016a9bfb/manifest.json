@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260425T074650-016a9bfb",
+  "bead_id": "ddx-46370e6b",
+  "base_rev": "05d78016d67b8f2e47b7b20f88a83b7cf312dc98",
+  "created_at": "2026-04-25T07:46:50.676721188Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-46370e6b",
+    "title": "regression test: execute-bead against GIT_DIR-contaminated env leaves outer bare repo untouched",
+    "description": "Split from timed-out ddx-65b88ae1. Write the regression test that proves the B4+B5[a-c] migrations actually stop Bug A.\n\nTest sketch (Go test in cli/internal/agent/):\n1. Create a fake outer bare repo at /tmp/\u003ctestname\u003e/bare with 'git init --bare' and capture a copy of its config file bytes.\n2. Set GIT_DIR=\u003cbare\u003e/.git, GIT_WORK_TREE=\u003cfake-work\u003e, GIT_INDEX_FILE=\u003cfake-index\u003e in the test env via t.Setenv.\n3. Create a separate working repo in a tempdir.\n4. Construct a minimal Runner + agent.Script-based no-op harness.\n5. Drive an in-process execute-bead end-to-end hitting WorktreeAdd, SynthesizeCommit, CommitTracker, and the landing/preserve-refs path (use --no-merge preserve to exercise update-ref in the base repo without requiring a remote).\n6. Assert the fake bare repo's config bytes are byte-identical after the run. Assert no stray files appeared under \u003cbare\u003e/.git.\n\nThis is the provable gate: if Bug A is truly fixed, polluted env does not mutate the outer repo.",
+    "acceptance": "Go test exists, passes, and would fail if any git call-site in the agent path reverted to bare exec.Command(\"git\", ...). Test runs in under 60s.",
+    "parent": "ddx-64ac553a",
+    "metadata": {
+      "claimed-at": "2026-04-25T07:46:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:20.542244839Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:20.614584754Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-25T02:23:20.682769211Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-25T02:23:20.815904207Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T07:46:50.127639194Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260425T074650-016a9bfb",
+    "prompt": ".ddx/executions/20260425T074650-016a9bfb/prompt.md",
+    "manifest": ".ddx/executions/20260425T074650-016a9bfb/manifest.json",
+    "result": ".ddx/executions/20260425T074650-016a9bfb/result.json",
+    "checks": ".ddx/executions/20260425T074650-016a9bfb/checks.json",
+    "usage": ".ddx/executions/20260425T074650-016a9bfb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-46370e6b-20260425T074650-016a9bfb"
+  }
+}
