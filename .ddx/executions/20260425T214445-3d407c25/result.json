@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "AC #2 strict reading: pre-existing failures in `cmd/` (TestBeadReviewCollapseGolden golden drift; TestAcceptance_US028/029/030/031/034; TestInstallationPerformance) cause `go test ./...` to fail. The evidence file argues these are unrelated and identical before/after — accept that argument or scope the AC, but a downstream bead should either (a) restore a green tree or (b) explicitly amend the AC to exclude the documented environmental tests so future beads aren't forced to keep `LEFTHOOK_EXCLUDE=go-test` as standard practice."
+}
