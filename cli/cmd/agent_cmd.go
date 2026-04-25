@@ -175,16 +175,21 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 					return fmt.Errorf("--arm or --harnesses required for --compare mode")
 				}
 
-				opts := agent.CompareOptions{
-					RunOptions: agent.RunOptions{
+				overrides := config.CLIOverrides{
+					Model:       model,
+					Effort:      effort,
+					Permissions: permissions,
+				}
+				if timeout > 0 {
+					overrides.Timeout = &timeout
+				}
+				rcfg, _ := config.LoadAndResolve(f.WorkingDir, overrides)
+				runtime := agent.CompareRuntime{
+					AgentRunRuntime: agent.AgentRunRuntime{
 						Prompt:       prompt,
 						PromptFile:   promptFile,
 						PromptSource: promptSource,
-						Model:        model,
-						Effort:       effort,
-						Timeout:      timeout,
 						WorkDir:      workDir,
-						Permissions:  permissions,
 					},
 					Harnesses:   harnessNames,
 					ArmModels:   armModels,
@@ -193,7 +198,7 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 					KeepSandbox: keepSandbox,
 					PostRun:     postRun,
 				}
-				record, err := agent.RunCompareViaService(cmd.Context(), f.WorkingDir, opts)
+				record, err := agent.RunCompareWithConfigViaService(cmd.Context(), f.WorkingDir, rcfg, runtime)
 				if err != nil {
 					return err
 				}

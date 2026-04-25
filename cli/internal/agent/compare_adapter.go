@@ -28,8 +28,55 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
+
+// CompareRuntime is the SD-024 successor to CompareOptions for the
+// `ddx agent run --compare` dispatch path. Durable knobs (Model,
+// Effort, Permissions, Timeout) are stripped — they live on
+// config.ResolvedConfig and are passed via RunCompareWithConfigViaService's
+// rcfg argument. Only non-serializable plumbing and per-invocation
+// runtime intent remain.
+//
+// See SD-024 / TD-024 §Runtime structs and §Stage 2 CompareOptions
+// migration.
+type CompareRuntime struct {
+	AgentRunRuntime
+	Harnesses   []string
+	ArmModels   map[int]string
+	ArmLabels   map[int]string
+	Sandbox     bool
+	KeepSandbox bool
+	PostRun     string
+}
+
+// RunCompareWithConfigViaService is the SD-024 successor to
+// RunCompareViaService. It accepts a sealed ResolvedConfig (durable
+// knobs) and a CompareRuntime (plumbing + per-invocation intent),
+// assembles an equivalent CompareOptions, and delegates to
+// RunCompareViaService.
+func RunCompareWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, runtime CompareRuntime) (*ComparisonRecord, error) {
+	var opts CompareOptions
+	opts.RunOptions = RunOptions{
+		Prompt:       runtime.Prompt,
+		PromptFile:   runtime.PromptFile,
+		PromptSource: runtime.PromptSource,
+		Correlation:  runtime.Correlation,
+		Model:        rcfg.Model(),
+		Effort:       rcfg.Effort(),
+		Timeout:      rcfg.Timeout(),
+		WorkDir:      runtime.WorkDir,
+		Permissions:  rcfg.Permissions(),
+	}
+	opts.Harnesses = runtime.Harnesses
+	opts.ArmModels = runtime.ArmModels
+	opts.ArmLabels = runtime.ArmLabels
+	opts.Sandbox = runtime.Sandbox
+	opts.KeepSandbox = runtime.KeepSandbox
+	opts.PostRun = runtime.PostRun
+	return RunCompareViaService(ctx, workDir, opts)
+}
 
 // BenchmarkPrompt is a single test case in a benchmark suite.
 type BenchmarkPrompt struct {

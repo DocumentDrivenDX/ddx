@@ -70,10 +70,10 @@ func BenchmarkArmsToCompare(arms []BenchmarkArm, baseOpts RunOptions) CompareOpt
 		armLabels[i] = arm.Label
 	}
 
-	return CompareOptions{
-		RunOptions: baseOpts,
-		Harnesses:  harnesses,
-		ArmModels:  armModels,
-		ArmLabels:  armLabels,
-	}
+	var opts CompareOptions
+	opts.RunOptions = baseOpts
+	opts.Harnesses = harnesses
+	opts.ArmModels = armModels
+	opts.ArmLabels = armLabels
+	return opts
 }
