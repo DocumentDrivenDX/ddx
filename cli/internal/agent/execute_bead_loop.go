@@ -11,8 +11,67 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
+
+// ExecuteBeadLoopRuntime is the SD-024 successor to ExecuteBeadLoopOptions.
+// Durable knobs (Assignee, ReviewMaxRetries, NoProgressCooldown,
+// MaxNoChangesBeforeClose, HeartbeatInterval, Harness, Model, Provider,
+// ModelRef, Profile, MinTier, MaxTier) are stripped — they live on
+// config.ResolvedConfig and are passed via RunWithConfig's rcfg argument.
+// Only non-serializable plumbing and per-invocation runtime intent remain.
+//
+// See SD-024 / TD-024 §Runtime structs and §Bead 6.
+type ExecuteBeadLoopRuntime struct {
+	Log          io.Writer
+	EventSink    io.Writer
+	ProgressCh   chan<- ProgressEvent
+	PreClaimHook func(ctx context.Context) error
+	Once         bool
+	PollInterval time.Duration
+	NoReview     bool
+	LabelFilter  string
+	SessionID    string
+	WorkerID     string
+	ProjectRoot  string
+}
+
+// RunWithConfig is the SD-024 successor to Run. It accepts a sealed
+// ResolvedConfig (durable knobs) and a ExecuteBeadLoopRuntime (plumbing
+// + per-invocation intent) and delegates to Run under the hood. Behavior
+// is identical to Run with an equivalently-populated ExecuteBeadLoopOptions.
+//
+// Stage 1 of SD-024: this method exists alongside Run; production callers
+// have not migrated yet.
+func (w *ExecuteBeadWorker) RunWithConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
+	opts := ExecuteBeadLoopOptions{
+		Assignee:                rcfg.Assignee(),
+		Once:                    runtime.Once,
+		PollInterval:            runtime.PollInterval,
+		NoProgressCooldown:      rcfg.NoProgressCooldown(),
+		MaxNoChangesBeforeClose: rcfg.MaxNoChangesBeforeClose(),
+		HeartbeatInterval:       rcfg.HeartbeatInterval(),
+		Log:                     runtime.Log,
+		NoReview:                runtime.NoReview,
+		ReviewMaxRetries:        rcfg.ReviewMaxRetries(),
+		EventSink:               runtime.EventSink,
+		ProgressCh:              runtime.ProgressCh,
+		PreClaimHook:            runtime.PreClaimHook,
+		WorkerID:                runtime.WorkerID,
+		ProjectRoot:             runtime.ProjectRoot,
+		Harness:                 rcfg.Harness(),
+		Model:                   rcfg.Model(),
+		Profile:                 rcfg.Profile(),
+		Provider:                rcfg.Provider(),
+		ModelRef:                rcfg.ModelRef(),
+		SessionID:               runtime.SessionID,
+		LabelFilter:             runtime.LabelFilter,
+		MinTier:                 rcfg.MinTier(),
+		MaxTier:                 rcfg.MaxTier(),
+	}
+	return w.Run(ctx, opts)
+}
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
 // committed result_rev before the loop emits a terminal
