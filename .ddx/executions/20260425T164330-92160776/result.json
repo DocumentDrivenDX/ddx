@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Mechanical migration cleanly applied: 8 call sites in `execute_bead_review_test.go` and 1 in `execute_bead_review_evidence_test.go` converted from `worker.Run(..., ExecuteBeadLoopOptions{Assignee:..., ...})` to `worker.RunWithConfig(..., rcfg, ExecuteBeadLoopRuntime{...})` using `config.NewTestConfigForLoop` + `Resolve`. `Assignee` correctly hoisted into `TestLoopConfigOpts`; runtime-only fields (`Once`, `NoReview`) preserved on the runtime struct, matching SD-024's runtime/durable split."
+}
