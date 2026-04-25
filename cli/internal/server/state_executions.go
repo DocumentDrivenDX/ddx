@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -209,16 +210,16 @@ func loadExecutionBundleDetail(projectID, projectRoot, bundleDirAbs, bundleID st
 		return nil
 	}
 	if data, err := os.ReadFile(filepath.Join(bundleDirAbs, "prompt.md")); err == nil {
-		s := string(data)
-		exec.Prompt = &s
+		clamped, _, _ := evidence.ClampOutput(string(data), serverInlineCapBytes)
+		exec.Prompt = &clamped
 	}
 	if data, err := os.ReadFile(filepath.Join(bundleDirAbs, "manifest.json")); err == nil {
-		s := string(data)
-		exec.Manifest = &s
+		clamped, _, _ := evidence.ClampOutput(string(data), serverInlineCapBytes)
+		exec.Manifest = &clamped
 	}
 	if data, err := os.ReadFile(filepath.Join(bundleDirAbs, "result.json")); err == nil {
-		s := string(data)
-		exec.Result = &s
+		clamped, _, _ := evidence.ClampOutput(string(data), serverInlineCapBytes)
+		exec.Result = &clamped
 	}
 	return exec
 }

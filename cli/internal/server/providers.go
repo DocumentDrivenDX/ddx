@@ -157,7 +157,7 @@ func (s *Server) mcpProviderList() mcpToolResult {
 	now := time.Now().UTC()
 	infos, err := listHarnessInfos(context.Background(), s.WorkingDir)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 
 	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
@@ -170,22 +170,22 @@ func (s *Server) mcpProviderList() mcpToolResult {
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	if harnessName == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "harness required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("harness required")}, IsError: true}
 	}
 	infos, err := listHarnessInfos(context.Background(), s.WorkingDir)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	info, ok := findHarnessInfo(infos, harnessName)
 	if !ok {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "harness not found: " + harnessName}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("harness not found: " + harnessName)}, IsError: true}
 	}
 
 	now := time.Now().UTC()
@@ -197,9 +197,9 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	detail := buildProviderDetail(info, signal, outcomes, burnSummaries, now)
 	data, err := json.Marshal(detail)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "{}"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("{}")}}
 	}
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 // ---- Build helpers ----

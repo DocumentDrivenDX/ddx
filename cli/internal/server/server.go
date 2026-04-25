@@ -46,6 +46,26 @@ import (
 // mutate it.
 var serverPromptCapBytes = evidence.DefaultMaxPromptBytes
 
+// serverInlineCapBytes caps inline content bodies returned on egress paths
+// — MCP tool responses and REST JSON responses that carry library-doc,
+// execution-bundle, diff, session, or persona text. FEAT-022 §10 / §11.
+// Stage E1. Package-level variable so tests can lower the cap; production
+// callers must not mutate it.
+var serverInlineCapBytes = evidence.DefaultMaxInlinedFileBytes
+
+// mcpText constructs a text-typed mcpContent whose Text body is bounded by
+// serverInlineCapBytes via evidence.ClampOutput. The Truncated and
+// OriginalBytes fields are always populated (false/len(text) when the body
+// fits within the cap). This is the single mcpContent{Type:"text"} literal
+// site in this package — every other caller must route through this helper
+// so static analysis (TestEvidencePrimitiveUsage) can guarantee no
+// unbounded text egress on the MCP surface. FEAT-022 §10 / Stage E1.
+func mcpText(text string) mcpContent {
+	clamped, truncated, originalBytes := evidence.ClampOutput(text, serverInlineCapBytes)
+	// evidence:allow-unbounded reason="single mcpContent{Type:\"text\"} literal site for the package; Text is sourced from evidence.ClampOutput above (FEAT-022 §10 Stage E1)"
+	return mcpContent{Type: "text", Text: clamped, Truncated: truncated, OriginalBytes: originalBytes}
+}
+
 // beadHubCloser is the minimal interface the Server requires from its bead
 // lifecycle hub. *bead.WatcherHub satisfies this interface.
 type beadHubCloser interface {
@@ -435,7 +455,7 @@ func (s *Server) mcpResolveWorkingDir(project string) (string, *mcpToolResult) {
 		entry, ok := s.resolveProject(project)
 		if !ok {
 			return "", &mcpToolResult{
-				Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("project not found: %s", project)}},
+				Content: []mcpContent{mcpText(fmt.Sprintf("project not found: %s", project))},
 				IsError: true,
 			}
 		}
@@ -449,7 +469,7 @@ func (s *Server) mcpResolveWorkingDir(project string) (string, *mcpToolResult) {
 		return projects[0].Path, nil
 	default:
 		return "", &mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "multiple projects registered; specify 'project' argument (id or path)"}},
+			Content: []mcpContent{mcpText("multiple projects registered; specify 'project' argument (id or path)")},
 			IsError: true,
 		}
 	}
@@ -965,9 +985,12 @@ func (s *Server) handleReadDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"path":    cleaned,
-		"content": string(data),
+	clamped, truncated, originalBytes := evidence.ClampOutput(string(data), serverInlineCapBytes)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":           cleaned,
+		"content":        clamped,
+		"truncated":      truncated,
+		"original_bytes": originalBytes,
 	})
 }
 
@@ -2143,9 +2166,12 @@ func (s *Server) handleAgentWorkerPrompt(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "prompt not found"})
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	clamped, truncated, originalBytes := evidence.ClampOutput(string(data), serverInlineCapBytes)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"prompt":         clamped,
+		"truncated":      truncated,
+		"original_bytes": originalBytes,
+	})
 }
 
 // --- Project-Scoped Worker Endpoints (FEAT-002 §22-24) ---
@@ -2312,6 +2338,12 @@ type agentSessionDetail struct {
 	ResponseAvailable bool   `json:"response_available"`
 	Prompt            string `json:"prompt,omitempty"`
 	Response          string `json:"response,omitempty"`
+	// Truncated is true when either Prompt or Response was clamped by
+	// evidence.ClampOutput on egress. FEAT-022 §10 / Stage E1.
+	Truncated bool `json:"truncated"`
+	// OriginalBytes is the sum of the original byte sizes of the inlined
+	// Prompt and Response bodies before clamping. FEAT-022 §10 / Stage E1.
+	OriginalBytes int `json:"original_bytes"`
 }
 
 func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
@@ -2437,10 +2469,20 @@ func detailAgentSession(sess agent.SessionEntry) agentSessionDetail {
 		ResponseAvailable:   sess.Response != "",
 	}
 	if detail.PromptAvailable {
-		detail.Prompt = sess.Prompt
+		clamped, truncated, originalBytes := evidence.ClampOutput(sess.Prompt, serverInlineCapBytes)
+		detail.Prompt = clamped
+		detail.OriginalBytes += originalBytes
+		if truncated {
+			detail.Truncated = true
+		}
 	}
 	if detail.ResponseAvailable {
-		detail.Response = sess.Response
+		clamped, truncated, originalBytes := evidence.ClampOutput(sess.Response, serverInlineCapBytes)
+		detail.Response = clamped
+		detail.OriginalBytes += originalBytes
+		if truncated {
+			detail.Truncated = true
+		}
 	}
 	return detail
 }
@@ -2556,6 +2598,12 @@ type mcpToolResult struct {
 type mcpContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
+	// Truncated is true when Text was clamped by evidence.ClampOutput.
+	// Always present (false when the body fit within the cap). FEAT-022 §10.
+	Truncated bool `json:"truncated"`
+	// OriginalBytes is len(originalText) before clamping. Always present
+	// (equals len(Text) when not truncated). FEAT-022 §10.
+	OriginalBytes int `json:"original_bytes"`
 }
 
 func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
@@ -2960,7 +3008,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	}
 	if err := json.Unmarshal(params, &call); err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "invalid tool call parameters"}},
+			Content: []mcpContent{mcpText("invalid tool call parameters")},
 			IsError: true,
 		}
 	}
@@ -3029,7 +3077,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpAgentSessions(workingDir, harness)
 	case "ddx_bead_create":
 		if !isTrusted(r) {
-			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
 		}
 		title, _ := call.Arguments["title"].(string)
 		issueType, _ := call.Arguments["type"].(string)
@@ -3043,7 +3091,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpBeadCreate(workingDir, title, issueType, priority, labelsStr, description, acceptance)
 	case "ddx_bead_update":
 		if !isTrusted(r) {
-			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
 		status, _ := call.Arguments["status"].(string)
@@ -3053,7 +3101,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpBeadUpdate(workingDir, id, status, labelsStr, description, acceptance)
 	case "ddx_bead_claim":
 		if !isTrusted(r) {
-			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
 		assignee, _ := call.Arguments["assignee"].(string)
@@ -3070,13 +3118,13 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpExecHistory(workingDir, artifact, definition)
 	case "ddx_exec_dispatch":
 		if !isTrusted(r) {
-			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: dispatch tools require trusted origin"}}, IsError: true}
+			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: dispatch tools require trusted origin")}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
 		return s.mcpExecDispatch(workingDir, id)
 	case "ddx_agent_dispatch":
 		if !isTrusted(r) {
-			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: dispatch tools require trusted origin"}}, IsError: true}
+			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: dispatch tools require trusted origin")}, IsError: true}
 		}
 		harness, _ := call.Arguments["harness"].(string)
 		prompt, _ := call.Arguments["prompt"].(string)
@@ -3088,7 +3136,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpDocChanged(workingDir, since)
 	case "ddx_doc_write":
 		if !isTrusted(r) {
-			return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "forbidden: write tools require trusted origin"}}, IsError: true}
+			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
 		content, _ := call.Arguments["content"].(string)
@@ -3102,7 +3150,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpDocDiff(workingDir, id, ref)
 	default:
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("unknown tool: %s", call.Name)}},
+			Content: []mcpContent{mcpText(fmt.Sprintf("unknown tool: %s", call.Name))},
 			IsError: true,
 		}
 	}
@@ -3113,7 +3161,7 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 func (s *Server) mcpListDocuments(workingDir string) mcpToolResult {
 	libPath := s.libraryPathFor(workingDir)
 	if libPath == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
 
 	type docEntry struct {
@@ -3138,51 +3186,51 @@ func (s *Server) mcpListDocuments(workingDir string) mcpToolResult {
 		}
 	}
 	data, _ := json.Marshal(docs)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpReadDocument(workingDir, path string) mcpToolResult {
 	if path == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "path is required"}},
+			Content: []mcpContent{mcpText("path is required")},
 			IsError: true,
 		}
 	}
 	libPath := s.libraryPathFor(workingDir)
 	if libPath == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "library not configured"}},
+			Content: []mcpContent{mcpText("library not configured")},
 			IsError: true,
 		}
 	}
 	cleaned := filepath.Clean(path)
 	if strings.Contains(cleaned, "..") {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "invalid path"}},
+			Content: []mcpContent{mcpText("invalid path")},
 			IsError: true,
 		}
 	}
 	data, err := os.ReadFile(filepath.Join(libPath, cleaned))
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "document not found"}},
+			Content: []mcpContent{mcpText("document not found")},
 			IsError: true,
 		}
 	}
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpSearch(workingDir, query string) mcpToolResult {
 	if query == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "query is required"}},
+			Content: []mcpContent{mcpText("query is required")},
 			IsError: true,
 		}
 	}
 
 	libPath := s.libraryPathFor(workingDir)
 	if libPath == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
 
 	type searchResult struct {
@@ -3221,13 +3269,13 @@ func (s *Server) mcpSearch(workingDir, query string) mcpToolResult {
 	}
 
 	data, _ := json.Marshal(results)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpResolvePersona(workingDir, role string) mcpToolResult {
 	if role == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "role is required"}},
+			Content: []mcpContent{mcpText("role is required")},
 			IsError: true,
 		}
 	}
@@ -3236,7 +3284,7 @@ func (s *Server) mcpResolvePersona(workingDir, role string) mcpToolResult {
 	personaName, err := bm.GetBinding(role)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("no persona bound to role: %s", role)}},
+			Content: []mcpContent{mcpText(fmt.Sprintf("no persona bound to role: %s", role))},
 			IsError: true,
 		}
 	}
@@ -3245,7 +3293,7 @@ func (s *Server) mcpResolvePersona(workingDir, role string) mcpToolResult {
 	p, err := loader.LoadPersona(personaName)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf("persona not found: %s", personaName)}},
+			Content: []mcpContent{mcpText(fmt.Sprintf("persona not found: %s", personaName))},
 			IsError: true,
 		}
 	}
@@ -3257,26 +3305,26 @@ func (s *Server) mcpResolvePersona(workingDir, role string) mcpToolResult {
 		"content":     p.Content,
 	}
 	data, _ := json.Marshal(result)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpListBeads(workingDir, status, label string) mcpToolResult {
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	beads, err := store.List(status, label, nil)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
 	if beads == nil {
 		beads = []bead.Bead{}
 	}
 	data, _ := json.Marshal(beads)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpShowBead(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			Content: []mcpContent{mcpText("id is required")},
 			IsError: true,
 		}
 	}
@@ -3284,12 +3332,12 @@ func (s *Server) mcpShowBead(workingDir, id string) mcpToolResult {
 	b, err := store.Get(id)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "bead not found"}},
+			Content: []mcpContent{mcpText("bead not found")},
 			IsError: true,
 		}
 	}
 	data, _ := json.Marshal(b)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpListProjects() mcpToolResult {
@@ -3298,13 +3346,13 @@ func (s *Server) mcpListProjects() mcpToolResult {
 		projects = []ProjectEntry{}
 	}
 	data, _ := json.Marshal(projects)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpShowProject(id, path string) mcpToolResult {
 	if id == "" && path == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "id or path is required"}},
+			Content: []mcpContent{mcpText("id or path is required")},
 			IsError: true,
 		}
 	}
@@ -3320,25 +3368,25 @@ func (s *Server) mcpShowProject(id, path string) mcpToolResult {
 	}
 	if !ok {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "project not found"}},
+			Content: []mcpContent{mcpText("project not found")},
 			IsError: true,
 		}
 	}
 	data, _ := json.Marshal(entry)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpBeadReady(workingDir string) mcpToolResult {
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	ready, err := store.Ready()
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
 	if ready == nil {
 		ready = []bead.Bead{}
 	}
 	data, _ := json.Marshal(ready)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpBeadStatus(workingDir string) mcpToolResult {
@@ -3346,19 +3394,19 @@ func (s *Server) mcpBeadStatus(workingDir string) mcpToolResult {
 	counts, err := store.Status()
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
 			IsError: true,
 		}
 	}
 	data, _ := json.Marshal(counts)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocGraph(workingDir string) mcpToolResult {
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
 			IsError: true,
 		}
 	}
@@ -3380,14 +3428,14 @@ func (s *Server) mcpDocGraph(workingDir string) mcpToolResult {
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
 	data, _ := json.Marshal(nodes)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocStale(workingDir string) mcpToolResult {
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
 			IsError: true,
 		}
 	}
@@ -3396,27 +3444,27 @@ func (s *Server) mcpDocStale(workingDir string) mcpToolResult {
 		stale = []docgraph.StaleReason{}
 	}
 	data, _ := json.Marshal(stale)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocShow(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			Content: []mcpContent{mcpText("id is required")},
 			IsError: true,
 		}
 	}
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
 			IsError: true,
 		}
 	}
 	doc, ok := graph.Show(id)
 	if !ok {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "document not found"}},
+			Content: []mcpContent{mcpText("document not found")},
 			IsError: true,
 		}
 	}
@@ -3433,38 +3481,38 @@ func (s *Server) mcpDocShow(workingDir, id string) mcpToolResult {
 		resp["stale_reasons"] = staleReason.Reasons
 	}
 	data, _ := json.Marshal(resp)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocDeps(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			Content: []mcpContent{mcpText("id is required")},
 			IsError: true,
 		}
 	}
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"error":"%s"}`, err.Error())}},
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
 			IsError: true,
 		}
 	}
 	deps, err := graph.Dependencies(id)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			Content: []mcpContent{mcpText(err.Error())},
 			IsError: true,
 		}
 	}
 	data, _ := json.Marshal(deps)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpAgentSessions(workingDir, harness string) mcpToolResult {
 	sessions, err := s.loadSessionsFor(workingDir)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
 	if harness != "" {
 		var filtered []agent.SessionEntry
@@ -3482,13 +3530,13 @@ func (s *Server) mcpAgentSessions(workingDir, harness string) mcpToolResult {
 		return sessions[i].Timestamp.After(sessions[j].Timestamp)
 	})
 	data, _ := json.Marshal(sessions)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpBeadCreate(workingDir, title, issueType string, priority int, labelsStr, description, acceptance string) mcpToolResult {
 	if title == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "title is required"}},
+			Content: []mcpContent{mcpText("title is required")},
 			IsError: true,
 		}
 	}
@@ -3505,18 +3553,18 @@ func (s *Server) mcpBeadCreate(workingDir, title, issueType string, priority int
 	}
 	if err := store.Create(b); err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			Content: []mcpContent{mcpText(err.Error())},
 			IsError: true,
 		}
 	}
 	data, _ := json.Marshal(b)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpBeadUpdate(workingDir, id, status, labelsStr, description, acceptance string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			Content: []mcpContent{mcpText("id is required")},
 			IsError: true,
 		}
 	}
@@ -3537,46 +3585,46 @@ func (s *Server) mcpBeadUpdate(workingDir, id, status, labelsStr, description, a
 	})
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			Content: []mcpContent{mcpText(err.Error())},
 			IsError: true,
 		}
 	}
 	updated, _ := store.Get(id)
 	data, _ := json.Marshal(updated)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpBeadClaim(workingDir, id, assignee string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			Content: []mcpContent{mcpText("id is required")},
 			IsError: true,
 		}
 	}
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	if err := store.ClaimWithOptions(id, assignee, "", ""); err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			Content: []mcpContent{mcpText(err.Error())},
 			IsError: true,
 		}
 	}
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: fmt.Sprintf(`{"id":"%s","status":"claimed"}`, id)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(fmt.Sprintf(`{"id":"%s","status":"claimed"}`, id))}}
 }
 
 func (s *Server) mcpExecDefinitions(workingDir, artifactID string) mcpToolResult {
 	store := ddxexec.NewStore(workingDir)
 	defs, err := store.ListDefinitions(artifactID)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
 	data, _ := json.Marshal(defs)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpExecShow(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: "id is required"}},
+			Content: []mcpContent{mcpText("id is required")},
 			IsError: true,
 		}
 	}
@@ -3584,38 +3632,38 @@ func (s *Server) mcpExecShow(workingDir, id string) mcpToolResult {
 	def, err := store.ShowDefinition(id)
 	if err != nil {
 		return mcpToolResult{
-			Content: []mcpContent{{Type: "text", Text: err.Error()}},
+			Content: []mcpContent{mcpText(err.Error())},
 			IsError: true,
 		}
 	}
 	data, _ := json.Marshal(def)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpExecHistory(workingDir, artifactID, definitionID string) mcpToolResult {
 	store := ddxexec.NewStore(workingDir)
 	runs, err := store.History(artifactID, definitionID)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "[]"}}}
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
 	data, _ := json.Marshal(runs)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocWrite(workingDir, id, content string) mcpToolResult {
 	if id == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
 	if content == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "content is required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("content is required")}, IsError: true}
 	}
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	doc, ok := graph.Show(id)
 	if !ok {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("document not found")}, IsError: true}
 	}
 	// doc.Path is relative to the docgraph root; resolve against workingDir
 	// before touching the file system.
@@ -3624,7 +3672,7 @@ func (s *Server) mcpDocWrite(workingDir, id, content string) mcpToolResult {
 		fullPath = filepath.Join(workingDir, fullPath)
 	}
 	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	committed := false
 	var acCfg internalgit.AutoCommitConfig
@@ -3638,25 +3686,25 @@ func (s *Server) mcpDocWrite(workingDir, id, content string) mcpToolResult {
 		}
 	}
 	data, _ := json.Marshal(map[string]any{"status": "ok", "path": doc.Path, "committed": committed})
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocHistory(workingDir, id string) mcpToolResult {
 	if id == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	doc, ok := graph.Show(id)
 	if !ok {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("document not found")}, IsError: true}
 	}
 	logCmd := internalgit.Command(context.Background(), workingDir, "log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path)
 	out, gitErr := logCmd.Output()
 	if gitErr != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git log failed"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("git log failed")}, IsError: true}
 	}
 	type commitEntry struct {
 		Hash    string `json:"hash"`
@@ -3685,20 +3733,20 @@ func (s *Server) mcpDocHistory(workingDir, id string) mcpToolResult {
 		entries = append(entries, commitEntry{Hash: hash, Date: date, Author: parts[2], Message: parts[3]})
 	}
 	data, _ := json.Marshal(entries)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocDiff(workingDir, id, ref string) mcpToolResult {
 	if id == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	doc, ok := graph.Show(id)
 	if !ok {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "document not found"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("document not found")}, IsError: true}
 	}
 	var gitArgs []string
 	if ref != "" {
@@ -3709,31 +3757,31 @@ func (s *Server) mcpDocDiff(workingDir, id, ref string) mcpToolResult {
 	mcpDiffCmd := internalgit.Command(context.Background(), workingDir, gitArgs...)
 	out, gitErr := mcpDiffCmd.Output()
 	if gitErr != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("git diff failed")}, IsError: true}
 	}
 	data, _ := json.Marshal(map[string]string{"diff": string(out)})
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpExecDispatch(workingDir, id string) mcpToolResult {
 	if id == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "id is required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
 	store := ddxexec.NewStore(workingDir)
 	record, err := store.Run(context.Background(), id)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	data, _ := json.Marshal(record)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpAgentDispatch(workingDir, harness, prompt, model, effort string) mcpToolResult {
 	if harness == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "harness is required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("harness is required")}, IsError: true}
 	}
 	if prompt == "" {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "prompt is required"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("prompt is required")}, IsError: true}
 	}
 	opts := agent.RunOptions{
 		Harness: harness,
@@ -3744,10 +3792,10 @@ func (s *Server) mcpAgentDispatch(workingDir, harness, prompt, model, effort str
 	}
 	result, err := agent.RunViaService(context.Background(), workingDir, opts)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	data, _ := json.Marshal(result)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
@@ -3757,18 +3805,18 @@ func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 	diffCmd := internalgit.Command(context.Background(), workingDir, "diff", "--name-status", since, "HEAD")
 	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "git diff failed"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("git diff failed")}, IsError: true}
 	}
 
 	graph, err := docgraph.BuildGraphWithConfig(workingDir)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: err.Error()}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 
 	rootCmd := internalgit.Command(context.Background(), workingDir, "rev-parse", "--show-toplevel")
 	rootOut, rootErr := rootCmd.Output()
 	if rootErr != nil {
-		return mcpToolResult{Content: []mcpContent{{Type: "text", Text: "could not determine git root"}}, IsError: true}
+		return mcpToolResult{Content: []mcpContent{mcpText("could not determine git root")}, IsError: true}
 	}
 	repoRoot := strings.TrimRight(string(rootOut), "\n")
 
@@ -3816,7 +3864,7 @@ func (s *Server) mcpDocChanged(workingDir, since string) mcpToolResult {
 	}
 
 	data, _ := json.Marshal(entries)
-	return mcpToolResult{Content: []mcpContent{{Type: "text", Text: string(data)}}}
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
 // --- Helpers ---
