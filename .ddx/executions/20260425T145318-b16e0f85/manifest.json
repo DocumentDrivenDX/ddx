@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T145318-b16e0f85",
+  "bead_id": "ddx-c5b8aad1",
+  "base_rev": "5b6a80737778d218f7f720c764fe13be68a77f75",
+  "created_at": "2026-04-25T14:53:19.443702089Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c5b8aad1",
+    "title": "config: NoProgressCooldown / MaxNoChangesBeforeClose / HeartbeatInterval resolvers on WorkersConfig",
+    "description": "Stage 1 of SD-024. Adds three new fields to WorkersConfig with sensible defaults matching today's hardcoded constants (6h, 3, bead.HeartbeatInterval). Adds resolver methods. The loop does not read them yet — that wires up in beads 6/7.\n\nDefaults: NoProgressCooldown=6h, MaxNoChangesBeforeClose=3, HeartbeatInterval=15s (or whatever bead.HeartbeatInterval currently is — preserve existing value).\n\nIn-scope:\n- cli/internal/config/types.go (extend WorkersConfig)\n- cli/internal/config/types_test.go (or new file) for resolver tests\n\nOut-of-scope:\n- ExecuteBeadLoopRuntime / RunWithConfig migration (bead 6+)\n\nSee TD-024 §*Config extensions §WorkersConfig.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestWorkersConfigResolvers ./internal/config/... passes for each of the three new resolvers (default + override). cd cli \u0026\u0026 go test ./... passes (no regression). git diff cli/internal/config/types.go shows three new fields added to WorkersConfig with yaml/json tags.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:config",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T14:53:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T14:53:18.913919658Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T145318-b16e0f85",
+    "prompt": ".ddx/executions/20260425T145318-b16e0f85/prompt.md",
+    "manifest": ".ddx/executions/20260425T145318-b16e0f85/manifest.json",
+    "result": ".ddx/executions/20260425T145318-b16e0f85/result.json",
+    "checks": ".ddx/executions/20260425T145318-b16e0f85/checks.json",
+    "usage": ".ddx/executions/20260425T145318-b16e0f85/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c5b8aad1-20260425T145318-b16e0f85"
+  }
+}
