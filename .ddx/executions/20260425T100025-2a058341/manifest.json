@@ -1,0 +1,144 @@
+{
+  "attempt_id": "20260425T100025-2a058341",
+  "bead_id": "ddx-a730058a",
+  "base_rev": "3d42eb69b6dbca8fab51eeb76a4bb37e6e8c1e63",
+  "created_at": "2026-04-25T10:00:25.955484334Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a730058a",
+    "title": "execute-bead: write live run-state file during execution for operator observability",
+    "description": "During ddx agent execute-bead and ddx agent execute-loop, write a .ddx/run-state.json file at execution start and remove it on completion. This file records the currently-executing bead ID, attempt ID, harness, start time, and execution worktree path so operators and HELIX can observe what is currently running without polling the bead tracker.\n\nThis capability is implied by CONTRACT-001 Section 5 (Always-on runtime metrics and provenance) but is currently absent from the DDx source. The post-execution evidence bundle (.ddx/executions/) captures historical facts, but there is no live-state signal during execution.\n\n## Scope\n\n- On execute-bead start: write .ddx/run-state.json with fields: bead_id, attempt_id, harness, model, started_at (RFC3339), worktree_path\n- On execute-bead end (success or failure): remove .ddx/run-state.json (or overwrite with status=idle)\n- execute-loop may write N run-state entries or a single active one depending on parallelism model\n- File must be written atomically (write tmp + rename) to avoid partial-read races\n\n## Contract reference\n\nCONTRACT-001 Section 5: Always-on runtime metrics and provenance — per-attempt capture of harness, model, session ID, elapsed, tokens, cost, base revision, result revision.",
+    "acceptance": "1. .ddx/run-state.json is written at execute-bead start with required fields (bead_id, attempt_id, harness, model, started_at, worktree_path)\n2. .ddx/run-state.json is removed (or set to status=idle) when execute-bead completes normally\n3. .ddx/run-state.json is removed on execute-bead error or crash recovery path\n4. execute-loop writes/clears run-state correctly for sequential bead execution\n5. Unit test: write/read/cleanup cycle passes\n6. Integration test: crashed worker leaves stale run-state that orphan-recovery cleans up",
+    "labels": [
+      "area:cli",
+      "area:agent",
+      "kind:feat",
+      "phase:build",
+      "contract:CONTRACT-001"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T10:00:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "pre-execute-bead checkpoint: staging changes: exit status 128",
+          "created_at": "2026-04-23T06:28:52.192494375Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "pre-execute-bead checkpoint: staging changes: exit status 128",
+          "created_at": "2026-04-23T06:29:56.673180331Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "pre-execute-bead checkpoint: staging changes: exit status 128",
+          "created_at": "2026-04-23T07:19:46.987407176Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-24T03:35:54.320467683Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260424T032813-9a7b8808\",\"harness\":\"claude\",\"input_tokens\":47,\"output_tokens\":16050,\"total_tokens\":16097,\"cost_usd\":2.0900617499999994,\"duration_ms\":460442,\"exit_code\":0}",
+          "created_at": "2026-04-24T03:35:54.402733576Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=16097 cost_usd=2.0901"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-24T03:35:57.141812414Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff scope is wrong: only the evidence bundle (two JSON files under `.ddx/executions/`) is shown. To evaluate ACs 1–6, the review needs the implementation commit 588f1ae3, which presumably touches `cli/cmd/agent_execute_bead.go` / `agent_execute_loop.go` and associated `*_test.go` files.\nNo `.ddx/run-state.json` writer/remover code visible.\nNo unit test for write/read/cleanup cycle visible.\nNo integration test for orphan recovery of stale run-state visible.\nRe-run the review with the diff range `a7427cae..fca9ba16` (or at minimum include 588f1ae3) so the source changes are present.",
+          "created_at": "2026-04-24T03:36:12.279087387Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-24T03:36:12.355404246Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff scope is wrong: only the evidence bundle (two JSON files under `.ddx/executions/`) is shown. To evaluate ACs 1–6, the review needs the implementation commit 588f1ae3, which presumably touches `cli/cmd/agent_execute_bead.go` / `agent_execute_loop.go` and associated `*_test.go` files.\nNo `.ddx/run-state.json` writer/remover code visible.\nNo unit test for write/read/cleanup cycle visible.\nNo integration test for orphan recovery of stale run-state visible.\nRe-run the review with the diff range `a7427cae..fca9ba16` (or at minimum include 588f1ae3) so the source changes are present.\nresult_rev=fca9ba16c07df6b6676d33db1ea5cceaf63be717\nbase_rev=a7427caea9d89204db602b1697603af17fc885e6",
+          "created_at": "2026-04-24T03:36:12.416016042Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:30.770812407Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:30.870574155Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-25T02:23:30.934594945Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-25T02:23:31.059925858Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T10:00:25.346522151Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260425T100025-2a058341",
+    "prompt": ".ddx/executions/20260425T100025-2a058341/prompt.md",
+    "manifest": ".ddx/executions/20260425T100025-2a058341/manifest.json",
+    "result": ".ddx/executions/20260425T100025-2a058341/result.json",
+    "checks": ".ddx/executions/20260425T100025-2a058341/checks.json",
+    "usage": ".ddx/executions/20260425T100025-2a058341/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a730058a-20260425T100025-2a058341"
+  }
+}
