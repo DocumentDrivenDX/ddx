@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -78,6 +80,76 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 	}
 	if got.Effort != "high" {
 		t.Errorf("Effort = %q, want %q", got.Effort, "high")
+	}
+}
+
+// TestExecutionsMirrorFromConfig verifies that an ExecutionsConfig.Mirror
+// block on *Config flows through Resolve → ResolvedConfig.MirrorConfig() →
+// ExecuteBeadWithConfig → ExecuteBead, and the bundle is mirrored to the
+// configured destination after the worker writes result.json. SD-024 Stage 3.
+func TestExecutionsMirrorFromConfig(t *testing.T) {
+	const beadID = "ddx-mirror-cfg-01"
+
+	projectRoot := setupArtifactTestProjectRoot(t)
+	mirrorRoot := t.TempDir()
+	async := false
+
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "claude",
+		Model:   "claude-test-model",
+		Mirror: &config.ExecutionsMirrorConfig{
+			Kind:  "local",
+			Path:  filepath.Join(mirrorRoot, "{attempt_id}"),
+			Async: &async,
+		},
+	})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+
+	if rcfg.MirrorConfig() == nil {
+		t.Fatal("ResolvedConfig.MirrorConfig() must be non-nil after Resolve")
+	}
+
+	gitOps := &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     "cccc000000000001",
+		resultRev:   "cccc000000000001",
+		wtSetupFn: func(wtPath string) {
+			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
+		},
+	}
+
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: &artifactTestAgentRunner{},
+	}, gitOps)
+	if err != nil {
+		t.Fatalf("ExecuteBeadWithConfig: %v", err)
+	}
+	if res == nil || res.AttemptID == "" {
+		t.Fatalf("expected non-nil result with attempt id")
+	}
+
+	mirroredManifest := filepath.Join(mirrorRoot, res.AttemptID, "manifest.json")
+	if _, err := os.Stat(mirroredManifest); err != nil {
+		t.Errorf("expected mirrored manifest at %s: %v", mirroredManifest, err)
+	}
+	mirroredResult := filepath.Join(mirrorRoot, res.AttemptID, "result.json")
+	if _, err := os.Stat(mirroredResult); err != nil {
+		t.Errorf("expected mirrored result at %s: %v", mirroredResult, err)
+	}
+
+	entries, err := ReadMirrorIndex(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadMirrorIndex: %v", err)
+	}
+	found := false
+	for _, e := range entries {
+		if e.AttemptID == res.AttemptID && e.BeadID == beadID {
+			found = true
+		}
+	}
+	if !found {
+		raw, _ := os.ReadFile(filepath.Join(projectRoot, ExecutionsMirrorIndexFile))
+		t.Errorf("attempt %s not in mirror index. raw=%s", res.AttemptID, raw)
 	}
 }
 
