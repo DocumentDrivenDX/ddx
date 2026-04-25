@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260425T102514-54b57be6",
+  "bead_id": "ddx-0bbf8563",
+  "base_rev": "86368907c420d4445d8c5012e1a3a3fd6d028d4e",
+  "created_at": "2026-04-25T10:25:15.034877752Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0bbf8563",
+    "title": "grading: bounded evidence assembly including PostRunOut/PostRunOK/ToolCalls",
+    "description": "Stage C2 of FEAT-022. Modify buildGradingPrompt to use\ncli/internal/evidence primitives with a minimum evidence floor,\ninclude PostRunOut/PostRunOK/ToolCalls bounded via ClampOutput, and\nemit a pre-dispatch short-circuit outcome class.\n\nImplements FEAT-022 requirement §6 and §7 for the grader path.\nContributes to US-225.\n\nDepends on Stage A1 (ddx-64299657) only. Independent of Stage B/C1.\n\nPINNED event name (fixed here, consumed by Stage F): the pre-dispatch\nshort-circuit outcome event is emitted as 'compare-error:\ncontext_overflow'. The same class name used in Stage C1 for review\n(see FEAT-022 §12) is mirrored on the grading side, with the event\nkind prefix adapted to the grading context. Stage F reads this name\nwhen aggregating metrics.\n\nIn-scope files:\n- cli/internal/agent/grade.go (buildGradingPrompt at :58: route arm\n  Output, PostRunOut, ToolCalls through evidence.ClampOutput; route\n  arm Diff through evidence.ClampDiff + evidence.DecomposeDiff;\n  include arm.PostRunOK as a boolean field in the prompt; implement\n  priority-ordered assembly with minimum floor: rubric + task prompt\n  + per-arm identity always present)\n- cli/internal/agent/grade.go (pre-dispatch short-circuit: if\n  assembled prompt exceeds MaxPromptBytes after all trimming, skip\n  provider dispatch and emit 'compare-error: context_overflow')\n- Tests: fixture with multi-MB arm outputs and diffs exercising\n  minimum floor preservation, PostRunOut/PostRunOK/ToolCalls\n  inclusion (bounded), pre-dispatch short-circuit event emission\n\nOut-of-scope:\n- Review path (Stage C1)\n- Section-level telemetry (Stage F)\n- Ref-only-metadata alternative for grading (rejected in round 2:\n  compare sandboxes are deleted before the record returns unless\n  KeepSandbox is set; inline-with-cap is the correct strategy)\n\nRollback: revert grade.go changes; compare tests fall back to\nprior behavior.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestBuildGradingPrompt ./internal/agent/... passes including tests for: arm output trimming (fixture arm.Output = 10× MaxOutputBytes or equivalent cap, assert bounded + truncation marker), minimum floor preservation (fixture total = 20× MaxPromptBytes; output still contains rubric, task prompt, and each arm's identity (harness, model) verbatim), PostRunOut/PostRunOK/ToolCalls inclusion after ClampOutput (each appears in output with truncation marker when clamped), pre-dispatch short-circuit. cd cli \u0026\u0026 go test -run TestGradingContextOverflow ./internal/agent/... passes: given a fixture that forces residual overflow, the grader emits an event whose body contains the literal substring 'compare-error: context_overflow' and the event's recorded provider-dispatch count remains 0. AST/import check: cd cli \u0026\u0026 go test -run TestEvidencePrimitiveUsage ./internal/agent/... asserts grade.go imports cli/internal/evidence and contains no direct os.ReadFile calls unless annotated. Existing comparison tests under cli/internal/agent/ still pass unchanged.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "area:grading",
+      "stage:C2"
+    ],
+    "metadata": {
+      "blocked-by": "ddx-64299657",
+      "claimed-at": "2026-04-25T10:25:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T10:25:14.476008608Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T102514-54b57be6",
+    "prompt": ".ddx/executions/20260425T102514-54b57be6/prompt.md",
+    "manifest": ".ddx/executions/20260425T102514-54b57be6/manifest.json",
+    "result": ".ddx/executions/20260425T102514-54b57be6/result.json",
+    "checks": ".ddx/executions/20260425T102514-54b57be6/checks.json",
+    "usage": ".ddx/executions/20260425T102514-54b57be6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0bbf8563-20260425T102514-54b57be6"
+  }
+}
