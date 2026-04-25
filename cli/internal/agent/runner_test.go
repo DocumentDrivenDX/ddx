@@ -1,6 +1,11 @@
 package agent
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+)
 
 // TestRunLMStudioDispatchesThroughEmbeddedAgent is the regression for
 // ddx-501e87ef. An lmstudio candidate has Binary="" and
@@ -22,7 +27,8 @@ func TestRunLMStudioDispatchesThroughEmbeddedAgent(t *testing.T) {
 	// Invoke with explicit --harness lmstudio. Without AgentProvider set,
 	// RunAgent will fail to resolve a provider — that's fine; the check
 	// is that the exec path is NEVER reached.
-	_, _ = r.Run(RunOptions{Harness: "lmstudio", Prompt: "hello"})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "lmstudio"}).Resolve(config.CLIOverrides{})
+	_, _ = r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 
 	// The mockExecutor's ExecuteInDir records the last binary it was
 	// asked to run. If the dispatch fix is working, it was never called
@@ -37,7 +43,8 @@ func TestRunOpenRouterDispatchesThroughEmbeddedAgent(t *testing.T) {
 	mock := &mockExecutor{output: "should not be called"}
 	r := newTestRunner(mock)
 
-	_, _ = r.Run(RunOptions{Harness: "openrouter", Prompt: "hello"})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "openrouter"}).Resolve(config.CLIOverrides{})
+	_, _ = r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 
 	if mock.lastBinary != "" {
 		t.Errorf("openrouter dispatch leaked to exec path: got lastBinary=%q (want empty)", mock.lastBinary)

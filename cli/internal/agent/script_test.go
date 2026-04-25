@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // initScriptTestRepo creates a temp dir, initialises a git repo with a
@@ -108,10 +110,12 @@ func writeDirectives(t *testing.T, content string) string {
 // runScript is a convenience wrapper that calls RunViaService with the script harness.
 func runScript(t *testing.T, workDir, directivePath string, corr map[string]string) (*Result, error) {
 	t.Helper()
-	return RunViaService(context.Background(), workDir, RunOptions{
-		Harness:     "script",
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Harness: "script",
+		Model:   directivePath,
+	}).Resolve(config.CLIOverrides{})
+	return RunWithConfigViaService(context.Background(), workDir, rcfg, AgentRunRuntime{
 		WorkDir:     workDir,
-		Model:       directivePath,
 		Correlation: corr,
 	})
 }
