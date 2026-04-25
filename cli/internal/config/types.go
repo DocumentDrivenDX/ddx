@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // NewConfig represents the simplified DDx configuration structure
 // This aligns with the schema defined in ADR-005 and SD-003
 type NewConfig struct {
@@ -59,6 +61,66 @@ type EvidenceCapsOverride struct {
 type WorkersConfig struct {
 	DefaultSpec *WorkerDefaultSpec `yaml:"default_spec,omitempty" json:"default_spec,omitempty"`
 	MaxCount    *int               `yaml:"max_count,omitempty" json:"max_count,omitempty"`
+	// NoProgressCooldown bounds how long a bead may sit without a phase
+	// transition before the execute-loop forces the worker to give up. Parsed
+	// via time.ParseDuration (e.g. "6h"). Empty string uses the built-in
+	// default (6h). See SD-024 §Config extensions §WorkersConfig.
+	NoProgressCooldown string `yaml:"no_progress_cooldown,omitempty" json:"no_progress_cooldown,omitempty"`
+	// MaxNoChangesBeforeClose caps the number of consecutive no_changes
+	// attempts the execute-loop tolerates before closing the bead as
+	// no-progress. Zero or unset uses the built-in default (3). Negative
+	// values are treated as unset.
+	MaxNoChangesBeforeClose *int `yaml:"max_no_changes_before_close,omitempty" json:"max_no_changes_before_close,omitempty"`
+	// HeartbeatInterval is how often a claim owner refreshes its heartbeat
+	// while holding a bead. Parsed via time.ParseDuration (e.g. "15s"). Empty
+	// string uses the built-in default that matches bead.HeartbeatInterval
+	// (30s today).
+	HeartbeatInterval string `yaml:"heartbeat_interval,omitempty" json:"heartbeat_interval,omitempty"`
+}
+
+// Default values for WorkersConfig resolvers. These mirror the hardcoded
+// constants the execute-loop uses today; bead 6/7 of SD-024 wires the
+// resolvers into the loop.
+const (
+	defaultNoProgressCooldown      = 6 * time.Hour
+	defaultMaxNoChangesBeforeClose = 3
+	defaultHeartbeatInterval       = 30 * time.Second
+)
+
+// ResolveNoProgressCooldown returns the effective no-progress cooldown for
+// this config. Defaults to 6h when unset or unparseable.
+func (w *WorkersConfig) ResolveNoProgressCooldown() time.Duration {
+	if w == nil || w.NoProgressCooldown == "" {
+		return defaultNoProgressCooldown
+	}
+	d, err := time.ParseDuration(w.NoProgressCooldown)
+	if err != nil || d <= 0 {
+		return defaultNoProgressCooldown
+	}
+	return d
+}
+
+// ResolveMaxNoChangesBeforeClose returns the effective max no_changes cap.
+// Defaults to 3 when unset or non-positive.
+func (w *WorkersConfig) ResolveMaxNoChangesBeforeClose() int {
+	if w == nil || w.MaxNoChangesBeforeClose == nil || *w.MaxNoChangesBeforeClose <= 0 {
+		return defaultMaxNoChangesBeforeClose
+	}
+	return *w.MaxNoChangesBeforeClose
+}
+
+// ResolveHeartbeatInterval returns the effective heartbeat refresh interval.
+// Defaults to 30s (matching bead.HeartbeatInterval today) when unset or
+// unparseable.
+func (w *WorkersConfig) ResolveHeartbeatInterval() time.Duration {
+	if w == nil || w.HeartbeatInterval == "" {
+		return defaultHeartbeatInterval
+	}
+	d, err := time.ParseDuration(w.HeartbeatInterval)
+	if err != nil || d <= 0 {
+		return defaultHeartbeatInterval
+	}
+	return d
 }
 
 // WorkerDefaultSpec mirrors the knobs a one-click "+ Add worker" dispatch
