@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean migration of the remaining 13 callsites to `internalgit.Command`, with the redundant `cleanGitEnv` helper removed and its unused `strings`/`os` imports trimmed implicitly via the diff. Scope matches the bead exactly with no incidental changes."
+}
