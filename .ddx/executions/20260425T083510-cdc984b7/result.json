@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Implementation cleanly routes governing-doc reads through `evidence.ReadFileClamped`, diff through `ClampDiff`+`DecomposeDiff`, adds priority-ordered ranking and per-file degradation, and wires the pre-dispatch short-circuit inside `DefaultBeadReviewer.ReviewBead` (functionally equivalent to wiring it in execute_bead_loop.go — the worker loop's existing review-error append path emits the event and leaves the bead open, which TestReviewContextOverflow verifies end-to-end). All five AC test functions are present with assertions matching the spec; floor preservation, marker presence, ranking order, and provider-zero-dispatch are all checked."
+}
