@@ -3,7 +3,10 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
@@ -22,6 +25,49 @@ type GradeOptions struct {
 	// evidence.OutcomeCompareContextOverflow ("compare-error: context_overflow")
 	// and ProviderDispatchCount of zero — the provider was not invoked.
 	OnEvent func(GradingEvent)
+	// ArtifactDir, when non-empty, is a directory where GradeFn writes a
+	// result.json + manifest.json carrying the FEAT-022 §15 evidence_assembly
+	// telemetry block for the grading attempt. The directory is created if
+	// missing. When empty, no artifacts are written.
+	ArtifactDir string
+}
+
+// gradeArtifactManifest mirrors the review-side manifest shape for grading
+// attempts. The evidence_assembly key is additive to the FEAT-014 runtime
+// metrics block; it does not replace it.
+type gradeArtifactManifest struct {
+	Grader           string                     `json:"grader,omitempty"`
+	ComparisonID     string                     `json:"comparison_id,omitempty"`
+	CreatedAt        time.Time                  `json:"created_at"`
+	EvidenceAssembly *EvidenceAssemblyTelemetry `json:"evidence_assembly,omitempty"`
+}
+
+type gradeArtifactResult struct {
+	Grader           string                     `json:"grader,omitempty"`
+	Grades           []ComparisonGrade          `json:"grades,omitempty"`
+	Error            string                     `json:"error,omitempty"`
+	EvidenceAssembly *EvidenceAssemblyTelemetry `json:"evidence_assembly,omitempty"`
+}
+
+func writeGradeArtifacts(dir string, manifest gradeArtifactManifest, result gradeArtifactResult) error {
+	if dir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("grade artifact: mkdir %s: %w", dir, err)
+	}
+	mb, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), mb, 0o644); err != nil {
+		return err
+	}
+	rb, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "result.json"), rb, 0o644)
 }
 
 // GradingEvent is the structured outcome record emitted by GradeFn for the
@@ -82,7 +128,18 @@ func GradeFn(r *Runner, record *ComparisonRecord, opts GradeOptions) ([]Comparis
 
 	built := buildGradingPromptBounded(record, opts.Rubric, caps)
 
+	comparisonID := ""
+	if record != nil {
+		comparisonID = record.ID
+	}
+
 	if built.Overflow {
+		overflowTelemetry := &EvidenceAssemblyTelemetry{
+			Sections:    built.Sections,
+			InputBytes:  len(built.Prompt),
+			OutputBytes: 0,
+			Harness:     opts.Grader,
+		}
 		if opts.OnEvent != nil {
 			opts.OnEvent(GradingEvent{
 				Kind:                  evidence.OutcomeCompareContextOverflow,
@@ -93,27 +150,94 @@ func GradeFn(r *Runner, record *ComparisonRecord, opts GradeOptions) ([]Comparis
 				Sections:              built.Sections,
 			})
 		}
+		_ = writeGradeArtifacts(opts.ArtifactDir, gradeArtifactManifest{
+			Grader:           opts.Grader,
+			ComparisonID:     comparisonID,
+			CreatedAt:        time.Now().UTC(),
+			EvidenceAssembly: overflowTelemetry,
+		}, gradeArtifactResult{
+			Grader:           opts.Grader,
+			Error:            evidence.OutcomeCompareContextOverflow,
+			EvidenceAssembly: overflowTelemetry,
+		})
 		return nil, fmt.Errorf("agent: %s (assembled prompt %d bytes exceeds cap %d)",
 			evidence.OutcomeCompareContextOverflow, len(built.Prompt), caps.MaxPromptBytes)
 	}
 
 	// Run the grading harness
+	start := time.Now()
 	result, err := r.Run(RunOptions{
 		Harness: opts.Grader,
 		Prompt:  built.Prompt,
 	})
+	elapsedMS := int(time.Since(start).Milliseconds())
+
+	telemetry := &EvidenceAssemblyTelemetry{
+		Sections:   built.Sections,
+		InputBytes: len(built.Prompt),
+		ElapsedMS:  elapsedMS,
+		Harness:    opts.Grader,
+	}
+	if result != nil {
+		telemetry.OutputBytes = len(result.Output)
+		if result.Model != "" {
+			telemetry.Model = result.Model
+		}
+	}
+
 	if err != nil {
+		_ = writeGradeArtifacts(opts.ArtifactDir, gradeArtifactManifest{
+			Grader:           opts.Grader,
+			ComparisonID:     comparisonID,
+			CreatedAt:        time.Now().UTC(),
+			EvidenceAssembly: telemetry,
+		}, gradeArtifactResult{
+			Grader:           opts.Grader,
+			Error:            err.Error(),
+			EvidenceAssembly: telemetry,
+		})
 		return nil, fmt.Errorf("agent: grading failed: %w", err)
 	}
 	if result.ExitCode != 0 {
+		_ = writeGradeArtifacts(opts.ArtifactDir, gradeArtifactManifest{
+			Grader:           opts.Grader,
+			ComparisonID:     comparisonID,
+			CreatedAt:        time.Now().UTC(),
+			EvidenceAssembly: telemetry,
+		}, gradeArtifactResult{
+			Grader:           opts.Grader,
+			Error:            result.Error,
+			EvidenceAssembly: telemetry,
+		})
 		return nil, fmt.Errorf("agent: grader returned exit code %d: %s", result.ExitCode, result.Error)
 	}
 
 	// Parse the grading response
 	grades, err := parseGrades(result.Output)
 	if err != nil {
+		_ = writeGradeArtifacts(opts.ArtifactDir, gradeArtifactManifest{
+			Grader:           opts.Grader,
+			ComparisonID:     comparisonID,
+			CreatedAt:        time.Now().UTC(),
+			EvidenceAssembly: telemetry,
+		}, gradeArtifactResult{
+			Grader:           opts.Grader,
+			Error:            err.Error(),
+			EvidenceAssembly: telemetry,
+		})
 		return nil, err
 	}
+
+	_ = writeGradeArtifacts(opts.ArtifactDir, gradeArtifactManifest{
+		Grader:           opts.Grader,
+		ComparisonID:     comparisonID,
+		CreatedAt:        time.Now().UTC(),
+		EvidenceAssembly: telemetry,
+	}, gradeArtifactResult{
+		Grader:           opts.Grader,
+		Grades:           grades,
+		EvidenceAssembly: telemetry,
+	})
 
 	return grades, nil
 }

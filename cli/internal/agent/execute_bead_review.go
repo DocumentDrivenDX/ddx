@@ -45,6 +45,12 @@ type ReviewResult struct {
 	ExecutionDir    string     `json:"execution_dir,omitempty"`
 	DurationMS      int        `json:"duration_ms,omitempty"`
 	Error           string     `json:"error,omitempty"`
+	// InputBytes and OutputBytes are the FEAT-022 §16 byte counters used to
+	// populate the compact summary appended to review and review-error event
+	// bodies. InputBytes is the assembled prompt size; OutputBytes is the
+	// raw reviewer output size (zero on pre-dispatch overflow / transport).
+	InputBytes  int `json:"input_bytes,omitempty"`
+	OutputBytes int `json:"output_bytes,omitempty"`
 }
 
 type ReviewAC struct {
@@ -55,22 +61,24 @@ type ReviewAC struct {
 }
 
 type reviewArtifactManifest struct {
-	Harness      string `json:"harness,omitempty"`
-	Model        string `json:"model,omitempty"`
-	SessionID    string `json:"session_id,omitempty"`
-	BaseRev      string `json:"base_rev,omitempty"`
-	ResultRev    string `json:"result_rev,omitempty"`
-	Verdict      string `json:"verdict,omitempty"`
-	BeadID       string `json:"bead_id,omitempty"`
-	ExecutionDir string `json:"execution_dir,omitempty"`
+	Harness          string                     `json:"harness,omitempty"`
+	Model            string                     `json:"model,omitempty"`
+	SessionID        string                     `json:"session_id,omitempty"`
+	BaseRev          string                     `json:"base_rev,omitempty"`
+	ResultRev        string                     `json:"result_rev,omitempty"`
+	Verdict          string                     `json:"verdict,omitempty"`
+	BeadID           string                     `json:"bead_id,omitempty"`
+	ExecutionDir     string                     `json:"execution_dir,omitempty"`
+	EvidenceAssembly *EvidenceAssemblyTelemetry `json:"evidence_assembly,omitempty"`
 }
 
 type reviewArtifactResult struct {
-	Verdict   string     `json:"verdict"`
-	PerAC     []ReviewAC `json:"per_ac,omitempty"`
-	Rationale string     `json:"rationale,omitempty"`
-	Findings  []Finding  `json:"findings,omitempty"`
-	Error     string     `json:"error,omitempty"`
+	Verdict          string                     `json:"verdict"`
+	PerAC            []ReviewAC                 `json:"per_ac,omitempty"`
+	Rationale        string                     `json:"rationale,omitempty"`
+	Findings         []Finding                  `json:"findings,omitempty"`
+	Error            string                     `json:"error,omitempty"`
+	EvidenceAssembly *EvidenceAssemblyTelemetry `json:"evidence_assembly,omitempty"`
 }
 
 // SelectReviewerTier returns the tier to use for the review agent.
@@ -468,6 +476,13 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	// records the failure and leaves the bead open for retry.
 	if built.Overflow {
 		baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
+		overflowTelemetry := &EvidenceAssemblyTelemetry{
+			Sections:    built.Sections,
+			InputBytes:  len(prompt),
+			OutputBytes: 0,
+			Harness:     r.Harness,
+			Model:       r.Model,
+		}
 		reviewRes := &ReviewResult{
 			Verdict:         VerdictBlock,
 			Error:           evidence.OutcomeReviewContextOverflow,
@@ -477,18 +492,22 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 			BaseRev:         baseRev,
 			ResultRev:       resultRev,
 			ExecutionDir:    artifacts.DirRel,
+			InputBytes:      overflowTelemetry.InputBytes,
+			OutputBytes:     overflowTelemetry.OutputBytes,
 		}
 		_ = writeReviewArtifacts(artifacts, reviewArtifactManifest{
-			Harness:      r.Harness,
-			Model:        r.Model,
-			BaseRev:      baseRev,
-			ResultRev:    resultRev,
-			Verdict:      string(VerdictBlock),
-			BeadID:       beadID,
-			ExecutionDir: artifacts.DirRel,
+			Harness:          r.Harness,
+			Model:            r.Model,
+			BaseRev:          baseRev,
+			ResultRev:        resultRev,
+			Verdict:          string(VerdictBlock),
+			BeadID:           beadID,
+			ExecutionDir:     artifacts.DirRel,
+			EvidenceAssembly: overflowTelemetry,
 		}, reviewArtifactResult{
-			Verdict: string(VerdictBlock),
-			Error:   evidence.OutcomeReviewContextOverflow,
+			Verdict:          string(VerdictBlock),
+			Error:            evidence.OutcomeReviewContextOverflow,
+			EvidenceAssembly: overflowTelemetry,
 		})
 		return reviewRes, fmt.Errorf("reviewer: %s (assembled prompt %d bytes exceeds cap %d; see %s)",
 			evidence.OutcomeReviewContextOverflow, len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
@@ -523,6 +542,14 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		// Transport-class failure (FEAT-022 §12): network or provider-side
 		// error. Surface as a typed review-error so the loop classifies and
 		// counts it correctly, rather than masquerading as a BLOCK verdict.
+		transportTelemetry := &EvidenceAssemblyTelemetry{
+			Sections:    built.Sections,
+			InputBytes:  len(prompt),
+			OutputBytes: 0,
+			ElapsedMS:   durationMS,
+			Harness:     reviewHarness,
+			Model:       reviewModel,
+		}
 		reviewRes := &ReviewResult{
 			Verdict:         VerdictBlock,
 			Rationale:       runErr.Error(),
@@ -533,19 +560,23 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 			ResultRev:       resultRev,
 			ExecutionDir:    artifacts.DirRel,
 			DurationMS:      durationMS,
+			InputBytes:      transportTelemetry.InputBytes,
+			OutputBytes:     transportTelemetry.OutputBytes,
 		}
 		_ = writeReviewArtifacts(artifacts, reviewArtifactManifest{
-			Harness:      reviewHarness,
-			Model:        reviewModel,
-			BaseRev:      reviewRes.BaseRev,
-			ResultRev:    resultRev,
-			Verdict:      string(reviewRes.Verdict),
-			BeadID:       beadID,
-			ExecutionDir: artifacts.DirRel,
+			Harness:          reviewHarness,
+			Model:            reviewModel,
+			BaseRev:          reviewRes.BaseRev,
+			ResultRev:        resultRev,
+			Verdict:          string(reviewRes.Verdict),
+			BeadID:           beadID,
+			ExecutionDir:     artifacts.DirRel,
+			EvidenceAssembly: transportTelemetry,
 		}, reviewArtifactResult{
-			Verdict:   string(reviewRes.Verdict),
-			Rationale: reviewRes.Rationale,
-			Error:     reviewRes.Error,
+			Verdict:          string(reviewRes.Verdict),
+			Rationale:        reviewRes.Rationale,
+			Error:            reviewRes.Error,
+			EvidenceAssembly: transportTelemetry,
 		})
 		return reviewRes, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewTransport, runErr)
 	}
@@ -597,6 +628,14 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		}
 	}
 	baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
+	telemetry := &EvidenceAssemblyTelemetry{
+		Sections:    built.Sections,
+		InputBytes:  len(prompt),
+		OutputBytes: len(output),
+		ElapsedMS:   durationMS,
+		Harness:     actualHarness,
+		Model:       actualModel,
+	}
 	reviewRes := &ReviewResult{
 		Verdict:         strictVerdict,
 		Rationale:       rationale,
@@ -608,21 +647,25 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		ResultRev:       resultRev,
 		ExecutionDir:    artifacts.DirRel,
 		DurationMS:      durationMS,
+		InputBytes:      telemetry.InputBytes,
+		OutputBytes:     telemetry.OutputBytes,
 	}
 	_ = writeReviewArtifacts(artifacts, reviewArtifactManifest{
-		Harness:      actualHarness,
-		Model:        actualModel,
-		SessionID:    sessionID,
-		BaseRev:      baseRev,
-		ResultRev:    resultRev,
-		Verdict:      string(strictVerdict),
-		BeadID:       beadID,
-		ExecutionDir: artifacts.DirRel,
+		Harness:          actualHarness,
+		Model:            actualModel,
+		SessionID:        sessionID,
+		BaseRev:          baseRev,
+		ResultRev:        resultRev,
+		Verdict:          string(strictVerdict),
+		BeadID:           beadID,
+		ExecutionDir:     artifacts.DirRel,
+		EvidenceAssembly: telemetry,
 	}, reviewArtifactResult{
-		Verdict:   string(strictVerdict),
-		Rationale: rationale,
-		Findings:  findings,
-		Error:     reviewRes.Error,
+		Verdict:          string(strictVerdict),
+		Rationale:        rationale,
+		Findings:         findings,
+		Error:            reviewRes.Error,
+		EvidenceAssembly: telemetry,
 	})
 	if parseErr != nil {
 		// FEAT-022 §12: distinguish provider_empty (zero bytes) from

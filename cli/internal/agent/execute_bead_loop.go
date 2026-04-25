@@ -487,8 +487,21 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 					if maxRetries <= 0 {
 						maxRetries = DefaultReviewMaxRetries
 					}
+					errSummary := EventBodySummary{
+						InputBytes:  0,
+						OutputBytes: 0,
+					}
+					if reviewRes != nil {
+						errSummary = EventBodySummary{
+							Harness:     reviewRes.ReviewerHarness,
+							Model:       reviewRes.ReviewerModel,
+							InputBytes:  reviewRes.InputBytes,
+							OutputBytes: reviewRes.OutputBytes,
+							ElapsedMS:   reviewRes.DurationMS,
+						}
+					}
 					if attemptCount >= maxRetries {
-						body := reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
+						body := appendEventSummary(reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error()), errSummary)
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review-manual-required",
 							Summary:   class,
@@ -504,7 +517,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 						parkUntil := now().UTC().Add(365 * 24 * time.Hour)
 						_ = w.Store.SetExecutionCooldown(candidate.ID, parkUntil, "review-manual-required", class)
 					} else {
-						body := reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
+						body := appendEventSummary(reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error()), errSummary)
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review-error",
 							Summary:   class,
@@ -528,6 +541,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 						_, _ = fmt.Fprintf(opts.Log, "reviewer stream artifact: %v\n", artifactErr)
 					}
 
+					reviewSummary := EventBodySummary{
+						Harness:     reviewRes.ReviewerHarness,
+						Model:       reviewRes.ReviewerModel,
+						InputBytes:  reviewRes.InputBytes,
+						OutputBytes: reviewRes.OutputBytes,
+						ElapsedMS:   reviewRes.DurationMS,
+					}
 					switch reviewRes.Verdict {
 					case VerdictApprove:
 						// Approved: record the verdict event and then close.
@@ -536,7 +556,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review",
 							Summary:   "APPROVE",
-							Body:      reviewEventBody("APPROVE", reviewRes.Rationale, artifactPath),
+							Body:      appendEventSummary(reviewEventBody("APPROVE", reviewRes.Rationale, artifactPath), reviewSummary),
 							Actor:     assignee,
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
@@ -552,7 +572,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review",
 							Summary:   "REQUEST_CHANGES",
-							Body:      reviewEventBody("REQUEST_CHANGES", reviewRes.Rationale, artifactPath),
+							Body:      appendEventSummary(reviewEventBody("REQUEST_CHANGES", reviewRes.Rationale, artifactPath), reviewSummary),
 							Actor:     assignee,
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
@@ -573,7 +593,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 							_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 								Kind:      "review-malfunction",
 								Summary:   "BLOCK without rationale",
-								Body:      reviewEventBody("BLOCK without rationale", "", artifactPath),
+								Body:      appendEventSummary(reviewEventBody("BLOCK without rationale", "", artifactPath), reviewSummary),
 								Actor:     assignee,
 								Source:    "ddx agent execute-loop",
 								CreatedAt: now().UTC(),
@@ -589,7 +609,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 							Kind:      "review",
 							Summary:   "BLOCK",
-							Body:      rationale,
+							Body:      appendEventSummary(rationale, reviewSummary),
 							Actor:     assignee,
 							Source:    "ddx agent execute-loop",
 							CreatedAt: now().UTC(),
