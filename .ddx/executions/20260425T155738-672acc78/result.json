@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Resolver migration at cli/internal/server/graphql/resolver_feat008.go:77 cleanly layers GraphQL input fields as `config.CLIOverrides` onto on-disk config via `LoadAndResolve`, then forwards resolved harness/profile/effort to the dispatcher — closing the hardcoded \"smart\"/\"medium\" bypass. The two-half e2e test gives both surface-level (dispatcher capture) and behavioral (loop closes at threshold with no manual-required event) proof on the GraphQL path. Scope is tight and matches Stage 1's bead inventory.\nMinor note (non-blocking): `LoadAndResolve` error is swallowed with `_` at resolver_feat008.go (around the new block). Given the SD-024 sealed-construction sentinel, a zero `rcfg` would panic on first accessor call. Not part of AC, but worth a follow-up to surface the error to the caller."
+}
