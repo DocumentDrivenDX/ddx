@@ -26,117 +26,6 @@ func (r *reviewRunnerStub) Run(opts RunOptions) (*Result, error) {
 }
 
 // ---------------------------------------------------------------------------
-// ParseReviewVerdict
-// ---------------------------------------------------------------------------
-
-func TestParseReviewVerdict_Approve(t *testing.T) {
-	output := `
-## Review: ddx-1234 iter 1
-
-### Verdict: APPROVE
-
-### AC Grades
-| 1 | some item | APPROVE | file.go:10 |
-`
-	assert.Equal(t, VerdictApprove, ParseReviewVerdict(output))
-}
-
-func TestParseReviewVerdict_RequestChanges(t *testing.T) {
-	output := `
-### Verdict: REQUEST_CHANGES
-
-### AC Grades
-| 1 | some item | REQUEST_CHANGES | missing tests |
-`
-	assert.Equal(t, VerdictRequestChanges, ParseReviewVerdict(output))
-}
-
-func TestParseReviewVerdict_Block(t *testing.T) {
-	output := `
-### Verdict: BLOCK
-`
-	assert.Equal(t, VerdictBlock, ParseReviewVerdict(output))
-}
-
-func TestParseReviewVerdict_UnparsableDefaultsToBlock(t *testing.T) {
-	// Backwards-compatible wrapper still returns VerdictBlock on unparseable
-	// input. New callers use ParseReviewVerdictStrict to get the typed error.
-	assert.Equal(t, VerdictBlock, ParseReviewVerdict(""))
-	assert.Equal(t, VerdictBlock, ParseReviewVerdict("No structured output here"))
-	assert.Equal(t, VerdictBlock, ParseReviewVerdict("verdict: APPROVE")) // no leading ##
-}
-
-// TestParseReviewVerdictStrict covers ddx-f7ae036f AC #3 and #4: the strict
-// variant returns a typed error on unparseable input instead of silently
-// collapsing to BLOCK. Callers that propagate the error get review-error
-// (retryable) event-loop handling; callers that swallow it get the same
-// legacy BLOCK default. The difference is the caller's choice, not a silent
-// mis-record.
-func TestParseReviewVerdictStrict(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    ReviewVerdict
-		wantErr bool
-	}{
-		{
-			name:    "clean APPROVE",
-			input:   "some preamble\n### Verdict: APPROVE\n\ntrailing",
-			want:    VerdictApprove,
-			wantErr: false,
-		},
-		{
-			name:    "clean BLOCK",
-			input:   "### Verdict: BLOCK\n",
-			want:    VerdictBlock,
-			wantErr: false,
-		},
-		{
-			name:    "clean REQUEST_CHANGES",
-			input:   "### Verdict: REQUEST_CHANGES\n",
-			want:    VerdictRequestChanges,
-			wantErr: false,
-		},
-		{
-			name:    "empty output",
-			input:   "",
-			wantErr: true,
-		},
-		{
-			name:    "unparseable — no verdict line",
-			input:   "Reviewer crashed mid-stream.\nNo structured verdict anywhere.",
-			wantErr: true,
-		},
-		{
-			name:    "unparseable — lowercase inline verdict without heading",
-			input:   "I would say verdict: APPROVE but I haven't formatted it",
-			wantErr: true,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := ParseReviewVerdictStrict(tc.input)
-			if tc.wantErr {
-				assert.ErrorIs(t, err, ErrReviewVerdictUnparseable,
-					"unparseable input must surface a typed error — the silent default-to-BLOCK behavior is what caused the f7ae036f incident")
-				return
-			}
-			assert.NoError(t, err)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
-
-func TestParseReviewVerdict_CaseInsensitive(t *testing.T) {
-	assert.Equal(t, VerdictApprove, ParseReviewVerdict("### Verdict: approve"))
-	assert.Equal(t, VerdictRequestChanges, ParseReviewVerdict("## Verdict: request_changes"))
-}
-
-func TestParseReviewVerdict_ExtraWhitespace(t *testing.T) {
-	assert.Equal(t, VerdictApprove, ParseReviewVerdict("### Verdict: APPROVE  "))
-}
-
-// ---------------------------------------------------------------------------
 // SelectReviewerTier
 // ---------------------------------------------------------------------------
 
@@ -161,7 +50,7 @@ func TestHasBeadLabel(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // makeReviewer builds a BeadReviewerFunc that always returns the given verdict.
-func makeReviewer(verdict ReviewVerdict, output string) BeadReviewerFunc {
+func makeReviewer(verdict Verdict, output string) BeadReviewerFunc {
 	return BeadReviewerFunc(func(_ context.Context, _, _, _, _ string) (*ReviewResult, error) {
 		return &ReviewResult{
 			Verdict:         verdict,
@@ -367,7 +256,7 @@ func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
 		Runner: &reviewRunnerStub{result: &Result{
 			Harness:        "claude",
 			Model:          "claude-opus-4-6",
-			Output:         "### Verdict: BLOCK\n\n### Findings\n- AC#3 regression test missing",
+			Output:         "```json\n{\"schema_version\":1,\"verdict\":\"BLOCK\",\"summary\":\"AC#3 regression test missing\",\"findings\":[{\"severity\":\"block\",\"summary\":\"regression test missing\",\"location\":\"file.go:42\"}]}\n```",
 			DurationMS:     42,
 			AgentSessionID: "native-review-1",
 		}},
@@ -392,8 +281,6 @@ func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, VerdictBlock, artifactResult.Verdict)
 	assert.Equal(t, "AC#3 regression test missing", artifactResult.Rationale)
-	require.Len(t, artifactResult.PerAC, 1)
-	assert.Equal(t, 3, artifactResult.PerAC[0].Number)
 
 	var manifest reviewArtifactManifest
 	rawManifest, err := os.ReadFile(manifestPath)

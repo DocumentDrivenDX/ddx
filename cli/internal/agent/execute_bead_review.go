@@ -8,9 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,32 +19,32 @@ import (
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
-// ReviewVerdict is the outcome of a post-merge bead review.
-type ReviewVerdict string
+// Verdict is the outcome of a post-merge bead review.
+type Verdict string
 
 const (
 	// VerdictApprove means all AC items passed; the bead stays closed.
-	VerdictApprove ReviewVerdict = "APPROVE"
+	VerdictApprove Verdict = "APPROVE"
 	// VerdictRequestChanges means some AC items need fixing; the bead is reopened.
-	VerdictRequestChanges ReviewVerdict = "REQUEST_CHANGES"
+	VerdictRequestChanges Verdict = "REQUEST_CHANGES"
 	// VerdictBlock means escalation should stop; the bead is flagged for human review.
-	VerdictBlock ReviewVerdict = "BLOCK"
+	VerdictBlock Verdict = "BLOCK"
 )
 
 // ReviewResult is the structured outcome of a post-merge bead review.
 type ReviewResult struct {
-	Verdict         ReviewVerdict `json:"verdict"`
-	Rationale       string        `json:"rationale,omitempty"`
-	PerAC           []ReviewAC    `json:"per_ac,omitempty"`
-	RawOutput       string        `json:"raw_output,omitempty"`
-	ReviewerHarness string        `json:"reviewer_harness,omitempty"`
-	ReviewerModel   string        `json:"reviewer_model,omitempty"`
-	SessionID       string        `json:"session_id,omitempty"`
-	BaseRev         string        `json:"base_rev,omitempty"`
-	ResultRev       string        `json:"result_rev,omitempty"`
-	ExecutionDir    string        `json:"execution_dir,omitempty"`
-	DurationMS      int           `json:"duration_ms,omitempty"`
-	Error           string        `json:"error,omitempty"`
+	Verdict         Verdict    `json:"verdict"`
+	Rationale       string     `json:"rationale,omitempty"`
+	PerAC           []ReviewAC `json:"per_ac,omitempty"`
+	RawOutput       string     `json:"raw_output,omitempty"`
+	ReviewerHarness string     `json:"reviewer_harness,omitempty"`
+	ReviewerModel   string     `json:"reviewer_model,omitempty"`
+	SessionID       string     `json:"session_id,omitempty"`
+	BaseRev         string     `json:"base_rev,omitempty"`
+	ResultRev       string     `json:"result_rev,omitempty"`
+	ExecutionDir    string     `json:"execution_dir,omitempty"`
+	DurationMS      int        `json:"duration_ms,omitempty"`
+	Error           string     `json:"error,omitempty"`
 }
 
 type ReviewAC struct {
@@ -71,218 +69,8 @@ type reviewArtifactResult struct {
 	Verdict   string     `json:"verdict"`
 	PerAC     []ReviewAC `json:"per_ac,omitempty"`
 	Rationale string     `json:"rationale,omitempty"`
+	Findings  []Finding  `json:"findings,omitempty"`
 	Error     string     `json:"error,omitempty"`
-}
-
-// reVerdictLine matches "### Verdict: APPROVE|REQUEST_CHANGES|BLOCK"
-// anywhere in the output, case-insensitive, allowing 1–4 leading hashes.
-var reVerdictLine = regexp.MustCompile(`(?im)^#{1,4}\s+Verdict:\s*(APPROVE|REQUEST_CHANGES|BLOCK)\s*$`)
-var reReviewSectionHeading = regexp.MustCompile(`(?im)^#{1,4}\s+(AC Grades|Summary|Findings)\s*:?\s*$`)
-var reACReference = regexp.MustCompile(`(?i)\bAC#\s*([0-9]+)\b`)
-
-// ErrReviewVerdictUnparseable is returned by ParseReviewVerdictStrict when
-// the reviewer output does not contain a recognizable `### Verdict: ...`
-// line. Callers should surface this as a review-error (retryable) rather
-// than silently treating it as BLOCK — the pre-ddx-f7ae036f behavior was to
-// default-to-BLOCK, which produced spurious APPROVE→BLOCK mis-records
-// whenever the reviewer's output shape drifted (codex stream frames,
-// rationale-only responses, stall-truncated output).
-var ErrReviewVerdictUnparseable = fmt.Errorf("reviewer output: no recognizable verdict line")
-
-// ParseReviewVerdictStrict is the structured-error variant of
-// ParseReviewVerdict: on unparseable input it returns
-// ErrReviewVerdictUnparseable instead of silently returning VerdictBlock.
-// The execute-loop uses this path so a parse failure reopens the bead for
-// retry rather than recording a false BLOCK.
-func ParseReviewVerdictStrict(output string) (ReviewVerdict, error) {
-	m := reVerdictLine.FindStringSubmatch(output)
-	if m == nil {
-		return "", ErrReviewVerdictUnparseable
-	}
-	switch strings.ToUpper(strings.TrimSpace(m[1])) {
-	case "APPROVE":
-		return VerdictApprove, nil
-	case "REQUEST_CHANGES":
-		return VerdictRequestChanges, nil
-	case "BLOCK":
-		return VerdictBlock, nil
-	default:
-		return "", ErrReviewVerdictUnparseable
-	}
-}
-
-// ParseReviewVerdict extracts the verdict from a review agent's output.
-// The expected format includes a line: ### Verdict: APPROVE | REQUEST_CHANGES | BLOCK
-//
-// Deprecated: returns VerdictBlock on unparseable input, which masks
-// legitimate verdict-parse failures as BLOCKs and caused the wave-2
-// review-malfunction incident (ddx-f7ae036f). New callers should use
-// ParseReviewVerdictStrict and treat ErrReviewVerdictUnparseable as a
-// retryable review-error.
-func ParseReviewVerdict(output string) ReviewVerdict {
-	v, err := ParseReviewVerdictStrict(output)
-	if err != nil {
-		return VerdictBlock
-	}
-	return v
-}
-
-func ParseReviewResult(output string) (ReviewVerdict, []ReviewAC, string) {
-	verdict := ParseReviewVerdict(output)
-	perAC := parseReviewACTable(output)
-	rationale := strings.TrimSpace(extractReviewRationale(output, perAC))
-	if len(perAC) == 0 {
-		perAC = synthesizeReviewACsFromRationale(verdict, rationale)
-	}
-	return verdict, perAC, rationale
-}
-
-func parseReviewACTable(output string) []ReviewAC {
-	lines := strings.Split(output, "\n")
-	var rows []ReviewAC
-	inTable := false
-	for _, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if line == "" {
-			if inTable {
-				break
-			}
-			continue
-		}
-		if reReviewSectionHeading.MatchString(line) {
-			inTable = strings.Contains(strings.ToLower(line), "ac grades")
-			continue
-		}
-		if !inTable || !strings.HasPrefix(line, "|") {
-			continue
-		}
-		cols := splitMarkdownTableRow(line)
-		if len(cols) < 4 {
-			continue
-		}
-		if cols[0] == "#" || strings.HasPrefix(cols[0], "---") {
-			continue
-		}
-		n, err := strconv.Atoi(cols[0])
-		if err != nil {
-			continue
-		}
-		rows = append(rows, ReviewAC{
-			Number:   n,
-			Item:     cols[1],
-			Grade:    cols[2],
-			Evidence: cols[3],
-		})
-	}
-	return rows
-}
-
-func splitMarkdownTableRow(line string) []string {
-	parts := strings.Split(line, "|")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		out = append(out, part)
-	}
-	return out
-}
-
-func extractReviewRationale(output string, perAC []ReviewAC) string {
-	lines := strings.Split(output, "\n")
-	var summaryLines []string
-	var findingLines []string
-	var section string
-	for _, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "## Review:") || strings.HasPrefix(line, "### Verdict:") || strings.HasPrefix(line, "#### Verdict:") {
-			continue
-		}
-		if reReviewSectionHeading.MatchString(line) {
-			heading := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(strings.TrimLeft(line, "# "), ":")))
-			switch heading {
-			case "summary":
-				section = "summary"
-			case "findings":
-				section = "findings"
-			case "ac grades":
-				section = "ac"
-			default:
-				section = ""
-			}
-			continue
-		}
-		if section == "ac" && strings.HasPrefix(line, "|") {
-			continue
-		}
-		switch section {
-		case "findings":
-			line = strings.TrimSpace(strings.TrimPrefix(line, "-"))
-			if line != "" {
-				findingLines = append(findingLines, line)
-			}
-		case "summary":
-			summaryLines = append(summaryLines, line)
-		}
-	}
-	if len(findingLines) > 0 {
-		return strings.Join(findingLines, "\n")
-	}
-	if len(summaryLines) > 0 {
-		return strings.Join(summaryLines, "\n")
-	}
-	var unmet []string
-	for _, ac := range perAC {
-		if strings.EqualFold(ac.Grade, string(VerdictApprove)) {
-			continue
-		}
-		label := fmt.Sprintf("AC#%d", ac.Number)
-		if ac.Item != "" {
-			label += " " + ac.Item
-		}
-		if ac.Evidence != "" {
-			unmet = append(unmet, label+": "+ac.Evidence)
-		} else {
-			unmet = append(unmet, label)
-		}
-	}
-	return strings.Join(unmet, "\n")
-}
-
-func synthesizeReviewACsFromRationale(verdict ReviewVerdict, rationale string) []ReviewAC {
-	if rationale == "" {
-		return nil
-	}
-	matches := reACReference.FindAllStringSubmatch(rationale, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-	seen := make(map[int]struct{}, len(matches))
-	out := make([]ReviewAC, 0, len(matches))
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-		n, err := strconv.Atoi(match[1])
-		if err != nil {
-			continue
-		}
-		if _, ok := seen[n]; ok {
-			continue
-		}
-		seen[n] = struct{}{}
-		out = append(out, ReviewAC{
-			Number:   n,
-			Grade:    string(verdict),
-			Evidence: rationale,
-		})
-	}
-	return out
 }
 
 // SelectReviewerTier returns the tier to use for the review agent.
@@ -320,46 +108,38 @@ func (f BeadReviewerFunc) ReviewBead(ctx context.Context, beadID, resultRev, imp
 }
 
 // beadReviewInstructions is the review contract embedded in the prompt.
-// The reviewing agent must produce APPROVE / REQUEST_CHANGES / BLOCK with
-// the exact markdown format described below.
+// The reviewing agent must produce a single JSON object matching the
+// ReviewVerdict schema (schema_version: 1). The markdown contract this
+// replaces silently mis-parsed `### Verdict: APPROVE` outputs whenever the
+// model echoed the prompt's options header — see review_verdict.go.
 const beadReviewInstructions = `You are reviewing a bead implementation against its acceptance criteria.
 
-## Your task
+For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
 
-Examine the diff and each acceptance-criteria (AC) item. For each item assign one grade:
+- APPROVE — every AC item is fully and correctly implemented.
+- REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
 
-- **APPROVE** — fully and correctly implemented; cite the specific file path and line that proves it.
-- **REQUEST_CHANGES** — partially implemented or has fixable minor issues.
-- **BLOCK** — not implemented, incorrectly implemented, or the diff is insufficient to evaluate.
+## Required output format (schema_version: 1)
 
-Overall verdict rule:
-- All items APPROVE → **APPROVE**
-- Any item BLOCK → **BLOCK**
-- Otherwise → **REQUEST_CHANGES**
+Respond with EXACTLY one JSON object as your final response, fenced as a single ` + "`" + `` + "`" + `` + "`" + `json … ` + "`" + `` + "`" + `` + "`" + ` code block. Do not include any prose outside the fenced block. The JSON must match this schema:
 
-## Required output format
+` + "`" + `` + "`" + `` + "`" + `json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "≤300 char human-readable verdict justification",
+  "findings": [
+    { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
+  ]
+}
+` + "`" + `` + "`" + `` + "`" + `
 
-Respond with a structured review using exactly this layout (replace placeholder text):
-
----
-## Review: <bead-id> iter <N>
-
-### Verdict: APPROVE | REQUEST_CHANGES | BLOCK
-
-### AC Grades
-
-| # | Item | Grade | Evidence |
-|---|------|-------|----------|
-| 1 | <AC item text, max 60 chars> | APPROVE | path/to/file.go:42 — brief note |
-| 2 | <AC item text, max 60 chars> | BLOCK   | — not found in diff |
-
-### Summary
-
-<1–3 sentences on overall implementation quality and any recurring theme in findings.>
-
-### Findings
-
-<Bullet list of REQUEST_CHANGES and BLOCK findings. Each finding must name the specific file, function, or test that is missing or wrong — specific enough for the next agent to act on without re-reading the entire diff. Omit this section entirely if verdict is APPROVE.>`
+Rules:
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "severity" must be exactly one of "info", "warn", "block".
+- Output the JSON object inside ONE fenced ` + "`" + `` + "`" + `` + "`" + `json … ` + "`" + `` + "`" + `` + "`" + ` block. No additional prose, no extra fences, no markdown headings.
+- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.`
 
 // BuildReviewPromptOptions configures evidence-bounded prompt assembly.
 // FEAT-022 §5/§7: caps drive per-section trimming and the pre-dispatch
@@ -788,22 +568,38 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		output = result.Output
 		sessionID = result.AgentSessionID
 	}
-	// Strict parse: unparseable reviewer output surfaces as a typed error so
-	// the execute-loop can classify it as review-error (retryable) rather
-	// than mis-recording it as BLOCK (ddx-f7ae036f). The review result
-	// artifacts still land on disk for forensics via writeReviewArtifacts
-	// below, regardless of the error path.
-	strictVerdict, parseErr := ParseReviewVerdictStrict(output)
-	perAC := parseReviewACTable(output)
-	rationale := strings.TrimSpace(extractReviewRationale(output, perAC))
-	if len(perAC) == 0 {
-		perAC = synthesizeReviewACsFromRationale(strictVerdict, rationale)
+	// Strict JSON parse: replaces the legacy markdown extractor that silently
+	// pulled "BLOCK" from the prompt's options-header line whenever the model
+	// echoed it back (the upstream-report regression). On parse error we emit
+	// a typed review-error class — the execute-loop reopens the bead for
+	// retry rather than mis-recording a BLOCK verdict.
+	parsed, parseErr := ParseReviewVerdict([]byte(output))
+	var strictVerdict Verdict
+	var rationale string
+	var findings []Finding
+	if parseErr == nil {
+		strictVerdict = parsed.Verdict
+		rationale = strings.TrimSpace(parsed.Summary)
+		findings = parsed.Findings
+		if rationale == "" && len(findings) > 0 {
+			parts := make([]string, 0, len(findings))
+			for _, f := range findings {
+				line := strings.TrimSpace(f.Summary)
+				if line == "" {
+					continue
+				}
+				if f.Location != "" {
+					line = f.Location + ": " + line
+				}
+				parts = append(parts, line)
+			}
+			rationale = strings.Join(parts, "\n")
+		}
 	}
 	baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
 	reviewRes := &ReviewResult{
 		Verdict:         strictVerdict,
 		Rationale:       rationale,
-		PerAC:           perAC,
 		RawOutput:       output,
 		ReviewerHarness: actualHarness,
 		ReviewerModel:   actualModel,
@@ -824,13 +620,13 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		ExecutionDir: artifacts.DirRel,
 	}, reviewArtifactResult{
 		Verdict:   string(strictVerdict),
-		PerAC:     perAC,
 		Rationale: rationale,
+		Findings:  findings,
 		Error:     reviewRes.Error,
 	})
 	if parseErr != nil {
 		// FEAT-022 §12: distinguish provider_empty (zero bytes) from
-		// unparseable (text without a recognizable verdict line). Operators
+		// unparseable (text without a recognizable JSON contract). Operators
 		// triage these differently — provider_empty often signals a context-
 		// window or backend availability issue, while unparseable signals a
 		// reviewer-prompt or output-format drift.
@@ -913,7 +709,7 @@ func ReadReviewArtifactResult(path string) (*ReviewResult, error) {
 		return nil, err
 	}
 	return &ReviewResult{
-		Verdict:   ReviewVerdict(artifact.Verdict),
+		Verdict:   Verdict(artifact.Verdict),
 		Rationale: artifact.Rationale,
 		PerAC:     artifact.PerAC,
 		Error:     artifact.Error,
