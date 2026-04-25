@@ -1,0 +1,377 @@
+<bead-review>
+  <bead id="ddx-b6cf025c" iter=1>
+    <title>Persistent drain-queue worker indicator in nav + N-worker count control on dashboard</title>
+    <description>
+## Observed / Motivation
+
+Today the queue-drain worker is invisible unless the operator is on the project home page or the Workers tab. An operator on any other page (Beads, Documents, Efficacy) has no idea whether a drain is active, how many ready beads are left, or whether they should kick off more capacity. The per-project home page's "Drain queue" button is one-shot and offers no scaling control — you start one worker and that's it.
+
+User feedback: the drain should be a **top-level always-visible affordance** with:
+1. A persistent spinner/badge in the global nav showing drain state + an at-a-glance count (ready beads, running workers).
+2. Clicking the badge goes to a workers overview where the operator can see what each worker is doing.
+3. That overview needs a "number of workers" control — `Add worker` / `Remove worker` to scale drain capacity up or down, not just start-one-at-a-time.
+
+## Why this is a new surface, not just a tweak to existing Workers page
+
+- **Global spinner** is a nav-shell concern, not a page concern. It needs to be mounted in `NavShell.svelte` so every route sees it.
+- **Worker-count control** is a different interaction model from the per-worker Start/Stop flow proposed in `ddx-69789664`. That flow is "pick a harness + effort + filter, start one worker with those specs." This flow is "I want N general-purpose drain workers; add/remove one at a time." Both should coexist.
+- A **worker-count affordance** implies a default worker spec (default harness, default profile). That's fine — it mirrors `ddx work` with no flags — but it has to be explicit so the operator knows what they're spawning.
+
+## Scope
+
+### Part 1 — Global drain indicator in `NavShell`
+
+- New element in the top nav bar, visible on every route (fits next to the theme toggle).
+- Two states:
+  - **Idle** (zero running drain workers): subtle dot + "Queue: X ready" (where X is project-scoped ready-bead count). Clicking navigates to the workers view.
+  - **Active** (≥1 running drain worker): animated spinner + "N workers · X ready". Clicking navigates to the workers view.
+- Data: new lightweight query `queueAndWorkersSummary(projectId) { readyBeads, runningWorkers, totalWorkers }`, subscribes to worker-progress events to stay fresh.
+- Scope: tied to the currently-selected project in the `ProjectPicker`. If no project is selected, the indicator is hidden.
+- Perf: the query must be cheap — must not trigger the N·M scan already tracked in `ddx-9ce6842a`. Depends on those fixes for the ready-bead count.
+
+### Part 2 — Workers overview with count control
+
+- Repurpose the existing `/workers` route (or add a separate `/workers/overview` — design call) to include a header section with:
+  - Large "Drain workers: N" number.
+  - `+` button ("Add worker") — dispatches a new default-spec drain worker via the existing `workerDispatch(kind: "execute-loop")` mutation.
+  - `−` button ("Remove worker") — stops the oldest-running drain worker. Confirm-gated.
+  - Small help text: "Adds a general-purpose queue-drain worker. Use the per-harness picker below for custom specs."
+- The existing per-worker table and per-row Start/Stop (from `ddx-69789664`) remain for fine control.
+- "Default spec" is: harness unset (route via profile), profile `default`, no effort override. Operator can change the project default in config.
+
+### Part 3 — Defaults + config
+
+- `.ddx/config.yaml: workers.default_spec` — object with optional harness, profile, effort, min_tier, max_tier. Used by Part 2's `+ Add worker`. Unset = use `ddx work` defaults.
+- `.ddx/config.yaml: workers.max_count` — optional safety rail, default unset. When set, `+ Add worker` refuses past the cap and tooltips "at workers.max_count limit".
+
+### Part 4 — Empty/error states
+
+- Indicator on a project with no ready beads and zero workers: "Queue: 0 ready — nothing to drain". Clicking still navigates (so operator can spawn one anyway).
+- Indicator when the per-project workers query is broken (pre-`ddx-05b4cc9d`): falls back to the global count; logs a one-time console warning.
+- Add-worker failure: surfaces inline on the overview page (error toast + detail), doesn't silently drop.
+
+## Out of scope
+
+- Per-harness-specific queue views (e.g., "drain with codex" as a distinct indicator).
+- Bead prioritization rules for multi-worker draining — beads already have a priority field, and `execute-loop` already claims in ready-order. No change.
+- Concurrency safety review of multi-worker draining. It already works (beads are claimed atomically), but if `ddx-05b4cc9d` surfaces issues there, file a follow-up.
+    </description>
+    <acceptance>
+**User story:** As an operator on any page in the project, I always see whether a drain worker is running and how much work is queued. One click takes me to the worker overview where I can scale capacity up or down with a single button, without picking a harness or profile every time.
+
+**Acceptance criteria:**
+
+1. **Nav indicator visible everywhere.**
+   - A component in `NavShell.svelte` renders the drain indicator on every route inside a selected project.
+   - Idle state: dot + "Queue: X ready".
+   - Active state: spinner + "N workers · X ready".
+   - Clicking navigates to the workers overview.
+   - Playwright: navigate to beads, documents, sessions, efficacy — assert indicator is present on each with the expected text.
+
+2. **Live updates.**
+   - The indicator updates within 2s when a worker starts, finishes, or changes state. Backed by the existing worker-progress subscription.
+   - When ready-bead count changes (a bead is created/closed), the indicator updates within 5s. Either subscription-driven or short poll.
+
+3. **Summary query.**
+   - New `queueAndWorkersSummary(projectId) { readyBeads runningWorkers totalWorkers }`. Returns zeros on unknown or empty projects — no error.
+   - Resolver is cheap: reads the ready count from the same path bead-status queries use, not by iterating every bead.
+
+4. **Overview page — count control.**
+   - Header shows "Drain workers: N" prominently.
+   - `+ Add worker` button dispatches a default-spec worker (`workerDispatch(kind: "execute-loop", args: null)`). On success the row appears in the table within 2s and the indicator updates.
+   - `− Remove worker` button stops the oldest-running drain worker. Confirm-gated ("Stop worker-XYZ?"). After confirm, the worker transitions to `stopped` within 2s.
+   - Help text below the buttons: "Adds a general-purpose drain worker. Use the per-harness picker below for custom specs."
+
+5. **Default-spec + safety rail.**
+   - `.ddx/config.yaml: workers.default_spec` is respected by `+ Add worker`. Integration test asserts a configured `profile: cheap` is propagated.
+   - `.ddx/config.yaml: workers.max_count`: when set, `+ Add worker` refuses past the cap; button disabled with tooltip "at workers.max_count limit". Not set → no cap. Integration test covers both.
+
+6. **Playwright — flow.**
+   - Seeds a project with 3 ready beads, zero workers.
+   - Asserts indicator shows "Queue: 3 ready", dot state.
+   - Clicks indicator → navigates to overview.
+   - Clicks `+ Add worker` → asserts new row and indicator transitions to spinner + "1 worker · 3 ready".
+   - Clicks `+` again → asserts "2 workers · 3 ready".
+   - Clicks `− Remove worker` → asserts one worker stops and indicator shows "1 worker · ..." within 2s.
+   - Navigates to /beads → asserts indicator persists and stays live.
+
+7. **No regressions.**
+   - Existing Drain button on project home continues to work (dispatches the same kind). Can stay or be removed depending on design note; recommend keeping it as the initial-kickoff affordance when zero workers run.
+   - Existing Workers table rendering + live-phase subscription is unchanged.
+   - Existing per-worker Start/Stop from `ddx-69789664` coexists unchanged.
+
+8. **Cross-references.**
+   - Hard dependency: `ddx-05b4cc9d` (fixes `workersByProject` filter — without it, the running-workers count is always 0 on a per-project query).
+   - Adjacent: `ddx-69789664` (per-worker lifecycle + Sessions IA). These beads are complementary; implementation should not re-introduce either's functionality, just use it.
+   - Adjacent: `ddx-9ce6842a` (perf harness). The `queueAndWorkersSummary` resolver gets a perf target in that harness: p95 ≤ 30ms in-process on a 5k-bead fixture. No full scan allowed.
+    </acceptance>
+    <labels>feat-008, feat-010, feat-006, ui, operator-ux</labels>
+  </bead>
+
+  <governing>
+    <note>No governing documents found. Evaluate the diff against the acceptance criteria alone.</note>
+  </governing>
+
+  <diff rev="dbc9c373185249904bec9cd32e0409c7cb9743c0">
+commit dbc9c373185249904bec9cd32e0409c7cb9743c0
+Author: ddx-land-coordinator <coordinator@ddx.local>
+Date:   Sat Apr 25 05:59:22 2026 -0400
+
+    chore: add execution evidence [20260425T095217-]
+
+diff --git a/.ddx/executions/20260425T095217-b7236494/manifest.json b/.ddx/executions/20260425T095217-b7236494/manifest.json
+new file mode 100644
+index 00000000..44edff5a
+--- /dev/null
++++ b/.ddx/executions/20260425T095217-b7236494/manifest.json
+@@ -0,0 +1,177 @@
++{
++  "attempt_id": "20260425T095217-b7236494",
++  "bead_id": "ddx-b6cf025c",
++  "base_rev": "a65ccd52e8fc22eb5852a72636c9f72cfb74b56b",
++  "created_at": "2026-04-25T09:52:17.806247929Z",
++  "requested": {
++    "harness": "claude",
++    "prompt": "synthesized"
++  },
++  "bead": {
++    "id": "ddx-b6cf025c",
++    "title": "Persistent drain-queue worker indicator in nav + N-worker count control on dashboard",
++    "description": "## Observed / Motivation\n\nToday the queue-drain worker is invisible unless the operator is on the project home page or the Workers tab. An operator on any other page (Beads, Documents, Efficacy) has no idea whether a drain is active, how many ready beads are left, or whether they should kick off more capacity. The per-project home page's \"Drain queue\" button is one-shot and offers no scaling control — you start one worker and that's it.\n\nUser feedback: the drain should be a **top-level always-visible affordance** with:\n1. A persistent spinner/badge in the global nav showing drain state + an at-a-glance count (ready beads, running workers).\n2. Clicking the badge goes to a workers overview where the operator can see what each worker is doing.\n3. That overview needs a \"number of workers\" control — `Add worker` / `Remove worker` to scale drain capacity up or down, not just start-one-at-a-time.\n\n## Why this is a new surface, not just a tweak to existing Workers page\n\n- **Global spinner** is a nav-shell concern, not a page concern. It needs to be mounted in `NavShell.svelte` so every route sees it.\n- **Worker-count control** is a different interaction model from the per-worker Start/Stop flow proposed in `ddx-69789664`. That flow is \"pick a harness + effort + filter, start one worker with those specs.\" This flow is \"I want N general-purpose drain workers; add/remove one at a time.\" Both should coexist.\n- A **worker-count affordance** implies a default worker spec (default harness, default profile). That's fine — it mirrors `ddx work` with no flags — but it has to be explicit so the operator knows what they're spawning.\n\n## Scope\n\n### Part 1 — Global drain indicator in `NavShell`\n\n- New element in the top nav bar, visible on every route (fits next to the theme toggle).\n- Two states:\n  - **Idle** (zero running drain workers): subtle dot + \"Queue: X ready\" (where X is project-scoped ready-bead count). Clicking navigates to the workers view.\n  - **Active** (≥1 running drain worker): animated spinner + \"N workers · X ready\". Clicking navigates to the workers view.\n- Data: new lightweight query `queueAndWorkersSummary(projectId) { readyBeads, runningWorkers, totalWorkers }`, subscribes to worker-progress events to stay fresh.\n- Scope: tied to the currently-selected project in the `ProjectPicker`. If no project is selected, the indicator is hidden.\n- Perf: the query must be cheap — must not trigger the N·M scan already tracked in `ddx-9ce6842a`. Depends on those fixes for the ready-bead count.\n\n### Part 2 — Workers overview with count control\n\n- Repurpose the existing `/workers` route (or add a separate `/workers/overview` — design call) to include a header section with:\n  - Large \"Drain workers: N\" number.\n  - `+` button (\"Add worker\") — dispatches a new default-spec drain worker via the existing `workerDispatch(kind: \"execute-loop\")` mutation.\n  - `−` button (\"Remove worker\") — stops the oldest-running drain worker. Confirm-gated.\n  - Small help text: \"Adds a general-purpose queue-drain worker. Use the per-harness picker below for custom specs.\"\n- The existing per-worker table and per-row Start/Stop (from `ddx-69789664`) remain for fine control.\n- \"Default spec\" is: harness unset (route via profile), profile `default`, no effort override. Operator can change the project default in config.\n\n### Part 3 — Defaults + config\n\n- `.ddx/config.yaml: workers.default_spec` — object with optional harness, profile, effort, min_tier, max_tier. Used by Part 2's `+ Add worker`. Unset = use `ddx work` defaults.\n- `.ddx/config.yaml: workers.max_count` — optional safety rail, default unset. When set, `+ Add worker` refuses past the cap and tooltips \"at workers.max_count limit\".\n\n### Part 4 — Empty/error states\n\n- Indicator on a project with no ready beads and zero workers: \"Queue: 0 ready — nothing to drain\". Clicking still navigates (so operator can spawn one anyway).\n- Indicator when the per-project workers query is broken (pre-`ddx-05b4cc9d`): falls back to the global count; logs a one-time console warning.\n- Add-worker failure: surfaces inline on the overview page (error toast + detail), doesn't silently drop.\n\n## Out of scope\n\n- Per-harness-specific queue views (e.g., \"drain with codex\" as a distinct indicator).\n- Bead prioritization rules for multi-worker draining — beads already have a priority field, and `execute-loop` already claims in ready-order. No change.\n- Concurrency safety review of multi-worker draining. It already works (beads are claimed atomically), but if `ddx-05b4cc9d` surfaces issues there, file a follow-up.",
++    "acceptance": "**User story:** As an operator on any page in the project, I always see whether a drain worker is running and how much work is queued. One click takes me to the worker overview where I can scale capacity up or down with a single button, without picking a harness or profile every time.\n\n**Acceptance criteria:**\n\n1. **Nav indicator visible everywhere.**\n   - A component in `NavShell.svelte` renders the drain indicator on every route inside a selected project.\n   - Idle state: dot + \"Queue: X ready\".\n   - Active state: spinner + \"N workers · X ready\".\n   - Clicking navigates to the workers overview.\n   - Playwright: navigate to beads, documents, sessions, efficacy — assert indicator is present on each with the expected text.\n\n2. **Live updates.**\n   - The indicator updates within 2s when a worker starts, finishes, or changes state. Backed by the existing worker-progress subscription.\n   - When ready-bead count changes (a bead is created/closed), the indicator updates within 5s. Either subscription-driven or short poll.\n\n3. **Summary query.**\n   - New `queueAndWorkersSummary(projectId) { readyBeads runningWorkers totalWorkers }`. Returns zeros on unknown or empty projects — no error.\n   - Resolver is cheap: reads the ready count from the same path bead-status queries use, not by iterating every bead.\n\n4. **Overview page — count control.**\n   - Header shows \"Drain workers: N\" prominently.\n   - `+ Add worker` button dispatches a default-spec worker (`workerDispatch(kind: \"execute-loop\", args: null)`). On success the row appears in the table within 2s and the indicator updates.\n   - `− Remove worker` button stops the oldest-running drain worker. Confirm-gated (\"Stop worker-XYZ?\"). After confirm, the worker transitions to `stopped` within 2s.\n   - Help text below the buttons: \"Adds a general-purpose drain worker. Use the per-harness picker below for custom specs.\"\n\n5. **Default-spec + safety rail.**\n   - `.ddx/config.yaml: workers.default_spec` is respected by `+ Add worker`. Integration test asserts a configured `profile: cheap` is propagated.\n   - `.ddx/config.yaml: workers.max_count`: when set, `+ Add worker` refuses past the cap; button disabled with tooltip \"at workers.max_count limit\". Not set → no cap. Integration test covers both.\n\n6. **Playwright — flow.**\n   - Seeds a project with 3 ready beads, zero workers.\n   - Asserts indicator shows \"Queue: 3 ready\", dot state.\n   - Clicks indicator → navigates to overview.\n   - Clicks `+ Add worker` → asserts new row and indicator transitions to spinner + \"1 worker · 3 ready\".\n   - Clicks `+` again → asserts \"2 workers · 3 ready\".\n   - Clicks `− Remove worker` → asserts one worker stops and indicator shows \"1 worker · ...\" within 2s.\n   - Navigates to /beads → asserts indicator persists and stays live.\n\n7. **No regressions.**\n   - Existing Drain button on project home continues to work (dispatches the same kind). Can stay or be removed depending on design note; recommend keeping it as the initial-kickoff affordance when zero workers run.\n   - Existing Workers table rendering + live-phase subscription is unchanged.\n   - Existing per-worker Start/Stop from `ddx-69789664` coexists unchanged.\n\n8. **Cross-references.**\n   - Hard dependency: `ddx-05b4cc9d` (fixes `workersByProject` filter — without it, the running-workers count is always 0 on a per-project query).\n   - Adjacent: `ddx-69789664` (per-worker lifecycle + Sessions IA). These beads are complementary; implementation should not re-introduce either's functionality, just use it.\n   - Adjacent: `ddx-9ce6842a` (perf harness). The `queueAndWorkersSummary` resolver gets a perf target in that harness: p95 ≤ 30ms in-process on a 5k-bead fixture. No full scan allowed.",
++    "labels": [
++      "feat-008",
++      "feat-010",
++      "feat-006",
++      "ui",
++      "operator-ux"
++    ],
++    "metadata": {
++      "claimed-at": "2026-04-25T09:52:17Z",
++      "claimed-machine": "eitri",
++      "claimed-pid": "196235",
++      "events": [
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
++          "created_at": "2026-04-23T06:29:24.605603349Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260423T060734-3971df84\",\"harness\":\"claude\",\"input_tokens\":169,\"output_tokens\":55004,\"total_tokens\":55173,\"cost_usd\":12.771323249999998,\"duration_ms\":1309280,\"exit_code\":0}",
++          "created_at": "2026-04-23T06:29:24.676494504Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=55173 cost_usd=12.7713"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
++          "created_at": "2026-04-23T06:29:25.27239431Z",
++          "kind": "routing",
++          "source": "ddx agent execute-loop",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "REQUEST_CHANGES\n**`+layout.svelte` (workers overview)**: The `+ Add worker` button has no awareness of `workers.max_count`. The AC requires the button to be **disabled with a tooltip** (\"at workers.max_count limit\") when the cap is reached, rather than allowing the click and surfacing a server error. This needs the `queueAndWorkersSummary` query (or a new field) to expose the cap, and the button's `disabled` binding to incorporate it.\nartifact: .ddx/executions/20260423T060734-3971df84/reviewer-stream.log",
++          "created_at": "2026-04-23T06:29:55.726187037Z",
++          "kind": "review",
++          "source": "ddx agent execute-loop",
++          "summary": "REQUEST_CHANGES"
++        },
++        {
++          "actor": "",
++          "body": "",
++          "created_at": "2026-04-23T06:29:55.793833278Z",
++          "kind": "reopen",
++          "source": "",
++          "summary": "review: REQUEST_CHANGES"
++        },
++        {
++          "actor": "ddx",
++          "body": "post-merge review: REQUEST_CHANGES\n**`+layout.svelte` (workers overview)**: The `+ Add worker` button has no awareness of `workers.max_count`. The AC requires the button to be **disabled with a tooltip** (\"at workers.max_count limit\") when the cap is reached, rather than allowing the click and surfacing a server error. This needs the `queueAndWorkersSummary` query (or a new field) to expose the cap, and the button's `disabled` binding to incorporate it.\n**`workers.spec.ts`**: The e2e test asserts `dispatchCalled` and `stopCalled` booleans but does not verify the **indicator text transitions** after add/remove. AC #6 explicitly requires asserting \"1 worker · 3 ready\" after the first add, \"2 workers · 3 ready\" after the second add, and updated text after remove. The test also only clicks `+` once, not twice as the AC specifies. The mock's `QueueAndWorkersSummary` handler dynamically computes `runningWorkers` from the mocked `workers` array, so the data is available — the assertions are just missing.\nresult_rev=04740d3b0993f51f35ac9df011623edd5acaca97\nbase_rev=6876f24688741220b2c7556d4dbaece84cb54b43",
++          "created_at": "2026-04-23T06:29:55.859897937Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "review_request_changes"
++        },
++        {
++          "actor": "ddx",
++          "body": "pre-execute-bead checkpoint: staging changes: exit status 128",
++          "created_at": "2026-04-23T07:19:46.663153626Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "execution_failed"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
++          "created_at": "2026-04-24T03:26:42.227361059Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260424T031731-b9a67a94\",\"harness\":\"claude\",\"input_tokens\":107,\"output_tokens\":28616,\"total_tokens\":28723,\"cost_usd\":6.320813249999999,\"duration_ms\":550224,\"exit_code\":0}",
++          "created_at": "2026-04-24T03:26:42.300927046Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=28723 cost_usd=6.3208"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
++          "created_at": "2026-04-24T03:26:45.41810185Z",
++          "kind": "routing",
++          "source": "ddx agent execute-loop",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "REQUEST_CHANGES\n**`DrainIndicator.svelte:75-85`** — poll-only refresh via 3s `setInterval`. AC #2 requires subscription-driven updates (`subscribeWorkerProgress`) so worker-state changes reflect within 2s. Add a `workerProgress` subscription (filtered to the current project) that triggers `refresh(projectId)` on every event, keeping the 3s poll only as a backstop for ready-bead count changes.\nartifact: .ddx/executions/20260424T031731-b9a67a94/reviewer-stream.log",
++          "created_at": "2026-04-24T03:28:12.866279325Z",
++          "kind": "review",
++          "source": "ddx agent execute-loop",
++          "summary": "REQUEST_CHANGES"
++        },
++        {
++          "actor": "",
++          "body": "",
++          "created_at": "2026-04-24T03:28:12.935267735Z",
++          "kind": "reopen",
++          "source": "",
++          "summary": "review: REQUEST_CHANGES"
++        },
++        {
++          "actor": "ddx",
++          "body": "post-merge review: REQUEST_CHANGES\n**`DrainIndicator.svelte:75-85`** — poll-only refresh via 3s `setInterval`. AC #2 requires subscription-driven updates (`subscribeWorkerProgress`) so worker-state changes reflect within 2s. Add a `workerProgress` subscription (filtered to the current project) that triggers `refresh(projectId)` on every event, keeping the 3s poll only as a backstop for ready-bead count changes.\nresult_rev=a983206e6250d917e02d25cb2ae622204550342c\nbase_rev=583500c6a3ae5c43baf047158778c8cc2629f953",
++          "created_at": "2026-04-24T03:28:12.994711116Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "review_request_changes"
++        },
++        {
++          "actor": "ddx",
++          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
++          "created_at": "2026-04-25T02:23:28.188728141Z",
++          "kind": "tier-attempt",
++          "source": "ddx agent execute-loop",
++          "summary": "skipped"
++        },
++        {
++          "actor": "ddx",
++          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
++          "created_at": "2026-04-25T02:23:28.260662431Z",
++          "kind": "tier-attempt",
++          "source": "ddx agent execute-loop",
++          "summary": "skipped"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
++          "created_at": "2026-04-25T02:23:28.328038596Z",
++          "kind": "escalation-summary",
++          "source": "ddx agent execute-loop",
++          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
++        },
++        {
++          "actor": "ddx",
++          "body": "execute-loop: all tiers exhausted — no viable provider found",
++          "created_at": "2026-04-25T02:23:28.459123092Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "execution_failed"
++        }
++      ],
++      "execute-loop-heartbeat-at": "2026-04-25T09:52:17.206103846Z",
++      "feature": "FEAT-008"
++    }
++  },
++  "paths": {
++    "dir": ".ddx/executions/20260425T095217-b7236494",
++    "prompt": ".ddx/executions/20260425T095217-b7236494/prompt.md",
++    "manifest": ".ddx/executions/20260425T095217-b7236494/manifest.json",
++    "result": ".ddx/executions/20260425T095217-b7236494/result.json",
++    "checks": ".ddx/executions/20260425T095217-b7236494/checks.json",
++    "usage": ".ddx/executions/20260425T095217-b7236494/usage.json",
++    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b6cf025c-20260425T095217-b7236494"
++  }
++}
+\ No newline at end of file
+diff --git a/.ddx/executions/20260425T095217-b7236494/result.json b/.ddx/executions/20260425T095217-b7236494/result.json
+new file mode 100644
+index 00000000..3fad8813
+--- /dev/null
++++ b/.ddx/executions/20260425T095217-b7236494/result.json
+@@ -0,0 +1,22 @@
++{
++  "bead_id": "ddx-b6cf025c",
++  "attempt_id": "20260425T095217-b7236494",
++  "base_rev": "a65ccd52e8fc22eb5852a72636c9f72cfb74b56b",
++  "result_rev": "0581bde46f486a7d71586838d9870721eee0cc59",
++  "outcome": "task_succeeded",
++  "status": "success",
++  "detail": "success",
++  "harness": "claude",
++  "session_id": "eb-46c62442",
++  "duration_ms": 422906,
++  "tokens": 22168,
++  "cost_usd": 2.89721075,
++  "exit_code": 0,
++  "execution_dir": ".ddx/executions/20260425T095217-b7236494",
++  "prompt_file": ".ddx/executions/20260425T095217-b7236494/prompt.md",
++  "manifest_file": ".ddx/executions/20260425T095217-b7236494/manifest.json",
++  "result_file": ".ddx/executions/20260425T095217-b7236494/result.json",
++  "usage_file": ".ddx/executions/20260425T095217-b7236494/usage.json",
++  "started_at": "2026-04-25T09:52:17.806685303Z",
++  "finished_at": "2026-04-25T09:59:20.713560125Z"
++}
+\ No newline at end of file
+  </diff>
+
+  <instructions>
+You are reviewing a bead implementation against its acceptance criteria.
+
+## Your task
+
+Examine the diff and each acceptance-criteria (AC) item. For each item assign one grade:
+
+- **APPROVE** — fully and correctly implemented; cite the specific file path and line that proves it.
+- **REQUEST_CHANGES** — partially implemented or has fixable minor issues.
+- **BLOCK** — not implemented, incorrectly implemented, or the diff is insufficient to evaluate.
+
+Overall verdict rule:
+- All items APPROVE → **APPROVE**
+- Any item BLOCK → **BLOCK**
+- Otherwise → **REQUEST_CHANGES**
+
+## Required output format
+
+Respond with a structured review using exactly this layout (replace placeholder text):
+
+---
+## Review: ddx-b6cf025c iter 1
+
+### Verdict: APPROVE | REQUEST_CHANGES | BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | &lt;AC item text, max 60 chars&gt; | APPROVE | path/to/file.go:42 — brief note |
+| 2 | &lt;AC item text, max 60 chars&gt; | BLOCK   | — not found in diff |
+
+### Summary
+
+&lt;1–3 sentences on overall implementation quality and any recurring theme in findings.&gt;
+
+### Findings
+
+&lt;Bullet list of REQUEST_CHANGES and BLOCK findings. Each finding must name the specific file, function, or test that is missing or wrong — specific enough for the next agent to act on without re-reading the entire diff. Omit this section entirely if verdict is APPROVE.&gt;
+  </instructions>
+</bead-review>

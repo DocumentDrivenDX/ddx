@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "This iteration's narrow goal — converting the indicator from poll-only to subscription-driven — is implemented correctly. Per-worker `subscribeWorkerProgress` is rewired on bead-lifecycle events (which fire on claim, catching newly-spawned workers), the 3s poll is preserved as a backstop, and the e2e mock ordering bug that broke the workers-list assertion is fixed by matching the more specific `WorkersByProject` query first. Resolves the prior REQUEST_CHANGES on AC2."
+}
