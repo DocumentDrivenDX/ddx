@@ -1,0 +1,283 @@
+{
+  "attempt_id": "20260425T073541-4f46941d",
+  "bead_id": "ddx-9ce6842a",
+  "base_rev": "7a2078a59d9885cb94f4c188ea95ce5149f969cd",
+  "created_at": "2026-04-25T07:35:42.062613828Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9ce6842a",
+    "title": "Bead list and cross-project all-beads are too slow: establish a GraphQL perf harness and fix N·M scan pattern",
+    "description": "## Observed\n\nPer-project `/beads` page is noticeably slow; the cross-project \"all beads\" view is substantially slower. Related: `ddx-ad0db8fd` already identified the single-bead-detail slowness caused by the same storage pattern.\n\n## Root cause (same pattern, different call site)\n\n`cli/internal/server/graphql/resolver_beads.go:22,40` —\n\n- `Beads` (cross-project) and `BeadsByProject` (single-project) both call `r.State.GetBeadSnapshots(status, label, projectID, search)`.\n- `GetBeadSnapshots` (`cli/internal/server/state_graphql.go:49-105`) iterates every registered project, constructs a `bead.Store` per project, calls `ReadAll()` (scan + JSONL parse of every bead file), filters in Go. Cost is `O(projects × beads_per_project)` on every call, independent of the filter/page size.\n- All filtering (status, label, project, search) is Go-side, post-read. The page-size window is applied in `beadConnectionFromSnapshots` after the full corpus is already materialized.\n- Cross-project \"all beads\" = same loop, just without the projectID filter. It is the worst case by design.\n\nThis is the same shape that's breaking the Sessions feed (`ddx-2ceb02fa`) and single-bead detail (`ddx-ad0db8fd`). A point fix here is insufficient — we need a measurement surface first so we stop relying on anecdote.\n\n## Proposed direction\n\n### Part 1 — Perf harness (foundational; enables everything else)\n\nIntroduce a reusable GraphQL perf harness under `cli/internal/server/perf/` or `cli/internal/server/graphql/bench_test.go`:\n\n- Seeded fixture builder: generates N projects × M beads with configurable distribution of status/labels/dependencies. Reuses existing store primitives (no fake data layer).\n- Go benchmark + scriptable HTTP runner (wrapper around an already-running server) reporting p50/p95/p99 per query shape.\n- Targets covered on day one: `bead(id:)`, `beadsByProject(projectID, first, after, status, label, search)`, `beads(projectID=nil, first, after, status, label)`, `docGraph`, `sessions` (so the sessions shard work `ddx-2ceb02fa` inherits this harness). New query targets are added by writing a single table row.\n- Thresholds are **recorded, not asserted**, in the first pass. CI surfaces a regression if a threshold is breached beyond a configured delta (e.g., +25% p95). Initial pass is \"land the harness and record baseline\"; a follow-up wires it into CI.\n\n### Part 2 — Fix the scan pattern\n\nMinimum viable, in priority order:\n\n1. **Scope by project when the query is scoped.** `BeadsByProject` should call a new `GetBeadSnapshotsForProject(projectID, filters…)` that only opens that one project's store. Trivial change; eliminates the cross-project factor for the common case.\n2. **Early filter pushdown.** `GetBeadSnapshots` should apply status/label/projectID filters at the file-parse boundary where cheap, not after materializing every bead. (Still reads every file — deeper fix below.)\n3. **Lightweight in-memory index with invalidation.** After (1) and (2), if \"all beads\" or search is still slow, introduce an index keyed `{projectID, beadID}` with basic metadata (status, labels, title, updatedAt). Refresh on bead write + debounced filesystem watch. Full-body reads stay lazy — the index never holds bodies. This is the same storage discipline we adopted for sessions in `ddx-2ceb02fa`.\n\nThe harness from Part 1 is the gate for choosing between (2) and (3); don't commit to the index without numbers.\n\n## Out of scope\n\n- Full-text search infrastructure (tracked separately if needed).\n- Changing the on-disk bead format.\n- Cross-node federation performance. Current concern is a single server reading a single workspace.",
+    "acceptance": "**User story:** As a developer using the web UI on a real-world-sized workspace (tens of projects × hundreds of beads each), the beads list opens in under a second and the cross-project all-beads view stays usable. Before any perf fix lands, we can reproduce the problem and measure improvement — not guess.\n\n**Acceptance criteria:**\n\n1. **Perf harness exists and is reusable.**\n   - Fixture builder generates `N × M` beads across projects with configurable shape (status mix, label density, dep count). Reuses the real `bead.Store` write path (no fake writer).\n   - Benchmark covers at minimum: `bead(id:)`, `beadsByProject`, `beads` (cross-project), `docGraph`, `sessions`. Adding a new target is a single-table-row change.\n   - Each target produces p50/p95/p99 for in-process calls and end-to-end HTTP. Results write to a human-readable report (markdown or JSON) plus a machine-readable artifact suitable for CI diffing later.\n\n2. **Baseline recorded.** First run of the harness on the current `main` binary is stored in the bead notes and in `docs/helix/04-observe/perf/YYYY-MM-DD-baseline.md` (or equivalent existing location). Numbers include hardware + go version footer.\n\n3. **BeadsByProject scope fix.** `BeadsByProject` calls a new `GetBeadSnapshotsForProject(projectID, …)` that opens exactly one project's store. Unit test asserts only that project's store is opened (no iteration over other projects).\n\n4. **Filter pushdown.** Status/label/projectID filters apply at the per-file / per-entry parse boundary, not post-materialization. Benchmark captures before/after for the common filtered case (e.g., `status=open`).\n\n5. **Perf targets on fixture (10 projects × 500 beads = 5000 beads total):**\n   - `bead(id:)` p95 ≤ 50ms in-process / ≤ 200ms HTTP (already covered by `ddx-ad0db8fd`; this bead may inherit the work).\n   - `beadsByProject(first=50)` p95 ≤ 75ms in-process / ≤ 250ms HTTP.\n   - `beads(first=50, no projectID)` p95 ≤ 200ms in-process / ≤ 500ms HTTP.\n   These are targets for the **first** pass (scope + pushdown). If they are not met with (1)+(2), escalate to the in-memory index (step 3 of Part 2 in the description) and update these targets with the new baseline.\n\n6. **Stale-read safety.** Regardless of fix chosen, a test writes a bead via `ddx bead update`, then queries it via GraphQL, then asserts the new value is visible on the very next request. Works under concurrency: N concurrent readers + writers interleaved without torn reads or panics.\n\n7. **CI posture (soft).** The harness is runnable via `make bench-graphql` (or the project's equivalent). CI wiring to fail on \u003e25% regression is a follow-up bead — recorded in this bead's notes with the proposed threshold but not implemented here.\n\n8. **Playwright smoke.** Opening `/beads` on the fixture project returns an interactive (clickable) list within 1s. Opening the cross-project `/beads` page returns within 2s. These are ceilings, not p95 targets — guards against outright regression, not fine-grained perf.\n\n9. **Cross-reference.** This bead's notes list `ddx-ad0db8fd` (bead detail) and `ddx-2ceb02fa` (sessions shard/index) as the other two bead/session perf threads that should inherit this harness.",
+    "labels": [
+      "feat-008",
+      "feat-004",
+      "perf",
+      "graphql"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T07:35:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:28.485694569Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T20:59:28.687045804Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"codex/gpt-5.4\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:31.32304999Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=codex/gpt-5.4"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=claude model=codex/gpt-5.4 probe=ok\nunsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+          "created_at": "2026-04-22T20:59:31.529043133Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"gemini\",\"resolved_model\":\"minimax/minimax-m2.7\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:34.163826904Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=gemini model=minimax/minimax-m2.7"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness=gemini model=minimax/minimax-m2.7 probe=ok\nunsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+          "created_at": "2026-04-22T20:59:34.363473184Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"harness\":\"agent\",\"model\":\"qwen/qwen3.6-35b-a3b\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2015},{\"tier\":\"standard\",\"harness\":\"claude\",\"model\":\"codex/gpt-5.4\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2062},{\"tier\":\"smart\",\"harness\":\"gemini\",\"model\":\"minimax/minimax-m2.7\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2011}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-22T20:59:34.427699726Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite\ntier=smart\nprobe_result=ok\nresult_rev=ecca4ced7e5acdfd75dcd7fb06cc57cf4ce27d18\nbase_rev=ecca4ced7e5acdfd75dcd7fb06cc57cf4ce27d18\nretry_after=2026-04-23T02:59:34Z",
+          "created_at": "2026-04-22T20:59:34.605566506Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T00:52:20.925216678Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T002632-1f60f8fb\",\"harness\":\"claude\",\"input_tokens\":144,\"output_tokens\":79438,\"total_tokens\":79582,\"cost_usd\":14.637292249999998,\"duration_ms\":1548122,\"exit_code\":0}",
+          "created_at": "2026-04-23T00:52:20.985788526Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=79582 cost_usd=14.6373"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-23T00:52:24.195448718Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "REQUEST_CHANGES\n**AC §8 — Playwright cross-project test routes wrong path**: `beads-smoke.spec.ts:107` navigates to `/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/beads` for the \"cross-project\" test, which is the same per-project URL as the 1s test. A cross-project smoke test should hit the all-beads route (e.g., `/nodes/${NODE_INFO.id}/beads` or whatever the actual cross-project URL is) and mock the `beads` query, not `beadsByProj…\nartifact: .ddx/executions/20260423T002632-1f60f8fb/reviewer-stream.log",
+          "created_at": "2026-04-23T00:53:27.188538802Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-23T00:53:27.255174727Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: REQUEST_CHANGES\n**AC §8 — Playwright cross-project test routes wrong path**: `beads-smoke.spec.ts:107` navigates to `/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/beads` for the \"cross-project\" test, which is the same per-project URL as the 1s test. A cross-project smoke test should hit the all-beads route (e.g., `/nodes/${NODE_INFO.id}/beads` or whatever the actual cross-project URL is) and mock the `beads` query, not `beadsByProject`. The mock for `beads` exists (lines 76-89) but is never exercised because both tests navigate to the project-scoped path.\n**AC §9 — Bead notes cross-reference**: The acceptance criteria require this bead's notes to list `ddx-ad0db8fd` and `ddx-2ceb02fa`. The baseline `.md` and code comments mention them, but no `ddx bead update` call or notes update appears in the diff. If the notes were updated via a separate mechanism not captured in this branch, this finding can be dismissed.\nresult_rev=7e79441bf5f93f93b1dbc066820ea7990533a3e7\nbase_rev=a8d23c2381ca55bccd721ea1f3d0fb8debd9bf46",
+          "created_at": "2026-04-23T00:53:27.317832989Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T01:08:25.620297574Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T005714-24085f34\",\"harness\":\"codex\",\"input_tokens\":11894998,\"output_tokens\":21788,\"total_tokens\":11916786,\"cost_usd\":0,\"duration_ms\":670789,\"exit_code\":0}",
+          "created_at": "2026-04-23T01:08:25.683554585Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=11916786"
+        },
+        {
+          "actor": "ddx",
+          "body": "merge conflict\npreserve_ref=refs/ddx/iterations/ddx-9ce6842a/20260423T005714-24085f34-be036de7bf38\nresult_rev=6830cf4a6c5c31bbd14fcc7c72a749ae88b1d000\nbase_rev=892c05a155255ec4d96b108a71e9f4171c419ef8",
+          "created_at": "2026-04-23T01:08:26.762659611Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "land_conflict"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T04:04:40.355689829Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T035055-06c99b23\",\"harness\":\"agent\",\"provider\":\"omlx-vidar-1235\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"input_tokens\":434470,\"output_tokens\":2007,\"total_tokens\":436477,\"cost_usd\":0,\"duration_ms\":824646,\"exit_code\":1}",
+          "created_at": "2026-04-23T04:04:40.422974019Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=436477 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "stalled: read_only_tools_exceeded\nresult_rev=46136ca4732fe50011662c8227b5e2fc142e6ad0\nbase_rev=46136ca4732fe50011662c8227b5e2fc142e6ad0\nretry_after=2026-04-23T10:04:40Z",
+          "created_at": "2026-04-23T04:04:40.783107699Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T23:50:53.730301058Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T234701-b5579c5c\",\"harness\":\"claude\",\"input_tokens\":49,\"output_tokens\":10190,\"total_tokens\":10239,\"cost_usd\":1.7380187499999995,\"duration_ms\":232328,\"exit_code\":0}",
+          "created_at": "2026-04-23T23:50:53.804383499Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=10239 cost_usd=1.7380"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-23T23:50:56.665103062Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Review payload is insufficient: the only commit shown is the execution-evidence chore. Re-run the review against the full branch diff (commits `9dc0a408` and any predecessors introducing the harness, `BeadsByProject` scope fix, filter pushdown, `make bench-graphql`, baseline markdown, and Playwright specs) so each AC can be graded against real code.\nExecution events in `manifest.json` also record a prior iter-1 finding (Playwright cross-project test in `beads-smoke.spec.ts:107` navigated to the per-project URL rather than the all-beads route) and a notes-cross-reference gap; confirm both are resolved in the full diff before approving AC §8 and §9.",
+          "created_at": "2026-04-23T23:51:17.524246973Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-23T23:51:17.593523165Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nReview payload is insufficient: the only commit shown is the execution-evidence chore. Re-run the review against the full branch diff (commits `9dc0a408` and any predecessors introducing the harness, `BeadsByProject` scope fix, filter pushdown, `make bench-graphql`, baseline markdown, and Playwright specs) so each AC can be graded against real code.\nExecution events in `manifest.json` also record a prior iter-1 finding (Playwright cross-project test in `beads-smoke.spec.ts:107` navigated to the per-project URL rather than the all-beads route) and a notes-cross-reference gap; confirm both are resolved in the full diff before approving AC §8 and §9.\nresult_rev=6865c0cf931831740018216ed31745bf697e4937\nbase_rev=7f3b09da72bb08f07291b5b3ab3f4bcc413738f0",
+          "created_at": "2026-04-23T23:51:17.652130234Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:15.238316602Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T02:23:15.463140804Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-25T02:23:15.526287886Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-25T02:23:15.663420341Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T07:35:41.42140889Z",
+      "execute-loop-last-detail": "stalled: read_only_tools_exceeded",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-04-23T10:04:40Z",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260425T073541-4f46941d",
+    "prompt": ".ddx/executions/20260425T073541-4f46941d/prompt.md",
+    "manifest": ".ddx/executions/20260425T073541-4f46941d/manifest.json",
+    "result": ".ddx/executions/20260425T073541-4f46941d/result.json",
+    "checks": ".ddx/executions/20260425T073541-4f46941d/checks.json",
+    "usage": ".ddx/executions/20260425T073541-4f46941d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9ce6842a-20260425T073541-4f46941d"
+  }
+}
