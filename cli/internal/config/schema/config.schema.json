@@ -499,6 +499,47 @@
         }
       },
       "additionalProperties": false
+    },
+    "evidence_caps": {
+      "type": "object",
+      "description": "Byte-size caps used by the shared evidence-assembly primitives (FEAT-022 §1a). Project-level fields override the built-in defaults; entries in per_harness further override the project-level values for that harness name.",
+      "properties": {
+        "max_prompt_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total prompt cap in bytes. Default: 4 MiB."
+        },
+        "max_inlined_file_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cap on a single inlined file's bytes. Default: 512 KiB."
+        },
+        "max_diff_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cap on the assembled diff section's bytes. Default: 2 MiB."
+        },
+        "max_governing_doc_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cap on a single governing document's inlined bytes. Default: 256 KiB."
+        },
+        "per_harness": {
+          "type": "object",
+          "description": "Per-harness overrides. Keys are harness names; values override the project-level caps for that harness only.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "max_prompt_bytes": {"type": "integer", "minimum": 0},
+              "max_inlined_file_bytes": {"type": "integer", "minimum": 0},
+              "max_diff_bytes": {"type": "integer", "minimum": 0},
+              "max_governing_doc_bytes": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
