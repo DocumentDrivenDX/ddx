@@ -30,6 +30,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
@@ -38,6 +39,13 @@ import (
 	"github.com/gorilla/websocket"
 	"tailscale.com/tsnet"
 )
+
+// serverPromptCapBytes caps the size of inline prompt bodies accepted on
+// server-side ingress (POST /api/agent/run). FEAT-022 §9 / Stage D2. It is
+// a package-level variable rather than a literal so tests can lower the
+// cap without writing multi-MB request bodies. Production callers must not
+// mutate it.
+var serverPromptCapBytes = evidence.DefaultMaxPromptBytes
 
 // beadHubCloser is the minimal interface the Server requires from its bead
 // lifecycle hub. *bead.WatcherHub satisfies this interface.
@@ -1874,6 +1882,15 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Prompt == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "prompt is required"})
+		return
+	}
+	if observed := len([]byte(req.Prompt)); observed > serverPromptCapBytes {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+			"error":          fmt.Sprintf("inline prompt body exceeds cap: observed %d bytes, cap %d bytes", observed, serverPromptCapBytes),
+			"observed_bytes": observed,
+			"cap_bytes":      serverPromptCapBytes,
+			"config_hint":    ".ddx/config.yaml:evidence_caps.max_prompt_bytes",
+		})
 		return
 	}
 

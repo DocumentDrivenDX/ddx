@@ -10,7 +10,14 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
+
+// execPromptCapBytes caps the size of inline prompt env-var values
+// (DDX_AGENT_PROMPT) carried by exec definitions. FEAT-022 §9 / Stage D2.
+// Package-level variable so tests can lower the cap; production callers
+// must not mutate it.
+var execPromptCapBytes = evidence.DefaultMaxPromptBytes
 
 // loadDefinitions returns all definitions and the doc graph built during loading.
 // The graph may be nil if graph loading failed (soft error treated as empty).
@@ -63,6 +70,13 @@ func (s *Store) loadDefinitions() ([]Definition, *docgraph.Graph, error) {
 
 	out := make([]Definition, 0, len(defs))
 	for _, def := range defs {
+		if prompt, ok := def.Executor.Env["DDX_AGENT_PROMPT"]; ok {
+			if observed := len([]byte(prompt)); observed > execPromptCapBytes {
+				return nil, nil, fmt.Errorf(
+					"exec definition %q env DDX_AGENT_PROMPT exceeds cap: observed %d bytes, cap %d bytes (configurable via .ddx/config.yaml:evidence_caps.max_prompt_bytes)",
+					def.ID, observed, execPromptCapBytes)
+			}
+		}
 		out = append(out, def)
 	}
 	sort.Slice(out, func(i, j int) bool {

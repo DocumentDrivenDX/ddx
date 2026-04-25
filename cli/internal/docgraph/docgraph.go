@@ -14,7 +14,20 @@ import (
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
+
+// docgraphPromptCapBytes caps the size of prompt-metadata strings parsed
+// from doc frontmatter. FEAT-022 §9 / Stage D2. Package-level variable so
+// tests can lower the cap; production callers must not mutate it.
+var docgraphPromptCapBytes = evidence.DefaultMaxPromptBytes
+
+// ErrPromptMetadataOversize is returned when a doc's `prompt:` metadata
+// exceeds the configured cap. Graph-build callers treat it as fatal so the
+// build stops with an actionable error rather than silently dropping the
+// document via a parse_error issue.
+var ErrPromptMetadataOversize = errors.New("docgraph prompt metadata exceeds cap")
 
 const (
 	frontmatterSeparator = "---"
@@ -180,6 +193,9 @@ func buildGraph(workingDir string, roots []string) (*Graph, error) {
 		if err != nil {
 			if errors.Is(err, ErrNotDocGraphDocument) {
 				continue
+			}
+			if errors.Is(err, ErrPromptMetadataOversize) {
+				return nil, err
 			}
 			issues = append(issues, GraphIssue{
 				Kind:    IssueParseError,
@@ -499,6 +515,11 @@ func ParseDocument(path string) (*Document, error) {
 	}
 	if !frontmatter.HasFrontmatter || frontmatter.Doc.ID == "" {
 		return nil, fmt.Errorf("%w in %s", ErrNotDocGraphDocument, path)
+	}
+	if observed := len([]byte(frontmatter.Doc.Prompt)); observed > docgraphPromptCapBytes {
+		return nil, fmt.Errorf(
+			"%w: document %q at %s prompt metadata is %d bytes, cap %d bytes (configurable via .ddx/config.yaml:evidence_caps.max_prompt_bytes)",
+			ErrPromptMetadataOversize, frontmatter.Doc.ID, path, observed, docgraphPromptCapBytes)
 	}
 
 	review := ReviewMetadata{
