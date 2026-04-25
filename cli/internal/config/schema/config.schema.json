@@ -550,6 +550,10 @@
             },
             "additionalProperties": false
           }
+        },
+        "context_budget": {
+          "type": "string",
+          "description": "Prompt budget label that execute-bead consults when assembling the bead prompt. Empty string means full budget; \"minimal\" omits large governing documents (cheap-tier path). See SD-024 §Stage 3."
         }
       },
       "additionalProperties": false

@@ -116,18 +116,19 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
-	workerOpts := agent.ExecuteBeadOptions{
-		FromRev:       fromRev,
+	rcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
 		Harness:       harness,
 		Model:         model,
 		Provider:      provider,
 		ModelRef:      modelRef,
 		Effort:        effort,
 		ContextBudget: contextBudget,
-		PromptFile:    promptFile,
-		WorkerID:      os.Getenv("DDX_WORKER_ID"),
-		BeadEvents:    bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-		MirrorCfg:     loadExecutionsMirrorConfig(projectRoot),
+	})
+	runtime := agent.ExecuteBeadRuntime{
+		FromRev:    fromRev,
+		PromptFile: promptFile,
+		WorkerID:   os.Getenv("DDX_WORKER_ID"),
+		BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 	}
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}
@@ -145,7 +146,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	// leave this nil so ExecuteBead constructs an agent service from
 	// projectRoot internally.
 	if f.AgentRunnerOverride != nil {
-		workerOpts.AgentRunner = f.AgentRunnerOverride
+		runtime.AgentRunner = f.AgentRunnerOverride
 	}
 
 	// Preflight the orphan-model check before creating a worktree. Mirrors
@@ -164,7 +165,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	agent.RecoverOrphans(gitOps, projectRoot, beadID)
 
 	// Worker step: run the agent in an isolated worktree.
-	res, err := agent.ExecuteBead(cmd.Context(), projectRoot, beadID, workerOpts, gitOps)
+	res, err := agent.ExecuteBeadWithConfig(cmd.Context(), projectRoot, beadID, rcfg, runtime, gitOps)
 	if err != nil && res == nil {
 		return err
 	}

@@ -10,18 +10,19 @@ import (
 // project config. Zero values mean "no override; use config".
 // Pointer fields distinguish "explicit value" from "not set".
 type CLIOverrides struct {
-	Harness     string
-	Model       string
-	Provider    string
-	ModelRef    string
-	Profile     string
-	Effort      string
-	Permissions string
-	MinTier     string
-	MaxTier     string
-	Timeout     *time.Duration
-	NoReview    *bool
-	Assignee    string
+	Harness       string
+	Model         string
+	Provider      string
+	ModelRef      string
+	Profile       string
+	Effort        string
+	Permissions   string
+	MinTier       string
+	MaxTier       string
+	Timeout       *time.Duration
+	NoReview      *bool
+	Assignee      string
+	ContextBudget string
 }
 
 // Resolve produces a sealed ResolvedConfig by layering overrides onto
@@ -78,6 +79,11 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	}
 
 	r.evidenceCaps = c.ResolveEvidenceCaps(r.harness)
+
+	r.contextBudget = overrides.ContextBudget
+	if r.contextBudget == "" && c != nil {
+		r.contextBudget = c.EvidenceCaps.ResolveContextBudget()
+	}
 
 	if agent != nil {
 		r.sessionLogDir = agent.SessionLogDir
