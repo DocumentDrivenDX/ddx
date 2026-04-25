@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T110843-6b52fede",
+  "bead_id": "ddx-999eee75",
+  "base_rev": "e6cad0d69c50582daba6e46aede81695f2f5e04b",
+  "created_at": "2026-04-25T11:08:43.831084398Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-999eee75",
+    "title": "server: bounded text egress for GraphQL schema + resolvers (Stage E2)",
+    "description": "Stage E2 of FEAT-022. Bound GraphQL resolvers that return library,\nexecution, diff, session, or persona content. Extend the GraphQL\nschema with `truncated` and `originalBytes` fields on the relevant\ntypes; regenerate via gqlgen.\n\nImplements FEAT-022 requirements §10 and §11 for the GraphQL surface.\nSatisfies US-224 for GraphQL.\n\nDepends on Stage A1 (ddx-64299657) only. Parallel with E1.\n\nRepo uses gqlgen (not houdini). Frontend has no GraphQL codegen —\nSvelteKit + Vite consumes GraphQL through raw fetch today; no frontend\ntype regen is required by this bead.\n\nIn-scope files:\n- cli/internal/server/graphql/schema.graphql (or equivalent; verify\n  file is the one gqlgen.yml points at — see cli/internal/server/graphql/gqlgen.yml):\n  extend the types returned by the three in-scope resolvers with\n  `truncated: Boolean!` and `originalBytes: Int!` fields.\n- cli/internal/server/graphql/resolver_documents.go (:19 DocumentByPath):\n  route the resolved text through evidence.ClampOutput; populate\n  truncated + originalBytes in the returned struct.\n- cli/internal/server/graphql/resolver_agent.go (:40 WorkerPrompt,\n  :62 AgentSession): same treatment.\n- cli/internal/server/graphql/generated.go: regenerated via\n  `cd cli/internal/server/graphql \u0026\u0026 go run github.com/99designs/gqlgen generate`\n  (or whatever command gqlgen.yml implies). This file WILL change; it\n  is expected.\n- cli/internal/server/graphql/models.go: may change as a result of\n  gqlgen regeneration.\n\nOut-of-scope:\n- MCP / REST server handlers — Stage E1.\n- Frontend consumers of the new fields.\n- Any GraphQL types that don't inline one of the five content classes.\n\nRollback: revert schema changes and resolver edits; regenerate gqlgen\nartifacts. New fields disappear additively.",
+    "acceptance": "cd cli/internal/server/graphql \u0026\u0026 go run github.com/99designs/gqlgen generate exits 0 (regeneration succeeds cleanly; schema edits and resolver signatures match). cd cli \u0026\u0026 go build ./internal/server/graphql/... passes. cd cli \u0026\u0026 go test -run TestGraphQLBoundedEgress ./internal/server/graphql/... passes with one subtest per in-scope resolver: each fires a GraphQL query against a fixture resource of size 2× MaxInlinedFileBytes; asserts the returned object's text field is bounded with a truncation marker and truncated is true and originalBytes equals the fixture size. Positive test: small resource returns truncated=false. cd cli \u0026\u0026 go test ./... passes. grep -cE 'truncated: Boolean|truncated: \"true\"|truncated_bytes' cli/internal/server/graphql/schema.graphql returns a positive integer (schema actually carries the field).",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:server",
+      "area:graphql",
+      "stage:E2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T11:08:43Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T11:08:43.237364796Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T110843-6b52fede",
+    "prompt": ".ddx/executions/20260425T110843-6b52fede/prompt.md",
+    "manifest": ".ddx/executions/20260425T110843-6b52fede/manifest.json",
+    "result": ".ddx/executions/20260425T110843-6b52fede/result.json",
+    "checks": ".ddx/executions/20260425T110843-6b52fede/checks.json",
+    "usage": ".ddx/executions/20260425T110843-6b52fede/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-999eee75-20260425T110843-6b52fede"
+  }
+}
