@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Stage A1 lands cleanly: shared `internal/evidence` package with caps, clamping, section fitting, diff decomposition, strategy helpers, telemetry struct, canonical truncation marker, pre-dispatch overflow class constants, and the `evidence_caps` config section with project + per-harness override resolution. Defaults are permissive as specified, package has no external imports beyond stdlib so it's safely importable from cmd/agent/server, and config→evidence dependency is one-way. Test coverage exists for every exported primitive plus a YAML-loaded per-harness override test."
+}
