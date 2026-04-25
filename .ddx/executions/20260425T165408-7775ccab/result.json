@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Mechanical migration applied cleanly to the only file that actually contained the legacy pattern. agent_execute_loop_test.go required no changes — it never used `ExecuteBeadLoopOptions{}` — so the AC's rg check passes vacuously for that file. The two converted call sites in agent_metrics_review_evidence_test.go follow the SD-024 Stage 1 add-alongside `RunWithConfig` shape correctly."
+}
