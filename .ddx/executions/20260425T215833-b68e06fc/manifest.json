@@ -1,0 +1,202 @@
+{
+  "attempt_id": "20260425T215833-b68e06fc",
+  "bead_id": "ddx-dd7fce7e",
+  "base_rev": "9e0043c00be754dc4b7abe79a06c3dfa306cc068",
+  "created_at": "2026-04-25T21:58:33.895664555Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dd7fce7e",
+    "title": "cmd/work: migrate ddx work CLI dispatch to LoadAndResolve + RunWithConfig + behavioral e2e",
+    "description": "Stage 1 of SD-024. Migrates the CLI dispatch site at cli/cmd/agent_cmd.go:1997 to use config.LoadAndResolve + ExecuteBeadWorker.RunWithConfig instead of constructing ExecuteBeadLoopOptions from CLI flags. Adds a behavioral e2e test that proves a .ddx/config.yaml change reaches the running CLI loop.\n\nThis bead unblocks FEAT-022 G's CLI path: ReviewMaxRetries from .ddx/config.yaml will actually drive review-retry behavior on 'ddx work' invocations.\n\nIn-scope:\n- cli/cmd/agent_cmd.go (around line 1997 — runAgentExecuteLoop)\n- cli/cmd/agent_execute_loop_e2e_test.go (new) — TestReviewRetryThresholdFromConfigCLI\n\nOut-of-scope:\n- Server worker dispatch (bead 8)\n- GraphQL StartWorker dispatch (bead 9)\n\nDepends on bead 6.5 (review-failure fixture). See TD-024 §Test plan.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestReviewRetryThresholdFromConfigCLI ./cmd/... passes: with .ddx/config.yaml setting review_max_retries=5, a deterministic test runner that fails the first 4 reviews and succeeds the 5th, ddx work --once on a seeded bead closes successfully on attempt 5 and emits no review-manual-required event. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:cmd",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T21:58:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T15:35:47.403942293Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T152448-a1bad981\",\"harness\":\"claude\",\"input_tokens\":66,\"output_tokens\":25664,\"total_tokens\":25730,\"cost_usd\":4.51543575,\"duration_ms\":658134,\"exit_code\":0}",
+          "created_at": "2026-04-25T15:35:47.486946248Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=25730 cost_usd=4.5154"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-25T15:35:50.669916467Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "REQUEST_CHANGES\ncli/cmd/agent_cmd.go:2010 — `rcfg, _ := config.LoadAndResolve(projectRoot, overrides)` silently swallows the error. If LoadAndResolve fails (malformed YAML, etc.), a zero-value ResolvedConfig flows into RunWithConfig and SD-024's sealed-construction sentinel will panic at first accessor read instead of surfacing a clean CLI error. Capture and return/log the error.\nartifact: .ddx/executions/20260425T152448-a1bad981/reviewer-stream.log",
+          "created_at": "2026-04-25T15:36:57.41579499Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-25T15:36:57.4970494Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: REQUEST_CHANGES\ncli/cmd/agent_cmd.go:2010 — `rcfg, _ := config.LoadAndResolve(projectRoot, overrides)` silently swallows the error. If LoadAndResolve fails (malformed YAML, etc.), a zero-value ResolvedConfig flows into RunWithConfig and SD-024's sealed-construction sentinel will panic at first accessor read instead of surfacing a clean CLI error. Capture and return/log the error.\nAC #2 verification: produce a `go test ./...` run (or scope exclusion list) demonstrating the cmd-package failures are byte-identical pre/post this bead, or fix them in-scope. Pointing at LEFTHOOK_EXCLUDE in the commit body is not a substitute for the AC's literal requirement.\nTest pragmatics: `store.Unclaim(beadID)` between iterations is a hand-driven re-pickup that the production poll loop would do naturally. Acceptable for a unit-style e2e but worth a one-line comment that this stands in for the poll-loop reclaim, not a behavior under test.\nresult_rev=909a0729216fbc0ef09d80927569e5b621517747\nbase_rev=b6d828eca15664eefc2db04466b8b00cf01f85f6",
+          "created_at": "2026-04-25T15:36:57.569120769Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T18:56:21.698724861Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T184635-7caed754\",\"harness\":\"omlx\",\"provider\":\"omlx-vidar-1235\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"input_tokens\":352835,\"output_tokens\":2966,\"total_tokens\":355801,\"cost_usd\":0,\"duration_ms\":585017,\"exit_code\":1}",
+          "created_at": "2026-04-25T18:56:21.774413459Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=355801 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "agent: identical tool calls repeated, aborting loop\nresult_rev=13609c6c39f3a32b4c5520d945b8c86144da8f8b\nbase_rev=13609c6c39f3a32b4c5520d945b8c86144da8f8b\nretry_after=2026-04-26T00:56:22Z",
+          "created_at": "2026-04-25T18:56:22.207034513Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T21:44:39.44052204Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T213553-c335fb85\",\"harness\":\"claude\",\"input_tokens\":68,\"output_tokens\":16279,\"total_tokens\":16347,\"cost_usd\":2.67057525,\"duration_ms\":525049,\"exit_code\":0}",
+          "created_at": "2026-04-25T21:44:39.522049371Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=16347 cost_usd=2.6706"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-25T21:44:45.316062327Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "REQUEST_CHANGES\nAC #2 strict reading: pre-existing failures in `cmd/` (TestBeadReviewCollapseGolden golden drift; TestAcceptance_US028/029/030/031/034; TestInstallationPerformance) cause `go test ./...` to fail. The evidence file argues these are unrelated and identical before/after — accept that argument or scope the AC, but a downstream bead should either (a) restore a green tree or (b) explicitly amend the AC to exclude the docum…\nartifact: .ddx/executions/20260425T213553-c335fb85/reviewer-stream.log",
+          "created_at": "2026-04-25T21:46:00.632735815Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-25T21:46:00.709775936Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: REQUEST_CHANGES\nAC #2 strict reading: pre-existing failures in `cmd/` (TestBeadReviewCollapseGolden golden drift; TestAcceptance_US028/029/030/031/034; TestInstallationPerformance) cause `go test ./...` to fail. The evidence file argues these are unrelated and identical before/after — accept that argument or scope the AC, but a downstream bead should either (a) restore a green tree or (b) explicitly amend the AC to exclude the documented environmental tests so future beads aren't forced to keep `LEFTHOOK_EXCLUDE=go-test` as standard practice.\nresult_rev=568094e5ad4a38e8bed922a18d69662444c8f5d4\nbase_rev=34c56a4aefff2a8a3fc921474ba0a1fa4ac9f65f",
+          "created_at": "2026-04-25T21:46:00.782716767Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T21:47:21.800102178Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-25T21:47:21.88508596Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-25T21:47:21.971887658Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-25T21:47:22.124973108Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T21:58:33.226938734Z",
+      "execute-loop-last-detail": "agent: identical tool calls repeated, aborting loop",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T215833-b68e06fc",
+    "prompt": ".ddx/executions/20260425T215833-b68e06fc/prompt.md",
+    "manifest": ".ddx/executions/20260425T215833-b68e06fc/manifest.json",
+    "result": ".ddx/executions/20260425T215833-b68e06fc/result.json",
+    "checks": ".ddx/executions/20260425T215833-b68e06fc/checks.json",
+    "usage": ".ddx/executions/20260425T215833-b68e06fc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dd7fce7e-20260425T215833-b68e06fc"
+  }
+}
