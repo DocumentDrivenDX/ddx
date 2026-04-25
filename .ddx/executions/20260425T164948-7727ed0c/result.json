@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Mechanical migration of all `ExecuteBeadLoopOptions{}` constructions to the new `RunWithConfig` + `ExecuteBeadLoopRuntime` API using the `config.TestLoopConfigOpts` helper. Pattern is uniform across all 9 call sites (7 in execute_bead, 2 in tier_escalation), preserving runtime intent (`Once`, `Assignee`) and the durable `MaxNoChangesBeforeClose` knob via the test config helper. Matches Stage 1 migration discipline in SD-024."
+}
