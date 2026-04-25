@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260425T083615-7e646301",
+  "bead_id": "ddx-da89909e",
+  "base_rev": "a991bd2b29082392b5d328b7aeab1acbb949b4e0",
+  "created_at": "2026-04-25T08:36:15.478115646Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-da89909e",
+    "title": "prompt-ingress: hard-fail oversize on agent-side file readers (Stage D1)",
+    "description": "Stage D1 of FEAT-022. Route agent-side --prompt file readers through\nevidence.ReadFileClamped. Hard-fail on oversize with an actionable\nerror naming source, observed size, and configured cap.\n\nImplements FEAT-022 requirements §8 and §9 for the agent-side sites\n(CLI and server-dispatch file readers). Satisfies US-223 for the CLI\npath.\n\nDepends on Stage A1 (ddx-64299657) only.\n\nIn-scope files (5 sites, all in cli/internal/agent/):\n- runner.go (resolvePrompt at :340)\n- compare_adapter.go (defaultResolvePromptForCompare at :181)\n- compare_adapter.go (benchmark suite reader at :614)\n- service_run.go (PromptFile reader at :83) — confirmed path\n- execute_bead.go (promptOverride raw read at :1291)\n\nEach site replaces the raw os.ReadFile with\nevidence.ReadFileClamped(path, evidence.MaxPromptBytes). On oversize:\nreturn a non-nil error whose message contains the file path, observed\nsize in bytes, configured cap in bytes, and a hint pointing at\n.ddx/config.yaml:evidence_caps.max_prompt_bytes.\n\nOut-of-scope:\n- Server-side inline prompt ingress (req.Prompt, DDX_AGENT_PROMPT env,\n  docgraph prompt metadata) — separate bead Stage D2.\n- Server text egress — Stage E.\n- Any new evidence primitives — if one is needed, add to Stage A1 via\n  a blocked-on dependency; do NOT inline a one-off here.\n\nRollback: revert the ReadFileClamped calls to os.ReadFile at each\nsite.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestPromptIngressOversize ./internal/agent/... passes with one subtest per in-scope site: each subtest writes a fixture file = 2× MaxPromptBytes to a temp dir, invokes the site under test, asserts the call returns a non-nil error whose message contains (a) the fixture path, (b) the observed size, (c) the cap in bytes, (d) the string 'evidence_caps.max_prompt_bytes'. cd cli \u0026\u0026 go test ./internal/agent/... passes. Integration smoke: run 'ddx agent run --prompt /tmp/huge-prompt.bin' where the file is 2× MaxPromptBytes; assert exit code != 0 and stderr contains the expected error-message substrings. AST assertion (via TestEvidencePrimitiveUsage in cli/internal/agent/): every os.ReadFile / ioutil.ReadFile call inside runner.go, compare_adapter.go, service_run.go, execute_bead.go whose argument is an opts.PromptFile-style symbol carries an //evidence:allow-unbounded annotation OR has been replaced with evidence.ReadFileClamped.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "area:ingress",
+      "stage:D1"
+    ],
+    "metadata": {
+      "blocked-by": "ddx-64299657",
+      "claimed-at": "2026-04-25T08:36:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T08:36:14.968493894Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T083615-7e646301",
+    "prompt": ".ddx/executions/20260425T083615-7e646301/prompt.md",
+    "manifest": ".ddx/executions/20260425T083615-7e646301/manifest.json",
+    "result": ".ddx/executions/20260425T083615-7e646301/result.json",
+    "checks": ".ddx/executions/20260425T083615-7e646301/checks.json",
+    "usage": ".ddx/executions/20260425T083615-7e646301/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-da89909e-20260425T083615-7e646301"
+  }
+}
