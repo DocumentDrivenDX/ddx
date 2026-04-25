@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T165624-efd724ff",
+  "bead_id": "ddx-5844cb88",
+  "base_rev": "fb64f011517dca692a54ebae090a365ee545438e",
+  "created_at": "2026-04-25T16:56:25.130730652Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5844cb88",
+    "title": "server/test: migrate workers_watchdog + workers_stop_propagation + sibling tests",
+    "description": "Stage 1 of SD-024. Migrate remaining server-side workers_*_test.go sites.\n\nIn-scope:\n- cli/internal/server/workers_watchdog_test.go\n- cli/internal/server/workers_stop_propagation_test.go\n- Any sibling cli/internal/server/workers_*_test.go that constructs ExecuteBeadLoopOptions",
+    "acceptance": "rg 'ExecuteBeadLoopOptions\\\\{' cli/internal/server/ returns 0 matches. cd cli \u0026\u0026 go test ./internal/server/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:test-migration",
+      "area:server",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T16:56:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T16:56:24.618146982Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T165624-efd724ff",
+    "prompt": ".ddx/executions/20260425T165624-efd724ff/prompt.md",
+    "manifest": ".ddx/executions/20260425T165624-efd724ff/manifest.json",
+    "result": ".ddx/executions/20260425T165624-efd724ff/result.json",
+    "checks": ".ddx/executions/20260425T165624-efd724ff/checks.json",
+    "usage": ".ddx/executions/20260425T165624-efd724ff/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5844cb88-20260425T165624-efd724ff"
+  }
+}
