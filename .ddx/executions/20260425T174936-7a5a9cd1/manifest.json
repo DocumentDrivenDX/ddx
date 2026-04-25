@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T174936-7a5a9cd1",
+  "bead_id": "ddx-ee2cd434",
+  "base_rev": "a4f92db6c09ba60a43273ebcf52decf0ce4bc705",
+  "created_at": "2026-04-25T17:49:37.120973738Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ee2cd434",
+    "title": "agent/test: migrate RunOptions test sites (5-10 sites)",
+    "description": "Stage 2 of SD-024. Mechanical migration of every test that constructs RunOptions{...}.\n\nIn-scope:\n- cli/internal/agent/agent_test.go and any sibling test using RunOptions\n- cli/internal/agent/prompt_ingress_oversize_test.go",
+    "acceptance": "rg 'RunOptions\\\\{|CompareOptions\\\\{|QuorumOptions\\\\{' cli/ returns 0 matches outside the type definitions about to be retired. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:test-migration",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T17:49:36Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T17:49:36.531715471Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T174936-7a5a9cd1",
+    "prompt": ".ddx/executions/20260425T174936-7a5a9cd1/prompt.md",
+    "manifest": ".ddx/executions/20260425T174936-7a5a9cd1/manifest.json",
+    "result": ".ddx/executions/20260425T174936-7a5a9cd1/result.json",
+    "checks": ".ddx/executions/20260425T174936-7a5a9cd1/checks.json",
+    "usage": ".ddx/executions/20260425T174936-7a5a9cd1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ee2cd434-20260425T174936-7a5a9cd1"
+  }
+}
