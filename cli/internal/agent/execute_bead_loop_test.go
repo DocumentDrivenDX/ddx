@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,9 @@ func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Attempts)
@@ -70,8 +73,9 @@ func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee:    "worker",
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:        true,
 		LabelFilter: "ui",
 	})
@@ -111,7 +115,9 @@ func TestExecuteBeadWorkerPreservedFailureStaysOpenAndContinues(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker"})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.ElementsMatch(t, []string{first.ID, second.ID}, executed)
@@ -157,7 +163,9 @@ func TestExecuteBeadWorkerLandConflictStaysOpenAndContinues(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker"})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.ElementsMatch(t, []string{first.ID, second.ID}, executed)
@@ -203,7 +211,9 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker"})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.ElementsMatch(t, []string{first.ID, second.ID}, executed)
@@ -254,7 +264,9 @@ func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing
 		},
 	}
 
-	firstRun, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	firstRun, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, firstRun)
 	assert.Equal(t, 1, firstRun.Attempts)
@@ -269,7 +281,7 @@ func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing
 	assert.Equal(t, "agent made no commits", gotFirst.Extra["execute-loop-last-detail"])
 	assert.NotEmpty(t, gotFirst.Extra["execute-loop-retry-after"])
 
-	secondRun, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	secondRun, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, secondRun)
 	assert.Equal(t, 1, secondRun.Attempts)
@@ -294,7 +306,9 @@ func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker"})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.NoReadyWork)
@@ -327,7 +341,9 @@ func TestExecuteBeadWorkerNoReadyWork_EpicOnlyQueue(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker"})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.NoReadyWork, "NoReadyWork must fire when execution queue is empty but dep-ready queue isn't")
@@ -376,13 +392,17 @@ func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing
 	results := make([]*ExecuteBeadLoopResult, 2)
 	errs := make([]error, 2)
 
+	cfgOptsA := config.TestLoopConfigOpts{Assignee: "worker-a"}
+	rcfgA := config.NewTestConfigForLoop(cfgOptsA).Resolve(config.TestLoopOverrides(cfgOptsA))
+	cfgOptsB := config.TestLoopConfigOpts{Assignee: "worker-b"}
+	rcfgB := config.NewTestConfigForLoop(cfgOptsB).Resolve(config.TestLoopOverrides(cfgOptsB))
 	go func() {
 		defer wg.Done()
-		results[0], errs[0] = workerA.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-a", Once: true})
+		results[0], errs[0] = workerA.RunWithConfig(context.Background(), rcfgA, ExecuteBeadLoopRuntime{Once: true})
 	}()
 	go func() {
 		defer wg.Done()
-		results[1], errs[1] = workerB.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-b", Once: true})
+		results[1], errs[1] = workerB.RunWithConfig(context.Background(), rcfgB, ExecuteBeadLoopRuntime{Once: true})
 	}()
 
 	<-started
