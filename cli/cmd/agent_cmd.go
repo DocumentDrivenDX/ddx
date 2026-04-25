@@ -2039,7 +2039,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	}
 
 	cliLandingOps := agent.RealLandingGitOps{}
-	result, err := worker.RunWithConfig(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
+	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Once:         once,
 		PollInterval: pollInterval,
 		Log:          cmd.OutOrStdout(),

@@ -49,7 +49,7 @@ func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.RunWithConfig(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{Once: true})
+	_, err := worker.Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
 	events, err := store.Events("ddx-rev-approve")
@@ -119,7 +119,7 @@ func TestReviewEvidenceRequestChangesCountedAsRejection(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.RunWithConfig(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{Once: true})
+	_, err := worker.Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
 	events, err := store.Events("ddx-rev-reject")

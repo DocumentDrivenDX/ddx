@@ -96,7 +96,7 @@ review_max_retries: 5
 	// matching the production loop's per-iteration claim/release rhythm).
 	const totalIterations = failUntil + 1
 	for i := 0; i < totalIterations; i++ {
-		_, runErr := worker.RunWithConfig(context.Background(), rcfg, runtime)
+		_, runErr := worker.Run(context.Background(), rcfg, runtime)
 		require.NoErrorf(t, runErr, "iteration %d: RunWithConfig", i+1)
 		if i < totalIterations-1 {
 			// On a reviewer-error iteration the loop intentionally leaves

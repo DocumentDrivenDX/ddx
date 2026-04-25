@@ -63,7 +63,7 @@ func TestReviewFailureRunner(t *testing.T) {
 
 	const totalIterations = failUntil + 1
 	for i := 0; i < totalIterations; i++ {
-		_, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
+		_, err := worker.Run(context.Background(), rcfg, runtime)
 		require.NoErrorf(t, err, "iteration %d: RunWithConfig", i+1)
 		// On a reviewer-error iteration the loop intentionally leaves
 		// the bead claimed (no Close, no Reopen) so the next iteration
@@ -167,7 +167,7 @@ func TestReviewFailureRunner_ThresholdEscalation(t *testing.T) {
 	// configured threshold and emits review-manual-required, parking
 	// the bead via SetExecutionCooldown.
 	for i := 0; i < threshold; i++ {
-		_, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
+		_, err := worker.Run(context.Background(), rcfg, runtime)
 		require.NoErrorf(t, err, "iteration %d", i+1)
 		if i < threshold-1 {
 			require.NoError(t, store.Unclaim(beadID))

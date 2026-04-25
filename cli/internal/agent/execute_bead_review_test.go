@@ -79,7 +79,7 @@ func TestExecuteBeadWorkerReviewApproveClosesBead(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Successes)
@@ -124,7 +124,7 @@ func TestExecuteBeadWorkerReviewRequestChangesReopensAndCountsFailure(t *testing
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Successes)
@@ -167,7 +167,7 @@ func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Successes)
@@ -213,7 +213,7 @@ func TestExecuteBeadWorkerReviewBlockWithoutRationaleIsMalfunction(t *testing.T)
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Successes)
@@ -320,7 +320,7 @@ func TestExecuteBeadWorkerNoReviewSkipsReviewer(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:     true,
 		NoReview: true,
 	})
@@ -358,7 +358,7 @@ func TestExecuteBeadWorkerReviewSkipLabelSkipsReviewer(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)
@@ -383,7 +383,7 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Successes)
 
@@ -421,7 +421,7 @@ func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		// no Once flag: drain the queue fully within this run
 	})
 	require.NoError(t, err)

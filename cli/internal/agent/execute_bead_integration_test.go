@@ -53,7 +53,7 @@ func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "integration-worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 		MaxNoChangesBeforeClose: 3, // explicit threshold so test is readable
 	}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestIntegration_ScriptHarness_DirtyWorktreeSynthesized(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "integration-worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "integration-worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)
@@ -317,7 +317,7 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 			worker := &ExecuteBeadWorker{Store: store, Executor: dispatchExec}
 			cfgOpts := config.TestLoopConfigOpts{Assignee: fmt.Sprintf("worker-%d", i)}
 			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-			results[i], errs[i] = worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			results[i], errs[i] = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 				Once: false,
 			})
 		}()
@@ -384,7 +384,7 @@ func TestIntegration_ScriptHarness_TwoWorkersSameBead_ClaimedOnce(t *testing.T) 
 			worker := &ExecuteBeadWorker{Store: store, Executor: executor}
 			cfgOpts := config.TestLoopConfigOpts{Assignee: fmt.Sprintf("worker-%d", i)}
 			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-			results[i], errs[i] = worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			results[i], errs[i] = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 				Once: true,
 			})
 		}()
@@ -463,7 +463,7 @@ func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "cancel-worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	// No Once: true — the worker would try to loop without context cancel.
-	_, err := worker.RunWithConfig(ctx, rcfg, ExecuteBeadLoopRuntime{})
+	_, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{})
 	// Context cancellation should cause Run to return context.Canceled.
 	assert.ErrorIs(t, err, context.Canceled, "Run must return context.Canceled after cancel")
 
@@ -524,7 +524,7 @@ func TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast(t *testing.
 		MaxNoChangesBeforeClose: 3, // would require 3 strikes without a specific rationale
 	}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)

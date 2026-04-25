@@ -15,14 +15,10 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
-// ExecuteBeadLoopRuntime is the SD-024 successor to ExecuteBeadLoopOptions.
-// Durable knobs (Assignee, ReviewMaxRetries, NoProgressCooldown,
-// MaxNoChangesBeforeClose, HeartbeatInterval, Harness, Model, Provider,
-// ModelRef, Profile, MinTier, MaxTier) are stripped — they live on
-// config.ResolvedConfig and are passed via RunWithConfig's rcfg argument.
-// Only non-serializable plumbing and per-invocation runtime intent remain.
-//
-// See SD-024 / TD-024 §Runtime structs and §Bead 6.
+// ExecuteBeadLoopRuntime carries the non-serializable plumbing and
+// per-invocation runtime intent for an execute-bead loop run. Durable knobs
+// (assignee, retry caps, harness/model, tier bounds, etc.) live on
+// config.ResolvedConfig and are passed via Run's rcfg argument.
 type ExecuteBeadLoopRuntime struct {
 	Log          io.Writer
 	EventSink    io.Writer
@@ -35,42 +31,6 @@ type ExecuteBeadLoopRuntime struct {
 	SessionID    string
 	WorkerID     string
 	ProjectRoot  string
-}
-
-// RunWithConfig is the SD-024 successor to Run. It accepts a sealed
-// ResolvedConfig (durable knobs) and a ExecuteBeadLoopRuntime (plumbing
-// + per-invocation intent) and delegates to Run under the hood. Behavior
-// is identical to Run with an equivalently-populated ExecuteBeadLoopOptions.
-//
-// Stage 1 of SD-024: this method exists alongside Run; production callers
-// have not migrated yet.
-func (w *ExecuteBeadWorker) RunWithConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
-	opts := ExecuteBeadLoopOptions{
-		Assignee:                rcfg.Assignee(),
-		Once:                    runtime.Once,
-		PollInterval:            runtime.PollInterval,
-		NoProgressCooldown:      rcfg.NoProgressCooldown(),
-		MaxNoChangesBeforeClose: rcfg.MaxNoChangesBeforeClose(),
-		HeartbeatInterval:       rcfg.HeartbeatInterval(),
-		Log:                     runtime.Log,
-		NoReview:                runtime.NoReview,
-		ReviewMaxRetries:        rcfg.ReviewMaxRetries(),
-		EventSink:               runtime.EventSink,
-		ProgressCh:              runtime.ProgressCh,
-		PreClaimHook:            runtime.PreClaimHook,
-		WorkerID:                runtime.WorkerID,
-		ProjectRoot:             runtime.ProjectRoot,
-		Harness:                 rcfg.Harness(),
-		Model:                   rcfg.Model(),
-		Profile:                 rcfg.Profile(),
-		Provider:                rcfg.Provider(),
-		ModelRef:                rcfg.ModelRef(),
-		SessionID:               runtime.SessionID,
-		LabelFilter:             runtime.LabelFilter,
-		MinTier:                 rcfg.MinTier(),
-		MaxTier:                 rcfg.MaxTier(),
-	}
-	return w.Run(ctx, opts)
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -206,72 +166,6 @@ type ProgressEvent struct {
 	Message   string    `json:"message,omitempty"`
 }
 
-type ExecuteBeadLoopOptions struct {
-	Assignee                string
-	Once                    bool
-	PollInterval            time.Duration
-	NoProgressCooldown      time.Duration
-	MaxNoChangesBeforeClose int
-	// HeartbeatInterval, if > 0, overrides bead.HeartbeatInterval for this
-	// worker's claim heartbeat loop. Tests use this to shorten the tick.
-	HeartbeatInterval time.Duration
-	Log               io.Writer
-	// NoReview, when true, skips the post-merge review step even when
-	// ExecuteBeadWorker.Reviewer is configured. Use for doc-only beads or
-	// tight iteration loops where review latency is not acceptable.
-	NoReview bool
-
-	// ReviewMaxRetries caps the number of reviewer attempts per committed
-	// result_rev before the loop emits a terminal `review-manual-required`
-	// event and parks the bead (FEAT-022 §14). Zero or negative falls back
-	// to DefaultReviewMaxRetries (3). The counter is scoped to a single
-	// result_rev: a fresh result_rev resets the counter, and iterations
-	// without a committed result_rev (--no-merge, execution-failed) do not
-	// consume the budget because the reviewer is not invoked.
-	ReviewMaxRetries int
-
-	// EventSink receives structured JSONL progress events emitted at
-	// loop.start, bead.claimed, bead.result, and loop.end milestones.
-	// When nil, no structured events are written. Log (terminal text)
-	// is independent and still emitted for human operators.
-	EventSink io.Writer
-
-	// ProgressCh, when non-nil, receives FEAT-006 ProgressEvents for each
-	// bead execution managed by this loop. The caller is responsible for
-	// draining the channel; the loop sends non-blocking (events are dropped
-	// if the channel is full). The loop does NOT close this channel; the
-	// caller (WorkerManager.runWorker) closes it after Run returns.
-	ProgressCh chan<- ProgressEvent
-
-	// PreClaimHook, when non-nil, is called before Store.Claim for each
-	// candidate bead. If it returns an error the bead is not claimed and the
-	// loop continues to the next iteration (ctx is NOT cancelled). A nil hook
-	// disables the check. Server and CLI paths wire a real implementation
-	// backed by LandingGitOps.FetchOriginAncestryCheck; tests may inject nil
-	// or a stub that always returns nil.
-	PreClaimHook func(ctx context.Context) error
-
-	// Worker/session metadata included in loop.start events so log
-	// aggregators can correlate structured output with the executing
-	// harness/worker. None of these are required.
-	WorkerID    string
-	ProjectRoot string
-	Harness     string
-	Model       string
-	Profile     string
-	Provider    string
-	ModelRef    string
-	SessionID   string
-	LabelFilter string
-
-	// MinTier and MaxTier bound the tier escalation range when the executor
-	// uses tier-based auto-escalation. Empty string uses the defaults (cheap
-	// and smart). Ignored when the executor has escalation disabled (e.g. an
-	// explicit --harness or --model override was specified).
-	MinTier string
-	MaxTier string
-}
-
 type ExecuteBeadLoopResult struct {
 	Attempts          int                  `json:"attempts"`
 	Successes         int                  `json:"successes"`
@@ -297,7 +191,7 @@ type ExecuteBeadWorker struct {
 	Reviewer BeadReviewer
 }
 
-// emitProgress sends a ProgressEvent to opts.ProgressCh non-blocking.
+// emitProgress sends a ProgressEvent to runtime.ProgressCh non-blocking.
 // If ch is nil or full the event is silently dropped.
 func emitProgress(ch chan<- ProgressEvent, evt ProgressEvent) {
 	if ch == nil {
@@ -310,16 +204,16 @@ func emitProgress(ch chan<- ProgressEvent, evt ProgressEvent) {
 }
 
 // newProgressEvent builds a ProgressEvent with a random event_id and current timestamp.
-func newProgressEvent(workerID, projectID, beadID, attemptID, phase string, phaseSeq int, heartbeat bool, elapsedMS int64, opts ExecuteBeadLoopOptions) ProgressEvent {
+func newProgressEvent(workerID, projectID, beadID, attemptID, harness, model, profile, phase string, phaseSeq int, heartbeat bool, elapsedMS int64) ProgressEvent {
 	return ProgressEvent{
 		EventID:   "evt-" + randomProgressID(),
 		AttemptID: attemptID,
 		WorkerID:  workerID,
 		ProjectID: projectID,
 		BeadID:    beadID,
-		Harness:   opts.Harness,
-		Model:     opts.Model,
-		Profile:   opts.Profile,
+		Harness:   harness,
+		Model:     model,
+		Profile:   profile,
 		Phase:     phase,
 		PhaseSeq:  phaseSeq,
 		Heartbeat: heartbeat,
@@ -332,7 +226,7 @@ func randomProgressID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())[:8]
 }
 
-func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions) (*ExecuteBeadLoopResult, error) {
+func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
 	if w.Store == nil {
 		return nil, fmt.Errorf("execute-bead loop: store is required")
 	}
@@ -344,38 +238,41 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 	if now == nil {
 		now = time.Now
 	}
-	assignee := opts.Assignee
+	assignee := rcfg.Assignee()
 	if assignee == "" {
 		assignee = "ddx"
 	}
-	noProgressCooldown := opts.NoProgressCooldown
+	noProgressCooldown := rcfg.NoProgressCooldown()
 	if noProgressCooldown <= 0 {
 		noProgressCooldown = 6 * time.Hour
 	}
-	maxNoChangesBeforeClose := opts.MaxNoChangesBeforeClose
+	maxNoChangesBeforeClose := rcfg.MaxNoChangesBeforeClose()
 	if maxNoChangesBeforeClose <= 0 {
 		maxNoChangesBeforeClose = 3
 	}
-	heartbeatInterval := opts.HeartbeatInterval
+	heartbeatInterval := rcfg.HeartbeatInterval()
 	if heartbeatInterval <= 0 {
 		heartbeatInterval = bead.HeartbeatInterval
 	}
+	harness := rcfg.Harness()
+	model := rcfg.Model()
+	profile := rcfg.Profile()
 
 	result := &ExecuteBeadLoopResult{}
 	attempted := make(map[string]struct{})
 
 	emit := func(eventType string, data map[string]any) {
-		writeLoopEvent(opts.EventSink, opts.SessionID, eventType, data, now().UTC())
+		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
 	}
 
 	emit("loop.start", map[string]any{
-		"worker_id":    opts.WorkerID,
-		"project_root": opts.ProjectRoot,
-		"harness":      opts.Harness,
-		"model":        opts.Model,
-		"session_id":   opts.SessionID,
+		"worker_id":    runtime.WorkerID,
+		"project_root": runtime.ProjectRoot,
+		"harness":      harness,
+		"model":        model,
+		"session_id":   runtime.SessionID,
 		"assignee":     assignee,
-		"once":         opts.Once,
+		"once":         runtime.Once,
 	})
 	defer func() {
 		emit("loop.end", map[string]any{
@@ -395,7 +292,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			return result, err
 		}
 
-		candidate, ok, err := w.nextCandidate(attempted, opts.LabelFilter)
+		candidate, ok, err := w.nextCandidate(attempted, runtime.LabelFilter)
 		if err != nil {
 			return result, err
 		}
@@ -414,10 +311,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 					}
 				}
 			}
-			if opts.PollInterval <= 0 {
+			if runtime.PollInterval <= 0 {
 				return result, nil
 			}
-			if err := sleepWithContext(ctx, opts.PollInterval); err != nil {
+			if err := sleepWithContext(ctx, runtime.PollInterval); err != nil {
 				return result, err
 			}
 			continue
@@ -428,10 +325,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		// Pre-claim hook: fetch origin + verify ancestry before claiming.
 		// On error the bead is skipped for this iteration; the loop
 		// continues (ctx is not cancelled).
-		if opts.PreClaimHook != nil {
-			if hookErr := opts.PreClaimHook(ctx); hookErr != nil {
-				if opts.Log != nil {
-					_, _ = fmt.Fprintf(opts.Log, "pre-claim hook: %v (skipping %s)\n", hookErr, candidate.ID)
+		if runtime.PreClaimHook != nil {
+			if hookErr := runtime.PreClaimHook(ctx); hookErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim hook: %v (skipping %s)\n", hookErr, candidate.ID)
 				}
 				emit("preclaim.skipped", map[string]any{
 					"bead_id": candidate.ID,
@@ -451,11 +348,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			"assignee": assignee,
 		})
 
-		if opts.Log != nil {
+		if runtime.Log != nil {
 			if candidate.Title != "" {
-				_, _ = fmt.Fprintf(opts.Log, "\n▶ %s: %s\n", candidate.ID, candidate.Title)
+				_, _ = fmt.Fprintf(runtime.Log, "\n▶ %s: %s\n", candidate.ID, candidate.Title)
 			} else {
-				_, _ = fmt.Fprintf(opts.Log, "\n▶ %s\n", candidate.ID)
+				_, _ = fmt.Fprintf(runtime.Log, "\n▶ %s\n", candidate.ID)
 			}
 		}
 
@@ -467,9 +364,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 		phaseSeq := 0
 		nextPhase := func(phase string, heartbeat bool) {
 			phaseSeq++
-			emitProgress(opts.ProgressCh, newProgressEvent(
-				opts.WorkerID, opts.ProjectRoot, candidate.ID, provAttemptID,
-				phase, phaseSeq, heartbeat, now().Sub(runStart).Milliseconds(), opts,
+			emitProgress(runtime.ProgressCh, newProgressEvent(
+				runtime.WorkerID, runtime.ProjectRoot, candidate.ID, provAttemptID,
+				harness, model, profile,
+				phase, phaseSeq, heartbeat, now().Sub(runStart).Milliseconds(),
 			))
 		}
 
@@ -522,7 +420,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			// (ddx-e30e60a9) accepts this path because closing_commit_sha is
 			// set and there is no malformed-APPROVE event to reject.
 			reviewApproved := true
-			reviewSkipped := w.Reviewer == nil || opts.NoReview || HasBeadLabel(candidate.Labels, "review:skip")
+			reviewSkipped := w.Reviewer == nil || runtime.NoReview || HasBeadLabel(candidate.Labels, "review:skip")
 
 			if reviewSkipped {
 				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
@@ -530,7 +428,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 				}
 			}
 
-			if w.Reviewer != nil && !opts.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
+			if w.Reviewer != nil && !runtime.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
 				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, report.Harness, report.Model)
 				if reviewErr != nil {
 					// FEAT-022 §12+§14: classify the failure into the four-class
@@ -542,7 +440,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 					class := classifyReviewError(reviewErr, reviewRes)
 					prior := countPriorReviewErrors(w.Store, candidate.ID, report.ResultRev)
 					attemptCount := prior + 1
-					maxRetries := opts.ReviewMaxRetries
+					maxRetries := rcfg.ReviewMaxRetries()
 					if maxRetries <= 0 {
 						maxRetries = DefaultReviewMaxRetries
 					}
@@ -595,9 +493,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 					// still contains the short verdict summary; callers of this
 					// loop can recover the full text from the reviewer session
 					// log if the artifact write failed.
-					artifactPath, artifactErr := persistReviewerStream(opts.ProjectRoot, candidate.ID, report.AttemptID, reviewRes.RawOutput)
-					if artifactErr != nil && opts.Log != nil {
-						_, _ = fmt.Fprintf(opts.Log, "reviewer stream artifact: %v\n", artifactErr)
+					artifactPath, artifactErr := persistReviewerStream(runtime.ProjectRoot, candidate.ID, report.AttemptID, reviewRes.RawOutput)
+					if artifactErr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "reviewer stream artifact: %v\n", artifactErr)
 					}
 
 					reviewSummary := EventBodySummary{
@@ -775,15 +673,15 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			finalAttemptID = provAttemptID
 		}
 		phaseSeq++
-		emitProgress(opts.ProgressCh, ProgressEvent{
+		emitProgress(runtime.ProgressCh, ProgressEvent{
 			EventID:   "evt-" + randomProgressID(),
 			AttemptID: finalAttemptID,
-			WorkerID:  opts.WorkerID,
-			ProjectID: opts.ProjectRoot,
+			WorkerID:  runtime.WorkerID,
+			ProjectID: runtime.ProjectRoot,
 			BeadID:    candidate.ID,
-			Harness:   opts.Harness,
-			Model:     opts.Model,
-			Profile:   opts.Profile,
+			Harness:   harness,
+			Model:     model,
+			Profile:   profile,
 			Phase:     terminalPhase,
 			PhaseSeq:  phaseSeq,
 			Heartbeat: false,
@@ -804,11 +702,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, opts ExecuteBeadLoopOptions
 			"duration_ms":          now().Sub(runStart).Milliseconds(),
 		})
 
-		if opts.Log != nil {
-			_, _ = fmt.Fprintf(opts.Log, "✓ %s → %s\n", candidate.ID, formatLoopResult(report))
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "✓ %s → %s\n", candidate.ID, formatLoopResult(report))
 		}
 
-		if opts.Once {
+		if runtime.Once {
 			return result, nil
 		}
 	}

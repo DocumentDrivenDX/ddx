@@ -158,7 +158,7 @@ agent:
 
 	const totalIterations = failUntil + 1
 	for i := 0; i < totalIterations; i++ {
-		_, runErr := worker.RunWithConfig(context.Background(), rcfg, runtime)
+		_, runErr := worker.Run(context.Background(), rcfg, runtime)
 		require.NoErrorf(t, runErr, "iteration %d: RunWithConfig", i+1)
 		if i < totalIterations-1 {
 			require.NoErrorf(t, store.Unclaim(beadID), "iteration %d: unclaim", i+1)

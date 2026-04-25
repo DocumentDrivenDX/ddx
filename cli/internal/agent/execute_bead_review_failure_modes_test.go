@@ -64,7 +64,7 @@ func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 
 			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-			_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+			_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 			require.NoError(t, err)
 
 			got, err := store.Get(first.ID)

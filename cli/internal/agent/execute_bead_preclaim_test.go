@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -176,9 +177,10 @@ func TestPreClaimHookDivergedSkipsBead(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "worker",
-		Once:     true,
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 		PreClaimHook: func(ctx context.Context) error {
 			return fmt.Errorf("diverged: local=aaa origin=bbb")
 		},

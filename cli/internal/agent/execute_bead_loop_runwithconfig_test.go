@@ -55,7 +55,7 @@ func TestRunWithConfigDelegation(t *testing.T) {
 		WorkerID:  "wkr-rt",
 	}
 
-	result, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
+	result, err := worker.Run(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Attempts)
@@ -120,5 +120,5 @@ func TestRunWithConfigDelegation_ZeroValueRcfgPanics(t *testing.T) {
 	}()
 
 	var rcfg config.ResolvedConfig
-	_, _ = worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	_, _ = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 }

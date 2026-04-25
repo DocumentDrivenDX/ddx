@@ -83,7 +83,7 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 	// based on callCount, mirroring the real escalation loop.
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "test-worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestEscalationTierRecordedInFinalEvent(t *testing.T) {
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "test-worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 	})
 	require.NoError(t, err)

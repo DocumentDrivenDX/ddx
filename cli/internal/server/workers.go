@@ -897,7 +897,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
 	landingOps := agent.RealLandingGitOps{}
-	loopResult, err := worker.RunWithConfig(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
+	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
 		Once:         spec.Once,
 		PollInterval: spec.PollInterval,
 		Log:          log,

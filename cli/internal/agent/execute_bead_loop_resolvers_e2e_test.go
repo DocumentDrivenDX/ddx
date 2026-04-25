@@ -74,7 +74,7 @@ workers:
 		"LoadAndResolve must surface workers.no_progress_cooldown from .ddx/config.yaml")
 
 	before := time.Now().UTC()
-	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:        true,
 		ProjectRoot: t.TempDir(),
 	})
@@ -180,7 +180,7 @@ workers:
 
 	// Iteration 1: count becomes 1, < threshold, not satisfied, bead stays
 	// open without cooldown (BaseRev empty), reverts to ready for iteration 2.
-	res1, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
+	res1, err := worker.Run(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	require.Equal(t, 1, res1.Attempts, "iteration 1 must run exactly once")
 	require.Equal(t, 0, res1.Successes, "iteration 1 must not close the bead (count=1 < threshold=2)")
@@ -200,7 +200,7 @@ workers:
 
 	// Iteration 2: count becomes 2, >= threshold, satisfied, bead closed
 	// as already_satisfied.
-	res2, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
+	res2, err := worker.Run(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	require.Equal(t, 1, res2.Attempts, "iteration 2 must run exactly once")
 	require.Equal(t, 1, res2.Successes, "iteration 2 must close the bead via the count-based rule")
