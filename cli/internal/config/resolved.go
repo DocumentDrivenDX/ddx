@@ -39,9 +39,15 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.reviewMaxRetries = c.ResolveReviewMaxRetries()
 
 	var agent *AgentConfig
+	var workers *WorkersConfig
 	if c != nil {
 		agent = c.Agent.Clone()
+		workers = c.Workers
 	}
+
+	r.noProgressCooldown = workers.ResolveNoProgressCooldown()
+	r.maxNoChangesBeforeClose = workers.ResolveMaxNoChangesBeforeClose()
+	r.heartbeatInterval = workers.ResolveHeartbeatInterval()
 
 	r.harness = overrides.Harness
 	if r.harness == "" && agent != nil {
