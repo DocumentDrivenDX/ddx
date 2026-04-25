@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T225551-063394ca",
+  "bead_id": "ddx-ade5ebb3",
+  "base_rev": "b199cf3cb11f50cfe842c5ad7faa9ac9db183ef7",
+  "created_at": "2026-04-25T22:55:51.819532903Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ade5ebb3",
+    "title": "agent: retire RunOptions + CompareOptions + QuorumOptions + legacy Run",
+    "description": "Stage 2 of SD-024 cleanup. Removes all three legacy options types and the legacy Run method on the agent runner. Renames RunWithConfig to Run.\n\nDepends on bead 16 (Stage 1 cleanup) AND beads 17-21 (every Stage 2 caller migrated).\n\nIn-scope:\n- cli/internal/agent/types.go — delete RunOptions, CompareOptions, QuorumOptions structs\n- cli/internal/agent/runner.go — delete legacy Run, rename RunWithConfig",
+    "acceptance": "rg 'type (RunOptions|CompareOptions|QuorumOptions) ' cli/ returns 0. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:cleanup",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T22:55:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T22:55:51.325774084Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T225551-063394ca",
+    "prompt": ".ddx/executions/20260425T225551-063394ca/prompt.md",
+    "manifest": ".ddx/executions/20260425T225551-063394ca/manifest.json",
+    "result": ".ddx/executions/20260425T225551-063394ca/result.json",
+    "checks": ".ddx/executions/20260425T225551-063394ca/checks.json",
+    "usage": ".ddx/executions/20260425T225551-063394ca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ade5ebb3-20260425T225551-063394ca"
+  }
+}
