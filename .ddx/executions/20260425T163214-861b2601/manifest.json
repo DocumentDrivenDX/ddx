@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T163214-861b2601",
+  "bead_id": "ddx-80ffc874",
+  "base_rev": "8bffd285712e47d9a81b0e4c7290cf117b556534",
+  "created_at": "2026-04-25T16:32:15.028824166Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-80ffc874",
+    "title": "agent/test: migrate review_retry + review_failure_modes + review_taxonomy tests",
+    "description": "Stage 1 of SD-024. Mechanical migration of ExecuteBeadLoopOptions literals in three review test files (~486 LoC combined).\n\nIn-scope:\n- cli/internal/agent/execute_bead_review_retry_test.go\n- cli/internal/agent/execute_bead_review_failure_modes_test.go\n- cli/internal/agent/execute_bead_review_taxonomy_test.go",
+    "acceptance": "rg 'ExecuteBeadLoopOptions\\\\{' cli/internal/agent/execute_bead_review_retry_test.go cli/internal/agent/execute_bead_review_failure_modes_test.go cli/internal/agent/execute_bead_review_taxonomy_test.go returns 0 matches. cd cli \u0026\u0026 go test ./internal/agent/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:test-migration",
+      "area:agent",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T16:32:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T16:32:14.421614352Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T163214-861b2601",
+    "prompt": ".ddx/executions/20260425T163214-861b2601/prompt.md",
+    "manifest": ".ddx/executions/20260425T163214-861b2601/manifest.json",
+    "result": ".ddx/executions/20260425T163214-861b2601/result.json",
+    "checks": ".ddx/executions/20260425T163214-861b2601/checks.json",
+    "usage": ".ddx/executions/20260425T163214-861b2601/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-80ffc874-20260425T163214-861b2601"
+  }
+}
