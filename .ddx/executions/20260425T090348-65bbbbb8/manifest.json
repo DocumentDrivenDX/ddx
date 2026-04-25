@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T090348-65bbbbb8",
+  "bead_id": "ddx-c3736074",
+  "base_rev": "2d64511a881d029e53c2148853f9238bdb59be78",
+  "created_at": "2026-04-25T09:03:48.917167964Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c3736074",
+    "title": "evidence: structural sink lint rule enforcing no-unbounded-prompts invariant (Stage A2)",
+    "description": "Stage A2 of FEAT-022. Implements the repo-wide lint rule enforcing\nthe no-unbounded-prompts invariant (FEAT-022 §3 + Non-Functional §Lint).\nSatisfies US-226.\n\nDepends on Stage A1 (ddx-64299657) — needs the evidence-package\nprimitives to exist so the lint rule can whitelist them.\n\nTooling choice (decided, no worker ambiguity): implement as a Go\nanalyzer under cli/tools/lint/evidencelint/ runnable via\n`go run ./tools/lint/evidencelint/cmd/evidencelint ./...` and wired\ninto Lefthook pre-commit as an additional check. This is the simplest\npath that works with the existing golangci-lint + go-vet stack and\navoids a custom golangci-lint plugin build. If this choice proves\nwrong, revisit in a follow-up bead — do not expand scope here.\n\nThe analyzer flags, and requires either routing through evidence.* or\nan `evidence:allow-unbounded reason=\"...\"` comment on:\n- Any assignment expression whose LHS is a selector matching\n  `*.Prompt` where the receiver type is the agent RunOptions struct.\n- Any composite-literal construction of `mcpContent` with `Type: \"text\"`.\n- Any call to `os.ReadFile` / `ioutil.ReadFile` whose result flows\n  into a variable named `*prompt*` or `*Prompt*` (structural heuristic\n  covering the identified ingress sites).\n- Any HTTP handler function writing response bytes that it obtained\n  from library-doc, execution-bundle, diff, session, or persona\n  sources (detected structurally by the source function's package\n  prefix, not general dataflow).\n\nStatic/literal prompt fragments (constant string expressions compiled\ninto the binary) are exempt.\n\nIn-scope files:\n- cli/tools/lint/evidencelint/ (new): analyzer.go, analyzer_test.go,\n  and cmd/evidencelint/main.go entry point.\n- lefthook.yml (existing): add evidence-lint pre-commit hook.\n- .github/workflows/ CI config: add evidence-lint job or fold into\n  existing lint job.\n\nOut-of-scope:\n- Any existing prompt-building call site. This bead only adds the\n  analyzer. Existing violations are expected and tolerated via\n  `evidence:allow-unbounded` annotations added in subsequent stages\n  (B–E) as those stages migrate each site.\n- Dataflow analysis. Structural coverage only — per FEAT-022\n  Non-Functional §Lint.\n\nRollback: remove cli/tools/lint/evidencelint/, revert lefthook.yml\nand CI workflow edits.",
+    "acceptance": "cd cli \u0026\u0026 go build ./tools/lint/evidencelint/... passes. cd cli \u0026\u0026 go test ./tools/lint/evidencelint/... passes with test fixtures covering all four sink patterns (RunOptions.Prompt assignment, mcpContent Type:text construction, os.ReadFile result flowing into a *prompt* variable, server handler writing doc-sourced response bytes). Adversarial test: a test fixture introducing one unannotated violation per pattern makes the analyzer exit non-zero with a message that names the file and line. Positive test: a fixture with the same violation carrying an evidence:allow-unbounded comment passes the analyzer. lefthook run pre-commit on a synthetic branch that introduces an unannotated violation exits non-zero. Running the analyzer against the current tree (before Stages B–E migrate call sites) exits non-zero (confirms it would actually have caught the original problem).",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:tooling",
+      "area:evidence",
+      "stage:A2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T09:03:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T09:03:48.31507294Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T090348-65bbbbb8",
+    "prompt": ".ddx/executions/20260425T090348-65bbbbb8/prompt.md",
+    "manifest": ".ddx/executions/20260425T090348-65bbbbb8/manifest.json",
+    "result": ".ddx/executions/20260425T090348-65bbbbb8/result.json",
+    "checks": ".ddx/executions/20260425T090348-65bbbbb8/checks.json",
+    "usage": ".ddx/executions/20260425T090348-65bbbbb8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c3736074-20260425T090348-65bbbbb8"
+  }
+}
