@@ -182,7 +182,7 @@ func RunCompareWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir s
 func defaultResolvePromptForCompare(opts RunOptions) (string, error) {
 	prompt := opts.Prompt
 	if opts.PromptFile != "" {
-		data, err := os.ReadFile(opts.PromptFile)
+		data, err := readPromptFileBounded(opts.PromptFile)
 		if err != nil {
 			return "", fmt.Errorf("agent: read prompt file: %w", err)
 		}
@@ -580,7 +580,7 @@ func RunBenchmarkWith(runCompare func(CompareOptions) (*ComparisonRecord, error)
 	for _, prompt := range suite.Prompts {
 		promptText := prompt.Prompt
 		if promptText == "" && prompt.PromptFile != "" {
-			data, err := os.ReadFile(prompt.PromptFile)
+			data, err := readPromptFileBounded(prompt.PromptFile)
 			if err != nil {
 				return nil, fmt.Errorf("reading prompt file %s: %w", prompt.PromptFile, err)
 			}

@@ -1294,7 +1294,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(workDir, path)
 		}
-		data, err := os.ReadFile(path)
+		data, err := readPromptFileBounded(path)
 		if err != nil {
 			return nil, "", fmt.Errorf("reading prompt override %q: %w", promptOverride, err)
 		}

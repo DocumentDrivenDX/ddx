@@ -83,7 +83,7 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 	// Resolve prompt either from inline text or PromptFile.
 	promptText := opts.Prompt
 	if opts.PromptFile != "" {
-		data, err := os.ReadFile(opts.PromptFile)
+		data, err := readPromptFileBounded(opts.PromptFile)
 		if err != nil {
 			return nil, fmt.Errorf("agent: read prompt file: %w", err)
 		}

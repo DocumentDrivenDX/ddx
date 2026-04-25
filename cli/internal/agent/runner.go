@@ -340,7 +340,7 @@ func (r *Runner) resolveHarness(opts RunOptions) (harnessConfig, string, error) 
 func (r *Runner) resolvePrompt(opts RunOptions) (string, error) {
 	prompt := opts.Prompt
 	if opts.PromptFile != "" {
-		data, err := os.ReadFile(opts.PromptFile)
+		data, err := readPromptFileBounded(opts.PromptFile)
 		if err != nil {
 			return "", fmt.Errorf("agent: read prompt file: %w", err)
 		}
