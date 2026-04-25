@@ -1,0 +1,121 @@
+{
+  "attempt_id": "20260425T195326-a958fd69",
+  "bead_id": "ddx-0b382233",
+  "base_rev": "0e8dfb85b7ea5bac7aec8b108cc5fa88b5e5af86",
+  "created_at": "2026-04-25T19:53:26.953640354Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0b382233",
+    "title": "agent/test + cmd/test: migrate remaining ExecuteBeadOptions sites",
+    "description": "Stage 3 of SD-024. Mechanical migration of any remaining sites.\n\nIn-scope:\n- cli/internal/agent/execute_bead_e2e_test.go\n- Any cmd/ test file constructing ExecuteBeadOptions",
+    "acceptance": "rg 'ExecuteBeadOptions\\\\{' cli/ returns 0 matches outside the type definition about to be retired. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:test-migration",
+      "area:agent",
+      "sd-024",
+      "stage:3"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T19:53:26Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T18:52:58.463687242Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T184724-6b4769e9\",\"harness\":\"claude\",\"input_tokens\":40,\"output_tokens\":12545,\"total_tokens\":12585,\"cost_usd\":1.7149379999999999,\"duration_ms\":333648,\"exit_code\":0}",
+          "created_at": "2026-04-25T18:52:58.549214961Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=12585 cost_usd=1.7149"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-25T18:53:01.734150577Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "**Production sites not migrated** — `cli/cmd/agent_cmd.go:1738` and `cli/internal/server/workers.go:586` still construct `agent.ExecuteBeadOptions{...}`. SD-024's \"all three dispatch sites must migrate together\" principle plus this AC require these to move to `ExecuteBeadWithConfig` + `ExecuteBeadRuntime`.\n**Test sites not migrated** — `cli/internal/agent/execute_bead_artifacts_test.go` (6 occurrences), `execute_bead_checkpoint_test.go` (2), `execute_bead_env_isolation_test.go` (1), `execute_bead_commit_test.go` (1) still construct `ExecuteBeadOptions{`. AC #1 explicitly covers these.\n**Verification gap** — Re-run `rg 'ExecuteBeadOptions\\{' cli/` after migration; only `cli/internal/agent/execute_bead.go:154` (the internal `opts := ExecuteBeadOptions{` inside the legacy shim) should remain, and only if that shim is \"the type definition about to be retired.\" If the shim itself is in scope, it must also be removed.\n**Scope-vs-AC mismatch** — The bead description listed only two files; the AC is repository-wide. Either the next iter expands scope to satisfy AC #1, or the bead needs a triage decision to narrow the AC. As written, AC #1 is unmet.",
+          "created_at": "2026-04-25T18:53:43.705325Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-25T18:53:43.795171593Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\n**Production sites not migrated** — `cli/cmd/agent_cmd.go:1738` and `cli/internal/server/workers.go:586` still construct `agent.ExecuteBeadOptions{...}`. SD-024's \"all three dispatch sites must migrate together\" principle plus this AC require these to move to `ExecuteBeadWithConfig` + `ExecuteBeadRuntime`.\n**Test sites not migrated** — `cli/internal/agent/execute_bead_artifacts_test.go` (6 occurrences), `execute_bead_checkpoint_test.go` (2), `execute_bead_env_isolation_test.go` (1), `execute_bead_commit_test.go` (1) still construct `ExecuteBeadOptions{`. AC #1 explicitly covers these.\n**Verification gap** — Re-run `rg 'ExecuteBeadOptions\\{' cli/` after migration; only `cli/internal/agent/execute_bead.go:154` (the internal `opts := ExecuteBeadOptions{` inside the legacy shim) should remain, and only if that shim is \"the type definition about to be retired.\" If the shim itself is in scope, it must also be removed.\n**Scope-vs-AC mismatch** — The bead description listed only two files; the AC is repository-wide. Either the next iter expands scope to satisfy AC #1, or the bead needs a triage decision to narrow the AC. As written, AC #1 is unmet.\nresult_rev=56ca531f22a2d2c0c6f12c0612f8a1c4651a05f2\nbase_rev=be01acfd381406a97ca909042262da6d5b0ef310",
+          "created_at": "2026-04-25T18:53:43.876134314Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T19:52:22.823792344Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T191054-47f9c9ea\",\"harness\":\"omlx\",\"provider\":\"omlx-vidar-1235\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"input_tokens\":2642309,\"output_tokens\":11711,\"total_tokens\":2654020,\"cost_usd\":0,\"duration_ms\":2487506,\"exit_code\":0}",
+          "created_at": "2026-04-25T19:52:22.910275168Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2654020 model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "merge conflict\npreserve_ref=refs/ddx/iterations/ddx-0b382233/20260425T191054-47f9c9ea-2aaccbc8d1af\nresult_rev=b5c95254a7d9f62727f8f5a59fbea9180720e654\nbase_rev=843d2c08e5c1ccdcf64135f66347cd6186cc3603",
+          "created_at": "2026-04-25T19:52:24.650695203Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "land_conflict"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T19:53:26.283062539Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T195326-a958fd69",
+    "prompt": ".ddx/executions/20260425T195326-a958fd69/prompt.md",
+    "manifest": ".ddx/executions/20260425T195326-a958fd69/manifest.json",
+    "result": ".ddx/executions/20260425T195326-a958fd69/result.json",
+    "checks": ".ddx/executions/20260425T195326-a958fd69/checks.json",
+    "usage": ".ddx/executions/20260425T195326-a958fd69/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0b382233-20260425T195326-a958fd69"
+  }
+}
