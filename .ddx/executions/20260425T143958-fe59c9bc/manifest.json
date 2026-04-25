@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T143958-fe59c9bc",
+  "bead_id": "ddx-57af378b",
+  "base_rev": "dbbf4c517ef1b3fcd331bb1e80d38a7c69feb0fb",
+  "created_at": "2026-04-25T14:39:59.471405083Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-57af378b",
+    "title": "config: ResolvedConfig sealed type + accessor unit tests",
+    "description": "Stage 1 of SD-024. Adds the cli/internal/config/ResolvedConfig type with sealed-construction sentinel + requireSealed panic helper + 22 accessor methods + per-accessor unit tests asserting zero-value-after-seal behavior.\n\nIn-scope:\n- cli/internal/config/resolved.go (new)\n- cli/internal/config/resolved_test.go (new)\n\nOut-of-scope:\n- Resolve method (bead 2)\n- LoadAndResolve helper (bead 3)\n- Any production caller (bead 6+)\n\nSee TD-024 §Type Definitions §config.ResolvedConfig.",
+    "acceptance": "cd cli \u0026\u0026 go build ./internal/config/... passes. cd cli \u0026\u0026 go test -run TestResolvedConfig ./internal/config/... passes including a zero-value test that asserts requireSealed panics with a message naming LoadAndResolve. Every accessor has a unit test; cd cli \u0026\u0026 go doc ./internal/config ResolvedConfig shows ≥22 methods.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:config",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T14:39:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T14:39:58.918941372Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T143958-fe59c9bc",
+    "prompt": ".ddx/executions/20260425T143958-fe59c9bc/prompt.md",
+    "manifest": ".ddx/executions/20260425T143958-fe59c9bc/manifest.json",
+    "result": ".ddx/executions/20260425T143958-fe59c9bc/result.json",
+    "checks": ".ddx/executions/20260425T143958-fe59c9bc/checks.json",
+    "usage": ".ddx/executions/20260425T143958-fe59c9bc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-57af378b-20260425T143958-fe59c9bc"
+  }
+}
