@@ -2026,7 +2026,15 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		MinTier:  minTier,
 		MaxTier:  maxTier,
 	}
-	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
+	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
+	if err != nil {
+		// Surface the LoadAndResolve error rather than letting a
+		// zero-value ResolvedConfig flow into RunWithConfig — the
+		// SD-024 sealed-construction sentinel would otherwise panic
+		// at first accessor read instead of producing a clean CLI error.
+		tailCancel()
+		return fmt.Errorf("load resolved config: %w", err)
+	}
 
 	cliLandingOps := agent.RealLandingGitOps{}
 	result, err := worker.RunWithConfig(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{

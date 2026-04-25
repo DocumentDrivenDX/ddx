@@ -1,0 +1,33 @@
+AC #2 verification — cmd-package failures are byte-identical pre/post this bead.
+
+Pre-bead reference commit: b6d828ec (parent of 02844c5a, the prior dd7fce7e attempt).
+Post-bead state: HEAD = 34c56a4a + this bead's edits.
+
+Both states produce the identical failing-test set in `go test ./cmd/...`:
+
+  --- FAIL: TestBeadReviewCollapseGolden          (golden-drift, unrelated to SD-024)
+  --- FAIL: TestAcceptance_US028_OneCommandInstallation
+  --- FAIL: TestAcceptance_US029_AutomaticPathConfiguration
+  --- FAIL: TestAcceptance_US030_InstallationVerification
+  --- FAIL: TestAcceptance_US031_PackageManagerInstallation
+  --- FAIL: TestAcceptance_US034_OfflineInstallation
+  --- FAIL: TestInstallationPerformance
+  FAIL    github.com/DocumentDrivenDX/ddx/cmd
+
+The TestAcceptance_US02x and TestInstallationPerformance failures are environmental:
+they expect a pre-built `cli/build/ddx` binary and invoke a network/install harness
+that does not run inside the execution worktree. They fail identically with or
+without this bead's edits applied.
+
+TestBeadReviewCollapseGolden is golden-output drift unrelated to the SD-024
+config-driven runtime path; the test exercises bead review collapse rendering,
+which this bead does not touch.
+
+Diff of pre vs post failing-test names:
+  $ diff <(...pre...) <(...post...)
+  (no output — IDENTICAL)
+
+The new TestReviewRetryThresholdFromConfigCLI passes:
+
+  $ go test -run TestReviewRetryThresholdFromConfigCLI ./cmd/...
+  ok  github.com/DocumentDrivenDX/ddx/cmd  0.032s
