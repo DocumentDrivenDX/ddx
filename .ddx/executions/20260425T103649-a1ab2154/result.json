@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage C2 implementation. Floor-first assembly (rubric + task + per-arm identity always emitted) with body trimmed to fit `MaxPromptBytes - reserved`, all per-arm sections (Output, PostRunOut, ToolCalls JSON, Diff) routed through `evidence.ClampOutput` / `ClampDiff` + `DecomposeDiff`, and a typed `GradingEvent` with the pinned `OutcomeCompareContextOverflow` constant for Stage F aggregation. Legacy entry point retained, so existing comparison tests keep working unchanged."
+}
