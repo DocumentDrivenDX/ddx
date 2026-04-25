@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,9 +81,10 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 	// Run the loop twice: first call returns cheap failure, second returns
 	// standard success. The Executor decides internally which tier to use
 	// based on callCount, mirroring the real escalation loop.
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "test-worker",
-		Once:     true,
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "test-worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 
@@ -139,9 +141,10 @@ func TestEscalationTierRecordedInFinalEvent(t *testing.T) {
 		}),
 	}
 
-	_, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "test-worker",
-		Once:     true,
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "test-worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,9 +51,10 @@ func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
 		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "integration-worker",
-		Once:     true,
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "integration-worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -103,10 +105,13 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                "integration-worker",
-		Once:                    true,
 		MaxNoChangesBeforeClose: 3, // explicit threshold so test is readable
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -157,9 +162,10 @@ func TestIntegration_ScriptHarness_DirtyWorktreeSynthesized(t *testing.T) {
 		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "integration-worker",
-		Once:     true,
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "integration-worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -207,9 +213,10 @@ func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T
 		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "integration-worker",
-		Once:     true,
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "integration-worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -308,9 +315,10 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			worker := &ExecuteBeadWorker{Store: store, Executor: dispatchExec}
-			results[i], errs[i] = worker.Run(context.Background(), ExecuteBeadLoopOptions{
-				Assignee: fmt.Sprintf("worker-%d", i),
-				Once:     false,
+			cfgOpts := config.TestLoopConfigOpts{Assignee: fmt.Sprintf("worker-%d", i)}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+			results[i], errs[i] = worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+				Once: false,
 			})
 		}()
 	}
@@ -374,9 +382,10 @@ func TestIntegration_ScriptHarness_TwoWorkersSameBead_ClaimedOnce(t *testing.T) 
 		go func() {
 			defer wg.Done()
 			worker := &ExecuteBeadWorker{Store: store, Executor: executor}
-			results[i], errs[i] = worker.Run(context.Background(), ExecuteBeadLoopOptions{
-				Assignee: fmt.Sprintf("worker-%d", i),
-				Once:     true,
+			cfgOpts := config.TestLoopConfigOpts{Assignee: fmt.Sprintf("worker-%d", i)}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+			results[i], errs[i] = worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+				Once: true,
 			})
 		}()
 	}
@@ -451,10 +460,10 @@ func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) 
 	store := makeLoopStore(t, ddxDir)
 	worker := &ExecuteBeadWorker{Store: store, Executor: outerExecutor}
 
-	_, err := worker.Run(ctx, ExecuteBeadLoopOptions{
-		Assignee: "cancel-worker",
-		// No Once: true — the worker would try to loop without context cancel.
-	})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "cancel-worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	// No Once: true — the worker would try to loop without context cancel.
+	_, err := worker.RunWithConfig(ctx, rcfg, ExecuteBeadLoopRuntime{})
 	// Context cancellation should cause Run to return context.Canceled.
 	assert.ErrorIs(t, err, context.Canceled, "Run must return context.Canceled after cancel")
 
@@ -510,10 +519,13 @@ func TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast(t *testing.
 		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                "rationale-worker",
-		Once:                    true,
 		MaxNoChangesBeforeClose: 3, // would require 3 strikes without a specific rationale
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
