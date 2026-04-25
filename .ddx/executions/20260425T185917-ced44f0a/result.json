@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Both disabled test files are removed in commit 40732d5c with a commit message citing SD-024 §Disabled Test Resolution and the dead-feature rationale. Verified on disk: both paths return no-such-file."
+}
