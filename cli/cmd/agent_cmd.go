@@ -324,19 +324,24 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				}
 			}
 
-			opts := agent.RunOptions{
-				Harness:      resolvedHarness,
+			overrides := config.CLIOverrides{
+				Harness:     resolvedHarness,
+				Model:       resolvedModel,
+				Provider:    resolvedProvider,
+				Effort:      effort,
+				Permissions: permissions,
+			}
+			if timeout > 0 {
+				overrides.Timeout = &timeout
+			}
+			rcfg, _ := config.LoadAndResolve(f.WorkingDir, overrides)
+			runtime := agent.AgentRunRuntime{
 				Prompt:       prompt,
 				PromptFile:   promptFile,
 				PromptSource: promptSource,
-				Model:        resolvedModel,
-				Provider:     resolvedProvider,
-				Effort:       effort,
-				Timeout:      timeout,
 				WorkDir:      workDir,
-				Permissions:  permissions,
 			}
-			result, err := agent.RunViaService(cmd.Context(), f.WorkingDir, opts)
+			result, err := agent.RunWithConfigViaService(cmd.Context(), f.WorkingDir, rcfg, runtime)
 			if err != nil {
 				return err
 			}

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // RunViaService dispatches a single agent invocation through the agent
@@ -65,6 +66,37 @@ func runFixtureHarnessViaRunner(ctx context.Context, workDir string, opts RunOpt
 		opts.Context = ctx
 	}
 	return r.Run(opts)
+}
+
+// RunWithConfigViaService is the SD-024 successor to RunViaService. It
+// takes a sealed ResolvedConfig (durable knobs) and an AgentRunRuntime
+// (per-invocation plumbing/intent), assembles an equivalent RunOptions,
+// and delegates to RunViaService. Production callers under
+// `ddx agent run` use this path so config.LoadAndResolve drives every
+// durable knob exactly once at the dispatch site.
+func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+	sessionLogDir := runtime.SessionLogDirOverride
+	if sessionLogDir == "" {
+		sessionLogDir = rcfg.SessionLogDir()
+	}
+	opts := RunOptions{
+		Context:       ctx,
+		Harness:       rcfg.Harness(),
+		Prompt:        runtime.Prompt,
+		PromptFile:    runtime.PromptFile,
+		PromptSource:  runtime.PromptSource,
+		Correlation:   runtime.Correlation,
+		Model:         rcfg.Model(),
+		Provider:      rcfg.Provider(),
+		ModelRef:      rcfg.ModelRef(),
+		Effort:        rcfg.Effort(),
+		Timeout:       rcfg.Timeout(),
+		WallClock:     rcfg.WallClock(),
+		WorkDir:       runtime.WorkDir,
+		Permissions:   rcfg.Permissions(),
+		SessionLogDir: sessionLogDir,
+	}
+	return RunViaService(ctx, workDir, opts)
 }
 
 // RunViaServiceWith is the variant of RunViaService that accepts a pre-built
