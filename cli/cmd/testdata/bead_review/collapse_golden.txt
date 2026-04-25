@@ -12,6 +12,10 @@ AC#2: 'covered' &gt; baseline
     <labels>kind:refactor, area:&lt;agent&gt;&amp;"x"</labels>
   </bead>
 
+  <changed-files>
+    <file>x.go</file>
+  </changed-files>
+
   <governing>
     <ref id="FEAT-XX" path="governing.md" title="Sample <Doc> & \"Title\"">
       <content>
@@ -27,9 +31,6 @@ The reviewer must compare the diff against acceptance criteria.
   </governing>
 
   <diff rev="deadbee">
-commit deadbee
-Author: Test <test@example.com>
-
 diff --git a/x.go b/x.go
 + added line with <tag> & "q" 'a'
   </diff>

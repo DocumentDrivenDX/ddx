@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -358,15 +361,50 @@ Respond with a structured review using exactly this layout (replace placeholder 
 
 <Bullet list of REQUEST_CHANGES and BLOCK findings. Each finding must name the specific file, function, or test that is missing or wrong — specific enough for the next agent to act on without re-reading the entire diff. Omit this section entirely if verdict is APPROVE.>`
 
-// BuildReviewPrompt builds the complete review prompt for a bead implementation.
-// It renders the bead metadata, governing document contents, git diff, and
-// review instructions into an XML-structured prompt string.
+// BuildReviewPromptOptions configures evidence-bounded prompt assembly.
+// FEAT-022 §5/§7: caps drive per-section trimming and the pre-dispatch
+// short-circuit on residual oversize.
+type BuildReviewPromptOptions struct {
+	Caps evidence.Caps
+}
+
+// BuildReviewPromptResult is the structured output of BuildReviewPromptBounded.
+// Overflow is true when, after all per-section trimming, the assembled
+// prompt still exceeds Caps.MaxPromptBytes; callers MUST NOT dispatch in
+// that case (FEAT-022 §7).
+type BuildReviewPromptResult struct {
+	Prompt   string
+	Overflow bool
+	Sections []evidence.EvidenceAssemblySection
+}
+
+// BuildReviewPrompt builds the complete review prompt for a bead implementation
+// using default caps. Callers needing overflow detection use
+// BuildReviewPromptBounded.
 func BuildReviewPrompt(b *bead.Bead, iter int, rev, diff, projectRoot string, refs []GoverningRef) string {
+	return BuildReviewPromptBounded(b, iter, rev, diff, projectRoot, refs, BuildReviewPromptOptions{Caps: evidence.DefaultCaps()}).Prompt
+}
+
+// BuildReviewPromptBounded assembles the review prompt under byte caps using
+// the cli/internal/evidence primitives. Governing documents are read via
+// evidence.ReadFileClamped, the diff is decomposed and clamped via
+// evidence.ClampDiff, and per-file inlining is bounded by
+// Caps.MaxInlinedFileBytes. The minimum evidence floor (bead title,
+// description, acceptance, notes, and the full changed-file inventory) is
+// preserved verbatim regardless of cap pressure (FEAT-022 §5).
+func BuildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot string, refs []GoverningRef, opts BuildReviewPromptOptions) BuildReviewPromptResult {
+	caps := opts.Caps
+	if caps.MaxPromptBytes == 0 {
+		caps = evidence.DefaultCaps()
+	}
+
 	var sb strings.Builder
+	sections := []evidence.EvidenceAssemblySection{}
 
 	sb.WriteString("<bead-review>\n")
 
-	// ── Bead section ────────────────────────────────────────────────────────
+	// ── Bead section (floor) ────────────────────────────────────────────────
+	beadStart := sb.Len()
 	fmt.Fprintf(&sb, "  <bead id=%q iter=%d>\n", b.ID, iter)
 	fmt.Fprintf(&sb, "    <title>%s</title>\n", reviewXMLEscape(strings.TrimSpace(b.Title)))
 
@@ -382,13 +420,40 @@ func BuildReviewPrompt(b *bead.Bead, iter int, rev, diff, projectRoot string, re
 		sb.WriteString("    <acceptance/>\n")
 	}
 
+	if notes := strings.TrimSpace(b.Notes); notes != "" {
+		fmt.Fprintf(&sb, "    <notes>\n%s\n    </notes>\n", reviewXMLEscape(notes))
+	}
+
 	if len(b.Labels) > 0 {
 		fmt.Fprintf(&sb, "    <labels>%s</labels>\n", reviewXMLEscape(strings.Join(b.Labels, ", ")))
 	}
 
 	sb.WriteString("  </bead>\n\n")
+	sections = append(sections, evidence.EvidenceAssemblySection{
+		Name:          "bead",
+		BytesIncluded: sb.Len() - beadStart,
+		SelectedItems: []string{"bead"},
+	})
 
-	// ── Governing docs section ───────────────────────────────────────────────
+	// ── Changed-file inventory (floor) ──────────────────────────────────────
+	allFiles := evidence.DecomposeDiff(diff)
+	if len(allFiles) > 0 {
+		invStart := sb.Len()
+		sb.WriteString("  <changed-files>\n")
+		paths := make([]string, 0, len(allFiles))
+		for _, f := range allFiles {
+			fmt.Fprintf(&sb, "    <file>%s</file>\n", reviewXMLEscape(f.Path))
+			paths = append(paths, f.Path)
+		}
+		sb.WriteString("  </changed-files>\n\n")
+		sections = append(sections, evidence.EvidenceAssemblySection{
+			Name:          "changed-files",
+			BytesIncluded: sb.Len() - invStart,
+			SelectedItems: paths,
+		})
+	}
+
+	// ── Governing docs section (clamped per-doc) ────────────────────────────
 	sb.WriteString("  <governing>\n")
 	if len(refs) == 0 {
 		sb.WriteString("    <note>No governing documents found. Evaluate the diff against the acceptance criteria alone.</note>\n")
@@ -400,28 +465,149 @@ func BuildReviewPrompt(b *bead.Bead, iter int, rev, diff, projectRoot string, re
 				fmt.Fprintf(&sb, "    <ref id=%q path=%q>\n", ref.ID, ref.Path)
 			}
 			docPath := filepath.Join(projectRoot, filepath.FromSlash(ref.Path))
-			content, readErr := os.ReadFile(docPath)
+			content, truncated, originalBytes, readErr := evidence.ReadFileClamped(docPath, caps.MaxGoverningDocBytes)
 			if readErr != nil {
 				fmt.Fprintf(&sb, "      <note>Could not read %s: %s</note>\n", ref.Path, readErr)
+				sections = append(sections, evidence.EvidenceAssemblySection{
+					Name:             "governing:" + ref.ID,
+					TruncationReason: "read_error",
+					OmittedItems:     []string{ref.Path},
+				})
 			} else {
-				fmt.Fprintf(&sb, "      <content>\n%s\n      </content>\n", strings.TrimSpace(string(content)))
+				txt := strings.TrimSpace(string(content))
+				if truncated {
+					txt += evidence.TruncationMarker
+				}
+				fmt.Fprintf(&sb, "      <content>\n%s\n      </content>\n", txt)
+				sec := evidence.EvidenceAssemblySection{
+					Name:          "governing:" + ref.ID,
+					BytesIncluded: len(content),
+					SelectedItems: []string{ref.Path},
+				}
+				if truncated {
+					sec.TruncationReason = "governing_doc_cap"
+					sec.BytesOmitted = int(originalBytes) - len(content)
+				}
+				sections = append(sections, sec)
 			}
 			sb.WriteString("    </ref>\n")
 		}
 	}
 	sb.WriteString("  </governing>\n\n")
 
-	// ── Diff section ─────────────────────────────────────────────────────────
-	fmt.Fprintf(&sb, "  <diff rev=%q>\n%s\n  </diff>\n\n", rev, strings.TrimRight(diff, "\n"))
+	// ── Diff section (ranked, per-file inlined cap, total clamp) ────────────
+	rankedDiff := rankAndDegradeDiffForReview(allFiles, diff, b, refs, caps.MaxInlinedFileBytes)
+	clampedDiff, diffSection := evidence.ClampDiff(rankedDiff, caps.MaxDiffBytes)
+	diffSection.Name = "diff"
+	sections = append(sections, diffSection)
+	fmt.Fprintf(&sb, "  <diff rev=%q>\n%s\n  </diff>\n\n", rev, strings.TrimRight(clampedDiff, "\n"))
 
-	// ── Instructions section ─────────────────────────────────────────────────
+	// ── Instructions section ────────────────────────────────────────────────
 	instructions := strings.ReplaceAll(beadReviewInstructions, "<bead-id>", b.ID)
 	instructions = strings.ReplaceAll(instructions, "<N>", fmt.Sprintf("%d", iter))
 	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", reviewXMLEscape(instructions))
 
 	sb.WriteString("</bead-review>\n")
 
-	return sb.String()
+	out := sb.String()
+	return BuildReviewPromptResult{
+		Prompt:   out,
+		Overflow: len(out) > caps.MaxPromptBytes,
+		Sections: sections,
+	}
+}
+
+// rankAndDegradeDiffForReview reorders diff files so that AC-referenced files
+// appear first, then files matching governing-ref paths, then others; and
+// degrades any individual file body that exceeds maxInlinedFileBytes to
+// "stat + hunk headers only" so a single oversize file cannot dominate the
+// diff section. The returned string is a re-serialized unified diff suitable
+// for evidence.ClampDiff. FEAT-022 §1.
+func rankAndDegradeDiffForReview(files []evidence.DiffFile, originalDiff string, b *bead.Bead, refs []GoverningRef, maxInlinedFileBytes int) string {
+	if len(files) == 0 {
+		return originalDiff
+	}
+	rank := func(f evidence.DiffFile) int {
+		if f.Path == "" {
+			return 3
+		}
+		if mentionsPathLike(b.Acceptance, f.Path) {
+			return 0
+		}
+		for _, r := range refs {
+			if pathsRelated(r.Path, f.Path) {
+				return 1
+			}
+		}
+		return 2
+	}
+	ordered := make([]evidence.DiffFile, len(files))
+	copy(ordered, files)
+	sort.SliceStable(ordered, func(i, j int) bool { return rank(ordered[i]) < rank(ordered[j]) })
+
+	var b2 strings.Builder
+	for _, f := range ordered {
+		body := f.Body
+		if maxInlinedFileBytes > 0 && len(body) > maxInlinedFileBytes {
+			body = degradeDiffFileBody(f)
+		}
+		b2.WriteString(body)
+	}
+	return b2.String()
+}
+
+// degradeDiffFileBody returns a stat + hunk-headers only rendering of a diff
+// file (FEAT-022 §1: large-file degradation). Used when a single file's body
+// exceeds Caps.MaxInlinedFileBytes — preserves enough structure for the
+// reviewer to know what changed without inlining the full content.
+func degradeDiffFileBody(f evidence.DiffFile) string {
+	var b strings.Builder
+	b.WriteString("diff --git a/")
+	b.WriteString(f.Path)
+	b.WriteString(" b/")
+	b.WriteString(f.Path)
+	b.WriteString("\n")
+	if f.Stat != "" {
+		b.WriteString(f.Stat)
+		b.WriteString("\n")
+	}
+	for _, h := range f.HunkHeaders {
+		b.WriteString(h)
+		b.WriteString("\n")
+	}
+	b.WriteString("[…file body omitted by ddx evidence cap…]\n")
+	return b.String()
+}
+
+// mentionsPathLike returns true when text mentions the file path or its
+// basename (a coarse heuristic — the reviewer only needs ranking, not
+// exact symbolic resolution).
+func mentionsPathLike(text, p string) bool {
+	if text == "" || p == "" {
+		return false
+	}
+	if strings.Contains(text, p) {
+		return true
+	}
+	base := path.Base(p)
+	return base != "" && base != "." && strings.Contains(text, base)
+}
+
+// pathsRelated returns true when refPath and filePath share a directory
+// prefix or basename, used to associate diff files with governing
+// documents.
+func pathsRelated(refPath, filePath string) bool {
+	if refPath == "" || filePath == "" {
+		return false
+	}
+	refDir := path.Dir(refPath)
+	if refDir != "" && refDir != "." && strings.HasPrefix(filePath, refDir+"/") {
+		return true
+	}
+	if path.Base(refPath) == path.Base(filePath) {
+		return true
+	}
+	return false
 }
 
 // reviewXMLEscape escapes &, <, and > for inclusion in XML text content.
@@ -454,6 +640,10 @@ type DefaultBeadReviewer struct {
 	// from TierSmart for the chosen harness.
 	Harness string
 	Model   string
+	// Caps configures the per-section evidence caps used when assembling
+	// the review prompt (FEAT-022). When zero-valued, evidence.DefaultCaps
+	// applies.
+	Caps evidence.Caps
 }
 
 // ReviewBead implements BeadReviewer.
@@ -475,8 +665,13 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	// Determine iteration number from bead events.
 	iter := 1
 
-	// Build the review prompt.
-	prompt := BuildReviewPrompt(b, iter, resultRev, diff, r.ProjectRoot, refs)
+	// Build the review prompt under evidence caps.
+	caps := r.Caps
+	if caps.MaxPromptBytes == 0 {
+		caps = evidence.DefaultCaps()
+	}
+	built := BuildReviewPromptBounded(b, iter, resultRev, diff, r.ProjectRoot, refs, BuildReviewPromptOptions{Caps: caps})
+	prompt := built.Prompt
 	attemptID := GenerateAttemptID()
 	artifacts, err := createArtifactBundle(r.ProjectRoot, r.ProjectRoot, attemptID)
 	if err != nil {
@@ -484,6 +679,39 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	}
 	if err := os.WriteFile(artifacts.PromptAbs, []byte(prompt), 0o644); err != nil {
 		return nil, fmt.Errorf("reviewer: write prompt artifact: %w", err)
+	}
+
+	// Pre-dispatch short-circuit (FEAT-022 §7): if the assembled prompt
+	// exceeds MaxPromptBytes after all per-section trimming, skip the
+	// provider dispatch and return a typed review-error: context_overflow.
+	// The bead is NOT closed — the loop's review-error event-append path
+	// records the failure and leaves the bead open for retry.
+	if built.Overflow {
+		baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
+		reviewRes := &ReviewResult{
+			Verdict:         VerdictBlock,
+			Error:           evidence.OutcomeReviewContextOverflow,
+			Rationale:       evidence.OutcomeReviewContextOverflow,
+			ReviewerHarness: r.Harness,
+			ReviewerModel:   r.Model,
+			BaseRev:         baseRev,
+			ResultRev:       resultRev,
+			ExecutionDir:    artifacts.DirRel,
+		}
+		_ = writeReviewArtifacts(artifacts, reviewArtifactManifest{
+			Harness:      r.Harness,
+			Model:        r.Model,
+			BaseRev:      baseRev,
+			ResultRev:    resultRev,
+			Verdict:      string(VerdictBlock),
+			BeadID:       beadID,
+			ExecutionDir: artifacts.DirRel,
+		}, reviewArtifactResult{
+			Verdict: string(VerdictBlock),
+			Error:   evidence.OutcomeReviewContextOverflow,
+		})
+		return reviewRes, fmt.Errorf("reviewer: %s (assembled prompt %d bytes exceeds cap %d; see %s)",
+			evidence.OutcomeReviewContextOverflow, len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
 	}
 
 	// Resolve reviewer harness and model.
@@ -665,6 +893,8 @@ func writeReviewArtifacts(artifacts *executeBeadArtifacts, manifest reviewArtifa
 }
 
 func ReadReviewArtifactResult(path string) (*ReviewResult, error) {
+	//evidence:allow-unbounded — review result artifacts are small JSON
+	// documents written by writeReviewArtifacts; bounded by construction.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
