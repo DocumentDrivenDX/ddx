@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -574,11 +575,14 @@ func TestQuorumRunsAllHarnesses(t *testing.T) {
 	run := func(opts RunOptions) (*Result, error) {
 		return r.Run(opts)
 	}
-	results, err := RunQuorumWith(run, QuorumOptions{
-		RunOptions: RunOptions{Prompt: "test"},
-		Harnesses:  []string{"codex", "claude"},
-		Strategy:   "unanimous",
-	})
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+	runtime := QuorumRuntime{
+		AgentRunRuntime: AgentRunRuntime{Prompt: "test"},
+		Harnesses:       []string{"codex", "claude"},
+		Strategy:        "unanimous",
+	}
+	results, err := RunQuorumWithConfig(run, rcfg, runtime)
 	require.NoError(t, err)
 	assert.Len(t, results, 2)
 	assert.True(t, calls["codex"])

@@ -389,6 +389,54 @@ func genCompareID() string {
 	return "cmp-" + hex.EncodeToString(b)
 }
 
+// QuorumRuntime is the SD-024 successor to QuorumOptions for the
+// `ddx agent run --quorum` dispatch path. Durable knobs (Model,
+// Effort, Permissions, Timeout) are stripped — they live on
+// config.ResolvedConfig and are passed via RunQuorumWithConfigViaService's
+// rcfg argument. Only non-serializable plumbing and per-invocation
+// runtime intent remain.
+//
+// See SD-024 / TD-024 §Runtime structs and §Stage 2 QuorumOptions
+// migration.
+type QuorumRuntime struct {
+	AgentRunRuntime
+	Harnesses []string
+	Strategy  string
+	Threshold int
+}
+
+// RunQuorumWithConfig is the SD-024 successor to RunQuorumWith. It
+// accepts a sealed ResolvedConfig (durable knobs) and a QuorumRuntime
+// (plumbing + per-invocation intent), assembles an equivalent
+// QuorumOptions, and delegates to RunQuorumWith.
+func RunQuorumWithConfig(run RunFunc, rcfg config.ResolvedConfig, runtime QuorumRuntime) ([]*Result, error) {
+	var opts QuorumOptions
+	opts.RunOptions = RunOptions{
+		Prompt:       runtime.Prompt,
+		PromptFile:   runtime.PromptFile,
+		PromptSource: runtime.PromptSource,
+		Correlation:  runtime.Correlation,
+		Model:        rcfg.Model(),
+		Effort:       rcfg.Effort(),
+		Timeout:      rcfg.Timeout(),
+		WorkDir:      runtime.WorkDir,
+		Permissions:  rcfg.Permissions(),
+	}
+	opts.Harnesses = runtime.Harnesses
+	opts.Strategy = runtime.Strategy
+	opts.Threshold = runtime.Threshold
+	return RunQuorumWith(run, opts)
+}
+
+// RunQuorumWithConfigViaService is the SD-024 successor to
+// RunQuorumViaService.
+func RunQuorumWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, runtime QuorumRuntime) ([]*Result, error) {
+	run := func(runOpts RunOptions) (*Result, error) {
+		return RunViaService(ctx, workDir, runOpts)
+	}
+	return RunQuorumWithConfig(run, rcfg, runtime)
+}
+
 // RunQuorumWith invokes multiple harnesses concurrently and returns each
 // result. Production callers should use RunQuorumViaService; tests may pass
 // Runner.Run.

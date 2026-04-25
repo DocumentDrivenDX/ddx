@@ -233,21 +233,26 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				if len(harnessNames) == 0 || (len(harnessNames) == 1 && harnessNames[0] == "") {
 					return fmt.Errorf("--harnesses required for quorum mode")
 				}
-				opts := agent.QuorumOptions{
-					RunOptions: agent.RunOptions{
+				overrides := config.CLIOverrides{
+					Model:       model,
+					Effort:      effort,
+					Permissions: permissions,
+				}
+				if timeout > 0 {
+					overrides.Timeout = &timeout
+				}
+				rcfg, _ := config.LoadAndResolve(f.WorkingDir, overrides)
+				runtime := agent.QuorumRuntime{
+					AgentRunRuntime: agent.AgentRunRuntime{
 						Prompt:       prompt,
 						PromptFile:   promptFile,
 						PromptSource: promptSource,
-						Model:        model,
-						Effort:       effort,
-						Timeout:      timeout,
 						WorkDir:      workDir,
-						Permissions:  permissions,
 					},
 					Harnesses: harnessNames,
 					Strategy:  quorum,
 				}
-				results, err := agent.RunQuorumViaService(cmd.Context(), f.WorkingDir, opts)
+				results, err := agent.RunQuorumWithConfigViaService(cmd.Context(), f.WorkingDir, rcfg, runtime)
 				if err != nil {
 					return err
 				}
