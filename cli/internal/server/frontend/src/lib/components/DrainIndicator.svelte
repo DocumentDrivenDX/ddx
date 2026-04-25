@@ -3,13 +3,14 @@
 	import { projectStore } from '$lib/stores/project.svelte';
 	import { nodeStore } from '$lib/stores/node.svelte';
 	import { createClient } from '$lib/gql/client';
+	import { subscribeBeadLifecycle, subscribeWorkerProgress } from '$lib/gql/subscriptions';
 	import { gql } from 'graphql-request';
 
 	// Persistent drain-queue worker indicator (ddx-b6cf025c). Shown on every
 	// route inside a selected project; hidden when no project is selected.
-	// Polls every 3s — lightweight, and avoids wiring a new subscription
-	// stream just for nav badge updates. AC requires ≤2s worker-state and
-	// ≤5s ready-count freshness; 3s poll sits inside both bounds.
+	// Subscription-driven so worker-state changes reflect within 2s
+	// (workerProgress) and bead-count changes within 5s (beadLifecycle).
+	// A 3s poll backstops both in case events are dropped.
 
 	const SUMMARY_QUERY = gql`
 		query QueueAndWorkersSummary($projectId: String!) {
@@ -17,6 +18,19 @@
 				readyBeads
 				runningWorkers
 				totalWorkers
+			}
+		}
+	`;
+
+	const RUNNING_WORKERS_QUERY = gql`
+		query DrainIndicatorRunningWorkers($projectID: String!) {
+			workersByProject(projectID: $projectID, first: 50) {
+				edges {
+					node {
+						id
+						state
+					}
+				}
 			}
 		}
 	`;
@@ -61,15 +75,74 @@
 		}
 	}
 
+	async function fetchRunningWorkerIds(pid: string): Promise<string[]> {
+		try {
+			const client = createClient(fetch);
+			const data = await client.request<{
+				workersByProject: { edges: { node: { id: string; state: string } }[] };
+			}>(RUNNING_WORKERS_QUERY, { projectID: pid });
+			return data.workersByProject.edges
+				.filter((e) => e.node.state === 'running')
+				.map((e) => e.node.id);
+		} catch {
+			return [];
+		}
+	}
+
 	$effect(() => {
-		const pid = projectId;
-		if (!pid) {
+		const pidNullable = projectId;
+		if (!pidNullable) {
 			loaded = false;
 			return;
 		}
-		void refresh(pid);
-		const h = setInterval(() => void refresh(pid), 3000);
-		return () => clearInterval(h);
+		const pid: string = pidNullable;
+		let cancelled = false;
+		const workerSubs = new Map<string, () => void>();
+
+		async function rewireWorkerSubscriptions() {
+			if (cancelled) return;
+			const ids = await fetchRunningWorkerIds(pid);
+			if (cancelled) return;
+			const next = new Set(ids);
+			// Drop subscriptions for workers no longer running.
+			for (const [id, dispose] of workerSubs) {
+				if (!next.has(id)) {
+					dispose();
+					workerSubs.delete(id);
+				}
+			}
+			// Add subscriptions for newly-running workers.
+			for (const id of ids) {
+				if (workerSubs.has(id)) continue;
+				const dispose = subscribeWorkerProgress(id, () => {
+					void refresh(pid);
+				});
+				workerSubs.set(id, dispose);
+			}
+		}
+
+		void refresh(pid).then(() => void rewireWorkerSubscriptions());
+
+		// Bead lifecycle drives both ready-count freshness AND triggers a re-scan
+		// for new running workers (workers come online by claiming a bead, which
+		// fires status_changed).
+		const beadDispose = subscribeBeadLifecycle(pid, () => {
+			void refresh(pid);
+			void rewireWorkerSubscriptions();
+		});
+
+		const h = setInterval(() => {
+			void refresh(pid);
+			void rewireWorkerSubscriptions();
+		}, 3000);
+
+		return () => {
+			cancelled = true;
+			clearInterval(h);
+			beadDispose();
+			for (const dispose of workerSubs.values()) dispose();
+			workerSubs.clear();
+		};
 	});
 </script>
 

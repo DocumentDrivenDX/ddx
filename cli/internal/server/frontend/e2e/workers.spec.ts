@@ -580,7 +580,25 @@ test('workers overview shows drain count control, indicator, and +/- buttons', a
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
 		} else if (body.query.includes('Projects')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
-		} else if (body.query.includes('QueueAndWorkersSummary') || body.query.includes('queueAndWorkersSummary')) {
+		} else if (body.query.includes('WorkersByProject')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeWorkersResponse(workers) })
+			});
+		} else if (body.query.includes('DrainIndicatorRunningWorkers')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						workersByProject: {
+							edges: workers.map((w, i) => ({ node: { id: w.id, state: w.state }, cursor: `cursor-${i}` }))
+						}
+					}
+				})
+			});
+		} else if (body.query.includes('QueueAndWorkersSummary')) {
 			const running = workers.filter((w) => w.state === 'running').length;
 			await route.fulfill({
 				status: 200,
@@ -630,12 +648,6 @@ test('workers overview shows drain count control, indicator, and +/- buttons', a
 				body: JSON.stringify({
 					data: { stopWorker: { id: body.variables?.id, state: 'stopped', kind: 'execute-loop' } }
 				})
-			});
-		} else if (body.query.includes('WorkersByProject')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: makeWorkersResponse(workers) })
 			});
 		} else if (body.query.includes('AgentSessions') || body.query.includes('agentSessions')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeSessionsResponse() }) });
