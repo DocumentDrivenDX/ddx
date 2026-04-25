@@ -1,0 +1,98 @@
+{
+  "attempt_id": "20260425T143440-73ecde86",
+  "bead_id": "ddx-70c1d2e2",
+  "base_rev": "4d573e25bca5a80885c7c6007e7a4075d10d7f1a",
+  "created_at": "2026-04-25T14:34:40.641277056Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-70c1d2e2",
+    "title": "review: error-class distinction + bounded retry with manual escalation",
+    "description": "Stage G of FEAT-022. Split review-error into four explicit outcome\nclasses. Add a bounded retry policy per result_rev with terminal\nmanual-escalation event. Preserve the invariant that reviewer failure\ndoes NOT close the bead.\n\nImplements FEAT-022 requirements §12, §13, §14. Satisfies US-222.\n\nDepends on Stage C1 (ddx-12934d66) — the context_overflow class is\nemitted by Stage C1's pre-dispatch short-circuit; this bead formalizes\nthe full taxonomy and the retry counter logic.\n\nIn-scope files:\n- cli/internal/agent/execute_bead_review.go (classify errors returned\n  from the review dispatch into the four taxonomy classes per §12:\n  context_overflow, provider_empty, unparseable, transport)\n- cli/internal/agent/execute_bead_loop.go (count review attempts per\n  result_rev via existing bead events; on Nth failure emit terminal\n  review-manual-required event and do NOT re-execute primary; a new\n  result_rev resets the counter; iterations without a result_rev\n  (--no-merge, execution-failed) do NOT consume the budget per FEAT-022\n  §14)\n- cli/internal/config or per-project config (add a review_max_retries\n  field — default 3)\n- Tests: each of the four error classes triggers from its distinct\n  root cause (empty output, unparseable output, context overflow from\n  Stage C1, transport failure); retry counter scoping (result_rev\n  change resets, --no-merge does not consume budget); terminal\n  review-manual-required event after N failures; bead is NOT closed by\n  the reviewer failure path (invariant from\n  execute_bead_review_failure_modes_test.go:13 stays green).\n\nOut-of-scope:\n- Any change that could auto-close a bead on reviewer failure (§13\n  invariant is non-negotiable)\n- UI for surfacing review-manual-required beads (separate work)\n- Context-overflow escalation to a smaller reviewer model or tighter\n  caps on retry (noted as follow-up in FEAT-022, not in scope here)\n\nThe terminal 'review-manual-required' event body should include the\nfailure class, attempt count, and the result_rev being blocked, so\noperators can triage without opening multiple bundles.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestReviewErrorTaxonomy ./internal/agent/... passes with one test per class: context_overflow (fixture forces pre-dispatch short-circuit per Stage C1), provider_empty (mock runner returns zero bytes), unparseable (mock runner returns text without a verdict line), transport (mock runner returns a network-error sentinel). Each subtest asserts the emitted review-error event body contains the literal class identifier. cd cli \u0026\u0026 go test -run TestBoundedReviewRetry ./internal/agent/... passes with three cases: (a) after N (default 3) failures on the same result_rev, the bead emits a review-manual-required event and a subsequent execute-loop iteration does NOT re-execute primary; (b) a fresh result_rev resets the counter; (c) iterations that do NOT produce a committed result_rev do NOT increment the counter, verified explicitly for both --no-merge iterations AND execution-failed iterations. cd cli \u0026\u0026 go test ./internal/agent/... includes execute_bead_review_failure_modes_test.go and passes unchanged (§13 invariant — reviewer failure does NOT close the bead). Default review_max_retries = 3; cd cli \u0026\u0026 go test -run TestReviewMaxRetriesConfig ./internal/config/... passes with a test that overrides the value in .ddx/config.yaml and verifies the loop respects the override. The terminal review-manual-required event body includes failure_class, attempt_count, and result_rev fields.",
+    "parent": "ddx-0c35470e",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "area:review",
+      "stage:G"
+    ],
+    "metadata": {
+      "blocked-by": "ddx-12934d66",
+      "claimed-at": "2026-04-25T14:34:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T09:02:11.045176304Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T084842-dd955bd9\",\"harness\":\"claude\",\"input_tokens\":79,\"output_tokens\":42933,\"total_tokens\":43012,\"cost_usd\":6.414584999999999,\"duration_ms\":807554,\"exit_code\":0}",
+          "created_at": "2026-04-25T09:02:11.118060601Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=43012 cost_usd=6.4146"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-25T09:02:14.111854425Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "REQUEST_CHANGES\n**Config-to-loop wiring missing.** `NewConfig.ReviewMaxRetries` and `ResolveReviewMaxRetries()` exist (cli/internal/config/types.go), and `ExecuteBeadLoopOptions.ReviewMaxRetries` is honored (cli/internal/agent/execute_bead_loop.go), but no caller in `cli/cmd/` reads the resolved value and sets it on the options struct. `grep -r ReviewMaxRetries cli/cmd` returns nothing. AC #4 explicitly requires \"verifies the loop res…\nartifact: .ddx/executions/20260425T084842-dd955bd9/reviewer-stream.log",
+          "created_at": "2026-04-25T09:03:47.728068524Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-25T09:03:47.803397236Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: REQUEST_CHANGES\n**Config-to-loop wiring missing.** `NewConfig.ReviewMaxRetries` and `ResolveReviewMaxRetries()` exist (cli/internal/config/types.go), and `ExecuteBeadLoopOptions.ReviewMaxRetries` is honored (cli/internal/agent/execute_bead_loop.go), but no caller in `cli/cmd/` reads the resolved value and sets it on the options struct. `grep -r ReviewMaxRetries cli/cmd` returns nothing. AC #4 explicitly requires \"verifies the loop respects the override\" sourced from `.ddx/config.yaml`; the existing config test stops at the loader. Add the plumbing in the `ddx work` / `ddx agent execute-loop` command wiring and either extend `TestReviewMaxRetriesConfig` to drive the loop via that path, or add an integration test that loads YAML→options→worker and asserts escalation at the configured threshold.\nresult_rev=79fc5c6b6bd733b7250992698e55330d03dfe86c\nbase_rev=048a82f041c562323c717a3d072d25ae1431ef07",
+          "created_at": "2026-04-25T09:03:47.872528204Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T14:34:39.985920808Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T143440-73ecde86",
+    "prompt": ".ddx/executions/20260425T143440-73ecde86/prompt.md",
+    "manifest": ".ddx/executions/20260425T143440-73ecde86/manifest.json",
+    "result": ".ddx/executions/20260425T143440-73ecde86/result.json",
+    "checks": ".ddx/executions/20260425T143440-73ecde86/checks.json",
+    "usage": ".ddx/executions/20260425T143440-73ecde86/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-70c1d2e2-20260425T143440-73ecde86"
+  }
+}
