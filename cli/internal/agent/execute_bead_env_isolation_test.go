@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,8 +146,10 @@ func TestExecuteBead_GitDirContaminatedEnv_LeavesOuterBareRepoUntouched(t *testi
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealOrchestratorGitOps{}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "script",
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "script",
+	}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: envIsoRunner{},
 	}, gitOps)
 	require.NoError(t, err, "ExecuteBead should not fail under contaminated env")

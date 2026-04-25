@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // artifactTestGitOps is a GitOps mock for artifact-focused tests. It lets
@@ -151,7 +152,8 @@ func TestExecuteBead_ArtifactsCreated(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{AgentRunner: &artifactTestAgentRunner{}}, gitOps)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: &artifactTestAgentRunner{}}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -181,9 +183,11 @@ func TestExecuteBead_ManifestShape(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "test-harness",
-		Model:       "test-model",
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "test-harness",
+		Model:   "test-model",
+	}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: &artifactTestAgentRunner{},
 	}, gitOps)
 	if err != nil {
@@ -295,7 +299,8 @@ func TestExecuteBead_ResultShape(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{AgentRunner: &artifactTestAgentRunner{}}, gitOps)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: &artifactTestAgentRunner{}}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -457,7 +462,8 @@ func TestExecuteBead_NoChecksArtifactWhenNoGates(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{AgentRunner: &artifactTestAgentRunner{}}, gitOps)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: &artifactTestAgentRunner{}}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -498,7 +504,8 @@ func TestExecuteBead_UsageArtifact(t *testing.T) {
 		},
 	}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{AgentRunner: runner}, gitOps)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
@@ -563,7 +570,8 @@ func TestExecuteBead_NoUsageArtifactWhenNoTokens(t *testing.T) {
 		result: &Result{ExitCode: 0, Tokens: 0, CostUSD: 0},
 	}
 
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{AgentRunner: runner}, gitOps)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, gitOps)
 	if err != nil {
 		t.Fatalf("ExecuteBead: %v", err)
 	}

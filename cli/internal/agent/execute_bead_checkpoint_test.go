@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,9 +49,11 @@ func TestExecuteBead_DirtyParentTree_CheckpointCommitted(t *testing.T) {
 	writeDirectiveFile(t, dirFile, []string{})
 
 	runner := NewRunner(Config{})
-	res, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "script",
-		Model:       dirFile,
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "script",
+		Model:   dirFile,
+	}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})
 	require.NoError(t, err)
@@ -96,9 +99,11 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 	writeDirectiveFile(t, dirFile, []string{})
 
 	runner := NewRunner(Config{})
-	_, err := ExecuteBead(context.Background(), projectRoot, beadID, ExecuteBeadOptions{
-		Harness:     "script",
-		Model:       dirFile,
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Harness: "script",
+		Model:   dirFile,
+	}).Resolve(config.CLIOverrides{})
+	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})
 	require.NoError(t, err)
