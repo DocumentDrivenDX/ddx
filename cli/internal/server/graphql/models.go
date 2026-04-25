@@ -1484,6 +1484,10 @@ type ProviderStatus struct {
 	Quota *ProviderQuota `json:"quota,omitempty"`
 	// Profile names where this row is the default candidate (may be empty).
 	DefaultForProfile []string `json:"defaultForProfile"`
+	// Hourly token totals for the last 24 hours, oldest-first. Empty when fewer
+	// than 6 non-zero hourly buckets are available; the UI uses that floor to
+	// decide whether to render the inline sparkline (FEAT-014 AC 2).
+	Sparkline []int `json:"sparkline"`
 }
 
 // ProviderTrend is the trend-detail payload for `/providers/[name]`.

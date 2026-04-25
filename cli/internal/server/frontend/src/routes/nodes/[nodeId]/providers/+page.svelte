@@ -32,6 +32,7 @@
 					remaining
 					resetAt
 				}
+				sparkline
 			}
 			harnessStatuses {
 				name
@@ -59,6 +60,7 @@
 					remaining
 					resetAt
 				}
+				sparkline
 			}
 		}
 	`;
@@ -104,6 +106,7 @@
 		defaultForProfile: string[];
 		usage: ProviderUsage | null;
 		quota: ProviderQuota | null;
+		sparkline: number[];
 	}
 
 	interface DefaultRouteStatus {
@@ -222,6 +225,17 @@
 		return Math.min(100, Math.round((usedTokens * 100) / quota.ceilingTokens));
 	}
 
+	function sparklineMax(values: number[]): number {
+		let m = 0;
+		for (const v of values) if (v > m) m = v;
+		return m === 0 ? 1 : m;
+	}
+
+	function sparkBarHeight(value: number, max: number): string {
+		const pct = Math.round((value * 100) / max);
+		return `${Math.max(2, pct)}%`;
+	}
+
 	function detailHref(row: ProviderStatus): string {
 		const nodeId = $page.params.nodeId;
 		return `/nodes/${nodeId}/providers/${encodeURIComponent(row.name)}`;
@@ -314,6 +328,9 @@
 						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
 							>Utilization</th
 						>
+						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+							>Trend (24h)</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -404,11 +421,32 @@
 									<span class="text-xs text-gray-400">not reported</span>
 								{/if}
 							</td>
+							<td class="px-4 py-3" data-testid="endpoint-sparkline-{row.name}">
+								{#if row.sparkline && row.sparkline.length >= 6}
+									{@const max = sparklineMax(row.sparkline)}
+									<div
+										class="flex h-6 w-24 items-end gap-[1px]"
+										role="img"
+										aria-label="24-hour token trend for {row.name}"
+										data-testid="endpoint-sparkline-bars-{row.name}"
+									>
+										{#each row.sparkline as v, i (i)}
+											<div
+												class="w-full bg-blue-400 dark:bg-blue-500"
+												style="height: {sparkBarHeight(v, max)}"
+												title="{v} tokens"
+											></div>
+										{/each}
+									</div>
+								{:else}
+									<span class="text-xs text-gray-400">—</span>
+								{/if}
+							</td>
 						</tr>
 					{/each}
 					{#if rows.length === 0}
 						<tr>
-							<td colspan="7" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+							<td colspan="8" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
 								No agent endpoints configured. Add providers to .ddx/config.yaml or install a
 								harness binary.
 							</td>

@@ -131,6 +131,7 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 		}
 		ps.Usage = buildUsage(entries, info.Name, agent.MatchHarness, now)
 		ps.Quota = quotaFromHarnessInfo(info)
+		ps.Sparkline = buildSparkline(entries, info.Name, agent.MatchHarness, now)
 		results = append(results, ps)
 	}
 
@@ -402,6 +403,7 @@ func providerStatusesFromInfos(providers []agentlib.ProviderInfo, entries []agen
 		}
 		ps.Usage = buildUsage(entries, p.Name, agent.MatchProvider, now)
 		ps.Quota = quotaFromProviderInfo(p)
+		ps.Sparkline = buildSparkline(entries, p.Name, agent.MatchProvider, now)
 		results = append(results, ps)
 	}
 	return results
@@ -411,8 +413,33 @@ func providerRowsWithUsage(rows []*ProviderStatus, entries []agent.SessionIndexE
 	out := cloneProviderRows(rows)
 	for _, row := range out {
 		row.Usage = buildUsage(entries, row.Name, agent.MatchProvider, now)
+		row.Sparkline = buildSparkline(entries, row.Name, agent.MatchProvider, now)
 	}
 	return out
+}
+
+// buildSparkline returns a 24-element slice of hourly token totals for the
+// last 24 hours (oldest-first). Returns nil when fewer than 6 of the 24
+// hourly buckets have non-zero token counts — the UI uses that floor to
+// suppress noisy single-spike sparklines (FEAT-014 AC 2: "Sparkline renders
+// when ≥6 hourly buckets of usage are available").
+func buildSparkline(entries []agent.SessionIndexEntry, name string, kind agent.UsageMatchKind, now time.Time) []int {
+	if len(entries) == 0 {
+		return nil
+	}
+	buckets := agent.BucketUsage(entries, name, kind, now, 1, time.Hour)
+	totals := make([]int, len(buckets))
+	nonEmpty := 0
+	for i, b := range buckets {
+		totals[i] = b.Tokens
+		if b.Tokens > 0 {
+			nonEmpty++
+		}
+	}
+	if nonEmpty < 6 {
+		return nil
+	}
+	return totals
 }
 
 func cloneProviderRows(rows []*ProviderStatus) []*ProviderStatus {
@@ -427,6 +454,9 @@ func cloneProviderRows(rows []*ProviderStatus) []*ProviderStatus {
 		clone := *row
 		if row.DefaultForProfile != nil {
 			clone.DefaultForProfile = append([]string(nil), row.DefaultForProfile...)
+		}
+		if row.Sparkline != nil {
+			clone.Sparkline = append([]int(nil), row.Sparkline...)
 		}
 		out = append(out, &clone)
 	}

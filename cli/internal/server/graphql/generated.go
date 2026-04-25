@@ -825,6 +825,7 @@ type ComplexityRoot struct {
 		ProviderType      func(childComplexity int) int
 		Quota             func(childComplexity int) int
 		Reachable         func(childComplexity int) int
+		Sparkline         func(childComplexity int) int
 		Status            func(childComplexity int) int
 		Usage             func(childComplexity int) int
 	}
@@ -4566,6 +4567,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ProviderStatus.Reachable(childComplexity), true
+	case "ProviderStatus.sparkline":
+		if e.ComplexityRoot.ProviderStatus.Sparkline == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.Sparkline(childComplexity), true
 	case "ProviderStatus.status":
 		if e.ComplexityRoot.ProviderStatus.Status == nil {
 			break
@@ -24476,6 +24483,35 @@ func (ec *executionContext) fieldContext_ProviderStatus_defaultForProfile(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _ProviderStatus_sparkline(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_sparkline,
+		func(ctx context.Context) (any, error) {
+			return obj.Sparkline, nil
+		},
+		nil,
+		ec.marshalNInt2ᚕintᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_sparkline(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ProviderTrend_name(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -27849,6 +27885,8 @@ func (ec *executionContext) fieldContext_Query_providerStatuses(_ context.Contex
 				return ec.fieldContext_ProviderStatus_quota(ctx, field)
 			case "defaultForProfile":
 				return ec.fieldContext_ProviderStatus_defaultForProfile(ctx, field)
+			case "sparkline":
+				return ec.fieldContext_ProviderStatus_sparkline(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ProviderStatus", field.Name)
 		},
@@ -27910,6 +27948,8 @@ func (ec *executionContext) fieldContext_Query_harnessStatuses(_ context.Context
 				return ec.fieldContext_ProviderStatus_quota(ctx, field)
 			case "defaultForProfile":
 				return ec.fieldContext_ProviderStatus_defaultForProfile(ctx, field)
+			case "sparkline":
+				return ec.fieldContext_ProviderStatus_sparkline(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ProviderStatus", field.Name)
 		},
@@ -39845,6 +39885,11 @@ func (ec *executionContext) _ProviderStatus(ctx context.Context, sel ast.Selecti
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "sparkline":
+			out.Values[i] = ec._ProviderStatus_sparkline(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -44175,6 +44220,21 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNInt2ᚕintᚄ(ctx context.Context, sel ast.SelectionSet, v []int) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNInt2int(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNJSON2string(ctx context.Context, v any) (string, error) {

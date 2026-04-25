@@ -23,7 +23,8 @@ const ENDPOINT_ROWS = [
 			requestsLastHour: 8,
 			requestsLast24h: 220
 		},
-		quota: null
+		quota: null,
+		sparkline: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400]
 	}
 ];
 
@@ -53,7 +54,8 @@ const HARNESS_ROWS = [
 			ceilingWindowSeconds: 60,
 			remaining: 75000,
 			resetAt: '2026-04-23T12:01:00Z'
-		}
+		},
+		sparkline: [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200]
 	},
 	{
 		name: 'codex',
@@ -75,7 +77,8 @@ const HARNESS_ROWS = [
 			requestsLastHour: 0,
 			requestsLast24h: 12
 		},
-		quota: null
+		quota: null,
+		sparkline: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400]
 	}
 ];
 
@@ -181,6 +184,10 @@ test('unified view shows endpoints and harnesses with kind labels', async ({ pag
 	// Tokens column populated for rows with usage.
 	await expect(page.getByTestId('endpoint-tokens-qwen-local')).toContainText('12.0k');
 	await expect(page.getByTestId('endpoint-tokens-claude')).toContainText('5.0k');
+
+	// Sparkline (24h) renders for rows with ≥6 hourly buckets of usage (AC 2).
+	await expect(page.getByTestId('endpoint-sparkline-bars-qwen-local')).toBeVisible();
+	await expect(page.getByTestId('endpoint-sparkline-bars-claude')).toBeVisible();
 });
 
 test('detail route renders 7d trend and projection callout', async ({ page }) => {

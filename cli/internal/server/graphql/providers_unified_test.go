@@ -498,6 +498,54 @@ func sortDurations(ds []time.Duration) {
 	}
 }
 
+// TestBuildSparklineEmitsHourlyTotalsAboveFloor seeds 24 hours of usage and
+// asserts buildSparkline returns 24 hourly bucket totals when ≥6 non-empty
+// buckets exist. Covers AC 2 ("Sparkline renders when ≥6 hourly buckets of
+// usage are available").
+func TestBuildSparklineEmitsHourlyTotalsAboveFloor(t *testing.T) {
+	now := time.Now().UTC()
+	entries := make([]agent.SessionIndexEntry, 0, 24)
+	for i := 0; i < 24; i++ {
+		t0 := now.Add(-time.Duration(24-i) * time.Hour).Add(30 * time.Minute)
+		entries = append(entries, agent.SessionIndexEntry{
+			ID: fmt.Sprintf("sp-%d", i), Harness: "claude", Provider: "anthropic",
+			StartedAt: t0, Tokens: 100 + i, Outcome: "success",
+		})
+	}
+	got := buildSparkline(entries, "claude", agent.MatchHarness, now)
+	if len(got) != 24 {
+		t.Fatalf("sparkline length: got %d want 24", len(got))
+	}
+	nonZero := 0
+	for _, v := range got {
+		if v > 0 {
+			nonZero++
+		}
+	}
+	if nonZero < 6 {
+		t.Fatalf("expected ≥6 non-zero buckets, got %d", nonZero)
+	}
+}
+
+// TestBuildSparklineSuppressesBelowFloor asserts that when fewer than 6
+// hourly buckets carry tokens, buildSparkline returns nil so the UI hides
+// the inline trend (avoids noisy single-spike sparklines).
+func TestBuildSparklineSuppressesBelowFloor(t *testing.T) {
+	now := time.Now().UTC()
+	// Only three sessions, all in distinct recent hours → 3 non-empty buckets.
+	entries := []agent.SessionIndexEntry{
+		{ID: "a", Harness: "claude", Provider: "anthropic",
+			StartedAt: now.Add(-1 * time.Hour), Tokens: 100, Outcome: "success"},
+		{ID: "b", Harness: "claude", Provider: "anthropic",
+			StartedAt: now.Add(-2 * time.Hour), Tokens: 200, Outcome: "success"},
+		{ID: "c", Harness: "claude", Provider: "anthropic",
+			StartedAt: now.Add(-3 * time.Hour), Tokens: 300, Outcome: "success"},
+	}
+	if got := buildSparkline(entries, "claude", agent.MatchHarness, now); got != nil {
+		t.Fatalf("expected nil sparkline below floor, got %v", got)
+	}
+}
+
 // writeMultiEndpointConfig writes a 5-endpoint config used by the perf test.
 func writeMultiEndpointConfig(t *testing.T, workDir string) {
 	t.Helper()
