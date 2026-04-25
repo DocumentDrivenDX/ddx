@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260425T233452-527fd4e5",
+  "bead_id": "ddx-c67969d5",
+  "base_rev": "ce96aa009393d783df09c6d5cead50b24663f855",
+  "created_at": "2026-04-25T23:34:53.168360135Z",
+  "requested": {
+    "harness": "pi",
+    "model": "Qwen3.6-27B-MLX-8bit",
+    "provider": "omlx-vidar-1235",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c67969d5",
+    "title": "execute-loop: reopen-retry must reuse initial worker params (harness, model, profile)",
+    "description": "Re-filed from agent-9465287e in /Users/erik/Projects/agent (closed there as 'tracked upstream'; the agent service is not the failure surface). Originally observed in ddx v0.6.2-alpha1 against agent v0.9.9 during SD-024 work.\n\n## Symptom\n\nWorker spawned with explicit pin:\n\n    ddx work --harness claude\n\nFirst attempt on a bead routes correctly to claude (e.g. opus-4.7) and produces a result. When the post-merge reviewer returns REQUEST_CHANGES the bead reopens. The next execute-loop iteration retries the bead but the worker's --harness override is NOT propagated to that retry. Tier-attempt events show:\n\n    kind:tier-attempt body=tier=standard harness= model= probe=no viable provider, no viable harness found\n    kind:tier-attempt body=tier=smart    harness= model= probe=no viable provider, no viable harness found\n    kind:escalation-summary winning_tier=exhausted\n\nNote harness= and model= empty — the retry constructs a service request with Harness=\"\". Smart-routing returns zero candidates at every tier above cheap (cheap suppressed by adaptive min-tier from prior failures). Bead bounces between REQUEST_CHANGES (cycle 1) → execution_failed (cycle 2 with no harness routing) repeatedly.\n\nConcrete instance: ddx-dd7fce7e in /Users/erik/Projects/ddx/.ddx/beads.jsonl shows the pattern at events around 2026-04-25T21:46-21:47Z.\n\n## Principle\n\n**Retries should use the same parameters as the initial work.** A reopened bead's retry must inherit every explicit pin (harness, model, model-ref, profile, provider) that the worker was spawned with. Otherwise the retry is a different request, not a retry — and the work cannot converge.\n\nThis is a general invariant, not specific to harness overrides. Any explicit pin the worker was launched with must propagate to every iteration on every bead the worker handles, including post-reopen retries.\n\n## Diagnosis (from agent-9465287e worker analysis)\n\nThe agent service surface (CONTRACT-003) is correct. The agent has no tier concept — tier classification and adaptive min-tier floors are ddx-side abstractions layered on top of the agent's per-call routing. Loosening the agent's routing engine to return candidates when the harness is empty would change behavior for every other caller and is not the right lever.\n\nThe fix is a few lines of option-propagation in the ddx execute-loop's reopen-retry path: when a bead reopens after REQUEST_CHANGES (or any review-driven reopen), the loop must copy the worker-level explicit pins into the next iteration's ExecuteBeadOptions / service.Execute request, the same way it does on the initial claim.\n\n## In-scope files\n\n- cli/internal/agent/execute_bead_loop.go (or wherever the retry path constructs its execute-bead invocation)\n- cli/internal/agent/execute_bead_review.go if review-driven reopens have a separate path\n- Regression test asserting the second service.Execute call carries the same Harness, Model, Profile values as the first when the bead was reopened by a reviewer\n\n## Out of scope\n\n- Agent-side routing engine changes — the surface is correct\n- Adaptive min-tier behavior tuning (separate concern)\n- Tool-loop detection (separate concern, see agent-1bdb9b60 in agent repo)",
+    "acceptance": "1. New regression test cd cli \u0026\u0026 go test ./internal/agent/... -run TestExecuteLoopRetryReusesWorkerHarness asserts: spawn execute-loop with --harness claude; bead reaches REQUEST_CHANGES → reopen → next iteration's service.Execute request has Harness=\"claude\" (not empty).\n2. Same test covers --model, --profile, and --provider propagation across review-driven reopens.\n3. Test covers all reopen sources (review BLOCK, review REQUEST_CHANGES, land_conflict, post_run_check_failed, no_changes if it triggers reopen) — every reopen path must propagate pins.\n4. Negative test: worker spawned without --harness; reopen retry continues to use auto-routing (no propagation regression).\n5. cd cli \u0026\u0026 go test ./... -count=1 passes.",
+    "labels": [
+      "ddx",
+      "kind:bug",
+      "area:agent",
+      "area:execute-loop",
+      "area:retry"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T23:34:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T23:34:52.68615128Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260425T233452-527fd4e5",
+    "prompt": ".ddx/executions/20260425T233452-527fd4e5/prompt.md",
+    "manifest": ".ddx/executions/20260425T233452-527fd4e5/manifest.json",
+    "result": ".ddx/executions/20260425T233452-527fd4e5/result.json",
+    "checks": ".ddx/executions/20260425T233452-527fd4e5/checks.json",
+    "usage": ".ddx/executions/20260425T233452-527fd4e5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c67969d5-20260425T233452-527fd4e5"
+  }
+}
