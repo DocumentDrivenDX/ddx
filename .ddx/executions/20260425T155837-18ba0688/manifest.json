@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T155837-18ba0688",
+  "bead_id": "ddx-67599511",
+  "base_rev": "eb9ee324b7258feebc7d26379b26a8777b8ce5cf",
+  "created_at": "2026-04-25T15:58:38.184307915Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-67599511",
+    "title": "agent: behavioral e2e tests for NoProgressCooldown + MaxNoChangesBeforeClose",
+    "description": "Stage 1 of SD-024. Adds behavioral e2e tests for the two new resolvers from bead 4 to prove they drive observable loop behavior (claim reattempts, bead closure after N no-change iterations).\n\nIn-scope:\n- cli/internal/agent/execute_bead_loop_resolvers_e2e_test.go (new) — TestNoProgressCooldownFromConfig, TestMaxNoChangesBeforeCloseFromConfig\n- May extend testfixtures package from bead 6.5 with additional deterministic harness modes\n\nOut-of-scope:\n- Adding new resolvers — that was bead 4\n\nSee TD-024 §Test plan.",
+    "acceptance": "cd cli \u0026\u0026 go test -run 'TestNoProgressCooldownFromConfig|TestMaxNoChangesBeforeCloseFromConfig' ./internal/agent/... passes against real .ddx/config.yaml fixtures. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T15:58:37Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T15:58:37.475079896Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T155837-18ba0688",
+    "prompt": ".ddx/executions/20260425T155837-18ba0688/prompt.md",
+    "manifest": ".ddx/executions/20260425T155837-18ba0688/manifest.json",
+    "result": ".ddx/executions/20260425T155837-18ba0688/result.json",
+    "checks": ".ddx/executions/20260425T155837-18ba0688/checks.json",
+    "usage": ".ddx/executions/20260425T155837-18ba0688/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-67599511-20260425T155837-18ba0688"
+  }
+}
