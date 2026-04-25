@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage D2 implementation. Three ingress sites cap inline prompts via package-level vars defaulting to `evidence.DefaultMaxPromptBytes`, each producing actionable errors with observed/cap/config_hint info. Test coverage matches the named acceptance gates exactly. The `--no-verify` note correctly scopes pre-existing evidencelint violations (Server text egress mcpContent literals) to Stage E1/E2, out of scope here."
+}
