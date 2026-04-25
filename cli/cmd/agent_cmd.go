@@ -1993,26 +1993,36 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		}),
 	}
 
+	// SD-024 Stage 1: dispatch flows through LoadAndResolve + RunWithConfig
+	// so .ddx/config.yaml's durable knobs (review_max_retries,
+	// no_progress_cooldown, max_no_changes_before_close, heartbeat_interval,
+	// agent.harness/model/permissions, etc.) reach the running loop without
+	// per-knob CLI plumbing. CLI flag values feed CLIOverrides which win
+	// over the on-disk config when set.
+	overrides := config.CLIOverrides{
+		Assignee: resolveClaimAssignee(),
+		Harness:  harness,
+		Model:    model,
+		Provider: provider,
+		ModelRef: modelRef,
+		Profile:  profile,
+		Effort:   effort,
+		MinTier:  minTier,
+		MaxTier:  maxTier,
+	}
+	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
+
 	cliLandingOps := agent.RealLandingGitOps{}
-	result, err := worker.Run(cmd.Context(), agent.ExecuteBeadLoopOptions{
-		Assignee:         resolveClaimAssignee(),
-		Once:             once,
-		PollInterval:     pollInterval,
-		Log:              cmd.OutOrStdout(),
-		EventSink:        loopSink,
-		WorkerID:         resolveClaimAssignee(),
-		ProjectRoot:      projectRoot,
-		Harness:          harness,
-		Model:            model,
-		Profile:          profile,
-		Provider:         provider,
-		ModelRef:         modelRef,
-		SessionID:        loopSessionID,
-		PreClaimHook:     buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		NoReview:         noReview,
-		MinTier:          minTier,
-		MaxTier:          maxTier,
-		ReviewMaxRetries: cfg.ResolveReviewMaxRetries(),
+	result, err := worker.RunWithConfig(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
+		Once:         once,
+		PollInterval: pollInterval,
+		Log:          cmd.OutOrStdout(),
+		EventSink:    loopSink,
+		WorkerID:     resolveClaimAssignee(),
+		ProjectRoot:  projectRoot,
+		SessionID:    loopSessionID,
+		PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		NoReview:     noReview,
 	})
 	tailCancel() // stop session log tailer
 	if err != nil {
