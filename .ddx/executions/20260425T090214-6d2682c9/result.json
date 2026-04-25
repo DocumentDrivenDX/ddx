@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "**Config-to-loop wiring missing.** `NewConfig.ReviewMaxRetries` and `ResolveReviewMaxRetries()` exist (cli/internal/config/types.go), and `ExecuteBeadLoopOptions.ReviewMaxRetries` is honored (cli/internal/agent/execute_bead_loop.go), but no caller in `cli/cmd/` reads the resolved value and sets it on the options struct. `grep -r ReviewMaxRetries cli/cmd` returns nothing. AC #4 explicitly requires \"verifies the loop respects the override\" sourced from `.ddx/config.yaml`; the existing config test stops at the loader. Add the plumbing in the `ddx work` / `ddx agent execute-loop` command wiring and either extend `TestReviewMaxRetriesConfig` to drive the loop via that path, or add an integration test that loads YAML→options→worker and asserts escalation at the configured threshold."
+}
