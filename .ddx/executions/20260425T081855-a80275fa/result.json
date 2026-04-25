@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage B collapse: duplicate `buildBeadReviewPrompt`, `beadReviewInstructions`, and `beadReviewXMLEscape` removed; `runBeadReview` now routes through `agent.BuildReviewPrompt`. Escape semantics convergence on `agent.reviewXMLEscape` (\u0026 \u003c \u003e only) is documented in the commit message and gated by the byte-equivalence golden, which was committed first as required. Both a golden-diff test and an end-to-end CLI wiring test were added."
+}
