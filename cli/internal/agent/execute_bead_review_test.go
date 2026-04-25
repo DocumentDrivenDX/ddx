@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,7 +77,9 @@ func TestExecuteBeadWorkerReviewApproveClosesBead(t *testing.T) {
 		Reviewer: makeReviewer(VerdictApprove, "### Verdict: APPROVE\n\nAll good."),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Successes)
@@ -119,7 +122,9 @@ func TestExecuteBeadWorkerReviewRequestChangesReopensAndCountsFailure(t *testing
 		Reviewer: makeReviewer(VerdictRequestChanges, "### Verdict: REQUEST_CHANGES\n\n- Missing tests."),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Successes)
@@ -160,7 +165,9 @@ func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Successes)
@@ -204,7 +211,9 @@ func TestExecuteBeadWorkerReviewBlockWithoutRationaleIsMalfunction(t *testing.T)
 		Reviewer: makeReviewer(VerdictBlock, "### Verdict: BLOCK"),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Successes)
@@ -309,8 +318,9 @@ func TestExecuteBeadWorkerNoReviewSkipsReviewer(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "worker",
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:     true,
 		NoReview: true,
 	})
@@ -346,9 +356,10 @@ func TestExecuteBeadWorkerReviewSkipLabelSkipsReviewer(t *testing.T) {
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "worker",
-		Once:     true,
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
 	})
 	require.NoError(t, err)
 	assert.False(t, reviewerCalled, "reviewer must not be called when bead has review:skip label")
@@ -370,7 +381,9 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 		Reviewer: nil, // no reviewer
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Successes)
 
@@ -406,8 +419,9 @@ func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
 		Reviewer: makeReviewer(VerdictRequestChanges, "### Verdict: REQUEST_CHANGES\n\nStill failing."),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee: "worker",
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		// no Once flag: drain the queue fully within this run
 	})
 	require.NoError(t, err)
