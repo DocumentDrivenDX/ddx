@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,7 +75,9 @@ func TestBoundedReviewRetry_NthFailureEmitsManualRequired(t *testing.T) {
 		Reviewer: failingReviewer(evidence.OutcomeReviewProviderEmpty),
 	}
 
-	_, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), execCount.Load(), "primary should run exactly once on this iteration")
 
@@ -104,7 +107,7 @@ func TestBoundedReviewRetry_NthFailureEmitsManualRequired(t *testing.T) {
 
 	// Subsequent execute-loop iteration must NOT re-execute primary. The
 	// bead is parked via SetExecutionCooldown so ReadyExecution skips it.
-	_, err = worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	_, err = worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), execCount.Load(),
 		"after review-manual-required the executor must not be invoked again")
@@ -142,7 +145,9 @@ func TestBoundedReviewRetry_FreshResultRevResetsCounter(t *testing.T) {
 		Reviewer: failingReviewer(evidence.OutcomeReviewTransport),
 	}
 
-	_, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
 	events, err := store.Events(first.ID)
@@ -195,7 +200,9 @@ func TestBoundedReviewRetry_NoResultRevDoesNotConsumeBudget(t *testing.T) {
 			Reviewer: reviewer,
 		}
 
-		_, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 		require.NoError(t, err)
 		assert.Equal(t, int32(0), reviewerCalls.Load(),
 			"reviewer must not be invoked when primary execution failed")
@@ -236,7 +243,9 @@ func TestBoundedReviewRetry_NoResultRevDoesNotConsumeBudget(t *testing.T) {
 			Reviewer: reviewer,
 		}
 
-		_, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 		require.NoError(t, err)
 		assert.Equal(t, int32(0), reviewerCalls.Load(),
 			"reviewer must not be invoked for iterations without a committed result_rev")
@@ -273,11 +282,9 @@ func TestBoundedReviewRetry_RespectsConfiguredOverride(t *testing.T) {
 	}
 
 	// Override to 1: the very first failure should escalate to terminal.
-	_, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee:         "worker",
-		Once:             true,
-		ReviewMaxRetries: 1,
-	})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", ReviewMaxRetries: 1}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
 	events, err := store.Events(first.ID)

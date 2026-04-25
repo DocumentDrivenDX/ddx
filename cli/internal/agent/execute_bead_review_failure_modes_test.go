@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,7 +62,9 @@ func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 				Reviewer: tc.reviewer,
 			}
 
-			_, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+			_, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 			require.NoError(t, err)
 
 			got, err := store.Get(first.ID)
