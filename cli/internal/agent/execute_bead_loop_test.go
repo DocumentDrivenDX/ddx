@@ -462,13 +462,17 @@ func TestExecuteBeadWorkerConcurrentWorkersDistributeDistinctReadyBeads(t *testi
 	results := make([]*ExecuteBeadLoopResult, 2)
 	errs := make([]error, 2)
 
+	cfgOptsA := config.TestLoopConfigOpts{Assignee: "worker-a"}
+	rcfgA := config.NewTestConfigForLoop(cfgOptsA).Resolve(config.TestLoopOverrides(cfgOptsA))
+	cfgOptsB := config.TestLoopConfigOpts{Assignee: "worker-b"}
+	rcfgB := config.NewTestConfigForLoop(cfgOptsB).Resolve(config.TestLoopOverrides(cfgOptsB))
 	go func() {
 		defer wg.Done()
-		results[0], errs[0] = workerA.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-a", Once: true})
+		results[0], errs[0] = workerA.RunWithConfig(context.Background(), rcfgA, ExecuteBeadLoopRuntime{Once: true})
 	}()
 	go func() {
 		defer wg.Done()
-		results[1], errs[1] = workerB.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker-b", Once: true})
+		results[1], errs[1] = workerB.RunWithConfig(context.Background(), rcfgB, ExecuteBeadLoopRuntime{Once: true})
 	}()
 
 	<-barrier
@@ -541,13 +545,16 @@ func TestExecuteBeadWorkerEmitsStructuredProgressEvents(t *testing.T) {
 	}
 
 	var sink bytes.Buffer
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee:    "worker",
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee: "worker",
+		Harness:  "claude",
+		Model:    "claude-3.5-sonnet",
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		EventSink:   &sink,
 		WorkerID:    "worker-42",
 		ProjectRoot: "/tmp/fake-project",
-		Harness:     "claude",
-		Model:       "claude-3.5-sonnet",
 		SessionID:   "agent-loop-test",
 	})
 	require.NoError(t, err)
@@ -641,8 +648,9 @@ func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
 	}
 
 	var sink bytes.Buffer
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee:  "worker",
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		EventSink: &sink,
 		SessionID: "agent-loop-empty",
 	})
@@ -688,12 +696,14 @@ func TestExecuteBeadWorkerNoChangesAutoClosesAtThreshold(t *testing.T) {
 
 	const threshold = 2
 
-	// First pass: count=1 < threshold, bead stays open.
-	r1, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                "worker",
-		Once:                    true,
 		MaxNoChangesBeforeClose: threshold,
-	})
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	// First pass: count=1 < threshold, bead stays open.
+	r1, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, r1.Attempts)
 	assert.Equal(t, 0, r1.Successes)
@@ -703,11 +713,7 @@ func TestExecuteBeadWorkerNoChangesAutoClosesAtThreshold(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 
 	// Second pass: count=2 == threshold, bead is closed as already_satisfied.
-	r2, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee:                "worker",
-		Once:                    true,
-		MaxNoChangesBeforeClose: threshold,
-	})
+	r2, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, r2.Attempts)
 	assert.Equal(t, 1, r2.Successes)
@@ -748,7 +754,9 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *te
 		}),
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{Assignee: "worker", Once: true})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.True(t, checkerCalled, "SatisfactionChecker must be called")
 	assert.Equal(t, 1, result.Attempts)
@@ -794,11 +802,12 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 		Now: func() time.Time { return now },
 	}
 
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:           "worker",
-		Once:               true,
 		NoProgressCooldown: 1 * time.Hour,
-	})
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 0, result.Successes)
@@ -860,17 +869,19 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	}
 
 	const threshold = 2
-	opts := ExecuteBeadLoopOptions{
+	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                "worker",
 		MaxNoChangesBeforeClose: threshold,
 	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	runtime := ExecuteBeadLoopRuntime{}
 
 	// Pass 1: all three beads are ready.
 	// ncBead returns no_changes (count=1 < threshold) and stays open.
 	// work1 and work2 succeed and are closed.
 	// The `attempted` map inside Run prevents ncBead from being picked up
 	// a second time within the same pass — the other beads run unblocked.
-	result1, err := worker.Run(context.Background(), opts)
+	result1, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	assert.Equal(t, 3, result1.Attempts, "all three beads must be attempted in pass 1")
 	assert.Equal(t, 2, result1.Successes)
@@ -885,7 +896,7 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead must stay open after first no_changes")
 
 	// Pass 2: only ncBead remains; count reaches threshold → closed as already_satisfied.
-	result2, err := worker.Run(context.Background(), opts)
+	result2, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result2.Attempts)
 	assert.Equal(t, 1, result2.Successes, "ncBead must be closed as already_satisfied")
@@ -896,7 +907,7 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, nc.Status)
 
 	// Pass 3: queue is empty.
-	result3, err := worker.Run(context.Background(), opts)
+	result3, err := worker.RunWithConfig(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	assert.True(t, result3.NoReadyWork)
 	assert.Equal(t, 0, result3.Attempts)
@@ -972,11 +983,12 @@ func TestExecuteBeadWorkerNoChangesWithCommitSHARationaleClosesImmediately(t *te
 	}
 
 	// MaxNoChangesBeforeClose=3 to confirm the heuristic fires before threshold.
-	result, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                "worker",
-		Once:                    true,
 		MaxNoChangesBeforeClose: 3,
-	})
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Attempts)
@@ -1021,12 +1033,14 @@ func TestExecuteBeadWorkerNoChangesVagueRationaleUsesCountThreshold(t *testing.T
 
 	const threshold = 2
 
-	// Pass 1: vague rationale → bead stays open.
-	r1, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
+	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                "worker",
-		Once:                    true,
 		MaxNoChangesBeforeClose: threshold,
-	})
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	// Pass 1: vague rationale → bead stays open.
+	r1, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, 0, r1.Successes)
 	got, err := store.Get(b.ID)
@@ -1034,11 +1048,7 @@ func TestExecuteBeadWorkerNoChangesVagueRationaleUsesCountThreshold(t *testing.T
 	assert.Equal(t, bead.StatusOpen, got.Status)
 
 	// Pass 2: count reaches threshold → closed as already_satisfied.
-	r2, err := worker.Run(context.Background(), ExecuteBeadLoopOptions{
-		Assignee:                "worker",
-		Once:                    true,
-		MaxNoChangesBeforeClose: threshold,
-	})
+	r2, err := worker.RunWithConfig(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, r2.Successes)
 	got, err = store.Get(b.ID)
