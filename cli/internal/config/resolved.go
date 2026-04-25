@@ -6,6 +6,100 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
+// CLIOverrides carries per-invocation flag values that override
+// project config. Zero values mean "no override; use config".
+// Pointer fields distinguish "explicit value" from "not set".
+type CLIOverrides struct {
+	Harness     string
+	Model       string
+	Provider    string
+	ModelRef    string
+	Profile     string
+	Effort      string
+	Permissions string
+	MinTier     string
+	MaxTier     string
+	Timeout     *time.Duration
+	NoReview    *bool
+	Assignee    string
+}
+
+// Resolve produces a sealed ResolvedConfig by layering overrides onto
+// cfg. Overrides are applied as last-write-wins per field. The
+// returned ResolvedConfig does not alias cfg's storage — every map
+// and slice is deep-cloned via per-type Clone methods before being
+// captured.
+//
+// Resolve accepts a nil cfg and returns a ResolvedConfig populated
+// from package defaults, sealed normally.
+func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
+	r := ResolvedConfig{sealed: true}
+
+	r.assignee = overrides.Assignee
+	r.reviewMaxRetries = c.ResolveReviewMaxRetries()
+
+	var agent *AgentConfig
+	if c != nil {
+		agent = c.Agent.Clone()
+	}
+
+	r.harness = overrides.Harness
+	if r.harness == "" && agent != nil {
+		r.harness = agent.Harness
+	}
+
+	r.model = overrides.Model
+	if r.model == "" && agent != nil {
+		r.model = agent.Model
+	}
+
+	r.provider = overrides.Provider
+	r.modelRef = overrides.ModelRef
+	r.profile = overrides.Profile
+	r.minTier = overrides.MinTier
+	r.maxTier = overrides.MaxTier
+	r.effort = overrides.Effort
+
+	r.permissions = overrides.Permissions
+	if r.permissions == "" && agent != nil {
+		r.permissions = agent.Permissions
+	}
+
+	if overrides.Timeout != nil {
+		r.timeout = *overrides.Timeout
+	} else if agent != nil && agent.TimeoutMS > 0 {
+		r.timeout = time.Duration(agent.TimeoutMS) * time.Millisecond
+	}
+
+	r.evidenceCaps = c.ResolveEvidenceCaps(r.harness)
+
+	if agent != nil {
+		r.sessionLogDir = agent.SessionLogDir
+		if agent.ReasoningLevels != nil {
+			r.reasoningLevels = make(map[string][]string, len(agent.ReasoningLevels))
+			for k, v := range agent.ReasoningLevels {
+				r.reasoningLevels[k] = append([]string(nil), v...)
+			}
+		}
+		if agent.Routing != nil {
+			r.resolvedLadder = map[string][]string{
+				r.profile: agent.Routing.ResolvedLadder(r.profile),
+			}
+		}
+	}
+	if r.resolvedLadder == nil {
+		r.resolvedLadder = map[string][]string{
+			r.profile: (*RoutingConfig)(nil).ResolvedLadder(r.profile),
+		}
+	}
+
+	if c != nil && c.Executions != nil && c.Executions.Mirror != nil {
+		r.mirrorConfig = c.Executions.Mirror.Clone()
+	}
+
+	return r
+}
+
 // ResolvedConfig is the loop/runner/reviewer's view of merged project
 // config plus per-invocation overrides. It is constructed only by
 // (*Config).Resolve / config.LoadAndResolve and is safe to share across

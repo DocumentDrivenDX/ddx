@@ -301,6 +301,123 @@ func TestResolvedConfigResolvedLadderAccessor(t *testing.T) {
 	}
 }
 
+func TestResolveNilCfg(t *testing.T) {
+	timeout := 9 * time.Second
+	overrides := CLIOverrides{
+		Harness:  "claude",
+		Profile:  "fast",
+		Assignee: "bot",
+		Timeout:  &timeout,
+	}
+
+	var rcfg ResolvedConfig
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("Resolve(nil, overrides) panicked: %v", r)
+			}
+		}()
+		rcfg = (*NewConfig)(nil).Resolve(overrides)
+	}()
+
+	if got := rcfg.Harness(); got != "claude" {
+		t.Fatalf("Harness = %q, want claude", got)
+	}
+	if got := rcfg.Assignee(); got != "bot" {
+		t.Fatalf("Assignee = %q, want bot", got)
+	}
+	if got := rcfg.Profile(); got != "fast" {
+		t.Fatalf("Profile = %q, want fast", got)
+	}
+	if got := rcfg.Timeout(); got != timeout {
+		t.Fatalf("Timeout = %v, want %v", got, timeout)
+	}
+	// Defaults-resolved review retries is 3.
+	if got := rcfg.ReviewMaxRetries(); got != 3 {
+		t.Fatalf("ReviewMaxRetries = %d, want 3", got)
+	}
+	// Default ladder for "fast" profile is built-in.
+	ladder := rcfg.ResolvedLadder()
+	if len(ladder["fast"]) == 0 {
+		t.Fatalf("ResolvedLadder[fast] empty: %v", ladder)
+	}
+	if rcfg.EvidenceCaps() != evidence.DefaultCaps() {
+		t.Fatalf("EvidenceCaps = %+v, want default", rcfg.EvidenceCaps())
+	}
+}
+
+func TestResolveDeepCopy(t *testing.T) {
+	mirrorAsync := true
+	cfg := &NewConfig{
+		Agent: &AgentConfig{
+			Harness: "claude",
+			Models: map[string]string{
+				"smart": "claude-opus",
+			},
+			ReasoningLevels: map[string][]string{
+				"smart": {"high", "medium"},
+			},
+			Routing: &RoutingConfig{
+				ProfileLadders: map[string][]string{
+					"default": {"cheap", "smart"},
+				},
+				ModelOverrides: map[string]string{
+					"smart": "claude-opus",
+				},
+			},
+		},
+		Executions: &ExecutionsConfig{
+			Mirror: &ExecutionsMirrorConfig{
+				Kind:    "fs",
+				Path:    "/tmp/mirror",
+				Include: []string{"prompt.md"},
+				Async:   &mirrorAsync,
+			},
+		},
+	}
+
+	rcfg := cfg.Resolve(CLIOverrides{Profile: "default"})
+
+	// Mutate exposed maps from the resolved value.
+	ladder := rcfg.ResolvedLadder()
+	ladder["default"][0] = "MUTATED"
+	ladder["new-key"] = []string{"x"}
+
+	levels := rcfg.ReasoningLevels()
+	levels["smart"][0] = "MUTATED"
+	levels["new-key"] = []string{"x"}
+
+	// Source cfg must be untouched.
+	if got := cfg.Agent.Routing.ProfileLadders["default"][0]; got != "cheap" {
+		t.Fatalf("source ProfileLadders mutated: %q", got)
+	}
+	if _, ok := cfg.Agent.Routing.ProfileLadders["new-key"]; ok {
+		t.Fatalf("source ProfileLadders gained new-key")
+	}
+	if got := cfg.Agent.ReasoningLevels["smart"][0]; got != "high" {
+		t.Fatalf("source ReasoningLevels mutated: %q", got)
+	}
+	if _, ok := cfg.Agent.ReasoningLevels["new-key"]; ok {
+		t.Fatalf("source ReasoningLevels gained new-key")
+	}
+	// Mutating the source after Resolve must not leak into resolved view.
+	cfg.Agent.Routing.ProfileLadders["default"][0] = "SOURCE-MUTATED"
+	cfg.Agent.ReasoningLevels["smart"][0] = "SOURCE-MUTATED"
+	cfg.Executions.Mirror.Kind = "SOURCE-MUTATED"
+
+	freshLadder := rcfg.ResolvedLadder()
+	if freshLadder["default"][0] != "cheap" {
+		t.Fatalf("post-source-mutation ladder = %v", freshLadder)
+	}
+	freshLevels := rcfg.ReasoningLevels()
+	if freshLevels["smart"][0] != "high" {
+		t.Fatalf("post-source-mutation levels = %v", freshLevels)
+	}
+	if rcfg.MirrorConfig().Kind != "fs" {
+		t.Fatalf("post-source-mutation mirror kind = %q", rcfg.MirrorConfig().Kind)
+	}
+}
+
 func TestResolvedConfigReasoningLevelsAccessor(t *testing.T) {
 	got := sealedFixture().ReasoningLevels()
 	if len(got["smart"]) != 1 || got["smart"][0] != "high" {
