@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T185858-b5a752cf",
+  "bead_id": "ddx-7150cd81",
+  "base_rev": "ee8653758ba911ab37b7d9931c2ebac571bcd49c",
+  "created_at": "2026-04-25T18:58:59.76330496Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7150cd81",
+    "title": "config/test: delete dead-feature config_us018 + config_us019 .disabled files",
+    "description": "Stage 4 of SD-024 test debt cleanup. Both files target features confirmed dead in the current loader: config_us018 (env-var ${VAR} substitution — no substitution code in cli/internal/config/loader.go), config_us019 (env-overlay .ddx.dev.yml/.ddx.staging.yml — no overlay loader exists).\n\nIn-scope:\n- delete cli/internal/config/config_us018_test.go.disabled\n- delete cli/internal/config/config_us019_test.go.disabled\n\nCommit message: dead-feature confirmation per SD-024 §Disabled Test Resolution.",
+    "acceptance": "ls cli/internal/config/config_us018_test.go.disabled cli/internal/config/config_us019_test.go.disabled returns no-such-file for both.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:test-debt",
+      "area:config",
+      "sd-024",
+      "stage:4"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T18:58:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T18:58:58.924951426Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T185858-b5a752cf",
+    "prompt": ".ddx/executions/20260425T185858-b5a752cf/prompt.md",
+    "manifest": ".ddx/executions/20260425T185858-b5a752cf/manifest.json",
+    "result": ".ddx/executions/20260425T185858-b5a752cf/result.json",
+    "checks": ".ddx/executions/20260425T185858-b5a752cf/checks.json",
+    "usage": ".ddx/executions/20260425T185858-b5a752cf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7150cd81-20260425T185858-b5a752cf"
+  }
+}
