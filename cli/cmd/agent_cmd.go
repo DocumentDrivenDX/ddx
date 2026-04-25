@@ -89,8 +89,9 @@ Examples:
 
 func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run",
-		Short: "Invoke an agent with a prompt",
+		Use:          "run",
+		Short:        "Invoke an agent with a prompt",
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			promptFile, _ := cmd.Flags().GetString("prompt")
 			promptText, _ := cmd.Flags().GetString("text")
@@ -653,9 +654,10 @@ func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 
 func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "doctor",
-		Short: "Check agent harness health",
-		Args:  cobra.NoArgs,
+		Use:          "doctor",
+		Short:        "Check agent harness health",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkConnectivity, _ := cmd.Flags().GetBool("connectivity")
 			checkRouting, _ := cmd.Flags().GetBool("routing")
