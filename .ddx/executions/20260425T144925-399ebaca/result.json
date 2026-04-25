@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Stage-1 foundation lands cleanly: `Resolve` + `CLIOverrides` defined, all five required `Clone` methods (AgentConfig, RoutingConfig, EvidenceCapsConfig, ExecutionsMirrorConfig, WorkersConfig) present and explicitly invoked from `Resolve`, nil-receiver path returns sealed defaults without panic, and deep-copy is verified by both source→clone and clone→source mutation assertions. Scope discipline respected (no LoadAndResolve, no new resolvers)."
+}
