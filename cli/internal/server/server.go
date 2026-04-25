@@ -16,7 +16,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -803,7 +802,7 @@ func (s *Server) handleProjectCommits(w http.ResponseWriter, r *http.Request) {
 	const recSep = "\x1e"
 	format := "--pretty=format:%H" + sep + "%h" + sep + "%an" + sep + "%aI" + sep + "%s" + sep + "%b" + recSep
 
-	args := []string{"-C", entry.Path, "log", format, "-n", strconv.Itoa(limit)}
+	args := []string{"log", format, "-n", strconv.Itoa(limit)}
 	if since != "" {
 		args = append(args, "--since="+since)
 	}
@@ -811,10 +810,7 @@ func (s *Server) handleProjectCommits(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "--author="+author)
 	}
 
-	cmd := exec.Command("git", args...) //nolint:gosec
-	// Scrub inherited GIT_* env vars so `-C` takes effect reliably even when
-	// running inside a parent git hook context.
-	cmd.Env = internalgit.CleanEnv()
+	cmd := internalgit.Command(r.Context(), entry.Path, args...)
 	out, err := cmd.Output()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed: " + err.Error()})
@@ -1675,9 +1671,7 @@ func (s *Server) handleDocHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gitArgs := []string{"log", "--follow", "--format=%H\t%ai\t%an\t%s", "--", doc.Path}
-	gitCmd := exec.Command("git", gitArgs...)
-	gitCmd.Dir = s.workingDirForRequest(r)
-	gitCmd.Env = internalgit.CleanEnv()
+	gitCmd := internalgit.Command(r.Context(), s.workingDirForRequest(r), gitArgs...)
 	out, gitErr := gitCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git log failed"})
@@ -1747,9 +1741,7 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 		gitArgs = []string{"diff", "--", doc.Path}
 	}
 
-	diffCmd := exec.Command("git", gitArgs...)
-	diffCmd.Dir = s.workingDirForRequest(r)
-	diffCmd.Env = internalgit.CleanEnv()
+	diffCmd := internalgit.Command(r.Context(), s.workingDirForRequest(r), gitArgs...)
 	out, gitErr := diffCmd.Output()
 	if gitErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git diff failed"})

@@ -20,12 +20,12 @@ package bead
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // Store manages beads via a pluggable backend.
@@ -1039,7 +1040,7 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 
 // detectCurrentCommit returns the current git HEAD SHA, or empty if not in a git repo.
 func (s *Store) detectCurrentCommit() string {
-	out, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	out, err := gitpkg.Command(context.Background(), s.Dir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return ""
 	}
@@ -1576,7 +1577,7 @@ func (s *Store) validateBead(b *Bead) error {
 // Falls back to DefaultPrefix if detection fails.
 func detectPrefix() string {
 	// Try git repo root name first
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd := gitpkg.Command(context.Background(), "", "rev-parse", "--show-toplevel")
 	if out, err := cmd.Output(); err == nil {
 		root := strings.TrimSpace(string(out))
 		if root != "" {

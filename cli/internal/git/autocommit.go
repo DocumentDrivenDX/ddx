@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -65,21 +64,18 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 	// Stage only the file name after switching into the file's parent
 	// directory. This keeps relative callers working when filePath itself is
 	// a nested relative path such as cli/cmd/doc.go.
-	addCmd := exec.CommandContext(ctx, "git", "add", filepath.Base(filePath))
-	addCmd.Dir = repoDir
+	addCmd := Command(ctx, repoDir, "add", filepath.Base(filePath))
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git add failed: %w\n%s", err, string(out))
 	}
 
 	// Commit with --no-verify because these are mechanical commits.
-	commitCmd := exec.CommandContext(ctx, "git", "commit", "--no-verify", "-m", message)
-	commitCmd.Dir = repoDir
+	commitCmd := Command(ctx, repoDir, "commit", "--no-verify", "-m", message)
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git commit failed: %w\n%s", err, string(out))
 	}
 
-	shaCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
-	shaCmd.Dir = repoDir
+	shaCmd := Command(ctx, repoDir, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse failed: %w", err)

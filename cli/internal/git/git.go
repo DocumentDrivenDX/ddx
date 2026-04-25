@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -25,8 +24,7 @@ func FindProjectRoot(startDir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
-	cmd.Dir = startDir
+	cmd := Command(ctx, startDir, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {
 		// Not in a git repo — fall back to the original directory.
@@ -102,16 +100,14 @@ func primaryWorktreeRoot(startDir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	gitDirCmd := exec.CommandContext(ctx, "git", "rev-parse", "--path-format=absolute", "--git-dir")
-	gitDirCmd.Dir = startDir
+	gitDirCmd := Command(ctx, startDir, "rev-parse", "--path-format=absolute", "--git-dir")
 	gitDirOut, err := gitDirCmd.Output()
 	if err != nil {
 		return ""
 	}
 	gitDir := strings.TrimSpace(string(gitDirOut))
 
-	commonDirCmd := exec.CommandContext(ctx, "git", "rev-parse", "--path-format=absolute", "--git-common-dir")
-	commonDirCmd.Dir = startDir
+	commonDirCmd := Command(ctx, startDir, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	commonDirOut, err := commonDirCmd.Output()
 	if err != nil {
 		return ""
@@ -142,7 +138,7 @@ func IsRepository(path string) bool {
 		cleanPath := filepath.Clean(path)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "git", "-C", cleanPath, "rev-parse", "--git-dir")
+		cmd := Command(ctx, cleanPath, "rev-parse", "--git-dir")
 		return cmd.Run() == nil
 	}
 
@@ -157,7 +153,7 @@ func IsRepository(path string) bool {
 	// Set timeout to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", cleanPath, "rev-parse", "--git-dir")
+	cmd := Command(ctx, cleanPath, "rev-parse", "--git-dir")
 	return cmd.Run() == nil
 }
 
@@ -182,7 +178,7 @@ func HasUncommittedChanges(path string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "-C", cleanPath, "status", "--porcelain")
+	cmd := Command(ctx, cleanPath, "status", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check git status")
@@ -201,7 +197,7 @@ func GetCurrentBranch() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "branch", "--show-current")
+	cmd := Command(ctx, "", "branch", "--show-current")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch")
@@ -210,7 +206,7 @@ func GetCurrentBranch() (string, error) {
 	branch := strings.TrimSpace(string(output))
 	if branch == "" {
 		// Fallback for older git versions or detached HEAD
-		cmd = exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+		cmd = Command(ctx, "", "rev-parse", "--abbrev-ref", "HEAD")
 		output, err = cmd.Output()
 		if err != nil {
 			return "", fmt.Errorf("failed to get branch name")
@@ -244,7 +240,7 @@ func CommitChanges(message string) error {
 	defer cancel()
 
 	// Add all changes
-	cmd := exec.CommandContext(ctx, "git", "add", "-A")
+	cmd := Command(ctx, "", "add", "-A")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to add changes")
 	}
@@ -259,7 +255,7 @@ func CommitChanges(message string) error {
 	}
 
 	// Commit with sanitized message
-	cmd = exec.CommandContext(ctx, "git", "commit", "-m", sanitizedMessage)
+	cmd = Command(ctx, "", "commit", "-m", sanitizedMessage)
 	_, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to commit changes")
