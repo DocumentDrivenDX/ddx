@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean Stage-1 e2e implementation: both tests load actual `.ddx/config.yaml`, route through `config.LoadAndResolve` + `RunWithConfig` (production path, no injected options), and assert observable loop behavior — RetryAfter timestamps for the cooldown branch, bead closure with `already_satisfied` for the count-based adjudication branch. The non-default values (47m, threshold=2) ensure a green test cannot be explained by hardcoded defaults. The bonus schema fix in `config.schema.json` is in-scope since the resolvers from bead 4 would otherwise be unreachable through real fixtures."
+}
