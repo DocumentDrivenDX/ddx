@@ -1,0 +1,98 @@
+{
+  "attempt_id": "20260425T185622-a3d3bfdb",
+  "bead_id": "ddx-d1d7ca17",
+  "base_rev": "75182745eb8a124d78956dccff672543fb7605eb",
+  "created_at": "2026-04-25T18:56:23.122799103Z",
+  "requested": {
+    "harness": "omlx",
+    "model": "Qwen3.6-27B-MLX-8bit",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d1d7ca17",
+    "title": "server/workers: migrate runWorker dispatch to LoadAndResolve + behavioral e2e",
+    "description": "Stage 1 of SD-024. Migrates the server worker dispatch at cli/internal/server/workers.go:878 to use config.LoadAndResolve + ExecuteBeadWorker.RunWithConfig. Each request loads the target project's config fresh (no cache); spec fields layer onto config as overrides via CLIOverrides/SpecOverrides.\n\nThis bead unblocks FEAT-022 G's server path — the most-used path in production since 'ddx work' submits to the running server by default.\n\nIn-scope:\n- cli/internal/server/workers.go (around line 878 — runWorker)\n- cli/internal/server/workers_e2e_test.go (new) — TestReviewRetryThresholdFromConfigServer\n\nOut-of-scope:\n- CLI dispatch (bead 7)\n- GraphQL StartWorker (bead 9)\n\nDepends on bead 6.5. See TD-024 §Dispatch site code shape.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestReviewRetryThresholdFromConfigServer ./internal/server/... passes: same shape as the CLI test in bead 7, against StartWorker→runWorker. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:server",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T18:56:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-25T15:46:00.111095958Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260425T153657-d04bf483\",\"harness\":\"claude\",\"input_tokens\":41,\"output_tokens\":16043,\"total_tokens\":16084,\"cost_usd\":2.1442099999999997,\"duration_ms\":541636,\"exit_code\":0}",
+          "created_at": "2026-04-25T15:46:00.191581492Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=16084 cost_usd=2.1442"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-25T15:46:03.466474401Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "REQUEST_CHANGES\n**`workers.go:892` swallows `LoadAndResolve` error**: `rcfg, _ := config.LoadAndResolve(projectRoot, overrides)` discards the error silently. If config is malformed the worker will run on a zero-value `ResolvedConfig` and (per SD-024 §1 sealed-construction) panic on first accessor. Either propagate the error to the worker record (preferred) or document why a load failure should hard-panic. Minor — not in AC but wort…\nartifact: .ddx/executions/20260425T153657-d04bf483/reviewer-stream.log",
+          "created_at": "2026-04-25T15:47:02.804006743Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-25T15:47:02.88372686Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: REQUEST_CHANGES\n**`workers.go:892` swallows `LoadAndResolve` error**: `rcfg, _ := config.LoadAndResolve(projectRoot, overrides)` discards the error silently. If config is malformed the worker will run on a zero-value `ResolvedConfig` and (per SD-024 §1 sealed-construction) panic on first accessor. Either propagate the error to the worker record (preferred) or document why a load failure should hard-panic. Minor — not in AC but worth fixing before merge.\n**AC #2 not literally met**: pre-existing failures in `cli/cmd` (golden drift, installation tests requiring built binary) prevent `go test ./...` from passing. Either (a) confirm independently that base commit `e56ee4d3` exhibits the same failures and waive AC #2, or (b) gate this bead behind a small fix that restores green. Recommend confirming (a) and explicitly waiving rather than re-running this bead.\nresult_rev=1a4357db6b1728992e572622823cada9e8a7f616\nbase_rev=e56ee4d36b1b309860f5e3b21d5f91382706289a",
+          "created_at": "2026-04-25T15:47:02.9531959Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-25T18:56:22.477086292Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T185622-a3d3bfdb",
+    "prompt": ".ddx/executions/20260425T185622-a3d3bfdb/prompt.md",
+    "manifest": ".ddx/executions/20260425T185622-a3d3bfdb/manifest.json",
+    "result": ".ddx/executions/20260425T185622-a3d3bfdb/result.json",
+    "checks": ".ddx/executions/20260425T185622-a3d3bfdb/checks.json",
+    "usage": ".ddx/executions/20260425T185622-a3d3bfdb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d1d7ca17-20260425T185622-a3d3bfdb"
+  }
+}
