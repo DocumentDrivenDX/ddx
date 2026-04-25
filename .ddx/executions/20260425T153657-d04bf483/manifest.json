@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T153657-d04bf483",
+  "bead_id": "ddx-d1d7ca17",
+  "base_rev": "e56ee4d36b1b309860f5e3b21d5f91382706289a",
+  "created_at": "2026-04-25T15:36:58.47132965Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d1d7ca17",
+    "title": "server/workers: migrate runWorker dispatch to LoadAndResolve + behavioral e2e",
+    "description": "Stage 1 of SD-024. Migrates the server worker dispatch at cli/internal/server/workers.go:878 to use config.LoadAndResolve + ExecuteBeadWorker.RunWithConfig. Each request loads the target project's config fresh (no cache); spec fields layer onto config as overrides via CLIOverrides/SpecOverrides.\n\nThis bead unblocks FEAT-022 G's server path — the most-used path in production since 'ddx work' submits to the running server by default.\n\nIn-scope:\n- cli/internal/server/workers.go (around line 878 — runWorker)\n- cli/internal/server/workers_e2e_test.go (new) — TestReviewRetryThresholdFromConfigServer\n\nOut-of-scope:\n- CLI dispatch (bead 7)\n- GraphQL StartWorker (bead 9)\n\nDepends on bead 6.5. See TD-024 §Dispatch site code shape.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestReviewRetryThresholdFromConfigServer ./internal/server/... passes: same shape as the CLI test in bead 7, against StartWorker→runWorker. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:server",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T15:36:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T15:36:57.921595988Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T153657-d04bf483",
+    "prompt": ".ddx/executions/20260425T153657-d04bf483/prompt.md",
+    "manifest": ".ddx/executions/20260425T153657-d04bf483/manifest.json",
+    "result": ".ddx/executions/20260425T153657-d04bf483/result.json",
+    "checks": ".ddx/executions/20260425T153657-d04bf483/checks.json",
+    "usage": ".ddx/executions/20260425T153657-d04bf483/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d1d7ca17-20260425T153657-d04bf483"
+  }
+}
