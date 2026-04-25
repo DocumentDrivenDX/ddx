@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean implementation of FEAT-022 §17. JSON shape becomes an object `{rows, prompt_size_p50/p95/p99, failure_classes}`; quantiles use nearest-rank over `input_bytes` parsed from review/review-error/review-manual-required event bodies; failure classes are pre-seeded so `has(...)` is stable even on empty stores. Adds a `--window` flag (additive, defaults to 0=all) and preserves tier attribution across windowed cutoffs. Test fixture is well-chosen (10 distinct input_bytes values producing exact P50/P95/P99 under nearest-rank)."
+}
