@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260425T152448-a1bad981",
+  "bead_id": "ddx-dd7fce7e",
+  "base_rev": "b6d828eca15664eefc2db04466b8b00cf01f85f6",
+  "created_at": "2026-04-25T15:24:49.267354318Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dd7fce7e",
+    "title": "cmd/work: migrate ddx work CLI dispatch to LoadAndResolve + RunWithConfig + behavioral e2e",
+    "description": "Stage 1 of SD-024. Migrates the CLI dispatch site at cli/cmd/agent_cmd.go:1997 to use config.LoadAndResolve + ExecuteBeadWorker.RunWithConfig instead of constructing ExecuteBeadLoopOptions from CLI flags. Adds a behavioral e2e test that proves a .ddx/config.yaml change reaches the running CLI loop.\n\nThis bead unblocks FEAT-022 G's CLI path: ReviewMaxRetries from .ddx/config.yaml will actually drive review-retry behavior on 'ddx work' invocations.\n\nIn-scope:\n- cli/cmd/agent_cmd.go (around line 1997 — runAgentExecuteLoop)\n- cli/cmd/agent_execute_loop_e2e_test.go (new) — TestReviewRetryThresholdFromConfigCLI\n\nOut-of-scope:\n- Server worker dispatch (bead 8)\n- GraphQL StartWorker dispatch (bead 9)\n\nDepends on bead 6.5 (review-failure fixture). See TD-024 §Test plan.",
+    "acceptance": "cd cli \u0026\u0026 go test -run TestReviewRetryThresholdFromConfigCLI ./cmd/... passes: with .ddx/config.yaml setting review_max_retries=5, a deterministic test runner that fails the first 4 reviews and succeeds the 5th, ddx work --once on a seeded bead closes successfully on attempt 5 and emits no review-manual-required event. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:cmd",
+      "sd-024",
+      "stage:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-25T15:24:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "196235",
+      "execute-loop-heartbeat-at": "2026-04-25T15:24:48.344586575Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260425T152448-a1bad981",
+    "prompt": ".ddx/executions/20260425T152448-a1bad981/prompt.md",
+    "manifest": ".ddx/executions/20260425T152448-a1bad981/manifest.json",
+    "result": ".ddx/executions/20260425T152448-a1bad981/result.json",
+    "checks": ".ddx/executions/20260425T152448-a1bad981/checks.json",
+    "usage": ".ddx/executions/20260425T152448-a1bad981/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dd7fce7e-20260425T152448-a1bad981"
+  }
+}
