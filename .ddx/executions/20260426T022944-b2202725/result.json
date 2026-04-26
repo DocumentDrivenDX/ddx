@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-a8eaef0a",
+  "attempt_id": "20260426T022944-b2202725",
+  "base_rev": "115d7faa8fabcfade5da585e66d7b6615cbe9ff8",
+  "result_rev": "115d7faa8fabcfade5da585e66d7b6615cbe9ff8",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "exit status 1",
+  "harness": "pi",
+  "provider": "omlx-vidar-1235",
+  "model": "Qwen3.6-27B-MLX-8bit",
+  "session_id": "eb-4d0f9d4c",
+  "duration_ms": 2532,
+  "exit_code": 1,
+  "error": "exit status 1",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260426T022944-b2202725",
+  "prompt_file": ".ddx/executions/20260426T022944-b2202725/prompt.md",
+  "manifest_file": ".ddx/executions/20260426T022944-b2202725/manifest.json",
+  "result_file": ".ddx/executions/20260426T022944-b2202725/result.json",
+  "started_at": "2026-04-26T02:29:45.349191995Z",
+  "finished_at": "2026-04-26T02:29:47.881470064Z"
+}
