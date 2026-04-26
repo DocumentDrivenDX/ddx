@@ -12,6 +12,8 @@ github.com/DocumentDrivenDX/agent v0.9.9 h1:ZQm5i0U85SKBeqlLwu9ZHxYHYGgDG/kHa9sC
 github.com/DocumentDrivenDX/agent v0.9.9/go.mod h1:l6NcrxPy6o8IAPUZ1M1hAPvC4uWrXlmisixbV/ud6q4=
 github.com/DocumentDrivenDX/agent v0.9.11 h1:au7qqE57yzoIY/FmhXbqk43Dh8jQA3RfOKgMXwL+744=
 github.com/DocumentDrivenDX/agent v0.9.11/go.mod h1:l6NcrxPy6o8IAPUZ1M1hAPvC4uWrXlmisixbV/ud6q4=
+github.com/DocumentDrivenDX/agent v0.9.12 h1:MQqwHPPKwDLf49kXpdghI/4BUmm97nS2l9TnicudDZs=
+github.com/DocumentDrivenDX/agent v0.9.12/go.mod h1:l6NcrxPy6o8IAPUZ1M1hAPvC4uWrXlmisixbV/ud6q4=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
