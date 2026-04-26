@@ -10,6 +10,8 @@ github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/DocumentDrivenDX/agent v0.9.9 h1:ZQm5i0U85SKBeqlLwu9ZHxYHYGgDG/kHa9sC5564EyQ=
 github.com/DocumentDrivenDX/agent v0.9.9/go.mod h1:l6NcrxPy6o8IAPUZ1M1hAPvC4uWrXlmisixbV/ud6q4=
+github.com/DocumentDrivenDX/agent v0.9.11 h1:au7qqE57yzoIY/FmhXbqk43Dh8jQA3RfOKgMXwL+744=
+github.com/DocumentDrivenDX/agent v0.9.11/go.mod h1:l6NcrxPy6o8IAPUZ1M1hAPvC4uWrXlmisixbV/ud6q4=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
