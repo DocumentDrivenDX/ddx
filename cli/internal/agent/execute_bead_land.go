@@ -745,7 +745,7 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 			res.Reason = "merged onto current tip"
 		}
 		if land.PushFailed {
-			res.Reason = "landed locally; push failed: " + land.PushError
+			res.Reason = PushFailedReasonPrefix + " " + land.PushError
 		}
 		// NewTip reflects the ref actually on the target branch (either
 		// ResultRev on the ff path or the merge commit SHA on the merge path).

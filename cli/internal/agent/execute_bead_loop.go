@@ -635,6 +635,20 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					result.Failures++
 					result.LastFailureStatus = report.Status
 				}
+			} else if report.Status == ExecuteBeadStatusPushFailed {
+				// Push failed after a successful local merge/ff. The bead is
+				// NOT closed (commits live only locally) — park it long enough
+				// that subsequent loop iterations refuse to re-pick it until
+				// an operator clears the state. The push stderr in
+				// report.Detail is recorded as last_detail so it surfaces on
+				// the bead and on any direct claim attempt.
+				parkUntil := now().UTC().Add(365 * 24 * time.Hour)
+				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
+					return result, err
+				}
+				report.RetryAfter = parkUntil.Format(time.RFC3339)
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			} else {
 				if shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(noProgressCooldown)

@@ -288,7 +288,7 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 				res.ResultRev = land.NewTip
 			}
 			if land.PushFailed {
-				landing.Reason = "landed locally; push failed: " + land.PushError
+				landing.Reason = PushFailedReasonPrefix + " " + land.PushError
 			}
 		case "preserved":
 			landing.Outcome = "preserved"

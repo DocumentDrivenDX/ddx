@@ -572,6 +572,19 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 			default:
 				return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
 			}
+			// Refuse claims on beads parked with last_status=push_failed:
+			// the previous attempt landed locally but `git push` was rejected,
+			// so the local commit history exists only on this machine. Re-running
+			// primary work would duplicate or strand commits. The operator must
+			// clear execute-loop-last-status (e.g. by manually pushing or
+			// resetting) before another attempt is allowed.
+			if last, ok := beads[i].Extra["execute-loop-last-status"].(string); ok && last == "push_failed" {
+				detail, _ := beads[i].Extra["execute-loop-last-detail"].(string)
+				if detail != "" {
+					return fmt.Errorf("bead: refusing to claim %s — previous attempt landed locally but push failed (%s); clear execute-loop-last-status to retry", id, detail)
+				}
+				return fmt.Errorf("bead: refusing to claim %s — previous attempt landed locally but push failed; clear execute-loop-last-status to retry", id)
+			}
 			if beads[i].Extra == nil {
 				beads[i].Extra = make(map[string]any)
 			}

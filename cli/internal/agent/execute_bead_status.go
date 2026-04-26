@@ -2,6 +2,13 @@ package agent
 
 import "strings"
 
+// PushFailedReasonPrefix is the canonical Reason prefix written by the
+// landing layer when `git push` rejects the new tip after a local merge or
+// fast-forward succeeded. ClassifyExecuteBeadStatus matches on this prefix
+// to map a merged-locally-but-not-pushed outcome to push_failed instead of
+// success, so the bead stays open.
+const PushFailedReasonPrefix = "landed locally; push failed:"
+
 // FailureMode constants classify *why* an execution did not land cleanly.
 // They are orthogonal to Outcome/Status: a single failed attempt carries one
 // outcome (e.g. preserved) and one failure mode (e.g. merge_conflict) so
@@ -203,6 +210,7 @@ const (
 	ExecuteBeadStatusPostRunCheckFailed         = "post_run_check_failed"
 	ExecuteBeadStatusRatchetFailed              = "ratchet_failed"
 	ExecuteBeadStatusLandConflict               = "land_conflict"
+	ExecuteBeadStatusPushFailed                 = "push_failed"
 	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
@@ -224,6 +232,14 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 
 	switch outcome {
 	case "merged":
+		// A merged outcome whose reason carries the push-failure marker
+		// means the local target branch advanced but `git push` rejected the
+		// new tip (large blob, branch protection, auth, divergence, etc.).
+		// Classify these as push_failed so the loop refuses to close the
+		// bead and operators are forced to investigate.
+		if strings.HasPrefix(reason, PushFailedReasonPrefix) {
+			return ExecuteBeadStatusPushFailed
+		}
 		return ExecuteBeadStatusSuccess
 	case "no-changes", ExecuteBeadOutcomeTaskNoChanges:
 		return ExecuteBeadStatusNoChanges
