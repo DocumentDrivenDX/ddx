@@ -1,0 +1,179 @@
+<bead-review>
+  <bead id="ddx-af54ebf3" iter=1>
+    <title>agent/execute-bead: classify failed git push as a hard failure (do not close bead)</title>
+    <description>
+**Reporter**: nexiq (downstream consumer). Observed across 2026-04-22 → 2026-04-26 on master.
+
+## Observed
+
+`ddx agent execute-bead` can land a commit locally (worktree merged into local master), then fail at the `git push origin master` step, and still classify the bead as `execute-bead: success`. The push failure shows up as `landed locally; push failed:` in the event body, but the bead transitions to closed and the loop moves on.
+
+Concrete blast radius: ~969 unpushed commits accumulated on nexiq's master across multiple days because every bead that landed in that window had a 258 MB turbopack `.sst` file somewhere in its commit history. GitHub rejected each push with the 100 MB-per-file limit error. The execute-loop's success rate looked normal — operators saw bead = closed, dashboard = working — but origin was untouched.
+
+Recovery required `git filter-branch --index-filter 'git rm --cached -r packages/web/.next .next'` across ~1000 commits plus a `.gitignore` hardening change. By that point the only signal that something was wrong was an operator manually running `git rev-list --count origin/master..master`.
+
+## Root cause
+
+The execute-bead orchestrator currently classifies the result of the *merge* step. The push step happens after, and a non-zero exit there is logged in the event body but does not bubble up to the bead's terminal status. As far as routing/state machines are concerned, the bead is done.
+
+This is the worst-case classification: silent for operators, irreversible for state (bead closes, primary doesn't re-run, the work that needs to be re-pushed isn't tracked anywhere).
+
+## Failure modes this masks
+
+- Large blob in commit history (the case we hit) — every subsequent bead inherits the bad ancestor and fails to push.
+- Auth expiration / credential rotation on the origin remote.
+- Branch protection rules added on the remote between the loop's last successful push and now.
+- HTTP 5xx / network flake against origin.
+- Local divergence from origin (someone else pushed; non-fast-forward refused).
+
+In all five cases the current behavior is: bead closes, loop picks the next bead, the divergence grows monotonically.
+
+## Suggested fix
+
+1. Promote push to a first-class step in execute-bead's outcome classification.
+   - On non-zero exit from `git push`, emit `execute-bead: push_failed` (or similar terminal that explicitly is NOT success) with the push stderr captured in the event body.
+   - Reopen the bead with `last_status=push_failed` and a retry_after that buys time for an operator to investigate.
+2. Surface push failure on the next claim attempt: when a worker tries to claim a bead in `last_status=push_failed`, refuse the claim and show the operator the prior push stderr — don't blindly redo the primary work, since the local commit is already there.
+3. (Optional, defense in depth) Have execute-loop maintain a per-repo divergence counter (`git rev-list --count origin/&lt;branch&gt;..&lt;branch&gt;`); if it crosses a threshold (e.g. &gt;5), pause new claims and emit a loop-level warning event.
+
+## Reproduction
+
+1. On a local fork, install a `pre-receive` hook on the remote that rejects all pushes (or use a remote that requires a permission the runner doesn't have).
+2. Queue any bead and run execute-loop normally.
+3. Observe: bead closes as success despite the push failing. The merge commit lives only on local master.
+4. Confirm: `git rev-list --count origin/master..master` is non-zero, but ddx still routed a new worker to the next bead.
+
+## Files to inspect
+
+- nexiq commit `f2c2ed33` (the .gitignore + .next scrub) is the recovery commit on the downstream side.
+- nexiq's own follow-up bead (`nexiq-e57b41eb`) lists this as a blocker; I'll amend it once this ddx bead has an ID.
+
+## Acceptance
+
+- A forced push failure (e.g. pre-receive hook rejecting) results in a bead that does NOT show as closed and shows up in `ddx bead list --status open` with a `last_status=push_failed` field.
+- The operator can see the push stderr in the bead's events.
+- Subsequent claim attempts on that bead fail loudly until the operator clears the state (retry, force-skip, etc.).
+    </description>
+    <acceptance>
+Push-failure produces non-closing terminal status; bead remains open with last_status=push_failed and the push stderr captured; subsequent claims refuse until operator clears.
+    </acceptance>
+    <labels>ddx, kind:bug, area:agent, area:execute-bead, severity:high</labels>
+  </bead>
+
+  <changed-files>
+    <file>.ddx/executions/20260426T185836-ae76e2f1/manifest.json</file>
+    <file>.ddx/executions/20260426T185836-ae76e2f1/result.json</file>
+  </changed-files>
+
+  <governing>
+    <note>No governing documents found. Evaluate the diff against the acceptance criteria alone.</note>
+  </governing>
+
+  <diff rev="8f325040ae977e6d2a564f0fb1e1b1029c8a353f">
+diff --git a/.ddx/executions/20260426T185836-ae76e2f1/manifest.json b/.ddx/executions/20260426T185836-ae76e2f1/manifest.json
+new file mode 100644
+index 00000000..40d4d40b
+--- /dev/null
++++ b/.ddx/executions/20260426T185836-ae76e2f1/manifest.json
+@@ -0,0 +1,38 @@
++{
++  "attempt_id": "20260426T185836-ae76e2f1",
++  "bead_id": "ddx-af54ebf3",
++  "base_rev": "228684a81b2c783dbc7710113495c189b1583ae3",
++  "created_at": "2026-04-26T18:58:37.497550454Z",
++  "requested": {
++    "harness": "claude",
++    "prompt": "synthesized"
++  },
++  "bead": {
++    "id": "ddx-af54ebf3",
++    "title": "agent/execute-bead: classify failed git push as a hard failure (do not close bead)",
++    "description": "**Reporter**: nexiq (downstream consumer). Observed across 2026-04-22 → 2026-04-26 on master.\n\n## Observed\n\n`ddx agent execute-bead` can land a commit locally (worktree merged into local master), then fail at the `git push origin master` step, and still classify the bead as `execute-bead: success`. The push failure shows up as `landed locally; push failed:` in the event body, but the bead transitions to closed and the loop moves on.\n\nConcrete blast radius: ~969 unpushed commits accumulated on nexiq's master across multiple days because every bead that landed in that window had a 258 MB turbopack `.sst` file somewhere in its commit history. GitHub rejected each push with the 100 MB-per-file limit error. The execute-loop's success rate looked normal — operators saw bead = closed, dashboard = working — but origin was untouched.\n\nRecovery required `git filter-branch --index-filter 'git rm --cached -r packages/web/.next .next'` across ~1000 commits plus a `.gitignore` hardening change. By that point the only signal that something was wrong was an operator manually running `git rev-list --count origin/master..master`.\n\n## Root cause\n\nThe execute-bead orchestrator currently classifies the result of the *merge* step. The push step happens after, and a non-zero exit there is logged in the event body but does not bubble up to the bead's terminal status. As far as routing/state machines are concerned, the bead is done.\n\nThis is the worst-case classification: silent for operators, irreversible for state (bead closes, primary doesn't re-run, the work that needs to be re-pushed isn't tracked anywhere).\n\n## Failure modes this masks\n\n- Large blob in commit history (the case we hit) — every subsequent bead inherits the bad ancestor and fails to push.\n- Auth expiration / credential rotation on the origin remote.\n- Branch protection rules added on the remote between the loop's last successful push and now.\n- HTTP 5xx / network flake against origin.\n- Local divergence from origin (someone else pushed; non-fast-forward refused).\n\nIn all five cases the current behavior is: bead closes, loop picks the next bead, the divergence grows monotonically.\n\n## Suggested fix\n\n1. Promote push to a first-class step in execute-bead's outcome classification.\n   - On non-zero exit from `git push`, emit `execute-bead: push_failed` (or similar terminal that explicitly is NOT success) with the push stderr captured in the event body.\n   - Reopen the bead with `last_status=push_failed` and a retry_after that buys time for an operator to investigate.\n2. Surface push failure on the next claim attempt: when a worker tries to claim a bead in `last_status=push_failed`, refuse the claim and show the operator the prior push stderr — don't blindly redo the primary work, since the local commit is already there.\n3. (Optional, defense in depth) Have execute-loop maintain a per-repo divergence counter (`git rev-list --count origin/\u003cbranch\u003e..\u003cbranch\u003e`); if it crosses a threshold (e.g. \u003e5), pause new claims and emit a loop-level warning event.\n\n## Reproduction\n\n1. On a local fork, install a `pre-receive` hook on the remote that rejects all pushes (or use a remote that requires a permission the runner doesn't have).\n2. Queue any bead and run execute-loop normally.\n3. Observe: bead closes as success despite the push failing. The merge commit lives only on local master.\n4. Confirm: `git rev-list --count origin/master..master` is non-zero, but ddx still routed a new worker to the next bead.\n\n## Files to inspect\n\n- nexiq commit `f2c2ed33` (the .gitignore + .next scrub) is the recovery commit on the downstream side.\n- nexiq's own follow-up bead (`nexiq-e57b41eb`) lists this as a blocker; I'll amend it once this ddx bead has an ID.\n\n## Acceptance\n\n- A forced push failure (e.g. pre-receive hook rejecting) results in a bead that does NOT show as closed and shows up in `ddx bead list --status open` with a `last_status=push_failed` field.\n- The operator can see the push stderr in the bead's events.\n- Subsequent claim attempts on that bead fail loudly until the operator clears the state (retry, force-skip, etc.).",
++    "acceptance": "Push-failure produces non-closing terminal status; bead remains open with last_status=push_failed and the push stderr captured; subsequent claims refuse until operator clears.",
++    "labels": [
++      "ddx",
++      "kind:bug",
++      "area:agent",
++      "area:execute-bead",
++      "severity:high"
++    ],
++    "metadata": {
++      "claimed-at": "2026-04-26T18:58:36Z",
++      "claimed-machine": "eitri",
++      "claimed-pid": "776906",
++      "execute-loop-heartbeat-at": "2026-04-26T18:58:36.258892037Z"
++    }
++  },
++  "paths": {
++    "dir": ".ddx/executions/20260426T185836-ae76e2f1",
++    "prompt": ".ddx/executions/20260426T185836-ae76e2f1/prompt.md",
++    "manifest": ".ddx/executions/20260426T185836-ae76e2f1/manifest.json",
++    "result": ".ddx/executions/20260426T185836-ae76e2f1/result.json",
++    "checks": ".ddx/executions/20260426T185836-ae76e2f1/checks.json",
++    "usage": ".ddx/executions/20260426T185836-ae76e2f1/usage.json",
++    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-af54ebf3-20260426T185836-ae76e2f1"
++  }
++}
+\ No newline at end of file
+diff --git a/.ddx/executions/20260426T185836-ae76e2f1/result.json b/.ddx/executions/20260426T185836-ae76e2f1/result.json
+new file mode 100644
+index 00000000..67a39e46
+--- /dev/null
++++ b/.ddx/executions/20260426T185836-ae76e2f1/result.json
+@@ -0,0 +1,22 @@
++{
++  "bead_id": "ddx-af54ebf3",
++  "attempt_id": "20260426T185836-ae76e2f1",
++  "base_rev": "228684a81b2c783dbc7710113495c189b1583ae3",
++  "result_rev": "b9f5503bef0e6fdb1daf210e5a3b49d84a2847db",
++  "outcome": "task_succeeded",
++  "status": "success",
++  "detail": "success",
++  "harness": "claude",
++  "session_id": "eb-4dc05d68",
++  "duration_ms": 690199,
++  "tokens": 23704,
++  "cost_usd": 4.546481,
++  "exit_code": 0,
++  "execution_dir": ".ddx/executions/20260426T185836-ae76e2f1",
++  "prompt_file": ".ddx/executions/20260426T185836-ae76e2f1/prompt.md",
++  "manifest_file": ".ddx/executions/20260426T185836-ae76e2f1/manifest.json",
++  "result_file": ".ddx/executions/20260426T185836-ae76e2f1/result.json",
++  "usage_file": ".ddx/executions/20260426T185836-ae76e2f1/usage.json",
++  "started_at": "2026-04-26T18:58:37.498230278Z",
++  "finished_at": "2026-04-26T19:10:07.697303329Z"
++}
+\ No newline at end of file
+  </diff>
+
+  <instructions>
+You are reviewing a bead implementation against its acceptance criteria.
+
+For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
+
+- APPROVE — every AC item is fully and correctly implemented.
+- REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
+
+## Required output format (schema_version: 1)
+
+Respond with EXACTLY one JSON object as your final response, fenced as a single ```json … ``` code block. Do not include any prose outside the fenced block. The JSON must match this schema:
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "≤300 char human-readable verdict justification",
+  "findings": [
+    { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
+  ]
+}
+```
+
+Rules:
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "severity" must be exactly one of "info", "warn", "block".
+- Output the JSON object inside ONE fenced ```json … ``` block. No additional prose, no extra fences, no markdown headings.
+- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.
+  </instructions>
+</bead-review>
