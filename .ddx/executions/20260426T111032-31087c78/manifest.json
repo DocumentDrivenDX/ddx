@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260426T111032-31087c78",
+  "bead_id": "ddx-880b7d8b",
+  "base_rev": "e9f2d53f5058d7459e528d14b3970dfb58926ad3",
+  "created_at": "2026-04-26T11:10:32.885596355Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-880b7d8b",
+    "title": "tools/lint: runtimelint analyzer + Lefthook + CI wiring",
+    "description": "Stage 4 of SD-024. Adds the runtimelint analyzer at cli/tools/lint/runtimelint/ following the FEAT-022 evidencelint pattern. Wires into Lefthook pre-commit + CI.\n\nThe analyzer flags:\n1. Forbidden field names on *Runtime structs in cli/internal/agent/ (closed list — see TD-024 §Lint rule)\n2. Composite literal of any legacy *Options type\n3. Function signature parameter of any legacy *Options type\n\nAllowed: NoReview, PollInterval, SessionLogDirOverride on *Runtime.\n\nIn-scope:\n- cli/tools/lint/runtimelint/ (new analyzer + tests)\n- lefthook.yml — add hook\n- CI workflow — add job\n\nDepends on beads 16, 22, 28 (all legacy types retired).",
+    "acceptance": "cd cli \u0026\u0026 go build ./tools/lint/runtimelint/... passes. cd cli \u0026\u0026 go test ./tools/lint/runtimelint/... passes including positive (no violations) + negative (each forbidden pattern flagged) test fixtures. lefthook run pre-commit on a synthetic branch introducing a violation exits non-zero. Running runtimelint against the post-cleanup tree exits 0.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:tooling",
+      "area:lint",
+      "sd-024",
+      "stage:4"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-26T11:10:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4075646",
+      "execute-loop-heartbeat-at": "2026-04-26T11:10:32.185446441Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260426T111032-31087c78",
+    "prompt": ".ddx/executions/20260426T111032-31087c78/prompt.md",
+    "manifest": ".ddx/executions/20260426T111032-31087c78/manifest.json",
+    "result": ".ddx/executions/20260426T111032-31087c78/result.json",
+    "checks": ".ddx/executions/20260426T111032-31087c78/checks.json",
+    "usage": ".ddx/executions/20260426T111032-31087c78/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-880b7d8b-20260426T111032-31087c78"
+  }
+}
