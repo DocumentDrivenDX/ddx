@@ -242,6 +242,105 @@ func TestExecuteLoopRetryNoChangesReopen(t *testing.T) {
 	_ = first
 }
 
+// driveLoopAcrossStatusReopen runs the loop twice with Once=true for a
+// non-review-driven reopen path: the executor returns a worker-level
+// failure status (e.g. land_conflict, post_run_check_failed) which causes
+// the loop to Unclaim the bead and leave it open. The next iteration
+// re-picks the same bead. The invariant under test is the same as the
+// review-driven path: every retry must carry the worker-level pins.
+//
+// BaseRev and ResultRev are deliberately left empty so that
+// shouldSuppressNoProgress returns false and no execution cooldown is
+// applied — otherwise the bead would not be ready for the second pass.
+func driveLoopAcrossStatusReopen(t *testing.T, status string, spec pinPropagationSpec) []capturedRequest {
+	t.Helper()
+
+	store, _, _ := newExecuteLoopTestStore(t)
+	var captured []capturedRequest
+	var execCalls atomic.Int32
+
+	executor := ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+		n := execCalls.Add(1)
+		captured = append(captured, capturedRequest{pinPropagationSpec: spec, BeadID: beadID})
+		return ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    status,
+			SessionID: fmt.Sprintf("sess-%s-%d", status, n),
+			Detail:    fmt.Sprintf("simulated %s", status),
+			Harness:   spec.Harness,
+			Model:     spec.Model,
+			Provider:  spec.Provider,
+		}, nil
+	})
+
+	worker := &ExecuteBeadWorker{
+		Store:    store,
+		Executor: executor,
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err, "iteration 1: worker.Run (%s)", status)
+	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err, "iteration 2: worker.Run (%s)", status)
+
+	require.Equalf(t, int32(2), execCalls.Load(),
+		"executor must run on both the initial attempt and the post-%s retry", status)
+	require.Lenf(t, captured, 2,
+		"expected exactly 2 captured executor invocations after %s reopen", status)
+	return captured
+}
+
+// TestExecuteLoopRetryLandConflictReopen covers AC3's land_conflict reopen
+// source: when ExecuteBead returns land_conflict (merge conflict /
+// preserved branch), the loop unclaims the bead and the next iteration
+// must re-issue the executor with the same worker-level pins.
+func TestExecuteLoopRetryLandConflictReopen(t *testing.T) {
+	spec := pinPropagationSpec{
+		Harness:  "claude",
+		Model:    "claude-opus-4-7",
+		Profile:  "smart",
+		Provider: "anthropic",
+	}
+
+	captured := driveLoopAcrossStatusReopen(t, ExecuteBeadStatusLandConflict, spec)
+
+	assert.Equal(t, spec.Harness, captured[1].Harness,
+		"iteration 2 (land_conflict retry): harness pin must propagate (not empty)")
+	assert.Equal(t, spec.Model, captured[1].Model,
+		"iteration 2 (land_conflict retry): model pin must propagate")
+	assert.Equal(t, spec.Profile, captured[1].Profile,
+		"iteration 2 (land_conflict retry): profile pin must propagate")
+	assert.Equal(t, spec.Provider, captured[1].Provider,
+		"iteration 2 (land_conflict retry): provider pin must propagate")
+}
+
+// TestExecuteLoopRetryPostRunCheckFailedReopen covers AC3's
+// post_run_check_failed reopen source: when post-merge checks fail and the
+// bead is preserved+reopened, the next iteration must re-issue the
+// executor with the same worker-level pins.
+func TestExecuteLoopRetryPostRunCheckFailedReopen(t *testing.T) {
+	spec := pinPropagationSpec{
+		Harness:  "claude",
+		Model:    "claude-opus-4-7",
+		Profile:  "smart",
+		Provider: "anthropic",
+	}
+
+	captured := driveLoopAcrossStatusReopen(t, ExecuteBeadStatusPostRunCheckFailed, spec)
+
+	assert.Equal(t, spec.Harness, captured[1].Harness,
+		"iteration 2 (post_run_check_failed retry): harness pin must propagate (not empty)")
+	assert.Equal(t, spec.Model, captured[1].Model,
+		"iteration 2 (post_run_check_failed retry): model pin must propagate")
+	assert.Equal(t, spec.Profile, captured[1].Profile,
+		"iteration 2 (post_run_check_failed retry): profile pin must propagate")
+	assert.Equal(t, spec.Provider, captured[1].Provider,
+		"iteration 2 (post_run_check_failed retry): provider pin must propagate")
+}
+
 // TestExecuteLoopRetryReusesWorkerHarness_NoPinAutoRoutes is the negative
 // control for AC4: when the worker is spawned WITHOUT --harness, retries
 // must continue to defer to auto-routing — i.e., the captured pin stays
