@@ -19,6 +19,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
@@ -192,14 +193,19 @@ func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error)
 			workDir = filepath.Join(s.WorkingDir, workDir)
 		}
 
-		var timeout time.Duration
-		if def.Executor.TimeoutMS > 0 {
-			timeout = time.Duration(def.Executor.TimeoutMS) * time.Millisecond
+		overrides := config.CLIOverrides{
+			Harness: def.Executor.Env["DDX_AGENT_HARNESS"],
+			Model:   def.Executor.Env["DDX_AGENT_MODEL"],
+			Effort:  def.Executor.Env["DDX_AGENT_EFFORT"],
 		}
+		if def.Executor.TimeoutMS > 0 {
+			timeout := time.Duration(def.Executor.TimeoutMS) * time.Millisecond
+			overrides.Timeout = &timeout
+		}
+		rcfg, _ := config.LoadAndResolve(s.WorkingDir, overrides)
 
 		sessionID := genAgentSessionID()
-		opts := agent.RunOptions{
-			Harness:    def.Executor.Env["DDX_AGENT_HARNESS"],
+		runtime := agent.AgentRunRuntime{
 			Prompt:     promptText,
 			PromptFile: promptFile,
 			Correlation: map[string]string{
@@ -207,14 +213,11 @@ func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error)
 				"artifact_ids":  strings.Join(def.ArtifactIDs, ","),
 				"session_id":    sessionID,
 			},
-			Model:   def.Executor.Env["DDX_AGENT_MODEL"],
-			Effort:  def.Executor.Env["DDX_AGENT_EFFORT"],
-			Timeout: timeout,
 			WorkDir: workDir,
 		}
 
 		start := time.Now().UTC()
-		agentResult, agentErr := s.AgentRunner.Run(opts)
+		agentResult, agentErr := s.AgentRunner.Run(ctx, rcfg, runtime)
 		finished := time.Now().UTC()
 
 		status := StatusSuccess

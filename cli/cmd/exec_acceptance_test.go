@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +19,7 @@ type mockAgentRunnerCmd struct {
 	result *agent.Result
 }
 
-func (m *mockAgentRunnerCmd) Run(opts agent.RunOptions) (*agent.Result, error) {
+func (m *mockAgentRunnerCmd) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime agent.AgentRunRuntime) (*agent.Result, error) {
 	return m.result, nil
 }
 
@@ -107,7 +109,7 @@ func TestExecAgentDelegation(t *testing.T) {
 	}))
 
 	factory := NewCommandFactory(workingDir)
-	factory.AgentRunnerOverride = &mockAgentRunnerCmd{
+	factory.ExecAgentRunnerOverride = &mockAgentRunnerCmd{
 		result: &agent.Result{
 			Harness:  "codex",
 			ExitCode: 0,

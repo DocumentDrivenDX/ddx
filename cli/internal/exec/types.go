@@ -1,14 +1,19 @@
 package exec
 
 import (
+	"context"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
-// AgentRunner is the interface exec needs from agent.
+// AgentRunner is the interface exec needs from agent. SD-024 Stage 2:
+// callers receive a sealed ResolvedConfig (durable knobs) and an
+// AgentRunRuntime (per-invocation plumbing) instead of the legacy
+// RunOptions struct.
 type AgentRunner interface {
-	Run(opts agent.RunOptions) (*agent.Result, error)
+	Run(ctx context.Context, rcfg config.ResolvedConfig, runtime agent.AgentRunRuntime) (*agent.Result, error)
 }
 
 const (

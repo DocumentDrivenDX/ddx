@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ type mockAgentRunner struct {
 	err    error
 }
 
-func (m *mockAgentRunner) Run(opts agent.RunOptions) (*agent.Result, error) {
+func (m *mockAgentRunner) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime agent.AgentRunRuntime) (*agent.Result, error) {
 	return m.result, m.err
 }
 

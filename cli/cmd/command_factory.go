@@ -29,8 +29,16 @@ type CommandFactory struct {
 	// Working directory (injected once at startup)
 	WorkingDir string
 
-	// AgentRunnerOverride overrides the agent runner used by execStore (for testing).
-	AgentRunnerOverride ddxexec.AgentRunner
+	// AgentRunnerOverride overrides the agent runner used by the
+	// execute-bead path (legacy agent.AgentRunner interface). For testing.
+	AgentRunnerOverride agent.AgentRunner
+
+	// ExecAgentRunnerOverride overrides the agent runner used by execStore.
+	// SD-024 Stage 2: distinct from AgentRunnerOverride because the exec
+	// AgentRunner interface has migrated to (ctx, ResolvedConfig, runtime),
+	// while agent.AgentRunner still uses the legacy RunOptions signature.
+	// For testing.
+	ExecAgentRunnerOverride ddxexec.AgentRunner
 
 	// executeBeadGitOverride overrides git operations in execute-bead worker (for testing).
 	executeBeadGitOverride agent.GitOps
@@ -89,6 +97,7 @@ func (f *CommandFactory) withWorkingDir(workingDir string) *CommandFactory {
 		Date:                               f.Date,
 		WorkingDir:                         workingDir,
 		AgentRunnerOverride:                f.AgentRunnerOverride,
+		ExecAgentRunnerOverride:            f.ExecAgentRunnerOverride,
 		executeBeadGitOverride:             f.executeBeadGitOverride,
 		executeBeadOrchestratorGitOverride: f.executeBeadOrchestratorGitOverride,
 		executeBeadLandingGitOverride:      f.executeBeadLandingGitOverride,

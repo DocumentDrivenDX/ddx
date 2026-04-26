@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	ddxagent "github.com/DocumentDrivenDX/ddx/internal/agent"
+	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/spf13/cobra"
 )
@@ -80,8 +82,8 @@ func (f *CommandFactory) newExecDefineCommand() *cobra.Command {
 
 func (f *CommandFactory) execStore() *ddxexec.Store {
 	store := ddxexec.NewStore(f.WorkingDir)
-	if f.AgentRunnerOverride != nil {
-		store.AgentRunner = f.AgentRunnerOverride
+	if f.ExecAgentRunnerOverride != nil {
+		store.AgentRunner = f.ExecAgentRunnerOverride
 	} else {
 		store.AgentRunner = serviceExecAgentRunner{workDir: f.WorkingDir}
 	}
@@ -89,14 +91,14 @@ func (f *CommandFactory) execStore() *ddxexec.Store {
 }
 
 // serviceExecAgentRunner satisfies ddxexec.AgentRunner by dispatching through
-// agent.RunViaService. It replaces the retired f.agentRunner() factory which
-// constructed a *agent.Runner only to call its Run method.
+// agent.RunWithConfigViaService. It replaces the retired f.agentRunner()
+// factory which constructed a *agent.Runner only to call its Run method.
 type serviceExecAgentRunner struct {
 	workDir string
 }
 
-func (s serviceExecAgentRunner) Run(opts ddxagent.RunOptions) (*ddxagent.Result, error) {
-	return ddxagent.RunViaService(opts.Context, s.workDir, opts)
+func (s serviceExecAgentRunner) Run(ctx context.Context, rcfg ddxconfig.ResolvedConfig, runtime ddxagent.AgentRunRuntime) (*ddxagent.Result, error) {
+	return ddxagent.RunWithConfigViaService(ctx, s.workDir, rcfg, runtime)
 }
 
 func (f *CommandFactory) newExecListCommand() *cobra.Command {
