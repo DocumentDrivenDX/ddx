@@ -55,6 +55,35 @@ type RunOptions struct {
 	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
 }
 
+// RunArgs is the SD-024 Stage 2 adapter type that production callers
+// migrate to in subsequent B22 beads. It collapses the durable knobs
+// (currently sourced from config.ResolvedConfig in RunWithConfig) and
+// the per-invocation plumbing (currently in AgentRunRuntime) into a
+// single flat struct, mirroring RunOptions, so callers don't need to
+// assemble a ResolvedConfig just to dispatch a single agent run.
+//
+// The type is declared here so that B22b/c/d (external-caller
+// migration beads) and the eventual B22 final removal can reference
+// it. In this bead it is not yet wired through Run; runInternal still
+// accepts RunOptions and the public Run signature is preserved.
+type RunArgs struct {
+	Context       context.Context
+	Harness       string
+	Prompt        string
+	PromptFile    string
+	PromptSource  string
+	Correlation   map[string]string
+	Model         string
+	Provider      string
+	ModelRef      string
+	Effort        string
+	Timeout       time.Duration
+	WallClock     time.Duration
+	WorkDir       string
+	Permissions   string
+	SessionLogDir string
+}
+
 // AgentRunRuntime is the SD-024 successor to RunOptions for the agent
 // run path. Durable knobs (Harness, Model, Provider, ModelRef, Effort,
 // Permissions, Timeout, WallClock, SessionLogDir) are stripped — they
