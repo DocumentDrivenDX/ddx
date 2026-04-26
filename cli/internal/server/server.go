@@ -1910,14 +1910,16 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workDir := s.workingDirForRequest(r)
-	opts := agent.RunOptions{
+	rcfg, _ := config.LoadAndResolve(workDir, config.CLIOverrides{
 		Harness: req.Harness,
-		Prompt:  req.Prompt,
 		Model:   req.Model,
 		Effort:  req.Effort,
+	})
+	runtime := agent.AgentRunRuntime{
+		Prompt:  req.Prompt,
 		WorkDir: workDir,
 	}
-	result, err := agent.RunViaService(r.Context(), workDir, opts)
+	result, err := agent.RunWithConfigViaService(r.Context(), workDir, rcfg, runtime)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -3783,14 +3785,16 @@ func (s *Server) mcpAgentDispatch(workingDir, harness, prompt, model, effort str
 	if prompt == "" {
 		return mcpToolResult{Content: []mcpContent{mcpText("prompt is required")}, IsError: true}
 	}
-	opts := agent.RunOptions{
+	rcfg, _ := config.LoadAndResolve(workingDir, config.CLIOverrides{
 		Harness: harness,
-		Prompt:  prompt,
 		Model:   model,
 		Effort:  effort,
+	})
+	runtime := agent.AgentRunRuntime{
+		Prompt:  prompt,
 		WorkDir: workingDir,
 	}
-	result, err := agent.RunViaService(context.Background(), workingDir, opts)
+	result, err := agent.RunWithConfigViaService(context.Background(), workingDir, rcfg, runtime)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
