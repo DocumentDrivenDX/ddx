@@ -1,0 +1,74 @@
+{
+  "attempt_id": "20260426T235327-6e42e7cb",
+  "bead_id": "ddx-af187382",
+  "base_rev": "93c18e2c8fbdaf5b3de87afc7ed88bf7baab2326",
+  "created_at": "2026-04-26T23:53:28.732583849Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-af187382",
+    "title": "agent: migrate internal helpers off RunOptions/CompareOptions/QuorumOptions",
+    "description": "Stage 2 prereq for B22 (SCOPE EXPANDED 2026-04-26 per worker analysis on attempt 1).\n\nMigrate ALL ddx-side callers off the three legacy options structs to AgentRunRuntime + ResolvedConfig. After this bead lands, the legacy types in cli/internal/agent/types.go are unreachable from any caller — B22 can then trivially delete them.\n\nIn-scope (expanded from original 10-file list):\n- cli/internal/agent/ helpers: virtual.go, script.go, claude_stream.go, agent_runner.go, agent_runner_service.go, models.go, grade.go, service_run.go, session_index.go, routing_metrics.go, compare_adapter.go, runner.go\n- cli/cmd/ callers: agent_cmd.go (RunViaService → RunWithConfigViaService)\n- cli/internal/agent/ dispatch sites: execute_bead.go (dispatchAgentRun), execute_bead_review.go (dispatchReviewRun)\n- All *_test.go files that construct RunOptions{}/CompareOptions{}/QuorumOptions{} composite literals\n\nOriginal 10-file scope was internally inconsistent (worker found that migrating a subset would either leave intermediate states the runtimelint gate fires on, or require touching out-of-scope callers anyway). Expanded scope authorizes the worker to perform the full migration in a single atomic change.\n\nOut-of-scope (still):\n- The three type DEFINITIONS at types.go:36/81/171 (B22 final deletes these)\n- Any change unrelated to this options-struct migration",
+    "acceptance": "field RunOptions removed from cli/internal/agent/grade.go. field RunOptions removed from cli/internal/agent/service_run.go. field RunOptions removed from cli/internal/agent/compare_adapter.go. field CompareOptions removed from cli/internal/agent/grade.go. field QuorumOptions removed from cli/internal/agent/grade.go. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./internal/agent/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-26T23:53:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "776906",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-26T19:59:30.697500971Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260426T194252-cd738202\",\"harness\":\"claude\",\"input_tokens\":72,\"output_tokens\":54217,\"total_tokens\":54289,\"cost_usd\":6.752860750000001,\"duration_ms\":997212,\"exit_code\":0}",
+          "created_at": "2026-04-26T19:59:30.798635015Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=54289 cost_usd=6.7529"
+        },
+        {
+          "actor": "ddx",
+          "body": "no_changes\nrationale: ddx-af187382 — agent: migrate internal helpers off RunOptions/CompareOptions/QuorumOptions\n\nNO_CHANGES decision after analysis.\n\n## What is done\n\n- Read all 10 in-scope helper files (virtual.go, script.go, claude_stream.go,\n  agent_runner.go, models.go, grade.go, service_run.go, session_index.go,\n  routing_metrics.go, compare_adapter.go) and inventoried every reference\n  to the three legacy options types.\n- Read the SD-024 Stage 4 runtime-lint analyzer\n  (cli/tools/lint/runtimelint/analyzer.go) and its lefthook hook\n  (lefthook.yml runtime-lint block, lines 157–190).\n- Read the cross-package callers that the helpers serve: cli/cmd/agent_cmd.go,\n  cli/internal/agent/runner.go, execute_bead.go, execute_bead_review.go,\n  agent_runner_service.go, run_internal.go, plus all *_test.go in the\n  agent package, plus cli/internal/server/server.go.\n- Prototyped a \"minimal-blast\" migration that moves the RunOptions /\n  CompareOptions / QuorumOptions-typed dispatch entry points out of\n  grade.go, service_run.go, and compare_adapter.go into sibling files\n  service_run_legacy.go and compare_adapter_legacy.go (with grade.go\n  switching to the runInternal/RunArgs seam introduced by ddx-dd640c18).\n  The prototype builds (`go build ./...`) and passes\n  `go test ./internal/agent/...` except for the pre-existing\n  TestIntegration_CodexEcho codex-CLI environment failure that already\n  fails on base rev 12a2b57f (verified via\n  `git stash --include-untracked` round-trip; matches the same\n  pre-existing failure documented in commit 1718bdb5's message).\n\n## What is blocking\n\nThe bead's AC clauses\n  - \"field RunOptions removed from cli/internal/agent/service_run.go\"\n  - \"field RunOptions removed from cli/internal/agent/compare_adapter.go\"\ncollide with two enforced project gates that this bead's stated\nin-scope/out-of-scope split does not authorize me to break:\n\n1. SD-024 Stage 4 runtime-lint (cli/tools/lint/runtimelint, wired into\n   lefthook pre-commit at lefthook.yml:157). Pattern 2 of the analyzer\n   forbids any composite literal of RunOptions / CompareOptions /\n   QuorumOptions *anywhere* in staged Go code, and pattern 3 forbids\n   any function parameter typed as one of those legacy types in the\n   cli/internal/agent/ package. The lefthook block filters diagnostics\n   to staged file paths, so untouched files keep working but every\n   freshly staged file is checked in full. My prototype's new\n   compare_adapter_legacy.go and service_run_legacy.go contain\n   verbatim copies of the legacy entry points (RunViaService,\n   RunViaServiceWith, RunCompareViaService, RunCompareWithAgent,\n   RunQuorumViaService, RunQuorumWithAgent, RunBenchmarkViaService,\n   RunBenchmarkWithAgent, RunCompareWith, RunQuorumWith,\n   runCompareArmWith, defaultResolvePromptForCompare,\n   RunWithConfigViaService, runFixtureHarnessViaRunner, RunFunc, plus\n   the *Config wrappers that build CompareOptions/QuorumOptions\n   internally), and the runtime-lint gate fires on every one of them\n   (pattern-2 composite literals plus pattern-3 function params,\n   17 violations total). Touching session_index_test.go to redirect\n   TestProductionAgentExecutionPathsUseIndexedServiceWriter at the new\n   sibling files also re-stages the file and trips pattern-2 on the\n   pre-existing RunOptions{} literals at session_index_test.go:195 and\n   :278.\n\n2. The bead's own out-of-scope list. Eliminating the gate-violating\n   sites without moving them requires migrating the *callers* of the\n   public entry points off the legacy types — and those callers are\n   the explicitly out-of-scope packages:\n     - cli/cmd/agent_cmd.go (1 call to RunViaService at :1462) — the\n       bead lists \"cli/cmd/ migration\" as out-of-scope.\n     - cli/internal/server/server.go — listed as B22c (out-of-scope).\n     - cli/internal/exec/store.go — listed as B22b (out-of-scope).\n     - cli/internal/agent/execute_bead.go (dispatchAgentRun at :927,\n       calls RunViaServiceWith at :938) and execute_bead_review.go\n       (dispatchReviewRun at :692, RunViaServiceWith at :704) — neither\n       file is in the bead's 10-file in-scope list, so per the\n       constraint \"Do not modify files outside the scope the bead\n       description names\" they are off-limits.\n     - cli/internal/agent/agent_runner_service.go\n       (runAgentViaService at :72) and agent_runner.go (RunAgent at\n       :13) — both in scope per the description but their signatures\n       are called from out-of-scope runner.go (Runner.Run dispatches\n       to RunAgent at runner.go:110, runVirtualFn at :106, runScriptFn\n       at :114, runClaudeWithFallbackFn at :207, finalizeClaudeResult\n       at :209, recordRoutingOutcome at :231) and changing those\n       signatures cascades back into out-of-scope runner.go.\n\nThe two constraints are jointly unsatisfiable in a single attempt:\nremoving RunOptions from compare_adapter.go and service_run.go either\nrequires keeping the legacy entry points somewhere (and runtime-lint\nfires on whatever staged file holds them) or migrating all callers\n(and the bead forbids touching the out-of-scope files where most of\nthem live).\n\n## What a follow-up attempt would need\n\nA clean landing requires either:\n\na) **Bead resplit.** Split this bead into per-caller migration beads\n   that each cover one call site plus its package, so the runtime-lint\n   gate stays satisfied at every step. Concretely: one bead each for\n   (i) cmd/agent_cmd.go RunViaService → RunWithConfigViaService,\n   (ii) execute_bead.go dispatchAgentRun + RunViaServiceWith,\n   (iii) execute_bead_review.go dispatchReviewRun + RunViaServiceWith,\n   (iv) compare/quorum/benchmark callers (find sites first), and only\n   then a final bead that retires the now-unreachable RunOptions /\n   CompareOptions / QuorumOptions-typed entry points from\n   service_run.go and compare_adapter.go. Each step is independently\n   buildable, lint-clean, and AC-checkable.\n\nb) **In-scope list expansion.** Authorise this bead to touch the\n   currently out-of-scope cli/cmd/agent_cmd.go, execute_bead.go,\n   execute_bead_review.go, agent_runner_service.go, runner.go callers\n   (and the *_test.go files that still construct RunOptions{}), so the\n   migration can collapse the legacy entry points in one pass without\n   the runtime-lint gate firing on intermediate states.\n\nThe grade.go change in isolation — switching the lone\n`r.Run(RunOptions{Harness, Prompt})` call to\n`r.runInternal(RunArgs{Harness, Prompt})` via the dispatch seam from\nddx-dd640c18 — is clean (build green, runtime-lint green, tests green\nmodulo the pre-existing codex-CLI environment failure), but landing\njust that change would satisfy only 3 of the 7 AC items (the\nRunOptions/CompareOptions/QuorumOptions removals from grade.go) and\nleaves the AC items for service_run.go and compare_adapter.go\nunsatisfied, which per the bead's \"do not commit partial code\" rule is\nworse than a no_changes hand-off.\nresult_rev=12a2b57f9f71b9c3a70a4f3cc2c59bdca456f9df\nbase_rev=12a2b57f9f71b9c3a70a4f3cc2c59bdca456f9df\nretry_after=2026-04-27T01:59:32Z",
+          "created_at": "2026-04-26T19:59:32.481185163Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-26T23:53:27.738595329Z",
+      "execute-loop-no-changes-count": 1,
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260426T235327-6e42e7cb",
+    "prompt": ".ddx/executions/20260426T235327-6e42e7cb/prompt.md",
+    "manifest": ".ddx/executions/20260426T235327-6e42e7cb/manifest.json",
+    "result": ".ddx/executions/20260426T235327-6e42e7cb/result.json",
+    "checks": ".ddx/executions/20260426T235327-6e42e7cb/checks.json",
+    "usage": ".ddx/executions/20260426T235327-6e42e7cb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-af187382-20260426T235327-6e42e7cb"
+  }
+}
