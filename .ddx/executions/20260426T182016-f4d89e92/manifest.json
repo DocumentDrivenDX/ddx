@@ -1,0 +1,99 @@
+{
+  "attempt_id": "20260426T182016-f4d89e92",
+  "bead_id": "ddx-4a751095",
+  "base_rev": "19741904c0aa47dbf989d663060af7b9a3d481a2",
+  "created_at": "2026-04-26T18:20:17.000424004Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4a751095",
+    "title": "execute-loop: tighten already_satisfied gate to require AC structural test name match",
+    "description": "Observed across multiple beads in agent v0.9.9 / v0.9.10 work (2026-04-25): worker classifies bead as already_satisfied when the regression test suite passes, even when the bead's acceptance criteria explicitly name structural test functions or properties that the implementation has not exercised.\n\n## Concrete instances\n\n- agent-9d120ece (route resolution): AC #1 was structural ('cmd/agent no longer contains provider-building helpers or route-provider wrapper types that depend on internal/core'). Regression tests passed because the AC also named a regression command. Bead closed already_satisfied — but cmd/agent/routing_provider.go and cmd/agent/provider_build.go still contained the forbidden helpers. False close.\n- agent-1023f072 (boundary tightening): same pattern earlier — AC structural property unmet, regression command passing, close.\n- agent-d9c358ba (smart-routing wiring): worker analysis correctly identified the bead was too broad and split it. Status still classified already_satisfied which is misleading — 'split deferred' is a different outcome from 'AC was already met.'\n\n## Principle\n\nalready_satisfied should mean: 'the AC's specific test functions or named structural properties were exercised and produced the asserted outcome without any code change in this attempt.' It should NOT mean: 'some unrelated regression command passed.'\n\nIf the AC names test functions (e.g. 'go test . -run TestX'), those tests must have run during the worker's verification step. If the AC names a structural property (e.g. 'no field X', 'file Y deleted', 'ProviderEntry.SupportsTools is OR-permissive'), the property must be checked.\n\n## Suggested fix\n\nParse the bead's acceptance criteria during worker verification. Extract:\n- Named test function references ('TestFoo', 'go test . -run TestFoo')\n- File-existence claims ('file X deleted', 'no longer contains')\n- AST-level claims ('field X removed', 'no import of Y')\n\nFor already_satisfied to be valid:\n- All named test functions must exist and pass.\n- All file-existence claims must hold via filesystem check.\n- AST-level claims must hold via parser pass.\n\nIf any check fails, classify as no_changes (or a new outcome class like ac_unmet_no_changes) so the loop unclaims and tries again rather than closing the bead.\n\n## Out of scope\n\n- Changes to the success / land_conflict / execution_failed / review_request_changes outcome classes.\n- Adding new structural-claim parsers beyond what the AC explicitly names.\n- Automatic AC-claim extraction beyond test names + file paths + simple AST patterns. Free-form prose stays operator-judgment territory.\n\n## Cross-reference\n\nDiscipline rule documented in agent repo AGENTS.md 'Review and Verification Discipline' section. Local mitigation (verify before accept, reopen with notes) caught three false closes in this session.",
+    "acceptance": "1. New test cd cli \u0026\u0026 go test ./internal/agent/... -run TestAlreadySatisfiedRequiresAcStructuralCheck covers: bead with AC naming TestX; worker run does not exercise TestX; classification is NOT already_satisfied (instead no_changes or new ac_unmet class).\n2. Test covers: bead with AC naming a deleted file path; file still exists; classification is NOT already_satisfied.\n3. Test covers: bead with AC asserting a struct does not have field Y; field still exists; classification is NOT already_satisfied.\n4. Test covers: positive case — bead with AC naming TestX; worker run exercises TestX and TestX passes; AC structural property holds; classification IS already_satisfied (no regression).\n5. cd cli \u0026\u0026 go test ./... -count=1 passes.",
+    "labels": [
+      "ddx",
+      "kind:bug",
+      "area:agent",
+      "area:execute-loop",
+      "area:harness"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-26T18:20:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4075646",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"pi\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-26T00:15:56.122827275Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=pi model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "agent: execute: model \"Qwen3.6-27B-MLX-8bit\" is not supported by harness \"pi\"; supported models: gemini-2.5-flash, gemini-2.5-pro\nresult_rev=73546133903dbe6607550d8eef6e80f229a36e33\nbase_rev=73546133903dbe6607550d8eef6e80f229a36e33\nretry_after=2026-04-26T06:15:56Z",
+          "created_at": "2026-04-26T00:15:56.552544857Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-26T11:26:21.494452942Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260426T111547-9d695f8c\",\"harness\":\"claude\",\"input_tokens\":62,\"output_tokens\":28303,\"total_tokens\":28365,\"cost_usd\":3.303562250000001,\"duration_ms\":633475,\"exit_code\":0}",
+          "created_at": "2026-04-26T11:26:21.576156292Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=28365 cost_usd=3.3036"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-26T11:26:24.103187934Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "failure_class=review-error: provider_empty\nattempt_count=1\nresult_rev=5c8d9944ba65f86202c18b34a6b0dcc510c1f530\n\nreviewer: review-error: provider_empty: reviewer output: unparseable JSON verdict: empty input (raw output 0 bytes; see .ddx/executions/20260426T112624-edb09519)\nharness=codex\nmodel=gpt-5.4\ninput_bytes=6816\noutput_bytes=0\nelapsed_ms=3130",
+          "created_at": "2026-04-26T11:26:31.456934631Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: provider_empty"
+        },
+        {
+          "actor": "ddx",
+          "body": "merged onto current tip\nresult_rev=5c8d9944ba65f86202c18b34a6b0dcc510c1f530\nbase_rev=332e9f6038879649b52c7a7af0a5e5c56187df65",
+          "created_at": "2026-04-26T11:26:31.526794074Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-26T18:20:16.347616141Z",
+      "execute-loop-last-detail": "agent: execute: model \"Qwen3.6-27B-MLX-8bit\" is not supported by harness \"pi\"; supported models: gemini-2.5-flash, gemini-2.5-pro",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-04-26T06:15:56Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260426T182016-f4d89e92",
+    "prompt": ".ddx/executions/20260426T182016-f4d89e92/prompt.md",
+    "manifest": ".ddx/executions/20260426T182016-f4d89e92/manifest.json",
+    "result": ".ddx/executions/20260426T182016-f4d89e92/result.json",
+    "checks": ".ddx/executions/20260426T182016-f4d89e92/checks.json",
+    "usage": ".ddx/executions/20260426T182016-f4d89e92/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4a751095-20260426T182016-f4d89e92"
+  }
+}
