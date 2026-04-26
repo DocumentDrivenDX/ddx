@@ -1,0 +1,76 @@
+{
+  "attempt_id": "20260426T181227-fd8d0bc2",
+  "bead_id": "ddx-b8926c2d",
+  "base_rev": "e081ef6ed03a4abab39ebd8ce14f429e99c77b8f",
+  "created_at": "2026-04-26T18:12:28.267092638Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b8926c2d",
+    "title": "agent: final sweep — runtimelint passes against the tree",
+    "description": "Stage 4 final sweep of SD-024. Runs runtimelint against the post-cleanup tree and asserts zero violations. Catches any drift introduced during the long migration.",
+    "acceptance": "cd cli \u0026\u0026 go run ./tools/lint/runtimelint/cmd/runtimelint ./... exits 0.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:cleanup",
+      "area:agent",
+      "sd-024",
+      "stage:4"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-26T18:12:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4075646",
+      "closing_commit_sha": "127f60c4688ac6c53c76aa8efe0289a188c39378",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-26T11:15:46.52866042Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260426T111359-73a03a29\",\"harness\":\"claude\",\"input_tokens\":26,\"output_tokens\":6097,\"total_tokens\":6123,\"cost_usd\":0.8238755000000001,\"duration_ms\":106346,\"exit_code\":0}",
+          "created_at": "2026-04-26T11:15:46.599267208Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6123 cost_usd=0.8239"
+        },
+        {
+          "actor": "ddx",
+          "body": "Bead: ddx-b8926c2d — agent: final sweep — runtimelint passes against the tree\nStage: SD-024 Stage 4\nResult: NO CHANGES (prerequisite work not actually done)\n\n(a) What is done\n- Read SD-024 §\"Stage 4 — Lint enforcement\" and TD-024 §\"Lint rule (Stage 4)\"\n  to confirm the bead's expectation: run\n  `cd cli \u0026\u0026 go run ./tools/lint/runtimelint/cmd/runtimelint ./...`\n  and assert exit 0 against a post-cleanup tree.\n- Verified the analyzer is missing:\n    `find . -iname '*runtimelint*'` → no matches.\n    No file in cli/tools/lint/ named runtimelint; only evidencelint\n    exists at cli/tools/lint/evidencelint/.\n    `go run ./tools/lint/runtimelint/cmd/runtimelint ./...` →\n    \"stat .../tools/lint/runtimelint/cmd/runtimelint: directory not\n    found\" (exit 1).\n- Inspected the dependency bead ddx-880b7d8b (\"tools/lint: runtimelint\n  analyzer + Lefthook + CI wiring\"). It is marked status=closed in the\n  tracker (commit e9f2d53f), but its event body in the tracker shows\n  the previous attempt itself returned a NO CHANGES rationale citing\n  blocked prerequisite work. The analyzer was never actually written\n  in the tree; the bead was closed without its acceptance criteria\n  being satisfied.\n- Verified the upstream legacy-type retirements (Stages 1–3) are also\n  incomplete:\n    `grep -rn \"type RunOptions\\|type ExecuteBeadOptions\\|type\n     CompareOptions\\|type QuorumOptions\" cli/internal/agent/` →\n    cli/internal/agent/types.go:36:type RunOptions struct {\n    cli/internal/agent/types.go:81:type QuorumOptions struct {\n    cli/internal/agent/types.go:171:type CompareOptions struct {\n  TD-024's Stage 4 lint rule pattern (2)/(3) flags any composite\n  literal or function parameter of these names. They are still\n  declared and used throughout the tree, so even if runtimelint\n  existed it would emit a large number of legitimate violations.\n\n(b) What is blocking\n1. The runtimelint analyzer source does not exist. The acceptance\n   criterion (\"go run ./tools/lint/runtimelint/cmd/runtimelint ./...\n   exits 0\") cannot be evaluated against a non-existent program.\n2. The Stage 1/2/3 retirements (beads 16, 22, 28 per TD-024) have not\n   landed: ExecuteBeadLoopOptions, RunOptions, ExecuteBeadOptions,\n   CompareOptions, QuorumOptions are all still declared in\n   cli/internal/agent/types.go and constructed from many call sites.\n   The lint by design fails on those.\n\n(c) What a follow-up attempt would need\n- The dependency bead ddx-880b7d8b must actually produce the analyzer\n  at cli/tools/lint/runtimelint/ (analyzer.go + cmd/runtimelint/main.go\n  + analyzer_test.go + testdata) following the FEAT-022 evidencelint\n  pattern, with the closed forbidden-name list and exemptions\n  (NoReview, PollInterval, SessionLogDirOverride) per TD-024 §\"Lint\n  rule (Stage 4)\".\n- Stages 1, 2, 3 of SD-024 must actually retire ExecuteBeadLoopOptions,\n  RunOptions, ExecuteBeadOptions, CompareOptions, QuorumOptions and\n  migrate every constructor + signature site to *Runtime. The TD-024\n  §\"Stage ordering\" section enumerates the inventory.\n- Only then is this final-sweep bead meaningful. Until then, the\n  acceptance test would either crash on the missing program or report\n  many real violations from the un-retired legacy types — neither\n  outcome is \"exit 0\".\n\nThis bead intentionally adds nothing. The right next step is to\nre-open ddx-880b7d8b (and its own deps 16/22/28) and complete them\nbefore retrying ddx-b8926c2d.\nrationale: Bead: ddx-b8926c2d — agent: final sweep — runtimelint passes against the tree\nStage: SD-024 Stage 4\nResult: NO CHANGES (prerequisite work not actually done)\n\n(a) What is done\n- Read SD-024 §\"Stage 4 — Lint enforcement\" and TD-024 §\"Lint rule (Stage 4)\"\n  to confirm the bead's expectation: run\n  `cd cli \u0026\u0026 go run ./tools/lint/runtimelint/cmd/runtimelint ./...`\n  and assert exit 0 against a post-cleanup tree.\n- Verified the analyzer is missing:\n    `find . -iname '*runtimelint*'` → no matches.\n    No file in cli/tools/lint/ named runtimelint; only evidencelint\n    exists at cli/tools/lint/evidencelint/.\n    `go run ./tools/lint/runtimelint/cmd/runtimelint ./...` →\n    \"stat .../tools/lint/runtimelint/cmd/runtimelint: directory not\n    found\" (exit 1).\n- Inspected the dependency bead ddx-880b7d8b (\"tools/lint: runtimelint\n  analyzer + Lefthook + CI wiring\"). It is marked status=closed in the\n  tracker (commit e9f2d53f), but its event body in the tracker shows\n  the previous attempt itself returned a NO CHANGES rationale citing\n  blocked prerequisite work. The analyzer was never actually written\n  in the tree; the bead was closed without its acceptance criteria\n  being satisfied.\n- Verified the upstream legacy-type retirements (Stages 1–3) are also\n  incomplete:\n    `grep -rn \"type RunOptions\\|type ExecuteBeadOptions\\|type\n     CompareOptions\\|type QuorumOptions\" cli/internal/agent/` →\n    cli/internal/agent/types.go:36:type RunOptions struct {\n    cli/internal/agent/types.go:81:type QuorumOptions struct {\n    cli/internal/agent/types.go:171:type CompareOptions struct {\n  TD-024's Stage 4 lint rule pattern (2)/(3) flags any composite\n  literal or function parameter of these names. They are still\n  declared and used throughout the tree, so even if runtimelint\n  existed it would emit a large number of legitimate violations.\n\n(b) What is blocking\n1. The runtimelint analyzer source does not exist. The acceptance\n   criterion (\"go run ./tools/lint/runtimelint/cmd/runtimelint ./...\n   exits 0\") cannot be evaluated against a non-existent program.\n2. The Stage 1/2/3 retirements (beads 16, 22, 28 per TD-024) have not\n   landed: ExecuteBeadLoopOptions, RunOptions, ExecuteBeadOptions,\n   CompareOptions, QuorumOptions are all still declared in\n   cli/internal/agent/types.go and constructed from many call sites.\n   The lint by design fails on those.\n\n(c) What a follow-up attempt would need\n- The dependency bead ddx-880b7d8b must actually produce the analyzer\n  at cli/tools/lint/runtimelint/ (analyzer.go + cmd/runtimelint/main.go\n  + analyzer_test.go + testdata) following the FEAT-022 evidencelint\n  pattern, with the closed forbidden-name list and exemptions\n  (NoReview, PollInterval, SessionLogDirOverride) per TD-024 §\"Lint\n  rule (Stage 4)\".\n- Stages 1, 2, 3 of SD-024 must actually retire ExecuteBeadLoopOptions,\n  RunOptions, ExecuteBeadOptions, CompareOptions, QuorumOptions and\n  migrate every constructor + signature site to *Runtime. The TD-024\n  §\"Stage ordering\" section enumerates the inventory.\n- Only then is this final-sweep bead meaningful. Until then, the\n  acceptance test would either crash on the missing program or report\n  many real violations from the un-retired legacy types — neither\n  outcome is \"exit 0\".\n\nThis bead intentionally adds nothing. The right next step is to\nre-open ddx-880b7d8b (and its own deps 16/22/28) and complete them\nbefore retrying ddx-b8926c2d.\nresult_rev=127f60c4688ac6c53c76aa8efe0289a188c39378\nbase_rev=127f60c4688ac6c53c76aa8efe0289a188c39378",
+          "created_at": "2026-04-26T11:15:47.010333994Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "already_satisfied"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-26T18:12:27.552706136Z",
+      "execute-loop-no-changes-count": 1,
+      "session_id": "eb-adf76360",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260426T181227-fd8d0bc2",
+    "prompt": ".ddx/executions/20260426T181227-fd8d0bc2/prompt.md",
+    "manifest": ".ddx/executions/20260426T181227-fd8d0bc2/manifest.json",
+    "result": ".ddx/executions/20260426T181227-fd8d0bc2/result.json",
+    "checks": ".ddx/executions/20260426T181227-fd8d0bc2/checks.json",
+    "usage": ".ddx/executions/20260426T181227-fd8d0bc2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b8926c2d-20260426T181227-fd8d0bc2"
+  }
+}
