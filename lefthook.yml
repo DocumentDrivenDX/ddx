@@ -154,6 +154,41 @@ pre-commit:
         - rebase
       fail_text: "Unbounded prompt sink detected in staged file. Route through internal/evidence or add `// evidence:allow-unbounded reason=\"...\"`."
 
+    # SD-024 Stage 4 runtime-lint: forbidden durable-knob fields on
+    # *Runtime structs and reintroduction of legacy *Options types.
+    # Scoped to packages containing staged files, with diagnostics
+    # filtered to only those staged files so existing violations in
+    # untouched packages don't block unrelated commits. The full-tree
+    # gate in the `ci` block fires once the RunOptions/CompareOptions/
+    # QuorumOptions retirement beads land.
+    runtime-lint:
+      <<: *go_checks
+      name: "Runtime Lint (SD-024 forbidden runtime fields + legacy options)"
+      glob: "cli/**/*.go"
+      run: |
+        staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/.+\.go$' || true)
+        [ -z "$staged" ] && exit 0
+        pkgs=$(printf '%s\n' "$staged" | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '^\./tools/lint/runtimelint' || true)
+        [ -z "$pkgs" ] && exit 0
+        out=$(go run ./tools/lint/runtimelint/cmd/runtimelint $pkgs 2>&1) || true
+        violations=""
+        for f in $staged; do
+          bare="${f#cli/}"
+          m=$(printf '%s\n' "$out" | grep "/$bare:" || true)
+          if [ -n "$m" ]; then
+            violations="$violations$m"$'\n'
+          fi
+        done
+        if [ -n "$violations" ]; then
+          printf '%s' "$violations"
+          exit 1
+        fi
+        exit 0
+      skip:
+        - merge
+        - rebase
+      fail_text: "Forbidden runtime-struct field or legacy *Options type in staged file. Move durable knobs to config.ResolvedConfig and use the *Runtime pair (SD-024 §Stage 4 / TD-024 §Lint rule)."
+
     # Go tests - targeted testing
     go-test:
       <<: *go_checks
