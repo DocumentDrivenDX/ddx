@@ -1,0 +1,47 @@
+{
+  "harness": "codex",
+  "model": "gpt-5.4",
+  "session_id": "/Users/erik/Projects/ddx/.ddx/agent-logs/svc-1777203106557723471.jsonl",
+  "base_rev": "06852fbe0631d3d450ba61e13bc38b3953a4391f",
+  "result_rev": "3afedb4c4ca3b4c6a8c192dabbfde45dc2852f29",
+  "bead_id": "ddx-c67969d5",
+  "execution_dir": ".ddx/executions/20260426T113144-48b56189",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 4248,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260426T112631-fce6a923/manifest.json",
+          ".ddx/executions/20260426T112631-fce6a923/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 10197,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 16251,
+    "output_bytes": 0,
+    "elapsed_ms": 2612,
+    "harness": "codex",
+    "model": "gpt-5.4"
+  }
+}
