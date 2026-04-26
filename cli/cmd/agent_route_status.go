@@ -323,7 +323,7 @@ Examples:
 							Model:         cand.Model,
 							Healthy:       cand.Healthy,
 							AvgDurationMs: cand.RecentLatencyMS,
-							Reliability:   cand.RecentSuccessRate,
+							Reliability:   cand.ProviderReliabilityRate,
 						}
 						if cand.Cooldown != nil && !cand.Cooldown.Until.IsZero() {
 							cj.InCooldown = true
@@ -418,7 +418,7 @@ Examples:
 						truncateRouteStr(cand.Model, 32),
 						health,
 						0.0, // Score not provided by RouteStatusReport
-						cand.RecentSuccessRate,
+						cand.ProviderReliabilityRate,
 						cand.RecentLatencyMS,
 						reason,
 					)
