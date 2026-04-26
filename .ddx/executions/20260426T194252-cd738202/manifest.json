@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260426T194252-cd738202",
+  "bead_id": "ddx-af187382",
+  "base_rev": "12a2b57f9f71b9c3a70a4f3cc2c59bdca456f9df",
+  "created_at": "2026-04-26T19:42:53.4520162Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-af187382",
+    "title": "agent: migrate internal helpers off RunOptions/CompareOptions/QuorumOptions",
+    "description": "Stage 2 prereq for B22.\n\nMigrate cli/internal/agent/ helpers off the three legacy options structs to AgentRunRuntime + ResolvedConfig.\n\nIn-scope (~10 files, all under cli/internal/agent/):\n- virtual.go\n- script.go\n- claude_stream.go\n- agent_runner.go\n- models.go\n- grade.go\n- service_run.go\n- session_index.go\n- routing_metrics.go\n- compare_adapter.go\n\nOut-of-scope:\n- cli/cmd/ migration (separate beads if needed; otherwise covered by previous Stage 2 work)\n- Server-side migration (B22c)\n- Final type deletion (B22)\n- exec migration (B22b)\n\nEach helper updates its public function signature. After this bead lands, only the type definitions in types.go remain referenced by ddx-side code (in test files and the type declarations themselves).",
+    "acceptance": "field RunOptions removed from cli/internal/agent/grade.go. field RunOptions removed from cli/internal/agent/service_run.go. field RunOptions removed from cli/internal/agent/compare_adapter.go. field CompareOptions removed from cli/internal/agent/grade.go. field QuorumOptions removed from cli/internal/agent/grade.go. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./internal/agent/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-26T19:42:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "776906",
+      "execute-loop-heartbeat-at": "2026-04-26T19:42:52.364409956Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260426T194252-cd738202",
+    "prompt": ".ddx/executions/20260426T194252-cd738202/prompt.md",
+    "manifest": ".ddx/executions/20260426T194252-cd738202/manifest.json",
+    "result": ".ddx/executions/20260426T194252-cd738202/result.json",
+    "checks": ".ddx/executions/20260426T194252-cd738202/checks.json",
+    "usage": ".ddx/executions/20260426T194252-cd738202/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-af187382-20260426T194252-cd738202"
+  }
+}
