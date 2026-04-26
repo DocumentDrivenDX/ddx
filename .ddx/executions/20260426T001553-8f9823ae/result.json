@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-4a751095",
+  "attempt_id": "20260426T001553-8f9823ae",
+  "base_rev": "73546133903dbe6607550d8eef6e80f229a36e33",
+  "result_rev": "73546133903dbe6607550d8eef6e80f229a36e33",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: execute: model \"Qwen3.6-27B-MLX-8bit\" is not supported by harness \"pi\"; supported models: gemini-2.5-flash, gemini-2.5-pro",
+  "harness": "pi",
+  "model": "Qwen3.6-27B-MLX-8bit",
+  "session_id": "eb-e465950d",
+  "duration_ms": 2012,
+  "exit_code": 1,
+  "error": "agent: execute: model \"Qwen3.6-27B-MLX-8bit\" is not supported by harness \"pi\"; supported models: gemini-2.5-flash, gemini-2.5-pro",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260426T001553-8f9823ae",
+  "prompt_file": ".ddx/executions/20260426T001553-8f9823ae/prompt.md",
+  "manifest_file": ".ddx/executions/20260426T001553-8f9823ae/manifest.json",
+  "result_file": ".ddx/executions/20260426T001553-8f9823ae/result.json",
+  "started_at": "2026-04-26T00:15:53.905430547Z",
+  "finished_at": "2026-04-26T00:15:55.918334065Z"
+}
