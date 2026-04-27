@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260427T021944-c01742e6",
+  "bead_id": "ddx-c7d9054d",
+  "base_rev": "5af3b4628a816e32445f7fde3c4f65dac7142f11",
+  "created_at": "2026-04-27T02:19:45.381657631Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c7d9054d",
+    "title": "helix run: review agent rc=1 every cycle — REVIEW_STATUS trailer missing",
+    "description": "During a 12-cycle 'helix run --agent claude --summary' against the heimq repo on 2026-04-26, every single post-implementation review step returned rc=1 with 0 tokens and the harness logged 'review output missing REVIEW_STATUS trailer'. The harness salvaged each cycle because the tracker showed progress (closed N → N+1), but this means:\n\n1. The structured REVIEW_STATUS verdict is never captured — we pay for the review cycle but lose its decision (block / approve / approve-with-followups).\n2. The salvage path masks the fact that reviews are not actually gating anything.\n3. Operators reading summary lines see rc=1 'failures' that are actually invisible reviews — confusing signal.\n\nSample log lines from /Users/erik/Projects/heimq/.helix-logs/helix-20260426-144028.log (run launched 14:40 UTC, completed 16:28 UTC):\n\n  --- ddx agent run [14:51:08] harness=claude rc=0 exit=1 elapsed=350s cost=/bin/zsh tokens=0 ---\n  --- end ddx agent output ---\n  helix: review output missing REVIEW_STATUS trailer\n  helix: review output was not safely interpretable after cycle 1 — continuing\n\nThis pattern repeated for every single one of the 12 cycles (same 0-tokens, same 'review output missing REVIEW_STATUS trailer' message after each cycle's review step).\n\nHypotheses to investigate:\n- Review prompt template emitted to Claude does not actually instruct the agent to print a REVIEW_STATUS trailer in a parseable form.\n- Prompt does instruct, but the trailer format the harness expects has drifted from what the prompt asks for.\n- Claude's output is being truncated before the trailer (timeouts? token caps?).\n- Review agent invocation is silently failing very early (0 tokens reported suggests it never got far) — could be a misconfigured CLI invocation, missing flag, env var.\n\nInvestigation steps:\n1. Inspect what prompt/system message the helix harness sends to claude for the review step — confirm it asks for a REVIEW_STATUS line.\n2. Inspect what the harness regexes for to detect the trailer.\n3. Run one review step manually with verbose logging to capture full agent stdout.\n4. Compare with codex agent — does the trailer issue exist there too, or is it claude-specific?\n\nWhy this matters: helix-run's correctness model assumes reviews actually gate progression. Right now reviews are decorative.",
+    "acceptance": "Either: (a) review step succeeds (rc=0, REVIEW_STATUS trailer present, structured verdict captured by harness) on a fresh helix run cycle against any repo with --agent claude, OR (b) the review-trailer requirement is removed from the harness and salvage becomes the explicit primary path with appropriate logging. Whichever decision is made, the operator-facing summary lines should not show rc=1 for an outcome that the harness considers normal.",
+    "labels": [
+      "helix",
+      "area:helix-run",
+      "kind:bug",
+      "component:review-step"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-27T02:19:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "776906",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "pre-execute-bead checkpoint: staging changes: exit status 128",
+          "created_at": "2026-04-27T00:01:21.004199209Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-27T02:19:44.371587329Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260427T021944-c01742e6",
+    "prompt": ".ddx/executions/20260427T021944-c01742e6/prompt.md",
+    "manifest": ".ddx/executions/20260427T021944-c01742e6/manifest.json",
+    "result": ".ddx/executions/20260427T021944-c01742e6/result.json",
+    "checks": ".ddx/executions/20260427T021944-c01742e6/checks.json",
+    "usage": ".ddx/executions/20260427T021944-c01742e6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c7d9054d-20260427T021944-c01742e6"
+  }
+}
