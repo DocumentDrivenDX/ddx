@@ -1,0 +1,57 @@
+{
+  "attempt_id": "20260427T021946-0213dddf",
+  "bead_id": "ddx-a4c8ed23",
+  "base_rev": "cf790ec863144bc2f7d3a1e254d1fb39e8913a07",
+  "created_at": "2026-04-27T02:19:47.053692676Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a4c8ed23",
+    "title": "B22d-a: grade.go switches r.Run(RunOptions{}) → r.runInternal(RunArgs{})",
+    "description": "Step a/h of B22d decomposition (worker analysis 2026-04-26).\n\nSwitch the single r.Run(RunOptions{...}) call in cli/internal/agent/grade.go to r.runInternal(RunArgs{...}) via the existing dispatch seam from B22a (ddx-dd640c18).\n\nIn-scope:\n- cli/internal/agent/grade.go (one call site, ~10 LoC)\n\nOut-of-scope:\n- All other files (siblings B22d-b through B22d-h cover them)",
+    "acceptance": "field RunOptions removed from cli/internal/agent/grade.go. field CompareOptions removed from cli/internal/agent/grade.go. field QuorumOptions removed from cli/internal/agent/grade.go. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./internal/agent/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-27T02:19:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "776906",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128",
+          "created_at": "2026-04-27T00:01:20.806248281Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-27T02:19:46.269153276Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260427T021946-0213dddf",
+    "prompt": ".ddx/executions/20260427T021946-0213dddf/prompt.md",
+    "manifest": ".ddx/executions/20260427T021946-0213dddf/manifest.json",
+    "result": ".ddx/executions/20260427T021946-0213dddf/result.json",
+    "checks": ".ddx/executions/20260427T021946-0213dddf/checks.json",
+    "usage": ".ddx/executions/20260427T021946-0213dddf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a4c8ed23-20260427T021946-0213dddf"
+  }
+}
