@@ -192,15 +192,15 @@ func TestReindexLegacySessionsBackfillsBillingMode(t *testing.T) {
 func TestSessionIndexPreservesWorkerIDCorrelation(t *testing.T) {
 	projectRoot := t.TempDir()
 	started := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
-	entry := SessionIndexEntryFromResult(projectRoot, RunOptions{
-		Harness: "codex",
-		Model:   "gpt-5.4",
-		Correlation: map[string]string{
-			"session_id": "session-worker",
-			"bead_id":    "ddx-worker",
-			"worker_id":  "worker-abc",
-		},
-	}, &Result{ExitCode: 0}, started, started.Add(time.Second))
+	var opts RunOptions
+	opts.Harness = "codex"
+	opts.Model = "gpt-5.4"
+	opts.Correlation = map[string]string{
+		"session_id": "session-worker",
+		"bead_id":    "ddx-worker",
+		"worker_id":  "worker-abc",
+	}
+	entry := SessionIndexEntryFromResult(projectRoot, opts, &Result{ExitCode: 0}, started, started.Add(time.Second))
 
 	if entry.WorkerID != "worker-abc" {
 		t.Fatalf("WorkerID=%q, want worker-abc", entry.WorkerID)
@@ -275,12 +275,12 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	workDir := t.TempDir()
 	embeddedLogDir := filepath.Join(workDir, ExecuteBeadArtifactDir, "attempt-1", "embedded")
 	svc := &noopCompactionDdxAgent{interval: time.Millisecond, total: 0}
-	_, err := RunViaServiceWith(context.Background(), svc, workDir, RunOptions{
-		Harness:       "agent",
-		Prompt:        "hello",
-		Model:         "fake-model",
-		SessionLogDir: embeddedLogDir,
-	})
+	var opts RunOptions
+	opts.Harness = "agent"
+	opts.Prompt = "hello"
+	opts.Model = "fake-model"
+	opts.SessionLogDir = embeddedLogDir
+	_, err := RunViaServiceWith(context.Background(), svc, workDir, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,8 +326,8 @@ func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 				t.Fatalf("%s does not append the session index", name)
 			}
 		case "execute-bead":
-			if !strings.Contains(text, "RunViaServiceWith(ctx, svc, projectRoot, runOpts)") {
-				t.Fatalf("%s is not routed through RunViaServiceWith", name)
+			if !strings.Contains(text, "dispatchViaResolvedConfig(") {
+				t.Fatalf("%s is not routed through the SD-024 dispatch seam", name)
 			}
 		case "execute-loop":
 			if !strings.Contains(text, "w.Executor.Execute(ctx, candidate.ID)") {
