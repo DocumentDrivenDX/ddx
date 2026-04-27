@@ -644,18 +644,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
 
-	runOpts := RunOptions{
-		Context:       ctx,
-		Harness:       rcfg.Harness(),
-		Prompt:        "",
-		PromptFile:    artifacts.PromptAbs,
-		Model:         rcfg.Model(),
-		Provider:      rcfg.Provider(),
-		ModelRef:      rcfg.ModelRef(),
-		Effort:        rcfg.Effort(),
-		WorkDir:       wtPath,
-		Permissions:   "unrestricted", // isolated worktree; writes must not require approval
-		SessionLogDir: embeddedStateDir,
+	runRuntime := AgentRunRuntime{
+		PromptFile: artifacts.PromptAbs,
+		WorkDir:    wtPath,
 		Correlation: map[string]string{
 			"bead_id":     beadID,
 			"base_rev":    baseRev,
@@ -665,9 +656,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			"bundle_path": artifacts.DirRel,
 			"prompt_file": artifacts.PromptRel,
 		},
+		SessionLogDirOverride: embeddedStateDir,
+		PermissionsOverride:   "unrestricted", // isolated worktree; writes must not require approval
 	}
 
-	agentResult, agentErr := dispatchAgentRun(ctx, projectRoot, runtime.Service, runtime.AgentRunner, runOpts)
+	agentResult, agentErr := dispatchAgentRun(ctx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
@@ -914,28 +907,16 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	return res, nil
 }
 
-// dispatchAgentRun resolves how the agent invocation should be executed and
-// returns the resulting *Result. Resolution order:
-//  1. runner (test injection seam) — used directly via runner.Run.
-//  2. svc (pre-built service) — used via RunViaServiceWith.
-//  3. Fallback: construct a fresh service via NewServiceFromWorkDir(projectRoot)
-//     and dispatch via RunViaServiceWith.
+// dispatchAgentRun is a thin SD-024 wrapper around dispatchViaResolvedConfig
+// for the execute-bead worker. It threads the durable knobs from rcfg and the
+// per-invocation plumbing from runtime through the shared dispatch seam in
+// service_run.go.
 //
 // The script and virtual harnesses are DDx-side helpers that the agent service
-// does not implement; RunViaService and RunViaServiceWith both delegate those
-// to a private Runner internally, so they continue to work through this path.
-func dispatchAgentRun(ctx context.Context, projectRoot string, svc agentlib.DdxAgent, runner AgentRunner, runOpts RunOptions) (*Result, error) {
-	if runner != nil {
-		return runner.Run(runOpts)
-	}
-	if svc == nil {
-		built, err := NewServiceFromWorkDir(projectRoot)
-		if err != nil {
-			return nil, fmt.Errorf("execute-bead: build agent service: %w", err)
-		}
-		svc = built
-	}
-	return RunViaServiceWith(ctx, svc, projectRoot, runOpts)
+// does not implement; the underlying RunViaServiceWith path delegates those to
+// a private Runner internally, so they continue to work through this path.
+func dispatchAgentRun(ctx context.Context, projectRoot string, svc agentlib.DdxAgent, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+	return dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 }
 
 // populateWorkerStatus fills in the Status and Detail fields on a worker result

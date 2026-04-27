@@ -104,6 +104,14 @@ type AgentRunRuntime struct {
 	EstimatedPromptTokens int
 	RequiresTools         bool
 	SessionLogDirOverride string
+	// HarnessOverride, ModelOverride, and PermissionsOverride let a caller
+	// pin one of the durable knobs from rcfg for this single invocation
+	// without re-resolving the full ResolvedConfig. SD-024 step B22d-d:
+	// execute-bead pins permissions=unrestricted; the post-merge reviewer
+	// pins harness/model to the reviewer-tier selection.
+	HarnessOverride     string
+	ModelOverride       string
+	PermissionsOverride string
 }
 
 // QuorumOptions extends RunOptions for multi-agent consensus.

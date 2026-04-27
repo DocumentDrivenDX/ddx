@@ -326,8 +326,8 @@ func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 				t.Fatalf("%s does not append the session index", name)
 			}
 		case "execute-bead":
-			if !strings.Contains(text, "RunViaServiceWith(ctx, svc, projectRoot, runOpts)") {
-				t.Fatalf("%s is not routed through RunViaServiceWith", name)
+			if !strings.Contains(text, "dispatchViaResolvedConfig(") {
+				t.Fatalf("%s is not routed through the SD-024 dispatch seam", name)
 			}
 		case "execute-loop":
 			if !strings.Contains(text, "w.Executor.Execute(ctx, candidate.ID)") {

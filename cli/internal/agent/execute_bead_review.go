@@ -14,6 +14,7 @@ import (
 
 	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -528,14 +529,13 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	}
 
 	start := time.Now()
-	runOpts := RunOptions{
-		Context: ctx,
-		Harness: reviewHarness,
-		Model:   reviewModel,
-		Prompt:  prompt,
-		WorkDir: r.ProjectRoot,
+	runRuntime := AgentRunRuntime{
+		Prompt:          prompt,
+		WorkDir:         r.ProjectRoot,
+		HarnessOverride: reviewHarness,
+		ModelOverride:   reviewModel,
 	}
-	result, runErr := r.dispatchReviewRun(ctx, runOpts)
+	result, runErr := r.dispatchReviewRun(ctx, runRuntime)
 
 	durationMS := int(time.Since(start).Milliseconds())
 	if runErr != nil {
@@ -683,25 +683,16 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	return reviewRes, nil
 }
 
-// dispatchReviewRun resolves how the review invocation should be executed.
-// Resolution order matches dispatchAgentRun:
-//  1. r.Runner (test injection seam) — used directly via Runner.Run.
-//  2. r.Service (pre-built service) — used via RunViaServiceWith.
-//  3. Fallback: construct a fresh service via NewServiceFromWorkDir(ProjectRoot)
-//     and dispatch via RunViaServiceWith.
-func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runOpts RunOptions) (*Result, error) {
-	if r.Runner != nil {
-		return r.Runner.Run(runOpts)
-	}
-	svc := r.Service
-	if svc == nil {
-		built, err := NewServiceFromWorkDir(r.ProjectRoot)
-		if err != nil {
-			return nil, fmt.Errorf("reviewer: build agent service: %w", err)
-		}
-		svc = built
-	}
-	return RunViaServiceWith(ctx, svc, r.ProjectRoot, runOpts)
+// dispatchReviewRun is a thin SD-024 wrapper around dispatchViaResolvedConfig
+// for the post-merge reviewer. The reviewer carries no persistent
+// ResolvedConfig of its own — the durable knobs that affect a review
+// invocation (timeout, provider, evidence caps) are read from the project's
+// .ddx/config.yaml via LoadAndResolve, while reviewer-tier harness/model
+// are pinned via the runtime override fields. Resolution order matches the
+// execute-bead worker (runner > pre-built service > fresh service).
+func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runtime AgentRunRuntime) (*Result, error) {
+	rcfg, _ := ddxconfig.LoadAndResolve(r.ProjectRoot, ddxconfig.CLIOverrides{})
+	return dispatchViaResolvedConfig(ctx, r.ProjectRoot, r.Service, r.Runner, rcfg, runtime)
 }
 
 // gitShow runs `git show <rev>` with pathspec exclusions for execution-
