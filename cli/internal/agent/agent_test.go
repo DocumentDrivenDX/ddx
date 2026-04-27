@@ -115,7 +115,7 @@ func TestRegistryNamesPreferenceOrder(t *testing.T) {
 func TestBuildArgsCodexBasic(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("codex")
-	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
+	args := BuildArgs(h, buildArgsInput{Prompt: "do stuff"}, "")
 	// Default (safe): no bypass flags, structured JSON remains enabled.
 	assert.Equal(t, []string{"exec", "--json", "do stuff"}, args)
 	for _, arg := range args {
@@ -127,7 +127,7 @@ func TestBuildArgsCodexBasic(t *testing.T) {
 func TestBuildArgsCodexAllFlags(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("codex")
-	args := BuildArgs(h, RunOptions{
+	args := BuildArgs(h, buildArgsInput{
 		Prompt:  "build it",
 		WorkDir: "/tmp/project",
 		Effort:  "high",
@@ -145,7 +145,7 @@ func TestBuildArgsCodexAllFlags(t *testing.T) {
 func TestBuildArgsClaudeBasic(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("claude")
-	args := BuildArgs(h, RunOptions{Prompt: "review code"}, "")
+	args := BuildArgs(h, buildArgsInput{Prompt: "review code"}, "")
 	// Should have base args + prompt, with stream-json output preserved so the
 	// harness emits real-time progress during a run.
 	assert.Equal(t, []string{"--print", "-p", "--verbose", "--output-format", "stream-json", "review code"}, args)
@@ -154,7 +154,7 @@ func TestBuildArgsClaudeBasic(t *testing.T) {
 func TestBuildArgsClaudeWithModel(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("claude")
-	args := BuildArgs(h, RunOptions{Prompt: "test"}, "claude-sonnet-4-6")
+	args := BuildArgs(h, buildArgsInput{Prompt: "test"}, "claude-sonnet-4-6")
 	assert.Contains(t, args, "--model")
 	assert.Contains(t, args, "claude-sonnet-4-6")
 }
@@ -162,7 +162,7 @@ func TestBuildArgsClaudeWithModel(t *testing.T) {
 func TestBuildArgsGeminiStdin(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("gemini")
-	args := BuildArgs(h, RunOptions{Prompt: "hello"}, "")
+	args := BuildArgs(h, buildArgsInput{Prompt: "hello"}, "")
 	// stdin mode: prompt should NOT be in args
 	for _, arg := range args {
 		assert.NotEqual(t, "hello", arg, "stdin harness should not have prompt in args")
@@ -185,7 +185,7 @@ func TestBuildArgsPermissionsDefault(t *testing.T) {
 	r := newHarnessRegistry()
 	// codex: default (no permissions set) should be safe — no bypass flags
 	h, _ := r.Get("codex")
-	args := BuildArgs(h, RunOptions{Prompt: "task"}, "")
+	args := BuildArgs(h, buildArgsInput{Prompt: "task"}, "")
 	for _, arg := range args {
 		assert.NotEqual(t, "--dangerously-bypass-approvals-and-sandbox", arg,
 			"default safe mode must not include codex bypass flag")
@@ -193,7 +193,7 @@ func TestBuildArgsPermissionsDefault(t *testing.T) {
 
 	// claude: default safe — no bypass flags
 	hc, _ := r.Get("claude")
-	argsC := BuildArgs(hc, RunOptions{Prompt: "task"}, "")
+	argsC := BuildArgs(hc, buildArgsInput{Prompt: "task"}, "")
 	for _, arg := range argsC {
 		assert.NotEqual(t, "--dangerously-skip-permissions", arg,
 			"default safe mode must not include claude bypass flag")
@@ -206,12 +206,12 @@ func TestBuildArgsPermissionsUnrestricted(t *testing.T) {
 	r := newHarnessRegistry()
 	// codex unrestricted
 	h, _ := r.Get("codex")
-	args := BuildArgs(h, RunOptions{Prompt: "task", Permissions: "unrestricted"}, "")
+	args := BuildArgs(h, buildArgsInput{Prompt: "task", Permissions: "unrestricted"}, "")
 	assert.Contains(t, args, "--dangerously-bypass-approvals-and-sandbox")
 
 	// claude unrestricted
 	hc, _ := r.Get("claude")
-	argsC := BuildArgs(hc, RunOptions{Prompt: "task", Permissions: "unrestricted"}, "")
+	argsC := BuildArgs(hc, buildArgsInput{Prompt: "task", Permissions: "unrestricted"}, "")
 	assert.Contains(t, argsC, "--dangerously-skip-permissions")
 	assert.Contains(t, argsC, "bypassPermissions")
 }
@@ -674,14 +674,14 @@ func TestBuildArgsOpencodeBasic(t *testing.T) {
 	r := newHarnessRegistry()
 	h, ok := r.Get("opencode")
 	require.True(t, ok)
-	args := BuildArgs(h, RunOptions{Prompt: "do stuff"}, "")
+	args := BuildArgs(h, buildArgsInput{Prompt: "do stuff"}, "")
 	assert.Equal(t, []string{"run", "--format", "json", "do stuff"}, args)
 }
 
 func TestBuildArgsOpencodeAllFlags(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("opencode")
-	args := BuildArgs(h, RunOptions{
+	args := BuildArgs(h, buildArgsInput{
 		Prompt:  "build it",
 		WorkDir: "/tmp/project",
 		Effort:  "high",
@@ -715,7 +715,7 @@ func TestOpencodePermissionsAllLevels(t *testing.T) {
 
 	// All permission levels should produce the same args (opencode run auto-approves)
 	for _, level := range []string{"safe", "supervised", "unrestricted"} {
-		args := BuildArgs(h, RunOptions{Prompt: "task", Permissions: level}, "")
+		args := BuildArgs(h, buildArgsInput{Prompt: "task", Permissions: level}, "")
 		expected := []string{"run", "--format", "json", "task"}
 		assert.Equal(t, expected, args, "permission level %q should not add extra flags", level)
 	}
@@ -724,7 +724,7 @@ func TestOpencodePermissionsAllLevels(t *testing.T) {
 func TestOpencodeModelFlag(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("opencode")
-	args := BuildArgs(h, RunOptions{Prompt: "test"}, "anthropic/claude-sonnet-4-6")
+	args := BuildArgs(h, buildArgsInput{Prompt: "test"}, "anthropic/claude-sonnet-4-6")
 	assert.Contains(t, args, "-m")
 	assert.Contains(t, args, "anthropic/claude-sonnet-4-6")
 }
@@ -853,7 +853,7 @@ func TestPiHarnessProperties(t *testing.T) {
 func TestBuildArgsPiBasic(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("pi")
-	args := BuildArgs(h, RunOptions{Prompt: "hello world"}, "")
+	args := BuildArgs(h, buildArgsInput{Prompt: "hello world"}, "")
 	// arg mode: base args + prompt
 	assert.Equal(t, []string{"--mode", "json", "--print", "hello world"}, args)
 }
@@ -861,9 +861,8 @@ func TestBuildArgsPiBasic(t *testing.T) {
 func TestBuildArgsPiWithModelAndEffort(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("pi")
-	args := BuildArgs(h, RunOptions{
+	args := BuildArgs(h, buildArgsInput{
 		Prompt: "task",
-		Model:  "pi-minimax",
 		Effort: "high",
 	}, "pi-default")
 	assert.Contains(t, args, "--model")
@@ -968,7 +967,7 @@ func TestGeminiHarnessProperties(t *testing.T) {
 func TestBuildArgsGeminiWithModel(t *testing.T) {
 	r := newHarnessRegistry()
 	h, _ := r.Get("gemini")
-	args := BuildArgs(h, RunOptions{Prompt: "task"}, "gemini-2.5")
+	args := BuildArgs(h, buildArgsInput{Prompt: "task"}, "gemini-2.5")
 	assert.Contains(t, args, "-m")
 	assert.Contains(t, args, "gemini-2.5")
 }

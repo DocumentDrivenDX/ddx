@@ -172,7 +172,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	// evidence:allow-unbounded reason="prompt is the bounded output of r.resolvePrompt → readPromptFileBounded (FEAT-022 §3)"
 	resolvedOpts.Prompt = prompt
 	resolvedOpts.Permissions = resolvePermissions(r.Config.Permissions, opts.Permissions)
-	args := BuildArgs(harness, resolvedOpts, model)
+	args := BuildArgs(harness, buildArgsInputFromRunOptions(resolvedOpts), model)
 	stdin := ""
 	if harness.PromptMode == "stdin" {
 		stdin = prompt
@@ -442,9 +442,29 @@ func resolvePermissions(cfgPerms, optsPerms string) string {
 	return "safe"
 }
 
+// buildArgsInput is the narrow input contract for BuildArgs: only the
+// per-invocation knobs that affect the argv assembled for a harness binary.
+// Internal to the agent package; callers convert from RunOptions at the call
+// site so BuildArgs no longer depends on the full RunOptions surface.
+type buildArgsInput struct {
+	Prompt      string
+	WorkDir     string
+	Permissions string
+	Effort      string
+}
+
+func buildArgsInputFromRunOptions(opts RunOptions) buildArgsInput {
+	return buildArgsInput{
+		Prompt:      opts.Prompt,
+		WorkDir:     opts.WorkDir,
+		Permissions: opts.Permissions,
+		Effort:      opts.Effort,
+	}
+}
+
 // BuildArgs constructs the argument array for a harness invocation.
 // Exported for testing.
-func BuildArgs(h harnessConfig, opts RunOptions, model string) []string {
+func BuildArgs(h harnessConfig, in buildArgsInput, model string) []string {
 	// Use BaseArgs if set, fall back to legacy Args for compatibility.
 	base := h.BaseArgs
 	if base == nil {
@@ -454,7 +474,7 @@ func BuildArgs(h harnessConfig, opts RunOptions, model string) []string {
 
 	// Append permission-specific args.
 	if h.PermissionArgs != nil {
-		level := opts.Permissions
+		level := in.Permissions
 		if level == "" {
 			level = "safe"
 		}
@@ -463,21 +483,21 @@ func BuildArgs(h harnessConfig, opts RunOptions, model string) []string {
 		}
 	}
 
-	if opts.WorkDir != "" && h.WorkDirFlag != "" {
-		args = append(args, h.WorkDirFlag, opts.WorkDir)
+	if in.WorkDir != "" && h.WorkDirFlag != "" {
+		args = append(args, h.WorkDirFlag, in.WorkDir)
 	}
 	if model != "" && h.ModelFlag != "" {
 		args = append(args, h.ModelFlag, model)
 	}
-	if opts.Effort != "" && h.EffortFlag != "" {
+	if in.Effort != "" && h.EffortFlag != "" {
 		if h.EffortFormat != "" {
-			args = append(args, h.EffortFlag, fmt.Sprintf(h.EffortFormat, opts.Effort))
+			args = append(args, h.EffortFlag, fmt.Sprintf(h.EffortFormat, in.Effort))
 		} else {
-			args = append(args, h.EffortFlag, opts.Effort)
+			args = append(args, h.EffortFlag, in.Effort)
 		}
 	}
 	if h.PromptMode == "arg" {
-		args = append(args, opts.Prompt)
+		args = append(args, in.Prompt)
 	}
 	return args
 }

@@ -302,7 +302,7 @@ func resolveClaudeProgressLogDir(opts RunOptions, cfg Config) string {
 // option), the caller falls back to the non-streaming path via
 // runClaudeWithFallbackFn.
 func runClaudeStreamingFn(r *Runner, ctx context.Context, harness harnessConfig, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
-	args := BuildArgs(harness, resolvedOpts, model)
+	args := BuildArgs(harness, buildArgsInputFromRunOptions(resolvedOpts), model)
 
 	start := time.Now()
 	runCtx, cancel := context.WithCancel(ctx)
@@ -491,7 +491,7 @@ func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness harnessConf
 	// non-streaming args so the run still completes.
 	legacyHarness := harness
 	legacyHarness.BaseArgs = []string{"--print", "-p", "--output-format", "json"}
-	args := BuildArgs(legacyHarness, resolvedOpts, model)
+	args := BuildArgs(legacyHarness, buildArgsInputFromRunOptions(resolvedOpts), model)
 	stdin := ""
 	if harness.PromptMode == "stdin" {
 		stdin = prompt
