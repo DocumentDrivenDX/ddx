@@ -1459,9 +1459,11 @@ Examples:
 			fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 50))
 
 			// Run the agent
-			result, err := agent.RunViaService(cmd.Context(), f.WorkingDir, agent.RunOptions{
+			rcfg, _ := config.LoadAndResolve(f.WorkingDir, config.CLIOverrides{
 				Harness: harness,
 				Model:   model,
+			})
+			result, err := agent.RunWithConfigViaService(cmd.Context(), f.WorkingDir, rcfg, agent.AgentRunRuntime{
 				Prompt:  prompt,
 				WorkDir: workDir,
 			})
