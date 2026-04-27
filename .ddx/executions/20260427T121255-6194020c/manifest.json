@@ -1,0 +1,77 @@
+{
+  "attempt_id": "20260427T121255-6194020c",
+  "bead_id": "ddx-b602ccce",
+  "base_rev": "05e6f4385c4304cd57b02c4f0d7b4e4ffc74fa82",
+  "created_at": "2026-04-27T12:12:55.798456231Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b602ccce",
+    "title": "B22d-h: delete RunViaService + RunViaServiceWith + runFixtureHarnessViaRunner",
+    "description": "Step h/h of B22d decomposition (final).\n\nDelete RunViaService, RunViaServiceWith, runFixtureHarnessViaRunner from cli/internal/agent/service_run.go and inline their bodies into the new RunWithConfigViaService internal helper. After steps b, c, d all migrated their callers, this deletion is mechanical.\n\nIn-scope:\n- cli/internal/agent/service_run.go (delete legacy entry points)\n\nOut-of-scope:\n- Test file updates (covered by earlier steps)\n\nDepends on B22d-b, B22d-c, B22d-d having migrated their callers.",
+    "acceptance": "field RunOptions removed from cli/internal/agent/service_run.go. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-27T12:12:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "776906",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-27T00:23:48.948849831Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260427T002150-d08557af\",\"harness\":\"claude\",\"input_tokens\":15,\"output_tokens\":6790,\"total_tokens\":6805,\"cost_usd\":0.7659057499999999,\"duration_ms\":117597,\"exit_code\":0}",
+          "created_at": "2026-04-27T00:23:49.048863398Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6805 cost_usd=0.7659"
+        },
+        {
+          "actor": "ddx",
+          "body": "no_changes\nrationale: Bead: B22d-h — delete RunViaService + RunViaServiceWith + runFixtureHarnessViaRunner\n\nSTATUS: Cannot be completed in this pass. The bead's premise is false: it claims\n\"After steps b, c, d all migrated their callers, this deletion is mechanical.\"\nThat is incorrect — steps a, e, f, and g (which migrate the remaining callers)\nare NOT yet closed.\n\n(a) WHAT IS DONE\nNothing. No code changes were made. Verification only.\n\n(b) WHAT IS BLOCKING\n\n`ddx bead list | grep B22d` shows the current decomposition state:\n\n  ddx-636ca6d4  closed        B22d-b\n  ddx-06267d44  closed        B22d-c\n  ddx-c168f77f  closed        B22d-d\n  ddx-a4c8ed23  in_progress   B22d-a (grade.go r.Run -\u003e r.runInternal)\n  ddx-7c6664be  in_progress   B22d-e (BuildArgs signature off RunOptions)\n  ddx-9f4b1a8c  open          B22d-f (SessionIndexEntryFromResult off RunOptions)\n  ddx-ce7a796e  open          B22d-g (RunFunc + runCompareArmWith + public\n                                       Run*With signatures off RunOptions)\n  ddx-b602ccce  in_progress   B22d-h (this bead)\n\n`grep -rn \"RunViaService\\|RunViaServiceWith\\|runFixtureHarnessViaRunner\"\ncli/internal/agent cli/cmd` shows live, non-test callers that still depend on\nthe three functions this bead asks me to delete:\n\n  - cli/internal/agent/compare_adapter.go:214  RunCompareViaService -\u003e RunViaService\n  - cli/internal/agent/compare_adapter.go:223  RunCompareWithAgent  -\u003e RunViaServiceWith\n  - cli/internal/agent/compare_adapter.go:435  RunQuorumWithConfigViaService -\u003e RunViaService\n  - cli/internal/agent/compare_adapter.go:481  RunQuorumViaService  -\u003e RunViaService\n  - cli/internal/agent/compare_adapter.go:489  RunQuorumWithAgent   -\u003e RunViaServiceWith\n  - cli/internal/agent/dispatch.go:79          dispatchViaResolvedConfig -\u003e RunViaServiceWith\n  - cli/internal/agent/prompt_ingress_oversize_test.go:112  RunViaServiceWith\n  - cli/internal/agent/session_index_test.go:283            RunViaServiceWith\n\nThe compare_adapter.go callers are owned by step B22d-g (\"RunFunc +\nrunCompareArmWith + public Run*With signatures off RunOptions\"). The two test\nfiles are part of the broader RunOptions retirement (steps e/f/g). Step c's\nown commit message (96b243d1) confirms this scope split: \"step g/h covers\nRunOptions retirement\", which means g must run before h is mechanical.\n\nThe dispatch.go call site at line 79 (introduced in B22d-d) was deliberately\nleft calling RunViaServiceWith because RunWithConfigViaService delegates back\nthrough RunViaService — there is no in-package internal helper today that\ntakes (svc, projectRoot, opts). Inlining the three functions into\nRunWithConfigViaService alone (a public ResolvedConfig+runtime function) does\nnot give dispatch.go a substitute either, because dispatch.go already has\noverride-resolved opts and would have to build a synthetic ResolvedConfig.\n\nIf I tried to satisfy this bead in isolation today I would have to either:\n  1. Delete the three functions and watch `go build ./...` fail on at least\n     8 call sites — violating \"do not commit red code\".\n  2. Migrate compare_adapter.go (step g), dispatch.go, and the two test files\n     myself — silently absorbing scope from B22d-a, -e, -f, -g, which the\n     decomposition deliberately separated.\n  3. Convert the three deletions into shims (re-export under new names) —\n     which contradicts the AC (\"removed from cli/internal/agent/service_run.go\").\n\n(c) WHAT A FOLLOW-UP ATTEMPT NEEDS\n\nClose (or merge into this bead) B22d-a, B22d-e, B22d-f, and especially\nB22d-g first. Once B22d-g lands, compare_adapter.go's Run*ViaService and\nRun*WithAgent helpers will no longer call RunViaService/RunViaServiceWith,\nand the two test files will have been converted off raw RunOptions. At that\npoint the only remaining caller will be dispatch.go:79, and the deletion\ntruly is mechanical: rename RunViaServiceWith to a lowercase\nrunViaServiceWith (or fold it into dispatchViaResolvedConfig), then delete\nRunViaService and runFixtureHarnessViaRunner.\n\nRe-queue this bead after B22d-a/e/f/g close. A stronger model is not the\nissue — sequencing is.\nresult_rev=b64d4fc99fa6e950826d48eceaedb490b6734dff\nbase_rev=b64d4fc99fa6e950826d48eceaedb490b6734dff\nretry_after=2026-04-27T06:23:50Z",
+          "created_at": "2026-04-27T00:23:51.048683858Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-27T12:12:55.133788712Z",
+      "execute-loop-last-detail": "no_changes",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-no-changes-count": 1,
+      "execute-loop-retry-after": "2026-04-27T06:23:50Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260427T121255-6194020c",
+    "prompt": ".ddx/executions/20260427T121255-6194020c/prompt.md",
+    "manifest": ".ddx/executions/20260427T121255-6194020c/manifest.json",
+    "result": ".ddx/executions/20260427T121255-6194020c/result.json",
+    "checks": ".ddx/executions/20260427T121255-6194020c/checks.json",
+    "usage": ".ddx/executions/20260427T121255-6194020c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b602ccce-20260427T121255-6194020c"
+  }
+}
