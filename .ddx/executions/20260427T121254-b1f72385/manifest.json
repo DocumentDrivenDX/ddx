@@ -1,0 +1,77 @@
+{
+  "attempt_id": "20260427T121254-b1f72385",
+  "bead_id": "ddx-9f4b1a8c",
+  "base_rev": "6841fcc4e02cca5ac15c347ac31200e77561c5a6",
+  "created_at": "2026-04-27T12:12:55.176483606Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9f4b1a8c",
+    "title": "B22d-f: SessionIndexEntryFromResult takes discrete args, not RunOptions",
+    "description": "Step f/h of B22d decomposition.\n\nChange SessionIndexEntryFromResult's RunOptions parameter to take only the small subset of fields it actually uses (Harness, Model, Provider, Correlation, PromptSource, etc.) as discrete arguments or a small internal struct. Update session_index_test.go and the four service-run callers in the same commit.\n\nIn-scope:\n- cli/internal/agent/session_index.go SessionIndexEntryFromResult signature\n- cli/internal/agent/session_index_test.go\n- cli/internal/agent/service_run.go callers\n\nOut-of-scope:\n- Other session_index changes",
+    "acceptance": "field RunOptions removed from cli/internal/agent/session_index.go. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./internal/agent/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-27T12:12:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "776906",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-27T00:08:15.178330099Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260427T000123-703a4308\",\"harness\":\"claude\",\"input_tokens\":39,\"output_tokens\":15449,\"total_tokens\":15488,\"cost_usd\":1.7517445,\"duration_ms\":411265,\"exit_code\":0}",
+          "created_at": "2026-04-27T00:08:15.276869584Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=15488 cost_usd=1.7517"
+        },
+        {
+          "actor": "ddx",
+          "body": "no_changes\nrationale: Bead ddx-9f4b1a8c (B22d-f) cannot be landed in isolation against base 4267be6c.\n\nWhat is done\n- The signature change itself is straightforward and verified locally:\n  SessionIndexEntryFromResult(projectRoot string, harness, model, provider, effort string,\n                              correlation map[string]string, result *Result,\n                              startedAt, endedAt time.Time) SessionIndexEntry\n  - cli/internal/agent/session_index.go: removed the RunOptions field/parameter\n    and rewired the body to read from the discrete params (harness/model/provider/\n    effort/correlation). After this change, RunOptions no longer appears in\n    session_index.go (AC #1).\n  - The single existing caller in cli/internal/agent/service_run.go:257\n    (the bead's \"four service-run callers\" overcounts; only one call site exists)\n    was updated to:\n      SessionIndexEntryFromResult(workDir, opts.Harness, opts.Model,\n                                  opts.Provider, opts.Effort, opts.Correlation,\n                                  result, start, finishedAt)\n  - cli/internal/agent/session_index_test.go (TestSessionIndexPreservesWorker-\n    IDCorrelation, line ~195) was updated to call the new signature with\n    discrete args. The test passes.\n  - `cd cli \u0026\u0026 go build ./...` passes (AC #2).\n  - `cd cli \u0026\u0026 go test ./internal/agent/...` runs clean for everything that\n    isn't TestIntegration_CodexEcho. That test fails for an unrelated reason\n    (real codex CLI returns \"thread not found\") on this machine — it is not\n    a regression introduced by this change, and -short does not skip it.\n\nWhat is blocking\n- The lefthook pre-commit `runtime-lint` rule (lefthook.yml) runs the\n  SD-024 runtimelint analyzer and filters its diagnostics down to the set\n  of staged files. Because the bead's in-scope files\n  (cli/internal/agent/service_run.go, cli/internal/agent/session_index_test.go)\n  contain many out-of-scope RunOptions usages — RunViaService,\n  runFixtureHarnessViaRunner, RunWithConfigViaService, RunViaServiceWith,\n  the `opts := RunOptions{...}` composite at service_run.go:82, and the\n  TestRunViaServiceWithAppendsOneSessionIndexRow composite at\n  session_index_test.go:274 — the lint blocks the commit even though none\n  of those usages are touched by this bead.\n- The bead's stated out-of-scope explicitly excludes \"service_run.go public\n  API deletions (step h)\" (per the parent step-d bead description). Those\n  call sites and signatures are what the lint is flagging.\n- Running the analyzer over ./internal/agent/... reports many other\n  RunOptions references across the package (compare_adapter.go,\n  execute_bead.go, execute_bead_review.go, grade.go, runner.go,\n  agent_runner.go, agent_runner_service.go, claude_stream.go, models.go,\n  etc.) that depend on later B22d steps and the broader Stage-4 retirement.\n- Per project policy, --no-verify / hook-skipping is forbidden; per the\n  bead instructions, modifying out-of-scope files is forbidden. There is no\n  in-scope way to make the lint pass on the staged-file set.\n\nWhat a follow-up attempt would need\n- Land step h (or the broader RunOptions retirement) FIRST so that\n  service_run.go and session_index_test.go no longer contain pre-existing\n  RunOptions usages, then this bead can run and the lint will pass on the\n  staged-file set; OR\n- Re-decompose the lint scope: change runtime-lint in lefthook.yml to\n  filter diagnostics to only the staged hunk lines (e.g. via a diff-aware\n  pass) rather than the whole staged file, so a partial migration step\n  isn't blocked by file-level peers; OR\n- Expand this bead's in-scope to include the full RunOptions removal from\n  service_run.go and session_index_test.go (effectively folding step h into\n  step f), and re-queue with a model that can carry the broader change.\n\nThe diff that was prepared and then reverted is reproducible from the bead\ndescription in 5 minutes; the blocker is project-level lint policy versus\nbead scope, not implementation difficulty.\nresult_rev=4267be6ca4757afe774b14f548a08556dbfbcf6d\nbase_rev=4267be6ca4757afe774b14f548a08556dbfbcf6d\nretry_after=2026-04-27T06:08:19Z",
+          "created_at": "2026-04-27T00:08:19.395075757Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-27T12:12:54.417268178Z",
+      "execute-loop-last-detail": "no_changes",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-no-changes-count": 1,
+      "execute-loop-retry-after": "2026-04-27T06:08:19Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260427T121254-b1f72385",
+    "prompt": ".ddx/executions/20260427T121254-b1f72385/prompt.md",
+    "manifest": ".ddx/executions/20260427T121254-b1f72385/manifest.json",
+    "result": ".ddx/executions/20260427T121254-b1f72385/result.json",
+    "checks": ".ddx/executions/20260427T121254-b1f72385/checks.json",
+    "usage": ".ddx/executions/20260427T121254-b1f72385/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9f4b1a8c-20260427T121254-b1f72385"
+  }
+}
