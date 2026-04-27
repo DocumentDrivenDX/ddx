@@ -166,7 +166,7 @@ func GradeFn(r *Runner, record *ComparisonRecord, opts GradeOptions) ([]Comparis
 
 	// Run the grading harness
 	start := time.Now()
-	result, err := r.Run(RunOptions{
+	result, err := r.runInternal(RunArgs{
 		Harness: opts.Grader,
 		Prompt:  built.Prompt,
 	})
