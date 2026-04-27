@@ -254,7 +254,13 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 			result.AgentSessionID = final.SessionLogPath
 		}
 	}
-	entry := SessionIndexEntryFromResult(workDir, opts, result, start, finishedAt)
+	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
+		Harness:     opts.Harness,
+		Model:       opts.Model,
+		Provider:    opts.Provider,
+		Effort:      opts.Effort,
+		Correlation: opts.Correlation,
+	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
 }

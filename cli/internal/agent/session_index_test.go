@@ -192,15 +192,16 @@ func TestReindexLegacySessionsBackfillsBillingMode(t *testing.T) {
 func TestSessionIndexPreservesWorkerIDCorrelation(t *testing.T) {
 	projectRoot := t.TempDir()
 	started := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
-	var opts RunOptions
-	opts.Harness = "codex"
-	opts.Model = "gpt-5.4"
-	opts.Correlation = map[string]string{
-		"session_id": "session-worker",
-		"bead_id":    "ddx-worker",
-		"worker_id":  "worker-abc",
+	inputs := SessionIndexInputs{
+		Harness: "codex",
+		Model:   "gpt-5.4",
+		Correlation: map[string]string{
+			"session_id": "session-worker",
+			"bead_id":    "ddx-worker",
+			"worker_id":  "worker-abc",
+		},
 	}
-	entry := SessionIndexEntryFromResult(projectRoot, opts, &Result{ExitCode: 0}, started, started.Add(time.Second))
+	entry := SessionIndexEntryFromResult(projectRoot, inputs, &Result{ExitCode: 0}, started, started.Add(time.Second))
 
 	if entry.WorkerID != "worker-abc" {
 		t.Fatalf("WorkerID=%q, want worker-abc", entry.WorkerID)
