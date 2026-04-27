@@ -135,11 +135,22 @@ func AppendSessionIndex(logDir string, entry SessionIndexEntry, now time.Time) e
 	return err
 }
 
-func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Result, startedAt, endedAt time.Time) SessionIndexEntry {
+// SessionIndexInputs carries the small subset of RunOptions fields that
+// SessionIndexEntryFromResult needs, decoupling it from the full RunOptions
+// surface.
+type SessionIndexInputs struct {
+	Harness     string
+	Model       string
+	Provider    string
+	Effort      string
+	Correlation map[string]string
+}
+
+func SessionIndexEntryFromResult(projectRoot string, inputs SessionIndexInputs, result *Result, startedAt, endedAt time.Time) SessionIndexEntry {
 	if result == nil {
 		result = &Result{}
 	}
-	corr := opts.Correlation
+	corr := inputs.Correlation
 	id := ""
 	beadID := ""
 	workerID := ""
@@ -174,11 +185,11 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 	}
 	harness := result.Harness
 	if harness == "" {
-		harness = opts.Harness
+		harness = inputs.Harness
 	}
 	model := result.Model
 	if model == "" {
-		model = opts.Model
+		model = inputs.Model
 	}
 	outcome := "success"
 	if result.ExitCode != 0 || result.Error != "" {
@@ -190,7 +201,7 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 		BeadID:          beadID,
 		WorkerID:        workerID,
 		Harness:         harness,
-		Provider:        firstNonEmpty(result.Provider, opts.Provider),
+		Provider:        firstNonEmpty(result.Provider, inputs.Provider),
 		BaseURL:         result.ResolvedBaseURL,
 		BillingMode:     billingModeFor(harness, "", result.ResolvedBaseURL),
 		Model:           model,
@@ -209,7 +220,7 @@ func SessionIndexEntryFromResult(projectRoot string, opts RunOptions, result *Re
 		SpanID:          spanID,
 		BundlePath:      filepath.ToSlash(bundlePath),
 		NativeLogRef:    filepath.ToSlash(nativeLogRef),
-		Effort:          opts.Effort,
+		Effort:          inputs.Effort,
 		Detail:          result.Error,
 		BaseRev:         baseRev,
 	}
