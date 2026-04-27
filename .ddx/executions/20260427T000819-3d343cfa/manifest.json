@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260427T000819-3d343cfa",
+  "bead_id": "ddx-ce7a796e",
+  "base_rev": "41d464b03c4e5d12b7a9244c3c59ee312e64e255",
+  "created_at": "2026-04-27T00:08:20.385008267Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ce7a796e",
+    "title": "B22d-g: RunFunc + runCompareArmWith + public Run*With signatures off RunOptions",
+    "description": "Step g/h of B22d decomposition.\n\nChange RunFunc's signature, runCompareArmWith, defaultResolvePromptForCompare, the public RunCompareWith/RunQuorumWith/RunBenchmarkWith signatures, and BenchmarkArmsToCompare's return shape. Update prompt_ingress_oversize_test.go, models_test.go, claude_stream_test.go in the same commit.\n\nAfter this step, cli/internal/agent/compare_adapter.go has no RunOptions/CompareOptions/QuorumOptions remaining (B22d AC items 2, 3 satisfied for compare_adapter).\n\nIn-scope:\n- cli/internal/agent/compare_adapter.go (RunFunc, runCompareArmWith, defaultResolvePromptForCompare, RunCompareWith/RunQuorumWith/RunBenchmarkWith, BenchmarkArmsToCompare)\n- cli/internal/agent/prompt_ingress_oversize_test.go\n- cli/internal/agent/models_test.go\n- cli/internal/agent/claude_stream_test.go\n\nOut-of-scope:\n- service_run.go public API deletions (step h)",
+    "acceptance": "field RunOptions removed from cli/internal/agent/compare_adapter.go. field CompareOptions removed from cli/internal/agent/compare_adapter.go. field QuorumOptions removed from cli/internal/agent/compare_adapter.go. cd cli \u0026\u0026 go build ./... passes. cd cli \u0026\u0026 go test ./internal/agent/... passes.",
+    "parent": "ddx-0f3ae192",
+    "labels": [
+      "ddx",
+      "kind:implementation",
+      "area:agent",
+      "sd-024",
+      "stage:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-27T00:08:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "776906",
+      "execute-loop-heartbeat-at": "2026-04-27T00:08:19.692047669Z",
+      "spec-id": "SD-024"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-024",
+      "path": "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md",
+      "title": "Solution Design: Config-Driven Runtime Options"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260427T000819-3d343cfa",
+    "prompt": ".ddx/executions/20260427T000819-3d343cfa/prompt.md",
+    "manifest": ".ddx/executions/20260427T000819-3d343cfa/manifest.json",
+    "result": ".ddx/executions/20260427T000819-3d343cfa/result.json",
+    "checks": ".ddx/executions/20260427T000819-3d343cfa/checks.json",
+    "usage": ".ddx/executions/20260427T000819-3d343cfa/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ce7a796e-20260427T000819-3d343cfa"
+  }
+}
