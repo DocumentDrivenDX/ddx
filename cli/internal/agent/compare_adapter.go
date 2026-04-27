@@ -710,6 +710,29 @@ func RunBenchmarkViaService(ctx context.Context, workDir string, suite *Benchmar
 	}, suite)
 }
 
+// RunBenchmarkWithConfigViaService is the SD-024 successor to
+// RunBenchmarkViaService. It accepts a sealed ResolvedConfig (durable
+// knobs) and routes each per-prompt comparison through
+// RunCompareWithConfigViaService.
+func RunBenchmarkWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, suite *BenchmarkSuite) (*BenchmarkResult, error) {
+	return RunBenchmarkWith(func(opts CompareOptions) (*ComparisonRecord, error) {
+		runtime := CompareRuntime{
+			AgentRunRuntime: AgentRunRuntime{
+				Prompt:     opts.Prompt,
+				PromptFile: opts.PromptFile,
+				WorkDir:    opts.WorkDir,
+			},
+			Harnesses:   opts.Harnesses,
+			ArmModels:   opts.ArmModels,
+			ArmLabels:   opts.ArmLabels,
+			Sandbox:     opts.Sandbox,
+			KeepSandbox: opts.KeepSandbox,
+			PostRun:     opts.PostRun,
+		}
+		return RunCompareWithConfigViaService(ctx, workDir, rcfg, runtime)
+	}, suite)
+}
+
 // RunBenchmarkWithAgent calls RunBenchmarkViaService using a pre-built DdxAgent.
 func RunBenchmarkWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir string, suite *BenchmarkSuite) (*BenchmarkResult, error) {
 	return RunBenchmarkWith(func(opts CompareOptions) (*ComparisonRecord, error) {

@@ -1240,7 +1240,8 @@ Examples:
 				return fmt.Errorf("loading benchmark suite: %w", err)
 			}
 
-			result, err := agent.RunBenchmarkViaService(cmd.Context(), f.WorkingDir, suite)
+			rcfg, _ := config.LoadAndResolve(f.WorkingDir, config.CLIOverrides{})
+			result, err := agent.RunBenchmarkWithConfigViaService(cmd.Context(), f.WorkingDir, rcfg, suite)
 			if err != nil {
 				return fmt.Errorf("running benchmark: %w", err)
 			}
