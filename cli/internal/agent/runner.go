@@ -83,7 +83,7 @@ func NewRunner(cfg Config) *Runner {
 }
 
 // Run invokes a single agent harness and returns the result.
-func (r *Runner) Run(opts RunOptions) (*Result, error) {
+func (r *Runner) Run(opts RunArgs) (*Result, error) {
 	harness, harnessName, err := r.resolveHarness(opts)
 	if err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 	// evidence:allow-unbounded reason="prompt is the bounded output of r.resolvePrompt → readPromptFileBounded (FEAT-022 §3)"
 	resolvedOpts.Prompt = prompt
 	resolvedOpts.Permissions = resolvePermissions(r.Config.Permissions, opts.Permissions)
-	args := BuildArgs(harness, buildArgsInputFromRunOptions(resolvedOpts), model)
+	args := BuildArgs(harness, buildArgsInputFromRunArgs(resolvedOpts), model)
 	stdin := ""
 	if harness.PromptMode == "stdin" {
 		stdin = prompt
@@ -234,9 +234,9 @@ func (r *Runner) Run(opts RunOptions) (*Result, error) {
 
 // RunWithConfig is the SD-024 successor to Run. It accepts a sealed
 // ResolvedConfig (durable knobs) and an AgentRunRuntime (plumbing +
-// per-invocation intent), assembles an equivalent RunOptions, and
+// per-invocation intent), assembles an equivalent RunArgs, and
 // delegates to Run. Behavior is identical to Run with an
-// equivalently-populated RunOptions.
+// equivalently-populated RunArgs.
 //
 // Stage 2 of SD-024: this method exists alongside Run; production
 // callers have not migrated yet.
@@ -245,7 +245,7 @@ func (r *Runner) RunWithConfig(ctx context.Context, rcfg config.ResolvedConfig, 
 	if sessionLogDir == "" {
 		sessionLogDir = rcfg.SessionLogDir()
 	}
-	opts := RunOptions{
+	opts := RunArgs{
 		Context:       ctx,
 		Harness:       rcfg.Harness(),
 		Prompt:        runtime.Prompt,
@@ -278,7 +278,7 @@ func (r *Runner) ValidateForExecuteLoop(harnessName, model, provider, modelRef s
 		return nil // no explicit harness; routing will pick at claim time
 	}
 
-	h, name, err := r.resolveHarness(RunOptions{Harness: harnessName})
+	h, name, err := r.resolveHarness(RunArgs{Harness: harnessName})
 	if err != nil {
 		return err
 	}
@@ -297,7 +297,7 @@ func (r *Runner) ValidateForExecuteLoop(harnessName, model, provider, modelRef s
 
 // Capabilities reports the model and reasoning options for a harness.
 func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
-	harness, harnessName, err := r.resolveHarness(RunOptions{Harness: name})
+	harness, harnessName, err := r.resolveHarness(RunArgs{Harness: name})
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +318,7 @@ func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 		caps.Path = path
 	}
 
-	model := r.resolveModel(RunOptions{}, harnessName)
+	model := r.resolveModel(RunArgs{}, harnessName)
 	if model == "" {
 		model = harness.DefaultModel
 	}
@@ -342,7 +342,7 @@ func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
 }
 
 // resolveHarness looks up the harness by name and checks availability.
-func (r *Runner) resolveHarness(opts RunOptions) (harnessConfig, string, error) {
+func (r *Runner) resolveHarness(opts RunArgs) (harnessConfig, string, error) {
 	name := opts.Harness
 	if name == "" {
 		// --provider names a harness directly (e.g. "agent", "local") →
@@ -372,7 +372,7 @@ func (r *Runner) resolveHarness(opts RunOptions) (harnessConfig, string, error) 
 }
 
 // resolvePrompt reads the prompt from text or file.
-func (r *Runner) resolvePrompt(opts RunOptions) (string, error) {
+func (r *Runner) resolvePrompt(opts RunArgs) (string, error) {
 	prompt := opts.Prompt
 	if opts.PromptFile != "" {
 		data, err := readPromptFileBounded(opts.PromptFile)
@@ -388,7 +388,7 @@ func (r *Runner) resolvePrompt(opts RunOptions) (string, error) {
 }
 
 // resolveModel picks the model from opts, per-harness config, or global config.
-func (r *Runner) resolveModel(opts RunOptions, harnessName string) string {
+func (r *Runner) resolveModel(opts RunArgs, harnessName string) string {
 	if opts.Model != "" {
 		return opts.Model
 	}
@@ -414,7 +414,7 @@ func (r *Runner) resolveReasoningLevels(harnessName string, harness harnessConfi
 }
 
 // resolveTimeout picks the idle (inactivity) timeout from opts or config.
-func (r *Runner) resolveTimeout(opts RunOptions) time.Duration {
+func (r *Runner) resolveTimeout(opts RunArgs) time.Duration {
 	if opts.Timeout > 0 {
 		return opts.Timeout
 	}
@@ -424,7 +424,7 @@ func (r *Runner) resolveTimeout(opts RunOptions) time.Duration {
 // resolveWallClock picks the absolute wall-clock cap from opts or config.
 // This bound fires regardless of stream/event activity so a provider that
 // emits heartbeats cannot pin the worker past the configured duration.
-func (r *Runner) resolveWallClock(opts RunOptions) time.Duration {
+func (r *Runner) resolveWallClock(opts RunArgs) time.Duration {
 	if opts.WallClock > 0 {
 		return opts.WallClock
 	}
@@ -444,8 +444,8 @@ func resolvePermissions(cfgPerms, optsPerms string) string {
 
 // buildArgsInput is the narrow input contract for BuildArgs: only the
 // per-invocation knobs that affect the argv assembled for a harness binary.
-// Internal to the agent package; callers convert from RunOptions at the call
-// site so BuildArgs no longer depends on the full RunOptions surface.
+// Internal to the agent package; callers convert from RunArgs at the call
+// site so BuildArgs no longer depends on the full RunArgs surface.
 type buildArgsInput struct {
 	Prompt      string
 	WorkDir     string
@@ -453,7 +453,7 @@ type buildArgsInput struct {
 	Effort      string
 }
 
-func buildArgsInputFromRunOptions(opts RunOptions) buildArgsInput {
+func buildArgsInputFromRunArgs(opts RunArgs) buildArgsInput {
 	return buildArgsInput{
 		Prompt:      opts.Prompt,
 		WorkDir:     opts.WorkDir,
@@ -993,7 +993,7 @@ func (r *Runner) TestProviderConnectivity(harnessName string, timeout time.Durat
 
 	// Send a lightweight probe request to test connectivity
 	probePrompt := "echo ok"
-	opts := RunOptions{
+	opts := RunArgs{
 		Harness: harnessName,
 		Prompt:  probePrompt,
 		Timeout: timeout,

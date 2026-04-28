@@ -135,8 +135,8 @@ func AppendSessionIndex(logDir string, entry SessionIndexEntry, now time.Time) e
 	return err
 }
 
-// SessionIndexInputs carries the small subset of RunOptions fields that
-// SessionIndexEntryFromResult needs, decoupling it from the full RunOptions
+// SessionIndexInputs carries the small subset of RunArgs fields that
+// SessionIndexEntryFromResult needs, decoupling it from the full RunArgs
 // surface.
 type SessionIndexInputs struct {
 	Harness     string

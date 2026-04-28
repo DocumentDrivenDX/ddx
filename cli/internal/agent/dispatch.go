@@ -34,7 +34,7 @@ import (
 // a single invocation without re-resolving the full ResolvedConfig.
 func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agentlib.DdxAgent, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
 	if runner != nil {
-		return runner.Run(buildRunOptionsFromConfig(ctx, rcfg, runtime))
+		return runner.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}
 	if svc == nil {
 		built, err := NewServiceFromWorkDir(projectRoot)
@@ -46,11 +46,11 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 	return executeOnService(ctx, svc, projectRoot, rcfg, runtime)
 }
 
-// buildRunOptionsFromConfig assembles a RunOptions value for the test
+// buildRunArgsFromConfig assembles a RunArgs value for the test
 // injection runner path. It applies AgentRunRuntime overrides so a caller
 // (execute-bead worker, post-merge reviewer) can pin one durable knob for
 // a single invocation without re-resolving the full ResolvedConfig.
-func buildRunOptionsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime AgentRunRuntime) RunOptions {
+func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime AgentRunRuntime) RunArgs {
 	harness := runtime.HarnessOverride
 	if harness == "" {
 		harness = rcfg.Harness()
@@ -68,7 +68,7 @@ func buildRunOptionsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, 
 		sessionLogDir = rcfg.SessionLogDir()
 	}
 
-	var opts RunOptions
+	var opts RunArgs
 	opts.Context = ctx
 	opts.Harness = harness
 	// evidence:allow-unbounded reason="caller is responsible for bounding the prompt before invoking dispatchViaResolvedConfig; downstream executeOnService hits readPromptFileBounded for PromptFile inputs"

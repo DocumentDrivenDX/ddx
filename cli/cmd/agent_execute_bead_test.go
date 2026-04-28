@@ -173,15 +173,15 @@ func (f *fakeExecuteBeadGit) DeleteRef(dir, ref string) error {
 type fakeAgentRunner struct {
 	result *agent.Result
 	err    error
-	last   agent.RunOptions
+	last   agent.RunArgs
 	// sideEffect, when set, runs while the runner has the opts in hand. It
 	// is used to simulate runtime state the embedded agent harness would
 	// otherwise write (session logs, telemetry, etc.) so tests can assert
 	// where those files land.
-	sideEffect func(opts agent.RunOptions) error
+	sideEffect func(opts agent.RunArgs) error
 }
 
-func (r *fakeAgentRunner) Run(opts agent.RunOptions) (*agent.Result, error) {
+func (r *fakeAgentRunner) Run(opts agent.RunArgs) (*agent.Result, error) {
 	r.last = opts
 	if r.sideEffect != nil {
 		if err := r.sideEffect(opts); err != nil {
@@ -1049,6 +1049,7 @@ ddx:
 	require.NotEmpty(t, res.PromptFile)
 	promptPath := filepath.Join(workDir, filepath.FromSlash(res.PromptFile))
 	require.FileExists(t, promptPath)
+	// evidence:allow-unbounded reason="test reads its own synthesized fixture prompt"
 	promptRaw, err := os.ReadFile(promptPath)
 	require.NoError(t, err)
 	promptText := string(promptRaw)
@@ -1146,6 +1147,7 @@ func TestExecuteBeadResolvesPathStyleSpecID(t *testing.T) {
 	require.NotEmpty(t, res.PromptFile)
 	promptPath := filepath.Join(workDir, filepath.FromSlash(res.PromptFile))
 	require.FileExists(t, promptPath)
+	// evidence:allow-unbounded reason="test reads its own synthesized fixture prompt"
 	promptRaw, err := os.ReadFile(promptPath)
 	require.NoError(t, err)
 	promptText := string(promptRaw)
@@ -2223,17 +2225,17 @@ func TestExecuteBeadEvidenceFields(t *testing.T) {
 }
 
 // modelPassthroughCapture is a passthrough wrapper around an agent.AgentRunner
-// that records the most recent RunOptions before forwarding to the underlying
+// that records the most recent RunArgs before forwarding to the underlying
 // runner. It instruments TestExecuteBeadModelFlagPassthrough so the test can
 // assert what ExecuteBead handed the runner without itself faking the runner —
 // every Run call is forwarded to the real script harness so production routing
 // semantics still execute end-to-end.
 type modelPassthroughCapture struct {
 	inner agent.AgentRunner
-	last  agent.RunOptions
+	last  agent.RunArgs
 }
 
-func (c *modelPassthroughCapture) Run(opts agent.RunOptions) (*agent.Result, error) {
+func (c *modelPassthroughCapture) Run(opts agent.RunArgs) (*agent.Result, error) {
 	c.last = opts
 	return c.inner.Run(opts)
 }
@@ -2916,6 +2918,7 @@ ddx:
 
 	require.NotEmpty(t, res.PromptFile)
 	promptPath := filepath.Join(workDir, filepath.FromSlash(res.PromptFile))
+	// evidence:allow-unbounded reason="test reads its own synthesized fixture prompt"
 	promptRaw, err := os.ReadFile(promptPath)
 	require.NoError(t, err)
 	promptText := string(promptRaw)

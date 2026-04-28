@@ -10,7 +10,7 @@ package agent
 //
 // To disable the new path as an emergency escape hatch, set the env var
 // DDX_USE_NEW_AGENT_PATH=0 (or "false"). Default is the new service path.
-func RunAgent(r *Runner, opts RunOptions) (*Result, error) {
+func RunAgent(r *Runner, opts RunArgs) (*Result, error) {
 	if useNewAgentPath() {
 		return runAgentViaService(r, opts)
 	}

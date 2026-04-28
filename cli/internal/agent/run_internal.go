@@ -7,17 +7,17 @@ package agent
 //
 // It accepts RunArgs — the new flat adapter type declared in
 // types.go — and routes through the existing Run dispatch. Subsequent
-// B22 beads migrate production callers off RunOptions onto RunArgs;
+// B22 beads migrate production callers off RunArgs onto RunArgs;
 // the B22 final bead removes the legacy types entirely. In this bead
 // runInternal is the only consumer of RunArgs.
 //
 // Implementation note: opts is declared with `var` rather than a
 // composite literal so this file does not introduce a fresh
-// RunOptions{...} reintroduction (per the SD-024 Stage 4 runtimelint
-// rule). The legacy RunOptions value is built field-by-field from the
+// RunArgs{...} reintroduction (per the SD-024 Stage 4 runtimelint
+// rule). The legacy RunArgs value is built field-by-field from the
 // RunArgs adapter and handed to the existing Run pathway.
 func (r *Runner) runInternal(args RunArgs) (*Result, error) {
-	var opts RunOptions
+	var opts RunArgs
 	opts.Context = args.Context
 	opts.Harness = args.Harness
 	// evidence:allow-unbounded reason="args.Prompt is already the bounded output of the upstream caller's prompt resolution (mirrors runner.go resolvedOpts.Prompt assignment, FEAT-022 §3)"

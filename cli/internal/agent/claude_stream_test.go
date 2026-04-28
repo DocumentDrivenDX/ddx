@@ -197,31 +197,31 @@ func TestExtractUsageClaudeStreamJSON(t *testing.T) {
 func TestResolveClaudeProgressLogDir(t *testing.T) {
 	cases := []struct {
 		name string
-		opts RunOptions
+		opts RunArgs
 		cfg  Config
 		want string
 	}{
 		{
 			name: "opts override wins over config",
-			opts: RunOptions{SessionLogDir: "/bundle/embedded"},
+			opts: RunArgs{SessionLogDir: "/bundle/embedded"},
 			cfg:  Config{SessionLogDir: "/runner/default"},
 			want: "/bundle/embedded",
 		},
 		{
 			name: "falls back to config when opts empty",
-			opts: RunOptions{},
+			opts: RunArgs{},
 			cfg:  Config{SessionLogDir: "/runner/default"},
 			want: "/runner/default",
 		},
 		{
 			name: "empty when both unset",
-			opts: RunOptions{},
+			opts: RunArgs{},
 			cfg:  Config{},
 			want: "",
 		},
 		{
 			name: "opts override wins even when config empty",
-			opts: RunOptions{SessionLogDir: "/bundle/embedded"},
+			opts: RunArgs{SessionLogDir: "/bundle/embedded"},
 			cfg:  Config{},
 			want: "/bundle/embedded",
 		},
@@ -288,7 +288,7 @@ func TestRunClaudeStreaming_OptsSessionLogDirOverridesConfig(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: runnerDefaultDir})
 	harness := harnessConfig{Name: "claude", Binary: binPath, PromptMode: "arg"}
-	opts := RunOptions{
+	opts := RunArgs{
 		Harness:       "claude",
 		Prompt:        "hi",
 		SessionLogDir: bundleEmbeddedDir,
@@ -321,7 +321,7 @@ func TestRunClaudeStreaming_FallsBackToConfigLogDir(t *testing.T) {
 
 	r := NewRunner(Config{SessionLogDir: runnerDefaultDir})
 	harness := harnessConfig{Name: "claude", Binary: binPath, PromptMode: "arg"}
-	opts := RunOptions{
+	opts := RunArgs{
 		Harness: "claude",
 		Prompt:  "hi",
 		// SessionLogDir deliberately left empty — must fall back to config.

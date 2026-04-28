@@ -76,7 +76,7 @@ func TestPromptIngressOversize(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
 		r := NewRunner(Config{})
-		var runnerOpts RunOptions
+		var runnerOpts RunArgs
 		runnerOpts.PromptFile = fixture
 		_, err := r.resolvePrompt(runnerOpts)
 		assertOversizeErrorMessage(t, err, fixture)

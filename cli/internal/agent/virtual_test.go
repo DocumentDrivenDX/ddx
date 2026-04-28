@@ -161,7 +161,7 @@ func TestRunVirtualWithInlineResponses(t *testing.T) {
 	]`)
 
 	t.Run("matching prompt returns response", func(t *testing.T) {
-		result, err := runVirtualFn(runner, RunOptions{
+		result, err := runVirtualFn(runner, RunArgs{
 			Harness: "virtual",
 			Prompt:  "say hello please",
 		})
@@ -171,7 +171,7 @@ func TestRunVirtualWithInlineResponses(t *testing.T) {
 	})
 
 	t.Run("failure simulation", func(t *testing.T) {
-		result, err := runVirtualFn(runner, RunOptions{
+		result, err := runVirtualFn(runner, RunArgs{
 			Harness: "virtual",
 			Prompt:  "this should fail",
 		})
@@ -211,7 +211,7 @@ func TestRunVirtual(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 	defer func() { _ = os.Chdir(origWd) }()
 
-	result, err := runVirtualFn(runner, RunOptions{
+	result, err := runVirtualFn(runner, RunArgs{
 		Harness: "virtual",
 		Prompt:  "test prompt",
 	})

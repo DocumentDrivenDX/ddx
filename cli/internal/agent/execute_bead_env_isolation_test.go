@@ -90,7 +90,7 @@ func (s repoSnapshot) diff(other repoSnapshot) []string {
 // worktree (so SynthesizeCommit fires) and exits 0.
 type envIsoRunner struct{}
 
-func (envIsoRunner) Run(opts RunOptions) (*Result, error) {
+func (envIsoRunner) Run(opts RunArgs) (*Result, error) {
 	if opts.WorkDir != "" {
 		path := filepath.Join(opts.WorkDir, "iso_marker.txt")
 		_ = os.WriteFile(path, []byte("iso\n"), 0o644)

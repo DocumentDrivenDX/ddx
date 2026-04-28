@@ -52,7 +52,7 @@ type artifactTestAgentRunner struct {
 	result *Result
 }
 
-func (r *artifactTestAgentRunner) Run(opts RunOptions) (*Result, error) {
+func (r *artifactTestAgentRunner) Run(opts RunArgs) (*Result, error) {
 	if r.result != nil {
 		return r.result, nil
 	}

@@ -50,7 +50,7 @@ func TestRunInternalRequiresPrompt(t *testing.T) {
 // TestRunInternalThreadsModelAndPermissions confirms the adapter
 // carries the durable knobs (Model, Permissions) through to the
 // resolved harness invocation. This is the contract subsequent B22
-// migration beads rely on when swapping a caller from RunOptions to
+// migration beads rely on when swapping a caller from RunArgs to
 // RunArgs.
 func TestRunInternalThreadsModelAndPermissions(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}

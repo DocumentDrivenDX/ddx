@@ -53,7 +53,7 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 }
 
 // TestRunConfigOpts names every durable knob the agent run path reads
-// via ResolvedConfig (per SD-024 §RunOptions → AgentRunRuntime field
+// via ResolvedConfig (per SD-024 §RunArgs → AgentRunRuntime field
 // classification). Tests must specify each field explicitly; there are
 // no zero-value defaults that silently bypass real config.
 //

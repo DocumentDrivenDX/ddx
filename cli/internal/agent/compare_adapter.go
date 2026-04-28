@@ -31,15 +31,13 @@ import (
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
-// CompareRuntime is the SD-024 successor to CompareOptions for the
+// CompareRuntime carries the per-invocation knobs for the
 // `ddx agent run --compare` dispatch path. Durable knobs (Model,
-// Effort, Permissions, Timeout) are stripped — they live on
-// config.ResolvedConfig and are passed via RunCompareWithConfigViaService's
-// rcfg argument. Only non-serializable plumbing and per-invocation
-// runtime intent remain.
+// Effort, Permissions, Timeout) live on config.ResolvedConfig and are
+// passed via RunCompareWithConfigViaService's rcfg argument; only
+// non-serializable plumbing and per-invocation runtime intent remain.
 //
-// See SD-024 / TD-024 §Runtime structs and §Stage 2 CompareOptions
-// migration.
+// See SD-024 / TD-024 §Runtime structs.
 type CompareRuntime struct {
 	AgentRunRuntime
 	Harnesses   []string
@@ -355,15 +353,13 @@ func genCompareID() string {
 	return "cmp-" + hex.EncodeToString(b)
 }
 
-// QuorumRuntime is the SD-024 successor to QuorumOptions for the
+// QuorumRuntime carries the per-invocation knobs for the
 // `ddx agent run --quorum` dispatch path. Durable knobs (Model,
-// Effort, Permissions, Timeout) are stripped — they live on
-// config.ResolvedConfig and are passed via RunQuorumWithConfigViaService's
-// rcfg argument. Only non-serializable plumbing and per-invocation
-// runtime intent remain.
+// Effort, Permissions, Timeout) live on config.ResolvedConfig and are
+// passed via RunQuorumWithConfigViaService's rcfg argument; only
+// non-serializable plumbing and per-invocation runtime intent remain.
 //
-// See SD-024 / TD-024 §Runtime structs and §Stage 2 QuorumOptions
-// migration.
+// See SD-024 / TD-024 §Runtime structs.
 type QuorumRuntime struct {
 	AgentRunRuntime
 	Harnesses []string

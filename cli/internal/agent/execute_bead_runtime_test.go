@@ -9,14 +9,14 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
-// capturingAgentRunner records the RunOptions passed to Run so the
+// capturingAgentRunner records the RunArgs passed to Run so the
 // delegation test can assert each durable knob landed on the agent
 // invocation.
 type capturingAgentRunner struct {
-	lastOpts RunOptions
+	lastOpts RunArgs
 }
 
-func (r *capturingAgentRunner) Run(opts RunOptions) (*Result, error) {
+func (r *capturingAgentRunner) Run(opts RunArgs) (*Result, error) {
 	r.lastOpts = opts
 	return &Result{ExitCode: 0}, nil
 }

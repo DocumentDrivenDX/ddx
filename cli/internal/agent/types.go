@@ -32,8 +32,8 @@ type RouteFlags struct {
 	Permissions string // --permissions: safe, supervised, unrestricted
 }
 
-// RunOptions holds options for a single agent invocation.
-type RunOptions struct {
+// RunArgs holds options for a single agent invocation.
+type RunArgs struct {
 	// Context is the caller's context. When non-nil, the Runner derives its
 	// internal cancel context from this so upstream cancellation (e.g.
 	// server.WorkerManager.Stop) propagates into the provider HTTP call.
@@ -55,36 +55,7 @@ type RunOptions struct {
 	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
 }
 
-// RunArgs is the SD-024 Stage 2 adapter type that production callers
-// migrate to in subsequent B22 beads. It collapses the durable knobs
-// (currently sourced from config.ResolvedConfig in RunWithConfig) and
-// the per-invocation plumbing (currently in AgentRunRuntime) into a
-// single flat struct, mirroring RunOptions, so callers don't need to
-// assemble a ResolvedConfig just to dispatch a single agent run.
-//
-// The type is declared here so that B22b/c/d (external-caller
-// migration beads) and the eventual B22 final removal can reference
-// it. In this bead it is not yet wired through Run; runInternal still
-// accepts RunOptions and the public Run signature is preserved.
-type RunArgs struct {
-	Context       context.Context
-	Harness       string
-	Prompt        string
-	PromptFile    string
-	PromptSource  string
-	Correlation   map[string]string
-	Model         string
-	Provider      string
-	ModelRef      string
-	Effort        string
-	Timeout       time.Duration
-	WallClock     time.Duration
-	WorkDir       string
-	Permissions   string
-	SessionLogDir string
-}
-
-// AgentRunRuntime is the SD-024 successor to RunOptions for the agent
+// AgentRunRuntime is the SD-024 successor to RunArgs for the agent
 // run path. Durable knobs (Harness, Model, Provider, ModelRef, Effort,
 // Permissions, Timeout, WallClock, SessionLogDir) are stripped — they
 // live on config.ResolvedConfig and are passed via RunWithConfig's
@@ -112,14 +83,6 @@ type AgentRunRuntime struct {
 	HarnessOverride     string
 	ModelOverride       string
 	PermissionsOverride string
-}
-
-// QuorumOptions extends RunOptions for multi-agent consensus.
-type QuorumOptions struct {
-	RunOptions
-	Harnesses []string // multiple harnesses to invoke
-	Strategy  string   // any, majority, unanimous, or numeric
-	Threshold int      // numeric threshold (when Strategy is "")
 }
 
 // Result holds the output of an agent invocation.
@@ -202,17 +165,6 @@ type HarnessCapabilities struct {
 	ProfileMappings     map[string]string `json:"profile_mappings,omitempty"` // effective profile → model for this harness
 	SupportsEffort      bool              `json:"supports_effort"`            // true if harness has effort/reasoning flag
 	SupportsPermissions bool              `json:"supports_permissions"`       // true if harness has permission-level flags
-}
-
-// CompareOptions configures a comparison dispatch.
-type CompareOptions struct {
-	RunOptions
-	Harnesses   []string       // harnesses to compare (may include duplicates with different models)
-	ArmModels   map[int]string // per-arm model overrides keyed by arm index
-	ArmLabels   map[int]string // per-arm display labels (e.g. "claude-fast")
-	Sandbox     bool           // run each arm in an isolated worktree
-	KeepSandbox bool           // preserve worktrees after comparison
-	PostRun     string         // command to run in each worktree after the agent completes
 }
 
 // ToolCallEntry records one tool execution during an agent run.

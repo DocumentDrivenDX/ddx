@@ -22,7 +22,7 @@ type reviewRunnerStub struct {
 	err    error
 }
 
-func (r *reviewRunnerStub) Run(opts RunOptions) (*Result, error) {
+func (r *reviewRunnerStub) Run(opts RunArgs) (*Result, error) {
 	return r.result, r.err
 }
 

@@ -36,7 +36,7 @@ type CommandFactory struct {
 	// ExecAgentRunnerOverride overrides the agent runner used by execStore.
 	// SD-024 Stage 2: distinct from AgentRunnerOverride because the exec
 	// AgentRunner interface has migrated to (ctx, ResolvedConfig, runtime),
-	// while agent.AgentRunner still uses the legacy RunOptions signature.
+	// while agent.AgentRunner still uses the legacy RunArgs signature.
 	// For testing.
 	ExecAgentRunnerOverride ddxexec.AgentRunner
 

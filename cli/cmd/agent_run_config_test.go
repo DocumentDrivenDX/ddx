@@ -13,7 +13,7 @@ import (
 // --harness flag, the agent.harness value from .ddx/config.yaml drives
 // the run. SD-024 Stage 2 / Bead ddx-c0ff5d3e behavioral test.
 //
-// Before the migration, agent_cmd.go built RunOptions directly from
+// Before the migration, agent_cmd.go built RunArgs directly from
 // flags and the harness defaulted to "" (service-routed) when the user
 // omitted --harness — config's agent.harness was dead. With the
 // migration, LoadAndResolve resolves agent.harness into rcfg.Harness()

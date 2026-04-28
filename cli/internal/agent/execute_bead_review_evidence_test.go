@@ -398,7 +398,7 @@ type countingRunner struct {
 	err    error
 }
 
-func (c *countingRunner) Run(_ RunOptions) (*Result, error) {
+func (c *countingRunner) Run(_ RunArgs) (*Result, error) {
 	c.calls++
 	return c.result, c.err
 }

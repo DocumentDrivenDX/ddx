@@ -69,7 +69,7 @@ func useNewAgentPath() bool {
 //
 // Stall detection: we delegate to the agent's StallPolicy. The agent
 // emits a stall event then a final event with Status="stalled".
-func runAgentViaService(r *Runner, opts RunOptions) (*Result, error) {
+func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 	promptText, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err

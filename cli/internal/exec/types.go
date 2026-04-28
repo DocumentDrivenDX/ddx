@@ -11,7 +11,7 @@ import (
 // AgentRunner is the interface exec needs from agent. SD-024 Stage 2:
 // callers receive a sealed ResolvedConfig (durable knobs) and an
 // AgentRunRuntime (per-invocation plumbing) instead of the legacy
-// RunOptions struct.
+// RunArgs struct.
 type AgentRunner interface {
 	Run(ctx context.Context, rcfg config.ResolvedConfig, runtime agent.AgentRunRuntime) (*agent.Result, error)
 }

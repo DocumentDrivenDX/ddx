@@ -180,7 +180,7 @@ func BuildBurnSummaries(snapshots []QuotaSnapshot) []BurnSummary {
 	return summaries
 }
 
-func (r *Runner) recordRoutingOutcome(result *Result, elapsed time.Duration, opts RunOptions) {
+func (r *Runner) recordRoutingOutcome(result *Result, elapsed time.Duration, opts RunArgs) {
 	if r == nil || result == nil || r.Config.SessionLogDir == "" {
 		return
 	}

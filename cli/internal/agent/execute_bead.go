@@ -139,7 +139,7 @@ type GitOps interface {
 
 // AgentRunner runs an agent with the given options.
 type AgentRunner interface {
-	Run(opts RunOptions) (*Result, error)
+	Run(opts RunArgs) (*Result, error)
 }
 
 // Artifact paths for an execute-bead attempt.

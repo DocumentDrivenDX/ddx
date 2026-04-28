@@ -13,7 +13,7 @@ import (
 // config.LoadAndResolve + QuorumRuntime + RunQuorumWithConfigViaService.
 // SD-024 Stage 2 / bead ddx-21f9e321 behavioral test.
 //
-// Before the migration, agent_cmd.go built QuorumOptions directly from
+// Before the migration, agent_cmd.go built quorum dispatch args directly from
 // flag values; agent.* fields in .ddx/config.yaml were dead at the
 // quorum dispatch site. With the migration, LoadAndResolve resolves
 // the durable knobs (Model, Effort, Permissions, Timeout) into rcfg

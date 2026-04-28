@@ -89,7 +89,7 @@ type gateTestAgentRunner struct {
 	exitCode int
 }
 
-func (r *gateTestAgentRunner) Run(opts RunOptions) (*Result, error) {
+func (r *gateTestAgentRunner) Run(opts RunArgs) (*Result, error) {
 	return &Result{ExitCode: r.exitCode}, nil
 }
 
@@ -308,7 +308,7 @@ type rationaleTestRunner struct {
 	rationale string
 }
 
-func (r *rationaleTestRunner) Run(opts RunOptions) (*Result, error) {
+func (r *rationaleTestRunner) Run(opts RunArgs) (*Result, error) {
 	attemptID := opts.Correlation["attempt_id"]
 	if attemptID == "" {
 		return &Result{ExitCode: 0}, nil

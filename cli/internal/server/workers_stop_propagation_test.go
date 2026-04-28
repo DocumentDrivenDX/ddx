@@ -17,7 +17,7 @@ import (
 // not merely close the poll loop. Pre-fix, runner.Run / RunAgent discarded
 // the caller ctx by using context.WithCancel(context.Background()), so
 // cancelling the worker goroutine left the agent subprocess / HTTP call
-// running until SIGKILL. With ctx threaded into RunOptions.Context, Stop's
+// running until SIGKILL. With ctx threaded into RunArgs.Context, Stop's
 // cancellation propagates into the executor within seconds.
 //
 // The fake executor here blocks on ctx (exactly like a real provider's

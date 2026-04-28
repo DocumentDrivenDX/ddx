@@ -139,7 +139,7 @@ func LookupEntry(dictDir, prompt string, patterns ...config.NormalizePattern) (*
 }
 
 // runVirtualFn replays a recorded response from the dictionary or inline responses.
-func runVirtualFn(r *Runner, opts RunOptions) (*Result, error) {
+func runVirtualFn(r *Runner, opts RunArgs) (*Result, error) {
 	prompt, err := r.resolvePrompt(opts)
 	if err != nil {
 		return nil, err
@@ -177,7 +177,7 @@ func runVirtualFn(r *Runner, opts RunOptions) (*Result, error) {
 }
 
 func buildVirtualResultFn(r *Runner, response string, exitCode int, model string, delayMS int,
-	inputTokens, outputTokens int, costUSD float64, prompt string, opts RunOptions) *Result {
+	inputTokens, outputTokens int, costUSD float64, prompt string, opts RunArgs) *Result {
 
 	if delayMS > 0 {
 		time.Sleep(time.Duration(delayMS) * time.Millisecond)

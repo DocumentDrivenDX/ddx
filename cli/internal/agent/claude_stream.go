@@ -281,7 +281,7 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 // execution bundle's embedded/ dir instead of the runner's default
 // .ddx/agent-logs. Matches the agent_runner.go precedence pattern so the
 // two harnesses behave identically under execute-bead.
-func resolveClaudeProgressLogDir(opts RunOptions, cfg Config) string {
+func resolveClaudeProgressLogDir(opts RunArgs, cfg Config) string {
 	if opts.SessionLogDir != "" {
 		return opts.SessionLogDir
 	}
@@ -301,8 +301,8 @@ func resolveClaudeProgressLogDir(opts RunOptions, cfg Config) string {
 // If the claude CLI rejects the stream-json flags (older build, unsupported
 // option), the caller falls back to the non-streaming path via
 // runClaudeWithFallbackFn.
-func runClaudeStreamingFn(r *Runner, ctx context.Context, harness harnessConfig, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
-	args := BuildArgs(harness, buildArgsInputFromRunOptions(resolvedOpts), model)
+func runClaudeStreamingFn(r *Runner, ctx context.Context, harness harnessConfig, harnessName, model string, resolvedOpts RunArgs, prompt, execDir string, timeout time.Duration) (*Result, error) {
+	args := BuildArgs(harness, buildArgsInputFromRunArgs(resolvedOpts), model)
 
 	start := time.Now()
 	runCtx, cancel := context.WithCancel(ctx)
@@ -474,7 +474,7 @@ func claudeStreamArgsUnsupported(stderr string) bool {
 // CLI rejects the stream-json flags, retries with the legacy buffered
 // --print/-p/--output-format=json invocation so existing non-streaming
 // contracts remain intact.
-func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness harnessConfig, harnessName, model string, resolvedOpts RunOptions, prompt, execDir string, timeout time.Duration) (*Result, error) {
+func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness harnessConfig, harnessName, model string, resolvedOpts RunArgs, prompt, execDir string, timeout time.Duration) (*Result, error) {
 	result, err := runClaudeStreamingFn(r, ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
 	if err != nil {
 		return nil, err
@@ -491,7 +491,7 @@ func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness harnessConf
 	// non-streaming args so the run still completes.
 	legacyHarness := harness
 	legacyHarness.BaseArgs = []string{"--print", "-p", "--output-format", "json"}
-	args := BuildArgs(legacyHarness, buildArgsInputFromRunOptions(resolvedOpts), model)
+	args := BuildArgs(legacyHarness, buildArgsInputFromRunArgs(resolvedOpts), model)
 	stdin := ""
 	if harness.PromptMode == "stdin" {
 		stdin = prompt
@@ -504,7 +504,7 @@ func runClaudeWithFallbackFn(r *Runner, ctx context.Context, harness harnessConf
 
 // finalizeClaudeResult writes the session log entry and records the routing
 // outcome, mirroring the tail end of Runner.Run for the non-streaming path.
-func finalizeClaudeResult(r *Runner, result *Result, opts RunOptions, prompt string, elapsed time.Duration) {
+func finalizeClaudeResult(r *Runner, result *Result, opts RunArgs, prompt string, elapsed time.Duration) {
 	promptSource := opts.PromptSource
 	if promptSource == "" {
 		if opts.PromptFile != "" {
