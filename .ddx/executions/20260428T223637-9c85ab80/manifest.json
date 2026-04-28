@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260428T223637-9c85ab80",
+  "bead_id": "ddx-4b59b816",
+  "base_rev": "c4518bd8b520a204440559044aeecaa799fcf414",
+  "created_at": "2026-04-28T22:36:37.865390114Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4b59b816",
+    "title": "Epic: cost-tiered execution + measurement — maximize closed-bead throughput per dollar",
+    "description": "Standing optimization goal captured 2026-04-15: get the most work done for the least cost, and continuously improve our ability to measure and tune that trade-off.\n\n## Operating principles\n\n1. Cheap models do the work. Local (vidar-coder / qwen3-coder-next / other LM Studio hosts), then budget-tier cloud (claude haiku / gpt-5.4-mini), then standard (claude sonnet / gpt-5.4), then smart (claude opus / gpt-5.4 high-effort). Start cheap; escalate on failure.\n2. Strong models review. Every closed bead gets an opus review against its acceptance. Rejected reviews reopen with specific fixes.\n3. Deterministic fixes are the top rung of the ladder. When LLMs keep failing on a mechanical task, apply the fix manually; capture as input for routing policy.\n4. Measurement feeds optimization. Track per-bead which model attempted, how long, whether it passed review, what failure mode if any.\n\n## Existing bead tie-ins (helix review-loop epic from parallel agent)\n\n- ddx-a317208c exec: post-merge review agent on-by-default in execute-loop\n- ddx-dc231144 exec: tier-based auto-escalation driven by resource discovery\n- ddx-fdf031c9 exec: ddx bead review \u003cid\u003e — template a review prompt\n- ddx-44084b3e exec: ddx bead reopen \u003cid\u003e — atomic review-driven reopen\n- ddx-518b2690 exec: ddx agent run --output text — plain result extraction\n\n## Existing bead tie-ins (mine)\n\n- ddx-bd0691fe Epic: surface ddx-agent routing visibility (providers/models/check/route-status commands — prereq for routing policy)\n- ddx-bfc1aeaf Visibility 8: capture routing decisions in bead evidence (kind:routing) — feeds the measurement database\n\n## New child beads (to be filed under this epic)\n\nThe beads below are scope for this epic. File as children when we are ready to work each one. NOT pre-filed to avoid blocking the current Svelte+GraphQL migration.\n\n1. Per-bead cost aggregation: extend bead evidence schema to record tokens-in/tokens-out/cost-usd per attempt; add ddx bead metrics aggregate command that rolls up per-bead totals.\n2. Ladder success-rate analytics: ddx agent metrics tier-success — query last N closed beads, report success rate at each tier (vidar-coder, claude-sonnet, claude-opus, deterministic-fix).\n3. Prompt-context pre-filter: shrink the prompt for cheap-tier attempts — omit the full plan doc and include only the bead description + acceptance + 2 most relevant files.\n4. Failure-mode taxonomy: document the known failure modes (vidar long-context hang, read-loop stall, ship-unbuilt-code, opus-shape-miss, etc.) as bead evidence kinds so measurement can aggregate by mode.\n5. Review-rejection telemetry: aggregate opus-review outcomes (APPROVE / APPROVE_WITH_EDITS / REJECT) per originating tier so we know where the shape gaps are.\n6. Dashboard page for the metrics (requires Svelte migration Stage 4 to land first).\n\n## Why this is captured as an epic not a memory-only goal\n\nMemory is read; epics are tracked. Future sessions should see this in ddx bead list and be able to file child beads against it as we discover new measurement needs or optimization opportunities. The memory file is the principle; this epic is the backlog.",
+    "acceptance": "The epic stays open indefinitely as a backlog for cost-tiered execution and measurement work. Closes ONLY if DDx pivots away from this optimization goal entirely (unlikely). Progress is measured by: (a) count of child beads closed that concretely improved the ladder, reviewed-rejection rate, or measurement granularity; (b) observable reduction in cost-per-closed-bead over time once the metric exists; (c) observable reduction in opus-review rejection rate as the cheap-tier work improves.",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:optimization",
+      "area:agent",
+      "area:cli",
+      "area:measurement",
+      "goal:throughput-per-dollar",
+      "wave:deferred",
+      "workstream:agent-upgrade"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-28T22:36:37Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "56807",
+      "execute-loop-heartbeat-at": "2026-04-28T22:36:37.191056179Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260428T223637-9c85ab80",
+    "prompt": ".ddx/executions/20260428T223637-9c85ab80/prompt.md",
+    "manifest": ".ddx/executions/20260428T223637-9c85ab80/manifest.json",
+    "result": ".ddx/executions/20260428T223637-9c85ab80/result.json",
+    "checks": ".ddx/executions/20260428T223637-9c85ab80/checks.json",
+    "usage": ".ddx/executions/20260428T223637-9c85ab80/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4b59b816-20260428T223637-9c85ab80"
+  }
+}
