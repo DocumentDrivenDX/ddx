@@ -428,6 +428,18 @@ ci:
       root: "cli/"
       run: 'go run ./tools/lint/evidencelint/cmd/evidencelint ./...'
 
+    # SD-024 Stage 4 runtime-lint: full-tree gate. The pre-commit hook
+    # only checks staged-package diagnostics; this CI gate enforces the
+    # post-cleanup invariant — zero forbidden runtime fields and zero
+    # legacy *Options types anywhere in cli/. Activated now that the
+    # RunOptions/CompareOptions/QuorumOptions/ExecuteBeadOptions
+    # retirement beads have all landed (ddx-ade5ebb3, ddx-a8eaef0a).
+    runtime-lint-all:
+      <<: *go_checks
+      name: "Runtime Lint (SD-024 forbidden runtime fields + legacy options) — full tree"
+      root: "cli/"
+      run: 'go run ./tools/lint/runtimelint/cmd/runtimelint ./...'
+
     # YAML validation
     yaml-validate:
       name: "Validate YAML files"
