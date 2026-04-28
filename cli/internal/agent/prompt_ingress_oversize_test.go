@@ -75,14 +75,16 @@ func TestPromptIngressOversize(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
 		r := NewRunner(Config{})
-		_, err := r.resolvePrompt(RunOptions{PromptFile: fixture})
+		var runnerOpts RunOptions
+		runnerOpts.PromptFile = fixture
+		_, err := r.resolvePrompt(runnerOpts)
 		assertOversizeErrorMessage(t, err, fixture)
 	})
 
 	t.Run("compare_defaultResolvePromptForCompare", func(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
-		_, err := defaultResolvePromptForCompare(RunOptions{PromptFile: fixture})
+		_, err := defaultResolvePromptForCompare(AgentRunRuntime{PromptFile: fixture})
 		assertOversizeErrorMessage(t, err, fixture)
 	})
 
@@ -95,7 +97,7 @@ func TestPromptIngressOversize(t *testing.T) {
 			Prompts: []BenchmarkPrompt{{ID: "p1", Name: "p1", PromptFile: fixture}},
 		}
 		runCompareCalls := 0
-		_, err := RunBenchmarkWith(func(CompareOptions) (*ComparisonRecord, error) {
+		_, err := RunBenchmarkWith(func(CompareRuntime) (*ComparisonRecord, error) {
 			runCompareCalls++
 			return nil, fmt.Errorf("runCompare must not be called when prompt-file read fails")
 		}, suite)
@@ -109,10 +111,10 @@ func TestPromptIngressOversize(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
 		svc := &promptIngressStubAgent{}
-		_, err := RunViaServiceWith(context.Background(), svc, t.TempDir(), RunOptions{
-			Harness:    "agent",
-			PromptFile: fixture,
-		})
+		var svcOpts RunOptions
+		svcOpts.Harness = "agent"
+		svcOpts.PromptFile = fixture
+		_, err := RunViaServiceWith(context.Background(), svc, t.TempDir(), svcOpts)
 		if svc.calls != 0 {
 			t.Errorf("svc.Execute invoked %d times; oversize prompt file must short-circuit before dispatch", svc.calls)
 		}

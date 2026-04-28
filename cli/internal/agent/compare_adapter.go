@@ -27,7 +27,6 @@ import (
 	"sync"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
@@ -51,31 +50,20 @@ type CompareRuntime struct {
 	PostRun     string
 }
 
-// RunCompareWithConfigViaService is the SD-024 successor to
-// RunCompareViaService. It accepts a sealed ResolvedConfig (durable
-// knobs) and a CompareRuntime (plumbing + per-invocation intent),
-// assembles an equivalent CompareOptions, and delegates to
-// RunCompareViaService.
+// RunCompareWithConfigViaService is the production entry point for
+// `ddx agent run --compare`. It assembles a per-arm RunFunc backed by
+// dispatchViaResolvedConfig (which honors AgentRunRuntime overrides for
+// Harness/Model/Permissions) and delegates orchestration to
+// RunCompareWith.
 func RunCompareWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, runtime CompareRuntime) (*ComparisonRecord, error) {
-	var opts CompareOptions
-	opts.RunOptions = RunOptions{
-		Prompt:       runtime.Prompt,
-		PromptFile:   runtime.PromptFile,
-		PromptSource: runtime.PromptSource,
-		Correlation:  runtime.Correlation,
-		Model:        rcfg.Model(),
-		Effort:       rcfg.Effort(),
-		Timeout:      rcfg.Timeout(),
-		WorkDir:      runtime.WorkDir,
-		Permissions:  rcfg.Permissions(),
+	svc, err := NewServiceFromWorkDir(workDir)
+	if err != nil {
+		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
-	opts.Harnesses = runtime.Harnesses
-	opts.ArmModels = runtime.ArmModels
-	opts.ArmLabels = runtime.ArmLabels
-	opts.Sandbox = runtime.Sandbox
-	opts.KeepSandbox = runtime.KeepSandbox
-	opts.PostRun = runtime.PostRun
-	return RunCompareViaService(ctx, workDir, opts)
+	run := func(armRuntime AgentRunRuntime) (*Result, error) {
+		return dispatchViaResolvedConfig(ctx, workDir, svc, nil, rcfg, armRuntime)
+	}
+	return RunCompareWith(run, runtime, defaultResolvePromptForCompare, cleanupCompareWorktrees)
 }
 
 // BenchmarkPrompt is a single test case in a benchmark suite.
@@ -130,21 +118,23 @@ type BenchmarkSummary struct {
 
 // RunFunc executes a single agent invocation and returns the Result. Used by
 // the comparison helpers so the same orchestration logic can be driven by
-// either the legacy Runner or the agent service.
-type RunFunc func(opts RunOptions) (*Result, error)
+// either the legacy Runner or the agent service. Per-arm overrides
+// (HarnessOverride, ModelOverride) on the AgentRunRuntime tell the closure
+// which harness/model to bind for this invocation.
+type RunFunc func(runtime AgentRunRuntime) (*Result, error)
 
 // RunCompareWith dispatches the same prompt to multiple harnesses, executing
 // each arm via run, and returns a ComparisonRecord. Production callers should
-// use RunCompareViaService; tests may pass Runner.Run as the closure.
-func RunCompareWith(run RunFunc, opts CompareOptions, resolvePrompt func(RunOptions) (string, error), cleanupSandbox func(repoDir, compareID string)) (*ComparisonRecord, error) {
-	if len(opts.Harnesses) == 0 {
+// use RunCompareWithConfigViaService; tests may pass an arbitrary RunFunc.
+func RunCompareWith(run RunFunc, runtime CompareRuntime, resolvePrompt func(AgentRunRuntime) (string, error), cleanupSandbox func(repoDir, compareID string)) (*ComparisonRecord, error) {
+	if len(runtime.Harnesses) == 0 {
 		return nil, fmt.Errorf("agent: compare requires at least one harness")
 	}
 	if resolvePrompt == nil {
 		resolvePrompt = defaultResolvePromptForCompare
 	}
 
-	prompt, err := resolvePrompt(opts.RunOptions)
+	prompt, err := resolvePrompt(runtime.AgentRunRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -154,19 +144,19 @@ func RunCompareWith(run RunFunc, opts CompareOptions, resolvePrompt func(RunOpti
 		ID:        id,
 		Timestamp: time.Now().UTC(),
 		Prompt:    prompt,
-		Arms:      make([]ComparisonArm, len(opts.Harnesses)),
+		Arms:      make([]ComparisonArm, len(runtime.Harnesses)),
 	}
 
-	baseDir := opts.WorkDir
+	baseDir := runtime.WorkDir
 	if baseDir == "" {
 		baseDir, _ = os.Getwd()
 	}
 
-	worktrees := make([]string, len(opts.Harnesses))
-	if opts.Sandbox {
-		for i, harness := range opts.Harnesses {
+	worktrees := make([]string, len(runtime.Harnesses))
+	if runtime.Sandbox {
+		for i, harness := range runtime.Harnesses {
 			label := harness
-			if l, ok := opts.ArmLabels[i]; ok {
+			if l, ok := runtime.ArmLabels[i]; ok {
 				label = l
 			}
 			wt, err := createCompareWorktree(baseDir, id, label)
@@ -183,19 +173,19 @@ func RunCompareWith(run RunFunc, opts CompareOptions, resolvePrompt func(RunOpti
 	}
 
 	var wg sync.WaitGroup
-	for i, harness := range opts.Harnesses {
-		if opts.Sandbox && worktrees[i] == "" && record.Arms[i].Error != "" {
+	for i, harness := range runtime.Harnesses {
+		if runtime.Sandbox && worktrees[i] == "" && record.Arms[i].Error != "" {
 			continue
 		}
 		wg.Add(1)
 		go func(idx int, harnessName string) {
 			defer wg.Done()
-			record.Arms[idx] = runCompareArmWith(run, opts, idx, harnessName, baseDir, prompt, worktrees[idx])
+			record.Arms[idx] = runCompareArmWith(run, runtime, idx, harnessName, baseDir, prompt, worktrees[idx])
 		}(i, harness)
 	}
 	wg.Wait()
 
-	if opts.Sandbox && !opts.KeepSandbox {
+	if runtime.Sandbox && !runtime.KeepSandbox {
 		if cleanupSandbox != nil {
 			cleanupSandbox(baseDir, id)
 		} else {
@@ -206,30 +196,11 @@ func RunCompareWith(run RunFunc, opts CompareOptions, resolvePrompt func(RunOpti
 	return record, nil
 }
 
-// RunCompareViaService is the production replacement for Runner.RunCompare.
-// It resolves prompts from inline text or PromptFile and drives each arm
-// through the agent service (RunViaService).
-func RunCompareViaService(ctx context.Context, workDir string, opts CompareOptions) (*ComparisonRecord, error) {
-	run := func(runOpts RunOptions) (*Result, error) {
-		return RunViaService(ctx, workDir, runOpts)
-	}
-	return RunCompareWith(run, opts, defaultResolvePromptForCompare, cleanupCompareWorktrees)
-}
-
-// RunCompareWithAgent calls RunCompareViaService using a pre-built DdxAgent.
-// Suitable for callers that want to reuse a service instance.
-func RunCompareWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir string, opts CompareOptions) (*ComparisonRecord, error) {
-	run := func(runOpts RunOptions) (*Result, error) {
-		return RunViaServiceWith(ctx, agent, workDir, runOpts)
-	}
-	return RunCompareWith(run, opts, defaultResolvePromptForCompare, cleanupCompareWorktrees)
-}
-
 // defaultResolvePromptForCompare reads inline Prompt or PromptFile.
-func defaultResolvePromptForCompare(opts RunOptions) (string, error) {
-	prompt := opts.Prompt
-	if opts.PromptFile != "" {
-		data, err := readPromptFileBounded(opts.PromptFile)
+func defaultResolvePromptForCompare(runtime AgentRunRuntime) (string, error) {
+	prompt := runtime.Prompt
+	if runtime.PromptFile != "" {
+		data, err := readPromptFileBounded(runtime.PromptFile)
 		if err != nil {
 			return "", fmt.Errorf("agent: read prompt file: %w", err)
 		}
@@ -241,9 +212,9 @@ func defaultResolvePromptForCompare(opts RunOptions) (string, error) {
 	return prompt, nil
 }
 
-func runCompareArmWith(run RunFunc, opts CompareOptions, armIdx int, harnessName, baseDir, prompt, worktreePath string) ComparisonArm {
+func runCompareArmWith(run RunFunc, runtime CompareRuntime, armIdx int, harnessName, baseDir, prompt, worktreePath string) ComparisonArm {
 	label := harnessName
-	if l, ok := opts.ArmLabels[armIdx]; ok {
+	if l, ok := runtime.ArmLabels[armIdx]; ok {
 		label = l
 	}
 	arm := ComparisonArm{Harness: label}
@@ -253,23 +224,18 @@ func runCompareArmWith(run RunFunc, opts CompareOptions, armIdx int, harnessName
 		workDir = worktreePath
 	}
 
-	model := opts.Model
-	if m, ok := opts.ArmModels[armIdx]; ok {
-		model = m
+	armRuntime := AgentRunRuntime{
+		Prompt:          prompt,
+		PromptSource:    runtime.PromptSource,
+		Correlation:     runtime.Correlation,
+		WorkDir:         workDir,
+		HarnessOverride: harnessName,
+	}
+	if m, ok := runtime.ArmModels[armIdx]; ok {
+		armRuntime.ModelOverride = m
 	}
 
-	runOpts := RunOptions{
-		Harness:     harnessName,
-		Prompt:      prompt,
-		Model:       model,
-		Effort:      opts.Effort,
-		Timeout:     opts.Timeout,
-		WorkDir:     workDir,
-		Permissions: opts.Permissions,
-		Correlation: opts.Correlation,
-	}
-
-	result, err := run(runOpts)
+	result, err := run(armRuntime)
 	if err != nil {
 		arm.ExitCode = 1
 		arm.Error = err.Error()
@@ -290,8 +256,8 @@ func runCompareArmWith(run RunFunc, opts CompareOptions, armIdx int, harnessName
 		arm.Diff = captureGitDiff(worktreePath)
 	}
 
-	if opts.PostRun != "" && workDir != "" {
-		out, ok := runPostCommand(workDir, opts.PostRun)
+	if runtime.PostRun != "" && workDir != "" {
+		out, ok := runPostCommand(workDir, runtime.PostRun)
 		arm.PostRunOut = out
 		arm.PostRunOK = &ok
 	}
@@ -405,63 +371,55 @@ type QuorumRuntime struct {
 	Threshold int
 }
 
-// RunQuorumWithConfig is the SD-024 successor to RunQuorumWith. It
-// accepts a sealed ResolvedConfig (durable knobs) and a QuorumRuntime
-// (plumbing + per-invocation intent), assembles an equivalent
-// QuorumOptions, and delegates to RunQuorumWith.
+// RunQuorumWithConfig threads a sealed ResolvedConfig + QuorumRuntime
+// through RunQuorumWith. The rcfg arg is no longer applied at this layer
+// — the per-arm RunFunc closure is expected to bind rcfg directly — and
+// is retained on the signature so legacy test callers compile.
 func RunQuorumWithConfig(run RunFunc, rcfg config.ResolvedConfig, runtime QuorumRuntime) ([]*Result, error) {
-	var opts QuorumOptions
-	opts.RunOptions = RunOptions{
-		Prompt:       runtime.Prompt,
-		PromptFile:   runtime.PromptFile,
-		PromptSource: runtime.PromptSource,
-		Correlation:  runtime.Correlation,
-		Model:        rcfg.Model(),
-		Effort:       rcfg.Effort(),
-		Timeout:      rcfg.Timeout(),
-		WorkDir:      runtime.WorkDir,
-		Permissions:  rcfg.Permissions(),
-	}
-	opts.Harnesses = runtime.Harnesses
-	opts.Strategy = runtime.Strategy
-	opts.Threshold = runtime.Threshold
-	return RunQuorumWith(run, opts)
+	_ = rcfg
+	return RunQuorumWith(run, runtime)
 }
 
-// RunQuorumWithConfigViaService is the SD-024 successor to
-// RunQuorumViaService.
+// RunQuorumWithConfigViaService is the production entry point for
+// `ddx agent run --quorum`. It assembles a per-arm RunFunc backed by
+// dispatchViaResolvedConfig (which honors AgentRunRuntime overrides for
+// Harness/Model/Permissions) and delegates orchestration to
+// RunQuorumWith.
 func RunQuorumWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, runtime QuorumRuntime) ([]*Result, error) {
-	run := func(runOpts RunOptions) (*Result, error) {
-		return RunViaService(ctx, workDir, runOpts)
+	svc, err := NewServiceFromWorkDir(workDir)
+	if err != nil {
+		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
-	return RunQuorumWithConfig(run, rcfg, runtime)
+	run := func(armRuntime AgentRunRuntime) (*Result, error) {
+		return dispatchViaResolvedConfig(ctx, workDir, svc, nil, rcfg, armRuntime)
+	}
+	return RunQuorumWith(run, runtime)
 }
 
 // RunQuorumWith invokes multiple harnesses concurrently and returns each
-// result. Production callers should use RunQuorumViaService; tests may pass
-// Runner.Run.
-func RunQuorumWith(run RunFunc, opts QuorumOptions) ([]*Result, error) {
-	if len(opts.Harnesses) == 0 {
+// result. Production callers should use RunQuorumWithConfigViaService.
+func RunQuorumWith(run RunFunc, runtime QuorumRuntime) ([]*Result, error) {
+	if len(runtime.Harnesses) == 0 {
 		return nil, fmt.Errorf("agent: quorum requires at least one harness")
 	}
 
-	threshold := effectiveThreshold(opts.Strategy, opts.Threshold, len(opts.Harnesses))
-	if threshold < 1 || threshold > len(opts.Harnesses) {
-		return nil, fmt.Errorf("agent: invalid quorum threshold %d for %d harnesses", threshold, len(opts.Harnesses))
+	threshold := effectiveThreshold(runtime.Strategy, runtime.Threshold, len(runtime.Harnesses))
+	if threshold < 1 || threshold > len(runtime.Harnesses) {
+		return nil, fmt.Errorf("agent: invalid quorum threshold %d for %d harnesses", threshold, len(runtime.Harnesses))
 	}
 
-	results := make([]*Result, len(opts.Harnesses))
+	results := make([]*Result, len(runtime.Harnesses))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
 
-	for i, name := range opts.Harnesses {
+	for i, name := range runtime.Harnesses {
 		wg.Add(1)
 		go func(idx int, harness string) {
 			defer wg.Done()
-			runOpts := opts.RunOptions
-			runOpts.Harness = harness
-			result, err := run(runOpts)
+			armRuntime := runtime.AgentRunRuntime
+			armRuntime.HarnessOverride = harness
+			result, err := run(armRuntime)
 			mu.Lock()
 			if err != nil && firstErr == nil {
 				firstErr = err
@@ -473,22 +431,6 @@ func RunQuorumWith(run RunFunc, opts QuorumOptions) ([]*Result, error) {
 	wg.Wait()
 
 	return results, firstErr
-}
-
-// RunQuorumViaService is the production replacement for Runner.RunQuorum.
-func RunQuorumViaService(ctx context.Context, workDir string, opts QuorumOptions) ([]*Result, error) {
-	run := func(runOpts RunOptions) (*Result, error) {
-		return RunViaService(ctx, workDir, runOpts)
-	}
-	return RunQuorumWith(run, opts)
-}
-
-// RunQuorumWithAgent calls RunQuorumViaService using a pre-built DdxAgent.
-func RunQuorumWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir string, opts QuorumOptions) ([]*Result, error) {
-	run := func(runOpts RunOptions) (*Result, error) {
-		return RunViaServiceWith(ctx, agent, workDir, runOpts)
-	}
-	return RunQuorumWith(run, opts)
 }
 
 // QuorumMet returns true if enough results succeeded.
@@ -654,8 +596,9 @@ func LoadBenchmarkSuite(path string) (*BenchmarkSuite, error) {
 }
 
 // RunBenchmarkWith executes all prompts in a suite against all arms via the
-// runCompare closure. Production callers should use RunBenchmarkViaService.
-func RunBenchmarkWith(runCompare func(CompareOptions) (*ComparisonRecord, error), suite *BenchmarkSuite) (*BenchmarkResult, error) {
+// runCompare closure. Production callers should use
+// RunBenchmarkWithConfigViaService.
+func RunBenchmarkWith(runCompare func(CompareRuntime) (*ComparisonRecord, error), suite *BenchmarkSuite) (*BenchmarkResult, error) {
 	result := &BenchmarkResult{
 		Suite:     suite.Name,
 		Version:   suite.Version,
@@ -663,11 +606,8 @@ func RunBenchmarkWith(runCompare func(CompareOptions) (*ComparisonRecord, error)
 		Arms:      suite.Arms,
 	}
 
-	var timeout time.Duration
 	if suite.Timeout != "" {
-		var err error
-		timeout, err = time.ParseDuration(suite.Timeout)
-		if err != nil {
+		if _, err := time.ParseDuration(suite.Timeout); err != nil {
 			return nil, fmt.Errorf("invalid timeout %q: %w", suite.Timeout, err)
 		}
 	}
@@ -682,16 +622,11 @@ func RunBenchmarkWith(runCompare func(CompareOptions) (*ComparisonRecord, error)
 			promptText = string(data)
 		}
 
-		baseOpts := RunOptions{
-			Prompt:  promptText,
-			Timeout: timeout,
-		}
+		runtime := BenchmarkArmsToCompare(suite.Arms, AgentRunRuntime{Prompt: promptText})
+		runtime.Sandbox = suite.Sandbox
+		runtime.PostRun = suite.PostRun
 
-		compareOpts := BenchmarkArmsToCompare(suite.Arms, baseOpts)
-		compareOpts.Sandbox = suite.Sandbox
-		compareOpts.PostRun = suite.PostRun
-
-		record, err := runCompare(compareOpts)
+		record, err := runCompare(runtime)
 		if err != nil {
 			return nil, fmt.Errorf("prompt %s: %w", prompt.ID, err)
 		}
@@ -703,40 +638,12 @@ func RunBenchmarkWith(runCompare func(CompareOptions) (*ComparisonRecord, error)
 	return result, nil
 }
 
-// RunBenchmarkViaService is the production replacement for Runner.RunBenchmark.
-func RunBenchmarkViaService(ctx context.Context, workDir string, suite *BenchmarkSuite) (*BenchmarkResult, error) {
-	return RunBenchmarkWith(func(opts CompareOptions) (*ComparisonRecord, error) {
-		return RunCompareViaService(ctx, workDir, opts)
-	}, suite)
-}
-
-// RunBenchmarkWithConfigViaService is the SD-024 successor to
-// RunBenchmarkViaService. It accepts a sealed ResolvedConfig (durable
-// knobs) and routes each per-prompt comparison through
-// RunCompareWithConfigViaService.
+// RunBenchmarkWithConfigViaService is the production entry point for
+// benchmarks. It threads a sealed ResolvedConfig through each per-prompt
+// comparison via RunCompareWithConfigViaService.
 func RunBenchmarkWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, suite *BenchmarkSuite) (*BenchmarkResult, error) {
-	return RunBenchmarkWith(func(opts CompareOptions) (*ComparisonRecord, error) {
-		runtime := CompareRuntime{
-			AgentRunRuntime: AgentRunRuntime{
-				Prompt:     opts.Prompt,
-				PromptFile: opts.PromptFile,
-				WorkDir:    opts.WorkDir,
-			},
-			Harnesses:   opts.Harnesses,
-			ArmModels:   opts.ArmModels,
-			ArmLabels:   opts.ArmLabels,
-			Sandbox:     opts.Sandbox,
-			KeepSandbox: opts.KeepSandbox,
-			PostRun:     opts.PostRun,
-		}
+	return RunBenchmarkWith(func(runtime CompareRuntime) (*ComparisonRecord, error) {
 		return RunCompareWithConfigViaService(ctx, workDir, rcfg, runtime)
-	}, suite)
-}
-
-// RunBenchmarkWithAgent calls RunBenchmarkViaService using a pre-built DdxAgent.
-func RunBenchmarkWithAgent(ctx context.Context, agent agentlib.DdxAgent, workDir string, suite *BenchmarkSuite) (*BenchmarkResult, error) {
-	return RunBenchmarkWith(func(opts CompareOptions) (*ComparisonRecord, error) {
-		return RunCompareWithAgent(ctx, agent, workDir, opts)
 	}, suite)
 }
 

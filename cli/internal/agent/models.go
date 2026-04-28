@@ -55,8 +55,10 @@ func (a *BenchmarkArm) ResolveArm() {
 	}
 }
 
-// BenchmarkArmsToCompare converts a slice of BenchmarkArms into CompareOptions fields.
-func BenchmarkArmsToCompare(arms []BenchmarkArm, baseOpts RunOptions) CompareOptions {
+// BenchmarkArmsToCompare converts a slice of BenchmarkArms into a
+// CompareRuntime carrying per-arm harness/model/label data plus the
+// caller-provided base AgentRunRuntime (Prompt, PromptFile, WorkDir, ...).
+func BenchmarkArmsToCompare(arms []BenchmarkArm, base AgentRunRuntime) CompareRuntime {
 	harnesses := make([]string, len(arms))
 	armModels := make(map[int]string, len(arms))
 	armLabels := make(map[int]string, len(arms))
@@ -70,10 +72,10 @@ func BenchmarkArmsToCompare(arms []BenchmarkArm, baseOpts RunOptions) CompareOpt
 		armLabels[i] = arm.Label
 	}
 
-	var opts CompareOptions
-	opts.RunOptions = baseOpts
-	opts.Harnesses = harnesses
-	opts.ArmModels = armModels
-	opts.ArmLabels = armLabels
-	return opts
+	return CompareRuntime{
+		AgentRunRuntime: base,
+		Harnesses:       harnesses,
+		ArmModels:       armModels,
+		ArmLabels:       armLabels,
+	}
 }

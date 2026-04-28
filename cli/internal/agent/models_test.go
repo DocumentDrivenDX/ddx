@@ -42,10 +42,11 @@ func TestBenchmarkArmsToCompare(t *testing.T) {
 		{Label: "a", Harness: "agent", Tier: escalation.TierSmart},
 		{Label: "b", Harness: "claude", Tier: escalation.TierCheap},
 	}
-	opts := BenchmarkArmsToCompare(arms, RunOptions{Prompt: "test"})
-	assert.Equal(t, []string{"agent", "claude"}, opts.Harnesses)
-	assert.Equal(t, "minimax/minimax-m2.7", opts.ArmModels[0])
-	assert.Equal(t, "claude-haiku-4-5", opts.ArmModels[1])
-	assert.Equal(t, "a", opts.ArmLabels[0])
-	assert.Equal(t, "b", opts.ArmLabels[1])
+	runtime := BenchmarkArmsToCompare(arms, AgentRunRuntime{Prompt: "test"})
+	assert.Equal(t, []string{"agent", "claude"}, runtime.Harnesses)
+	assert.Equal(t, "minimax/minimax-m2.7", runtime.ArmModels[0])
+	assert.Equal(t, "claude-haiku-4-5", runtime.ArmModels[1])
+	assert.Equal(t, "a", runtime.ArmLabels[0])
+	assert.Equal(t, "b", runtime.ArmLabels[1])
+	assert.Equal(t, "test", runtime.Prompt)
 }

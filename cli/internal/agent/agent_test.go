@@ -581,11 +581,11 @@ func TestQuorumRunsAllHarnesses(t *testing.T) {
 	// Override executor to track calls
 	r.Executor = &trackingExecutor{calls: calls, output: "ok"}
 
-	run := func(opts RunOptions) (*Result, error) {
-		return r.Run(opts)
-	}
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
 	rcfg := cfg.Resolve(config.CLIOverrides{})
+	run := func(armRuntime AgentRunRuntime) (*Result, error) {
+		return dispatchViaResolvedConfig(context.Background(), "", nil, r, rcfg, armRuntime)
+	}
 	runtime := QuorumRuntime{
 		AgentRunRuntime: AgentRunRuntime{Prompt: "test"},
 		Harnesses:       []string{"codex", "claude"},
