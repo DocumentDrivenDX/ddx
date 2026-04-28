@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260428T223115-54258d7e",
+  "bead_id": "ddx-0c35470e",
+  "base_rev": "5073f6bd29b875449e7c73332e775260a667cf0b",
+  "created_at": "2026-04-28T22:31:16.332976972Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0c35470e",
+    "title": "FEAT-022: Prompt Evidence Assembly and Size Invariants",
+    "description": "Epic tracking FEAT-022 Prompt Evidence Assembly and Size Invariants.\n\nSee docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md for\nthe full spec. This epic sequences implementation across Stages A–G.\n\nGoal: establish a repo-wide invariant that no prompt DDx constructs,\naccepts, or emits through text-returning server endpoints has unbounded\nsize. Provide shared primitives every prompt-building call site must use,\ncollapse the duplicate review assembler, bound review/grading evidence\nassembly, hard-fail oversize prompt ingress, bound all server text\negress, add section-level assembly telemetry, and classify review\nfailures with a bounded retry policy.\n\nOriginal bug that motivated this work: post-merge reviewer silently\nreturns zero bytes on beads with large diffs, causing the primary task\nto be re-executed 3–4 times and burning tokens. Root cause: reviewer\nprompt assembly inlines full governing docs and full git show diff\nwithout a cap; oversize prompts trigger provider-side failures that\nDDx classifies as retryable.\n\nChild beads implement Stages A through G per the spec's Delivery\nSequencing section. Dependency constraints:\n- Stage A blocks all others.\n- Stage B blocks Stage C1 (review path only).\n- Stage C1 blocks Stages F and G.\n- Stage C2 blocks Stage F.\n- Stages D and E depend only on Stage A.",
+    "acceptance": "All child stage beads (A through G) closed with their individual acceptance criteria met. cli/internal/evidence/ package exists and is imported by all identified prompt-building call sites. golangci-lint (or equivalent) rule blocks unannotated unbounded prompt sinks in CI. FEAT-022 Status field updated from Proposed to Implemented in docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md.",
+    "labels": [
+      "ddx",
+      "kind:epic",
+      "area:agent",
+      "area:server",
+      "area:evidence"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-28T22:31:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "56807",
+      "execute-loop-heartbeat-at": "2026-04-28T22:31:15.870520604Z",
+      "spec-id": "FEAT-022"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-022",
+      "path": "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md",
+      "title": "Feature: Prompt Evidence Assembly and Size Invariants"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260428T223115-54258d7e",
+    "prompt": ".ddx/executions/20260428T223115-54258d7e/prompt.md",
+    "manifest": ".ddx/executions/20260428T223115-54258d7e/manifest.json",
+    "result": ".ddx/executions/20260428T223115-54258d7e/result.json",
+    "checks": ".ddx/executions/20260428T223115-54258d7e/checks.json",
+    "usage": ".ddx/executions/20260428T223115-54258d7e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0c35470e-20260428T223115-54258d7e"
+  }
+}
