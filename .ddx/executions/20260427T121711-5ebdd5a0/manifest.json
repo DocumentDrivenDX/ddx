@@ -1,0 +1,57 @@
+{
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "/Users/erik/Projects/ddx/.ddx/agent-logs/svc-1777292234041880378.jsonl",
+  "base_rev": "9b16f7738f5d9246fa001ca6d7697db2903f26ec",
+  "result_rev": "7a33a47d9fe4325a88bce247a36a9a848de59ed9",
+  "verdict": "APPROVE",
+  "bead_id": "ddx-9f4b1a8c",
+  "execution_dir": ".ddx/executions/20260427T121711-5ebdd5a0",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1005,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260427T121254-b1f72385/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:SD-024",
+        "bytes_included": 16624,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1182,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 20647,
+    "output_bytes": 862,
+    "elapsed_ms": 34599,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
