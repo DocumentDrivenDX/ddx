@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 func TestSessionIndexWritesMonthlyShards(t *testing.T) {
@@ -276,12 +278,14 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	workDir := t.TempDir()
 	embeddedLogDir := filepath.Join(workDir, ExecuteBeadArtifactDir, "attempt-1", "embedded")
 	svc := &noopCompactionDdxAgent{interval: time.Millisecond, total: 0}
-	var opts RunOptions
-	opts.Harness = "agent"
-	opts.Prompt = "hello"
-	opts.Model = "fake-model"
-	opts.SessionLogDir = embeddedLogDir
-	_, err := RunViaServiceWith(context.Background(), svc, workDir, opts)
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Harness: "agent",
+		Model:   "fake-model",
+	}).Resolve(config.CLIOverrides{})
+	_, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{
+		Prompt:                "hello",
+		SessionLogDirOverride: embeddedLogDir,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

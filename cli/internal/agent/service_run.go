@@ -1,12 +1,9 @@
 package agent
 
 // service_run.go provides Runner-free helpers that drive every operation via
-// the agentlib.DdxAgent service surface (CONTRACT-003). Production code
-// callers should prefer these helpers over Runner methods so the legacy
-// Runner type can be retired when test scaffolding is migrated.
-//
-// Each helper constructs a fresh service from workDir. When a caller dispatches
-// many calls, build the service once with NewServiceFromWorkDir and reuse it.
+// the agentlib.DdxAgent service surface (CONTRACT-003). RunWithConfigViaService
+// is the only run entry point; legacy RunViaService/RunViaServiceWith and the
+// runFixtureHarnessViaRunner shim were retired in B22d-h.
 
 import (
 	"context"
@@ -19,13 +16,10 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
-// RunViaService dispatches a single agent invocation through the agent
-// service and returns a populated Result. It is the production replacement
-// for Runner.Run.
-//
-// workDir is the project root used to load provider config; opts mirrors the
-// existing Runner RunOptions. SessionLogDir falls back to DefaultLogDir when
-// neither opts.SessionLogDir nor an explicit override is provided.
+// RunWithConfigViaService dispatches a single agent invocation through the
+// agent service. It takes a sealed ResolvedConfig (durable knobs) and an
+// AgentRunRuntime (per-invocation plumbing/intent), and is the SD-024
+// successor to the retired RunViaService/RunViaServiceWith entry points.
 //
 // The virtual and script harnesses route through a DDx-owned Runner path,
 // not the upstream service. These are not "carve-outs pending migration" —
@@ -33,89 +27,66 @@ import (
 // virtual is a content-addressed record/replay dictionary keyed by
 // PromptHash; upstream's is a unit-test stub where callers stuff
 // virtual.response into Metadata. DDx's script reads a filesystem directive
-// file; upstream does not model this at all. See runFixtureHarnessViaRunner.
-func RunViaService(ctx context.Context, workDir string, opts RunOptions) (*Result, error) {
-	resolvedHarness := opts.Harness
-	if resolvedHarness == "" && opts.Provider != "" {
-		resolvedHarness = opts.Provider
+// file; upstream does not model this at all.
+func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	if resolvedHarness == "virtual" || resolvedHarness == "script" {
-		return runFixtureHarnessViaRunner(ctx, workDir, opts)
+
+	harness := rcfg.Harness()
+	if harness == "" && rcfg.Provider() != "" {
+		harness = rcfg.Provider()
 	}
+
+	if harness == "virtual" || harness == "script" {
+		sessionLogDir := runtime.SessionLogDirOverride
+		if sessionLogDir == "" {
+			sessionLogDir = rcfg.SessionLogDir()
+		}
+		cfg := Config{SessionLogDir: ResolveLogDir(workDir, "")}
+		r := NewRunner(cfg)
+		r.WorkDir = workDir
+		return r.runInternal(RunArgs{
+			Context:       ctx,
+			Harness:       rcfg.Harness(),
+			Prompt:        runtime.Prompt,
+			PromptFile:    runtime.PromptFile,
+			PromptSource:  runtime.PromptSource,
+			Correlation:   runtime.Correlation,
+			Model:         rcfg.Model(),
+			Provider:      rcfg.Provider(),
+			ModelRef:      rcfg.ModelRef(),
+			Effort:        rcfg.Effort(),
+			Timeout:       rcfg.Timeout(),
+			WallClock:     rcfg.WallClock(),
+			WorkDir:       runtime.WorkDir,
+			Permissions:   rcfg.Permissions(),
+			SessionLogDir: sessionLogDir,
+		})
+	}
+
 	svc, err := NewServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
-	return RunViaServiceWith(ctx, svc, workDir, opts)
+	return executeOnService(ctx, svc, workDir, rcfg, runtime)
 }
 
-// runFixtureHarnessViaRunner dispatches DDx's fixture-driven harnesses
-// (virtual, script) through the local Runner path. These harnesses are
-// DDx-owned products — virtual keys responses by a hash of the incoming
-// prompt for deterministic record/replay, script runs a directive file
-// against the worktree. Neither maps cleanly to the upstream v0.8.0
-// service-level virtual/script dispatch (agent-81830379), which takes
-// virtual.response or virtual.dict_dir metadata per call rather than a
-// keyed dictionary. Callers targeting the upstream stubs should construct
-// a direct Service.Execute request with Metadata populated.
-func runFixtureHarnessViaRunner(ctx context.Context, workDir string, opts RunOptions) (*Result, error) {
-	cfg := Config{SessionLogDir: ResolveLogDir(workDir, "")}
-	r := NewRunner(cfg)
-	r.WorkDir = workDir
-	if opts.Context == nil && ctx != nil {
-		opts.Context = ctx
-	}
-	return r.Run(opts)
-}
-
-// RunWithConfigViaService is the SD-024 successor to RunViaService. It
-// takes a sealed ResolvedConfig (durable knobs) and an AgentRunRuntime
-// (per-invocation plumbing/intent), assembles an equivalent RunOptions,
-// and delegates to RunViaService. Production callers under
-// `ddx agent run` use this path so config.LoadAndResolve drives every
-// durable knob exactly once at the dispatch site.
-func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
-	sessionLogDir := runtime.SessionLogDirOverride
-	if sessionLogDir == "" {
-		sessionLogDir = rcfg.SessionLogDir()
-	}
-	opts := RunOptions{
-		Context:       ctx,
-		Harness:       rcfg.Harness(),
-		Prompt:        runtime.Prompt,
-		PromptFile:    runtime.PromptFile,
-		PromptSource:  runtime.PromptSource,
-		Correlation:   runtime.Correlation,
-		Model:         rcfg.Model(),
-		Provider:      rcfg.Provider(),
-		ModelRef:      rcfg.ModelRef(),
-		Effort:        rcfg.Effort(),
-		Timeout:       rcfg.Timeout(),
-		WallClock:     rcfg.WallClock(),
-		WorkDir:       runtime.WorkDir,
-		Permissions:   rcfg.Permissions(),
-		SessionLogDir: sessionLogDir,
-	}
-	return RunViaService(ctx, workDir, opts)
-}
-
-// RunViaServiceWith is the variant of RunViaService that accepts a pre-built
-// DdxAgent so callers issuing many requests can reuse one service instance.
-func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir string, opts RunOptions) (*Result, error) {
+// executeOnService dispatches against a pre-built svc using the durable
+// knobs from rcfg and per-invocation plumbing from runtime, then records
+// one session-index row. It is the inlined replacement for the retired
+// RunViaServiceWith helper and is shared with dispatchViaResolvedConfig.
+func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
 	if svc == nil {
 		return nil, fmt.Errorf("agent: nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if opts.Context != nil {
-		ctx = opts.Context
-	}
 
-	// Resolve prompt either from inline text or PromptFile.
-	promptText := opts.Prompt
-	if opts.PromptFile != "" {
-		data, err := readPromptFileBounded(opts.PromptFile)
+	promptText := runtime.Prompt
+	if runtime.PromptFile != "" {
+		data, err := readPromptFileBounded(runtime.PromptFile)
 		if err != nil {
 			return nil, fmt.Errorf("agent: read prompt file: %w", err)
 		}
@@ -125,7 +96,7 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 		return nil, fmt.Errorf("agent: prompt is required")
 	}
 
-	wd := opts.WorkDir
+	wd := runtime.WorkDir
 	if wd == "" {
 		wd = workDir
 	}
@@ -133,41 +104,55 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 		wd, _ = os.Getwd()
 	}
 
-	idle := opts.Timeout
+	idle := rcfg.Timeout()
 	if idle <= 0 {
 		idle = time.Duration(DefaultTimeoutMS) * time.Millisecond
 	}
-	wall := opts.WallClock
+	wall := rcfg.WallClock()
 	if wall <= 0 {
 		wall = time.Duration(DefaultWallClockMS) * time.Millisecond
 	}
 
-	logDir := opts.SessionLogDir
-	if logDir == "" {
-		logDir = ResolveLogDir(workDir, "")
+	sessionLogDir := runtime.SessionLogDirOverride
+	if sessionLogDir == "" {
+		sessionLogDir = rcfg.SessionLogDir()
+	}
+	if sessionLogDir == "" {
+		sessionLogDir = ResolveLogDir(workDir, "")
 	}
 
-	harness := opts.Harness
-	if harness == "" && opts.Provider != "" {
-		// Honour --provider as a harness alias when no harness is explicit
-		// (matches Runner.resolveHarness behaviour).
-		harness = opts.Provider
+	harness := runtime.HarnessOverride
+	if harness == "" {
+		harness = rcfg.Harness()
+	}
+	if harness == "" && rcfg.Provider() != "" {
+		harness = rcfg.Provider()
+	}
+
+	model := runtime.ModelOverride
+	if model == "" {
+		model = rcfg.Model()
+	}
+
+	permissions := runtime.PermissionsOverride
+	if permissions == "" {
+		permissions = rcfg.Permissions()
 	}
 
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
-		Model:           opts.Model,
-		Provider:        opts.Provider,
+		Model:           model,
+		Provider:        rcfg.Provider(),
 		Harness:         harness,
-		ModelRef:        opts.ModelRef,
-		Reasoning:       agentlib.Reasoning(opts.Effort),
-		Permissions:     opts.Permissions,
+		ModelRef:        rcfg.ModelRef(),
+		Reasoning:       agentlib.Reasoning(rcfg.Effort()),
+		Permissions:     permissions,
 		WorkDir:         wd,
 		Timeout:         wall,
 		IdleTimeout:     idle,
 		ProviderTimeout: DefaultProviderRequestTimeout,
-		SessionLogDir:   logDir,
-		Metadata:        opts.Correlation,
+		SessionLogDir:   sessionLogDir,
+		Metadata:        runtime.Correlation,
 	}
 
 	cancelCtx, cancel := context.WithCancel(ctx)
@@ -185,7 +170,7 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 
 	result := &Result{
 		Harness:    harness,
-		Model:      opts.Model,
+		Model:      model,
 		DurationMS: int(elapsed.Milliseconds()),
 		ToolCalls:  toolCalls,
 	}
@@ -255,11 +240,11 @@ func RunViaServiceWith(ctx context.Context, svc agentlib.DdxAgent, workDir strin
 		}
 	}
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
-		Harness:     opts.Harness,
-		Model:       opts.Model,
-		Provider:    opts.Provider,
-		Effort:      opts.Effort,
-		Correlation: opts.Correlation,
+		Harness:     harness,
+		Model:       model,
+		Provider:    rcfg.Provider(),
+		Effort:      rcfg.Effort(),
+		Correlation: runtime.Correlation,
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil

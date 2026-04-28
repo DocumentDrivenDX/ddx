@@ -19,6 +19,7 @@ import (
 
 	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // promptIngressTestCap is the cap installed during oversize-fixture tests
@@ -107,14 +108,14 @@ func TestPromptIngressOversize(t *testing.T) {
 		assertOversizeErrorMessage(t, err, fixture)
 	})
 
-	t.Run("service_run_RunViaServiceWith", func(t *testing.T) {
+	t.Run("service_run_executeOnService", func(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
 		svc := &promptIngressStubAgent{}
-		var svcOpts RunOptions
-		svcOpts.Harness = "agent"
-		svcOpts.PromptFile = fixture
-		_, err := RunViaServiceWith(context.Background(), svc, t.TempDir(), svcOpts)
+		rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "agent"}).Resolve(config.CLIOverrides{})
+		_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+			PromptFile: fixture,
+		})
 		if svc.calls != 0 {
 			t.Errorf("svc.Execute invoked %d times; oversize prompt file must short-circuit before dispatch", svc.calls)
 		}

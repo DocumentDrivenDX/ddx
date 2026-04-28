@@ -17,21 +17,40 @@ import (
 // dispatchViaResolvedConfig is the internal SD-024 dispatch seam shared by
 // execute-bead's worker and the post-merge reviewer. It resolves how the
 // agent invocation is executed (test-injected runner, pre-built service, or
-// a fresh service constructed from projectRoot) and assembles a RunOptions
-// from rcfg + runtime so every durable knob lands on the dispatched request
+// a fresh service constructed from projectRoot) and routes through
+// executeOnService so every durable knob lands on the dispatched request
 // exactly once.
 //
 // Resolution order:
-//  1. runner (test injection seam) — used directly via runner.Run.
-//  2. svc (pre-built service) — used via RunViaServiceWith.
+//  1. runner (test injection seam) — used directly via runner.Run after
+//     applying any AgentRunRuntime overrides.
+//  2. svc (pre-built service) — used via executeOnService.
 //  3. Fallback: construct a fresh service via NewServiceFromWorkDir(projectRoot)
-//     and dispatch via RunViaServiceWith.
+//     and dispatch via executeOnService.
 //
 // Override fields on runtime (HarnessOverride, ModelOverride,
 // PermissionsOverride, SessionLogDirOverride) take precedence over the
 // matching rcfg accessors when non-empty, so callers can pin one knob for
 // a single invocation without re-resolving the full ResolvedConfig.
 func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agentlib.DdxAgent, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+	if runner != nil {
+		return runner.Run(buildRunOptionsFromConfig(ctx, rcfg, runtime))
+	}
+	if svc == nil {
+		built, err := NewServiceFromWorkDir(projectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("agent: build service: %w", err)
+		}
+		svc = built
+	}
+	return executeOnService(ctx, svc, projectRoot, rcfg, runtime)
+}
+
+// buildRunOptionsFromConfig assembles a RunOptions value for the test
+// injection runner path. It applies AgentRunRuntime overrides so a caller
+// (execute-bead worker, post-merge reviewer) can pin one durable knob for
+// a single invocation without re-resolving the full ResolvedConfig.
+func buildRunOptionsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime AgentRunRuntime) RunOptions {
 	harness := runtime.HarnessOverride
 	if harness == "" {
 		harness = rcfg.Harness()
@@ -52,7 +71,8 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 	var opts RunOptions
 	opts.Context = ctx
 	opts.Harness = harness
-	opts.Prompt = runtime.Prompt // evidence:allow-unbounded reason="caller is responsible for bounding the prompt before invoking dispatchViaResolvedConfig; downstream RunViaServiceWith hits readPromptFileBounded for PromptFile inputs"
+	// evidence:allow-unbounded reason="caller is responsible for bounding the prompt before invoking dispatchViaResolvedConfig; downstream executeOnService hits readPromptFileBounded for PromptFile inputs"
+	opts.Prompt = runtime.Prompt
 	opts.PromptFile = runtime.PromptFile
 	opts.PromptSource = runtime.PromptSource
 	opts.Correlation = runtime.Correlation
@@ -65,16 +85,5 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 	opts.WorkDir = runtime.WorkDir
 	opts.Permissions = permissions
 	opts.SessionLogDir = sessionLogDir
-
-	if runner != nil {
-		return runner.Run(opts)
-	}
-	if svc == nil {
-		built, err := NewServiceFromWorkDir(projectRoot)
-		if err != nil {
-			return nil, fmt.Errorf("agent: build service: %w", err)
-		}
-		svc = built
-	}
-	return RunViaServiceWith(ctx, svc, projectRoot, opts)
+	return opts
 }
