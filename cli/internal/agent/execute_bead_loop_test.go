@@ -315,11 +315,11 @@ func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts)
 }
 
-// TestExecuteBeadWorkerNoReadyWork_EpicOnlyQueue covers ddx-672cf2bf:
-// when the dependency-ready queue contains only epics, the loop must not
-// silently exit — it must surface a breakdown identifying the skipped epics
-// so the operator knows why nothing ran.
-func TestExecuteBeadWorkerNoReadyWork_EpicOnlyQueue(t *testing.T) {
+// TestExecuteBeadWorkerEpicIsExecutable: epics are first-class execution
+// targets. When the only non-cooldown ready bead is an epic, the loop must
+// pick it up, not skip it. The agent is responsible for closing children
+// first and verifying epic-level AC before close.
+func TestExecuteBeadWorkerEpicIsExecutable(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -333,29 +333,28 @@ func TestExecuteBeadWorkerNoReadyWork_EpicOnlyQueue(t *testing.T) {
 	}
 	require.NoError(t, store.Create(cooldownTask))
 
+	var executed []string
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatalf("unexpected execution for %s", beadID)
-			return ExecuteBeadReport{}, nil
+			executed = append(executed, beadID)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "epic closed after children",
+				SessionID: "sess-" + beadID,
+				ResultRev: "deadbeef",
+			}, nil
 		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.True(t, result.NoReadyWork, "NoReadyWork must fire when execution queue is empty but dep-ready queue isn't")
-	assert.Equal(t, 0, result.Attempts)
-
-	breakdown := result.NoReadyWorkDetail
-	assert.Equal(t, []string{"ddx-epic-001"}, breakdown.SkippedEpics,
-		"ready epic must surface in the breakdown with its id so the operator knows to decompose it")
-	assert.Equal(t, []string{"ddx-task-002"}, breakdown.SkippedOnCooldown,
-		"cooldown bead must surface separately so the operator sees retry-after, not just absence of work")
-	assert.NotEmpty(t, breakdown.NextRetryAfter,
-		"NextRetryAfter must identify the soonest cooldown release so the operator knows when to poll again")
+	assert.False(t, result.NoReadyWork, "epic is ready work, loop must not signal NoReadyWork")
+	assert.Equal(t, []string{"ddx-epic-001"}, executed, "epic must be executed; cooldown task is skipped")
 }
 
 func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing.T) {
@@ -504,7 +503,7 @@ func TestExecuteBeadWorkerConcurrentWorkersDistributeDistinctReadyBeads(t *testi
 	assert.Equal(t, "sess-"+second.ID, secondGot.Extra["session_id"])
 }
 
-func TestReadyExecutionExcludesEpics(t *testing.T) {
+func TestReadyExecutionIncludesEpics(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -515,8 +514,7 @@ func TestReadyExecutionExcludesEpics(t *testing.T) {
 
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)
-	require.Len(t, ready, 1)
-	assert.Equal(t, task.ID, ready[0].ID)
+	require.Len(t, ready, 2, "epics are executable: agent closes children, verifies epic-level AC, then closes epic")
 }
 
 func TestExecuteBeadWorkerEmitsStructuredProgressEvents(t *testing.T) {

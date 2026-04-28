@@ -1158,10 +1158,6 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 	now := time.Now().UTC()
 	var soonestRetry time.Time
 	for _, b := range ready {
-		if b.IssueType == "epic" {
-			out.SkippedEpics = append(out.SkippedEpics, b.ID)
-			continue
-		}
 		if retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]; ok {
 			if retryAfterStr, isStr := retryAfterRaw.(string); isStr && retryAfterStr != "" {
 				if retryAfter, err := time.Parse(time.RFC3339, retryAfterStr); err == nil && retryAfter.After(now) {
@@ -1224,10 +1220,6 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 			continue
 		}
 		if executionOnly {
-			// Epics are structural containers, not executable work items.
-			if b.IssueType == "epic" {
-				continue
-			}
 			// Filter by execution-eligible (default true if absent)
 			eligible, ok := b.Extra["execution-eligible"]
 			if ok {
