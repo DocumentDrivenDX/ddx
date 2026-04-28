@@ -1,0 +1,64 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Epic close-out is complete: FEAT-022 status flipped to Implemented in aa6236b6, all Stage A–G child beads closed, cli/internal/evidence/ ships full primitive set, and evidencelint analyzer is wired in CI. Diff under review is execution evidence only, consistent with an epic finalization.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Diff for this attempt contains only manifest.json/result.json; the substantive change (status flip) was committed at result_rev aa6236b6, which is the bead's intended close-out commit.",
+      "location": ".ddx/executions/20260428T223115-54258d7e/result.json"
+    },
+    {
+      "severity": "info",
+      "summary": "evidencelint analyzer present at cli/tools/lint/evidencelint/ rather than the spec-suggested path; functionally satisfies the CI lint AC.",
+      "location": "cli/tools/lint/evidencelint/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2005,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260428T223115-54258d7e/manifest.json",
+          ".ddx/executions/20260428T223115-54258d7e/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-022",
+        "bytes_included": 24412,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4760,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 33082,
+    "output_bytes": 903,
+    "elapsed_ms": 36033,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
