@@ -11,7 +11,7 @@ ddx:
 # Feature: Prompt Evidence Assembly and Size Invariants
 
 **ID:** FEAT-022
-**Status:** Proposed
+**Status:** Implemented
 **Priority:** P1
 **Owner:** DDx Team
 
