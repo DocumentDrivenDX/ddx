@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260428T223023-4c79dabe",
+  "bead_id": "ddx-64ac553a",
+  "base_rev": "b3c9e92dea112cec75b22ba1ad6c906dfb006b46",
+  "created_at": "2026-04-28T22:30:23.478250606Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-64ac553a",
+    "title": "epic: bare-repo + escaping-symlink contamination",
+    "description": "Two recurring repo-corruption bugs:\nA) GIT_DIR inherited from hook context causes ~95 unsanitized exec.Command(\"git\") callsites to mutate the wrong repo (core.bare flips, stray core.worktree).\nB) registry/installer.go:symlinkSkills uses EvalSymlinks through a parent symlink, producing repo-escaping links that get committed and oscillate per machine.\n\nPlan converged after 3 review rounds (fresh-eyes x2, codex x2). Implementation broken into beads B1-B8.",
+    "acceptance": "All child beads closed; ddx work --once with GIT_DIR=fakebare set leaves fakebare/.git/config byte-identical; .agents/skills/helix-* and .claude/skills/helix-* show no diff after fresh ddx install helix on a clean clone.",
+    "metadata": {
+      "claimed-at": "2026-04-28T22:30:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "56807",
+      "execute-loop-heartbeat-at": "2026-04-28T22:30:22.977163215Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260428T223023-4c79dabe",
+    "prompt": ".ddx/executions/20260428T223023-4c79dabe/prompt.md",
+    "manifest": ".ddx/executions/20260428T223023-4c79dabe/manifest.json",
+    "result": ".ddx/executions/20260428T223023-4c79dabe/result.json",
+    "checks": ".ddx/executions/20260428T223023-4c79dabe/checks.json",
+    "usage": ".ddx/executions/20260428T223023-4c79dabe/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-64ac553a-20260428T223023-4c79dabe"
+  }
+}
