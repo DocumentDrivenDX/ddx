@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T191154-99abef11",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-6d9490ce",
+  "base_rev": "c8f5c4f575069a93b97d783c73918c05c3b26cc4",
+  "created_at": "2026-04-29T19:11:55.009433608Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-6d9490ce",
+    "title": "[read-coverage] add ddx_bead_blocked + ddx_bead_dep_tree MCP tools",
+    "description": "FEAT-004/002 gap. HTTP has GET /api/beads/blocked and GET /api/beads/dep/tree/{id}. MCP has ddx_list_beads, ddx_show_bead, ddx_bead_ready, ddx_bead_status but no blocked or dep-tree tools. Agents managing the bead queue via MCP cannot check blocked state or inspect dependency trees. Add both tools.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "mcp",
+      "feat-004",
+      "feat-002"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:11:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:11:54.0945458Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T191154-99abef11",
+    "prompt": ".ddx/executions/20260429T191154-99abef11/prompt.md",
+    "manifest": ".ddx/executions/20260429T191154-99abef11/manifest.json",
+    "result": ".ddx/executions/20260429T191154-99abef11/result.json",
+    "checks": ".ddx/executions/20260429T191154-99abef11/checks.json",
+    "usage": ".ddx/executions/20260429T191154-99abef11/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-6d9490ce-20260429T191154-99abef11"
+  }
+}
