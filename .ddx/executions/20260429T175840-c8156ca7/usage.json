@@ -1,0 +1,9 @@
+{
+  "attempt_id": "20260429T175840-c8156ca7",
+  "harness": "agent",
+  "provider": "lmstudio-bragi-1234",
+  "model": "qwen/qwen3.6-35b-a3b",
+  "tokens": 281389,
+  "input_tokens": 279559,
+  "output_tokens": 1830
+}
