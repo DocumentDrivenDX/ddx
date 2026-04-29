@@ -1284,8 +1284,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 45 {
-		t.Fatalf("expected 45 MCP tools, got %d", len(tools))
+	if len(tools) != 47 {
+		t.Fatalf("expected 47 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -1308,6 +1308,7 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_worker_list", "ddx_worker_show", "ddx_worker_log",
 		"ddx_agent_models", "ddx_agent_catalog", "ddx_agent_capabilities",
 		"ddx_metrics_summary", "ddx_metrics_cost", "ddx_metrics_cycle_time", "ddx_metrics_rework",
+		"ddx_list_mcp_servers", "ddx_list_plugins",
 	}
 	for _, name := range expected {
 		if !names[name] {
