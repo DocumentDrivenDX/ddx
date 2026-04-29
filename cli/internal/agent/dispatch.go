@@ -36,6 +36,19 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 	if runner != nil {
 		return runner.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}
+	// DDx-local harnesses (virtual, script) are not upstream service harnesses.
+	// Route them through the local Runner so DDX_VIRTUAL_RESPONSES and script
+	// directives work correctly via compare and quorum paths, not just agent run.
+	harness := runtime.HarnessOverride
+	if harness == "" {
+		harness = rcfg.Harness()
+	}
+	if harness == "virtual" || harness == "script" {
+		cfg := Config{SessionLogDir: ResolveLogDir(projectRoot, "")}
+		r := NewRunner(cfg)
+		r.WorkDir = projectRoot
+		return r.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
+	}
 	if svc == nil {
 		built, err := NewServiceFromWorkDir(projectRoot)
 		if err != nil {
