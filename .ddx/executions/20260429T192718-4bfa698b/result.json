@@ -1,0 +1,49 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff only contains execution evidence (manifest.json, result.json) for the attempt; no MCP tool implementation (ddx_worker_list/show/log) is present in the changed files. Cannot evaluate AC against actual code changes.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No source code changes for MCP worker tools in the diff — only execution metadata files were added.",
+      "location": ".ddx/executions/20260429T191744-2c90a8f1/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 593,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T191744-2c90a8f1/manifest.json",
+          ".ddx/executions/20260429T191744-2c90a8f1/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3280,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5679,
+    "output_bytes": 516,
+    "elapsed_ms": 6315,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
