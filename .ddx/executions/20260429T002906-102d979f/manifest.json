@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260429T002906-102d979f",
+  "bead_id": "ddx-967e9802",
+  "base_rev": "782d4d1257277337c59958647c93a62904df03ed",
+  "created_at": "2026-04-29T00:29:07.298545235Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-967e9802",
+    "title": "routing-bump: pin ddx-agent and document routing point release in DDx CHANGELOG",
+    "description": "Cover AC #1 of ddx-fdd3ea36. cli/go.mod already pins github.com/DocumentDrivenDX/agent v0.9.23, which transitively contains all six upstream routing-plan beads (agent-0dafc7f0 cost-aware routing, agent-191a74f9 default+local+standard profiles, agent-1f46cf22 docs, agent-53f38d95 public decision trace, agent-bab52778 supported-models allow-list, agent-dfabb10b typed errors). Upstream's per-tag CHANGELOG does NOT bundle these into a single 'routing point release' narrative — work landed scattered across v0.9.10..v0.9.24. DDx's CHANGELOG entry must therefore cite each upstream commit/bead and call out the combined contract DDx now consumes (zero-interaction defaults, profiles, override semantics, decision trace, cost dimension).",
+    "acceptance": "1. cli/go.mod pins ddx-agent at \u003e= v0.9.23. 2. DDx CHANGELOG.md (or equivalent release notes file) gains an entry under the next DDx release that lists each consumed upstream capability with the upstream commit hash or bead id. 3. Entry links to upstream beads in ~/Projects/agent/.ddx/ for traceability. 4. Entry calls out that AC #1 of parent ddx-fdd3ea36 is satisfied by go.mod + this CHANGELOG entry, not by a single upstream release tag. 5. PR is one focused commit; no code changes.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing",
+      "upstream-agent"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T00:29:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "56807",
+      "execute-loop-heartbeat-at": "2026-04-29T00:29:06.714805394Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T002906-102d979f",
+    "prompt": ".ddx/executions/20260429T002906-102d979f/prompt.md",
+    "manifest": ".ddx/executions/20260429T002906-102d979f/manifest.json",
+    "result": ".ddx/executions/20260429T002906-102d979f/result.json",
+    "checks": ".ddx/executions/20260429T002906-102d979f/checks.json",
+    "usage": ".ddx/executions/20260429T002906-102d979f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-967e9802-20260429T002906-102d979f"
+  }
+}
