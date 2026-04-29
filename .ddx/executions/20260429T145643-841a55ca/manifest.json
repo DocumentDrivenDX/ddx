@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260429T145643-841a55ca",
+  "bead_id": "ddx-52469547",
+  "base_rev": "aa7b31785a4479f41a410db723e62de6353b9f64",
+  "created_at": "2026-04-29T14:56:43.789837209Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-52469547",
+    "title": "runtime fallback removal + audit-side migration",
+    "description": "Bead 3 of 4 children under epic ddx-3562c48c. Depends on bead 2 (ddx-908a6d5d). May run in parallel with bead 4.\n\nStrip remaining ~/.ddx/plugins runtime reads; thread Force through update; audit-side path resolution.\n\nPERSONA FALLBACK:\n- DELETE cli/internal/persona/loader.go:64 fallback to ~/.ddx/plugins/ddx/personas.\n- Missing-config error message: 'DDx config not found; run \"ddx init\" to bootstrap project'.\n\nAUDIT (cli/internal/registry/audit.go):\n- Lines 104, 336, 339: stop ExpandHome on entry.Files. Resolve paths relative to projectRoot.\n- Pre-migration entries with ~/... paths uninstall as no-ops (existing os.Remove on missing path is tolerated).\n- Covered by TestUninstall_StaleHomeEntriesAreNoOp.\n\nGRAPHQL:\n- DELETE cli/internal/server/graphql/resolver_feat008.go:746-759 (pluginRootCandidates). Resolver returns project-rooted paths only.\n- Update affected resolver tests.\n\nUPDATE COMMAND:\n- cli/cmd/update.go: plumb skills.Options{Force: true} into skills.Install for the --force path.\n- TestUpdate_ForceReplacesStaleSymlinks: project starts with symlinks under .agents/skills/ pointing to ~/.ddx/plugins/, ddx update --force replaces with real files.\n\nWORKTREE FALLBACK (gated decision):\n- NEW TestExecuteBead_WorktreeFromPreMigrationCommit: create worktree from a commit predating migration; run skill-resolution path.\n- IF the test passes WITHOUT cli/internal/agent/worktree_skills.go:106-114 resolveBrokenSkillLink, DELETE the fallback in this bead.\n- IF the test fails, KEEP the fallback as a no-op for new installs and add a code comment + doc note.\n\nDOCTOR:\n- cli/cmd/doctor.go: when symlinks exist under \u003cprojectRoot\u003e/.agents/skills/ or .claude/skills/, doctor exits non-zero. stderr contains 'symlink detected under .agents/skills/' (and same for .claude/skills/). Recommendation message ends with 'run: ddx update --force'.\n- TestDoctor_FlagsLegacySymlinks asserts exit code and stderr substrings.\n\nOUT OF SCOPE: .gitignore, docs (bead 4). State.json relocation (separate follow-up).",
+    "acceptance": "1. cli/internal/persona/loader.go:64 fallback removed; missing-config error message points at ddx init. 2. cli/internal/registry/audit.go:104,336,339 no longer ExpandHome; paths resolve relative to projectRoot. 3. TestUninstall_StaleHomeEntriesAreNoOp passes. 4. cli/internal/server/graphql/resolver_feat008.go:746-759 pluginRootCandidates removed; affected resolver tests updated and passing. 5. cli/cmd/update.go threads Options{Force: true} for --force path. TestUpdate_ForceReplacesStaleSymlinks passes. 6. TestExecuteBead_WorktreeFromPreMigrationCommit exists and passes. resolveBrokenSkillLink removed if test passes without it; otherwise kept with comment. Decision documented in commit message. 7. Doctor exits non-zero with the specified stderr substrings when legacy symlinks present. TestDoctor_FlagsLegacySymlinks passes. 8. cd cli \u0026\u0026 go build ./... \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-3562c48c",
+    "labels": [
+      "area:cli",
+      "area:agent",
+      "area:registry",
+      "kind:refactor",
+      "spec:FEAT-015"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-015",
+      "path": "docs/helix/01-frame/features/FEAT-015-installation-architecture.md",
+      "title": "Feature: DDx Installation Architecture"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260429T145643-841a55ca",
+    "prompt": ".ddx/executions/20260429T145643-841a55ca/prompt.md",
+    "manifest": ".ddx/executions/20260429T145643-841a55ca/manifest.json",
+    "result": ".ddx/executions/20260429T145643-841a55ca/result.json",
+    "checks": ".ddx/executions/20260429T145643-841a55ca/checks.json",
+    "usage": ".ddx/executions/20260429T145643-841a55ca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-52469547-20260429T145643-841a55ca"
+  }
+}
