@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-98e6e9ef",
+  "attempt_id": "20260429T123156-6eefce3d",
+  "base_rev": "61dd52e6e98538aef837c2903ffa2840cb9267c6",
+  "result_rev": "4e2d22550b990829e0f5a36e81015a21ce9b2570",
+  "outcome": "task_succeeded",
+  "status": "success",
+  "detail": "success",
+  "harness": "agent",
+  "provider": "lmstudio-bragi-1234",
+  "model": "qwen/qwen3.6-35b-a3b",
+  "session_id": "eb-8f4583ad",
+  "duration_ms": 761180,
+  "tokens": 511245,
+  "exit_code": 0,
+  "execution_dir": ".ddx/executions/20260429T123156-6eefce3d",
+  "prompt_file": ".ddx/executions/20260429T123156-6eefce3d/prompt.md",
+  "manifest_file": ".ddx/executions/20260429T123156-6eefce3d/manifest.json",
+  "result_file": ".ddx/executions/20260429T123156-6eefce3d/result.json",
+  "usage_file": ".ddx/executions/20260429T123156-6eefce3d/usage.json",
+  "started_at": "2026-04-29T12:31:57.9837706Z",
+  "finished_at": "2026-04-29T12:44:39.164718716Z"
+}
