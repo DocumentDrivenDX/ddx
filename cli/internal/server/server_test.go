@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 )
 
@@ -431,6 +432,177 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 		}
 	})
+}
+
+// seedMetricHistory writes two history records for MET-001 in the given dir
+// so /api/metrics/{id}/history and /api/metrics/{id}/trend have data to read.
+func seedMetricHistory(t *testing.T, dir string) {
+	t.Helper()
+	store := metric.NewStore(dir)
+	t0, _ := time.Parse(time.RFC3339, "2026-04-04T15:00:00Z")
+	t1, _ := time.Parse(time.RFC3339, "2026-04-04T15:01:00Z")
+	for _, rec := range []metric.HistoryRecord{
+		{
+			RunID:        "MET-001@1",
+			MetricID:     "MET-001",
+			DefinitionID: "metric-startup-time@1",
+			ObservedAt:   t0,
+			Status:       metric.StatusPass,
+			Value:        20,
+			Unit:         "ms",
+			Comparison:   metric.ComparisonResult{Baseline: 20, Delta: 0, Direction: metric.ComparisonLowerIsBetter},
+			ArtifactID:   "MET-001",
+		},
+		{
+			RunID:        "MET-001@2",
+			MetricID:     "MET-001",
+			DefinitionID: "metric-startup-time@1",
+			ObservedAt:   t1,
+			Status:       metric.StatusPass,
+			Value:        10,
+			Unit:         "ms",
+			Comparison:   metric.ComparisonResult{Baseline: 20, Delta: -10, Direction: metric.ComparisonLowerIsBetter},
+			ArtifactID:   "MET-001",
+		},
+	} {
+		if err := store.AppendHistory(rec); err != nil {
+			t.Fatalf("AppendHistory: %v", err)
+		}
+	}
+}
+
+func TestMetricHistoryEndpoint(t *testing.T) {
+	dir := setupTestDir(t)
+	seedMetricHistory(t, dir)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/metrics/MET-001/history", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var history []metric.HistoryRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &history); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("expected 2 history records, got %d", len(history))
+	}
+	if history[0].MetricID != "MET-001" {
+		t.Errorf("expected MET-001, got %q", history[0].MetricID)
+	}
+}
+
+func TestMetricHistoryEndpointMissingID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/metrics//history", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatalf("expected non-200 for missing id, got 200: %s", w.Body.String())
+	}
+}
+
+func TestMetricTrendEndpoint(t *testing.T) {
+	dir := setupTestDir(t)
+	seedMetricHistory(t, dir)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/metrics/MET-001/trend", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var trend metric.TrendSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &trend); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if trend.MetricID != "MET-001" || trend.Count != 2 {
+		t.Fatalf("unexpected trend summary: %+v", trend)
+	}
+	if trend.Min != 10 || trend.Max != 20 || trend.Latest != 10 {
+		t.Fatalf("unexpected trend values: %+v", trend)
+	}
+}
+
+func TestMCPMetricHistory(t *testing.T) {
+	dir := setupTestDir(t)
+	seedMetricHistory(t, dir)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_metric_history","arguments":{"id":"MET-001"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	var history []metric.HistoryRecord
+	if err := json.Unmarshal([]byte(text), &history); err != nil {
+		t.Fatalf("MCP metric_history not valid JSON: %v", err)
+	}
+	if len(history) != 2 || history[0].MetricID != "MET-001" {
+		t.Fatalf("unexpected history payload: %+v", history)
+	}
+}
+
+func TestMCPMetricHistoryMissingID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_metric_history","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Fatalf("expected isError=true for missing id, got %+v", result)
+	}
+}
+
+func TestMCPMetricTrend(t *testing.T) {
+	dir := setupTestDir(t)
+	seedMetricHistory(t, dir)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_metric_trend","arguments":{"id":"MET-001"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	var trend metric.TrendSummary
+	if err := json.Unmarshal([]byte(text), &trend); err != nil {
+		t.Fatalf("MCP metric_trend not valid JSON: %v", err)
+	}
+	if trend.MetricID != "MET-001" || trend.Count != 2 || trend.Latest != 10 {
+		t.Fatalf("unexpected trend payload: %+v", trend)
+	}
 }
 
 func TestListBeads(t *testing.T) {
@@ -1339,6 +1511,7 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_worker_list", "ddx_worker_show", "ddx_worker_log",
 		"ddx_agent_models", "ddx_agent_catalog", "ddx_agent_capabilities",
 		"ddx_metrics_summary", "ddx_metrics_cost", "ddx_metrics_cycle_time", "ddx_metrics_rework",
+		"ddx_metric_history", "ddx_metric_trend",
 		"ddx_list_mcp_servers", "ddx_list_plugins",
 	}
 	for _, name := range expected {
