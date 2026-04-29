@@ -24,13 +24,23 @@ type ExecuteBeadLoopRuntime struct {
 	EventSink    io.Writer
 	ProgressCh   chan<- ProgressEvent
 	PreClaimHook func(ctx context.Context) error
-	Once         bool
-	PollInterval time.Duration
-	NoReview     bool
-	LabelFilter  string
-	SessionID    string
-	WorkerID     string
-	ProjectRoot  string
+	// RoutePreflight, when non-nil, is invoked between nextCandidate and
+	// Claim. It is expected to call upstream ResolveRoute against the
+	// loop's resolved (harness, model) and return whatever typed routing
+	// error the upstream surfaced — notably agent.ErrHarnessModelIncompatible
+	// when the harness allow-list rejects the model. Any non-nil error
+	// causes the loop to exit immediately without claiming the bead, with
+	// a worker-level execution_failed record naming the rejected pair.
+	// DDx does NOT duplicate the upstream allow-list; this gate only
+	// consumes the typed-incompatibility surface.
+	RoutePreflight func(ctx context.Context, harness, model string) error
+	Once           bool
+	PollInterval   time.Duration
+	NoReview       bool
+	LabelFilter    string
+	SessionID      string
+	WorkerID       string
+	ProjectRoot    string
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -344,6 +354,40 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"reason":  hookErr.Error(),
 				})
 				continue
+			}
+		}
+
+		// Routing preflight gate (FEAT-006 D3, ddx-98e6e9ef): consult the
+		// upstream typed-incompatibility surface BEFORE claiming. If the
+		// configured (harness, model) cannot serve the bead, exit the loop
+		// with a worker-level failure record — no claim, no executor
+		// invocation, no tier-attempt event burn.
+		if runtime.RoutePreflight != nil {
+			if rerr := runtime.RoutePreflight(ctx, harness, model); rerr != nil {
+				detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
+					harness, model, rerr.Error())
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (skipping %s, exiting loop)\n",
+						detail, candidate.ID)
+				}
+				emit("preflight.rejected", map[string]any{
+					"bead_id": candidate.ID,
+					"harness": harness,
+					"model":   model,
+					"reason":  rerr.Error(),
+				})
+				report := ExecuteBeadReport{
+					BeadID:  candidate.ID,
+					Status:  ExecuteBeadStatusExecutionFailed,
+					Detail:  detail,
+					Harness: harness,
+					Model:   model,
+				}
+				result.Attempts++
+				result.Failures++
+				result.LastFailureStatus = report.Status
+				result.Results = append(result.Results, report)
+				return result, nil
 			}
 		}
 
