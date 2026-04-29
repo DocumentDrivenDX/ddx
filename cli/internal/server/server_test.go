@@ -989,6 +989,36 @@ func TestDocStale(t *testing.T) {
 	}
 }
 
+func TestDocChanged(t *testing.T) {
+	dir := setupTestDir(t)
+	// Initialize a git repo so handleDocChanged's underlying git diff succeeds.
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"-c", "user.email=t@e.com", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "init"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/docs/changed?since=HEAD", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var entries []json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("expected JSON array: %v", err)
+	}
+}
+
 func TestHealth(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
