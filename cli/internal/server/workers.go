@@ -725,26 +725,57 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			requestedTier := string(tiers[0])
 
 			for tierIdx, tier := range tiers {
-				modelRefForTier := agent.ResolveTierModelRef(routingCfg, tier)
-				// Resolve the best harness for this tier via service.ResolveRoute.
-				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-					Profile:   profile,
-					Model:     modelRefForTier,
-					Provider:  spec.Provider,
-					Reasoning: agentlib.Reasoning(spec.Effort),
-				})
-				probeResult := "ok"
-				// Treat cooldown-marked harnesses as unavailable for this tier.
-				// Health is owned by the upstream service; consult svc.RouteStatus.
-				if routeErr == nil && !workerHarnessHealthy(ctx, svc, dec.Harness) {
-					routeErr = fmt.Errorf("provider cooldown")
+				// Catalog-driven tier resolution (ddx-5538aa5b): walk catalog
+				// surfaces (or model_overrides if set) to produce concrete
+				// (harness, model) candidates. Avoids the prior failure mode
+				// where the literal tier name ("cheap"/"standard"/"smart") was
+				// passed as Model and resolved to no harness/no model.
+				candidates := agent.ResolveTierCandidates(routingCfg, agent.BuiltinCatalog, tier)
+
+				var dec *agentlib.RouteDecision
+				var routeErr error
+				var skipReasons []string
+				for _, cand := range candidates {
+					req := agentlib.RouteRequest{
+						Profile:   profile,
+						Provider:  spec.Provider,
+						Reasoning: agentlib.Reasoning(spec.Effort),
+					}
+					if cand.Harness != "" {
+						req.Harness = cand.Harness
+					}
+					if cand.Model != "" {
+						req.Model = cand.Model
+					}
+					d, err := svc.ResolveRoute(ctx, req)
+					if err != nil {
+						skipReasons = append(skipReasons, formatTierCandidateRejection(cand, err.Error()))
+						continue
+					}
+					if !workerHarnessHealthy(ctx, svc, d.Harness) {
+						skipReasons = append(skipReasons, formatTierCandidateRejection(cand, "provider cooldown"))
+						continue
+					}
+					dec = d
+					break
 				}
+				if dec == nil {
+					if len(candidates) == 0 {
+						skipReasons = []string{"tier has no candidates in catalog and no model_overrides entry"}
+					}
+					routeErr = fmt.Errorf("no viable harness")
+				}
+				probeResult := "ok"
 				if routeErr != nil {
 					probeResult = "no viable provider"
+					detail := strings.Join(skipReasons, "\n")
+					if detail == "" {
+						detail = "no viable harness found"
+					}
 					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
 						Kind:      "tier-attempt",
 						Summary:   "skipped",
-						Body:      escalation.FormatTierAttemptBody(string(tier), "", "", probeResult, "no viable harness found"),
+						Body:      escalation.FormatTierAttemptBody(string(tier), "", "", probeResult, detail),
 						Actor:     "ddx",
 						Source:    "ddx agent execute-loop",
 						CreatedAt: time.Now().UTC(),
@@ -1686,6 +1717,19 @@ func relToProject(projectRoot, path string) string {
 		return path
 	}
 	return rel
+}
+
+// formatTierCandidateRejection renders a single per-candidate rejection
+// line for the tier-attempt body (ddx-5538aa5b AC#3).
+func formatTierCandidateRejection(cand agent.TierCandidate, reason string) string {
+	label := cand.Source
+	if cand.Surface != "" {
+		label = cand.Surface
+	}
+	if cand.Model != "" {
+		return fmt.Sprintf("%s (%s): %s", label, cand.Model, reason)
+	}
+	return fmt.Sprintf("%s: %s", label, reason)
 }
 
 // workerHarnessHealthy reports whether the upstream service has an active

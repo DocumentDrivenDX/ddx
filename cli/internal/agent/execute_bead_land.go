@@ -127,6 +127,20 @@ type LandResult struct {
 	// PushError captures the underlying push error when PushFailed is true.
 	PushError string
 
+	// PushConflict is true when the initial push was rejected (e.g. origin
+	// advanced) and the loop's automatic pull/merge/retry recovery ran into
+	// a merge conflict it cannot resolve without operator input. Distinct
+	// from PushFailed so the loop can park the bead for human review under
+	// a short cooldown instead of treating it as a generic push failure.
+	PushConflict bool
+
+	// PushRecovered is true when the initial push was rejected but the loop
+	// successfully fetched, merged, and re-pushed without operator input.
+	// The land is fully complete; PushFailed and PushConflict are false.
+	// Set so callers can record telemetry on how often the auto-recovery
+	// path actually saves an operator round-trip.
+	PushRecovered bool
+
 	// MergedCommitCount is the number of commits reachable from ResultRev but
 	// not from BaseRev — i.e. the "size" of the worker's contribution being
 	// merged in. Zero on the no-changes path. Set on both the fast-forward
@@ -704,14 +718,117 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 // landPush pushes the new target tip to origin when a remote exists. Push
 // failure is non-fatal for the local land outcome; it is surfaced via
 // PushFailed/PushError on the result.
+//
+// On the first push rejection landPush attempts one automatic recovery —
+// fetch origin, merge our local tip into the new origin tip, advance the
+// local target ref, and retry the push. The race-with-remote case (origin
+// advanced with non-overlapping work between our local merge and our push)
+// is the common failure in a multi-worker / multi-operator setup and can be
+// fixed without operator intervention. If the auto-merge produces a conflict
+// the loop cannot resolve, landPush marks the result PushConflict (a distinct
+// signal from generic PushFailed) so the caller can park the bead for human
+// review under a short cooldown rather than the long park used for
+// non-recoverable push failures.
 func landPush(wd, targetBranch, newTip string, hasOrigin bool, gitOps LandingGitOps, result *LandResult) {
 	if !hasOrigin {
 		return
 	}
-	if err := gitOps.PushFFOnly(wd, "origin", newTip, targetBranch); err != nil {
-		result.PushFailed = true
-		result.PushError = err.Error()
+	firstErr := gitOps.PushFFOnly(wd, "origin", newTip, targetBranch)
+	if firstErr == nil {
+		return
 	}
+	// First push rejected. Try one automatic pull/merge/retry-push pass.
+	if recovered, mergeSHA, recErr := landPushAutoRecover(wd, targetBranch, newTip, gitOps); recovered {
+		result.NewTip = mergeSHA
+		result.PushRecovered = true
+		return
+	} else if recErr != nil && isPushAutoMergeConflict(recErr) {
+		// Auto-merge could not be resolved without operator input.
+		result.PushConflict = true
+		result.PushError = recErr.Error()
+		return
+	}
+	// Either recovery itself failed for non-conflict reasons (network, auth,
+	// fetch error, retry push still rejected) or origin was already at our
+	// tip. Surface the original push error so operator messages match the
+	// historical contract.
+	result.PushFailed = true
+	result.PushError = firstErr.Error()
+}
+
+// landPushAutoMergeConflictError tags a recovery error that originates from
+// an unresolvable git merge conflict, so landPush can branch on it without
+// pattern-matching free-form error strings.
+type landPushAutoMergeConflictError struct{ inner error }
+
+func (e *landPushAutoMergeConflictError) Error() string { return e.inner.Error() }
+func (e *landPushAutoMergeConflictError) Unwrap() error { return e.inner }
+
+func isPushAutoMergeConflict(err error) bool {
+	for err != nil {
+		if _, ok := err.(*landPushAutoMergeConflictError); ok {
+			return true
+		}
+		type unwrapper interface{ Unwrap() error }
+		u, ok := err.(unwrapper)
+		if !ok {
+			return false
+		}
+		err = u.Unwrap()
+	}
+	return false
+}
+
+// landPushAutoRecover attempts one fetch + merge + retry-push pass after the
+// initial push was rejected. Returns recovered=true and the new merge SHA
+// when the retry-push succeeds; otherwise returns recovered=false plus an
+// error that indicates whether the recovery hit a merge conflict (wrapped in
+// landPushAutoMergeConflictError) or some other failure.
+//
+// Caller responsibilities (already met by landPush):
+//   - The local target ref is at newTip and not yet pushed.
+//   - hasOrigin is true.
+func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) (recovered bool, mergeSHA string, err error) {
+	if fetchErr := gitOps.FetchBranch(wd, "origin", targetBranch); fetchErr != nil {
+		return false, "", fmt.Errorf("auto-recovery fetch origin %s: %w", targetBranch, fetchErr)
+	}
+	originSHA, resolveErr := gitOps.ResolveRef(wd, "refs/remotes/origin/"+targetBranch)
+	if resolveErr != nil {
+		return false, "", fmt.Errorf("auto-recovery resolve origin/%s: %w", targetBranch, resolveErr)
+	}
+	if originSHA == newTip {
+		// Origin is already at our tip — push must have failed for a reason
+		// other than a non-fast-forward (auth, branch protection, large
+		// blob, etc.). Recovery cannot help.
+		return false, "", fmt.Errorf("origin already at local tip; push failure not recoverable by auto-merge")
+	}
+	tempWT, mkErr := os.MkdirTemp("", "ddx-push-recover-*")
+	if mkErr != nil {
+		return false, "", fmt.Errorf("auto-recovery temp worktree: %w", mkErr)
+	}
+	_ = os.RemoveAll(tempWT)
+	if addErr := gitOps.AddWorktree(wd, tempWT, originSHA); addErr != nil {
+		return false, "", fmt.Errorf("auto-recovery add worktree at %s: %w", originSHA, addErr)
+	}
+	defer func() { _ = gitOps.RemoveWorktree(wd, tempWT) }()
+
+	mergeMsg := fmt.Sprintf("Merge origin/%s into %s after push race", targetBranch, targetBranch)
+	if mergeErr := gitOps.MergeInto(tempWT, newTip, mergeMsg); mergeErr != nil {
+		return false, "", &landPushAutoMergeConflictError{inner: mergeErr}
+	}
+	mergeSHA, headErr := gitOps.HeadRevAt(tempWT)
+	if headErr != nil {
+		return false, "", fmt.Errorf("auto-recovery read merge HEAD: %w", headErr)
+	}
+	targetRef := "refs/heads/" + targetBranch
+	if updErr := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, newTip); updErr != nil {
+		return false, "", fmt.Errorf("auto-recovery advance %s to %s: %w", targetRef, mergeSHA, updErr)
+	}
+	_ = gitOps.SyncWorkTreeToHead(wd, newTip)
+	if pushErr := gitOps.PushFFOnly(wd, "origin", mergeSHA, targetBranch); pushErr != nil {
+		return false, "", fmt.Errorf("auto-recovery retry push: %w", pushErr)
+	}
+	return true, mergeSHA, nil
 }
 
 // shortAttempt returns a 10-char slug derived from attemptID for use in temp
@@ -744,7 +861,9 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 		if land.Merged {
 			res.Reason = "merged onto current tip"
 		}
-		if land.PushFailed {
+		if land.PushConflict {
+			res.Reason = PushConflictReasonPrefix + " " + land.PushError
+		} else if land.PushFailed {
 			res.Reason = PushFailedReasonPrefix + " " + land.PushError
 		}
 		// NewTip reflects the ref actually on the target branch (either

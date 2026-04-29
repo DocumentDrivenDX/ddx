@@ -1,0 +1,6 @@
+version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/ddx-fixture"
+    branch: "main"

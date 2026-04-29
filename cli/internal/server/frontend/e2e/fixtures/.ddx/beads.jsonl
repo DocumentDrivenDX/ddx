@@ -1,0 +1,4 @@
+{"id":"fx-001","title":"Open ready bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","labels":["fixture","ready"]}
+{"id":"fx-002","title":"Closed bead","status":"closed","priority":2,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z","labels":["fixture"]}
+{"id":"fx-003","title":"Blocked bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","labels":["fixture","blocked"],"dependencies":[{"issue_id":"fx-003","depends_on_id":"fx-001","type":"blocks"}]}
+{"id":"fx-004","title":"Another open bead","status":"open","priority":3,"issue_type":"task","created_at":"2026-01-03T00:00:00Z","updated_at":"2026-01-03T00:00:00Z","labels":["fixture"]}

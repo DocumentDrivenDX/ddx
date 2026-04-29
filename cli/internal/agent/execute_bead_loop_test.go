@@ -1112,8 +1112,13 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	require.NotEmpty(t, retryAfter, "execute-loop-retry-after must be set")
 	parkedUntil, perr := time.Parse(time.RFC3339, retryAfter)
 	require.NoError(t, perr)
-	require.True(t, parkedUntil.After(time.Now().Add(180*24*time.Hour)),
-		"cooldown must park well into the future (>180d), got %s", retryAfter)
+	// ddx-a458af7c: all loop-set cooldowns cap at MaxLoopCooldown (24h).
+	// Year-scale parks are operator-only (`ddx bead update --set
+	// execute-loop-retry-after=...`), never an automatic loop output.
+	require.True(t, parkedUntil.After(time.Now().Add(MaxLoopCooldown-time.Hour)),
+		"cooldown must park near the cap (~24h), got %s", retryAfter)
+	require.True(t, parkedUntil.Before(time.Now().Add(MaxLoopCooldown+time.Hour)),
+		"cooldown must NOT exceed MaxLoopCooldown (24h), got %s", retryAfter)
 	lastStatus, _ := got.Extra["execute-loop-last-status"].(string)
 	require.Equal(t, ExecuteBeadStatusDeclinedNeedsDecomposition, lastStatus)
 

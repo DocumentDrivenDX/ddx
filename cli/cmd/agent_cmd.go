@@ -935,6 +935,21 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 // RecordRouteAttempt benefits every other consumer. When RouteStatus is
 // unavailable (e.g. fresh service with no routes yet) the harness is
 // considered healthy.
+// formatCandidateRejection renders a single per-candidate rejection line for
+// the tier-attempt body. It distinguishes catalog candidates (named by
+// surface) from override candidates so operators can see which fallback path
+// produced each error (ddx-5538aa5b AC#3).
+func formatCandidateRejection(cand agent.TierCandidate, reason string) string {
+	label := cand.Source
+	if cand.Surface != "" {
+		label = cand.Surface
+	}
+	if cand.Model != "" {
+		return fmt.Sprintf("%s (%s): %s", label, cand.Model, reason)
+	}
+	return fmt.Sprintf("%s: %s", label, reason)
+}
+
 func harnessHealthyViaService(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
 	if svc == nil || harness == "" {
 		return true
@@ -1368,9 +1383,53 @@ func (f *CommandFactory) newAgentCatalogCommand() *cobra.Command {
 					fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", id)
 				}
 			}
+
+			// Reachability warnings (ddx-5538aa5b AC#4): for each tier surface,
+			// probe the agent service to see whether the catalog model resolves
+			// to a healthy route. A tier with zero reachable surfaces would
+			// produce "no viable provider" in execute-loop; surface that gap
+			// here so users discover it before invoking the queue.
+			projectFlag, _ := cmd.Flags().GetString("project")
+			projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
+			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
+			if svcErr == nil && svc != nil {
+				ctx := cmd.Context()
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				var warnings []string
+				for _, tier := range []string{"smart", "standard", "cheap"} {
+					def, ok := cat.Tiers[tier]
+					if !ok || len(def.Surfaces) == 0 {
+						continue
+					}
+					anyReachable := false
+					var perSurface []string
+					for surface, model := range def.Surfaces {
+						_, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{
+							Model: model,
+						})
+						if err == nil {
+							anyReachable = true
+							break
+						}
+						perSurface = append(perSurface, fmt.Sprintf("    %s (%s): %v", surface, model, err))
+					}
+					if !anyReachable {
+						warnings = append(warnings, fmt.Sprintf("  [%s] no surface resolves to a healthy route:\n%s", tier, strings.Join(perSurface, "\n")))
+					}
+				}
+				if len(warnings) > 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "\nWarning: tiers with no reachable provider:\n")
+					for _, w := range warnings {
+						fmt.Fprintln(cmd.OutOrStdout(), w)
+					}
+				}
+			}
 			return nil
 		},
 	}
+	showCmd.Flags().String("project", "", "Project root (default: current directory)")
 
 	cmd.AddCommand(showCmd)
 	return cmd
@@ -1621,7 +1680,8 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Bool("no-adaptive-min-tier", false, "Disable adaptive min-tier promotion based on trailing cheap-tier success rate")
 	cmd.Flags().Int("adaptive-min-tier-window", 50, "Trailing window size for adaptive min-tier evaluation")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
-	cmd.Flags().Bool("escalate", false, "Enable tier-ladder escalation. Off by default: a single ResolveRoute call drives each attempt (ddx-755f5881). Use this only when you explicitly want cheap→standard→smart fallback semantics.")
+	cmd.Flags().Bool("escalate", false, "Enable tier-ladder escalation. Off by default: a single ResolveRoute call drives each attempt (ddx-755f5881). Use this only when you explicitly want cheap→standard→smart fallback semantics. Consults agent.routing.profile_ladders.")
+	cmd.Flags().Bool("override-model", false, "Consult agent.routing.model_overrides when picking a per-tier model reference. Off by default; the field is ignored unless this flag is set (bead ddx-87fb72c2).")
 	return cmd
 }
 
@@ -1648,6 +1708,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	adaptiveWindow, _ := cmd.Flags().GetInt("adaptive-min-tier-window")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	escalate, _ := cmd.Flags().GetBool("escalate")
+	overrideModel, _ := cmd.Flags().GetBool("override-model")
 
 	// Adaptive min-tier: when the operator did not pin --min-tier and adaptation
 	// is not disabled, consult trailing cheap-tier success rate and promote to
@@ -1913,27 +1974,69 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			requestedTier := string(tiers[0])
 
 			for tierIdx, tier := range tiers {
-				modelRefForTier := agent.ResolveTierModelRef(routingCfg, tier)
-				// Resolve the best harness for this tier via service.ResolveRoute.
-				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-					Profile:   profile,
-					Model:     modelRefForTier,
-					Provider:  provider,
-					Reasoning: agentlib.Reasoning(effort),
-				})
-				probeResult := "ok"
-				// Treat cooldown-marked harnesses as unavailable for this tier.
-				// Health is owned by the upstream service: consult svc.RouteStatus.
-				if routeErr == nil && !harnessHealthyViaService(ctx, svc, dec.Harness) {
-					routeErr = fmt.Errorf("provider cooldown")
+				// Catalog-driven tier resolution (ddx-5538aa5b): walk catalog
+				// surfaces (or model_overrides if set) to produce concrete
+				// (harness, model) candidates. Per-project model_overrides
+				// remain a supported override layered on top of catalog
+				// defaults; absence no longer collapses tier resolution to
+				// the literal tier name.
+				candidates := agent.ResolveTierCandidates(routingCfg, agent.BuiltinCatalog, tier)
+				if !overrideModel {
+					// model_overrides is opt-in via --override-model.
+					filtered := candidates[:0]
+					for _, c := range candidates {
+						if c.Source != "override" {
+							filtered = append(filtered, c)
+						}
+					}
+					candidates = filtered
 				}
+
+				var dec *agentlib.RouteDecision
+				var routeErr error
+				var skipReasons []string
+				for _, cand := range candidates {
+					req := agentlib.RouteRequest{
+						Profile:   profile,
+						Provider:  provider,
+						Reasoning: agentlib.Reasoning(effort),
+					}
+					if cand.Harness != "" {
+						req.Harness = cand.Harness
+					}
+					if cand.Model != "" {
+						req.Model = cand.Model
+					}
+					d, err := svc.ResolveRoute(ctx, req)
+					if err != nil {
+						skipReasons = append(skipReasons, formatCandidateRejection(cand, err.Error()))
+						continue
+					}
+					if !harnessHealthyViaService(ctx, svc, d.Harness) {
+						skipReasons = append(skipReasons, formatCandidateRejection(cand, "provider cooldown"))
+						continue
+					}
+					dec = d
+					break
+				}
+				if dec == nil {
+					if len(candidates) == 0 {
+						skipReasons = []string{"tier has no candidates in catalog and no model_overrides entry"}
+					}
+					routeErr = fmt.Errorf("no viable harness")
+				}
+				probeResult := "ok"
 				if routeErr != nil {
 					probeResult = "no viable provider"
+					detail := strings.Join(skipReasons, "\n")
+					if detail == "" {
+						detail = "no viable harness found"
+					}
 					// No viable harness for this tier; skip and escalate.
 					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
 						Kind:      "tier-attempt",
 						Summary:   "skipped",
-						Body:      escalation.FormatTierAttemptBody(string(tier), "", "", probeResult, "no viable harness found"),
+						Body:      escalation.FormatTierAttemptBody(string(tier), "", "", probeResult, detail),
 						Actor:     assignee,
 						Source:    "ddx agent execute-loop",
 						CreatedAt: time.Now().UTC(),

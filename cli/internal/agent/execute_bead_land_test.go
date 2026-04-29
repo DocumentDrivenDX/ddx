@@ -553,6 +553,165 @@ func TestLand_NoChanges(t *testing.T) {
 	}
 }
 
+// TestLand_PushAutoRecovery_RaceWithRemoteResolved verifies the AC for
+// ddx-a458af7c (#1, #4): a non-fast-forward push because origin advanced
+// while the worker was running is auto-recovered by fetch + merge + retry-push.
+// The bead lands cleanly without operator intervention.
+func TestLand_PushAutoRecovery_RaceWithRemoteResolved(t *testing.T) {
+	r := newLandTestRepoWithOrigin(t)
+	ops := RealLandingGitOps{}
+
+	// Side-clone advances origin/main with a commit that touches a different
+	// file, so the auto-merge will succeed without conflicts.
+	sideDir, err := os.MkdirTemp("", "land-side-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(sideDir)
+	runCmd := func(dir string, args ...string) {
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		out, cerr := c.CombinedOutput()
+		if cerr != nil {
+			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), cerr)
+		}
+	}
+	runCmd("", "clone", r.origin, sideDir)
+	runCmd(sideDir, "config", "user.name", "Side")
+	runCmd(sideDir, "config", "user.email", "side@test.local")
+	if err := os.WriteFile(filepath.Join(sideDir, "remote-only.txt"), []byte("remote\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runCmd(sideDir, "add", "-A")
+	runCmd(sideDir, "commit", "-m", "remote: side-clone advance")
+	runCmd(sideDir, "push", "origin", "main")
+
+	// Worker branched off baseSHA before the side-clone landed.
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "worker\n", "feat: worker")
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-pushrace",
+		AttemptID:    "20260429T000001-pr",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
+	}
+	if land.PushFailed {
+		t.Errorf("expected PushFailed=false after auto-recovery, got true (err=%q)", land.PushError)
+	}
+	if land.PushConflict {
+		t.Errorf("expected PushConflict=false on clean auto-merge, got true (err=%q)", land.PushError)
+	}
+	if !land.PushRecovered {
+		t.Errorf("expected PushRecovered=true after a successful auto-recovery, got false")
+	}
+	// Local target ref must point at the merge commit (not the original
+	// workerSHA, since auto-recovery merged origin into it).
+	localTip := r.resolveRef("refs/heads/main")
+	if localTip == workerSHA {
+		t.Errorf("expected local main to advance past workerSHA after auto-recovery, still at %s", workerSHA)
+	}
+	if land.NewTip != localTip {
+		t.Errorf("LandResult.NewTip = %s, want local main tip %s", land.NewTip, localTip)
+	}
+	// Origin must have received the new tip (push retry succeeded).
+	originOut, err := exec.Command("git", "-C", r.origin, "rev-parse", "refs/heads/main").CombinedOutput()
+	if err != nil {
+		t.Fatalf("rev-parse origin/main: %s: %v", string(originOut), err)
+	}
+	originTip := strings.TrimSpace(string(originOut))
+	if originTip != localTip {
+		t.Errorf("origin/main = %s, want local %s — retry push must have landed remotely", originTip, localTip)
+	}
+	// Replay fidelity: workerSHA's own parent is unchanged (= baseSHA).
+	parents := r.commitParents(workerSHA)
+	if len(parents) != 1 || parents[0] != r.baseSHA {
+		t.Errorf("worker commit parent = %v, want [%s] (auto-recovery must not rewrite worker commits)", parents, r.baseSHA)
+	}
+}
+
+// TestLand_PushAutoRecovery_UnresolvableConflictReportsPushConflict verifies
+// AC #3 + #5 of ddx-a458af7c: when origin advanced with overlapping changes
+// the auto-merge cannot resolve, Land() reports PushConflict (distinct from
+// generic PushFailed) so the loop can park the bead for human review under
+// the 24h cap.
+func TestLand_PushAutoRecovery_UnresolvableConflictReportsPushConflict(t *testing.T) {
+	r := newLandTestRepoWithOrigin(t)
+	ops := RealLandingGitOps{}
+
+	// Side-clone edits the SAME file (feature.txt) on origin so the auto-merge
+	// against our worker's edits will conflict.
+	sideDir, err := os.MkdirTemp("", "land-side-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(sideDir)
+	runCmd := func(dir string, args ...string) {
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		out, cerr := c.CombinedOutput()
+		if cerr != nil {
+			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), cerr)
+		}
+	}
+	runCmd("", "clone", r.origin, sideDir)
+	runCmd(sideDir, "config", "user.name", "Side")
+	runCmd(sideDir, "config", "user.email", "side@test.local")
+	if err := os.WriteFile(filepath.Join(sideDir, "feature.txt"), []byte("origin-version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runCmd(sideDir, "add", "-A")
+	runCmd(sideDir, "commit", "-m", "remote: conflict")
+	runCmd(sideDir, "push", "origin", "main")
+
+	// Worker edits the same file with conflicting content.
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "worker-version\n", "feat: worker")
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-pushconflict",
+		AttemptID:    "20260429T000002-pc",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed (local) even when push auto-recovery conflicts, got %q", land.Status)
+	}
+	if !land.PushConflict {
+		t.Errorf("expected PushConflict=true when auto-merge conflicts, got false (PushFailed=%v PushError=%q)", land.PushFailed, land.PushError)
+	}
+	if land.PushFailed {
+		t.Errorf("expected PushFailed=false (PushConflict is the more specific signal), got true")
+	}
+	if land.PushRecovered {
+		t.Errorf("expected PushRecovered=false on conflict, got true")
+	}
+	if land.PushError == "" {
+		t.Errorf("expected non-empty PushError describing the conflict, got empty")
+	}
+	// ApplyLandResultToExecuteBeadResult must surface the conflict marker so
+	// the loop classifies the report as push_conflict, not push_failed.
+	res := &ExecuteBeadResult{ExitCode: 0, BaseRev: r.baseSHA, ResultRev: workerSHA, BeadID: req.BeadID, AttemptID: req.AttemptID}
+	ApplyLandResultToExecuteBeadResult(res, land)
+	if !strings.HasPrefix(res.Reason, PushConflictReasonPrefix) {
+		t.Errorf("expected res.Reason to start with PushConflictReasonPrefix, got %q", res.Reason)
+	}
+	if res.Status != ExecuteBeadStatusPushConflict {
+		t.Errorf("expected res.Status = push_conflict, got %q", res.Status)
+	}
+}
+
 // Deterministic test clock helper — avoids unused time import when no test
 // overrides NowFunc.
 var _ = time.Now

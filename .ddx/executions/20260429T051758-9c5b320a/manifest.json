@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T051758-9c5b320a",
+  "bead_id": "ddx-d15b6aa1",
+  "base_rev": "1354a5397fa732ca6a1042f3e51ec466705ba9a4",
+  "created_at": "2026-04-29T05:17:59.086046022Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d15b6aa1",
+    "title": "Migrate bead execution and worker smoke specs to fixture data",
+    "description": "## Context\n\nThe frontend e2e specs for beads, executions, and workers require backend data and currently fail when Playwright serves static preview output without the Go DDx server. After the fixture-backed harness exists, these specs should use the seeded `.ddx/beads.jsonl`, docs library, and any execution/worker fixture state available from the harness instead of relying on developer-local DDx state.\n\nUpdate the backend-data smoke specs so they pass against the self-contained fixture while preserving coverage of bead lists/status, execution views, and worker-related UI/API behavior.\n\n## In-scope files\n\n- `cli/internal/server/frontend/e2e/beads-smoke.spec.ts`.\n- `cli/internal/server/frontend/e2e/executions.spec.ts`.\n- `cli/internal/server/frontend/e2e/workers.spec.ts`.\n\n## Out-of-scope\n\n- `cli/internal/server/frontend/e2e/app.spec.ts`.\n- `cli/internal/server/frontend/e2e/navigation.spec.ts` and `src/routes/layout.e2e.ts`.\n- `cli/internal/server/frontend/e2e/screenshots.spec.ts` and any visual baseline rework.\n- `cli/internal/server/frontend/playwright.config.ts` and fixture creation except reading the fixture IDs/data created by the prerequisite bead.\n- `cli/internal/server/frontend/e2e/demo-recording.spec.ts` and `playwright.demo.config.ts`.\n- Go server source changes under `cli/internal/server/`.\n- Test deletion, `.skip`, or broad assertion weakening.\n\n## Rollback / cleanup\n\nIf a spec needs additional fixture records, keep the fixture deterministic and self-contained. Do not point tests at the repository's live `.ddx/` tracker or developer-specific worker state.",
+    "acceptance": "cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e e2e/beads-smoke.spec.ts e2e/executions.spec.ts e2e/workers.spec.ts\ncd cli/internal/server/frontend \u0026\u0026 git diff --exit-code -- playwright.demo.config.ts e2e/demo-recording.spec.ts",
+    "parent": "ddx-ccdf9cf9",
+    "labels": [
+      "area:test",
+      "area:frontend",
+      "kind:test-infra",
+      "phase:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T05:17:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "131811",
+      "execute-loop-heartbeat-at": "2026-04-29T05:17:58.394522532Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T051758-9c5b320a",
+    "prompt": ".ddx/executions/20260429T051758-9c5b320a/prompt.md",
+    "manifest": ".ddx/executions/20260429T051758-9c5b320a/manifest.json",
+    "result": ".ddx/executions/20260429T051758-9c5b320a/result.json",
+    "checks": ".ddx/executions/20260429T051758-9c5b320a/checks.json",
+    "usage": ".ddx/executions/20260429T051758-9c5b320a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d15b6aa1-20260429T051758-9c5b320a"
+  }
+}

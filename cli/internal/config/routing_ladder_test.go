@@ -28,13 +28,11 @@ routing:
     fast: kimi/k2.5
     standard: codex/gpt-5.4
     smart: minimax/minimax-m2.7
-  default_harness: agent
 `
 	var cfg AgentConfig
 	require.NoError(t, yaml.Unmarshal([]byte(raw), &cfg))
 
 	require.NotNil(t, cfg.Routing)
-	assert.Equal(t, "agent", cfg.Routing.DefaultHarness)
 
 	require.Contains(t, cfg.Routing.ProfileLadders, "default")
 	assert.Equal(t, []string{"cheap", "standard", "smart"}, cfg.Routing.ProfileLadders["default"])

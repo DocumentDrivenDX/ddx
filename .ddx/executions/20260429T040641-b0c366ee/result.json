@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "drain_regression_test.go reproduces the 4-endpoint + gemini/minimax overrides config with empty spec, asserts ≤1 executor invocation (vs historical 19), handles gemini-binary by stubbing executor at loop boundary (documented), and runs in default go test ./....",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Test stubs executor at the loop boundary instead of using a real harness binary; rationale documented in the file header. This is a sound choice — guards the dispatch/loop regression rather than the harness runner.",
+      "location": "cli/internal/agent/drain_regression_test.go:38"
+    },
+    {
+      "severity": "info",
+      "summary": "Belt-and-braces assertions on ResolveProfileLadder/ResolveTierModelRef call counters add useful future-proofing beyond the literal AC.",
+      "location": "cli/internal/agent/drain_regression_test.go:152"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1304,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T035839-ec1070fd/manifest.json",
+          ".ddx/executions/20260429T035839-ec1070fd/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3805,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6915,
+    "output_bytes": 922,
+    "elapsed_ms": 17828,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

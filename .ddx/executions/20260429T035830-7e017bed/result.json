@@ -1,0 +1,49 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review contains only execution evidence (manifest.json, result.json) for the attempt. No actual code, schema, CHANGELOG, or migration-doc changes are visible, so none of the 5 AC items can be verified from this diff.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Changed files are limited to .ddx/executions/* metadata; no Go struct, schema, sample config, CHANGELOG, or docs/migrations changes present to evaluate against AC1–AC5.",
+      "location": ".ddx/executions/20260429T034538-9aa875d6/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1523,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T034538-9aa875d6/manifest.json",
+          ".ddx/executions/20260429T034538-9aa875d6/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4021,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 7350,
+    "output_bytes": 594,
+    "elapsed_ms": 6475,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

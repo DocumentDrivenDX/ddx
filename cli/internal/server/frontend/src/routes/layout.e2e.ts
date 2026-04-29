@@ -1,44 +1,36 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-const NODE_INFO = { id: 'node-abc', name: 'Test Node' };
-
-async function mockGraphQL(page: Page) {
-	await page.route('/graphql', async (route) => {
-		const body = route.request().postDataJSON() as { query: string };
-		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
-			});
-		} else if (body.query.includes('Projects')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { projects: { edges: [] } } })
-			});
-		} else {
-			await route.continue();
-		}
-	});
-}
+// Layout/shell expectations driven by the live Go-server fixture harness.
+// The harness boots ddx-server from a temp `ddx-e2e-XXXXXX` workspace so
+// nodeInfo and the project list resolve against seeded fixture data instead
+// of the developer's $HOME or the repo's live `.ddx/` state.
 
 test('loads / and NavShell links exist', async ({ page }) => {
-	await mockGraphQL(page);
 	await page.goto('/');
+	await page.waitForSelector('nav');
 
 	// NavShell brand
-	await expect(page.getByText('DDx')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'DDx' })).toBeVisible();
 
-	// Sidebar nav links (rendered as spans since no project selected)
+	// No project is auto-selected from the fixture's project list, so the
+	// project-scoped sidebar entries render as plain text (spans) and remain
+	// matchable via getByText.
 	const nav = page.locator('nav');
-	for (const label of ['Beads', 'Documents', 'Graph', 'Workers', 'Sessions', 'Personas', 'Commits', 'All Beads']) {
-		await expect(nav.getByText(label)).toBeVisible();
+	for (const label of [
+		'Beads',
+		'Documents',
+		'Graph',
+		'Workers',
+		'Sessions',
+		'Personas',
+		'Commits',
+		'All Beads'
+	]) {
+		await expect(nav.getByText(label, { exact: true })).toBeVisible();
 	}
 });
 
 test('dark mode toggle updates html class', async ({ page }) => {
-	await mockGraphQL(page);
 	await page.goto('/');
 
 	const html = page.locator('html');
@@ -46,7 +38,7 @@ test('dark mode toggle updates html class', async ({ page }) => {
 	await expect(toggle).toBeVisible();
 
 	// Read initial class state
-	const initialClass = await html.getAttribute('class') ?? '';
+	const initialClass = (await html.getAttribute('class')) ?? '';
 	const wasDark = initialClass.includes('dark');
 
 	// Toggle once — class should flip
@@ -67,7 +59,6 @@ test('dark mode toggle updates html class', async ({ page }) => {
 });
 
 test('bits-ui Button renders on /demo/ui-primitives', async ({ page }) => {
-	await mockGraphQL(page);
 	await page.goto('/demo/ui-primitives');
 
 	const button = page.getByRole('button', { name: 'bits-ui Button' });
@@ -75,7 +66,6 @@ test('bits-ui Button renders on /demo/ui-primitives', async ({ page }) => {
 });
 
 test('bits-ui Button has correct role attribute', async ({ page }) => {
-	await mockGraphQL(page);
 	await page.goto('/demo/ui-primitives');
 
 	const button = page.getByRole('button', { name: 'bits-ui Button' });

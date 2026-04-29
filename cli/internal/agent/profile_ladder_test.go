@@ -68,6 +68,48 @@ func TestResolveTierModelRefUsesOverrides(t *testing.T) {
 	assert.Equal(t, "cheap", ResolveTierModelRef(routing, "cheap"))
 }
 
+// ddx-5538aa5b AC#1: when model_overrides is unset, ResolveTierCandidates
+// must consult the catalog and return concrete (harness, model) candidates
+// rather than collapsing to the literal tier name.
+func TestResolveTierCandidatesFromCatalog(t *testing.T) {
+	cands := ResolveTierCandidates(nil, BuiltinCatalog, "cheap")
+	assert.NotEmpty(t, cands, "catalog must produce candidates for cheap tier")
+	for _, c := range cands {
+		assert.Equal(t, "catalog", c.Source)
+		assert.NotEmpty(t, c.Harness, "candidate must name a harness")
+		assert.NotEmpty(t, c.Model, "candidate must name a concrete model")
+		assert.NotEqual(t, "cheap", c.Model, "candidate model must not be the literal tier name")
+	}
+}
+
+// ddx-5538aa5b AC#5: model_overrides remains a supported override that
+// wins over catalog defaults — backwards compatible.
+func TestResolveTierCandidatesOverridesWinFirst(t *testing.T) {
+	routing := &config.RoutingConfig{
+		ModelOverrides: map[string]string{
+			"standard": "codex/gpt-5.4",
+		},
+	}
+	cands := ResolveTierCandidates(routing, BuiltinCatalog, "standard")
+	assert.GreaterOrEqual(t, len(cands), 1)
+	assert.Equal(t, "override", cands[0].Source)
+	assert.Equal(t, "codex/gpt-5.4", cands[0].Model)
+	// Catalog defaults still appear after the override so callers can fall
+	// back when the override is unreachable.
+	hasCatalog := false
+	for _, c := range cands[1:] {
+		if c.Source == "catalog" {
+			hasCatalog = true
+		}
+	}
+	assert.True(t, hasCatalog, "catalog candidates must follow override candidates")
+}
+
+func TestResolveTierCandidatesUnknownTier(t *testing.T) {
+	cands := ResolveTierCandidates(nil, BuiltinCatalog, "nonexistent-tier")
+	assert.Empty(t, cands)
+}
+
 func TestProfileLadderExecutionPaths(t *testing.T) {
 	cases := []struct {
 		name     string
