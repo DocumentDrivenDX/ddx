@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260429T160253-45091def",
+  "bead_id": "ddx-ccdf9cf9",
+  "base_rev": "6122dae53ee8189d8fb62b56ad6d81318f68c701",
+  "created_at": "2026-04-29T16:02:54.143504618Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ccdf9cf9",
+    "title": "test-infra: e2e suite drifted from node/project router; needs Go-server harness + seeded fixture",
+    "description": "## Problem\n\n`bun run test:e2e` from `cli/internal/server/frontend` exits 1: 42 of 196 tests fail, 149 pass, 5 skipped. The failures are not regressions — they are accumulated drift between the test suite and the current UI. `playwright.config.ts` runs only `bun run preview` (port 4173, static SvelteKit output, no Go backend), and the suite outgrew that scope.\n\nBead ddx-955b9c41 (closed 2026-04-21) flagged the split between `playwright.config.ts` (4173) and `playwright.demo.config.ts` (18080) as \"likely intentional but undocumented\". This epic resolves it.\n\n## Failure breakdown\n\n**(A) TC-008 HTTP API — 6 tests.** `e2e/app.spec.ts:368-409`. Direct `request.get('/api/...')` to `/api/health`, `/api/documents`, `/api/beads`, `/api/beads/status`, `/api/personas`, `/api/docs/graph`. Static preview returns 404; the Go server returns 200 for all six (verified with curl against the running ddx-server on https://127.0.0.1:7743 during the session that filed this bead).\n\n**(B) TC-001 Dashboard — 8 tests.** `e2e/app.spec.ts:9-57`. All visit `/` and expect `h1` \"Dashboard\". Per Stage 3.8 (commit 3bf655cf), `src/routes/+page.svelte` does `goto(`/nodes/${nodeStore.value.id}`, { replaceState: true })` whenever a node is selected — `/` is no longer a Dashboard route. Tests were not migrated.\n\n**(C) Pages requiring backend data — ~28 tests.** Spread across `e2e/app.spec.ts` (TC-002, TC-003, TC-005, TC-007), `e2e/beads-smoke.spec.ts`, `e2e/executions.spec.ts`, `e2e/navigation.spec.ts` (TC-006, TC-007), `e2e/screenshots.spec.ts`, `e2e/demo-recording.spec.ts`, `e2e/workers.spec.ts`, `src/routes/layout.e2e.ts`. All fail because the static preview can't serve real document/bead/session data.\n\n## In-scope files\n\nConfiguration:\n- `cli/internal/server/frontend/playwright.config.ts` — switch `webServer` to spawn the Go ddx server (built binary or `go run`) on a deterministic port with a fixture working dir, instead of `bun run preview`. Set `use.baseURL` to that port. Keep `bun run preview` available as a separate project (\"static-only\") for any tests that genuinely don't need a backend.\n- `cli/internal/server/frontend/playwright.demo.config.ts` — **leave alone**. Used for demo recording; do not modify.\n\nFixture:\n- `cli/internal/server/frontend/e2e/fixtures/\u003cname\u003e/` — new directory containing a seeded `.ddx/beads.jsonl` (handful of beads in varied states: open, closed, ready, blocked), a tiny `docs/` library (a few documents the API can index), and any minimum config the server needs. Self-contained — must NOT depend on the developer's `~/.config/ddx` or the parent repo's `.ddx/`.\n\nTests (categorize and migrate):\n- `e2e/app.spec.ts` (TC-001, TC-002, TC-003, TC-005, TC-007, TC-008) — rewrite navigation paths to use `/nodes/\u003cfixture-node-id\u003e/projects/\u003cfixture-project-id\u003e/...`, matching the pattern in `e2e/navigation.spec.ts:177`. Drop assumptions about `/` resolving to a Dashboard route.\n- `e2e/beads-smoke.spec.ts`, `e2e/executions.spec.ts`, `e2e/navigation.spec.ts`, `e2e/screenshots.spec.ts`, `e2e/demo-recording.spec.ts`, `e2e/workers.spec.ts`, `src/routes/layout.e2e.ts` — verify each passes against the new harness; update navigation paths and any data-shape assumptions where needed.\n\nCI / runbook:\n- `cli/internal/server/frontend/README.md` (or whatever is canonical) — document that `bun run test:e2e` now requires the ddx Go binary built first, and how the fixture is structured.\n\n## Out-of-scope (file separate beads if needed)\n\n- Server source changes in `cli/internal/server/` — the API is correct; this bead is about test wiring.\n- Frontend route additions or component changes — only test files and fixtures change.\n- `playwright.demo.config.ts` and `demo-recording.spec.ts` semantics — leave untouched (recording is its own concern).\n- Visual regression baselines in `e2e/screenshots.spec.ts` — re-baselining if pixel diffs appear is a follow-up bead, not this one.\n\n## Why an epic, not a single task\n\nPer beads.md, anything that touches more than ~3 files or crosses subsystems should decompose. This crosses test-infra (playwright config + fixture seeding) and four distinct test files at minimum. Codex should decompose during refinement: at minimum, \"(1) harness + fixture\", \"(2) migrate TC-001/TC-008\", \"(3) migrate page-data tests\", and \"(4) update runbook\".\n\n## Rollback / cleanup\n\nIf a child bead fails partway:\n- Do not leave the fixture dir half-populated under `e2e/fixtures/`. Either commit a complete fixture or revert.\n- Do not commit a `playwright.config.ts` that runs but skips tests (no `.skip` to make CI green).\n- The currently-passing 149 tests must continue to pass at every checkpoint.\n\n## Verification snapshot at filing time\n\n- Working tree clean before run: confirmed.\n- 196 tests collected, 149 pass, 42 fail, 5 skipped.\n- Recent commits on main: d0945dc3 (frontend-verify Makefile target — unrelated to e2e), 5569a727 (beads.jsonl conflict resolve — unrelated).\n- API endpoints verified live on https://127.0.0.1:7743: /api/health, /api/personas, /api/docs/graph, /api/beads, /api/documents all return 200.",
+    "acceptance": "1. `cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e` exits 0.\n2. The same 196 tests run as today (or more — net non-decreasing). No test is deleted, `.skip`-ed, or commented out to make the suite pass. Tolerated changes: rewriting test bodies to use the new node/project router; adding `beforeAll` setup that seeds or boots the harness.\n3. `playwright.config.ts` spins up the Go ddx server (built binary or `go run`) on a deterministic port with a self-contained fixture, instead of `bun run preview`. Verifiable: `grep -E 'preview|webServer' playwright.config.ts` no longer mentions `preview` for the default project, and the new `webServer.command` invokes `ddx`/`go run`.\n4. The fixture is fully under `cli/internal/server/frontend/e2e/fixtures/`. Verifiable: `grep -rE '\\$HOME|~/' e2e/fixtures/` returns nothing; the test run sets the server's working dir to a temp copy of the fixture, not the developer's actual workspace.\n5. `playwright.demo.config.ts` is unchanged. Verifiable: `git diff --stat origin/main -- cli/internal/server/frontend/playwright.demo.config.ts` shows 0 lines changed.\n6. Runbook updated. `cli/internal/server/frontend/README.md` (or the project-canonical doc) describes the new prerequisite (binary build) and how to run the suite locally.\n7. The 149 tests that pass today still pass. Verifiable: a clean checkout at the merge commit, run `bun run test:e2e`, exit 0.",
+    "labels": [
+      "area:test",
+      "area:frontend",
+      "kind:test-infra",
+      "phase:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T16:02:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T06:51:04.379378923Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T055651-739ad84a\",\"harness\":\"claude\",\"input_tokens\":6,\"output_tokens\":24,\"total_tokens\":30,\"cost_usd\":3.431865499999999,\"duration_ms\":3252161,\"exit_code\":0}",
+          "created_at": "2026-04-29T06:51:04.458035869Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=30 cost_usd=3.4319"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T06:51:07.054551231Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "REQUEST_CHANGES\nHarness now builds frontend assets so most specs pass (176/189), but `bun run test:e2e` still exits non-zero with 13 failures, contradicting AC #1 (`exits 0`). Author claims remaining failures (screenshots/a11y/demo) are out-of-scope follow-ups, but AC #1 is unconditional.\nartifact: .ddx/executions/20260429T055651-739ad84a/reviewer-stream.log\nharness=claude\nmodel=opus\ninput_bytes=18063\noutput_bytes=1353\nelapsed_ms=51855",
+          "created_at": "2026-04-29T06:52:03.111171952Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T06:52:03.197757139Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: REQUEST_CHANGES\nHarness now builds frontend assets so most specs pass (176/189), but `bun run test:e2e` still exits non-zero with 13 failures, contradicting AC #1 (`exits 0`). Author claims remaining failures (screenshots/a11y/demo) are out-of-scope follow-ups, but AC #1 is unconditional.\nresult_rev=41017d52121f4151325d47ccc0483bfae77d1779\nbase_rev=247e2bdb47f1b41a6b7d0cc3dcdbb40e3b874aee",
+          "created_at": "2026-04-29T06:52:03.27467563Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-29T16:02:51.366830873Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T160253-45091def",
+    "prompt": ".ddx/executions/20260429T160253-45091def/prompt.md",
+    "manifest": ".ddx/executions/20260429T160253-45091def/manifest.json",
+    "result": ".ddx/executions/20260429T160253-45091def/result.json",
+    "checks": ".ddx/executions/20260429T160253-45091def/checks.json",
+    "usage": ".ddx/executions/20260429T160253-45091def/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ccdf9cf9-20260429T160253-45091def"
+  }
+}
