@@ -110,6 +110,15 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		}
 	}
 
+	// Default-path contract (ddx-755f5881 AC #1): an empty dispatch input
+	// (no rawArgs, no workers.default_spec) must produce a spec with
+	// Profile: "default" and nothing else. This eliminates the historical
+	// 19-burn drain-queue failure mode where an empty spec fanned out into
+	// per-tier ladder iteration with no upstream synthesis target.
+	if req.Profile == "" {
+		req.Profile = "default"
+	}
+
 	var pollInterval time.Duration
 	if req.PollInterval != "" {
 		d, err := time.ParseDuration(req.PollInterval)
