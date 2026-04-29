@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T192729-eeef7323",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-4c9f51f9",
+  "base_rev": "1c921a9189bf2412d0d1edffe43cd8218b30e32f",
+  "created_at": "2026-04-29T19:27:30.331265689Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-4c9f51f9",
+    "title": "[read-coverage] add agent models/catalog/capabilities HTTP + MCP",
+    "description": "FEAT-006 gap. CLI has ddx agent models, ddx agent catalog show, ddx agent capabilities, ddx agent usage. No HTTP routes or MCP tools exist for any of these. There is no server-side way to discover available models, tier assignments, or capability metadata. Required for the endpoint-first routing redesign and automated model selection. Add /api/agent/models, /api/agent/catalog, /api/agent/capabilities HTTP routes and corresponding MCP tools.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "http",
+      "mcp",
+      "feat-006"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:27:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:27:27.495581724Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T192729-eeef7323",
+    "prompt": ".ddx/executions/20260429T192729-eeef7323/prompt.md",
+    "manifest": ".ddx/executions/20260429T192729-eeef7323/manifest.json",
+    "result": ".ddx/executions/20260429T192729-eeef7323/result.json",
+    "checks": ".ddx/executions/20260429T192729-eeef7323/checks.json",
+    "usage": ".ddx/executions/20260429T192729-eeef7323/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-4c9f51f9-20260429T192729-eeef7323"
+  }
+}
