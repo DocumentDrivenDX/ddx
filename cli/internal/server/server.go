@@ -726,6 +726,10 @@ func (s *Server) routes() {
 	trusted("GET /api/providers", s.handleListProviders)
 	trusted("GET /api/providers/{harness}", s.handleShowProvider)
 
+	// MCP server registry + plugin manifest (FEAT-009/015 read coverage)
+	trusted("GET /api/mcp-servers", s.handleListMCPServers)
+	trusted("GET /api/plugins", s.handleListPlugins)
+
 	// MCP
 	trusted("POST /mcp", s.handleMCP)
 
@@ -3215,6 +3219,24 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
+		{
+			Name:        "ddx_list_mcp_servers",
+			Description: "List MCP servers available in the DDx library registry",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_list_plugins",
+			Description: "List installed DDx plugins",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
 	}
 }
 
@@ -3249,6 +3271,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpProviderShow(harness)
 	case "ddx_agent_catalog":
 		return s.mcpAgentCatalog()
+	case "ddx_list_plugins":
+		return s.mcpListPlugins()
 	}
 
 	// From here on: project-local tools. Resolve the project arg to a working
@@ -3412,6 +3436,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_metrics_rework":
 		since, _ := call.Arguments["since"].(string)
 		return s.mcpMetricsRework(workingDir, since)
+	case "ddx_list_mcp_servers":
+		return s.mcpListMCPServers(workingDir)
 	default:
 		return mcpToolResult{
 			Content: []mcpContent{mcpText(fmt.Sprintf("unknown tool: %s", call.Name))},
