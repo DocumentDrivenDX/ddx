@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-c7081f89",
+  "attempt_id": "20260429T130848-876ca277",
+  "base_rev": "5ef7764ff1c94f47db0fb1ce2b01f92fd061ce8e",
+  "result_rev": "5ef7764ff1c94f47db0fb1ce2b01f92fd061ce8e",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "execution_failed",
+  "reason": "git rev-parse HEAD: chdir /tmp/ddx-exec-wt/.execute-bead-wt-ddx-c7081f89-20260429T130848-876ca277: no such file or directory",
+  "harness": "claude",
+  "session_id": "eb-44fd9362",
+  "duration_ms": 1475678,
+  "tokens": 76116,
+  "cost_usd": 13.212565750000005,
+  "exit_code": 1,
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260429T130848-876ca277",
+  "prompt_file": ".ddx/executions/20260429T130848-876ca277/prompt.md",
+  "manifest_file": ".ddx/executions/20260429T130848-876ca277/manifest.json",
+  "result_file": ".ddx/executions/20260429T130848-876ca277/result.json",
+  "started_at": "2026-04-29T13:08:49.11664739Z",
+  "finished_at": "2026-04-29T13:33:24.795114523Z"
+}

@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260429T131806-5f40e1a2",
+  "bead_id": "ddx-aec9d68c",
+  "base_rev": "488150eb5fe9ea0b2c4d2520818ef6d086448f96",
+  "created_at": "2026-04-29T13:18:07.733697077Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aec9d68c",
+    "title": "adaptive min-tier: provide a trivial reset; current state is sticky and unresettable",
+    "description": "execute-loop's adaptive min-tier promotion (escalation.AdaptiveMinTierThreshold etc.) silently skips cheap tier when trailing cheap-tier success rate falls under threshold. Today the only visible signal is a single log line:\n\n  adaptive min-tier: skipping cheap tier (trailing success rate 0.00 over 9 attempts; threshold 0.20) — min-tier=standard\n\nThere is no documented or discoverable way to reset this state. Issues with the current design:\n\n1. STATE LOCATION IS NOT DOCUMENTED. The trailing-window metric is computed from .ddx/agent-logs/routing-outcomes.jsonl per-project (and possibly other sources — rotating that file alone did NOT clear the 0% verdict in a recent test, so additional state may live elsewhere). A user who wants to reset cannot find authoritative documentation of where the state lives.\n\n2. NO RESET CLI. There is no `ddx agent route-status reset`, no `ddx agent metrics clear`, no `ddx agent doctor --reset-adaptive`. The only path is to edit/truncate JSONL files by hand, which is fragile and breaks compatibility with any future schema.\n\n3. SILENT NOISE. Every cheap-tier failure permanently affects future routing without surfacing to the user. If a configuration bug (e.g. the model_overrides issue tracked as ddx-5538aa5b) caused 9 immediate failures, the adaptive logic now blocks cheap tier even after the configuration is fixed. The user has no way to know 'this is stale state, not real performance signal' without reading source.\n\n4. MITIGATION VIA --no-adaptive-min-tier IS NOT A FIX, IT'S AN OVERRIDE. The flag bypasses the gating but also defeats the legitimate purpose of the metric. We need ability to RESET the metric and re-evaluate from a clean slate, not permanently disable the feature.\n\n5. THE THRESHOLD/WINDOW DEFAULTS ARE AGGRESSIVE. Trailing window of 9-50 attempts at threshold 0.20 means a single cheap-tier provider misconfiguration (which is easy to hit, see ddx-5538aa5b) condemns cheap-tier for many subsequent invocations. Meanwhile EVERY configuration error is recorded as cheap-tier failure even when the failure was 'no viable provider' rather than 'model produced bad output'.\n\nRequested behavior:\n\n- A first-class CLI: `ddx agent route-status reset [--scope cheap|all]` that clears the adaptive metric for the current project, with a confirm prompt by default.\n- A flag on `ddx agent doctor` that displays current adaptive state per tier (success rate, attempt count, threshold, current floor) so users can SEE the problem.\n- An option to record only EXECUTION outcomes (model produced output) in adaptive metrics, NOT no-viable-provider/configuration failures — those should be tracked separately and never count against a tier's reputation.\n- Documented location and schema for the metric store, so users who want to inspect or surgically edit understand the on-disk format.",
+    "acceptance": "AC1. `ddx agent route-status reset` (or equivalent verb) exists and clears the trailing-window adaptive metric for the current project, returning min-tier evaluation to a clean baseline. Output names every file/store touched.\n\nAC2. `ddx agent doctor` (or `ddx agent route-status`) prints current adaptive state per tier: window size, trailing attempts, success rate, threshold, current effective floor, and whether the tier is currently being skipped. Diagnostic output is enough to debug a 'why is cheap being skipped' scenario without reading source.\n\nAC3. Routing failures classified as 'no viable provider', 'harness not installed', or 'configuration error' are recorded but EXCLUDED from the adaptive success-rate computation — only failures that reached an actual model invocation count.\n\nAC4. Documentation in docs/ describes the adaptive min-tier mechanism, the metric store path and schema, the reset workflow, and the relationship between --no-adaptive-min-tier (temporary bypass) and reset (permanent state clear).\n\nAC5. After running the reset CLI, a fresh `execute-loop --once --local` evaluates cheap tier on its own merits without the prior trailing-window verdict carrying over.",
+    "labels": [
+      "area:agent",
+      "area:routing",
+      "kind:design-flaw",
+      "ux"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T03:33:40.221248079Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T03:33:40.344273463Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T03:33:40.447636843Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T03:33:40.659795091Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T131806-5f40e1a2",
+    "prompt": ".ddx/executions/20260429T131806-5f40e1a2/prompt.md",
+    "manifest": ".ddx/executions/20260429T131806-5f40e1a2/manifest.json",
+    "result": ".ddx/executions/20260429T131806-5f40e1a2/result.json",
+    "checks": ".ddx/executions/20260429T131806-5f40e1a2/checks.json",
+    "usage": ".ddx/executions/20260429T131806-5f40e1a2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-aec9d68c-20260429T131806-5f40e1a2"
+  }
+}
