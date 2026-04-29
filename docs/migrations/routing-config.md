@@ -88,6 +88,15 @@ agent:
 DDX_PROJECT_ROOT=/tmp ddx status   # exits non-zero with migration message
 ```
 
+## Server worker path alignment (ddx-c7081f89)
+
+The server worker path (`ddx work` without `--local`) now matches the CLI path
+semantics described above. Prior to bead `ddx-c7081f89`, the worker started
+escalation whenever neither harness nor model was pinned. After that bead,
+`WorkerSpec.Escalate` must be `true` for the tier loop to engage — identical to
+the `--escalate` flag on the CLI path. The `--escalate` flag is forwarded to the
+server worker spec automatically when passed to `ddx work`.
+
 ## Background
 
 Prior to this change, three competing surfaces dictated harness
