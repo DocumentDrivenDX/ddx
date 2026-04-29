@@ -928,6 +928,18 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
 	landingOps := agent.RealLandingGitOps{}
+	// RoutePreflight: preflight gate (FEAT-006 D3, ddx-98e6e9ef).
+	// Before claiming a bead, the loop consults upstream ResolveRoute
+	// against the resolved (harness, model).  If the upstream surfaces
+	// agent.ErrHarnessModelIncompatible (or any other typed error), the
+	// loop exits with a worker-level execution_failed record — no bead
+	// is claimed, no executor invocation, no tier-attempt event burn.
+	// DDx does NOT duplicate the upstream allow-list; this gate only
+	// consumes the typed-incompatibility surface.
+	var preflightSvc agentlib.DdxAgent
+	preflightSvc, preflightSvcErr := agent.NewServiceFromWorkDir(projectRoot)
+	preflightErr := preflightSvcErr
+
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
 		Once:         spec.Once,
 		PollInterval: spec.PollInterval,
@@ -939,6 +951,23 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ProgressCh:   progressCh,
 		PreClaimHook: buildPreClaimHook(projectRoot, landingOps),
 		NoReview:     spec.NoReview,
+		RoutePreflight: func(ctx context.Context, harness, model string) error {
+			svc := preflightSvc
+			if svc == nil {
+				return preflightErr
+			}
+			req := agentlib.RouteRequest{
+				Profile: agent.NormalizeRoutingProfile(spec.Profile),
+			}
+			if harness != "" {
+				req.Harness = harness
+			}
+			if model != "" {
+				req.Model = model
+			}
+			_, rErr := svc.ResolveRoute(ctx, req)
+			return rErr
+		},
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
