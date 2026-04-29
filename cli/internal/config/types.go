@@ -209,6 +209,29 @@ type AgentConfig struct {
 	Endpoints       []AgentEndpoint     `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
 	Routing         *RoutingConfig      `yaml:"routing,omitempty" json:"routing,omitempty"`
 	Virtual         *VirtualConfig      `yaml:"virtual,omitempty" json:"virtual,omitempty"`
+	Triage          *TriageConfig       `yaml:"triage,omitempty" json:"triage,omitempty"`
+}
+
+// TriageConfig controls the pre-Claim complexity gate (ddx-5bf4ee7e).
+type TriageConfig struct {
+	// MaxDecompositionDepth caps recursive bead splitting. Children re-enter
+	// the gate; at cap the parent is blocked with label=needs-human-decomposition.
+	// Zero or unset uses the binary default (3). Configurable as
+	// agent.triage.max_decomposition_depth in .ddx/config.yaml.
+	MaxDecompositionDepth *int `yaml:"max_decomposition_depth,omitempty" json:"max_decomposition_depth,omitempty"`
+}
+
+// ResolveMaxDecompositionDepth returns the effective depth cap for the triage
+// gate. Defaults to 3 when unset or non-positive.
+func (c *NewConfig) ResolveMaxDecompositionDepth() int {
+	const defaultDepth = 3
+	if c == nil || c.Agent == nil || c.Agent.Triage == nil || c.Agent.Triage.MaxDecompositionDepth == nil {
+		return defaultDepth
+	}
+	if *c.Agent.Triage.MaxDecompositionDepth <= 0 {
+		return defaultDepth
+	}
+	return *c.Agent.Triage.MaxDecompositionDepth
 }
 
 // AgentEndpoint describes one endpoint-first native agent provider target.

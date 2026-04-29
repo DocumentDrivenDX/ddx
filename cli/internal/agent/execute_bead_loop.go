@@ -284,6 +284,14 @@ type ExecuteBeadWorker struct {
 	// (escalating to land_conflict_needs_human); false means failed-but-retriable.
 	ConflictResolver func(ctx context.Context, beadID, preserveRef, projectRoot string) (newTip string, isBlocking bool, err error)
 
+	// ComplexityGate, when non-nil, is invoked between RoutePreflight and Claim.
+	// It evaluates whether the candidate bead is atomic (proceed to Claim),
+	// decomposable (file children, block parent, re-pick), or ambiguous
+	// (surface to human triage). When nil, the gate is bypassed and a one-time
+	// warning is emitted per Run() invocation. See triage.go and
+	// NewComplexityGate for the standard implementation.
+	ComplexityGate TriageGate
+
 	// conflictAutoRecoverFn replaces the default landConflictAutoRecover. Set
 	// in tests to inject controlled recovery results without a real git repo.
 	conflictAutoRecoverFn func(wd, preserveRef string, gitOps LandingGitOps) (string, error)
@@ -358,6 +366,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 	result := &ExecuteBeadLoopResult{}
 	attempted := make(map[string]struct{})
+	// triagedWarned suppresses the one-time boot warning when ComplexityGate is
+	// nil. One warning per Run() invocation is enough; the bool resets on the
+	// next worker boot.
+	triagedWarned := false
 	// hookFailed tracks beads whose pre-claim hook failed on first presentation
 	// in this run. A bead in hookFailed but not attempted gets one retry: on the
 	// second hook failure it moves to attempted so nextCandidate will skip it and
@@ -484,6 +496,42 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.LastFailureStatus = report.Status
 				result.Results = append(result.Results, report)
 				return result, nil
+			}
+		}
+
+		// Complexity triage gate (ddx-5bf4ee7e): pre-Claim decomposition check.
+		// When the gate is nil, emit a one-time boot warning — the gate must not
+		// be silently optional.
+		if w.ComplexityGate == nil {
+			if !triagedWarned {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"warning: triage complexity gate is disabled; coarse beads may waste dispatch attempts\n")
+				}
+				emit("triage.gate_disabled", map[string]any{"bead_id": candidate.ID})
+				triagedWarned = true
+			}
+		} else {
+			shouldClaim, triageErr := w.ComplexityGate(ctx, candidate)
+			if triageErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"triage gate error for %s: %v (skipping)\n", candidate.ID, triageErr)
+				}
+				emit("triage.error", map[string]any{
+					"bead_id": candidate.ID,
+					"reason":  triageErr.Error(),
+				})
+				// A gate error does not count as an attempt; re-pick next candidate.
+				continue
+			}
+			if !shouldClaim {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"triage: skipped dispatch of %s (classified as non-atomic)\n", candidate.ID)
+				}
+				emit("triage.skipped", map[string]any{"bead_id": candidate.ID})
+				continue
 			}
 		}
 
