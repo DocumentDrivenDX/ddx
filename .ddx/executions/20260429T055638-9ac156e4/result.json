@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "README addition documents the fixture-backed e2e harness: run command (bun run test:e2e), binary/go build prerequisite, fixture location and layout, extension guidance, and demarcation from the demo config. Both acceptance grep patterns match.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Scope respected — only frontend README touched; playwright config and demo files untouched.",
+      "location": "cli/internal/server/frontend/README.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1628,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T055553-0664c7fd/manifest.json",
+          ".ddx/executions/20260429T055553-0664c7fd/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4155,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 7589,
+    "output_bytes": 499,
+    "elapsed_ms": 10278,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
