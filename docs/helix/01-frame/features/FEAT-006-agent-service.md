@@ -99,6 +99,100 @@ Both statuses use `LandConflictCooldown` (15 min) rather than the 24h cap used
 for `push_failed`, because land conflicts typically unblock quickly as sibling
 beads advance the base branch.
 
+## Execute-Bead Worker Sub-task Discovery Policy
+
+**Design position: option (b) — surface via result.**
+
+Workers executing inside `ddx agent execute-bead` MUST NOT call `ddx bead create`
+in-band during their execution run. Creating beads in-band (option c) allows a
+single worker to flood the queue with unreviewed children — in one observed case
+(ddx-44236615), one worker spawned 11 P0 children without operator review. This
+violates the architectural principle from FEAT-013: *"DDx provides primitives,
+not orchestration. Orchestration policy stays in HELIX and other workflow tools."*
+
+Workers MAY surface discovered sub-tasks as structured data in `result.json`
+under a `discovered_subtasks` array. Each entry is a lightweight object with at
+minimum a `title` and optional `description`, `labels`, and `priority` fields.
+The execute-loop or supervisor reads this array from the result bundle and passes
+it to the workflow tool (HELIX or operator) for decomposition decisions. The
+supervisor decides whether, when, and at what priority to file new beads — DDx
+does not do this automatically.
+
+### Rationale
+
+| Option | Description | Problem |
+| --- | --- | --- |
+| (a) Append to parent | Worker writes sub-tasks as notes or events on the parent bead | Loses structure; sub-tasks are not queryable or executable without manual decomposition |
+| (b) Surface via result (**chosen**) | Agent emits `discovered_subtasks` in result.json; supervisor decides | Gates tracker mutations at an explicit decision point; aligns with "primitives not orchestration" |
+| (c) Create in-band (former behavior) | Worker calls `ddx bead create` directly | Unreviewed children flood the queue; P0 tagging without operator review; violates workflow ownership boundary |
+
+Option (b) preserves the operator control point required by workflow tools while
+providing structure that automation can act on. It is the only option consistent
+with the FEAT-013 boundary.
+
+### Result schema extension
+
+`result.json` gains an optional `discovered_subtasks` array. The execute-bead
+orchestrator writes it from the agent's structured output when present. The
+supervisor MUST NOT act on this field automatically; it is surfaced as an
+observation for the workflow tool.
+
+```json
+{
+  "status": "success",
+  "detail": "...",
+  "discovered_subtasks": [
+    {
+      "title": "Add read-coverage for X",
+      "description": "Optional detail about what is needed",
+      "labels": ["area:tests"],
+      "priority": "P1"
+    }
+  ]
+}
+```
+
+If the agent does not emit `discovered_subtasks`, the field is absent. The
+execute-loop treats an absent or empty array identically — no automatic bead
+creation occurs in either case.
+
+### Enforcement
+
+The execute-bead prompt delivered to the agent (via the prompt rationalizer)
+MUST include an explicit instruction that workers must not call `ddx bead create`
+and must instead emit `discovered_subtasks` in their result if sub-tasks are
+identified. This constraint is part of the prompt contract; it is not enforced
+by the CLI at runtime.
+
+## Malformed-Bead Remediation Decision (beads ddx-7eab13a6 era)
+
+**Decision: close and refile.**
+
+The layer-1 worktree-path bug fixed in ddx-7eab13a6 caused 22 beads to be
+created with IDs of the form `.execute-bead-wt-<parent>-<timestamp>-<random>-<hex>`
+(the worktree directory path was mistakenly used as the bead ID). These beads
+are invalid: their IDs do not match the `ddx-<8hex>` format expected by all DDx
+CLI commands, and the IDs appear in git commit trailers as malformed values.
+
+Repair in-place is not safe. Bead IDs are immutable identifiers embedded in git
+commit trailers (`Ddx-Attempt-Id` etc.), inter-bead dependency edges, and the
+JSONL append-only store. Renaming an existing bead ID requires rewriting
+history, which violates the merge policy recorded in project memory.
+
+The operator (human or supervising workflow tool) should:
+1. Inspect each malformed bead's description to determine whether the underlying
+   work is still valid.
+2. If valid: refile a new bead with the same title and description, using
+   `ddx bead create`. The new bead will receive a correct ID.
+3. Close the malformed bead with `ddx bead close <id> --reason "malformed-id
+   refiled as <new-id>"`.
+4. If the work is no longer needed: close the malformed bead with reason
+   `malformed-id obsolete`.
+
+No automated bulk remediation is performed. The 22 beads are left open pending
+operator triage. A future `ddx bead validate` command (not yet implemented) can
+flag structurally invalid bead IDs to aid discovery.
+
 ## Asking ddx-agent for changes
 
 When DDx needs new behavior from the agent — a new method, a new field on
