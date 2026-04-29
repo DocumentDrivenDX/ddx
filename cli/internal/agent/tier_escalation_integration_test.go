@@ -164,19 +164,3 @@ func TestEscalationTierRecordedInFinalEvent(t *testing.T) {
 	assert.Contains(t, loopEvent.Body, "tier=standard", "tier must appear in loop event body")
 	assert.Contains(t, loopEvent.Body, "probe_result=ok (2 candidates)", "probe_result must appear in loop event body")
 }
-
-// TestMinTierMaxTierRangeHelpers validates the tier range helpers used by
-// both the CLI and server escalation paths.
-func TestMinTierMaxTierRangeHelpers(t *testing.T) {
-	// --min-tier standard --max-tier smart → [standard, smart]
-	tiers := escalation.TiersInRange(escalation.TierStandard, escalation.TierSmart)
-	assert.Equal(t, []escalation.ModelTier{escalation.TierStandard, escalation.TierSmart}, tiers)
-
-	// --min-tier cheap --max-tier cheap → [cheap] (single tier, cost control)
-	tiers = escalation.TiersInRange(escalation.TierCheap, escalation.TierCheap)
-	assert.Equal(t, []escalation.ModelTier{escalation.TierCheap}, tiers)
-
-	// defaults → full range
-	tiers = escalation.TiersInRange("", "")
-	assert.Equal(t, []escalation.ModelTier{escalation.TierCheap, escalation.TierStandard, escalation.TierSmart}, tiers)
-}

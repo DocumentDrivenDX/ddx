@@ -23,19 +23,14 @@ Migration: delete the field. The top-level `agent.harness` is still honored as
 a tie-break preference on the resolution path (NOT a default override). See
 [docs/migrations/routing-config.md](docs/migrations/routing-config.md).
 
-#### Opt-in: `agent.routing.profile_ladders` and `agent.routing.model_overrides`
+#### Removed: `agent.routing.profile_ladders` and `agent.routing.model_overrides`
 
-These fields are no longer consulted on the default execute path. They are now
-explicit opt-in:
+These fields and the `--escalate` / `--override-model` CLI flags are removed
+(bead ddx-3bd7396a). DDx refuses to load any config that still carries them.
 
-- `profile_ladders` is consulted only when `--escalate` is passed.
-- `model_overrides` is consulted only when the new `--override-model` flag is
-  passed.
-
-Configs that still set these fields will load successfully but emit a one-time
-process warning at config-load time. To silence the warning, either pass the
-opt-in flag on the relevant invocation or remove the field. See the migration
-guide for details.
+Migration: delete the fields. The default execute-loop path issues exactly one
+`ResolveRoute` call per bead; tier-ladder iteration is gone. See
+[docs/migrations/routing-config.md](docs/migrations/routing-config.md).
 
 ### Fix: `latency_ms` in claude harness traces now reflects per-call duration
 

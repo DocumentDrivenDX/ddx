@@ -572,23 +572,6 @@ func (f *CommandFactory) newAgentListCommand() *cobra.Command {
 	return cmd
 }
 
-func profileModelOverrideForRun(workDir, profile string) string {
-	cfg, err := config.LoadWithWorkingDir(workDir)
-	if err != nil || cfg == nil || cfg.Agent == nil || cfg.Agent.Routing == nil {
-		return ""
-	}
-	tiers := agent.ResolveProfileLadder(cfg.Agent.Routing, profile, "", "")
-	if len(tiers) == 0 {
-		return ""
-	}
-	firstTier := tiers[0]
-	override := agent.ResolveTierModelRef(cfg.Agent.Routing, firstTier)
-	if override == string(firstTier) {
-		return ""
-	}
-	return override
-}
-
 func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "capabilities [harness]",
@@ -935,21 +918,6 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 // RecordRouteAttempt benefits every other consumer. When RouteStatus is
 // unavailable (e.g. fresh service with no routes yet) the harness is
 // considered healthy.
-// formatCandidateRejection renders a single per-candidate rejection line for
-// the tier-attempt body. It distinguishes catalog candidates (named by
-// surface) from override candidates so operators can see which fallback path
-// produced each error (ddx-5538aa5b AC#3).
-func formatCandidateRejection(cand agent.TierCandidate, reason string) string {
-	label := cand.Source
-	if cand.Surface != "" {
-		label = cand.Surface
-	}
-	if cand.Model != "" {
-		return fmt.Sprintf("%s (%s): %s", label, cand.Model, reason)
-	}
-	return fmt.Sprintf("%s: %s", label, reason)
-}
-
 func harnessHealthyViaService(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
 	if svc == nil || harness == "" {
 		return true
@@ -1675,13 +1643,7 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (e.g. for doc-only beads or tight iteration loops)")
 	cmd.Flags().String("review-harness", "", "Harness to use for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
-	cmd.Flags().String("min-tier", "", "Minimum tier for auto-escalation: cheap, standard, or smart (default: cheap)")
-	cmd.Flags().String("max-tier", "", "Maximum tier for auto-escalation: cheap, standard, or smart (default: smart)")
-	cmd.Flags().Bool("no-adaptive-min-tier", false, "Disable adaptive min-tier promotion based on trailing cheap-tier success rate")
-	cmd.Flags().Int("adaptive-min-tier-window", 50, "Trailing window size for adaptive min-tier evaluation")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
-	cmd.Flags().Bool("escalate", false, "Enable tier-ladder escalation. Off by default: a single ResolveRoute call drives each attempt (ddx-755f5881). Use this only when you explicitly want cheap→standard→smart fallback semantics. Consults agent.routing.profile_ladders.")
-	cmd.Flags().Bool("override-model", false, "Consult agent.routing.model_overrides when picking a per-tier model reference. Off by default; the field is ignored unless this flag is set (bead ddx-87fb72c2).")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout (e.g. 60m, 2h); overrides project config and model-class defaults. Use when a thinking model needs more than the default 15 min.")
 	return cmd
 }
@@ -1703,32 +1665,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
 	reviewModel, _ := cmd.Flags().GetString("review-model")
-	minTier, _ := cmd.Flags().GetString("min-tier")
-	maxTier, _ := cmd.Flags().GetString("max-tier")
-	noAdaptiveMinTier, _ := cmd.Flags().GetBool("no-adaptive-min-tier")
-	adaptiveWindow, _ := cmd.Flags().GetInt("adaptive-min-tier-window")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
-	escalate, _ := cmd.Flags().GetBool("escalate")
-	overrideModel, _ := cmd.Flags().GetBool("override-model")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
-
-	// Adaptive min-tier: when the operator did not pin --min-tier and adaptation
-	// is not disabled, consult trailing cheap-tier success rate and promote to
-	// standard when the cheap tier has been nearly pure waste. This saves the
-	// queue from burning time and budget on attempts that almost never succeed.
-	if minTier == "" && !noAdaptiveMinTier {
-		adaptive := escalation.AdaptiveMinTier(projectRoot, adaptiveWindow, agent.ResolveModelTier)
-		if adaptive.Skipped {
-			minTier = string(adaptive.Tier)
-			fmt.Fprintf(cmd.OutOrStdout(),
-				"adaptive min-tier: skipping cheap tier (trailing success rate %.2f over %d attempts; threshold %.2f) — min-tier=%s\n",
-				adaptive.CheapSuccessRate, adaptive.CheapAttempts, escalation.AdaptiveMinTierThreshold, minTier)
-		}
-	}
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
-		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel, minTier, maxTier, escalate)
+		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel)
 	}
 
 	// Pre-flight: validate harness availability and model compatibility
@@ -1776,24 +1718,9 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		}
 	}
 
-	// escalationEnabled is true when neither --harness nor --model is pinned.
-	// In that case the executor iterates through tiers (cheap → standard →
-	// smart) and escalates on failure. When either flag is set, the executor
-	// runs a single attempt with the specified harness/model.
 	profile = agent.NormalizeRoutingProfile(profile)
-	cfg, _ := config.LoadWithWorkingDir(projectRoot)
-	var routingCfg *config.RoutingConfig
-	if cfg != nil && cfg.Agent != nil {
-		routingCfg = cfg.Agent.Routing
-	}
 
-	// ddx-755f5881: tier-ladder escalation is opt-in via --escalate.
-	// The default path goes through singleTierAttempt with one ResolveRoute call
-	// and lets upstream pick the harness/model — no DDx-side ladder iteration,
-	// no ResolveTierModelRef lookup, no preference-order fallback.
-	escalationEnabled := escalate && harness == "" && model == ""
-
-	// Cost-cap state shared by both the single-attempt and tier-escalation
+	// Cost-cap state shared across attempts for this loop run.
 	// paths. Accumulated billed spend (excluding local and subscription
 	// providers) above --max-cost trips the cap and halts further bead
 	// claiming. See escalation.DefaultMaxCostUSD / CountsTowardCostCap.
@@ -1911,256 +1838,37 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				cappedReport.BeadID = beadID
 				return cappedReport, nil
 			}
-			if !escalationEnabled {
-				// Default + single-attempt path (ddx-755f5881 D1+D2): when no
-				// harness is pinned, issue exactly one ResolveRoute call with
-				// the (already-normalized) Profile and let upstream pick the
-				// harness/model. No per-tier iteration, no ResolveTierModelRef
-				// lookup, no preference-order fallback.
-				resolvedHarness := harness
-				resolvedProvider := provider
-				resolvedModel := model
-				if resolvedHarness == "" {
-					svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
-					if svcErr == nil {
-						dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-							Profile:   profile,
-							Model:     model,
-							Provider:  provider,
-							ModelRef:  modelRef,
-							Reasoning: agentlib.Reasoning(effort),
-						})
-						if routeErr == nil {
-							resolvedHarness = dec.Harness
-							resolvedProvider = dec.Provider
-							if model == "" && dec.Model != "" {
-								resolvedModel = dec.Model
-							}
-						}
-					}
-				}
-				report, err := singleTierAttempt(ctx, beadID, "", resolvedHarness, resolvedProvider, resolvedModel)
-				if err == nil {
-					accumulateBilledCost(report)
-					if cappedReport, capped := costCapTripped(); capped {
-						cappedReport.BeadID = beadID
-						return cappedReport, nil
-					}
-				}
-				return report, err
-			}
-
-			// Profile escalation path: iterate the configured profile ladder
-			// (bounded by --min-tier / --max-tier). For each tier, probe available harnesses,
-			// filter out unhealthy ones, pick the best, and attempt execution.
-			// On escalatable failures, mark the harness unhealthy and try the
-			// next tier. A successful result or a non-escalatable failure
-			// terminates the loop early.
-			tiers := agent.ResolveProfileLadder(routingCfg, profile, minTier, maxTier)
-			if len(tiers) == 0 {
-				return agent.ExecuteBeadReport{
-					BeadID: beadID,
-					Status: agent.ExecuteBeadStatusExecutionFailed,
-					Detail: "execute-loop: no tiers in range (check --min-tier / --max-tier)",
-				}, nil
-			}
-
-			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-			assignee := resolveClaimAssignee()
-			svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
-			if svcErr != nil {
-				return agent.ExecuteBeadReport{
-					BeadID: beadID,
-					Status: agent.ExecuteBeadStatusExecutionFailed,
-					Detail: "execute-loop: failed to initialize routing service: " + svcErr.Error(),
-				}, nil
-			}
-			var lastReport agent.ExecuteBeadReport
-			var escalationAttempts []escalation.TierAttemptRecord
-			requestedTier := string(tiers[0])
-
-			for tierIdx, tier := range tiers {
-				// Catalog-driven tier resolution (ddx-5538aa5b): walk catalog
-				// surfaces (or model_overrides if set) to produce concrete
-				// (harness, model) candidates. Per-project model_overrides
-				// remain a supported override layered on top of catalog
-				// defaults; absence no longer collapses tier resolution to
-				// the literal tier name.
-				candidates := agent.ResolveTierCandidates(routingCfg, agent.BuiltinCatalog, tier)
-				if !overrideModel {
-					// model_overrides is opt-in via --override-model.
-					filtered := candidates[:0]
-					for _, c := range candidates {
-						if c.Source != "override" {
-							filtered = append(filtered, c)
-						}
-					}
-					candidates = filtered
-				}
-
-				var dec *agentlib.RouteDecision
-				var routeErr error
-				var skipReasons []string
-				for _, cand := range candidates {
-					req := agentlib.RouteRequest{
+			resolvedHarness := harness
+			resolvedProvider := provider
+			resolvedModel := model
+			if resolvedHarness == "" {
+				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+				if svcErr == nil {
+					dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
 						Profile:   profile,
+						Model:     model,
 						Provider:  provider,
+						ModelRef:  modelRef,
 						Reasoning: agentlib.Reasoning(effort),
-					}
-					if cand.Harness != "" {
-						req.Harness = cand.Harness
-					}
-					if cand.Model != "" {
-						req.Model = cand.Model
-					}
-					d, err := svc.ResolveRoute(ctx, req)
-					if err != nil {
-						skipReasons = append(skipReasons, formatCandidateRejection(cand, err.Error()))
-						continue
-					}
-					if !harnessHealthyViaService(ctx, svc, d.Harness) {
-						skipReasons = append(skipReasons, formatCandidateRejection(cand, "provider cooldown"))
-						continue
-					}
-					dec = d
-					break
-				}
-				if dec == nil {
-					if len(candidates) == 0 {
-						skipReasons = []string{"tier has no candidates in catalog and no model_overrides entry"}
-					}
-					routeErr = fmt.Errorf("no viable harness")
-				}
-				probeResult := "ok"
-				if routeErr != nil {
-					probeResult = "no viable provider"
-					detail := strings.Join(skipReasons, "\n")
-					if detail == "" {
-						detail = "no viable harness found"
-					}
-					// No viable harness for this tier; skip and escalate.
-					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
-						Kind:      "tier-attempt",
-						Summary:   "skipped",
-						Body:      escalation.FormatTierAttemptBody(string(tier), "", "", probeResult, detail),
-						Actor:     assignee,
-						Source:    "ddx agent execute-loop",
-						CreatedAt: time.Now().UTC(),
 					})
-					escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
-						Tier:   string(tier),
-						Status: "skipped",
-					})
-					continue
-				}
-
-				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Provider, dec.Model)
-				if attemptErr != nil {
-					report = agent.ExecuteBeadReport{
-						BeadID:           beadID,
-						Tier:             string(tier),
-						Harness:          dec.Harness,
-						Model:            dec.Model,
-						Status:           agent.ExecuteBeadStatusExecutionFailed,
-						Detail:           attemptErr.Error(),
-						ProbeResult:      probeResult,
-						RequestedProfile: profile,
-						RequestedTier:    requestedTier,
-						ResolvedTier:     string(tier),
-						EscalationCount:  tierIdx,
-						FinalTier:        string(tier),
+					if routeErr == nil {
+						resolvedHarness = dec.Harness
+						resolvedProvider = dec.Provider
+						if model == "" && dec.Model != "" {
+							resolvedModel = dec.Model
+						}
 					}
-				} else {
-					report.ProbeResult = probeResult
-					report.RequestedProfile = profile
-					report.RequestedTier = requestedTier
-					report.ResolvedTier = string(tier)
-					report.EscalationCount = tierIdx
-					report.FinalTier = string(tier)
 				}
-				lastReport = report
-				escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
-					Tier:       string(tier),
-					Harness:    report.Harness,
-					Model:      report.Model,
-					Status:     report.Status,
-					CostUSD:    report.CostUSD,
-					DurationMS: report.DurationMS,
-				})
-
-				// Record a per-tier attempt event so the escalation trail is visible.
-				_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
-					Kind:      "tier-attempt",
-					Summary:   report.Status,
-					Body:      escalation.FormatTierAttemptBody(string(tier), report.Harness, report.Model, probeResult, report.Detail),
-					Actor:     assignee,
-					Source:    "ddx agent execute-loop",
-					CreatedAt: time.Now().UTC(),
-				})
-
-				if report.Status == agent.ExecuteBeadStatusSuccess {
-					accumulateBilledCost(report)
-					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, string(tier), time.Now().UTC())
-					if cappedReport, capped := costCapTripped(); capped {
-						cappedReport.BeadID = beadID
-						return cappedReport, nil
-					}
-					return report, nil
-				}
-				if !escalation.ShouldEscalate(report.Status) {
-					// Structural failure — escalation cannot help.
-					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
-					return report, nil
-				}
-				// Infrastructure failures don't consume escalation budget;
-				// defer the bead with a retry-after instead of burning a
-				// more expensive tier on a problem the model can't fix.
-				if escalation.IsInfrastructureFailure(report.Status, report.Detail) {
-					accumulateBilledCost(report)
-					retryAt := time.Now().UTC().Add(escalation.ProviderCooldownDuration)
-					report.RetryAfter = retryAt.Format(time.RFC3339)
-					report.Detail = "infrastructure failure (deferred): " + report.Detail
-					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
-					if cappedReport, capped := costCapTripped(); capped {
-						cappedReport.BeadID = beadID
-						return cappedReport, nil
-					}
-					return report, nil
-				}
-
-				// Execution-level model-capability failure: record the
-				// failed attempt with the upstream service (which owns the
-				// cooldown window) + accumulate cost + escalate.
+			}
+			report, err := singleTierAttempt(ctx, beadID, "", resolvedHarness, resolvedProvider, resolvedModel)
+			if err == nil {
 				accumulateBilledCost(report)
-				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
-					_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
-						Harness:   dec.Harness,
-						Provider:  dec.Provider,
-						Model:     dec.Model,
-						Status:    "failed",
-						Reason:    "execution_failed",
-						Error:     report.Detail,
-						Timestamp: time.Now().UTC(),
-					})
+				if cappedReport, capped := costCapTripped(); capped {
+					cappedReport.BeadID = beadID
+					return cappedReport, nil
 				}
 			}
-
-			_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, assignee, escalationAttempts, "", time.Now().UTC())
-
-			if cappedReport, capped := costCapTripped(); capped {
-				cappedReport.BeadID = beadID
-				return cappedReport, nil
-			}
-
-			if lastReport.BeadID == "" {
-				return agent.ExecuteBeadReport{
-					BeadID: beadID,
-					Status: agent.ExecuteBeadStatusExecutionFailed,
-					Detail: "execute-loop: all tiers exhausted — no viable provider found",
-				}, nil
-			}
-			lastReport.Detail = "escalation exhausted: " + lastReport.Detail
-			return lastReport, nil
+			return report, err
 		}),
 	}
 
@@ -2178,8 +1886,6 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		ModelRef: modelRef,
 		Profile:  profile,
 		Effort:   effort,
-		MinTier:  minTier,
-		MaxTier:  maxTier,
 	}
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
@@ -2267,7 +1973,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.
-func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel, minTier, maxTier string, escalate bool) error {
+func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel string) error {
 	serverBase := resolveServerURL(projectRoot)
 
 	workerSpec := map[string]any{
@@ -2304,16 +2010,6 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	if reviewModel != "" {
 		workerSpec["review_model"] = reviewModel
 	}
-	if minTier != "" {
-		workerSpec["min_tier"] = minTier
-	}
-	if maxTier != "" {
-		workerSpec["max_tier"] = maxTier
-	}
-	if escalate {
-		workerSpec["escalate"] = true
-	}
-
 	specData, err := json.Marshal(workerSpec)
 	if err != nil {
 		return fmt.Errorf("marshal worker spec: %w", err)

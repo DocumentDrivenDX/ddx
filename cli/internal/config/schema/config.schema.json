@@ -297,26 +297,9 @@
           "properties": {
             "profile_priority": {
               "type": "array",
-              "description": "DEPRECATED: flat ordered list of profiles to prefer. Replaced by `profile_ladders`; retained for backward compatibility. When both are set, `profile_ladders` wins.",
+              "description": "DEPRECATED: flat ordered list of profiles to prefer.",
               "deprecated": true,
               "items": {
-                "type": "string"
-              }
-            },
-            "profile_ladders": {
-              "type": "object",
-              "description": "Per-profile escalation ladders. Each key is a profile name (cheap|default|fast|smart|custom); each value is the ordered tier list to try. Example: { \"default\": [\"cheap\", \"standard\", \"smart\"], \"cheap\": [\"cheap\"], \"fast\": [\"fast\", \"smart\"], \"smart\": [\"smart\"] }. See FEAT-006 Profile Routing and ddx-bbb65768.",
-              "additionalProperties": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "model_overrides": {
-              "type": "object",
-              "description": "Per-tier model override map (e.g. { \"cheap\": \"qwen/qwen3.6\", \"standard\": \"codex/gpt-5.4\", \"smart\": \"claude-opus-4-6\" })",
-              "additionalProperties": {
                 "type": "string"
               }
             }
@@ -476,14 +459,6 @@
             "effort": {
               "type": "string",
               "description": "Default reasoning-effort tier (low, medium, high)."
-            },
-            "min_tier": {
-              "type": "string",
-              "description": "Optional minimum routing tier."
-            },
-            "max_tier": {
-              "type": "string",
-              "description": "Optional maximum routing tier."
             }
           },
           "additionalProperties": false

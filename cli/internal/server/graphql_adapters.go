@@ -72,8 +72,6 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		NoReview      bool   `json:"no_review"`
 		ReviewHarness string `json:"review_harness"`
 		ReviewModel   string `json:"review_model"`
-		MinTier       string `json:"min_tier"`
-		MaxTier       string `json:"max_tier"`
 	}
 	if rawArgs != nil && *rawArgs != "" {
 		if err := json.Unmarshal([]byte(*rawArgs), &req); err != nil {
@@ -94,12 +92,6 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 			}
 			if req.Effort == "" {
 				req.Effort = spec.Effort
-			}
-			if req.MinTier == "" {
-				req.MinTier = spec.MinTier
-			}
-			if req.MaxTier == "" {
-				req.MaxTier = spec.MaxTier
 			}
 		}
 		if wc.MaxCount != nil && *wc.MaxCount >= 0 {
@@ -142,8 +134,6 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		NoReview:      req.NoReview,
 		ReviewHarness: req.ReviewHarness,
 		ReviewModel:   req.ReviewModel,
-		MinTier:       req.MinTier,
-		MaxTier:       req.MaxTier,
 	})
 	if err != nil {
 		return nil, err
