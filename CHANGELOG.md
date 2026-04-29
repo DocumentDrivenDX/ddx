@@ -4,6 +4,42 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### execute-loop: structured `declined_needs_decomposition` outcome
+
+Adds a first-class outcome distinct from `no_changes` and `execution_failed`
+for executors that conclude a bead is too large to deliver in one pass and
+must first be split into sub-beads. Previously this case was conveyed via
+free-form text in `no_changes_rationale`, and the loop kept re-attempting the
+bead under a short cooldown — burning tokens to re-derive the same
+recommendation across runs.
+
+The new contract:
+
+- `ExecuteBeadStatusDeclinedNeedsDecomposition` (`declined_needs_decomposition`)
+  is a new value of the execute-bead status. Executors set it together with
+  `DecompositionRecommendation []string` (recommended sub-bead titles) and
+  optional `DecompositionRationale string` on `ExecuteBeadReport`.
+- The execute-loop responds by appending a structured
+  `decomposition-recommendation` event (JSON body carrying the rationale and
+  recommended sub-beads) and parking the bead with a 365-day cooldown so
+  subsequent loop iterations do not re-attempt it. The bead remains open;
+  its status field is unchanged.
+- A first-class CLI for the cooldown surface lands as `ddx bead cooldown
+  show <id>` and `ddx bead cooldown clear <id>`. Operators should reach for
+  these commands instead of editing the magic `execute-loop-retry-after`
+  Extra key. The existing `ddx bead update --set/--unset
+  execute-loop-retry-after=...` workflow continues to work as a power-user
+  override but is deprecated for the decomposition case — clearing a
+  cooldown via the new command is the intended path.
+
+Migration: this is an additive contract. Executors that do not emit the new
+status see no behaviour change. Existing cooldown workflows (no_changes
+short cooldown, push_failed long park) are unchanged.
+
+Regression coverage:
+`TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead` in
+`cli/internal/agent/execute_bead_loop_test.go`.
+
 ### Routing point release — ddx-agent v0.9.23
 
 DDx now consumes the cumulative routing contract delivered upstream across

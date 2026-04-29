@@ -61,6 +61,7 @@ Examples:
 	cmd.AddCommand(f.newBeadReviewCommand())
 	cmd.AddCommand(f.newBeadMetricsCommand())
 	cmd.AddCommand(f.newBeadDoctorCommand())
+	cmd.AddCommand(f.newBeadCooldownCommand())
 
 	return cmd
 }
@@ -1065,5 +1066,117 @@ func (f *CommandFactory) newBeadExportCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("stdout", false, "Write to stdout")
+	return cmd
+}
+
+// newBeadCooldownCommand wires `ddx bead cooldown show|clear <id>`.
+//
+// `cooldown show` prints the bead's current execute-loop cooldown fields
+// (retry-after, last-status, last-detail) in human or JSON form. `cooldown
+// clear` removes those three fields so the bead becomes execution-eligible
+// again at the next loop pass. This is the first-class operator-facing
+// surface for the underlying `execute-loop-retry-after` Extra key — the
+// `ddx bead update --set/--unset execute-loop-retry-after=...` workflow
+// continues to work as a power-user fallback, but operators should reach
+// for `cooldown clear` for the common case.
+func (f *CommandFactory) newBeadCooldownCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cooldown",
+		Short: "Inspect and clear execute-loop cooldowns",
+		Long: `Inspect and clear the execute-loop cooldown that parks a bead from
+re-execution. Cooldowns are set automatically by the loop in three cases:
+
+  * no_changes with a vague rationale (short retry, default 6h)
+  * push_failed (long park, 365d, requires operator action)
+  * declined_needs_decomposition (long park, 365d, requires decomposition)
+
+Use this command instead of editing the magic Extra key directly:
+
+  ddx bead cooldown show <bead-id>     # show retry-after, last-status, last-detail
+  ddx bead cooldown clear <bead-id>    # remove cooldown so the bead re-enters the queue
+`,
+		Run: func(cmd *cobra.Command, args []string) { _ = cmd.Help() },
+	}
+
+	showCmd := &cobra.Command{
+		Use:   "show <id>",
+		Short: "Show the execute-loop cooldown fields for a bead",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s := f.beadStore()
+			b, err := s.Get(args[0])
+			if err != nil {
+				return err
+			}
+			retry, _ := b.Extra["execute-loop-retry-after"].(string)
+			lastStatus, _ := b.Extra["execute-loop-last-status"].(string)
+			lastDetail, _ := b.Extra["execute-loop-last-detail"].(string)
+
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(struct {
+					BeadID      string `json:"bead_id"`
+					RetryAfter  string `json:"retry_after,omitempty"`
+					LastStatus  string `json:"last_status,omitempty"`
+					LastDetail  string `json:"last_detail,omitempty"`
+					ParkedUntil string `json:"parked_until,omitempty"`
+				}{BeadID: b.ID, RetryAfter: retry, LastStatus: lastStatus, LastDetail: lastDetail, ParkedUntil: retry})
+			}
+
+			if retry == "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: no cooldown set\n", b.ID)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "bead:        %s\n", b.ID)
+			fmt.Fprintf(cmd.OutOrStdout(), "retry_after: %s\n", retry)
+			if lastStatus != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "last_status: %s\n", lastStatus)
+			}
+			if lastDetail != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "last_detail: %s\n", lastDetail)
+			}
+			return nil
+		},
+	}
+	showCmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.AddCommand(showCmd)
+
+	clearCmd := &cobra.Command{
+		Use:   "clear <id>",
+		Short: "Clear the execute-loop cooldown for a bead",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s := f.beadStore()
+			cleared := false
+			if err := s.Update(args[0], func(b *bead.Bead) {
+				if b.Extra == nil {
+					return
+				}
+				for _, key := range []string{
+					"execute-loop-retry-after",
+					"execute-loop-last-status",
+					"execute-loop-last-detail",
+				} {
+					if _, ok := b.Extra[key]; ok {
+						delete(b.Extra, key)
+						cleared = true
+					}
+				}
+			}); err != nil {
+				return err
+			}
+			f.beadAutoCommit("cooldown clear " + args[0])
+			if cleared {
+				fmt.Fprintf(cmd.OutOrStdout(), "Cleared cooldown on %s\n", args[0])
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: no cooldown set\n", args[0])
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(clearCmd)
+
 	return cmd
 }

@@ -78,6 +78,15 @@ type ExecuteBeadReport struct {
 	ResolvedTier     string `json:"resolved_tier,omitempty"`
 	EscalationCount  int    `json:"escalation_count,omitempty"`
 	FinalTier        string `json:"final_tier,omitempty"`
+	// DecompositionRecommendation carries the structured list of recommended
+	// sub-bead titles when Status == declined_needs_decomposition. The loop
+	// records these on the bead as a `decomposition-recommendation` event so
+	// operators (or helix-evolve) can split the bead without re-deriving the
+	// recommendation.
+	DecompositionRecommendation []string `json:"decomposition_recommendation,omitempty"`
+	// DecompositionRationale is a free-form explanation accompanying
+	// DecompositionRecommendation. Optional.
+	DecompositionRationale string `json:"decomposition_rationale,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -635,6 +644,46 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					result.Failures++
 					result.LastFailureStatus = report.Status
 				}
+			} else if report.Status == ExecuteBeadStatusDeclinedNeedsDecomposition {
+				// Executor declined the bead because it is too large to
+				// deliver in one pass. Record a structured
+				// `decomposition-recommendation` event and park the bead
+				// long enough that subsequent loop iterations do NOT
+				// re-attempt it. An operator (or helix-evolve) clears the
+				// cooldown — typically by splitting the bead.
+				body, mErr := json.Marshal(map[string]any{
+					"rationale":            report.DecompositionRationale,
+					"recommended_subbeads": report.DecompositionRecommendation,
+					"detail":               report.Detail,
+					"base_rev":             report.BaseRev,
+					"session_id":           report.SessionID,
+				})
+				bodyStr := ""
+				if mErr == nil {
+					bodyStr = string(body)
+				} else {
+					bodyStr = fmt.Sprintf("rationale=%s\nrecommended_subbeads=%v",
+						report.DecompositionRationale, report.DecompositionRecommendation)
+				}
+				summary := "agent declined: needs decomposition"
+				if n := len(report.DecompositionRecommendation); n > 0 {
+					summary = fmt.Sprintf("%s (%d sub-beads)", summary, n)
+				}
+				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+					Kind:      "decomposition-recommendation",
+					Summary:   summary,
+					Body:      bodyStr,
+					Actor:     assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+				parkUntil := now().UTC().Add(365 * 24 * time.Hour)
+				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
+					return result, err
+				}
+				report.RetryAfter = parkUntil.Format(time.RFC3339)
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			} else if report.Status == ExecuteBeadStatusPushFailed {
 				// Push failed after a successful local merge/ff. The bead is
 				// NOT closed (commits live only locally) — park it long enough

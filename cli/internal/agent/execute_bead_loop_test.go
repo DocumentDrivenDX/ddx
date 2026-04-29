@@ -1054,6 +1054,98 @@ func TestExecuteBeadWorkerNoChangesVagueRationaleUsesCountThreshold(t *testing.T
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
+// TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead verifies that when
+// the executor returns the structured `declined_needs_decomposition` outcome
+// the loop:
+//
+//  1. parks the bead so subsequent loop iterations do not re-attempt it,
+//  2. records the recommended sub-beads as a structured
+//     `decomposition-recommendation` event (JSON body, not free-form text),
+//  3. does not pick the bead up on a second `Run` while the cooldown holds.
+//
+// Regression coverage for ddx-fba752b9.
+func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-decomp01", Title: "Routing point release (epic)"}
+	require.NoError(t, store.Create(b))
+
+	recommended := []string{
+		"split: cost-aware routing tiebreak",
+		"split: routing profiles",
+		"split: public route decision trace",
+	}
+	rationale := "scope is epic-sized; deliver as 3 sub-beads"
+
+	var execCount int32
+	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+		atomic.AddInt32(&execCount, 1)
+		return ExecuteBeadReport{
+			BeadID:                      beadID,
+			Status:                      ExecuteBeadStatusDeclinedNeedsDecomposition,
+			Detail:                      "this epic is too big, split it into sub-beads",
+			DecompositionRationale:      rationale,
+			DecompositionRecommendation: recommended,
+		}, nil
+	})
+
+	worker := &ExecuteBeadWorker{Store: store, Executor: executor}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	// First run: the executor declines, the loop parks the bead.
+	r1, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, r1)
+	require.Equal(t, 1, r1.Attempts)
+	require.Equal(t, 0, r1.Successes)
+	require.Equal(t, 1, r1.Failures)
+	require.Equal(t, ExecuteBeadStatusDeclinedNeedsDecomposition, r1.LastFailureStatus)
+
+	// Cooldown must be set so the bead is no longer execution-ready.
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	require.Equal(t, bead.StatusOpen, got.Status, "bead stays open; cooldown removes it from queue")
+	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
+	require.NotEmpty(t, retryAfter, "execute-loop-retry-after must be set")
+	parkedUntil, perr := time.Parse(time.RFC3339, retryAfter)
+	require.NoError(t, perr)
+	require.True(t, parkedUntil.After(time.Now().Add(180*24*time.Hour)),
+		"cooldown must park well into the future (>180d), got %s", retryAfter)
+	lastStatus, _ := got.Extra["execute-loop-last-status"].(string)
+	require.Equal(t, ExecuteBeadStatusDeclinedNeedsDecomposition, lastStatus)
+
+	// A structured decomposition-recommendation event must be appended.
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var rec *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "decomposition-recommendation" {
+			rec = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, rec, "decomposition-recommendation event missing; got %d events", len(events))
+
+	// Body must be JSON-decodable and carry the recommended sub-beads as a
+	// structured field, not just inline text.
+	var payload struct {
+		Rationale           string   `json:"rationale"`
+		RecommendedSubbeads []string `json:"recommended_subbeads"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(rec.Body), &payload))
+	require.Equal(t, rationale, payload.Rationale)
+	require.Equal(t, recommended, payload.RecommendedSubbeads)
+
+	// Second run: the bead must not be re-attempted while the cooldown holds.
+	r2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.Equal(t, 0, r2.Attempts, "parked bead must not be re-attempted")
+	require.Equal(t, int32(1), atomic.LoadInt32(&execCount), "executor must run exactly once")
+}
+
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
 	t.Helper()
 

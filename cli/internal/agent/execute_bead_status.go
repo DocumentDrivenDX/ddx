@@ -215,6 +215,20 @@ const (
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
 
+	// ExecuteBeadStatusDeclinedNeedsDecomposition is a structured outcome
+	// signalling that the executor inspected the bead and concluded it cannot
+	// be delivered in a single pass — typically because the scope is
+	// epic-sized and must first be broken into sub-beads. It is distinct
+	// from no_changes (which means "I tried and there was nothing to change")
+	// and from execution_failed (which means the agent or harness errored).
+	//
+	// The loop treats this status as terminal-for-loop: it parks the bead
+	// with a long cooldown and records the recommended sub-beads as a
+	// structured `decomposition-recommendation` event. No further attempts
+	// happen until an operator clears the cooldown (e.g. via
+	// `ddx bead cooldown clear`) or splits the bead.
+	ExecuteBeadStatusDeclinedNeedsDecomposition = "declined_needs_decomposition"
+
 	// Post-merge review outcomes. The bead was merged, then reviewed;
 	// the review returned a non-APPROVE verdict and the bead was reopened.
 	ExecuteBeadStatusReviewRequestChanges = "review_request_changes"
