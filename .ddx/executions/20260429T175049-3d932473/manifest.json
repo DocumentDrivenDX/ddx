@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260429T175049-3d932473",
+  "bead_id": "ddx-2d9026d0",
+  "base_rev": "8bc88ccb536160d2a576191b45f07d96bc0190ba",
+  "created_at": "2026-04-29T17:50:50.418478694Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2d9026d0",
+    "title": "FEAT-015 amendment: project-local install model, no symlinks invariant",
+    "description": "Bead 0 of 4 children under epic ddx-3562c48c.\n\nAmend FEAT-015 to describe project-local install behavior. NO CODE CHANGES — spec only. Per project rule: specs land first, code follows.\n\nRequired edits to docs/helix/01-frame/features/FEAT-015-installation-architecture.md:\n- Overview bullets: rewrite to describe project-local copy semantics. Remove the 'ddx install --global' bullet entirely.\n- New 'Cross-platform invariant' section: ddx creates no symlinks during install; reasoning = Windows compat; plugin source symlinks (in tarballs) are NOT materialized — author's responsibility.\n- New 'Migration' section: ddx update --force heals pre-existing projects with home-symlinked skills; stale ~/.ddx/installed.yaml entries are no-op uninstalls; ~/.ddx/plugins/ left in place as inert (user can rm -rf).\n- FEAT-011, FEAT-009 cross-references: minimal edits, point readers at FEAT-015 amendment.\n\nLocked decisions to encode in spec:\n1. Drop global skills targets (~/.agents/skills/, ~/.claude/skills/).\n2. ddx init/install only touch \u003cprojectRoot\u003e.\n3. Stale ~/.ddx/installed.yaml entries no-op.\n4. \u003cprojectRoot\u003e/.ddx/plugins/, .agents/skills/, .claude/skills/ are committed.\n5. Zero symlinks created by ddx install.\n6. ddx install --global removed.\n7. ~-prefixed Root.Target manifests rejected with non-zero exit.",
+    "acceptance": "1. FEAT-015 overview describes project-local copy semantics; install --global bullet removed. 2. Cross-platform invariant section added. 3. Migration section added. 4. FEAT-011 and FEAT-009 cross-references updated where they describe install model. 5. No code changes in this bead. 6. Commit message references parent epic ddx-3562c48c.",
+    "parent": "ddx-3562c48c",
+    "labels": [
+      "helix",
+      "area:docs",
+      "phase:design",
+      "kind:spec",
+      "spec:FEAT-015"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T17:50:47Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T14:24:28.320245281Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T142244-a1c2d56e\",\"harness\":\"claude\",\"input_tokens\":16,\"output_tokens\":6391,\"total_tokens\":6407,\"cost_usd\":0.64623075,\"duration_ms\":103159,\"exit_code\":0}",
+          "created_at": "2026-04-29T14:24:28.407258148Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6407 cost_usd=0.6462"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-29T17:50:47.530531469Z",
+      "spec-id": "FEAT-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-015",
+      "path": "docs/helix/01-frame/features/FEAT-015-installation-architecture.md",
+      "title": "Feature: DDx Installation Architecture"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260429T175049-3d932473",
+    "prompt": ".ddx/executions/20260429T175049-3d932473/prompt.md",
+    "manifest": ".ddx/executions/20260429T175049-3d932473/manifest.json",
+    "result": ".ddx/executions/20260429T175049-3d932473/result.json",
+    "checks": ".ddx/executions/20260429T175049-3d932473/checks.json",
+    "usage": ".ddx/executions/20260429T175049-3d932473/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2d9026d0-20260429T175049-3d932473"
+  }
+}
