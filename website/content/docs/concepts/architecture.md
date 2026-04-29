@@ -35,7 +35,21 @@ created → ready → in-progress → review → closed
 shape. `ddx bead dep tree` visualizes the DAG. See **FEAT-004** for the bead
 tracker spec.
 
-<!-- diagram: bead-lifecycle -->
+```mermaid
+stateDiagram-v2
+    [*] --> created: ddx bead create
+    created --> ready: deps closed
+    created --> blocked: external blocker
+    ready --> in_progress: agent claims
+    in_progress --> review: implementation done
+    in_progress --> blocked: surfaces blocker
+    review --> closed: AC pass
+    review --> ready: AC fail (reopen, escalate)
+    review --> declined: push conflict /<br/>cannot reconcile
+    blocked --> ready: blocker cleared
+    closed --> [*]
+    declined --> [*]
+```
 
 {{< callout type="info" >}}
 **Why beads, not tickets?** Beads are local files in JSONL, not records in
@@ -86,7 +100,29 @@ next attempt's prompt so the escalating model knows exactly what was missed.
 `ddx agent execute-loop` with all flags passed through. See **FEAT-006**
 (agent service) and **FEAT-010** (executions) for the runtime contract.
 
-<!-- diagram: execute-loop -->
+```mermaid
+flowchart TD
+    Start(["ddx work"]) --> Claim{"ready bead<br/>in queue?"}
+    Claim -- "no" --> Done(["exit"])
+    Claim -- "yes" --> Worktree["create execution<br/>worktree from base rev"]
+    Worktree --> Render["render bead prompt<br/>(persona + context)"]
+    Render --> RunImpl["run implementer agent<br/>(cheap tier)"]
+    RunImpl --> Review["review by stronger model<br/>against acceptance criteria"]
+    Review --> Pass{"AC pass?"}
+    Pass -- "no" --> Escalate["reopen bead, thread findings,<br/>escalate to higher tier"]
+    Escalate --> Claim
+    Pass -- "yes" --> Merge["merge to base"]
+    Merge --> Push{"push race?"}
+    Push -- "yes" --> Recover["auto-recover:<br/>rebase / retry"]
+    Recover --> Merge
+    Push -- "no" --> Close["close bead"]
+    Close --> Claim
+
+    classDef cheap fill:#dcfce7,stroke:#15803d,color:#1e293b;
+    classDef strong fill:#fae8ff,stroke:#a21caf,color:#1e293b;
+    class RunImpl cheap;
+    class Review strong;
+```
 
 ## Personas and Role Binding
 
@@ -114,7 +150,38 @@ This separation is why execute-loop's cost tiering works cleanly — the
 implementer role binds to a cheap-tier persona, the reviewer role binds to
 a strong-tier one, and the loop never hardcodes a model name.
 
-<!-- diagram: persona-role-binding -->
+```mermaid
+flowchart LR
+    subgraph Workflow["Workflow (e.g. HELIX)"]
+        RoleR["role:<br/>code-reviewer"]
+        RoleI["role:<br/>implementer"]
+        RoleA["role:<br/>architect"]
+    end
+    subgraph Project[".ddx/config.yaml"]
+        Bind["persona_bindings:<br/>code-reviewer → code-reviewer<br/>implementer → cheap-implementer<br/>architect → architect"]
+    end
+    subgraph Library["library/personas/"]
+        PR["code-reviewer.md"]
+        PI["cheap-implementer.md"]
+        PA["architect.md"]
+    end
+    Envelope["prompt envelope<br/>(persona + bead + context)"]
+    Agent["agent harness"]
+
+    RoleR --> Bind
+    RoleI --> Bind
+    RoleA --> Bind
+    Bind --> PR
+    Bind --> PI
+    Bind --> PA
+    PR --> Envelope
+    PI --> Envelope
+    PA --> Envelope
+    Envelope --> Agent
+
+    classDef cfg fill:#fef3c7,stroke:#b45309,color:#1f2937;
+    class Bind cfg;
+```
 
 ## Project-Local Install Model
 
@@ -151,7 +218,29 @@ This is a deliberate inversion of the usual CLI pattern. It makes:
 
 See **FEAT-015** for the installation architecture spec.
 
-<!-- diagram: project-local-install -->
+```mermaid
+flowchart TB
+    subgraph Global["Global (developer machine)"]
+        Bin["ddx binary<br/>(~/.local/bin/ddx)"]
+        Server["ddx-server<br/>(optional, only global artifact)"]
+    end
+    subgraph Project["&lt;projectRoot&gt;/ — everything else lives here"]
+        direction LR
+        DDxDir[".ddx/<br/>config.yaml · plugins/ ·<br/>executions/ · beads/"]
+        AgentsDir[".agents/skills/"]
+        ClaudeDir[".claude/skills/"]
+    end
+
+    Bin -->|"ddx init"| Project
+    Bin -->|"ddx install &lt;plugin&gt;"| DDxDir
+    Bin -->|"ddx install &lt;plugin&gt;"| AgentsDir
+    Bin -->|"ddx install &lt;plugin&gt;"| ClaudeDir
+
+    classDef global fill:#e5e7eb,stroke:#4b5563,color:#1f2937;
+    classDef local fill:#dbeafe,stroke:#1d4ed8,color:#1e293b;
+    class Bin,Server global;
+    class DDxDir,AgentsDir,ClaudeDir local;
+```
 
 ## How the Pieces Fit
 

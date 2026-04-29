@@ -17,7 +17,28 @@ Well-maintained abstractions — requirements, architecture, design, tests —
 produce better software than working at the code level alone. DDx encodes that
 insight into infrastructure.
 
-<!-- diagram: documents-drive-agents -->
+```mermaid
+flowchart LR
+    Dev["Developer<br/>(maintains documents)"]
+    subgraph Docs["Documents (the product)"]
+        direction TB
+        Specs["Specs"]
+        Personas["Personas"]
+        Patterns["Patterns"]
+        Templates["Templates"]
+        Prompts["Prompts"]
+    end
+    Agent["AI Agent<br/>(harness)"]
+    Code["Code,<br/>tests, artifacts"]
+
+    Dev -->|edits| Docs
+    Docs -->|composed into prompt| Agent
+    Agent -->|produces| Code
+    Code -.->|feedback informs| Docs
+
+    classDef product fill:#fef3c7,stroke:#b45309,color:#1f2937;
+    class Docs product;
+```
 
 ## The Three-Layer Stack
 
@@ -33,7 +54,31 @@ is independently useful and replaceable.
 DDx provides primitives. HELIX and others provide opinions. Dun verifies the
 result.
 
-<!-- diagram: three-layer-stack -->
+```mermaid
+flowchart TB
+    subgraph Workflow["Workflow layer — opinions"]
+        HELIX["HELIX<br/>phases · gates · supervisory dispatch"]
+        Other["...alternative<br/>workflows"]
+    end
+    subgraph Platform["Platform layer — primitives"]
+        DDx["DDx<br/>document library · bead tracker ·<br/>agent dispatch · personas · git sync"]
+    end
+    subgraph Quality["Quality layer — verification"]
+        Dun["Dun<br/>check discovery · execution ·<br/>agent-friendly output"]
+    end
+
+    HELIX -->|consumes primitives| DDx
+    Other -->|consumes primitives| DDx
+    DDx -->|invokes checks| Dun
+    Dun -->|results| DDx
+
+    classDef platform fill:#dbeafe,stroke:#1d4ed8,color:#1e293b;
+    classDef workflow fill:#dcfce7,stroke:#15803d,color:#1e293b;
+    classDef quality fill:#fae8ff,stroke:#a21caf,color:#1e293b;
+    class DDx platform;
+    class HELIX,Other workflow;
+    class Dun quality;
+```
 
 {{< callout type="info" >}}
 **Why three layers?** Mixing methodology into platform code locks teams into
