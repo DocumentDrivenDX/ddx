@@ -59,6 +59,72 @@ turn 2, (b) the second-turn latency excludes the prior turn and tool window,
 and (c) the sum of per-call latencies does not exceed the final event's
 `elapsed_ms`.
 
+### execute-loop: conflict-recovery for preserved iterations before discard
+
+Bead ddx-0097af14. When a land attempt produces a merge conflict the executor
+preserves the agent's commit under `refs/ddx/iterations/<bead>/<ts>-<tip>` and
+the loop previously reopened the bead with status `land_conflict` — forcing a
+full re-execution from scratch and discarding hours of agent work.
+
+The loop now attempts to reuse the preserved commit before discarding it:
+
+1. **3-way ort auto-merge (-X ours).** On `land_conflict` (and on
+   `execution_failed` when the agent produced a commit before timing out), the
+   loop runs `git merge --no-ff -s ort -X ours` to merge the preserved
+   iteration onto the current target tip. Mechanical positional drift from
+   parallel beads (the common case) resolves cleanly; the bead lands without
+   operator intervention and closes normally. The merge commit preserves both
+   the current-tip history and the preserved iteration as a parent, so replay
+   fidelity is maintained.
+
+2. **Focused conflict-resolve agent (optional).** If the ort auto-merge fails,
+   the loop calls the optional `ConflictResolver` hook (a cheap-tier agent run
+   tasked solely with resolving conflicts in the preserved files). On success
+   the bead closes; on failure the hook signals whether a human is required
+   (`isBlocking=true`) or the conflict may be retried.
+
+3. **Structured park outcome.** Only after both (1) and (2) fail does the loop
+   park the bead. The new status `land_conflict_unresolvable` (or
+   `land_conflict_needs_human` when the focused agent returned BLOCKING)
+   replaces the previous generic re-open so dashboards can distinguish
+   machine-resolvable retries from conflicts that need human input. A structured
+   `kind:land-conflict-unresolvable` (or `kind:land-conflict-needs-human`)
+   bead event records `preserve_ref`, `base_rev`, `result_rev`, and the
+   auto-merge error for operator forensics.
+
+4. **Short 15-minute cooldown.** Unlike the 24h cap used for `push_failed`,
+   `land_conflict_unresolvable` parks the bead for 15 minutes — land conflicts
+   typically unblock themselves as sibling beads advance the base branch.
+
+5. **Timeout-with-preserved-commit case.** The same recovery path fires for
+   `execution_failed` when `ResultRev != BaseRev` and `PreserveRef` is set
+   (i.e. the agent produced commits before the 3-hour hard timeout). Previously
+   those runs were silently discarded.
+
+**New constants:**
+- `ExecuteBeadStatusLandConflictUnresolvable` = `"land_conflict_unresolvable"`
+- `ExecuteBeadStatusLandConflictNeedsHuman` = `"land_conflict_needs_human"`
+- `LandConflictCooldown` = 15 min
+
+Regression coverage:
+
+- `TestLandConflictAutoRecover_OrtResolvesCleanly` in
+  `execute_bead_land_test.go` exercises the `landConflictAutoRecover` function
+  against a real git repo with a content conflict, asserting ort -X ours
+  produces a clean merge commit reachable from both the current tip and the
+  preserved iteration.
+- `TestExecuteBeadLoopLandConflict_AutoRecoverySucceeds_BeadCloses` (AC #6a):
+  stub auto-recover returns a tip → loop closes the bead as success.
+- `TestExecuteBeadLoopLandConflict_AutoRecoverFails_EscalatesResolver` (AC #6b):
+  stub auto-recover fails → loop calls `ConflictResolver` → both fail → bead
+  parks with `land_conflict_unresolvable` under the 15-min cooldown.
+- `TestExecuteBeadLoopExecutionFailed_WithPreservedCommit_AttemptsRecovery`
+  (AC #6c): `execution_failed` with `PreserveRef` and `ResultRev != BaseRev` →
+  `conflictAutoRecoverFn` is called before discarding the run.
+- `TestExecuteBeadLoopLandConflict_EmptyProjectRoot_SkipsRecovery`: empty
+  `ProjectRoot` bypasses recovery and preserves pre-patch `land_conflict`
+  behavior for callers without a project root.
+
 ### execute-loop: recoverable push races and a 24h cap on loop-set cooldowns
 
 Bead ddx-a458af7c. Two related fixes:
