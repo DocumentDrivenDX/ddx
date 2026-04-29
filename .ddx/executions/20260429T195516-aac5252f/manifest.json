@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260429T195516-aac5252f",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-7a85a707",
+  "base_rev": "c86ec1f12369804d16e38a0a2a371cf5a65156d3",
+  "created_at": "2026-04-29T19:55:17.178431052Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-7a85a707",
+    "title": "[read-coverage] add MCP server registry + plugin manifest HTTP + MCP",
+    "description": "FEAT-009/015 gap. CLI has ddx mcp list (MCP server registry) and ddx install installed/outdated/search (plugin manifest). No HTTP routes or MCP tools expose this. Agents and UIs cannot discover which MCP servers are configured or which plugins are installed without spawning the CLI. Add /api/mcp-servers, /api/plugins HTTP routes and ddx_list_mcp_servers, ddx_list_plugins MCP tools.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "http",
+      "mcp",
+      "feat-009",
+      "feat-015"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:55:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:55:12.679347302Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T195516-aac5252f",
+    "prompt": ".ddx/executions/20260429T195516-aac5252f/prompt.md",
+    "manifest": ".ddx/executions/20260429T195516-aac5252f/manifest.json",
+    "result": ".ddx/executions/20260429T195516-aac5252f/result.json",
+    "checks": ".ddx/executions/20260429T195516-aac5252f/checks.json",
+    "usage": ".ddx/executions/20260429T195516-aac5252f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-7a85a707-20260429T195516-aac5252f"
+  }
+}
