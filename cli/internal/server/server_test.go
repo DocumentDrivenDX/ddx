@@ -1556,6 +1556,109 @@ func TestMCPBeadDepTreeMissingID(t *testing.T) {
 	}
 }
 
+func TestMCPWorkerList(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_worker_list","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	textMap := content[0].(map[string]any)
+	text := textMap["text"].(string)
+
+	var workers []map[string]any
+	if err := json.Unmarshal([]byte(text), &workers); err != nil {
+		t.Fatalf("MCP worker_list response not valid JSON array: %v (text=%q)", err, text)
+	}
+	if len(workers) != 0 {
+		t.Errorf("expected empty worker list for fresh dir, got %d", len(workers))
+	}
+}
+
+func TestMCPWorkerShowMissingID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_worker_show","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Errorf("expected isError=true when id missing, got %v", result["isError"])
+	}
+}
+
+func TestMCPWorkerShowUnknownID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_worker_show","arguments":{"id":"does-not-exist"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Errorf("expected isError=true for unknown worker id, got %v", result["isError"])
+	}
+}
+
+func TestMCPWorkerLogMissingID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_worker_log","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Errorf("expected isError=true when id missing, got %v", result["isError"])
+	}
+}
+
+func TestMCPWorkerLogUnknownID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_worker_log","arguments":{"id":"does-not-exist"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Errorf("expected isError=true for unknown worker id, got %v", result["isError"])
+	}
+}
+
 func TestMCPSearch(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
