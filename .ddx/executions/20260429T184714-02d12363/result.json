@@ -1,0 +1,68 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff at rev 1550c5382a is a bare merge commit with no code changes; none of the 8 AC items (3-way auto-resolve, focused-resolve agent dispatch, structured outcomes, cooldown cap, timeout-with-preserved-commit path, regression tests, CHANGELOG, FEAT-006 update) can be evaluated as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Reviewed revision is a merge commit with empty patch; no implementation visible to evaluate against AC 1-8.",
+      "location": "(commit 1550c5382a41)"
+    },
+    {
+      "severity": "block",
+      "summary": "AC1-3 (3-way auto-resolve, focused-resolve dispatch, structured park outcomes) — no evidence in diff.",
+      "location": "cli/internal/agent/execute_loop*.go"
+    },
+    {
+      "severity": "block",
+      "summary": "AC4 (5-30 min cooldown for land-conflict-unresolvable, capped under 24h) — no evidence.",
+      "location": "cli/internal/agent/cooldown*.go"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 (timeout-with-preserved-commit reuses same merge path) — no evidence.",
+      "location": "cli/internal/agent/execute_bead*.go"
+    },
+    {
+      "severity": "block",
+      "summary": "AC6 (regression tests for mechanical, structural, timeout-with-commit cases) — no test files in diff.",
+      "location": "cli/internal/agent/*_test.go"
+    },
+    {
+      "severity": "block",
+      "summary": "AC7 (CHANGELOG entry) — not present in diff.",
+      "location": "CHANGELOG.md"
+    },
+    {
+      "severity": "block",
+      "summary": "AC8 (FEAT-006 outcome contract documentation update) — not present in diff.",
+      "location": "docs/helix/.../FEAT-006*"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 5215,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 215,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 7055,
+    "output_bytes": 1595,
+    "elapsed_ms": 13501,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
