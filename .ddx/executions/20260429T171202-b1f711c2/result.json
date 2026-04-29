@@ -1,0 +1,54 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution evidence files (manifest.json, result.json) — no source changes to cli/internal/server/workers.go or anywhere else. None of the AC items can be verified from this diff.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No source changes present; only execution metadata added. The required server worker fix at cli/internal/server/workers.go:650 is not in the diff.",
+      "location": "cli/internal/server/workers.go:650"
+    },
+    {
+      "severity": "block",
+      "summary": "AC requires sole child ddx-c7081f89 to close and tests to pass; diff provides no evidence of either.",
+      "location": ".ddx/executions/20260429T170036-22cf74ed/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 5441,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T170036-22cf74ed/manifest.json",
+          ".ddx/executions/20260429T170036-22cf74ed/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 8038,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 15285,
+    "output_bytes": 736,
+    "elapsed_ms": 6303,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
