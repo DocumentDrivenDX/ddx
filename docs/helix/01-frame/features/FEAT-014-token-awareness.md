@@ -19,7 +19,9 @@ ddx:
 DDx's agent wrapper should understand provider-native usage and routing signals
 across harnesses so that every `ddx agent run` can make an informed decision
 about which harness to use based on request fit, availability, cost,
-performance, and current quota/headroom when known.
+performance, and current quota/headroom when known. `ddx artifact regenerate`
+runs are layer-1 agent invocations and consume token budgets via this same
+FEAT-014 normalized signal model.
 
 ## Problem Statement
 
