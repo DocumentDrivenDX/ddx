@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T031704-db3a0920",
+  "bead_id": "ddx-969c5500",
+  "base_rev": "4fa2686a26f7425d9a7d484a69ce694f95ca1320",
+  "created_at": "2026-04-29T03:17:04.933050788Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-969c5500",
+    "title": "FEAT: agent-logs jsonl schema is metadata-only; add verbose mode capturing tool I/O and content",
+    "description": "## Problem\n\n`.ddx/agent-logs/agent-claude-*.jsonl` (lean schema) records only:\n  - `session.start` (model, harness, bead_id)\n  - `llm.response` (turn, input_tokens, output_tokens, elapsed_ms)\n  - `tool.call`     (turn, tool name)\n\nNotably absent: model output content, tool call arguments, tool call results, finish_reason, full usage breakdown (cache reads, cache writes), error/stop reasons.\n\nMeanwhile, `agent/demos/sessions/*.jsonl` from the sibling `Projects/agent` repo demonstrates a richer schema for the same event types:\n\n```jsonl\n{\"type\":\"llm.response\",\"data\":{\"content\":\"...\",\"finish_reason\":\"tool_calls\",\"usage\":{\"input\":899,\"output\":21,\"total\":920},\"latency_ms\":3040,\"tool_calls\":1}}\n{\"type\":\"tool.call\",\"data\":{\"tool\":\"edit\",\"input\":{\"path\":\"...\",\"old_string\":\"...\",\"new_string\":\"...\"},\"output\":\"Replaced 1 occurrence\",\"duration_ms\":0,\"error\":\"\"}}\n```\n\n## Why it matters\n\n- Cannot replay a real session to reproduce a bug — the inputs are gone.\n- Cannot root-cause provider failures (e.g. RotatingKVCache Quantization NYI seen in sessions.jsonl) because the prompt that triggered it is not in the per-event log; only the whole-session metadata in sessions.jsonl has it.\n- The lucebox-hub/dflash `bench_server.py` replay-mode benchmark needs full prompt text from real traces, not just metadata, to be representative.\n- Inability to tell what tool args caused a slow call.\n\n## Proposed fix\n\nAdd a verbose mode to the agent-logs writer (env var `DDX_AGENT_LOG_VERBOSE=1` or config flag) that adopts the agent/demos schema:\n  - llm.response: include `content`, `finish_reason`, full `usage` object\n  - tool.call: include `input` (tool args), `output` (truncated to N KB), `duration_ms`, `error`\n  - new event: `llm.request` with messages_count and possibly truncated message preview\n\nVerbose mode off by default to avoid bloating logs. On for any session with `--debug` or for failed sessions (auto-bump-on-error).\n\n## Side note\n\n`sessions.jsonl` (the 37 MB whole-session log) does have full `prompt` text but no per-turn breakdown. So we have two log formats and neither captures the full picture. This bead is about the per-event log only; whole-session log is out of scope.",
+    "acceptance": "1. `DDX_AGENT_LOG_VERBOSE=1 ddx agent ...` produces a trace where llm.response events include `content`, `finish_reason`, `usage`, and tool.call events include `input`, `output`, `duration_ms`, `error`.\n2. Schema documented in cli/internal/agent/session_log_format.go (Go doc comment listing all fields per event type for both lean and verbose modes).\n3. Default behavior unchanged (lean mode by default; existing tooling that consumes the lean schema continues to work).\n4. Test fixture added for verbose mode that asserts every required field is populated.",
+    "labels": [
+      "kind:implementation",
+      "area:agent",
+      "area:measurement"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T03:17:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "131811",
+      "execute-loop-heartbeat-at": "2026-04-29T03:17:04.266105769Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T031704-db3a0920",
+    "prompt": ".ddx/executions/20260429T031704-db3a0920/prompt.md",
+    "manifest": ".ddx/executions/20260429T031704-db3a0920/manifest.json",
+    "result": ".ddx/executions/20260429T031704-db3a0920/result.json",
+    "checks": ".ddx/executions/20260429T031704-db3a0920/checks.json",
+    "usage": ".ddx/executions/20260429T031704-db3a0920/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-969c5500-20260429T031704-db3a0920"
+  }
+}
