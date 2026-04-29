@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "WorkerSpec.Escalate field added (default false), workers.go:651 predicate updated to opt-in, --escalate plumbed through executeLoopWithServer, unit tests assert ResolveProfileLadder call count per Escalate value, migration doc updated. Matches all six AC items.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Operator pin (Harness/Model) preserved via existing predicate conjunction",
+      "location": "cli/internal/server/workers.go:655"
+    },
+    {
+      "severity": "info",
+      "summary": "Enabled subtest polls counter then Stops worker rather than waiting for natural exit — pragmatic given network I/O in tier loop",
+      "location": "cli/internal/server/workers_test.go:1148"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 7885,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T164539-86e4f11a/manifest.json",
+          ".ddx/executions/20260429T164539-86e4f11a/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 10553,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 20244,
+    "output_bytes": 749,
+    "elapsed_ms": 17095,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
