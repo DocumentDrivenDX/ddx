@@ -178,6 +178,9 @@ to handle conflicts. That's workflow-level policy (HELIX). DDx provides:
    `ddx_bead_claim`
 3. Bead operations safe under concurrent append to JSONL
    (already implemented via atomic writes — verify and document)
+4. Concurrent `ddx artifact regenerate` calls are safe under the same
+   worktree-isolation locking: each generator runs in its own worktree,
+   so at most one agent writes a given artifact at a time.
 
 **MCP supervisor surface**
 4. MCP tools for execution result inspection
