@@ -360,7 +360,7 @@
 					<span class="font-medium text-yellow-600 dark:text-yellow-400">
 						{data.worker.currentAttempt.phase}
 					</span>
-					<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">
+					<span class="ml-1 text-xs text-gray-600 dark:text-gray-400">
 						({formatElapsed(data.worker.currentAttempt.elapsedMs)})
 					</span>
 				</div>

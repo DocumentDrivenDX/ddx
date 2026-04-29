@@ -381,7 +381,7 @@
 						</td>
 						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
 							<span>{s.harness}</span>
-							<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">{s.model}</span>
+							<span class="ml-1 text-xs text-gray-600 dark:text-gray-400">{s.model}</span>
 						</td>
 						<td class="px-4 py-3">
 							<span class="font-medium {statusClass(s.status)}">{s.status}</span>

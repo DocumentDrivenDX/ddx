@@ -10,16 +10,46 @@ import { test } from '@playwright/test'
 // Output:
 //   demo-output/ contains a .webm video file
 
+async function getFixtureIds(
+	request: import('@playwright/test').APIRequestContext
+): Promise<{ nodeId: string; projectId: string }> {
+	const nodeResp = await request.post('/graphql', {
+		data: { query: '{ nodeInfo { id name } }' }
+	})
+	const nodeBody = (await nodeResp.json()) as {
+		data: { nodeInfo: { id: string; name: string } }
+	}
+	const projectsResp = await request.get('/api/projects')
+	const projects = (await projectsResp.json()) as Array<{
+		id: string
+		name: string
+		path: string
+	}>
+	const fixture = projects.find(
+		(p) => /(^|\/)ddx-e2e-/.test(p.path) || /^ddx-e2e-/.test(p.name)
+	)
+	if (!fixture) {
+		throw new Error(
+			`fixture server has no ddx-e2e-* project registered (got: ${projects
+				.map((p) => p.id)
+				.join(', ')})`
+		)
+	}
+	return { nodeId: nodeBody.data.nodeInfo.id, projectId: fixture.id }
+}
+
 test.describe('DDx Server UI Demo', () => {
-  test('full walkthrough', async ({ page }) => {
+  test('full walkthrough', async ({ page, request }) => {
+    const ids = await getFixtureIds(request)
+    const base = `/nodes/${ids.nodeId}/projects/${ids.projectId}`
+
     // ---------------------------------------------------------------
-    // 1. Dashboard — overview of the project
+    // 1. Project Overview — overview of the project
     // ---------------------------------------------------------------
-    await test.step('Dashboard — overview of the project', async () => {
-      await page.goto('/')
+    await test.step('Project Overview — overview of the project', async () => {
+      await page.goto(base)
       await page.waitForSelector('h1')
-      // Wait for all API data to populate cards
-      await page.waitForSelector('text=ok', { timeout: 5000 })
+      await page.waitForLoadState('networkidle')
       await page.waitForTimeout(2500)
     })
 
@@ -27,8 +57,8 @@ test.describe('DDx Server UI Demo', () => {
     // 2. Documents — browse and read a document
     // ---------------------------------------------------------------
     await test.step('Documents — browse and read a document', async () => {
-      await page.locator('a[href="/documents"]').first().click()
-      await page.waitForSelector('h1:has-text("Documents")')
+      await page.goto(`${base}/documents`)
+      await page.waitForSelector('h1')
       await page.waitForTimeout(1000)
 
       // Select the first document to show rendered markdown
@@ -37,25 +67,6 @@ test.describe('DDx Server UI Demo', () => {
         await firstDoc.click()
         await page.waitForSelector('.prose', { timeout: 5000 })
         await page.waitForTimeout(2000)
-
-        // Show the edit toggle briefly
-        const editBtn = page.locator('button:has-text("Edit")')
-        if (await editBtn.isVisible()) {
-          await editBtn.click()
-          await page.waitForTimeout(1200)
-          await page.click('button:has-text("Cancel")')
-          await page.waitForTimeout(800)
-        }
-      }
-
-      // Demonstrate type filtering
-      const typeSelect = page.locator('select')
-      const options = await typeSelect.locator('option').allTextContents()
-      if (options.length > 1) {
-        await typeSelect.selectOption({ index: 1 })
-        await page.waitForTimeout(1000)
-        await typeSelect.selectOption({ index: 0 }) // back to "All types"
-        await page.waitForTimeout(500)
       }
 
       // Demonstrate search
@@ -72,14 +83,14 @@ test.describe('DDx Server UI Demo', () => {
     // 3. Beads — kanban board, search, detail, create
     // ---------------------------------------------------------------
     await test.step('Beads — kanban board, search, detail, create', async () => {
-      await page.locator('a[href="/beads"]').first().click()
+      await page.goto(`${base}/beads`)
       await page.waitForSelector('text=OPEN')
       await page.waitForTimeout(1500)
 
-      // Search for beads
-      const beadSearch = page.locator('input[placeholder*="Search beads"]')
+      // Search for beads (type="search" distinguishes it from the command palette input)
+      const beadSearch = page.locator('input[type="search"]')
       if (await beadSearch.isVisible()) {
-        await beadSearch.fill('helix')
+        await beadSearch.fill('open')
         await page.waitForTimeout(1200)
         await beadSearch.fill('')
         await page.waitForTimeout(600)
@@ -87,35 +98,9 @@ test.describe('DDx Server UI Demo', () => {
 
       // Click a bead card to show detail panel
       const beadCard = page.locator('[draggable="true"]').first()
-      if (await beadCard.isVisible()) {
+      if (await beadCard.isVisible({ timeout: 3000 }).catch(() => false)) {
         await beadCard.click()
         await page.waitForTimeout(2000)
-        // Close detail
-        const closeBtn = page.locator('button:has-text("×")')
-        if (await closeBtn.isVisible()) {
-          await closeBtn.click()
-          await page.waitForTimeout(500)
-        }
-      }
-
-      // Show the create bead modal (don't submit — just demonstrate the form)
-      const newBeadBtn = page.locator('button:has-text("New Bead")')
-      if (await newBeadBtn.isVisible()) {
-        await newBeadBtn.click()
-        await page.waitForSelector('form')
-        await page.waitForTimeout(800)
-
-        const titleInput = page.locator('form input[type="text"]').first()
-        await titleInput.fill('Demo: example work item')
-        await page.waitForTimeout(600)
-
-        const descriptionArea = page.locator('form textarea').first()
-        await descriptionArea.fill('Created during the DDx server UI demo walkthrough.')
-        await page.waitForTimeout(800)
-
-        // Close the modal without submitting
-        await page.click('button:has-text("Cancel")')
-        await page.waitForTimeout(500)
       }
     })
 
@@ -123,15 +108,17 @@ test.describe('DDx Server UI Demo', () => {
     // 4. Graph — document dependency visualization
     // ---------------------------------------------------------------
     await test.step('Graph — document dependency visualization', async () => {
-      await page.locator('a[href="/graph"]').first().click()
+      await page.goto(`${base}/graph`)
+      await page.waitForSelector('h1')
       await page.waitForTimeout(2500)
     })
 
     // ---------------------------------------------------------------
-    // 5. Agent — session history
+    // 5. Workers — session history
     // ---------------------------------------------------------------
-    await test.step('Agent — session history', async () => {
-      await page.locator('a[href="/agent"]').first().click()
+    await test.step('Workers — session history', async () => {
+      await page.goto(`${base}/workers`)
+      await page.waitForSelector('h1')
       await page.waitForTimeout(2000)
     })
 
@@ -139,7 +126,8 @@ test.describe('DDx Server UI Demo', () => {
     // 6. Personas — browse and view a persona
     // ---------------------------------------------------------------
     await test.step('Personas — browse and view a persona', async () => {
-      await page.locator('a[href="/personas"]').first().click()
+      await page.goto(`${base}/personas`)
+      await page.waitForSelector('text=Personas')
       await page.waitForTimeout(2000)
 
       const firstPersona = page.locator('.w-80 button').first()
@@ -150,10 +138,10 @@ test.describe('DDx Server UI Demo', () => {
     })
 
     // ---------------------------------------------------------------
-    // 7. Back to Dashboard — closing shot
+    // 7. Back to Project Overview — closing shot
     // ---------------------------------------------------------------
-    await test.step('Back to Dashboard — closing shot', async () => {
-      await page.locator('a[href="/"]').first().click()
+    await test.step('Back to Project Overview — closing shot', async () => {
+      await page.goto(base)
       await page.waitForSelector('h1')
       await page.waitForTimeout(2000)
     })

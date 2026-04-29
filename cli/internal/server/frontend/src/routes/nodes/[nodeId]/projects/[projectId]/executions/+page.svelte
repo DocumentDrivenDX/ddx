@@ -210,7 +210,7 @@
 						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
 							<span>{exec.harness ?? '—'}</span>
 							{#if exec.model}
-								<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">{exec.model}</span>
+								<span class="ml-1 text-xs text-gray-600 dark:text-gray-400">{exec.model}</span>
 							{/if}
 						</td>
 						<td class="px-4 py-3">
