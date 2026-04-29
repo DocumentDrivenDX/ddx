@@ -1,0 +1,120 @@
+{
+  "attempt_id": "20260429T234610-971f2f2b",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-7a85a707",
+  "base_rev": "3804cf1f62114832ed641131666fd0b5d20d0d1d",
+  "created_at": "2026-04-29T23:46:11.306904687Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-7a85a707",
+    "title": "[read-coverage] add MCP server registry + plugin manifest HTTP + MCP",
+    "description": "FEAT-009/015 gap. CLI has ddx mcp list (MCP server registry) and ddx install installed/outdated/search (plugin manifest). No HTTP routes or MCP tools expose this. Agents and UIs cannot discover which MCP servers are configured or which plugins are installed without spawning the CLI. Add /api/mcp-servers, /api/plugins HTTP routes and ddx_list_mcp_servers, ddx_list_plugins MCP tools.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "http",
+      "mcp",
+      "feat-009",
+      "feat-015"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T23:46:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T20:09:29.948621876Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T195516-aac5252f\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":67,\"output_tokens\":34420,\"total_tokens\":34487,\"cost_usd\":2.54401945,\"duration_ms\":852766,\"exit_code\":0}",
+          "created_at": "2026-04-29T20:09:30.064303484Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=34487 cost_usd=2.5440 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T20:09:34.339942456Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff only contains execution evidence files (manifest.json, result.json) under .ddx/executions/. No actual implementation of /api/mcp-servers, /api/plugins HTTP routes or ddx_list_mcp_servers, ddx_list_plugins MCP tools is present in this diff.\nharness=claude\nmodel=opus\ninput_bytes=5890\noutput_bytes=895\nelapsed_ms=6922",
+          "created_at": "2026-04-29T20:09:43.501132453Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T20:09:43.602650207Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff only contains execution evidence files (manifest.json, result.json) under .ddx/executions/. No actual implementation of /api/mcp-servers, /api/plugins HTTP routes or ddx_list_mcp_servers, ddx_list_plugins MCP tools is present in this diff.\nresult_rev=5bab4108846f931684cf79f33b1dc9eb72fe338f\nbase_rev=c86ec1f12369804d16e38a0a2a371cf5a65156d3",
+          "created_at": "2026-04-29T20:09:43.693825343Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:28:50.732117011Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:28:50.852189718Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:28:50.937165086Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:28:51.108589322Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-29T23:46:10.330736722Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T234610-971f2f2b",
+    "prompt": ".ddx/executions/20260429T234610-971f2f2b/prompt.md",
+    "manifest": ".ddx/executions/20260429T234610-971f2f2b/manifest.json",
+    "result": ".ddx/executions/20260429T234610-971f2f2b/result.json",
+    "checks": ".ddx/executions/20260429T234610-971f2f2b/checks.json",
+    "usage": ".ddx/executions/20260429T234610-971f2f2b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-7a85a707-20260429T234610-971f2f2b"
+  }
+}
