@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No changes under `cli/internal/mcp/` (or wherever MCP tools are registered) to add `ddx_bead_blocked` or `ddx_bead_dep_tree` handlers.\nNo test additions covering the two new MCP tools (e.g., a `*_test.go` exercising blocked listing and dep-tree retrieval).\nThe diff under review is purely execution metadata; the actual implementation commit (referenced as `05236b2a` in result.json) is not part of the diff being graded. Re-run the review against the implementation commit, or re-attempt the bead so the implementation diff is what gets reviewed."
+}
