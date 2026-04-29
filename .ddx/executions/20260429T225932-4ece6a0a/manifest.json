@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T225932-4ece6a0a",
+  "bead_id": "ddx-d57d98d7",
+  "base_rev": "f4755fe4b930c0b22c822a436b95eeb0c90db882",
+  "created_at": "2026-04-29T22:59:32.955973195Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d57d98d7",
+    "title": "[artifact-run-arch] ship effort-estimate skill",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. New skill at skills/ddx/effort-estimate/. Workflow skill for effort estimation composing ddx run primitives.",
+    "labels": [
+      "skill",
+      "plan-2026-04-29",
+      "library"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T22:59:30Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T22:59:30.15175755Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T225932-4ece6a0a",
+    "prompt": ".ddx/executions/20260429T225932-4ece6a0a/prompt.md",
+    "manifest": ".ddx/executions/20260429T225932-4ece6a0a/manifest.json",
+    "result": ".ddx/executions/20260429T225932-4ece6a0a/result.json",
+    "checks": ".ddx/executions/20260429T225932-4ece6a0a/checks.json",
+    "usage": ".ddx/executions/20260429T225932-4ece6a0a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d57d98d7-20260429T225932-4ece6a0a"
+  }
+}
