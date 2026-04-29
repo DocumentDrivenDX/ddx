@@ -1682,6 +1682,7 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
 	cmd.Flags().Bool("escalate", false, "Enable tier-ladder escalation. Off by default: a single ResolveRoute call drives each attempt (ddx-755f5881). Use this only when you explicitly want cheap→standard→smart fallback semantics. Consults agent.routing.profile_ladders.")
 	cmd.Flags().Bool("override-model", false, "Consult agent.routing.model_overrides when picking a per-tier model reference. Off by default; the field is ignored unless this flag is set (bead ddx-87fb72c2).")
+	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout (e.g. 60m, 2h); overrides project config and model-class defaults. Use when a thinking model needs more than the default 15 min.")
 	return cmd
 }
 
@@ -1709,6 +1710,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	escalate, _ := cmd.Flags().GetBool("escalate")
 	overrideModel, _ := cmd.Flags().GetBool("override-model")
+	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 
 	// Adaptive min-tier: when the operator did not pin --min-tier and adaptation
 	// is not disabled, consult trailing cheap-tier success rate and promote to
@@ -1838,13 +1840,17 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			attemptProvider = resolvedProvider
 		}
 
-		attemptRcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+		loopOverrides := config.CLIOverrides{
 			Harness:  resolvedHarness,
 			Model:    resolvedModel,
 			Provider: attemptProvider,
 			ModelRef: modelRef,
 			Effort:   effort,
-		})
+		}
+		if requestTimeout > 0 {
+			loopOverrides.ProviderRequestTimeout = &requestTimeout
+		}
+		attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 			FromRev:    fromRev,
 			BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),

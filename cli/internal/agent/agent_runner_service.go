@@ -101,6 +101,8 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		logDir = DefaultLogDir
 	}
 
+	providerTimeout := ResolveProviderRequestTimeout(wd, opts.Provider, model, 0)
+
 	// Build the public ExecuteRequest per CONTRACT-003.
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
@@ -113,7 +115,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		WorkDir:         wd,
 		Timeout:         wallClock,
 		IdleTimeout:     timeout,
-		ProviderTimeout: DefaultProviderRequestTimeout,
+		ProviderTimeout: providerTimeout,
 		SessionLogDir:   logDir,
 		Metadata:        opts.Correlation,
 	}
@@ -198,6 +200,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 				result.Error = final.Status
 			}
 		}
+		result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 		if final.SessionLogPath != "" {
 			// surface as session ID for downstream cross-reference (mirrors
 			// the legacy path's AgentSessionID population).
