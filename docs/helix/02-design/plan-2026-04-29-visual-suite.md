@@ -1,7 +1,7 @@
 # Visual Suite — Principles, Tools, User Workflow
 
 Date: 2026-04-29
-Status: Draft v5 (pending review)
+Status: Draft v6 (locked; reviewers' Q1–Q6 resolved)
 
 ## Summary
 
@@ -159,9 +159,10 @@ standard `bunx <pkg>` commands.
   pulls toward "dreamy illustration").
 - **DESIGN.md tokens injected** into every prompt for palette/typography
   consistency.
-- **Sequential rendering with $10 budget cap.** Render one visual at a
-  time; evaluate against acceptance criteria before generating the next.
-  Halt on cap exceeded.
+- **Sequential rendering with $10 total budget cap and $1.50/image halt
+  trigger.** Render one visual at a time; evaluate against acceptance
+  criteria before generating the next. Halt on either cap. Per-image
+  cap prevents one runaway prompt eating the budget.
 - **First real dogfood** of the artifact infrastructure (sidecar I/O,
   `generated_by` edges, `ddx artifact regenerate` CLI). Bugs surfaced here
   feed back into beads `ddx-d5e71fb3` (FEAT-010), `ddx-5d92b873` (FEAT-007),
@@ -218,11 +219,20 @@ standard `bunx <pkg>` commands.
   (logo, current rgba triad, terminal-demo tone). Tokens (colors,
   typography, spacing, components); prose Overview, Do's/Don'ts, metaphor
   system. Run `bun add --dev @google/design.md@0.1.0` at repo root; lint
-  with `bunx @google/design.md lint DESIGN.md`.
-- **V3.5.** Spike DESIGN.md → website palette integration. Try Hextra
+  with `bunx @google/design.md lint DESIGN.md`. **Treat as foundation,
+  not throwaway spike** — DDx has no visual language today; embedding
+  DESIGN.md is correct. Adapt as the format evolves.
+- **V3.5.** Wire DESIGN.md → website (Hugo + Hextra) palette. Try Hextra
   `params.theme` / CSS-variable override path first. Fall back to
-  accept-divergence if Hextra reach insufficient. Document outcome in
-  the bead resolution.
+  accept-divergence (DESIGN.md drives image prompts only) if Hextra
+  reach insufficient. Document outcome in bead resolution.
+- **V3.6.** Wire DESIGN.md → frontend (SvelteKit + Tailwind v4) at
+  `cli/internal/server/frontend/tailwind.config.js`. Use
+  `bunx @google/design.md export --format tailwind` to produce a
+  theme JSON the frontend's tailwind.config.js consumes. Easier path
+  than Hextra (frontend already uses Tailwind); ensures DESIGN.md ROI
+  even if V3.5 falls back to accept-divergence. **Goal: align on a new
+  visual language across the entire product surface.**
 - **V4.** Lefthook + CI lint integration: `bunx @google/design.md lint
   DESIGN.md` runs on commit if DESIGN.md is modified.
 
@@ -233,6 +243,10 @@ standard `bunx <pkg>` commands.
 - **V6.** Author principle-composite prompt + generate **(first render —
   pressure-test gate; budget tracking starts here)**. If the lever/fulcrum/
   load metaphor doesn't render usefully, pause and revise before proceeding.
+  **Hard-blocked on artifact infrastructure**: beads `ddx-d5e71fb3` (FEAT-010
+  three-layer substrate), `ddx-5d92b873` (FEAT-007 sidecar + generated_by),
+  and `ddx artifact regenerate` CLI implementation must be merged first.
+  No manual prompt-file → image fallback; if those slip, V6 slips.
 - **V7** *(optional, conditional on V6 outcome).* Render the 6 principle
   subsections standalone. Skip if composite suffices or if cross-prompt
   consistency fails.
