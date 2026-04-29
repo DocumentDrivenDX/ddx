@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build copy-skills eval-skill bench-graphql
+.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
 
 # Default target
 all: clean deps test build
@@ -32,11 +32,35 @@ frontend-build: $(FRONTEND_STAMP)
 $(FRONTEND_STAMP): $(FRONTEND_SRC) internal/server/frontend/package.json internal/server/frontend/svelte.config.js internal/server/frontend/vite.config.ts
 	@echo "Building SvelteKit frontend..."
 	cd internal/server/frontend && bun install --frozen-lockfile && bun run build
+	@$(MAKE) --no-print-directory frontend-verify
 
 # Force a frontend rebuild regardless of timestamps
 frontend-rebuild:
 	@echo "Rebuilding SvelteKit frontend (forced)..."
 	cd internal/server/frontend && bun install --frozen-lockfile && bun run build
+	@$(MAKE) --no-print-directory frontend-verify
+
+# Verify the embedded frontend bundle is internally consistent: every
+# /_app/* asset referenced by index.html must exist on disk. Catches the
+# class of bug where index.html and the chunk dir get out of sync (partial
+# build, file restore, manual edit) and go:embed silently bakes in a
+# broken bundle that 404s every JS chunk to the SPA shell.
+frontend-verify:
+	@echo "Verifying embedded frontend bundle integrity..."
+	@cd internal/server/frontend/build && \
+	missing=0; \
+	for ref in $$(grep -hoE '"/_app/[^"]+"' index.html | tr -d '"' | sort -u); do \
+		path=".$$ref"; \
+		if [ ! -f "$$path" ]; then \
+			echo "  MISSING: $$ref"; \
+			missing=$$((missing+1)); \
+		fi; \
+	done; \
+	if [ $$missing -gt 0 ]; then \
+		echo "frontend-verify: $$missing referenced asset(s) missing — run 'make frontend-rebuild'"; \
+		exit 1; \
+	fi; \
+	echo "  ok"
 
 # Copy the canonical top-level skills/ddx/ tree into cli/internal/skills/ddx/
 # so //go:embed (which cannot traverse upward out of the package) picks it up.
