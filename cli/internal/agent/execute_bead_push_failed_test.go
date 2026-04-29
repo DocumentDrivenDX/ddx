@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -80,6 +81,104 @@ func TestExecuteBeadWorkerPushFailedStaysOpenAndParks(t *testing.T) {
 	}
 	assert.True(t, sawPushStderr,
 		"push stderr must appear in a bead event so operators can see why the push failed")
+}
+
+// TestExecuteBeadWorkerPushFailedCooldownCappedAt24h pins AC #2 + #7 of
+// ddx-a458af7c: push_failed (and every other loop-set cooldown) caps at
+// MaxLoopCooldown (24h). Year-scale parks are an operator decision via
+// `ddx bead update --set execute-loop-retry-after=...`, never an automatic
+// loop output.
+func TestExecuteBeadWorkerPushFailedCooldownCappedAt24h(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusPushFailed,
+				Detail:    PushFailedReasonPrefix + " remote rejected",
+				SessionID: "sess-cap",
+				BaseRev:   "aaaa",
+				ResultRev: "bbbb",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	startedAt := time.Now().UTC()
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
+	require.NotEmpty(t, retryAfter, "push_failed must park the bead")
+	parsed, perr := time.Parse(time.RFC3339, retryAfter)
+	require.NoError(t, perr, "execute-loop-retry-after must parse as RFC3339")
+	delta := parsed.Sub(startedAt)
+	assert.LessOrEqual(t, delta, MaxLoopCooldown+time.Minute,
+		"push_failed cooldown must cap at MaxLoopCooldown (24h), got %s", delta)
+}
+
+// TestExecuteBeadWorkerPushConflictParksAndEmitsEvent pins AC #3 + #5 of
+// ddx-a458af7c: push_conflict (auto-merge during push recovery failed)
+// emits a structured `push-conflict` event, parks the bead under the 24h
+// cap, and is distinct from generic execution_failed.
+func TestExecuteBeadWorkerPushConflictParksAndEmitsEvent(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	conflictDetail := PushConflictReasonPrefix + " auto-recovery retry push: CONFLICT (content)"
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusPushConflict,
+				Detail:    conflictDetail,
+				SessionID: "sess-pconf",
+				BaseRev:   "aaaa1111",
+				ResultRev: "cccc3333",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	startedAt := time.Now().UTC()
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, ExecuteBeadStatusPushConflict, result.LastFailureStatus)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "push_conflict must NOT close the bead")
+	require.NotNil(t, got.Extra)
+	assert.Equal(t, "push_conflict", got.Extra["execute-loop-last-status"])
+
+	// Cooldown capped at 24h.
+	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
+	require.NotEmpty(t, retryAfter)
+	parsed, perr := time.Parse(time.RFC3339, retryAfter)
+	require.NoError(t, perr)
+	delta := parsed.Sub(startedAt)
+	assert.LessOrEqual(t, delta, MaxLoopCooldown+time.Minute,
+		"push_conflict cooldown must cap at MaxLoopCooldown (24h), got %s", delta)
+
+	// Structured push-conflict event with the conflict context.
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var sawPushConflict bool
+	for _, ev := range events {
+		if ev.Kind == "push-conflict" {
+			sawPushConflict = true
+			assert.Contains(t, ev.Body, conflictDetail,
+				"push-conflict event body must record the conflict detail")
+			break
+		}
+	}
+	assert.True(t, sawPushConflict,
+		"loop must emit a kind:push-conflict event so operators can see the conflict context")
 }
 
 // TestClaimRefusesPushFailedBead pins the AC that subsequent claim attempts

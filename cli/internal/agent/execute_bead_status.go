@@ -9,6 +9,13 @@ import "strings"
 // success, so the bead stays open.
 const PushFailedReasonPrefix = "landed locally; push failed:"
 
+// PushConflictReasonPrefix marks a more specific failure mode than
+// PushFailedReasonPrefix: the local push was rejected because the remote
+// advanced, the loop attempted an automatic pull/merge to recover, and the
+// merge produced a conflict the loop cannot resolve. The bead is parked for
+// human review with a short cooldown rather than a year-long park.
+const PushConflictReasonPrefix = "landed locally; push conflict:"
+
 // FailureMode constants classify *why* an execution did not land cleanly.
 // They are orthogonal to Outcome/Status: a single failed attempt carries one
 // outcome (e.g. preserved) and one failure mode (e.g. merge_conflict) so
@@ -211,6 +218,7 @@ const (
 	ExecuteBeadStatusRatchetFailed              = "ratchet_failed"
 	ExecuteBeadStatusLandConflict               = "land_conflict"
 	ExecuteBeadStatusPushFailed                 = "push_failed"
+	ExecuteBeadStatusPushConflict               = "push_conflict"
 	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
@@ -251,6 +259,9 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 		// new tip (large blob, branch protection, auth, divergence, etc.).
 		// Classify these as push_failed so the loop refuses to close the
 		// bead and operators are forced to investigate.
+		if strings.HasPrefix(reason, PushConflictReasonPrefix) {
+			return ExecuteBeadStatusPushConflict
+		}
 		if strings.HasPrefix(reason, PushFailedReasonPrefix) {
 			return ExecuteBeadStatusPushFailed
 		}

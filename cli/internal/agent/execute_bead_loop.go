@@ -48,6 +48,27 @@ type ExecuteBeadLoopRuntime struct {
 // `review-manual-required` event and stops re-executing primary. FEAT-022 §14.
 const DefaultReviewMaxRetries = 3
 
+// MaxLoopCooldown is the absolute upper bound the execute-loop will set for
+// any execute-loop-retry-after value. Year-scale parks effectively mean
+// "never retry" and that should be a deliberate operator choice via
+// `ddx bead update --set execute-loop-retry-after=...`, not an automatic
+// loop decision. Beyond this cap, the loop refuses to lengthen the cooldown
+// further; an operator extending it manually still works.
+const MaxLoopCooldown = 24 * time.Hour
+
+// capLoopCooldown clamps a loop-set cooldown duration to MaxLoopCooldown.
+// The loop uses this for every SetExecutionCooldown call so no automatic
+// path can silently park a bead for a year.
+func capLoopCooldown(d time.Duration) time.Duration {
+	if d <= 0 {
+		return 0
+	}
+	if d > MaxLoopCooldown {
+		return MaxLoopCooldown
+	}
+	return d
+}
+
 type ExecuteBeadReport struct {
 	BeadID      string `json:"bead_id"`
 	AttemptID   string `json:"attempt_id,omitempty"`
@@ -524,7 +545,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						// loop iterations do NOT re-pick it for primary
 						// re-execution. Reviewer-failure invariant (§13) is
 						// preserved: the bead is NOT closed.
-						parkUntil := now().UTC().Add(365 * 24 * time.Hour)
+						parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
 						_ = w.Store.SetExecutionCooldown(candidate.ID, parkUntil, "review-manual-required", class)
 					} else {
 						body := appendEventSummary(reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error()), errSummary)
@@ -679,7 +700,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					// Unresolved: suppress immediate retry so the queue can
 					// move on to other beads.
 					if shouldSuppressNoProgress(report) {
-						retryAfter := now().UTC().Add(noProgressCooldown)
+						retryAfter := now().UTC().Add(capLoopCooldown(noProgressCooldown))
 						if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
 							return result, cerr
 						}
@@ -721,7 +742,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Source:    "ddx agent execute-loop",
 					CreatedAt: now().UTC(),
 				})
-				parkUntil := now().UTC().Add(365 * 24 * time.Hour)
+				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
 					return result, err
 				}
@@ -730,12 +751,43 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.LastFailureStatus = report.Status
 			} else if report.Status == ExecuteBeadStatusPushFailed {
 				// Push failed after a successful local merge/ff. The bead is
-				// NOT closed (commits live only locally) — park it long enough
-				// that subsequent loop iterations refuse to re-pick it until
-				// an operator clears the state. The push stderr in
-				// report.Detail is recorded as last_detail so it surfaces on
-				// the bead and on any direct claim attempt.
-				parkUntil := now().UTC().Add(365 * 24 * time.Hour)
+				// NOT closed (commits live only locally) — park it under the
+				// 24h cap so the loop re-attempts within a reasonable horizon.
+				// The push stderr in report.Detail is recorded as last_detail
+				// so it surfaces on the bead and on any direct claim attempt.
+				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
+				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
+					return result, err
+				}
+				report.RetryAfter = parkUntil.Format(time.RFC3339)
+				result.Failures++
+				result.LastFailureStatus = report.Status
+			} else if report.Status == ExecuteBeadStatusPushConflict {
+				// The local target ref was advanced and the loop's
+				// auto-pull/merge/retry recovery hit a merge conflict it
+				// cannot resolve without operator input. Record a
+				// `push-conflict` event with the conflict context so the
+				// operator can find and resolve it, and park the bead under
+				// the same 24h cap as push_failed.
+				body, mErr := json.Marshal(map[string]any{
+					"detail":     report.Detail,
+					"base_rev":   report.BaseRev,
+					"result_rev": report.ResultRev,
+					"session_id": report.SessionID,
+				})
+				bodyStr := report.Detail
+				if mErr == nil {
+					bodyStr = string(body)
+				}
+				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+					Kind:      "push-conflict",
+					Summary:   "auto-merge after push race could not be resolved",
+					Body:      bodyStr,
+					Actor:     assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
 					return result, err
 				}
@@ -744,7 +796,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.LastFailureStatus = report.Status
 			} else {
 				if shouldSuppressNoProgress(report) {
-					retryAfter := now().UTC().Add(noProgressCooldown)
+					retryAfter := now().UTC().Add(capLoopCooldown(noProgressCooldown))
 					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
 						return result, err
 					}

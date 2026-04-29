@@ -59,6 +59,58 @@ turn 2, (b) the second-turn latency excludes the prior turn and tool window,
 and (c) the sum of per-call latencies does not exceed the final event's
 `elapsed_ms`.
 
+### execute-loop: recoverable push races and a 24h cap on loop-set cooldowns
+
+Bead ddx-a458af7c. Two related fixes:
+
+1. **Push-race auto-recovery.** When a worker's commits land locally but `git
+   push` is rejected because origin advanced (the common multi-worker /
+   multi-operator case), the land coordinator now attempts one
+   fetch + merge + retry-push pass before giving up. Previously the bead
+   was parked for a year and required manual operator intervention even
+   though the work was already done locally and the merge was trivial. On a
+   clean auto-merge the land returns with `PushRecovered=true` and the bead
+   closes normally; the operator never sees the race.
+
+2. **`push_conflict` is a distinct, structured outcome.** When the
+   auto-recovery merge hits a real conflict (overlapping changes that the
+   loop cannot resolve), Land() reports `PushConflict=true` and the loop
+   maps it to a new `push_conflict` execute-bead status — distinct from the
+   generic `push_failed` (and from `execution_failed`). The loop appends a
+   `kind:push-conflict` bead event carrying the conflict context (detail,
+   `base_rev`, `result_rev`, `session_id`) so an operator can find and
+   resolve it without combing logs.
+
+3. **Loop-set cooldowns cap at 24h.** Previously several paths
+   (`push_failed`, `declined_needs_decomposition`, `review-manual-required`)
+   parked beads for 365 days, which effectively meant "never retry." That
+   should be a deliberate operator decision via `ddx bead update --set
+   execute-loop-retry-after=...`, not an automatic loop output. A new
+   constant `MaxLoopCooldown = 24h` and helper `capLoopCooldown` now clamp
+   every `SetExecutionCooldown` call the loop makes. Operators extending a
+   cooldown manually beyond 24h still works — the cap only governs
+   loop-driven cooldowns.
+
+   Note that this also changes the `declined_needs_decomposition` cooldown
+   shipped earlier in this Unreleased section (the 365-day park described
+   above); under the new cap, decomposition-declined beads re-surface within
+   24h instead of being parked for a year. Operators clearing the cooldown
+   via `ddx bead cooldown clear <id>` (the recommended path) is unchanged.
+
+Regression coverage:
+
+- `TestLand_PushAutoRecovery_RaceWithRemoteResolved` and
+  `TestLand_PushAutoRecovery_UnresolvableConflictReportsPushConflict` in
+  `cli/internal/agent/execute_bead_land_test.go` exercise the new fetch +
+  merge + retry-push recovery against real git repositories with
+  side-clones advancing origin/main between local land and push.
+- `TestExecuteBeadWorkerPushFailedCooldownCappedAt24h` and
+  `TestExecuteBeadWorkerPushConflictParksAndEmitsEvent` in
+  `cli/internal/agent/execute_bead_push_failed_test.go` pin the 24h cap and
+  the structured `push-conflict` event contract.
+- `TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead` was updated to
+  assert the new 24h cap (previously asserted >180d).
+
 ### execute-loop: structured `declined_needs_decomposition` outcome
 
 Adds a first-class outcome distinct from `no_changes` and `execution_failed`
