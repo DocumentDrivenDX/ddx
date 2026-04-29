@@ -1726,7 +1726,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
-		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel, minTier, maxTier)
+		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel, minTier, maxTier, escalate)
 	}
 
 	// Pre-flight: validate harness availability and model compatibility
@@ -2261,7 +2261,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.
-func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel, minTier, maxTier string) error {
+func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel, minTier, maxTier string, escalate bool) error {
 	serverBase := resolveServerURL(projectRoot)
 
 	workerSpec := map[string]any{
@@ -2303,6 +2303,9 @@ func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, 
 	}
 	if maxTier != "" {
 		workerSpec["max_tier"] = maxTier
+	}
+	if escalate {
+		workerSpec["escalate"] = true
 	}
 
 	specData, err := json.Marshal(workerSpec)

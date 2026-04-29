@@ -46,6 +46,11 @@ type ExecuteLoopWorkerSpec struct {
 	// Ignored when Harness or Model is pinned (escalation disabled).
 	MinTier string `json:"min_tier,omitempty"`
 	MaxTier string `json:"max_tier,omitempty"`
+	// Escalate opts into tier-ladder escalation semantics. Off by default:
+	// a single ResolveRoute call drives each attempt (matches --escalate on
+	// the CLI path). When false, profile_ladders and AdaptiveMinTier are
+	// not consulted.
+	Escalate bool `json:"escalate,omitempty"`
 }
 
 type PluginActionWorkerSpec struct {
@@ -646,8 +651,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			routingCfg = cfg.Agent.Routing
 		}
 
-		// escalationEnabled when neither Harness nor Model is pinned.
-		escalationEnabled := spec.Harness == "" && spec.Model == ""
+		// escalationEnabled when explicitly opted-in and neither Harness nor Model is pinned.
+		escalationEnabled := spec.Escalate && spec.Harness == "" && spec.Model == ""
 
 		// Cost-cap state shared by both single-attempt and tier-escalation
 		// paths within this worker run. Subscription / local providers do
