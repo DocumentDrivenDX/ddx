@@ -93,6 +93,7 @@ unclaimed for a later attempt.`,
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().String("context-budget", "", "Context budget for prompt: empty (full), minimal (omit large governing docs for cheap-tier)")
 	cmd.Flags().String("prompt", "", "Prompt file path (auto-generated from bead if omitted)")
+	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout (e.g. 60m, 2h); overrides project config and model-class defaults. Use when a thinking model needs more than the default 15 min.")
 	cmd.Flags().Bool("json", false, "Output result as JSON")
 	return cmd
 }
@@ -112,18 +113,23 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	effort, _ := cmd.Flags().GetString("effort")
 	contextBudget, _ := cmd.Flags().GetString("context-budget")
 	promptFile, _ := cmd.Flags().GetString("prompt")
+	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	asJSON, _ := cmd.Flags().GetBool("json")
 
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
-	rcfg, err := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+	overrides := config.CLIOverrides{
 		Harness:       harness,
 		Model:         model,
 		Provider:      provider,
 		ModelRef:      modelRef,
 		Effort:        effort,
 		ContextBudget: contextBudget,
-	})
+	}
+	if requestTimeout > 0 {
+		overrides.ProviderRequestTimeout = &requestTimeout
+	}
+	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
 		return fmt.Errorf("load config at %s: %w", projectRoot, err)
 	}

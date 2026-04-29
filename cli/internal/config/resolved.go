@@ -23,6 +23,10 @@ type CLIOverrides struct {
 	NoReview      *bool
 	Assignee      string
 	ContextBudget string
+	// ProviderRequestTimeout, when non-nil, overrides the per-request wall-clock
+	// cap applied to a single Chat/ChatStream call. Corresponds to --request-timeout
+	// on execute-bead and execute-loop. Zero pointer means "use config or model default".
+	ProviderRequestTimeout *time.Duration
 }
 
 // Resolve produces a sealed ResolvedConfig by layering overrides onto
@@ -76,6 +80,10 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 		r.timeout = *overrides.Timeout
 	} else if agent != nil && agent.TimeoutMS > 0 {
 		r.timeout = time.Duration(agent.TimeoutMS) * time.Millisecond
+	}
+
+	if overrides.ProviderRequestTimeout != nil {
+		r.providerRequestTimeout = *overrides.ProviderRequestTimeout
 	}
 
 	r.evidenceCaps = c.ResolveEvidenceCaps(r.harness)
@@ -165,6 +173,7 @@ type ResolvedConfig struct {
 	mirrorConfig            *ExecutionsMirrorConfig
 	resolvedLadder          map[string][]string
 	reasoningLevels         map[string][]string
+	providerRequestTimeout  time.Duration
 }
 
 // requireSealed panics if r was not produced by Resolve / LoadAndResolve.
@@ -256,6 +265,14 @@ func (r ResolvedConfig) Timeout() time.Duration {
 func (r ResolvedConfig) WallClock() time.Duration {
 	r.requireSealed()
 	return r.wallClock
+}
+
+// ProviderRequestTimeout returns the per-request wall-clock cap override
+// set via --request-timeout. Zero means "use the model-class or endpoint default"
+// (resolved by agent.ResolveProviderRequestTimeout at dispatch time).
+func (r ResolvedConfig) ProviderRequestTimeout() time.Duration {
+	r.requireSealed()
+	return r.providerRequestTimeout
 }
 
 func (r ResolvedConfig) ContextBudget() string {

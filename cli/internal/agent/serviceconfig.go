@@ -23,15 +23,120 @@ import (
 	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
-// DefaultProviderRequestTimeout bounds a single Chat / ChatStream call.
-// Defeats RC4 of ddx-0a651925: a stalled TCP socket that has delivered
-// headers but stopped emitting body bytes would otherwise pin a goroutine
-// until the outer wall-clock (3h) frees it.
+// DefaultProviderRequestTimeout is the per-request wall-clock cap for
+// standard (non-thinking) providers. It guards against a provider that
+// emits headers but then stalls entirely — a scenario the idle-read
+// timeout below catches for streaming providers, but which also applies
+// to non-streaming Chat calls where no body bytes arrive at all.
+//
+// Relationship between the two timeouts:
+//   - DefaultProviderIdleReadTimeout (5 min): fires when no stream delta
+//     arrives for 5 continuous minutes. This is the primary defense against
+//     stalled TCP sockets on streaming providers.
+//   - DefaultProviderRequestTimeout (15 min): wall-clock cap on the entire
+//     Chat/ChatStream call. This is a secondary backstop for non-streaming
+//     paths and should NOT be the primary tool for limiting thinking models,
+//     since those can legitimately spend >15 min on reasoning before the
+//     first delta. Use DefaultThinkingModelProviderRequestTimeout (60 min)
+//     for models known to do extended chain-of-thought reasoning.
+//
+// To override per-project, set agent.endpoints.<name>.request_timeout_seconds
+// in .ddx/config.yaml, or pass --request-timeout DURATION to execute-bead /
+// execute-loop for one-off debugging.
 const DefaultProviderRequestTimeout = 15 * time.Minute
 
+// DefaultThinkingModelProviderRequestTimeout is the per-request wall-clock
+// cap for known thinking / chain-of-thought reasoning models (e.g.
+// qwen3.x, deepseek-r1, o1, o3). These models can spend 5–20+ minutes on
+// internal reasoning before emitting the first response token, so the
+// standard 15-minute cap would kill legitimate requests. The idle-read
+// timeout still applies — a truly stalled stream fires after 5 min of
+// silence regardless of this cap.
+const DefaultThinkingModelProviderRequestTimeout = 60 * time.Minute
+
 // DefaultProviderIdleReadTimeout bounds the maximum idle gap between stream
-// deltas. Used by service callers to bound idle reads on streaming providers.
+// deltas. This is the primary stalled-TCP-socket defense: when no body bytes
+// arrive for 5 continuous minutes the provider is assumed hung and the call
+// fails. Thinking models that are actively streaming reasoning tokens will
+// NOT hit this timeout — they only risk DefaultThinkingModelProviderRequestTimeout
+// (60 min) if a single call exceeds the wall-clock cap.
 const DefaultProviderIdleReadTimeout = 5 * time.Minute
+
+// thinkingModelPrefixes is the set of model-name substrings (lowercased)
+// that identify thinking / chain-of-thought reasoning models requiring a
+// longer per-request wall-clock cap. Extend this list when a new model
+// class needs more than 15 minutes to produce its first response token.
+var thinkingModelPrefixes = []string{
+	"qwen3",      // qwen3.x series (e.g. qwen3.6-35b-a3b)
+	"qwen-r1",    // Qwen R1 series
+	"deepseek-r", // deepseek-r1, deepseek-r2, deepseek-reasoner
+	"deepseek/r", // deepseek/r1 (openrouter format)
+	"o1-",        // OpenAI o1 series (o1-mini, o1-preview)
+	"o1-pro",     // OpenAI o1-pro
+	"o3",         // OpenAI o3 / o3-mini
+	"thinking",   // any model with "thinking" in the name
+}
+
+// isThinkingModel reports whether model is a known thinking/reasoning
+// model that requires a longer per-request timeout than the standard 15 min.
+func isThinkingModel(model string) bool {
+	low := strings.ToLower(model)
+	for _, prefix := range thinkingModelPrefixes {
+		if strings.Contains(low, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// ResolveProviderRequestTimeout returns the effective wall-clock cap for a
+// single Chat/ChatStream call. Resolution order:
+//  1. override if > 0 (from --request-timeout CLI flag via ResolvedConfig)
+//  2. agent.endpoints[n].request_timeout_seconds in .ddx/config.yaml for
+//     the named provider endpoint
+//  3. DefaultThinkingModelProviderRequestTimeout (60 min) when model is a
+//     known thinking/reasoning model
+//  4. DefaultProviderRequestTimeout (15 min) for all other models
+//
+// The idle-read timeout (DefaultProviderIdleReadTimeout, 5 min) is a
+// separate mechanism and is NOT affected by this function.
+func ResolveProviderRequestTimeout(workDir, providerName, model string, override time.Duration) time.Duration {
+	if override > 0 {
+		return override
+	}
+	if workDir != "" && providerName != "" {
+		if cfg, err := ddxconfig.LoadWithWorkingDir(workDir); err == nil {
+			if t := endpointRequestTimeout(cfg, providerName); t > 0 {
+				return t
+			}
+		}
+	}
+	if isThinkingModel(model) {
+		return DefaultThinkingModelProviderRequestTimeout
+	}
+	return DefaultProviderRequestTimeout
+}
+
+// endpointRequestTimeout looks up the request_timeout_seconds for the named
+// provider in cfg.Agent.Endpoints. Returns 0 if not configured or not found.
+func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Duration {
+	if cfg == nil || cfg.Agent == nil {
+		return 0
+	}
+	for i, ep := range cfg.Agent.Endpoints {
+		if ep.RequestTimeoutSeconds <= 0 {
+			continue
+		}
+		name, _, err := endpointProviderEntry(ep, i)
+		if err != nil {
+			continue
+		}
+		if name == providerName {
+			return time.Duration(ep.RequestTimeoutSeconds) * time.Second
+		}
+	}
+	return 0
+}
 
 // NewServiceFromWorkDir constructs a DdxAgent for the given DDx project.
 // When .ddx/config.yaml contains agent.endpoints, those endpoint blocks are

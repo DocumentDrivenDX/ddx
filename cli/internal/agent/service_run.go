@@ -16,6 +16,21 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
+// appendProviderTimeoutHint appends a configuration override hint to errMsg
+// when it indicates a provider request timeout fired. Helps operators find
+// the knob to adjust (AC4 of ddx-2c63bb95).
+func appendProviderTimeoutHint(errMsg string, providerTimeout time.Duration) string {
+	if errMsg == "" || !strings.Contains(errMsg, "provider request timeout") {
+		return errMsg
+	}
+	return errMsg + fmt.Sprintf(
+		"; request_timeout=%s exceeded — override via"+
+			" agent.endpoints.<name>.request_timeout_seconds in .ddx/config.yaml"+
+			" or pass --request-timeout DURATION to execute-bead/execute-loop",
+		providerTimeout.Round(time.Second),
+	)
+}
+
 // RunWithConfigViaService dispatches a single agent invocation through the
 // agent service. It takes a sealed ResolvedConfig (durable knobs) and an
 // AgentRunRuntime (per-invocation plumbing/intent), and is the SD-024
@@ -139,6 +154,8 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 		permissions = rcfg.Permissions()
 	}
 
+	providerTimeout := ResolveProviderRequestTimeout(workDir, rcfg.Provider(), model, rcfg.ProviderRequestTimeout())
+
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
 		Model:           model,
@@ -150,7 +167,7 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 		WorkDir:         wd,
 		Timeout:         wall,
 		IdleTimeout:     idle,
-		ProviderTimeout: DefaultProviderRequestTimeout,
+		ProviderTimeout: providerTimeout,
 		SessionLogDir:   sessionLogDir,
 		Metadata:        runtime.Correlation,
 	}
@@ -235,6 +252,7 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 				result.Error = final.Status
 			}
 		}
+		result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 		if final.SessionLogPath != "" {
 			result.AgentSessionID = final.SessionLogPath
 		}

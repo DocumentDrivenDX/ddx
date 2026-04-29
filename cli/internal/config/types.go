@@ -220,6 +220,13 @@ type AgentEndpoint struct {
 	Port    int    `yaml:"port,omitempty" json:"port,omitempty"`
 	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
 	APIKey  string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
+	// RequestTimeoutSeconds is the wall-clock cap for a single Chat/ChatStream
+	// call to this endpoint. Zero means "use the model-class default" (15 min
+	// for standard models, 60 min for known thinking/reasoning models).
+	// Increase this for local thinking models that need >15 min to produce
+	// their first body delta (e.g. qwen3.6-35b on lmstudio).
+	// Example: request_timeout_seconds: 3600  # 1 hour
+	RequestTimeoutSeconds int `yaml:"request_timeout_seconds,omitempty" json:"request_timeout_seconds,omitempty"`
 }
 
 // RoutingConfig is the agent routing policy block. See FEAT-006 Profile
