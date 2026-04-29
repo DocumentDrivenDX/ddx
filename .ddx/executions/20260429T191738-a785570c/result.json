@@ -1,0 +1,49 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review contains only execution manifest/result JSON artifacts. No MCP tool implementation (ddx_bead_blocked, ddx_bead_dep_tree) or tests are present in the changed files, so acceptance cannot be evaluated.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes adding ddx_bead_blocked or ddx_bead_dep_tree MCP tools are visible in this diff; only execution evidence files are included.",
+      "location": ".ddx/executions/20260429T191154-99abef11/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 605,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T191154-99abef11/manifest.json",
+          ".ddx/executions/20260429T191154-99abef11/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3279,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5690,
+    "output_bytes": 553,
+    "elapsed_ms": 5406,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
