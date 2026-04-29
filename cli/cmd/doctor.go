@@ -242,7 +242,23 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check 11: Legacy symlinks under project skill directories (FEAT-015).
+	// Check 11: package.json locations — detect missing/stale node_modules.
+	fmt.Print("✓ Checking package.json locations... ")
+	pkgIssues := checkPackageJSONLocations(f.WorkingDir)
+	if len(pkgIssues) == 0 {
+		fmt.Println("✅ Node dependencies up to date")
+	} else {
+		fmt.Printf("⚠️  %d location(s) need 'bun install'\n", len(pkgIssues))
+		for _, issue := range pkgIssues {
+			fmt.Printf("   ⚠️  %s\n", issue.Description)
+			for _, r := range issue.Remediation {
+				fmt.Printf("   💡 %s\n", r)
+			}
+		}
+		issues = append(issues, pkgIssues...)
+	}
+
+	// Check 13: Legacy symlinks under project skill directories (FEAT-015).
 	// In the project-local model all skills are real files. Symlinks indicate
 	// a pre-migration install; ddx update --force replaces them.
 	if legacyDirs := legacySkillSymlinkDirs(f.WorkingDir); len(legacyDirs) > 0 {
@@ -806,6 +822,75 @@ func checkGitRepoHealth(workingDir string, fix bool) []DiagnosticIssue {
 				"git config extensions.worktreeConfig true",
 			},
 		})
+	}
+
+	return issues
+}
+
+// packageJSONCheck holds the result of scanning one package.json location.
+type packageJSONCheck struct {
+	Dir      string // relative path from project root (e.g. "website")
+	HasPkg   bool   // package.json exists
+	NeedsBun bool   // node_modules missing or stale vs bun.lock
+	Reason   string // "missing" | "stale"
+}
+
+// knownPackageJSONDirs are the subdirectories (relative to workingDir) that
+// may contain a package.json. "" means the repo root itself.
+var knownPackageJSONDirs = []string{"", "website", "cli/internal/server/frontend"}
+
+// checkPackageJSONLocations scans the known package.json locations under
+// workingDir and returns a DiagnosticIssue for each location where
+// node_modules/ is absent or older than bun.lock.
+func checkPackageJSONLocations(workingDir string) []DiagnosticIssue {
+	var issues []DiagnosticIssue
+
+	for _, rel := range knownPackageJSONDirs {
+		var dir string
+		if rel == "" {
+			dir = workingDir
+		} else {
+			dir = filepath.Join(workingDir, filepath.FromSlash(rel))
+		}
+
+		pkgPath := filepath.Join(dir, "package.json")
+		if _, err := os.Stat(pkgPath); err != nil {
+			continue // no package.json here
+		}
+
+		label := rel
+		if label == "" {
+			label = "(repo root)"
+		}
+
+		nmPath := filepath.Join(dir, "node_modules")
+		nmInfo, nmErr := os.Stat(nmPath)
+		if nmErr != nil {
+			// node_modules missing entirely
+			issues = append(issues, DiagnosticIssue{
+				Type:        "node_modules_missing",
+				Description: fmt.Sprintf("node_modules/ missing in %s", label),
+				Remediation: []string{
+					fmt.Sprintf("cd %s && bun install", dir),
+				},
+				SystemInfo: map[string]string{"package_json": pkgPath},
+			})
+			continue
+		}
+
+		// Check if bun.lock is newer than node_modules
+		lockPath := filepath.Join(dir, "bun.lock")
+		lockInfo, lockErr := os.Stat(lockPath)
+		if lockErr == nil && lockInfo.ModTime().After(nmInfo.ModTime()) {
+			issues = append(issues, DiagnosticIssue{
+				Type:        "node_modules_stale",
+				Description: fmt.Sprintf("node_modules/ in %s is older than bun.lock (run bun install)", label),
+				Remediation: []string{
+					fmt.Sprintf("cd %s && bun install", dir),
+				},
+				SystemInfo: map[string]string{"package_json": pkgPath},
+			})
+		}
 	}
 
 	return issues
