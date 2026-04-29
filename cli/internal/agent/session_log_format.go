@@ -6,6 +6,77 @@ import (
 	"strings"
 )
 
+// Session log JSONL schema reference.
+//
+// The agent harness writes one event per line to .ddx/agent-logs/agent-*.jsonl
+// (or to the per-run SessionLogDir override). Every line has the envelope:
+//
+//	{"session_id": string, "seq": int, "type": string, "ts": RFC3339Nano, "data": {...}}
+//
+// Two schema modes coexist. Lean mode is always on by default and is what
+// existing tooling consumes. Verbose mode is opt-in via the env var
+// DDX_AGENT_LOG_VERBOSE=1; when set, the writer adds extra fields to a
+// few event types so a session can be replayed and root-caused without
+// loss of inputs and outputs. Lean fields are never removed in verbose
+// mode — verbose is strictly additive (with the single exception that
+// tool.call events are deferred until the matching tool_result arrives,
+// so they can include output/duration_ms/error in one line).
+//
+// Per-event-type fields:
+//
+//	session.start (lean and verbose):
+//	  data.model       string  — model id reported by the harness
+//	  data.session_id  string  — session id from the harness CLI
+//	  data.bead_id     string  — bead under which the session ran (may be "")
+//	  data.elapsed_ms  int     — ms since session start (always 0 here)
+//	  data.harness     string  — "claude" | "ddx-agent" | etc.
+//
+//	llm.request (lean and verbose):
+//	  data.attempt_index int        — request attempt counter (0-based)
+//	  data.messages      []object   — conversation messages (last user message hint used by the renderer)
+//
+//	llm.response (lean):
+//	  data.model         string  — resolved model id
+//	  data.latency_ms    int     — per-call wall time (request → response)
+//	  data.tool_calls    []{name} — tool_use names emitted in this turn
+//	  data.turn          int     — 1-based assistant turn count
+//	  data.bead_id       string
+//	  data.elapsed_ms    int     — ms since session start
+//	  data.input_tokens  int     — running input tokens (latest seen)
+//	  data.output_tokens int     — running output tokens (latest seen)
+//	  data.attempt.cost.raw.total_tokens int — running total
+//
+//	llm.response (verbose adds):
+//	  data.content       string  — concatenated assistant text blocks for this turn
+//	  data.finish_reason string  — claude stop_reason ("end_turn", "tool_use", "max_tokens", ...)
+//	  data.usage object:
+//	    input_tokens                int
+//	    output_tokens               int
+//	    cache_creation_input_tokens int
+//	    cache_read_input_tokens     int
+//	    total_tokens                int
+//
+//	tool.call (lean):
+//	  data.tool       string         — tool name
+//	  data.input      object         — tool arguments as decoded JSON
+//	  data.bead_id    string
+//	  data.elapsed_ms int            — ms since session start
+//	  data.turn       int            — assistant turn that issued the call
+//
+//	tool.call (verbose) — emitted when the matching tool_result arrives so output is populated:
+//	  data.tool        string
+//	  data.input       object
+//	  data.output      string  — tool_result content (joined if structured)
+//	  data.duration_ms int     — wall time from tool_use → tool_result
+//	  data.error       string  — non-empty when tool_result is_error=true; empty otherwise
+//	  data.bead_id     string
+//	  data.elapsed_ms  int     — ms-from-session-start at the time of the originating tool_use
+//	  data.turn        int     — assistant turn that issued the call
+//
+// Verbose mode is off by default; existing consumers of the lean schema
+// (TailSessionLogs, FormatSessionLogLines, the server worker log endpoint)
+// keep working unchanged because they tolerate extra fields.
+
 // FormatSessionLogLines formats ddx-agent JSONL log entries into readable progress.
 // It is used by both the CLI (local execute-loop) and the server worker log endpoint.
 func FormatSessionLogLines(lines []string) string {
