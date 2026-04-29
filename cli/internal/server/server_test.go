@@ -2074,6 +2074,87 @@ func TestExecRunNotFound(t *testing.T) {
 	}
 }
 
+func TestMCPExecRun(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_run","arguments":{"id":"bench-startup@2026-04-01T10:00:00Z-1"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result.IsError {
+		t.Fatalf("unexpected error: %s", resp.Result.Content[0].Text)
+	}
+	if len(resp.Result.Content) == 0 {
+		t.Fatal("expected MCP content")
+	}
+	if !strings.Contains(resp.Result.Content[0].Text, "bench-startup") {
+		t.Errorf("expected run id in MCP response, got %q", resp.Result.Content[0].Text)
+	}
+}
+
+func TestMCPExecRunLog(t *testing.T) {
+	dir := setupExecTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_exec_run_log","arguments":{"id":"bench-startup@2026-04-01T10:00:00Z-1"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result.IsError {
+		t.Fatalf("unexpected error: %s", resp.Result.Content[0].Text)
+	}
+	if len(resp.Result.Content) == 0 {
+		t.Fatal("expected MCP content")
+	}
+	var logs struct {
+		Stdout string `json:"stdout"`
+		Stderr string `json:"stderr"`
+	}
+	if err := json.Unmarshal([]byte(resp.Result.Content[0].Text), &logs); err != nil {
+		t.Fatalf("expected JSON log payload, got %q: %v", resp.Result.Content[0].Text, err)
+	}
+	if logs.Stdout != "7.2 ms" {
+		t.Errorf("expected stdout='7.2 ms', got %q", logs.Stdout)
+	}
+}
+
 func TestMCPExecDefinitions(t *testing.T) {
 	dir := setupExecTestDir(t)
 	srv := New(":0", dir)
