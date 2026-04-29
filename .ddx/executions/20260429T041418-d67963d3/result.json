@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Default Playwright harness now boots ddx server from a copied temp fixture; fixtures contain open/closed/blocked beads and tiny library, no $HOME/~ refs, and demo config/spec untouched.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "BASE_URL is https://127.0.0.1; relies on the embedded server's TLS plus ignoreHTTPSErrors. Verify the server actually serves TLS on this port when --tsnet=false; otherwise health probe would fail.",
+      "location": "cli/internal/server/frontend/playwright.config.ts:14"
+    },
+    {
+      "severity": "info",
+      "summary": "Fixture beads use a self-referential dependency (fx-003 depends_on fx-001 but issue_id is fx-003 — looks fine, just noting the schema usage).",
+      "location": "cli/internal/server/frontend/e2e/fixtures/.ddx/beads.jsonl:3"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2761,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T040702-6ce27625/manifest.json",
+          ".ddx/executions/20260429T040702-6ce27625/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5302,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 9869,
+    "output_bytes": 852,
+    "elapsed_ms": 33544,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
