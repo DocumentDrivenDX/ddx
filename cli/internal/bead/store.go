@@ -1565,7 +1565,7 @@ func (s *Store) validateBead(b *Bead) error {
 	if b.Priority < MinPriority || b.Priority > MaxPriority {
 		return fmt.Errorf("bead: priority must be %d-%d, got %d", MinPriority, MaxPriority, b.Priority)
 	}
-	if b.Status != StatusOpen && b.Status != StatusInProgress && b.Status != StatusClosed {
+	if b.Status != StatusOpen && b.Status != StatusInProgress && b.Status != StatusClosed && b.Status != StatusBlocked {
 		return fmt.Errorf("bead: invalid status: %s", b.Status)
 	}
 	// Self-ref check

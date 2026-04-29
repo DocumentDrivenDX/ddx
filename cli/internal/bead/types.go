@@ -57,6 +57,11 @@ const (
 	StatusOpen       = "open"
 	StatusInProgress = "in_progress"
 	StatusClosed     = "closed"
+	// StatusBlocked marks a bead that is not eligible for agent dispatch —
+	// either decomposed into child beads by the triage gate or parked for
+	// human intervention after a triage-overflow event. Blocked beads are
+	// excluded from ReadyExecution and will not be auto-dispatched.
+	StatusBlocked = "blocked"
 )
 
 // Default values
