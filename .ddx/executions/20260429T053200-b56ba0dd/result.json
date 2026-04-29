@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Diff under review only contains execution evidence artifacts (manifest.json, result.json) recording a successful claude-harness run for ddx-d15b6aa1. The actual spec migration landed in commit d604d686 per result_rev; this evidence commit is consistent with task_succeeded outcome.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Reviewed diff is execution evidence only; the spec migration changes are in the referenced result_rev d604d686, not in this diff range.",
+      "location": ".ddx/executions/20260429T051758-9c5b320a/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2112,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T051758-9c5b320a/manifest.json",
+          ".ddx/executions/20260429T051758-9c5b320a/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4648,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8566,
+    "output_bytes": 625,
+    "elapsed_ms": 6983,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
