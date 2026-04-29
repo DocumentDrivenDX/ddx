@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260429T142618-064ee2d5",
+  "bead_id": "ddx-c3efa754",
+  "base_rev": "a146ad07d96c1e2261bb85aae12ecf17379dccd9",
+  "created_at": "2026-04-29T14:26:18.938431861Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c3efa754",
+    "title": "shared skill installer + ddx init rewire (cli/internal/skills)",
+    "description": "Bead 1 of 4 children under epic ddx-3562c48c. Depends on bead 0 (ddx-2d9026d0) for spec.\n\nExtract a shared skill installer used by both ddx init and ddx install. Real-files-only; no symlinks. Wire ddx init to it.\n\nNEW FILE: cli/internal/skills/install.go\n```go\npackage skills\nimport \"io/fs\"\ntype Options struct { Force bool }\nfunc Install(src fs.FS, projectRoot string, opts Options) error\n```\n\nBehavior:\n- Copies skills from src into \u003cprojectRoot\u003e/.agents/skills/\u003cname\u003e/ and \u003cprojectRoot\u003e/.claude/skills/\u003cname\u003e/.\n- Real files only. NEVER creates symlinks.\n- Path traversal defense: rejects '..', absolute paths, symlink-escape outside projectRoot — return non-nil error before any write.\n- Force semantics: pre-existing SYMLINK destinations removed UNCONDITIONALLY before write. Pre-existing REAL-FILE destinations skipped per-skill (whole dir) when Force=false; overwritten when Force=true.\n- Tarball broken-symlink recovery: when source's .agents/skills/\u003cskill\u003e is broken symlink, fall back to \u003csource\u003e/skills/\u003cskill\u003e.\n- embed.FS satisfies fs.FS (used by init for bootstrap ddx skill); plugin path uses os.DirFS(\u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e) (covered in bead 2).\n- .ddx/skills/ registration stays bootstrap-only — plugin skills do NOT get registered there.\n\nWIRING:\n- cli/cmd/init.go:256: replace registerProjectSkills call with skills.Install(skills.SkillFiles, workingDir, skills.Options{Force: opts.Force}).\n- DELETE registerProjectSkills (cli/cmd/init.go:464+).\n- DELETE registerSkills (cli/cmd/init.go:337) — the function that writes ~/.agents/skills/. Audit and remove all callers.\n\nOUT OF SCOPE: registry installer, local install (--local flag), audit/uninstall, ddx install --global removal, .gitignore, docs. (Those are beads 2 and 4.)",
+    "acceptance": "1. cli/internal/skills/install.go exists with exported Install(fs.FS, projectRoot, Options) and type Options struct{Force bool}. 2. TestInstall_FromEmbedFS_CopiesBootstrapSkill exists and passes — asserts real files for bootstrap ddx skill, no symlinks. 3. TestInstall_BrokenTarballSymlinkRecovery exists and passes — broken source symlink falls back to \u003csource\u003e/skills/\u003cskill\u003e, destination is real file. 4. TestInstall_RejectsPathTraversal exists and passes — '..', absolute path, and symlink-escape inputs return errors before any write. 5. TestInstall_PreExistingSymlinkRemovedUnconditionally exists — Force=false still removes existing symlink dest. 6. TestInstall_ForceFalseSkipsRealDir / TestInstall_ForceTrueOverwritesRealDir cover Force semantics. 7. cli/cmd/init.go:256 calls skills.Install with skills.SkillFiles. 8. registerProjectSkills deleted. 9. registerSkills (init.go:337) deleted; no remaining callers. 10. cd cli \u0026\u0026 go build ./... passes. 11. cd cli \u0026\u0026 go test ./cmd/... ./internal/skills/... passes (registry tests not yet updated — covered in bead 2).",
+    "parent": "ddx-3562c48c",
+    "labels": [
+      "area:cli",
+      "area:install",
+      "kind:feature",
+      "spec:FEAT-015"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-015",
+      "path": "docs/helix/01-frame/features/FEAT-015-installation-architecture.md",
+      "title": "Feature: DDx Installation Architecture"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260429T142618-064ee2d5",
+    "prompt": ".ddx/executions/20260429T142618-064ee2d5/prompt.md",
+    "manifest": ".ddx/executions/20260429T142618-064ee2d5/manifest.json",
+    "result": ".ddx/executions/20260429T142618-064ee2d5/result.json",
+    "checks": ".ddx/executions/20260429T142618-064ee2d5/checks.json",
+    "usage": ".ddx/executions/20260429T142618-064ee2d5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c3efa754-20260429T142618-064ee2d5"
+  }
+}
