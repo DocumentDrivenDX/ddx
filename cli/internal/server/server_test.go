@@ -1476,6 +1476,86 @@ func TestMCPBeadStatus(t *testing.T) {
 	}
 }
 
+func TestMCPBeadBlocked(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_blocked","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	textMap := content[0].(map[string]any)
+	text := textMap["text"].(string)
+
+	var beads []map[string]any
+	if err := json.Unmarshal([]byte(text), &beads); err != nil {
+		t.Fatalf("MCP bead_blocked response not valid JSON: %v", err)
+	}
+	if len(beads) != 1 {
+		t.Fatalf("expected 1 blocked bead, got %d", len(beads))
+	}
+	if beads[0]["id"] != "bx-003" {
+		t.Errorf("expected blocked bead bx-003, got %v", beads[0]["id"])
+	}
+}
+
+func TestMCPBeadDepTree(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_dep_tree","arguments":{"id":"bx-003"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	textMap := content[0].(map[string]any)
+	text := textMap["text"].(string)
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		t.Fatalf("MCP bead_dep_tree response not valid JSON: %v", err)
+	}
+	if payload["id"] != "bx-003" {
+		t.Errorf("expected id bx-003, got %v", payload["id"])
+	}
+	tree, _ := payload["tree"].(string)
+	if !strings.Contains(tree, "bx-003") || !strings.Contains(tree, "bx-001") {
+		t.Errorf("expected tree to contain bx-003 and bx-001, got %q", tree)
+	}
+}
+
+func TestMCPBeadDepTreeMissingID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_dep_tree","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Errorf("expected isError=true when id missing, got %v", result["isError"])
+	}
+}
+
 func TestMCPSearch(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
