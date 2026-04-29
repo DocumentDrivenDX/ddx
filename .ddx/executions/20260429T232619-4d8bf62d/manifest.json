@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T232619-4d8bf62d",
+  "bead_id": "ddx-1986ee33",
+  "base_rev": "92acc8c6123565fb05532849d41001b21be10b65",
+  "created_at": "2026-04-29T23:26:19.800827102Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1986ee33",
+    "title": "[artifact-run-arch] update FEAT-014 (cost attribution for generate-artifact)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. One-sentence touch: generate-artifact runs consume token budgets via FEAT-014 model.",
+    "labels": [
+      "frame",
+      "plan-2026-04-29",
+      "token-awareness"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T23:26:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T23:26:16.978312155Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T232619-4d8bf62d",
+    "prompt": ".ddx/executions/20260429T232619-4d8bf62d/prompt.md",
+    "manifest": ".ddx/executions/20260429T232619-4d8bf62d/manifest.json",
+    "result": ".ddx/executions/20260429T232619-4d8bf62d/result.json",
+    "checks": ".ddx/executions/20260429T232619-4d8bf62d/checks.json",
+    "usage": ".ddx/executions/20260429T232619-4d8bf62d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1986ee33-20260429T232619-4d8bf62d"
+  }
+}
