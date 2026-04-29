@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T225552-48a4eed2",
+  "bead_id": "ddx-acafd9b6",
+  "base_rev": "798a82ce5758928b9c24206baa4e711979ec7348",
+  "created_at": "2026-04-29T22:55:53.02599362Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-acafd9b6",
+    "title": "[artifact-run-arch] ship adversarial-review skill",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. New skill at skills/ddx/adversarial-review/. Workflow skill for adversarial review composing ddx run primitives.",
+    "labels": [
+      "skill",
+      "plan-2026-04-29",
+      "library"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T22:55:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T22:55:50.250220164Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T225552-48a4eed2",
+    "prompt": ".ddx/executions/20260429T225552-48a4eed2/prompt.md",
+    "manifest": ".ddx/executions/20260429T225552-48a4eed2/manifest.json",
+    "result": ".ddx/executions/20260429T225552-48a4eed2/result.json",
+    "checks": ".ddx/executions/20260429T225552-48a4eed2/checks.json",
+    "usage": ".ddx/executions/20260429T225552-48a4eed2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-acafd9b6-20260429T225552-48a4eed2"
+  }
+}
