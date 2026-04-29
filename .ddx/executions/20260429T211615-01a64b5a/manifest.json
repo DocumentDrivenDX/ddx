@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T211615-01a64b5a",
+  "bead_id": "ddx-905c07d0",
+  "base_rev": "dfe58ddb065a51fbb712f34f80b70166f3c7ffba",
+  "created_at": "2026-04-29T21:16:16.443822429Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-905c07d0",
+    "title": "[visual-suite] V3 author DESIGN.md at repo root + add @google/design.md",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Run 'bun add --dev @google/design.md@0.1.0' at repo root. Author /DESIGN.md capturing existing precedent (logo, current rgba triad rgba(72,120,198)/rgba(53,163,95)/rgba(142,53,163), terminal-demo tone). Tokens (colors, typography, spacing, components); prose Overview, Do's/Don'ts, metaphor system (lever/load/fulcrum). Lint via 'bunx @google/design.md lint DESIGN.md'. Foundation work, not throwaway spike — DDx has no visual language today; embedding is correct.",
+    "labels": [
+      "design",
+      "plan-2026-04-29-vis",
+      "foundation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T21:16:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T21:16:13.537189452Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T211615-01a64b5a",
+    "prompt": ".ddx/executions/20260429T211615-01a64b5a/prompt.md",
+    "manifest": ".ddx/executions/20260429T211615-01a64b5a/manifest.json",
+    "result": ".ddx/executions/20260429T211615-01a64b5a/result.json",
+    "checks": ".ddx/executions/20260429T211615-01a64b5a/checks.json",
+    "usage": ".ddx/executions/20260429T211615-01a64b5a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-905c07d0-20260429T211615-01a64b5a"
+  }
+}
