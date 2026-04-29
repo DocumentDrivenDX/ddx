@@ -77,6 +77,21 @@ ddx agent execute-bead <bead-id>
 ddx agent execute-bead <bead-id> --no-merge
 ```
 
+## Loop termination conditions
+
+The execute-loop exits the `for` iteration only when one of these conditions holds:
+
+| Condition | Details |
+|---|---|
+| Context cancelled | `ctx.Err() != nil` — e.g. operator `^C`, `ddx agent stop`, or server shutdown. Terminates immediately. |
+| `Once == true` | Loop processed one bead (or exhausted the queue once) and exits. Set by `--once`. |
+| `PollInterval <= 0` AND no ready candidate | Queue is empty (or all remaining candidates were already attempted this run) and the loop is not polling. Default mode. |
+| `RoutePreflight` rejected | The configured harness/model pair was rejected by the upstream route table. Exits with an `execution_failed` record. |
+
+**Store errors during outcome handling do NOT terminate the loop.** If a `Store.*` call (`Unclaim`, `CloseWithEvidence`, `Reopen`, `SetExecutionCooldown`, `AppendEvent`, etc.) fails after the executor returns, the loop logs the error, records a `kind:loop-error` event on the bead (best-effort), applies a short cooldown (`StoreErrorCooldown = 5m`) so the bead is not immediately re-queued, and continues to the next candidate. The worker exits only when `ctx` is cancelled.
+
+**Pre-claim hook failures are NOT terminal.** A hook failure on the first presentation of a bead allows one retry: the bead is not added to `attempted` until the hook passes (or fails a second time). If the hook always fails for a bead (e.g. branch is persistently diverged), the bead is moved to `attempted` on its second failure so the loop can exit normally. Fix the divergence and restart the loop to process that bead.
+
 ## Related
 
 - `cli/internal/agent/execute_bead_loop.go` — canonical close-semantics source

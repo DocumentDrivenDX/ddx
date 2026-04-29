@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1163,4 +1164,405 @@ func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead)
 	require.NoError(t, store.Create(second))
 
 	return store, first, second
+}
+
+// errorInjectingStore wraps a real ExecuteBeadLoopStore and allows individual
+// methods to be overridden to return injected errors. Used in tests that verify
+// the loop continues on transient Store.* failures instead of terminating.
+type errorInjectingStore struct {
+	ExecuteBeadLoopStore
+	onUnclaim           func(id string) error
+	onIncrNoChanges     func(id string) (int, error)
+	onCloseWithEvidence func(id, sessionID, commitSHA string) error
+	onReopen            func(id, reason, notes string) error
+	onSetCooldown       func(id string, until time.Time, status, detail string) error
+	onAppendEvent       func(id string, event bead.BeadEvent) error
+}
+
+func (s *errorInjectingStore) Unclaim(id string) error {
+	if s.onUnclaim != nil {
+		return s.onUnclaim(id)
+	}
+	return s.ExecuteBeadLoopStore.Unclaim(id)
+}
+
+func (s *errorInjectingStore) IncrNoChangesCount(id string) (int, error) {
+	if s.onIncrNoChanges != nil {
+		return s.onIncrNoChanges(id)
+	}
+	return s.ExecuteBeadLoopStore.IncrNoChangesCount(id)
+}
+
+func (s *errorInjectingStore) CloseWithEvidence(id, sessionID, commitSHA string) error {
+	if s.onCloseWithEvidence != nil {
+		return s.onCloseWithEvidence(id, sessionID, commitSHA)
+	}
+	return s.ExecuteBeadLoopStore.CloseWithEvidence(id, sessionID, commitSHA)
+}
+
+func (s *errorInjectingStore) Reopen(id, reason, notes string) error {
+	if s.onReopen != nil {
+		return s.onReopen(id, reason, notes)
+	}
+	return s.ExecuteBeadLoopStore.Reopen(id, reason, notes)
+}
+
+func (s *errorInjectingStore) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
+	if s.onSetCooldown != nil {
+		return s.onSetCooldown(id, until, status, detail)
+	}
+	return s.ExecuteBeadLoopStore.SetExecutionCooldown(id, until, status, detail)
+}
+
+func (s *errorInjectingStore) AppendEvent(id string, event bead.BeadEvent) error {
+	if s.onAppendEvent != nil {
+		return s.onAppendEvent(id, event)
+	}
+	return s.ExecuteBeadLoopStore.AppendEvent(id, event)
+}
+
+// TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable verifies that
+// when the pre-claim hook always fails (e.g. branch is persistently diverged),
+// the bead stays open and is available for a subsequent Run invocation once the
+// hook starts passing. This is the cross-run correctness companion to the
+// same-run retry test below.
+func TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-hook-always-fail", Title: "Bead with persistent hook failure"}
+	require.NoError(t, store.Create(b))
+
+	var executedIDs []string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executedIDs = append(executedIDs, beadID)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-hook",
+				ResultRev: "abc1234",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	// First run: hook always fails — bead must remain open with 0 attempts.
+	result1, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		PreClaimHook: func(ctx context.Context) error {
+			return fmt.Errorf("diverged branch")
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result1.Attempts, "hook failure must not count as an attempt")
+	assert.Empty(t, executedIDs, "executor must not be called when hook always fails")
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after hook always fails")
+
+	// Second run: hook passes — bead must be executed and closed.
+	result2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		PreClaimHook: func(ctx context.Context) error { return nil },
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result2.Attempts)
+	assert.Equal(t, 1, result2.Successes)
+	assert.Equal(t, []string{b.ID}, executedIDs)
+
+	got2, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got2.Status)
+}
+
+// TestExecuteBeadWorkerPreClaimHookFailureRetriesOnNextIteration verifies that
+// in a multi-bead queue, a hook failure on the first iteration does NOT prevent
+// the same bead from being picked up in a subsequent iteration of the same Run.
+// This covers the direct reproduce scenario from the bead description (runs 3/4).
+func TestExecuteBeadWorkerPreClaimHookFailureRetriesOnNextIteration(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	// Only one ready bead in the queue.
+	b := &bead.Bead{ID: "ddx-hook-same-run", Title: "Bead retried in same run"}
+	require.NoError(t, store.Create(b))
+
+	// Hook fails on first call, passes on second.
+	hookCalls := 0
+	var executedIDs []string
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executedIDs = append(executedIDs, beadID)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-retry",
+				ResultRev: "feed1234",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		// No Once flag: loop runs until no more candidates.
+		PreClaimHook: func(ctx context.Context) error {
+			hookCalls++
+			if hookCalls == 1 {
+				return fmt.Errorf("diverged branch on first hook call")
+			}
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	// The bead was skipped once (hook fail), then retried and succeeded.
+	assert.Equal(t, 1, result.Attempts, "bead should be executed exactly once after hook passes")
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, []string{b.ID}, executedIDs)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
+// TestExecuteBeadWorkerStoreErrorContinuesLoop verifies root cause #2: any
+// Store.* error in the post-Execute outcome block must NOT terminate the loop.
+// The loop must: continue to the next iteration, record a kind:loop-error event
+// on the affected bead, and increment result.Failures.
+//
+// Regression for ddx-37cdb43a.
+func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
+	injectedErr := fmt.Errorf("transient storage failure")
+
+	cases := []struct {
+		name           string
+		executorStatus string
+		injectErr      func(s *errorInjectingStore)
+		wantOp         string
+	}{
+		{
+			name:           "Unclaim fails on no_changes path",
+			executorStatus: ExecuteBeadStatusNoChanges,
+			injectErr: func(s *errorInjectingStore) {
+				s.onUnclaim = func(id string) error { return injectedErr }
+			},
+			wantOp: "Unclaim",
+		},
+		{
+			name:           "IncrNoChangesCount fails",
+			executorStatus: ExecuteBeadStatusNoChanges,
+			injectErr: func(s *errorInjectingStore) {
+				s.onIncrNoChanges = func(id string) (int, error) { return 0, injectedErr }
+			},
+			wantOp: "IncrNoChangesCount",
+		},
+		{
+			name:           "adjudicateNoChanges fails via SatisfactionChecker",
+			executorStatus: ExecuteBeadStatusNoChanges,
+			injectErr:      nil, // injected via SatisfactionChecker, not store
+			wantOp:         "adjudicateNoChanges",
+		},
+		{
+			name:           "CloseWithEvidence fails on success path",
+			executorStatus: ExecuteBeadStatusSuccess,
+			injectErr: func(s *errorInjectingStore) {
+				s.onCloseWithEvidence = func(id, sessionID, commitSHA string) error { return injectedErr }
+			},
+			wantOp: "CloseWithEvidence",
+		},
+		{
+			name:           "SetExecutionCooldown fails on no_changes no-progress path",
+			executorStatus: ExecuteBeadStatusNoChanges,
+			injectErr: func(s *errorInjectingStore) {
+				s.onSetCooldown = func(id string, until time.Time, status, detail string) error { return injectedErr }
+			},
+			wantOp: "SetExecutionCooldown",
+		},
+		{
+			name:           "SetExecutionCooldown fails on execution_failed path",
+			executorStatus: ExecuteBeadStatusExecutionFailed,
+			injectErr: func(s *errorInjectingStore) {
+				// execution_failed doesn't call SetExecutionCooldown unless
+				// shouldSuppressNoProgress — use a report with matching base/result rev.
+				// Actually execution_failed goes through the else branch which
+				// calls SetExecutionCooldown only if shouldSuppressNoProgress.
+				// To trigger it, inject at the Unclaim level so we get to that branch.
+				s.onUnclaim = func(id string) error { return injectedErr }
+			},
+			wantOp: "Unclaim",
+		},
+		{
+			name:           "late AppendEvent fails",
+			executorStatus: ExecuteBeadStatusExecutionFailed,
+			injectErr: func(s *errorInjectingStore) {
+				callCount := 0
+				s.onAppendEvent = func(id string, event bead.BeadEvent) error {
+					callCount++
+					// Fail only the late execute-bead event (not loop-error events).
+					if event.Kind == "execute-bead" || event.Kind == "" {
+						return injectedErr
+					}
+					return nil
+				}
+			},
+			wantOp: "AppendEvent",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			realStore := bead.NewStore(t.TempDir())
+			require.NoError(t, realStore.Init())
+
+			// Two beads: first gets the error injection, second should still be processed.
+			first := &bead.Bead{ID: "ddx-err-first", Title: "First bead"}
+			second := &bead.Bead{ID: "ddx-err-second", Title: "Second bead"}
+			require.NoError(t, realStore.Create(first))
+			require.NoError(t, realStore.Create(second))
+
+			store := &errorInjectingStore{ExecuteBeadLoopStore: realStore}
+			if tc.injectErr != nil {
+				tc.injectErr(store)
+			}
+
+			// For the adjudicateNoChanges case, inject via SatisfactionChecker.
+			var satisfactionChecker SatisfactionChecker
+			if tc.wantOp == "adjudicateNoChanges" {
+				satisfactionChecker = SatisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+					if beadID == first.ID {
+						return false, "", injectedErr
+					}
+					return false, "", nil
+				})
+			}
+
+			var executedIDs []string
+			worker := &ExecuteBeadWorker{
+				Store:               store,
+				SatisfactionChecker: satisfactionChecker,
+				Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+					executedIDs = append(executedIDs, beadID)
+					status := tc.executorStatus
+					if beadID == second.ID {
+						status = ExecuteBeadStatusSuccess
+					}
+					return ExecuteBeadReport{
+						BeadID:    beadID,
+						Status:    status,
+						SessionID: "sess-" + beadID,
+						ResultRev: "rev-" + beadID,
+						BaseRev:   "rev-" + beadID, // same as ResultRev → triggers shouldSuppressNoProgress
+					}, nil
+				}),
+			}
+
+			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+			result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+			require.NoError(t, err, "loop must not return error on store failure")
+
+			// (a) loop continues — second bead must have been executed.
+			assert.Contains(t, executedIDs, second.ID, "loop must continue to next bead after store error on first")
+
+			// (c) result.Failures advances.
+			assert.GreaterOrEqual(t, result.Failures, 1, "result.Failures must be >= 1 after store error")
+
+			// (b) kind:loop-error event recorded on the affected bead (best-effort;
+			// not checked for AppendEvent failures since the event sink itself is broken).
+			if tc.wantOp != "AppendEvent" {
+				events, evErr := realStore.Events(first.ID)
+				require.NoError(t, evErr)
+				var loopErrorEvent *bead.BeadEvent
+				for i := range events {
+					if events[i].Kind == "loop-error" {
+						loopErrorEvent = &events[i]
+						break
+					}
+				}
+				require.NotNil(t, loopErrorEvent, "kind:loop-error event must be recorded; got events: %v", events)
+				assert.Contains(t, loopErrorEvent.Summary, tc.wantOp,
+					"loop-error summary must contain the failing operation name")
+			}
+		})
+	}
+}
+
+// TestExecuteBeadWorkerEndToEndThreeBeadDrain is the integration guard from
+// AC-4: seeds 3 ready beads with outcomes no_changes / success /
+// already_satisfied and asserts all three are processed without premature exit.
+// With the pre-fix loop this test failed because the no_changes result caused
+// Unclaim to be the first store call and the loop exited on any transient path.
+func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	a := &bead.Bead{ID: "ddx-e2e-a", Title: "Bead A — no_changes", Priority: 0}
+	b := &bead.Bead{ID: "ddx-e2e-b", Title: "Bead B — success", Priority: 1}
+	c := &bead.Bead{ID: "ddx-e2e-c", Title: "Bead C — already_satisfied", Priority: 2}
+	require.NoError(t, store.Create(a))
+	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(c))
+
+	var executedIDs []string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executedIDs = append(executedIDs, beadID)
+			switch beadID {
+			case a.ID:
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusNoChanges,
+					BaseRev:   "aaa",
+					ResultRev: "aaa", // equal → shouldSuppressNoProgress
+				}, nil
+			case b.ID:
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-b",
+					ResultRev: "bbb",
+				}, nil
+			case c.ID:
+				// Returning no_changes with a specific commit-SHA rationale causes
+				// adjudication to close it as already_satisfied on the first attempt.
+				return ExecuteBeadReport{
+					BeadID:             beadID,
+					Status:             ExecuteBeadStatusNoChanges,
+					BaseRev:            "ccc",
+					ResultRev:          "ccc",
+					NoChangesRationale: "already done in commit abc1234 (cli/foo.go)",
+				}, nil
+			default:
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess}, nil
+			}
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+	require.NoError(t, err)
+
+	// All three beads must have been attempted.
+	assert.ElementsMatch(t, []string{a.ID, b.ID, c.ID}, executedIDs,
+		"all three beads must be processed; loop must not exit after the first")
+	assert.Equal(t, 3, result.Attempts)
+
+	// Bead B must be closed.
+	gotB, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotB.Status)
+
+	// Bead C must be closed as already_satisfied.
+	gotC, err := store.Get(c.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotC.Status)
 }

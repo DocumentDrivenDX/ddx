@@ -63,6 +63,45 @@ const MaxLoopCooldown = 24 * time.Hour
 // advance the base branch.
 const LandConflictCooldown = 15 * time.Minute
 
+// StoreErrorCooldown is the short cooldown applied when a Store.* operation in
+// the outcome-handling block returns a transient error. It prevents an
+// immediate re-queue of the affected bead while allowing the loop to continue
+// to the next candidate. Store errors during outcome handling are non-fatal:
+// they are logged and emitted as loop-error events but do not terminate the
+// worker.
+const StoreErrorCooldown = 5 * time.Minute
+
+// handleOutcomeStoreError is called when a Store.* operation in the
+// post-Execute outcome block returns a non-nil error. It logs the error,
+// appends a kind:loop-error event to the bead (best-effort), sets a short
+// cooldown so the bead is not immediately re-queued, increments
+// result.Failures, and returns true — signalling the caller to continue to
+// the next loop iteration rather than returning.
+//
+// If ctx is already cancelled, it returns false so the caller can propagate
+// the cancellation immediately.
+func (w *ExecuteBeadWorker) handleOutcomeStoreError(ctx context.Context, beadID, operation string, storeErr error, assignee string, result *ExecuteBeadLoopResult, runtime ExecuteBeadLoopRuntime, now func() time.Time) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	if runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "outcome store error (%s %s): %v (continuing)\n", operation, beadID, storeErr)
+	}
+	_ = w.Store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "loop-error",
+		Summary:   operation + " failed",
+		Body:      storeErr.Error(),
+		Actor:     assignee,
+		Source:    "ddx agent execute-loop",
+		CreatedAt: now().UTC(),
+	})
+	cooldownUntil := now().UTC().Add(StoreErrorCooldown)
+	_ = w.Store.SetExecutionCooldown(beadID, cooldownUntil, "loop-error", operation+": "+storeErr.Error())
+	result.Failures++
+	result.LastFailureStatus = "loop-error"
+	return true
+}
+
 // capLoopCooldown clamps a loop-set cooldown duration to MaxLoopCooldown.
 // The loop uses this for every SetExecutionCooldown call so no automatic
 // path can silently park a bead for a year.
@@ -319,6 +358,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 	result := &ExecuteBeadLoopResult{}
 	attempted := make(map[string]struct{})
+	// hookFailed tracks beads whose pre-claim hook failed on first presentation
+	// in this run. A bead in hookFailed but not attempted gets one retry: on the
+	// second hook failure it moves to attempted so nextCandidate will skip it and
+	// the loop can exit gracefully. This prevents infinite spinning when the hook
+	// always fails while still allowing transient hook failures to be retried.
+	hookFailed := make(map[string]struct{})
 
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
@@ -379,11 +424,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			continue
 		}
 
-		attempted[candidate.ID] = struct{}{}
-
 		// Pre-claim hook: fetch origin + verify ancestry before claiming.
 		// On error the bead is skipped for this iteration; the loop
-		// continues (ctx is not cancelled).
+		// continues (ctx is not cancelled). The bead is NOT added to
+		// attempted on the FIRST failure so a transient hook failure (e.g.
+		// diverged branch) allows a retry on the next iteration. On a
+		// SECOND failure for the same bead in the same run it is moved into
+		// attempted so nextCandidate will skip it, preventing an infinite
+		// loop when the hook always fails.
 		if runtime.PreClaimHook != nil {
 			if hookErr := runtime.PreClaimHook(ctx); hookErr != nil {
 				if runtime.Log != nil {
@@ -393,9 +441,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"bead_id": candidate.ID,
 					"reason":  hookErr.Error(),
 				})
+				if _, alreadyFailed := hookFailed[candidate.ID]; alreadyFailed {
+					// Second failure in this run: stop retrying this bead.
+					attempted[candidate.ID] = struct{}{}
+				} else {
+					hookFailed[candidate.ID] = struct{}{}
+				}
 				continue
 			}
 		}
+
+		attempted[candidate.ID] = struct{}{}
 
 		// Routing preflight gate (FEAT-006 D3, ddx-98e6e9ef): consult the
 		// upstream typed-incompatibility surface BEFORE claiming. If the
@@ -517,7 +573,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 			if reviewSkipped {
 				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-					return result, err
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 			}
 
@@ -612,7 +671,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							CreatedAt: now().UTC(),
 						})
 						if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); cerr != nil {
-							return result, cerr
+							if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", cerr, assignee, result, runtime, now) {
+								continue
+							}
+							return result, ctx.Err()
 						}
 					case VerdictRequestChanges:
 						// Needs fixes: record the review verdict, then reopen
@@ -632,7 +694,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							reopenNotes = reviewRes.RawOutput
 						}
 						if reopenErr := w.Store.Reopen(candidate.ID, "review: REQUEST_CHANGES", reopenNotes); reopenErr != nil {
-							return result, reopenErr
+							if w.handleOutcomeStoreError(ctx, candidate.ID, "Reopen", reopenErr, assignee, result, runtime, now) {
+								continue
+							}
+							return result, ctx.Err()
 						}
 						report.Status = ExecuteBeadStatusReviewRequestChanges
 						report.Detail = "post-merge review: REQUEST_CHANGES"
@@ -666,7 +731,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						})
 						blockNotes := "REVIEW:BLOCK\n\n" + rationale
 						if reopenErr := w.Store.Reopen(candidate.ID, "review: BLOCK", blockNotes); reopenErr != nil {
-							return result, reopenErr
+							if w.handleOutcomeStoreError(ctx, candidate.ID, "Reopen", reopenErr, assignee, result, runtime, now) {
+								continue
+							}
+							return result, ctx.Err()
 						}
 						report.Status = ExecuteBeadStatusReviewBlock
 						report.Detail = "post-merge review: BLOCK (flagged for human)"
@@ -691,17 +759,26 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			report = w.runConflictRecovery(ctx, candidate, report, runtime, assignee, now)
 			if report.Status == ExecuteBeadStatusSuccess {
 				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-					return result, err
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				result.Successes++
 				result.LastSuccessAt = now().UTC()
 			} else {
 				if err := w.Store.Unclaim(candidate.ID); err != nil {
-					return result, err
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				parkUntil := now().UTC().Add(LandConflictCooldown)
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					return result, err
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				report.RetryAfter = parkUntil.Format(time.RFC3339)
 				result.Failures++
@@ -709,16 +786,25 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		} else {
 			if err := w.Store.Unclaim(candidate.ID); err != nil {
-				return result, err
+				if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
+					continue
+				}
+				return result, ctx.Err()
 			}
 			if report.Status == ExecuteBeadStatusNoChanges {
 				count, cerr := w.Store.IncrNoChangesCount(candidate.ID)
 				if cerr != nil {
-					return result, cerr
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "IncrNoChangesCount", cerr, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				satisfied, evidence, aerr := w.adjudicateNoChanges(ctx, candidate.ID, count, maxNoChangesBeforeClose, report.NoChangesRationale, candidate.Acceptance, runtime.ProjectRoot)
 				if aerr != nil {
-					return result, aerr
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "adjudicateNoChanges", aerr, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				if satisfied {
 					// Adjudication confirmed bead is already satisfied.
@@ -736,7 +822,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
 					if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); cerr != nil {
-						return result, cerr
+						if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", cerr, assignee, result, runtime, now) {
+							continue
+						}
+						return result, ctx.Err()
 					}
 					result.Successes++
 					result.LastSuccessAt = now().UTC()
@@ -746,7 +835,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if shouldSuppressNoProgress(report) {
 						retryAfter := now().UTC().Add(capLoopCooldown(noProgressCooldown))
 						if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
-							return result, cerr
+							if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", cerr, assignee, result, runtime, now) {
+								continue
+							}
+							return result, ctx.Err()
 						}
 						report.RetryAfter = retryAfter.Format(time.RFC3339)
 					}
@@ -788,7 +880,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					return result, err
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				report.RetryAfter = parkUntil.Format(time.RFC3339)
 				result.Failures++
@@ -801,7 +896,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// so it surfaces on the bead and on any direct claim attempt.
 				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					return result, err
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				report.RetryAfter = parkUntil.Format(time.RFC3339)
 				result.Failures++
@@ -833,7 +931,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					return result, err
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
 				report.RetryAfter = parkUntil.Format(time.RFC3339)
 				result.Failures++
@@ -842,7 +943,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(capLoopCooldown(noProgressCooldown))
 					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
-						return result, err
+						if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
+							continue
+						}
+						return result, ctx.Err()
 					}
 					report.RetryAfter = retryAfter.Format(time.RFC3339)
 				}
@@ -859,7 +963,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// Duplicating it here would yield two identical events.
 		if report.Status != ExecuteBeadStatusAlreadySatisfied {
 			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
-				return result, err
+				// Event recording failure is non-terminal: log it and continue.
+				// result counters were already updated by the outcome block above;
+				// do not double-count by calling handleOutcomeStoreError.
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+				}
+				if ctx.Err() == nil {
+					_ = w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "loop-error", "AppendEvent: "+err.Error())
+				}
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				continue
 			}
 		}
 
