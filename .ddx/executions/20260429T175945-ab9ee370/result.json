@@ -1,0 +1,54 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review contains only execution evidence files (manifest.json, result.json) and no changes to docs/helix/01-frame/prd.md. The PRD restructure required by the bead is not present in this diff and cannot be evaluated.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes to docs/helix/01-frame/prd.md present in diff; bead requires Problem section restructure (6 clusters incl. LLM physics), Goals updates, Non-goals sharpening, and FEAT blurb updates.",
+      "location": "docs/helix/01-frame/prd.md"
+    },
+    {
+      "severity": "info",
+      "summary": "Result.json references result_rev bebb231b which is the PRD commit, but the diff shown for review only includes the execution evidence files, not the PRD changes themselves.",
+      "location": ".ddx/executions/20260429T175518-a355fb38/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2023,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T175518-a355fb38/manifest.json",
+          ".ddx/executions/20260429T175518-a355fb38/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4554,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8383,
+    "output_bytes": 883,
+    "elapsed_ms": 7525,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
