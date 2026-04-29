@@ -2,6 +2,7 @@ package agent
 
 import (
 	"strings"
+	"sync/atomic"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -16,9 +17,31 @@ var profileTierRank = map[string]int{
 	"smart":    3,
 }
 
+// Test seams: tests assert that ResolveProfileLadder and ResolveTierModelRef
+// are NOT in the call graph on the default routing path (ddx-755f5881 AC #3).
+// Production code never reads these counters; they are exported only for tests.
+var (
+	resolveProfileLadderCalls atomic.Int64
+	resolveTierModelRefCalls  atomic.Int64
+)
+
+// ResolveProfileLadderCallCount returns the current value of the call counter.
+// Tests use it together with ResetRoutingCallCounters to verify call-graph claims.
+func ResolveProfileLadderCallCount() int64 { return resolveProfileLadderCalls.Load() }
+
+// ResolveTierModelRefCallCount returns the current value of the call counter.
+func ResolveTierModelRefCallCount() int64 { return resolveTierModelRefCalls.Load() }
+
+// ResetRoutingCallCounters zeros the test-seam counters.
+func ResetRoutingCallCounters() {
+	resolveProfileLadderCalls.Store(0)
+	resolveTierModelRefCalls.Store(0)
+}
+
 // ResolveProfileLadder returns the ordered tiers to try for profile after
 // applying explicit --min-tier / --max-tier caps.
 func ResolveProfileLadder(routing *config.RoutingConfig, profile, minTier, maxTier string) []escalation.ModelTier {
+	resolveProfileLadderCalls.Add(1)
 	profile = NormalizeRoutingProfile(profile)
 	ladder := routing.ResolvedLadder(profile)
 	out := make([]escalation.ModelTier, 0, len(ladder))
@@ -42,6 +65,7 @@ func NormalizeRoutingProfile(profile string) string {
 
 // ResolveTierModelRef applies agent.routing.model_overrides for a ladder tier.
 func ResolveTierModelRef(routing *config.RoutingConfig, tier escalation.ModelTier) string {
+	resolveTierModelRefCalls.Add(1)
 	tierRef := string(tier)
 	if routing != nil && routing.ModelOverrides != nil {
 		if override := strings.TrimSpace(routing.ModelOverrides[tierRef]); override != "" {

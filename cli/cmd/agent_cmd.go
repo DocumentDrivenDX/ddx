@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -25,6 +26,39 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
 	"github.com/spf13/cobra"
 )
+
+// Routing test seams (ddx-755f5881 AC #2): record every RouteRequest issued
+// by the default `ddx agent run` path so unit tests can assert that the
+// default path calls ResolveRoute exactly once with Profile: "default" and
+// no other fields. Production code never reads this slice; it is exported
+// only for tests.
+var (
+	routeRequestRecorderMu sync.Mutex
+	routeRequestRecorder   []agentlib.RouteRequest
+)
+
+func recordRouteRequestForTest(req agentlib.RouteRequest) {
+	routeRequestRecorderMu.Lock()
+	routeRequestRecorder = append(routeRequestRecorder, req)
+	routeRequestRecorderMu.Unlock()
+}
+
+// RecordedRouteRequestsForTest returns a copy of all RouteRequests recorded
+// by the agent CLI surface since the last reset.
+func RecordedRouteRequestsForTest() []agentlib.RouteRequest {
+	routeRequestRecorderMu.Lock()
+	defer routeRequestRecorderMu.Unlock()
+	out := make([]agentlib.RouteRequest, len(routeRequestRecorder))
+	copy(out, routeRequestRecorder)
+	return out
+}
+
+// ResetRecordedRouteRequestsForTest clears the route-request recording slice.
+func ResetRecordedRouteRequestsForTest() {
+	routeRequestRecorderMu.Lock()
+	routeRequestRecorder = nil
+	routeRequestRecorderMu.Unlock()
+}
 
 func (f *CommandFactory) newAgentCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -288,37 +322,36 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				return nil
 			}
 
-			// Single harness mode.
-			// When no explicit --harness is given but --profile (or --model) is set,
-			// route through service.ResolveRoute to select the best available harness.
-			// This allows workflow tools to pass stage intent (cheap/fast/smart) without
-			// choosing a harness.
+			// Single harness mode (ddx-755f5881 D1+D5):
+			// When neither --harness nor agent.harness in config pins a
+			// specific harness, issue exactly one ResolveRoute call with the
+			// (normalized) Profile and let upstream pick the harness/model.
+			// No DDx-side ladder iteration, no ResolveTierModelRef lookup,
+			// no preference-order fallback. The default profile is "default".
+			//
+			// When agent.harness is set in config, fall through to
+			// LoadAndResolve below — that path already plumbs the configured
+			// harness into rcfg.Harness() (SD-024 Stage 2 contract).
+			configHarness := ""
+			if cfg, _ := config.LoadWithWorkingDir(f.WorkingDir); cfg != nil && cfg.Agent != nil {
+				configHarness = strings.TrimSpace(cfg.Agent.Harness)
+			}
 			resolvedHarness := harness
 			resolvedModel := model
 			resolvedProvider := ""
-			if harness == "" && (profile != "" || model != "") {
-				if profile != "" {
-					profile = agent.NormalizeRoutingProfile(profile)
-				}
+			if harness == "" && configHarness == "" {
+				profile = agent.NormalizeRoutingProfile(profile)
 				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
 				if svcErr != nil {
 					return fmt.Errorf("agent: failed to initialize routing service: %w", svcErr)
 				}
-				routeModel := model
-				routeModelRef := profile
-				if routeModel == "" {
-					if override := profileModelOverrideForRun(f.WorkingDir, profile); override != "" {
-						routeModel = override
-						routeModelRef = ""
-					}
-				}
 				routeReq := agentlib.RouteRequest{
-					Model:       routeModel,
 					Profile:     profile,
+					Model:       model,
 					Reasoning:   agentlib.Reasoning(effort),
 					Permissions: permissions,
-					ModelRef:    routeModelRef,
 				}
+				recordRouteRequestForTest(routeReq)
 				dec, routeErr := svc.ResolveRoute(cmd.Context(), routeReq)
 				if routeErr != nil {
 					return fmt.Errorf("agent: no viable harness found for profile %q: %w", profile, routeErr)
@@ -327,8 +360,6 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				resolvedProvider = dec.Provider
 				if model == "" && dec.Model != "" {
 					resolvedModel = dec.Model
-				} else if model == "" && routeModel != "" {
-					resolvedModel = routeModel
 				}
 				if resolvedHarness == "" {
 					return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
@@ -1590,6 +1621,7 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Bool("no-adaptive-min-tier", false, "Disable adaptive min-tier promotion based on trailing cheap-tier success rate")
 	cmd.Flags().Int("adaptive-min-tier-window", 50, "Trailing window size for adaptive min-tier evaluation")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
+	cmd.Flags().Bool("escalate", false, "Enable tier-ladder escalation. Off by default: a single ResolveRoute call drives each attempt (ddx-755f5881). Use this only when you explicitly want cheap→standard→smart fallback semantics.")
 	return cmd
 }
 
@@ -1615,6 +1647,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	noAdaptiveMinTier, _ := cmd.Flags().GetBool("no-adaptive-min-tier")
 	adaptiveWindow, _ := cmd.Flags().GetInt("adaptive-min-tier-window")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
+	escalate, _ := cmd.Flags().GetBool("escalate")
 
 	// Adaptive min-tier: when the operator did not pin --min-tier and adaptation
 	// is not disabled, consult trailing cheap-tier success rate and promote to
@@ -1691,7 +1724,11 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 		routingCfg = cfg.Agent.Routing
 	}
 
-	escalationEnabled := harness == "" && model == ""
+	// ddx-755f5881: tier-ladder escalation is opt-in via --escalate.
+	// The default path goes through singleTierAttempt with one ResolveRoute call
+	// and lets upstream pick the harness/model — no DDx-side ladder iteration,
+	// no ResolveTierModelRef lookup, no preference-order fallback.
+	escalationEnabled := escalate && harness == "" && model == ""
 
 	// Cost-cap state shared by both the single-attempt and tier-escalation
 	// paths. Accumulated billed spend (excluding local and subscription
@@ -1808,8 +1845,11 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 				return cappedReport, nil
 			}
 			if !escalationEnabled {
-				// Single-attempt path: --harness or --model was specified.
-				// Route dynamically when no harness is pinned.
+				// Default + single-attempt path (ddx-755f5881 D1+D2): when no
+				// harness is pinned, issue exactly one ResolveRoute call with
+				// the (already-normalized) Profile and let upstream pick the
+				// harness/model. No per-tier iteration, no ResolveTierModelRef
+				// lookup, no preference-order fallback.
 				resolvedHarness := harness
 				resolvedProvider := provider
 				resolvedModel := model
@@ -1817,6 +1857,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 					svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
 					if svcErr == nil {
 						dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
+							Profile:   profile,
 							Model:     model,
 							Provider:  provider,
 							ModelRef:  modelRef,
