@@ -5,36 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v3"
 )
 
-// routingDeprecationWarnOnce ensures the deprecated profile_priority +
-// opt-in (profile_ladders / model_overrides) warnings fire only once per
-// process even when LoadWithWorkingDir is called many times. Each key
-// gets its own sync.Once.
-var (
-	routingDeprecationWarnOnce sync.Map // key string -> *sync.Once
-)
-
-func warnRoutingOnce(key, msg string) {
-	v, _ := routingDeprecationWarnOnce.LoadOrStore(key, &sync.Once{})
-	v.(*sync.Once).Do(func() {
-		fmt.Fprintln(os.Stderr, msg)
-	})
-}
-
-// ResetRoutingDeprecationWarnings clears the one-time warning latches.
-// Tests call this so each test case can observe the warning fresh.
-func ResetRoutingDeprecationWarnings() {
-	routingDeprecationWarnOnce = sync.Map{}
-}
-
-// RoutingMigrationError signals that the loaded config carries the
-// removed agent.routing.default_harness field (bead ddx-87fb72c2). The
-// field is gone for good; configs must be migrated before DDx will
-// load them.
+// RoutingMigrationError signals that the loaded config carries a removed
+// agent.routing field. The field is gone for good; configs must be migrated
+// before DDx will load them.
 type RoutingMigrationError struct {
 	Field string
 	Path  string
@@ -43,17 +20,13 @@ type RoutingMigrationError struct {
 func (e *RoutingMigrationError) Error() string {
 	return fmt.Sprintf(
 		"%s: %s has been removed. "+
-			"Migration: delete the field. The top-level agent.harness is a "+
-			"tie-break preference, not a default override. "+
+			"Migration: delete the field from your .ddx/config.yaml. "+
 			"See docs/migrations/routing-config.md.",
 		e.Path, e.Field)
 }
 
-// checkRoutingMigration parses the raw config bytes and reports the
-// breaking change cases for agent.routing. Returns a hard error when
-// agent.routing.default_harness is present; emits a one-time process
-// warning when profile_ladders or model_overrides are set (because
-// those fields are now opt-in via --escalate / --override-model).
+// checkRoutingMigration parses the raw config bytes and hard-errors on any
+// removed agent.routing fields.
 func checkRoutingMigration(path string, data []byte) error {
 	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {
@@ -67,25 +40,13 @@ func checkRoutingMigration(path string, data []byte) error {
 	if routing == nil {
 		return nil
 	}
-	if _, ok := routing["default_harness"]; ok {
-		return &RoutingMigrationError{
-			Field: "agent.routing.default_harness",
-			Path:  path,
+	for _, field := range []string{"default_harness", "profile_ladders", "model_overrides"} {
+		if _, ok := routing[field]; ok {
+			return &RoutingMigrationError{
+				Field: "agent.routing." + field,
+				Path:  path,
+			}
 		}
-	}
-	if _, ok := routing["profile_ladders"]; ok {
-		warnRoutingOnce("profile_ladders",
-			"warning: agent.routing.profile_ladders is opt-in. "+
-				"It is consulted only when --escalate is passed; "+
-				"the default execute path ignores it. "+
-				"See docs/migrations/routing-config.md.")
-	}
-	if _, ok := routing["model_overrides"]; ok {
-		warnRoutingOnce("model_overrides",
-			"warning: agent.routing.model_overrides is opt-in. "+
-				"It is consulted only when --override-model is passed; "+
-				"the default execute path ignores it. "+
-				"See docs/migrations/routing-config.md.")
 	}
 	return nil
 }
@@ -144,10 +105,8 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 	}
 
 	// Pre-validation migration check: surface a friendly hard error for
-	// removed-field cases (agent.routing.default_harness) and emit
-	// one-time warnings for opt-in fields (profile_ladders,
-	// model_overrides) before the schema validator sees the file. This
-	// happens before LoadConfig so the migration message is what the
+	// removed agent.routing fields before the schema validator sees the file.
+	// This happens before LoadConfig so the migration message is what the
 	// operator sees.
 	configPath := filepath.Join(workingDir, ".ddx", "config.yaml")
 	if data, readErr := os.ReadFile(configPath); readErr == nil {
@@ -170,7 +129,7 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 	config.ApplyDefaults()
 	if config.Agent != nil && config.Agent.Routing != nil &&
 		len(config.Agent.Routing.ProfilePriority) > 0 {
-		fmt.Fprintln(os.Stderr, "warning: agent.routing.profile_priority is deprecated; use agent.routing.profile_ladders.default instead")
+		fmt.Fprintln(os.Stderr, "warning: agent.routing.profile_priority is deprecated and will be removed in a future version")
 	}
 
 	// Override library path with environment variable if set

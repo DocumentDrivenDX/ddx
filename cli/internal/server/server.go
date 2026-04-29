@@ -2117,8 +2117,6 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		NoReview      bool   `json:"no_review"`
 		ReviewHarness string `json:"review_harness"`
 		ReviewModel   string `json:"review_model"`
-		MinTier       string `json:"min_tier"`
-		MaxTier       string `json:"max_tier"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -2162,8 +2160,6 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		NoReview:      req.NoReview,
 		ReviewHarness: req.ReviewHarness,
 		ReviewModel:   req.ReviewModel,
-		MinTier:       req.MinTier,
-		MaxTier:       req.MaxTier,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

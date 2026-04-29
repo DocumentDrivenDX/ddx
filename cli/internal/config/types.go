@@ -143,8 +143,6 @@ type WorkerDefaultSpec struct {
 	Harness string `yaml:"harness,omitempty" json:"harness,omitempty"`
 	Profile string `yaml:"profile,omitempty" json:"profile,omitempty"`
 	Effort  string `yaml:"effort,omitempty" json:"effort,omitempty"`
-	MinTier string `yaml:"min_tier,omitempty" json:"min_tier,omitempty"`
-	MaxTier string `yaml:"max_tier,omitempty" json:"max_tier,omitempty"`
 }
 
 // CostConfig controls optional cost estimates that DDx cannot infer safely.
@@ -252,77 +250,16 @@ type AgentEndpoint struct {
 	RequestTimeoutSeconds int `yaml:"request_timeout_seconds,omitempty" json:"request_timeout_seconds,omitempty"`
 }
 
-// RoutingConfig is the agent routing policy block. See FEAT-006 Profile
-// Routing and epic ddx-bbb65768. ProfilePriority is the legacy flat list
-// and is deprecated in favour of ProfileLadders (per-profile tier lists).
-// When both are present, ProfileLadders wins.
+// RoutingConfig is the agent routing policy block.
 //
 // Note: agent.routing.default_harness was REMOVED in the routing-config
-// deprecation pass (bead ddx-87fb72c2). The top-level agent.harness field
-// is now a tie-break preference for harness selection, not a default
-// override. Configs that still carry default_harness fail to load with a
-// migration message; see docs/migrations/routing-config.md.
+// deprecation pass (bead ddx-87fb72c2). agent.routing.profile_ladders and
+// agent.routing.model_overrides were removed in bead ddx-3bd7396a. Configs
+// that still carry any of these fields fail to load with a migration message.
 type RoutingConfig struct {
-	// ProfilePriority is the deprecated flat-list form. New configs should
-	// use ProfileLadders.
+	// ProfilePriority is the deprecated flat-list form; still parsed so
+	// existing configs can emit a deprecation warning.
 	ProfilePriority []string `yaml:"profile_priority,omitempty" json:"profile_priority,omitempty"`
-	// ProfileLadders maps a profile name to the ordered tier list that a
-	// dispatch should try. Opt-in: only consulted when the operator passes
-	// `--escalate`. The default execute path does not read this map.
-	// Example:
-	//   default: [cheap, standard, smart]
-	//   cheap:   [cheap]
-	//   fast:    [fast, smart]
-	//   smart:   [smart]
-	ProfileLadders map[string][]string `yaml:"profile_ladders,omitempty" json:"profile_ladders,omitempty"`
-	// ModelOverrides maps a profile name to a concrete model reference.
-	// Opt-in: only consulted when the operator passes `--override-model`.
-	// e.g. { "cheap": "qwen/qwen3.6", "smart": "claude-opus-4-6" }.
-	ModelOverrides map[string]string `yaml:"model_overrides,omitempty" json:"model_overrides,omitempty"`
-}
-
-var defaultProfileLadders = map[string][]string{
-	"default": {"cheap", "standard", "smart"},
-	"cheap":   {"cheap"},
-	"fast":    {"fast", "smart"},
-	"smart":   {"smart"},
-}
-
-// DefaultProfileLadders returns the built-in profile escalation policy.
-func DefaultProfileLadders() map[string][]string {
-	out := make(map[string][]string, len(defaultProfileLadders))
-	for profile, ladder := range defaultProfileLadders {
-		out[profile] = append([]string(nil), ladder...)
-	}
-	return out
-}
-
-// ResolvedLadder returns the escalation ladder for the named profile. If
-// ProfileLadders contains an entry for profile, that wins. Otherwise falls
-// back to the deprecated ProfilePriority for the default profile only. If
-// neither is set, returns the shipped FEAT-006 profile ladder.
-func (r *RoutingConfig) ResolvedLadder(profile string) []string {
-	if profile == "" {
-		profile = "default"
-	}
-	if r == nil {
-		if ladder, ok := defaultProfileLadders[profile]; ok {
-			return append([]string(nil), ladder...)
-		}
-		return append([]string(nil), defaultProfileLadders["default"]...)
-	}
-	if r.ProfileLadders != nil {
-		if ladder, ok := r.ProfileLadders[profile]; ok && len(ladder) > 0 {
-			return append([]string(nil), ladder...)
-		}
-	}
-	if profile == "default" && len(r.ProfilePriority) > 0 {
-		return append([]string(nil), r.ProfilePriority...)
-	}
-	if ladder, ok := defaultProfileLadders[profile]; ok {
-		return append([]string(nil), ladder...)
-	}
-	return append([]string(nil), defaultProfileLadders["default"]...)
 }
 
 // AgentRunnerConfig was the embedded DDx Agent harness config block.

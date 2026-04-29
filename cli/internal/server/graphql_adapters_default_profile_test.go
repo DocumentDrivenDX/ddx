@@ -48,8 +48,7 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	defer func() { _ = m.Stop(result.ID) }()
 
 	// Read the persisted spec.json directly — it is the actual contract
-	// passed into StartExecuteLoop. WorkerRecord drops a few fields
-	// (MinTier/MaxTier) so it cannot fully verify "no other fields".
+	// passed into StartExecuteLoop.
 	specBytes, err := os.ReadFile(filepath.Join(m.rootDir, result.ID, "spec.json"))
 	if err != nil {
 		t.Fatalf("read spec.json: %v", err)
@@ -76,12 +75,6 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	if spec.Effort != "" {
 		t.Errorf("Effort must be empty on default path, got %q", spec.Effort)
 	}
-	if spec.MinTier != "" {
-		t.Errorf("MinTier must be empty on default path, got %q", spec.MinTier)
-	}
-	if spec.MaxTier != "" {
-		t.Errorf("MaxTier must be empty on default path, got %q", spec.MaxTier)
-	}
 	if spec.LabelFilter != "" {
 		t.Errorf("LabelFilter must be empty on default path, got %q", spec.LabelFilter)
 	}
@@ -94,32 +87,19 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 }
 
 // TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis pins ddx-755f5881
-// AC #4: the same historical drain-queue config (with agent.routing
-// profile_ladders + model_overrides) that previously caused the 19-burn
-// failure mode must no longer drive DDx-side synthesis on the default
-// dispatch path. The deprecated routing fields are NOT consulted; the
-// dispatched spec is just {Profile: "default"}, so a downstream worker
-// either succeeds or returns a single typed error — it can no longer fan
-// out into per-tier iteration with mismatched harness+model pairs.
+// AC #4: on the default dispatch path (no rawArgs, no workers.default_spec),
+// the dispatched spec is just {Profile: "default"} — model and harness are
+// empty so no synthesis fan-out occurs.
 func TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
 
-	// Mirror the shape of the user's historical config: routing block with
-	// profile_ladders and model_overrides naming a model that previously
-	// triggered the gemini+minimax misroute fan-out.
 	cfg := `version: "1.0"
 library:
   path: ".ddx/plugins/ddx"
   repository:
     url: "https://example.com/lib"
     branch: "main"
-agent:
-  routing:
-    profile_ladders:
-      default: [cheap, standard, smart]
-    model_overrides:
-      cheap: minimax/minimax-m2.7
 `
 	if err := writeFile(filepath.Join(root, ".ddx", "config.yaml"), cfg); err != nil {
 		t.Fatal(err)
@@ -137,11 +117,10 @@ agent:
 		}
 	}
 
-	agent.ResetRoutingCallCounters()
 	adapter := &workerDispatchAdapter{manager: m}
 	result, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, nil)
 	if err != nil {
-		t.Fatalf("dispatch with historical config: %v", err)
+		t.Fatalf("dispatch: %v", err)
 	}
 	defer func() { _ = m.Stop(result.ID) }()
 
@@ -157,17 +136,10 @@ agent:
 		t.Errorf("Profile: want %q, got %q", "default", spec.Profile)
 	}
 	if spec.Model != "" {
-		t.Errorf("Model must be empty — historical model_overrides must NOT drive synthesis on default path, got %q", spec.Model)
+		t.Errorf("Model must be empty on default path, got %q", spec.Model)
 	}
 	if spec.Harness != "" {
 		t.Errorf("Harness must be empty on default path, got %q", spec.Harness)
-	}
-	// The dispatch step itself must not consult the ladder helpers.
-	if got := agent.ResolveProfileLadderCallCount(); got != 0 {
-		t.Errorf("ResolveProfileLadder must not be called on default dispatch path, got %d", got)
-	}
-	if got := agent.ResolveTierModelRefCallCount(); got != 0 {
-		t.Errorf("ResolveTierModelRef must not be called on default dispatch path, got %d", got)
 	}
 }
 

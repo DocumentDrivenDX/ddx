@@ -37,7 +37,6 @@ func sealedFixture() ResolvedConfig {
 		evidenceCaps:            evidence.DefaultCaps(),
 		sessionLogDir:           "/tmp/sessions",
 		mirrorConfig:            &ExecutionsMirrorConfig{Kind: "fs", Path: "/tmp/mirror"},
-		resolvedLadder:          map[string][]string{"default": {"cheap", "smart"}},
 		reasoningLevels:         map[string][]string{"smart": {"high"}},
 	}
 }
@@ -92,7 +91,6 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"EvidenceCaps":            func(r ResolvedConfig) { _ = r.EvidenceCaps() },
 		"SessionLogDir":           func(r ResolvedConfig) { _ = r.SessionLogDir() },
 		"MirrorConfig":            func(r ResolvedConfig) { _ = r.MirrorConfig() },
-		"ResolvedLadder":          func(r ResolvedConfig) { _ = r.ResolvedLadder() },
 		"ReasoningLevels":         func(r ResolvedConfig) { _ = r.ReasoningLevels() },
 	}
 	for name, call := range cases {
@@ -286,23 +284,6 @@ func TestResolvedConfigMirrorConfigAccessor(t *testing.T) {
 	}
 }
 
-func TestResolvedConfigResolvedLadderAccessor(t *testing.T) {
-	got := sealedFixture().ResolvedLadder()
-	if len(got["default"]) != 2 || got["default"][0] != "cheap" || got["default"][1] != "smart" {
-		t.Fatalf("ResolvedLadder = %v", got)
-	}
-	// defensive copy: mutating result must not affect future reads
-	got["default"][0] = "MUTATED"
-	got["new-key"] = []string{"x"}
-	fresh := sealedFixture().ResolvedLadder()
-	if fresh["default"][0] != "cheap" {
-		t.Fatalf("ResolvedLadder not defensively copied: %v", fresh)
-	}
-	if (ResolvedConfig{sealed: true}).ResolvedLadder() != nil {
-		t.Fatalf("zero-after-seal ResolvedLadder should be nil")
-	}
-}
-
 func TestResolveNilCfg(t *testing.T) {
 	timeout := 9 * time.Second
 	overrides := CLIOverrides{
@@ -338,11 +319,6 @@ func TestResolveNilCfg(t *testing.T) {
 	if got := rcfg.ReviewMaxRetries(); got != 3 {
 		t.Fatalf("ReviewMaxRetries = %d, want 3", got)
 	}
-	// Default ladder for "fast" profile is built-in.
-	ladder := rcfg.ResolvedLadder()
-	if len(ladder["fast"]) == 0 {
-		t.Fatalf("ResolvedLadder[fast] empty: %v", ladder)
-	}
 	if rcfg.EvidenceCaps() != evidence.DefaultCaps() {
 		t.Fatalf("EvidenceCaps = %+v, want default", rcfg.EvidenceCaps())
 	}
@@ -359,14 +335,7 @@ func TestResolveDeepCopy(t *testing.T) {
 			ReasoningLevels: map[string][]string{
 				"smart": {"high", "medium"},
 			},
-			Routing: &RoutingConfig{
-				ProfileLadders: map[string][]string{
-					"default": {"cheap", "smart"},
-				},
-				ModelOverrides: map[string]string{
-					"smart": "claude-opus",
-				},
-			},
+			Routing: &RoutingConfig{ProfilePriority: []string{"default"}},
 		},
 		Executions: &ExecutionsConfig{
 			Mirror: &ExecutionsMirrorConfig{
@@ -381,21 +350,11 @@ func TestResolveDeepCopy(t *testing.T) {
 	rcfg := cfg.Resolve(CLIOverrides{Profile: "default"})
 
 	// Mutate exposed maps from the resolved value.
-	ladder := rcfg.ResolvedLadder()
-	ladder["default"][0] = "MUTATED"
-	ladder["new-key"] = []string{"x"}
-
 	levels := rcfg.ReasoningLevels()
 	levels["smart"][0] = "MUTATED"
 	levels["new-key"] = []string{"x"}
 
 	// Source cfg must be untouched.
-	if got := cfg.Agent.Routing.ProfileLadders["default"][0]; got != "cheap" {
-		t.Fatalf("source ProfileLadders mutated: %q", got)
-	}
-	if _, ok := cfg.Agent.Routing.ProfileLadders["new-key"]; ok {
-		t.Fatalf("source ProfileLadders gained new-key")
-	}
 	if got := cfg.Agent.ReasoningLevels["smart"][0]; got != "high" {
 		t.Fatalf("source ReasoningLevels mutated: %q", got)
 	}
@@ -403,14 +362,9 @@ func TestResolveDeepCopy(t *testing.T) {
 		t.Fatalf("source ReasoningLevels gained new-key")
 	}
 	// Mutating the source after Resolve must not leak into resolved view.
-	cfg.Agent.Routing.ProfileLadders["default"][0] = "SOURCE-MUTATED"
 	cfg.Agent.ReasoningLevels["smart"][0] = "SOURCE-MUTATED"
 	cfg.Executions.Mirror.Kind = "SOURCE-MUTATED"
 
-	freshLadder := rcfg.ResolvedLadder()
-	if freshLadder["default"][0] != "cheap" {
-		t.Fatalf("post-source-mutation ladder = %v", freshLadder)
-	}
 	freshLevels := rcfg.ReasoningLevels()
 	if freshLevels["smart"][0] != "high" {
 		t.Fatalf("post-source-mutation levels = %v", freshLevels)

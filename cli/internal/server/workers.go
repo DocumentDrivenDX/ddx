@@ -42,15 +42,6 @@ type ExecuteLoopWorkerSpec struct {
 	NoReview      bool   `json:"no_review,omitempty"`
 	ReviewHarness string `json:"review_harness,omitempty"`
 	ReviewModel   string `json:"review_model,omitempty"`
-	// Tier escalation bounds. Empty strings use the defaults (cheap and smart).
-	// Ignored when Harness or Model is pinned (escalation disabled).
-	MinTier string `json:"min_tier,omitempty"`
-	MaxTier string `json:"max_tier,omitempty"`
-	// Escalate opts into tier-ladder escalation semantics. Off by default:
-	// a single ResolveRoute call drives each attempt (matches --escalate on
-	// the CLI path). When false, profile_ladders and AdaptiveMinTier are
-	// not consulted.
-	Escalate bool `json:"escalate,omitempty"`
 }
 
 type PluginActionWorkerSpec struct {
@@ -648,18 +639,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}, nil
 		}
 
-		profile := agent.NormalizeRoutingProfile(spec.Profile)
-		cfg, _ := config.LoadWithWorkingDir(projectRoot)
-		var routingCfg *config.RoutingConfig
-		if cfg != nil && cfg.Agent != nil {
-			routingCfg = cfg.Agent.Routing
-		}
-
-		// escalationEnabled when explicitly opted-in and neither Harness nor Model is pinned.
-		escalationEnabled := spec.Escalate && spec.Harness == "" && spec.Model == ""
-
-		// Cost-cap state shared by both single-attempt and tier-escalation
-		// paths within this worker run. Subscription / local providers do
+		// Cost-cap state for this worker run. Subscription / local providers do
 		// not contribute (see escalation.CountsTowardCostCap).
 		// TODO(ddx-785d02f7): expose maxCostUSD as a worker spec field
 		// once the spec config knob lands.
@@ -698,204 +678,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				cappedReport.BeadID = beadID
 				return cappedReport, nil
 			}
-			if !escalationEnabled {
-				report, err := singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Provider, spec.Model)
-				if err == nil {
-					accumulateBilledCost(report)
-					if cappedReport, capped := costCapTripped(); capped {
-						cappedReport.BeadID = beadID
-						return cappedReport, nil
-					}
-				}
-				return report, err
-			}
-
-			// Profile escalation: configured profile ladder bounded by MinTier/MaxTier.
-			tiers := agent.ResolveProfileLadder(routingCfg, profile, spec.MinTier, spec.MaxTier)
-			if len(tiers) == 0 {
-				return agent.ExecuteBeadReport{
-					BeadID: beadID,
-					Status: agent.ExecuteBeadStatusExecutionFailed,
-					Detail: "execute-loop: no tiers in range (check min_tier / max_tier)",
-				}, nil
-			}
-
-			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
-			if svcErr != nil {
-				return agent.ExecuteBeadReport{
-					BeadID: beadID,
-					Status: agent.ExecuteBeadStatusExecutionFailed,
-					Detail: "execute-loop: failed to initialize routing service: " + svcErr.Error(),
-				}, nil
-			}
-			var lastReport agent.ExecuteBeadReport
-			var escalationAttempts []escalation.TierAttemptRecord
-			requestedTier := string(tiers[0])
-
-			for tierIdx, tier := range tiers {
-				// Catalog-driven tier resolution (ddx-5538aa5b): walk catalog
-				// surfaces (or model_overrides if set) to produce concrete
-				// (harness, model) candidates. Avoids the prior failure mode
-				// where the literal tier name ("cheap"/"standard"/"smart") was
-				// passed as Model and resolved to no harness/no model.
-				candidates := agent.ResolveTierCandidates(routingCfg, agent.BuiltinCatalog, tier)
-
-				var dec *agentlib.RouteDecision
-				var routeErr error
-				var skipReasons []string
-				for _, cand := range candidates {
-					req := agentlib.RouteRequest{
-						Profile:   profile,
-						Provider:  spec.Provider,
-						Reasoning: agentlib.Reasoning(spec.Effort),
-					}
-					if cand.Harness != "" {
-						req.Harness = cand.Harness
-					}
-					if cand.Model != "" {
-						req.Model = cand.Model
-					}
-					d, err := svc.ResolveRoute(ctx, req)
-					if err != nil {
-						skipReasons = append(skipReasons, formatTierCandidateRejection(cand, err.Error()))
-						continue
-					}
-					if !workerHarnessHealthy(ctx, svc, d.Harness) {
-						skipReasons = append(skipReasons, formatTierCandidateRejection(cand, "provider cooldown"))
-						continue
-					}
-					dec = d
-					break
-				}
-				if dec == nil {
-					if len(candidates) == 0 {
-						skipReasons = []string{"tier has no candidates in catalog and no model_overrides entry"}
-					}
-					routeErr = fmt.Errorf("no viable harness")
-				}
-				probeResult := "ok"
-				if routeErr != nil {
-					probeResult = "no viable provider"
-					detail := strings.Join(skipReasons, "\n")
-					if detail == "" {
-						detail = "no viable harness found"
-					}
-					_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
-						Kind:      "tier-attempt",
-						Summary:   "skipped",
-						Body:      escalation.FormatTierAttemptBody(string(tier), "", "", probeResult, detail),
-						Actor:     "ddx",
-						Source:    "ddx agent execute-loop",
-						CreatedAt: time.Now().UTC(),
-					})
-					escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
-						Tier:   string(tier),
-						Status: "skipped",
-					})
-					continue
-				}
-
-				report, attemptErr := singleTierAttempt(ctx, beadID, tier, dec.Harness, dec.Provider, dec.Model)
-				if attemptErr != nil {
-					report = agent.ExecuteBeadReport{
-						BeadID:           beadID,
-						Tier:             string(tier),
-						Harness:          dec.Harness,
-						Model:            dec.Model,
-						Status:           agent.ExecuteBeadStatusExecutionFailed,
-						Detail:           attemptErr.Error(),
-						ProbeResult:      probeResult,
-						RequestedProfile: profile,
-						RequestedTier:    requestedTier,
-						ResolvedTier:     string(tier),
-						EscalationCount:  tierIdx,
-						FinalTier:        string(tier),
-					}
-				} else {
-					report.ProbeResult = probeResult
-					report.RequestedProfile = profile
-					report.RequestedTier = requestedTier
-					report.ResolvedTier = string(tier)
-					report.EscalationCount = tierIdx
-					report.FinalTier = string(tier)
-				}
-				lastReport = report
-				escalationAttempts = append(escalationAttempts, escalation.TierAttemptRecord{
-					Tier:       string(tier),
-					Harness:    report.Harness,
-					Model:      report.Model,
-					Status:     report.Status,
-					CostUSD:    report.CostUSD,
-					DurationMS: report.DurationMS,
-				})
-
-				_ = beadStore.AppendEvent(beadID, bead.BeadEvent{
-					Kind:      "tier-attempt",
-					Summary:   report.Status,
-					Body:      escalation.FormatTierAttemptBody(string(tier), report.Harness, report.Model, probeResult, report.Detail),
-					Actor:     "ddx",
-					Source:    "ddx agent execute-loop",
-					CreatedAt: time.Now().UTC(),
-				})
-
-				if report.Status == agent.ExecuteBeadStatusSuccess {
-					accumulateBilledCost(report)
-					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, string(tier), time.Now().UTC())
-					if cappedReport, capped := costCapTripped(); capped {
-						cappedReport.BeadID = beadID
-						return cappedReport, nil
-					}
-					return report, nil
-				}
-				if !escalation.ShouldEscalate(report.Status) {
-					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
-					return report, nil
-				}
-				// Infrastructure failures don't consume escalation budget;
-				// defer the bead with a retry-after instead of escalating.
-				if escalation.IsInfrastructureFailure(report.Status, report.Detail) {
-					accumulateBilledCost(report)
-					retryAt := time.Now().UTC().Add(escalation.ProviderCooldownDuration)
-					report.RetryAfter = retryAt.Format(time.RFC3339)
-					report.Detail = "infrastructure failure (deferred): " + report.Detail
-					_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
-					if cappedReport, capped := costCapTripped(); capped {
-						cappedReport.BeadID = beadID
-						return cappedReport, nil
-					}
-					return report, nil
-				}
+			report, err := singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Provider, spec.Model)
+			if err == nil {
 				accumulateBilledCost(report)
-				if report.Status == agent.ExecuteBeadStatusExecutionFailed {
-					_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
-						Harness:   dec.Harness,
-						Provider:  dec.Provider,
-						Model:     dec.Model,
-						Status:    "failed",
-						Reason:    "execution_failed",
-						Error:     report.Detail,
-						Timestamp: time.Now().UTC(),
-					})
+				if cappedReport, capped := costCapTripped(); capped {
+					cappedReport.BeadID = beadID
+					return cappedReport, nil
 				}
 			}
-
-			_ = escalation.AppendEscalationSummaryEvent(beadStore, beadID, "ddx", escalationAttempts, "", time.Now().UTC())
-
-			if cappedReport, capped := costCapTripped(); capped {
-				cappedReport.BeadID = beadID
-				return cappedReport, nil
-			}
-
-			if lastReport.BeadID == "" {
-				return agent.ExecuteBeadReport{
-					BeadID: beadID,
-					Status: agent.ExecuteBeadStatusExecutionFailed,
-					Detail: "execute-loop: all tiers exhausted — no viable provider found",
-				}, nil
-			}
-			lastReport.Detail = "escalation exhausted: " + lastReport.Detail
-			return lastReport, nil
+			return report, err
 		})
 
 		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.
@@ -931,8 +722,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ModelRef: spec.ModelRef,
 		Profile:  agent.NormalizeRoutingProfile(spec.Profile),
 		Effort:   spec.Effort,
-		MinTier:  spec.MinTier,
-		MaxTier:  spec.MaxTier,
 	}
 	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
@@ -1833,19 +1622,6 @@ func relToProject(projectRoot, path string) string {
 		return path
 	}
 	return rel
-}
-
-// formatTierCandidateRejection renders a single per-candidate rejection
-// line for the tier-attempt body (ddx-5538aa5b AC#3).
-func formatTierCandidateRejection(cand agent.TierCandidate, reason string) string {
-	label := cand.Source
-	if cand.Surface != "" {
-		label = cand.Surface
-	}
-	if cand.Model != "" {
-		return fmt.Sprintf("%s (%s): %s", label, cand.Model, reason)
-	}
-	return fmt.Sprintf("%s: %s", label, reason)
 }
 
 // workerHarnessHealthy reports whether the upstream service has an active

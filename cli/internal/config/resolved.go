@@ -101,18 +101,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 				r.reasoningLevels[k] = append([]string(nil), v...)
 			}
 		}
-		if agent.Routing != nil {
-			r.resolvedLadder = map[string][]string{
-				r.profile: agent.Routing.ResolvedLadder(r.profile),
-			}
-		}
 	}
-	if r.resolvedLadder == nil {
-		r.resolvedLadder = map[string][]string{
-			r.profile: (*RoutingConfig)(nil).ResolvedLadder(r.profile),
-		}
-	}
-
 	if c != nil && c.Executions != nil && c.Executions.Mirror != nil {
 		r.mirrorConfig = c.Executions.Mirror.Clone()
 	}
@@ -171,7 +160,6 @@ type ResolvedConfig struct {
 	evidenceCaps            evidence.Caps
 	sessionLogDir           string
 	mirrorConfig            *ExecutionsMirrorConfig
-	resolvedLadder          map[string][]string
 	reasoningLevels         map[string][]string
 	providerRequestTimeout  time.Duration
 }
@@ -296,13 +284,6 @@ func (r ResolvedConfig) SessionLogDir() string {
 func (r ResolvedConfig) MirrorConfig() *ExecutionsMirrorConfig {
 	r.requireSealed()
 	return r.mirrorConfig
-}
-
-// ResolvedLadder returns a defensive copy of the resolved profile→tier
-// ladder map. Mutating the returned map does not affect the receiver.
-func (r ResolvedConfig) ResolvedLadder() map[string][]string {
-	r.requireSealed()
-	return cloneStringSliceMap(r.resolvedLadder)
 }
 
 // ReasoningLevels returns a defensive copy of the reasoning-level map.

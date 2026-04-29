@@ -13,9 +13,7 @@ func TestAgentConfigClone(t *testing.T) {
 		Models:          map[string]string{"smart": "claude-opus"},
 		ReasoningLevels: map[string][]string{"smart": {"high"}},
 		Endpoints:       []AgentEndpoint{{Type: "openai", Host: "h"}},
-		Routing: &RoutingConfig{
-			ProfileLadders: map[string][]string{"default": {"cheap"}},
-		},
+		Routing:         &RoutingConfig{ProfilePriority: []string{"default"}},
 		Virtual: &VirtualConfig{
 			Normalize: []NormalizePattern{{Pattern: "p", Replace: "r"}},
 		},
@@ -27,7 +25,7 @@ func TestAgentConfigClone(t *testing.T) {
 	dst.ReasoningLevels["smart"][0] = "X"
 	dst.ReasoningLevels["new"] = []string{"Y"}
 	dst.Endpoints[0].Host = "X"
-	dst.Routing.ProfileLadders["default"][0] = "X"
+	dst.Routing.ProfilePriority[0] = "X"
 	dst.Virtual.Normalize[0].Pattern = "X"
 
 	if src.Models["smart"] != "claude-opus" {
@@ -45,8 +43,8 @@ func TestAgentConfigClone(t *testing.T) {
 	if src.Endpoints[0].Host != "h" {
 		t.Fatalf("source Endpoints mutated: %v", src.Endpoints)
 	}
-	if src.Routing.ProfileLadders["default"][0] != "cheap" {
-		t.Fatalf("source Routing mutated: %v", src.Routing.ProfileLadders)
+	if src.Routing.ProfilePriority[0] != "default" {
+		t.Fatalf("source Routing mutated: %v", src.Routing.ProfilePriority)
 	}
 	if src.Virtual.Normalize[0].Pattern != "p" {
 		t.Fatalf("source Virtual mutated: %v", src.Virtual.Normalize)
@@ -60,28 +58,13 @@ func TestRoutingConfigClone(t *testing.T) {
 
 	src := &RoutingConfig{
 		ProfilePriority: []string{"a", "b"},
-		ProfileLadders:  map[string][]string{"default": {"cheap"}},
-		ModelOverrides:  map[string]string{"smart": "claude-opus"},
 	}
 
 	dst := src.Clone()
 	dst.ProfilePriority[0] = "X"
-	dst.ProfileLadders["default"][0] = "X"
-	dst.ProfileLadders["new"] = []string{"Y"}
-	dst.ModelOverrides["smart"] = "X"
-	dst.ModelOverrides["new"] = "Y"
 
 	if src.ProfilePriority[0] != "a" {
 		t.Fatalf("source ProfilePriority mutated: %v", src.ProfilePriority)
-	}
-	if src.ProfileLadders["default"][0] != "cheap" {
-		t.Fatalf("source ProfileLadders mutated: %v", src.ProfileLadders)
-	}
-	if _, ok := src.ProfileLadders["new"]; ok {
-		t.Fatal("source ProfileLadders gained new key")
-	}
-	if src.ModelOverrides["smart"] != "claude-opus" {
-		t.Fatalf("source ModelOverrides mutated: %v", src.ModelOverrides)
 	}
 }
 

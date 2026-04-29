@@ -43,18 +43,6 @@ func (r *RoutingConfig) Clone() *RoutingConfig {
 	if r.ProfilePriority != nil {
 		out.ProfilePriority = append([]string(nil), r.ProfilePriority...)
 	}
-	if r.ProfileLadders != nil {
-		out.ProfileLadders = make(map[string][]string, len(r.ProfileLadders))
-		for k, v := range r.ProfileLadders {
-			out.ProfileLadders[k] = append([]string(nil), v...)
-		}
-	}
-	if r.ModelOverrides != nil {
-		out.ModelOverrides = make(map[string]string, len(r.ModelOverrides))
-		for k, v := range r.ModelOverrides {
-			out.ModelOverrides[k] = v
-		}
-	}
 	return &out
 }
 
