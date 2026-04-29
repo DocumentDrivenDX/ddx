@@ -1,0 +1,88 @@
+phase: frame
+number: "01"
+
+entry_requirements:
+  automated: []
+  manual:
+    - "Problem or opportunity identified and documented"
+    - "Time allocated for analysis confirmed"
+
+exit_requirements:
+  automated:
+    # Core artifact existence checks
+    - check: file_exists
+      path: docs/helix/01-frame/prd.md
+      description: "PRD document must exist"
+
+    - check: file_exists
+      path: docs/helix/01-frame/principles.md
+      description: "Principles document must exist"
+
+    - check: dir_not_empty
+      path: docs/helix/01-frame/user-stories
+      description: "User stories directory must contain files"
+
+    - check: dir_not_empty
+      path: docs/helix/01-frame/features
+      description: "Feature specifications directory must contain files"
+
+    # Quality checks - no unresolved markers
+    - check: grep_absent
+      pattern: "\\[NEEDS CLARIFICATION\\]"
+      path: docs/helix/01-frame/**/*.md
+      description: "No unresolved clarification markers in P0 specs"
+
+    - check: grep_absent
+      pattern: "\\[TBD\\]"
+      path: docs/helix/01-frame/prd.md
+      description: "No TBD markers in PRD"
+
+    - check: grep_absent
+      pattern: "\\[TODO\\]"
+      path: docs/helix/01-frame/prd.md
+      description: "No TODO markers in PRD"
+
+    # User story format validation
+    - check: grep_present
+      pattern: "As a .* I want .* [Ss]o that"
+      path: docs/helix/01-frame/user-stories/**/*.md
+      description: "User stories follow standard format"
+
+    - check: grep_present
+      pattern: "Given .* [Ww]hen .* [Tt]hen"
+      path: docs/helix/01-frame/user-stories/**/*.md
+      description: "User stories have Given/When/Then acceptance criteria"
+
+    # Feature spec validation
+    - check: grep_present
+      pattern: "FEAT-[0-9]+"
+      path: docs/helix/01-frame/features/**/*.md
+      description: "Feature specs have FEAT-XXX identifiers"
+
+    # Success metrics must be quantified
+    - check: grep_present
+      pattern: "[0-9]+%|[0-9]+ (ms|seconds|minutes)|[<>][0-9]+"
+      path: docs/helix/01-frame/prd.md
+      description: "Success metrics contain numeric targets"
+
+  manual:
+    # PRD quality
+    - "Problem section quantifies pain or names a specific failure mode"
+    - "Every P0 requirement is testable (someone could write an acceptance test)"
+    - "Every P0 has an acceptance test sketch with inputs and expected outputs"
+    - "Non-goals exclude plausible scope items, not strawmen"
+    - "Personas are specific enough to validate with a real user"
+    - "Risk mitigations are concrete actions, not 'monitor'"
+    # Feature spec quality
+    - "Feature specs link to specific PRD requirements"
+    - "Non-functional requirements have specific numeric targets"
+    - "User stories referenced by ID, not duplicated inline"
+    # User story quality
+    - "Each story names a specific persona from the PRD"
+    - "Each story walkthrough traces a complete vertical slice"
+    - "Test scenarios include concrete values, not placeholders"
+    # Approval
+    - "Stakeholder sign-off on PRD obtained"
+    - "Product Owner approval confirmed"
+
+next_phase: design

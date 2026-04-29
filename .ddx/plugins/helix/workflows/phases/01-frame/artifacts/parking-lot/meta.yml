@@ -1,0 +1,90 @@
+# Metadata for Parking Lot
+
+artifact:
+  name: Parking Lot
+  id: parking-lot
+  type: registry
+  phase: frame
+
+description: |
+  Project-level registry for deferred and future work that is kept
+  out of the main PRD flow. Parked artifacts remain in their normal
+  HELIX locations and are flagged with dun.parking_lot: true.
+
+dependencies:
+  requires:
+    - input: PRD
+      type: artifact
+      path: prd
+      required: false
+
+output:
+  location: docs/helix/parking-lot.md
+  format: markdown
+  naming: parking-lot.md
+  update_frequency: continuous
+
+validation:
+  required_fields:
+    - type
+    - source
+    - revisit_trigger
+
+  quality_checks:
+    - check: traceability_present
+      description: Each item should include Source and Revisit Trigger
+      severity: warning
+
+  automated_checks:
+    - pattern: "\\*\\*Source\\*\\*:"
+      expected: ">0"
+      message: Items should include a Source field
+
+    - pattern: "\\*\\*Revisit Trigger\\*\\*:"
+      expected: ">0"
+      message: Items should include a Revisit Trigger field
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review the parking lot for:
+    1. Traceability (source + rationale + trigger)
+    2. Clear separation from in-scope work
+    3. Links to parked artifacts where needed
+
+template:
+  file: template.md
+  sections:
+    - purpose
+    - policy
+    - deferred_future_items
+
+examples:
+  - file: example.md
+    description: Sample parking lot entries and parked artifact links
+
+workflow:
+  creation_order: 6
+  review_cycles: 1
+  approval_required: false
+  update_triggers:
+    - deferral_added
+    - reprioritization
+
+relationships:
+  references:
+    - prd
+    - feature-specification
+    - user-stories
+    - adr
+    - solution-design
+    - implementation-plan
+
+tags:
+  - registry
+  - planning
+  - deferred
+  - future
+
+version: 1.0.0
+last_updated: 2026-02-03

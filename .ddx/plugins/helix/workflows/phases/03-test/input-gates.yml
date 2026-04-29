@@ -1,0 +1,13 @@
+input_gates:
+  - criteria: Design documents complete and approved
+    required: true
+    source: 02-design
+    validation: Architecture and API contracts fully specified
+  - criteria: User stories have clear acceptance criteria
+    required: true
+    source: 01-frame
+    validation: Each story has testable criteria
+  - criteria: Non-functional requirements defined
+    required: true
+    source: 01-frame
+    validation: Performance, security, scalability metrics specified

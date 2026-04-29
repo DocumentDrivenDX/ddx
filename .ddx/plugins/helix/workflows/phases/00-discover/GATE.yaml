@@ -1,0 +1,116 @@
+# Gate Criteria for Discover Phase
+# Entry and exit criteria for Phase 00
+
+phase: 00-discover
+name: Discover
+
+entry_gates:
+  - criteria: Idea or opportunity identified
+    required: true
+    validation:
+      - Clear problem statement or market gap exists
+      - Initial hypothesis is articulated
+    evidence: verbal or written description
+
+  - criteria: Sponsor commitment secured
+    required: true
+    validation:
+      - Named sponsor willing to champion investigation
+      - Time allocated for discovery activities
+    evidence: sponsor acknowledgment
+
+exit_gates:
+  # Vision Clarity
+  - criteria: Product vision approved
+    required: true
+    validation:
+      - Mission statement is concise and compelling
+      - Positioning names a specific customer segment and competitor/alternative
+      - Vision articulated (desired end state, not timeline or market position)
+      - User experience describes a concrete usage scenario
+      - Target market is specific enough to identify real people
+      - Key value propositions documented with customer benefits
+      - Success metrics have measurable outcomes
+      - Why Now cites an observable change
+    evidence: docs/helix/00-discover/product-vision.md
+
+  # Business Justification
+  - criteria: Business case validated
+    required: true
+    validation:
+      - Market sizing completed (TAM/SAM/SOM)
+      - Investment requirements estimated
+      - ROI projections justified
+      - Key risks identified
+      - Strategic alignment confirmed
+    evidence: docs/helix/00-discover/business-case.md
+
+  # Market Understanding
+  - criteria: Competitive position defined
+    required: true
+    validation:
+      - Market landscape mapped
+      - Key competitors identified
+      - Feature comparison completed
+      - Differentiation strategy established
+    evidence: docs/helix/00-discover/competitive-analysis.md
+
+  # Problem-Solution Fit
+  - criteria: Opportunity canvas complete
+    required: true
+    validation:
+      - Problem statement validated
+      - Customer segments identified
+      - Unique value articulated
+      - Solution concept outlined
+      - Key metrics defined
+      - Unfair advantage identified (if any)
+    evidence: docs/helix/00-discover/opportunity-canvas.md
+
+  # Decision Gate
+  - criteria: Go/No-Go decision documented
+    required: true
+    validation:
+      - Decision rationale captured
+      - Key assumptions listed
+      - Next steps defined (if Go)
+      - Lessons learned documented (if No-Go)
+    evidence: docs/helix/00-discover/decision.md
+
+# Validation Rules
+validation_rules:
+  - rule: vision_concise
+    description: Mission statement under 50 words
+    path: docs/helix/00-discover/product-vision.md
+    severity: warning
+
+  - rule: market_quantified
+    description: TAM/SAM/SOM includes numeric values
+    path: docs/helix/00-discover/business-case.md
+    severity: blocking
+
+  - rule: competitors_identified
+    description: At least 3 competitors analyzed
+    path: docs/helix/00-discover/competitive-analysis.md
+    severity: warning
+
+# Phase Transition
+transition:
+  to_phase: 01-frame
+  approval_required: true
+  approvers:
+    - Sponsor
+    - Product Lead
+    - Business Stakeholder
+
+  pre_transition_tasks:
+    - Archive discovery artifacts
+    - Communicate decision to stakeholders
+    - Schedule Frame phase kickoff
+    - Ensure Frame team has access to discovery outputs
+
+  rollback_conditions:
+    - Market conditions change significantly
+    - Competitive landscape shifts
+    - Strategic priorities change
+    - Assumptions invalidated by new data

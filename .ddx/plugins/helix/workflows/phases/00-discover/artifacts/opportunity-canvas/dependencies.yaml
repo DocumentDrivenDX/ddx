@@ -1,0 +1,93 @@
+# Dependencies for Opportunity Canvas
+
+artifact:
+  name: Opportunity Canvas
+  id: opportunity-canvas
+  type: document
+  phase: discover
+
+description: |
+  Synthesis document validating problem-solution fit.
+  Final artifact before go/no-go decision on proceeding to Frame.
+
+dependencies:
+  requires:
+    - input: Product Vision
+      type: artifact
+      path: product-vision
+      required: true
+    - input: Business Case
+      type: artifact
+      path: business-case
+      required: true
+    - input: Competitive Analysis
+      type: artifact
+      path: competitive-analysis
+      required: true
+
+  enables:
+    - output: Go/No-Go Decision
+      type: decision
+    - output: PRD
+      type: artifact
+      phase: frame
+    - output: User Stories
+      type: artifact
+      phase: frame
+
+output:
+  location: docs/helix/00-discover/opportunity-canvas.md
+  format: markdown
+
+validation:
+  required_sections:
+    - problem_statement
+    - customer_segments
+    - unique_value
+    - solution_concept
+    - key_metrics
+    - unfair_advantage
+    - go_nogo_checklist
+
+  quality_checks:
+    - check: problem_validated
+      description: Problem has evidence, not just assumption
+      severity: blocking
+
+    - check: segments_specific
+      description: Customer segments are named precisely
+      severity: blocking
+
+    - check: metrics_measurable
+      description: Key metrics have numeric targets
+      severity: blocking
+
+    - check: decision_documented
+      description: Go/No-Go decision with rationale
+      severity: blocking
+
+workflow:
+  creation_order: 4
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Sponsor
+    - Product Lead
+    - Business Stakeholder
+
+relationships:
+  depends_on:
+    - product-vision
+    - business-case
+    - competitive-analysis
+
+  informs:
+    - prd
+    - user-stories
+    - feature-specification
+
+tags:
+  - validation
+  - synthesis
+  - decision
+  - problem-solution-fit

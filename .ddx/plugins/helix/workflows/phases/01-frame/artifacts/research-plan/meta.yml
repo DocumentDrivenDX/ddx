@@ -1,0 +1,185 @@
+# Metadata for Research Plan
+
+artifact:
+  name: Research Plan
+  id: research-plan
+  type: document
+  phase: frame
+  optional: true
+
+description: |
+  A structured plan for investigating unknown requirements, exploring problem
+  spaces, or validating assumptions before committing to detailed specifications.
+  Used when the problem domain is unclear or requires investigation.
+
+dependencies:
+  requires:
+    - input: Problem or opportunity identified
+      type: external
+      required: true
+    - input: Uncertainty or knowledge gaps identified
+      type: external
+      required: true
+
+  enables:
+    - output: PRD (informed by research)
+      type: artifact
+      path: prd
+    - output: Feature specifications (evidence-based)
+      type: artifact
+      path: feature-specification
+    - output: Feasibility study
+      type: artifact
+      path: feasibility-study
+
+output:
+  location: docs/helix/01-frame/research-plan.md
+  format: markdown
+  naming: research-plan.md
+
+validation:
+  required_sections:
+    - research_objectives
+    - knowledge_gaps
+    - research_methods
+    - success_criteria
+    - timeline
+    - resource_requirements
+    - risk_assessment
+    - expected_outcomes
+
+  quality_checks:
+    - check: objectives_measurable
+      description: Research objectives must have measurable success criteria
+      severity: blocking
+
+    - check: methods_appropriate
+      description: Research methods must align with objectives
+      severity: warning
+
+    - check: timeline_realistic
+      description: Research timeline should be bounded and realistic
+      severity: warning
+
+    - check: resource_defined
+      description: Required resources and skills must be identified
+      severity: blocking
+
+  automated_checks:
+    - pattern: "\\[RESEARCH QUESTION"
+      expected: ">0"
+      message: Must define at least one research question
+
+    - pattern: "TBD|TODO|\\[PLACEHOLDER"
+      expected: 0
+      message: Complete all research plan sections before execution
+
+variables:
+  - name: research_topic
+    description: Main area of investigation
+    required: true
+
+  - name: research_lead
+    description: Person responsible for coordinating research
+    required: true
+
+  - name: time_budget
+    description: Maximum time allocated for research activities
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this research plan for:
+    1. Clear research objectives and questions
+    2. Appropriate research methods for objectives
+    3. Realistic timeline and resource allocation
+    4. Measurable success criteria
+    5. Risk mitigation for research activities
+
+template:
+  file: template.md
+  sections:
+    - research_objectives: "Start with clear questions"
+    - methods: "Choose appropriate research approaches"
+    - timeline: "Time-box all activities"
+
+examples:
+  - file: example.md
+    description: Research plan for exploring CLI architecture options
+
+workflow:
+  creation_order: 0.5  # Before PRD when needed
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Product Owner
+    - Technical Lead
+
+  execution_phases:
+    - planning: "Define scope and approach"
+    - investigation: "Execute research activities"
+    - synthesis: "Analyze and document findings"
+    - validation: "Verify conclusions with stakeholders"
+
+relationships:
+  triggers:
+    - "Unknown problem domain"
+    - "Unclear user needs"
+    - "Uncertain technical feasibility"
+    - "Market validation required"
+    - "Competitive analysis needed"
+
+  informs:
+    - prd
+    - principles
+    - feature-specification
+    - stakeholder-map
+    - risk-register
+
+  produces:
+    - research_findings
+    - validated_assumptions
+    - risk_assessment
+    - feasibility_conclusions
+
+research_types:
+  user_research:
+    methods: ["interviews", "surveys", "observations", "personas"]
+    outputs: ["user_insights", "problem_validation", "persona_refinement"]
+
+  market_research:
+    methods: ["competitor_analysis", "market_sizing", "trend_analysis"]
+    outputs: ["competitive_landscape", "market_opportunity", "positioning"]
+
+  technical_research:
+    methods: ["literature_review", "prototype", "benchmark", "spike"]
+    outputs: ["technical_feasibility", "architecture_options", "performance_data"]
+
+  domain_research:
+    methods: ["expert_interviews", "documentation_review", "workflow_analysis"]
+    outputs: ["domain_model", "business_rules", "process_understanding"]
+
+exit_criteria:
+  - all_research_questions_answered
+  - findings_documented_and_validated
+  - recommendations_actionable
+  - assumptions_tested
+  - stakeholders_aligned_on_findings
+
+quality_indicators:
+  - research_questions_specific_and_testable
+  - methods_align_with_questions
+  - findings_evidence_based
+  - recommendations_actionable
+  - timeline_respected
+
+tags:
+  - research
+  - investigation
+  - discovery
+  - validation
+  - analysis
+
+version: 1.0.0
+last_updated: 2024-01-14

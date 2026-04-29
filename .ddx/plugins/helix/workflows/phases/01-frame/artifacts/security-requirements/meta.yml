@@ -1,0 +1,124 @@
+# Metadata for Security Requirements
+
+artifact:
+  name: Security Requirements
+  id: security-requirements
+  type: document
+  phase: frame
+
+description: |
+  Comprehensive security requirements definition for the project.
+  Covers security user stories, compliance mapping, risk assessment,
+  and testable acceptance criteria for security controls.
+
+dependencies:
+  requires:
+    - input: Product Requirements Document
+      type: artifact
+      path: prd
+      required: true
+    - input: User Stories
+      type: artifact
+      path: user-stories
+      required: true
+    - input: Business requirements
+      type: external
+      required: true
+    - input: Compliance policies
+      type: external
+      required: true
+
+  enables:
+    - output: Solution Design (security sections)
+      type: artifact
+      path: solution-design
+      phase: design
+    - output: Security Testing Strategy
+      type: artifact
+      phase: test
+
+output:
+  location: docs/helix/01-frame/security-requirements.md
+  format: markdown
+  naming: security-requirements.md
+
+validation:
+  required_sections:
+    - security_user_stories
+    - compliance_requirements
+    - risk_assessment
+    - acceptance_criteria
+
+  quality_checks:
+    - check: all_requirements_have_acceptance_criteria
+      description: Every security requirement must have testable acceptance criteria
+      severity: blocking
+    - check: compliance_requirements_mapped
+      description: All applicable compliance requirements must be mapped to controls
+      severity: blocking
+    - check: risk_levels_defined
+      description: Risk levels must be defined for each threat area
+      severity: warning
+    - check: testable_criteria_specified
+      description: Acceptance criteria must be verifiable through testing
+      severity: warning
+
+variables:
+  - name: project_name
+    description: Name of the project
+    required: true
+  - name: project_type
+    description: Type of project (web app, API, mobile, etc.)
+    required: true
+  - name: data_types
+    description: Types of data the system will handle
+    required: true
+  - name: compliance_requirements
+    description: Applicable regulatory and compliance frameworks
+    required: true
+  - name: deployment_environment
+    description: Target deployment environment
+    required: true
+  - name: industry_sector
+    description: Industry sector for threat context
+    required: false
+  - name: geographic_scope
+    description: Geographic regions of operation
+    required: false
+  - name: risk_tolerance
+    description: Organization's risk tolerance level
+    required: false
+  - name: existing_security_controls
+    description: Security controls already in place
+    required: false
+
+prompts:
+  generation: prompt.md
+
+template:
+  file: template.md
+
+workflow:
+  creation_order: 3
+  review_cycles: 2
+  approval_required: true
+  approvers:
+    - Product Owner
+    - Security Champion
+
+relationships:
+  informs:
+    - solution-design
+    - threat-model
+    - compliance-requirements
+  referenced_by:
+    - test-plan
+
+tags:
+  - security
+  - requirements
+  - compliance
+  - risk
+
+version: 1.0.0
+last_updated: 2024-01-14

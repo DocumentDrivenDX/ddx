@@ -1,0 +1,219 @@
+# Metadata for Technical Spike
+
+artifact:
+  name: Technical Spike
+  id: tech-spike
+  type: investigation
+  phase: design
+  optional: true
+
+description: |
+  Time-boxed technical investigation to explore unknowns, validate approaches,
+  or reduce technical risk before committing to implementation. Produces
+  concrete technical insights to inform architecture and design decisions.
+
+dependencies:
+  requires:
+    - input: Technical uncertainty identified
+      type: external
+      required: true
+    - input: Solution design context
+      type: artifact
+      path: solution-design
+      required: false
+    - input: Architecture principles
+      type: artifact
+      path: principles
+      phase: frame
+      required: true
+
+  enables:
+    - output: Technical feasibility validation
+      type: insight
+      required: true
+    - output: Architecture refinement
+      type: artifact
+      path: architecture
+    - output: Implementation approach
+      type: artifact
+      path: implementation-plan
+      phase: build
+    - output: Risk mitigation
+      type: artifact
+      path: adr
+
+output:
+  location: docs/helix/02-design/spikes/
+  format: markdown
+  naming: SPIKE-{number}-{title-with-hyphens}.md
+  structure: per-spike
+
+validation:
+  required_sections:
+    - objective
+    - hypothesis
+    - approach
+    - findings
+    - conclusions
+    - recommendations
+    - artifacts
+
+  quality_checks:
+    - check: objective_specific
+      description: Spike objective must be specific and measurable
+      severity: blocking
+
+    - check: time_boxed
+      description: Spike must have strict time boundaries
+      severity: blocking
+
+    - check: findings_evidence_based
+      description: All findings must be backed by concrete evidence
+      severity: blocking
+
+    - check: recommendations_actionable
+      description: Recommendations must be specific and implementable
+      severity: warning
+
+  automated_checks:
+    - pattern: "HYPOTHESIS:|FINDING:|RECOMMENDATION:"
+      expected: ">0"
+      message: Must include hypothesis, findings, and recommendations
+
+    - pattern: "\\[INVESTIGATE\\]|\\[TODO\\]|\\[TBD\\]"
+      expected: 0
+      message: Complete all investigations before finalizing spike
+
+variables:
+  - name: spike_id
+    description: SPIKE-XXX identifier
+    required: true
+
+  - name: spike_title
+    description: Descriptive spike name
+    required: true
+
+  - name: technical_uncertainty
+    description: Specific technical question being investigated
+    required: true
+
+  - name: spike_lead
+    description: Engineer responsible for executing the spike
+    required: true
+
+  - name: time_budget
+    description: Maximum time allocated (e.g., 2 days, 1 week)
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this technical spike for:
+    1. Clear objectives and success criteria
+    2. Evidence-based findings and conclusions
+    3. Actionable recommendations for design/implementation
+    4. Appropriate scope for time budget
+    5. Sufficient technical depth for decision-making
+
+template:
+  file: template.md
+  time_boxed: true
+  evidence_focused: true
+
+examples:
+  - file: example.md
+    description: Technical spike investigating CLI architecture patterns
+
+workflow:
+  creation_order: 1.5  # During design when technical uncertainties arise
+  review_cycles: 1
+  approval_required: true
+  approvers:
+    - Technical Lead
+    - Spike Lead
+
+  execution_phases:
+    - planning: "Define scope and approach"
+    - investigation: "Execute spike activities"
+    - analysis: "Synthesize findings"
+    - recommendation: "Formulate actionable next steps"
+
+relationships:
+  triggers:
+    - "Technical approach uncertainty"
+    - "Architecture decision risk"
+    - "Implementation complexity unknown"
+    - "Technology choice needs validation"
+    - "Performance characteristics unclear"
+
+  informs:
+    - architecture
+    - adr
+    - solution-design
+    - implementation-plan
+    - contracts
+
+  outputs:
+    - technical_validation
+    - implementation_insights
+    - risk_assessment
+    - architecture_recommendations
+
+spike_types:
+  architecture_spike:
+    purpose: "Validate architectural approaches"
+    methods: ["prototype", "comparison", "analysis"]
+    outputs: ["architecture_recommendation", "trade_off_analysis"]
+
+  technology_spike:
+    purpose: "Evaluate technology choices"
+    methods: ["proof_of_concept", "benchmark", "integration_test"]
+    outputs: ["technology_recommendation", "integration_complexity"]
+
+  performance_spike:
+    purpose: "Understand performance characteristics"
+    methods: ["benchmark", "load_test", "profiling"]
+    outputs: ["performance_data", "scalability_analysis"]
+
+  integration_spike:
+    purpose: "Validate integration approaches"
+    methods: ["prototype", "api_exploration", "compatibility_test"]
+    outputs: ["integration_strategy", "compatibility_matrix"]
+
+  feasibility_spike:
+    purpose: "Validate technical feasibility"
+    methods: ["minimal_implementation", "constraint_testing", "expert_consultation"]
+    outputs: ["feasibility_assessment", "constraint_documentation"]
+
+success_criteria:
+  time_management:
+    - strict_time_bounds_respected
+    - investigation_focused_not_exhaustive
+    - clear_stop_criteria_defined
+
+  technical_depth:
+    - sufficient_depth_for_decisions
+    - concrete_evidence_provided
+    - alternatives_considered
+
+  actionable_outcomes:
+    - clear_recommendations_provided
+    - next_steps_defined
+    - risks_identified_and_assessed
+
+quality_indicators:
+  - objective_achieved_within_time_budget
+  - findings_backed_by_concrete_evidence
+  - recommendations_specific_and_implementable
+  - risks_and_trade_offs_clearly_identified
+  - artifacts_preserved_for_future_reference
+
+tags:
+  - spike
+  - investigation
+  - technical-validation
+  - risk-reduction
+  - architecture
+
+version: 1.0.0
+last_updated: 2024-01-14

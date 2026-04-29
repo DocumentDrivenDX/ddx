@@ -1,0 +1,81 @@
+# Dependencies for Competitive Analysis
+
+artifact:
+  name: Competitive Analysis
+  id: competitive-analysis
+  type: document
+  phase: discover
+
+description: |
+  Market landscape mapping and differentiation strategy.
+  Identifies competitive positioning and sustainable advantages.
+
+dependencies:
+  requires:
+    - input: Product Vision
+      type: artifact
+      path: product-vision
+      required: true
+    - input: Market research
+      type: external
+      required: true
+    - input: Competitor data
+      type: external
+      required: true
+
+  enables:
+    - output: Business Case (market context)
+      type: artifact
+      path: business-case
+    - output: Opportunity Canvas
+      type: artifact
+      path: opportunity-canvas
+    - output: PRD (positioning)
+      type: artifact
+      phase: frame
+
+output:
+  location: docs/helix/00-discover/competitive-analysis.md
+  format: markdown
+
+validation:
+  required_sections:
+    - market_landscape
+    - competitor_profiles
+    - feature_comparison
+    - differentiation_strategy
+
+  quality_checks:
+    - check: competitors_minimum
+      description: At least 3 competitors analyzed
+      severity: blocking
+
+    - check: matrix_complete
+      description: Feature matrix has no empty cells
+      severity: warning
+
+    - check: differentiators_specific
+      description: Differentiators are concrete, not vague
+      severity: warning
+
+workflow:
+  creation_order: 2
+  review_cycles: 1-2
+  approval_required: false
+  approvers:
+    - Product Lead
+
+relationships:
+  depends_on:
+    - product-vision
+
+  informs:
+    - business-case
+    - opportunity-canvas
+    - prd
+
+tags:
+  - market
+  - competition
+  - strategy
+  - positioning

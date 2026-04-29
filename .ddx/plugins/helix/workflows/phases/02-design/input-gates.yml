@@ -1,0 +1,11 @@
+input_gates:
+  - criteria: Problem statement validated and approved
+    required: true
+    source: 01-frame
+    validation: Problem is clearly defined and worth solving
+  - criteria: Success metrics are measurable
+    required: true
+    source: 01-frame
+  - criteria: Requirements and constraints documented
+    required: true
+    source: 01-frame

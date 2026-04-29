@@ -1,0 +1,179 @@
+# Metadata for Technical Design (Story-Level)
+
+artifact:
+  name: Technical Design
+  id: technical-design
+  type: document
+  phase: design
+  level: story  # This is a story-level artifact
+
+description: |
+  Story-specific technical design that details HOW to implement a single
+  user story within the context of the broader solution architecture.
+  This enables vertical slicing by providing implementation details for
+  one story at a time.
+
+dependencies:
+  requires:
+    - input: User Story
+      type: artifact
+      pattern: "US-XXX-*.md"
+      phase: frame
+      required: true
+
+    - input: Solution Design
+      type: artifact
+      pattern: "SD-XXX-*.md"
+      phase: design
+      required: true
+      note: "Parent feature's solution design"
+
+    - input: Feature Specification
+      type: artifact
+      pattern: "FEAT-XXX-*.md"
+      phase: frame
+      required: false
+      note: "For additional context"
+
+  enables:
+    - output: Story Test Plan
+      type: artifact
+      pattern: "TP-XXX-*.md"
+      phase: test
+
+    - output: Story Build Issue
+      type: issue
+      pattern: "tracker issue labeled helix,phase:build,story:US-XXX"
+      phase: build
+
+output:
+  location: docs/helix/02-design/technical-designs/TD-{id}-{name}.md
+  format: markdown
+  naming: TD-{story-number}-{story-name}.md
+  examples:
+    - TD-036-list-mcp-servers.md
+    - TD-037-install-mcp-server.md
+
+validation:
+  required_sections:
+    - story_reference
+    - acceptance_criteria_review
+    - technical_approach
+    - component_changes
+    - testing_approach
+    - definition_of_done
+
+  quality_checks:
+    - check: acceptance_criteria_mapped
+      description: Every acceptance criterion must map to technical implementation
+      severity: blocking
+
+    - check: api_contracts_defined
+      description: API changes must include full specifications
+      severity: blocking
+
+    - check: test_approach_specified
+      description: Testing strategy must be defined
+      severity: warning
+
+    - check: security_considered
+      description: Security requirements must be addressed
+      severity: blocking
+
+    - check: rollback_plan_exists
+      description: Rollback strategy should be defined
+      severity: warning
+
+  automated_checks:
+    - pattern: "\\[\\[US-\\d{3}-"
+      expected: ">=1"
+      message: Must reference the user story
+
+    - pattern: "\\[\\[SD-\\d{3}-"
+      expected: ">=1"
+      message: Must reference the solution design
+
+    - pattern: "acceptance criteri"
+      expected: ">=1"
+      message: Must review acceptance criteria
+
+cross_references:
+  must_reference:
+    - User Story (US-XXX)
+    - Solution Design (SD-XXX)
+
+  may_reference:
+    - Feature Specification (FEAT-XXX)
+    - API Contracts
+    - Data Models
+    - Other Technical Designs (TD-XXX)
+
+variables:
+  - name: story_id
+    description: User story ID (e.g., 036)
+    required: true
+
+  - name: story_name
+    description: User story descriptive name
+    required: true
+
+  - name: feature_id
+    description: Parent feature ID
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this technical design for:
+    1. Completeness of acceptance criteria mapping
+    2. Clarity of technical approach
+    3. Specificity of implementation details
+    4. Adequacy of test approach
+    5. Security considerations
+    6. Rollback capability
+
+template:
+  file: template.md
+  sections:
+    - story_reference: "Link to user story and feature"
+    - acceptance_criteria_review: "What must be satisfied"
+    - technical_approach: "How to implement"
+    - component_changes: "What needs to be modified"
+    - api_design: "Interface specifications"
+    - data_model: "Schema changes"
+    - testing_approach: "How to verify"
+
+workflow:
+  creation_order: 1  # First artifact in design phase for a story
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Technical Lead
+    - Senior Developer
+
+relationships:
+  informed_by:
+    - user-stories
+    - solution-design
+    - feature-specification
+
+  informs:
+    - test-plan
+    - implementation-plan
+
+  references:
+    - architecture
+
+story_progression:
+  previous: US-XXX (Frame)
+  current: TD-XXX (Design)
+  next: TP-XXX (Test)
+
+tags:
+  - story-level
+  - vertical-slice
+  - technical-design
+  - implementation
+
+version: 1.0.0
+last_updated: 2024-01-19

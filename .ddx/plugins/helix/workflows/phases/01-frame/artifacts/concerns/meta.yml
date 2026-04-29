@@ -1,0 +1,75 @@
+# Metadata for Project Concerns
+
+artifact:
+  name: Project Concerns
+  id: concerns
+  type: singleton
+  phase: frame
+
+description: |
+  Declares the project's active cross-cutting concerns (tech stacks,
+  quality attributes, conventions) and any project-specific overrides.
+  Concerns are composable selections from the library at
+  .ddx/plugins/helix/workflows/concerns/. Each concern declares area scope and associated
+  practices that flow into context digests on beads.
+
+dependencies:
+  requires:
+    - input: PRD
+      type: artifact
+      path: prd
+      required: false
+    - input: Principles
+      type: artifact
+      path: principles
+      required: false
+
+  enables:
+    - output: Context Digest
+      type: reference
+      path: context-digest
+    - output: Solution Design
+      type: artifact
+      phase: design
+    - output: ADRs
+      type: artifact
+      phase: design
+
+output:
+  location: docs/helix/01-frame/concerns.md
+  format: markdown
+  naming: concerns.md
+  structure: singleton
+
+validation:
+  required_sections:
+    - active_concerns
+    - area_labels
+
+  quality_checks:
+    - check: concerns_exist_in_library
+      description: Each selected concern must exist in .ddx/plugins/helix/workflows/concerns/
+      severity: blocking
+
+    - check: overrides_cite_adrs
+      description: Practice overrides should reference a governing ADR
+      severity: warning
+
+    - check: no_unresolved_conflicts
+      description: Practice conflicts between concerns must be resolved
+      severity: blocking
+
+template:
+  file: template.md
+
+prompts:
+  generation: prompt.md
+
+tags:
+  - concerns
+  - cross-cutting
+  - tech-stack
+  - quality-attributes
+  - practices
+
+version: 1.0.0

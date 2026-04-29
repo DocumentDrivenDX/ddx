@@ -1,0 +1,181 @@
+# Metadata for Feature Registry
+
+artifact:
+  name: Feature Registry
+  id: feature-registry
+  type: registry
+  phase: frame
+
+description: |
+  Central registry tracking all features, their status, dependencies,
+  and ownership throughout the project lifecycle. Single source of
+  truth for feature identification and tracking.
+
+dependencies:
+  requires:
+    - input: PRD
+      type: artifact
+      path: prd
+      required: true
+    - input: Feature specifications
+      type: artifact
+      path: feature-specification
+      required: false
+
+  enables:
+    - output: Implementation planning
+      type: artifact
+      phase: build
+    - output: Release planning
+      type: artifact
+      phase: deploy
+
+output:
+  location: docs/helix/01-frame/feature-registry.md
+  format: markdown
+  naming: feature-registry.md
+  update_frequency: continuous
+
+validation:
+  required_fields:
+    - feature_id
+    - name
+    - description
+    - status
+    - priority
+    - owner
+    - created_date
+
+  quality_checks:
+    - check: unique_ids
+      description: All FEAT-XXX IDs must be unique
+      severity: blocking
+
+    - check: owner_assigned
+      description: Each feature must have an owner
+      severity: blocking
+
+    - check: priority_assigned
+      description: Each feature must have P0/P1/P2 priority
+      severity: blocking
+
+    - check: dependencies_valid
+      description: Dependencies must reference valid feature IDs
+      severity: warning
+
+  automated_checks:
+    - pattern: "FEAT-\\d{3}"
+      expected: ">0"
+      message: Use proper FEAT-XXX format
+
+    - check: no_duplicate_ids
+      type: unique_constraint
+      field: feature_id
+
+variables:
+  - name: project_name
+    description: Name of the project
+    required: true
+
+  - name: registry_owner
+    description: Person/team maintaining the registry
+    required: true
+
+prompts:
+  generation: prompt.md
+  update: |
+    When adding features:
+    1. Assign next sequential FEAT-XXX ID
+    2. Never reuse retired IDs
+    3. Document dependencies
+    4. Assign owner and priority
+    5. Set initial status
+
+template:
+  file: template.md
+  sections:
+    - active_features
+    - feature_dependencies
+    - feature_categories
+    - deprecated_features
+    - metrics
+
+examples:
+  - file: example.md
+    description: Sample registry for a CLI toolkit project
+
+workflow:
+  creation_order: 5
+  review_cycles: 1
+  approval_required: false
+  update_triggers:
+    - new_feature_added
+    - status_change
+    - priority_change
+    - owner_change
+
+relationships:
+  aggregates:
+    - feature-specification
+    - user-stories
+
+  tracked_through:
+    - all_phases
+
+  referenced_by:
+    - project-dashboard
+    - release-notes
+    - progress-reports
+
+registry_rules:
+  id_assignment:
+    format: FEAT-XXX
+    sequence: incremental
+    reuse: never
+    reservation: optional
+
+  status_progression:
+    - draft
+    - specified
+    - designed
+    - in_test
+    - in_build
+    - built
+    - deployed
+    - deprecated
+    - cancelled
+
+  priority_levels:
+    P0: "Must have - Cannot ship without"
+    P1: "Should have - Important for good experience"
+    P2: "Nice to have - If time permits"
+
+monitoring:
+  track_changes: true
+  audit_log: true
+  metrics:
+    - features_per_phase
+    - completion_rate
+    - dependency_chains
+    - owner_distribution
+
+reporting:
+  dashboards:
+    - feature_status
+    - progress_tracking
+    - dependency_graph
+
+  exports:
+    - csv
+    - json
+    - gantt
+
+tags:
+  - registry
+  - tracking
+  - features
+  - management
+  - planning
+
+version: 1.0.0
+last_updated: 2024-01-14

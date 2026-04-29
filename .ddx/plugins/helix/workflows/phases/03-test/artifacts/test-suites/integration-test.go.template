@@ -1,0 +1,348 @@
+package {{package_name}}_test
+
+import (
+	"context"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+)
+
+// {{IntegrationName}}TestSuite tests integration between {{components}}
+type {{IntegrationName}}TestSuite struct {
+	suite.Suite
+	
+	// Test resources
+	{{resource_1}} {{Resource1Type}}
+	{{resource_2}} {{Resource2Type}}
+	
+	// Test context
+	ctx    context.Context
+	cancel context.CancelFunc
+	
+	// Cleanup functions
+	cleanups []func()
+}
+
+// SetupSuite runs once before all tests
+func (s *{{IntegrationName}}TestSuite) SetupSuite() {
+	// Skip if short tests only
+	if testing.Short() {
+		s.T().Skip("Skipping integration tests in short mode")
+	}
+	
+	// Create context with timeout
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), {{test_timeout}}*time.Minute)
+	
+	// Initialize shared resources
+	s.setup{{Resource1}}()
+	s.setup{{Resource2}}()
+	
+	// Verify connections
+	s.verifyConnections()
+}
+
+// TearDownSuite runs once after all tests
+func (s *{{IntegrationName}}TestSuite) TearDownSuite() {
+	// Cancel context
+	if s.cancel != nil {
+		s.cancel()
+	}
+	
+	// Run cleanup functions in reverse order
+	for i := len(s.cleanups) - 1; i >= 0; i-- {
+		if s.cleanups[i] != nil {
+			s.cleanups[i]()
+		}
+	}
+}
+
+// SetupTest runs before each test
+func (s *{{IntegrationName}}TestSuite) SetupTest() {
+	// Reset test data
+	s.resetTestData()
+	
+	// Clear any cached state
+	s.clearCache()
+}
+
+// TearDownTest runs after each test
+func (s *{{IntegrationName}}TestSuite) TearDownTest() {
+	// Clean up test-specific resources
+	s.cleanupTestResources()
+}
+
+// Test{{Operation}}_Success tests successful {{operation}} between components
+func (s *{{IntegrationName}}TestSuite) Test{{Operation}}_Success() {
+	// Arrange
+	testData := s.createTestData("{{test_data_scenario}}")
+	expectedResult := {{expected_result}}
+	
+	// Act
+	actualResult, err := s.{{resource_1}}.{{Operation}}(s.ctx, testData)
+	
+	// Assert
+	s.Require().NoError(err, "Operation should succeed")
+	s.Assert().Equal(expectedResult, actualResult, "Result should match expected")
+	
+	// Verify side effects
+	s.verifySideEffects(testData, actualResult)
+}
+
+// Test{{Operation}}_ErrorHandling tests error scenarios
+func (s *{{IntegrationName}}TestSuite) Test{{Operation}}_ErrorHandling() {
+	tests := []struct {
+		name        string
+		scenario    string
+		setup       func()
+		expectedErr string
+	}{
+		{
+			name:        "invalid_input",
+			scenario:    "Invalid input data",
+			setup: func() {
+				// Setup invalid conditions
+				{{invalid_setup}}
+			},
+			expectedErr: "{{expected_error_1}}",
+		},
+		{
+			name:        "resource_unavailable",
+			scenario:    "Resource temporarily unavailable",
+			setup: func() {
+				// Simulate resource unavailability
+				{{unavailable_setup}}
+			},
+			expectedErr: "{{expected_error_2}}",
+		},
+		{
+			name:        "timeout",
+			scenario:    "Operation timeout",
+			setup: func() {
+				// Create short timeout context
+				{{timeout_setup}}
+			},
+			expectedErr: "context deadline exceeded",
+		},
+	}
+	
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			// Setup error condition
+			if tt.setup != nil {
+				tt.setup()
+				defer s.resetTestData() // Reset after each test
+			}
+			
+			// Execute operation
+			_, err := s.{{resource_1}}.{{Operation}}(s.ctx, nil)
+			
+			// Verify error
+			s.Require().Error(err, "Should return error for: %s", tt.scenario)
+			s.Assert().Contains(err.Error(), tt.expectedErr, "Error message mismatch")
+		})
+	}
+}
+
+// Test{{Operation}}_Concurrent tests concurrent operations
+func (s *{{IntegrationName}}TestSuite) Test{{Operation}}_Concurrent() {
+	const numWorkers = {{num_workers}}
+	const numOperations = {{num_operations}}
+	
+	// Channel for collecting results
+	results := make(chan error, numWorkers*numOperations)
+	
+	// Launch concurrent workers
+	for i := 0; i < numWorkers; i++ {
+		go func(workerID int) {
+			for j := 0; j < numOperations; j++ {
+				// Create unique test data for each operation
+				testData := s.createTestDataWithID(workerID, j)
+				
+				// Execute operation
+				_, err := s.{{resource_1}}.{{Operation}}(s.ctx, testData)
+				results <- err
+			}
+		}(i)
+	}
+	
+	// Collect results
+	successCount := 0
+	errorCount := 0
+	
+	for i := 0; i < numWorkers*numOperations; i++ {
+		err := <-results
+		if err == nil {
+			successCount++
+		} else {
+			errorCount++
+			s.T().Logf("Operation error: %v", err)
+		}
+	}
+	
+	// Verify results
+	s.Assert().Greater(successCount, 0, "At least some operations should succeed")
+	s.Assert().Less(errorCount, numWorkers*numOperations/2, "Error rate should be < 50%")
+}
+
+// Test{{Operation}}_Performance tests performance requirements
+func (s *{{IntegrationName}}TestSuite) Test{{Operation}}_Performance() {
+	// Performance requirements
+	const maxLatency = {{max_latency_ms}} * time.Millisecond
+	const minThroughput = {{min_throughput_ops}}
+	
+	// Warm up
+	for i := 0; i < 10; i++ {
+		testData := s.createTestData("warmup")
+		s.{{resource_1}}.{{Operation}}(s.ctx, testData)
+	}
+	
+	// Measure latency
+	start := time.Now()
+	testData := s.createTestData("performance")
+	_, err := s.{{resource_1}}.{{Operation}}(s.ctx, testData)
+	latency := time.Since(start)
+	
+	s.Require().NoError(err, "Operation should succeed")
+	s.Assert().LessOrEqual(latency, maxLatency, "Latency exceeds maximum: %v > %v", latency, maxLatency)
+	
+	// Measure throughput
+	operations := 0
+	timeout := time.After(1 * time.Second)
+	start = time.Now()
+	
+loop:
+	for {
+		select {
+		case <-timeout:
+			break loop
+		default:
+			testData := s.createTestData("throughput")
+			if _, err := s.{{resource_1}}.{{Operation}}(s.ctx, testData); err == nil {
+				operations++
+			}
+		}
+	}
+	
+	duration := time.Since(start)
+	throughput := float64(operations) / duration.Seconds()
+	
+	s.Assert().GreaterOrEqual(throughput, float64(minThroughput), 
+		"Throughput below minimum: %.2f ops/s < %d ops/s", throughput, minThroughput)
+}
+
+// Test{{Operation}}_DataIntegrity verifies data consistency
+func (s *{{IntegrationName}}TestSuite) Test{{Operation}}_DataIntegrity() {
+	// Create test data with known values
+	testData := s.createTestDataWithIntegrity()
+	
+	// Perform operation
+	result, err := s.{{resource_1}}.{{Operation}}(s.ctx, testData)
+	s.Require().NoError(err)
+	
+	// Verify data integrity
+	s.verifyDataIntegrity(testData, result)
+	
+	// Verify data persistence
+	persistedData, err := s.{{resource_2}}.Get(s.ctx, result.ID)
+	s.Require().NoError(err)
+	s.Assert().Equal(result, persistedData, "Persisted data should match result")
+}
+
+// Helper methods
+
+func (s *{{IntegrationName}}TestSuite) setup{{Resource1}}() {
+	// Initialize resource 1
+	{{resource1_init}}
+	
+	// Add cleanup
+	s.cleanups = append(s.cleanups, func() {
+		{{resource1_cleanup}}
+	})
+}
+
+func (s *{{IntegrationName}}TestSuite) setup{{Resource2}}() {
+	// Initialize resource 2
+	{{resource2_init}}
+	
+	// Add cleanup
+	s.cleanups = append(s.cleanups, func() {
+		{{resource2_cleanup}}
+	})
+}
+
+func (s *{{IntegrationName}}TestSuite) verifyConnections() {
+	// Verify resource 1 connection
+	err := s.{{resource_1}}.Ping(s.ctx)
+	s.Require().NoError(err, "Resource 1 should be accessible")
+	
+	// Verify resource 2 connection
+	err = s.{{resource_2}}.Health(s.ctx)
+	s.Require().NoError(err, "Resource 2 should be healthy")
+}
+
+func (s *{{IntegrationName}}TestSuite) resetTestData() {
+	// Reset test data to known state
+	{{reset_data}}
+}
+
+func (s *{{IntegrationName}}TestSuite) clearCache() {
+	// Clear any cached data
+	{{clear_cache}}
+}
+
+func (s *{{IntegrationName}}TestSuite) cleanupTestResources() {
+	// Clean up test-specific resources
+	{{cleanup_resources}}
+}
+
+func (s *{{IntegrationName}}TestSuite) createTestData(scenario string) {{TestDataType}} {
+	// Create test data for scenario
+	{{create_test_data}}
+	return testData
+}
+
+func (s *{{IntegrationName}}TestSuite) createTestDataWithID(workerID, operationID int) {{TestDataType}} {
+	// Create unique test data
+	{{create_unique_data}}
+	return testData
+}
+
+func (s *{{IntegrationName}}TestSuite) createTestDataWithIntegrity() {{TestDataType}} {
+	// Create test data with checksums/hashes for integrity verification
+	{{create_integrity_data}}
+	return testData
+}
+
+func (s *{{IntegrationName}}TestSuite) verifySideEffects(input {{TestDataType}}, result {{ResultType}}) {
+	// Verify expected side effects occurred
+	{{verify_side_effects}}
+}
+
+func (s *{{IntegrationName}}TestSuite) verifyDataIntegrity(input {{TestDataType}}, result {{ResultType}}) {
+	// Verify data integrity constraints
+	{{verify_integrity}}
+}
+
+// TestRun{{IntegrationName}}Suite runs the integration test suite
+func TestRun{{IntegrationName}}Suite(t *testing.T) {
+	suite.Run(t, new({{IntegrationName}}TestSuite))
+}
+
+// Environment check
+func init() {
+	// Check for required environment variables
+	requiredEnvVars := []string{
+		"{{env_var_1}}",
+		"{{env_var_2}}",
+	}
+	
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			panic("Missing required environment variable: " + envVar)
+		}
+	}
+}

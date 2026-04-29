@@ -1,0 +1,114 @@
+# Metadata for Principles Document
+
+artifact:
+  name: Project Principles
+  id: principles
+  type: document
+  phase: frame
+
+description: |
+  Cross-cutting design principles that guide judgment calls across all HELIX
+  phases. Not workflow rules or process enforcement — these are lenses applied
+  when choosing between two valid options.
+
+  Two-layer model:
+    Layer 1 (HELIX defaults): .ddx/plugins/helix/workflows/principles.md — sensible defaults
+    Layer 2 (Project):        docs/helix/01-frame/principles.md — project-owned
+
+  If the project file exists, it is the sole active source.
+  If it does not exist, HELIX defaults are used.
+
+dependencies:
+  requires:
+    - input: PRD
+      type: artifact
+      path: prd
+      required: false
+    - input: Product Vision
+      type: artifact
+      required: false
+
+  enables:
+    - output: Architecture decisions
+      type: artifact
+      phase: design
+    - output: Solution designs
+      type: artifact
+      phase: design
+    - output: Implementation guidance
+      type: artifact
+      phase: build
+    - output: Review criteria
+      type: artifact
+      phase: build
+
+output:
+  location: docs/helix/01-frame/principles.md
+  format: markdown
+  naming: principles.md
+
+validation:
+  required_sections:
+    - principles
+    - tension_resolution
+
+  quality_checks:
+    - check: principles_decision_changing
+      description: Each principle must change at least one real decision
+      severity: blocking
+
+    - check: tensions_resolved
+      description: Identified tensions between principles must have resolution strategies
+      severity: blocking
+
+    - check: size_ceiling
+      description: Warn at 8 principles, nudge at 12, strongly recommend pruning at 15+
+      severity: warning
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review principles for:
+    1. Decision-changing power (does this principle change any real choice?)
+    2. Internal coherence (do principles tension with each other?)
+    3. Tension resolution completeness
+    4. Size ceiling compliance (8 warn / 12 nudge / 15+ prune)
+    5. Distinction from workflow rules (belongs in enforcers/ratchets?)
+
+template:
+  file: template.md
+
+workflow:
+  creation_order: 2
+  review_cycles: 1-2
+  approval_required: false
+
+relationships:
+  informed_by:
+    - prd
+    - product-vision
+
+  injected_into:
+    - implementation
+    - fresh-eyes-review
+    - plan
+    - evolve
+    - reconcile-alignment
+    - polish
+    - frame
+    - experiment
+
+  never_modified_by:
+    - evolve
+    - build
+    - review
+    - align
+    - polish
+
+tags:
+  - principles
+  - judgment
+  - cross-cutting
+  - governance
+
+version: 2.0.0

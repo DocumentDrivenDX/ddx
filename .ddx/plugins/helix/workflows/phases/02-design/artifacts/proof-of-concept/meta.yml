@@ -1,0 +1,226 @@
+# Metadata for Proof of Concept
+
+artifact:
+  name: Proof of Concept
+  id: proof-of-concept
+  type: implementation
+  phase: design
+  optional: true
+
+description: |
+  A minimal working implementation that validates the feasibility and approach
+  of a key technical concept before full development. More substantial than a
+  tech spike, focusing on end-to-end validation of technical approaches.
+
+dependencies:
+  requires:
+    - input: Technical approach defined
+      type: artifact
+      path: solution-design
+      required: true
+    - input: Architecture decisions made
+      type: artifact
+      path: adr
+      required: false
+    - input: Key technical risks identified
+      type: external
+      required: true
+
+  enables:
+    - output: Implementation validation
+      type: validation
+      required: true
+    - output: Refined technical approach
+      type: artifact
+      path: solution-design
+    - output: Implementation guidance
+      type: artifact
+      path: implementation-plan
+      phase: build
+    - output: Technical constraints documentation
+      type: artifact
+      path: contracts
+
+output:
+  location: docs/helix/02-design/proofs-of-concept/
+  format: markdown
+  naming: POC-{number}-{title-with-hyphens}.md
+  structure: per-poc
+  artifacts_location: proofs-of-concept/{poc-id}/
+
+validation:
+  required_sections:
+    - objective
+    - scope
+    - approach
+    - implementation
+    - testing
+    - findings
+    - conclusions
+    - recommendations
+    - artifacts
+
+  quality_checks:
+    - check: working_implementation_exists
+      description: PoC must include working code that demonstrates the concept
+      severity: blocking
+
+    - check: end_to_end_validation
+      description: PoC must validate complete workflow, not just individual components
+      severity: blocking
+
+    - check: production_readiness_assessed
+      description: Must evaluate what would be needed for production implementation
+      severity: warning
+
+    - check: scalability_considered
+      description: Should address scalability and performance implications
+      severity: warning
+
+  automated_checks:
+    - pattern: "IMPLEMENTATION:|WORKING:|VALIDATED:"
+      expected: ">0"
+      message: Must demonstrate working implementation
+
+    - pattern: "\\[TODO\\]|\\[INCOMPLETE\\]|\\[PLACEHOLDER\\]"
+      expected: 0
+      message: Complete all implementation sections before finalizing
+
+variables:
+  - name: poc_id
+    description: POC-XXX identifier
+    required: true
+
+  - name: poc_title
+    description: Descriptive name of the proof of concept
+    required: true
+
+  - name: technical_concept
+    description: Core technical concept being validated
+    required: true
+
+  - name: poc_lead
+    description: Engineer responsible for building the PoC
+    required: true
+
+  - name: time_budget
+    description: Time allocated for PoC development (e.g., 1-2 weeks)
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this proof of concept for:
+    1. Working implementation that validates the core concept
+    2. Comprehensive testing that demonstrates functionality
+    3. Clear findings about feasibility and implementation approach
+    4. Actionable recommendations for production implementation
+    5. Proper artifact preservation and documentation
+
+template:
+  file: template.md
+  implementation_focused: true
+  validation_oriented: true
+
+examples:
+  - file: example.md
+    description: Proof of concept for CLI template marketplace architecture
+
+workflow:
+  creation_order: 2.5  # After initial design, before detailed contracts
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Technical Lead
+    - PoC Lead
+    - Architecture Team
+
+  development_phases:
+    - planning: "Define scope and success criteria"
+    - implementation: "Build minimal working version"
+    - testing: "Validate functionality and approach"
+    - analysis: "Evaluate findings and implications"
+
+relationships:
+  triggers:
+    - "High-risk technical approach needs validation"
+    - "Novel architecture pattern requires proof"
+    - "Integration complexity needs demonstration"
+    - "Performance characteristics need validation"
+    - "User experience concept needs testing"
+
+  informs:
+    - solution-design
+    - architecture
+    - contracts
+    - implementation-plan
+    - adr
+
+  outputs:
+    - technical_validation
+    - implementation_approach
+    - performance_characteristics
+    - integration_strategy
+    - production_readiness_assessment
+
+poc_types:
+  architecture_poc:
+    purpose: "Validate overall system architecture"
+    scope: "End-to-end system workflow"
+    deliverables: ["working_system", "performance_data", "architecture_validation"]
+
+  integration_poc:
+    purpose: "Prove integration feasibility"
+    scope: "Key integration points and data flow"
+    deliverables: ["integration_demo", "compatibility_validation", "performance_impact"]
+
+  user_experience_poc:
+    purpose: "Validate user interaction patterns"
+    scope: "Core user workflows and interfaces"
+    deliverables: ["interactive_demo", "usability_assessment", "workflow_validation"]
+
+  performance_poc:
+    purpose: "Validate performance characteristics"
+    scope: "Performance-critical system components"
+    deliverables: ["performance_benchmarks", "scalability_analysis", "optimization_insights"]
+
+  technology_poc:
+    purpose: "Prove technology stack viability"
+    scope: "Core technology integration and capabilities"
+    deliverables: ["technology_demo", "capability_validation", "technology_assessment"]
+
+success_criteria:
+  implementation_quality:
+    - working_end_to_end_implementation
+    - comprehensive_test_coverage
+    - realistic_data_and_scenarios
+    - proper_error_handling
+
+  validation_completeness:
+    - core_assumptions_tested
+    - performance_characteristics_measured
+    - integration_points_validated
+    - user_experience_assessed
+
+  production_readiness:
+    - production_requirements_identified
+    - scalability_implications_understood
+    - security_considerations_documented
+    - maintenance_requirements_assessed
+
+quality_indicators:
+  - poc_successfully_demonstrates_concept
+  - implementation_reveals_practical_insights
+  - findings_directly_inform_production_design
+  - recommendations_actionable_and_specific
+  - artifacts_preserved_for_future_reference
+
+tags:
+  - proof-of-concept
+  - validation
+  - implementation
+  - technical-validation
+  - architecture
+
+version: 1.0.0
+last_updated: 2024-01-14

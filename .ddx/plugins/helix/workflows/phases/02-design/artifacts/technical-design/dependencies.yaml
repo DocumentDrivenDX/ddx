@@ -1,0 +1,45 @@
+# Technical Design Dependencies
+artifact: technical-design
+prefix: TD
+
+inputs:
+  required:
+    - artifact: user-stories
+      phase: "01-frame"
+      prefix: US
+      same_number: true
+      relationship: "designs implementation for story"
+    - artifact: architecture
+      relationship: "follows architectural patterns"
+  optional:
+    - artifact: solution-design
+      prefix: SD
+      relationship: "references feature-level design"
+    - artifact: feature-specification
+      phase: "01-frame"
+      prefix: FEAT
+      relationship: "implements feature requirements"
+
+outputs:
+  produces:
+    - artifact: test-plan
+      phase: "03-test"
+      prefix: TP
+      same_number: true
+      relationship: "test plan validates design"
+    - artifact: contracts
+      relationship: "defines API contracts"
+
+completion:
+  automated_checks:
+    - type: file_exists
+    - type: no_markers
+      pattern: "\\[NEEDS CLARIFICATION\\]"
+    - type: section_exists
+      sections:
+        - "API Changes"
+        - "Data Model"
+        - "Security Considerations"
+  manual_checks:
+    - "Acceptance criteria mapped to implementation"
+    - "Edge cases documented"

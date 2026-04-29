@@ -1,0 +1,237 @@
+# Metadata for Feasibility Study
+
+artifact:
+  name: Feasibility Study
+  id: feasibility-study
+  type: document
+  phase: frame
+  optional: true
+
+description: |
+  A systematic analysis of project viability across technical, business,
+  operational, and resource dimensions. Used to validate that a proposed
+  solution is achievable before committing significant resources.
+
+dependencies:
+  requires:
+    - input: Problem statement defined
+      type: external
+      required: true
+    - input: High-level solution approach identified
+      type: external
+      required: false
+    - input: Resource constraints known
+      type: external
+      required: true
+
+  enables:
+    - output: Go/No-Go decision
+      type: decision
+      required: true
+    - output: Risk-adjusted project plan
+      type: artifact
+      path: prd
+    - output: Technical constraints for design
+      type: artifact
+      phase: design
+
+  relates_to:
+    - research-plan
+    - risk-register
+    - principles
+
+output:
+  location: docs/helix/01-frame/feasibility-study.md
+  format: markdown
+  naming: feasibility-study.md
+
+validation:
+  required_sections:
+    - executive_summary
+    - technical_feasibility
+    - business_feasibility
+    - operational_feasibility
+    - resource_feasibility
+    - risk_assessment
+    - recommendations
+    - decision_framework
+
+  quality_checks:
+    - check: all_dimensions_assessed
+      description: Must evaluate technical, business, operational, and resource feasibility
+      severity: blocking
+
+    - check: evidence_based_conclusions
+      description: All feasibility assessments must be backed by evidence
+      severity: blocking
+
+    - check: clear_recommendations
+      description: Must provide clear go/no-go recommendation with rationale
+      severity: blocking
+
+    - check: risk_mitigation_defined
+      description: Key risks must have mitigation strategies
+      severity: warning
+
+  automated_checks:
+    - pattern: "FEASIBLE|NOT FEASIBLE|HIGH RISK"
+      expected: ">0"
+      message: Must provide clear feasibility assessment for each dimension
+
+    - pattern: "\\[NEEDS INVESTIGATION"
+      expected: 0
+      message: Complete all investigations before finalizing study
+
+variables:
+  - name: project_name
+    description: Name of the project being evaluated
+    required: true
+
+  - name: feasibility_lead
+    description: Person responsible for conducting feasibility analysis
+    required: true
+
+  - name: evaluation_timeframe
+    description: Time allocated for feasibility assessment
+    required: true
+
+  - name: decision_deadline
+    description: When go/no-go decision must be made
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this feasibility study for:
+    1. Completeness of analysis across all dimensions
+    2. Quality of evidence supporting conclusions
+    3. Clarity of recommendations and decision rationale
+    4. Identification and mitigation of key risks
+    5. Actionability of next steps
+
+template:
+  file: template.md
+  sections:
+    - technical_feasibility: "Focus on buildability and constraints"
+    - business_feasibility: "Evaluate value and market opportunity"
+    - resource_feasibility: "Assess team capacity and budget"
+
+examples:
+  - file: example.md
+    description: Feasibility study for a CLI automation platform
+
+workflow:
+  creation_order: 0.8  # After research plan, before detailed requirements
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Product Owner
+    - Technical Lead
+    - Executive Sponsor
+
+  analysis_phases:
+    - data_gathering: "Collect information for assessment"
+    - analysis: "Evaluate feasibility across dimensions"
+    - validation: "Verify conclusions with experts"
+    - recommendation: "Formulate go/no-go decision"
+
+relationships:
+  triggers:
+    - "Large investment required"
+    - "Technical complexity unclear"
+    - "Market opportunity uncertain"
+    - "Resource constraints significant"
+    - "Regulatory or compliance concerns"
+
+  informs:
+    - prd
+    - principles
+    - risk-register
+    - stakeholder-map
+    - feature-registry
+
+  outputs:
+    - feasibility_conclusion
+    - risk_assessment
+    - resource_requirements
+    - success_probability
+
+feasibility_dimensions:
+  technical:
+    criteria: ["buildable", "scalable", "maintainable", "secure"]
+    assessment: ["complexity", "skills_required", "technology_maturity", "integration_challenges"]
+
+  business:
+    criteria: ["valuable", "profitable", "competitive", "sustainable"]
+    assessment: ["market_demand", "revenue_potential", "competitive_advantage", "business_model"]
+
+  operational:
+    criteria: ["supportable", "deployable", "monitorable", "compliant"]
+    assessment: ["operational_overhead", "deployment_complexity", "support_requirements", "regulatory_compliance"]
+
+  resource:
+    criteria: ["affordable", "achievable", "sustainable", "available"]
+    assessment: ["budget_requirements", "timeline_feasibility", "team_capacity", "skill_availability"]
+
+risk_categories:
+  technical_risks:
+    - "Unproven technology"
+    - "Complex integrations"
+    - "Performance requirements"
+    - "Security vulnerabilities"
+
+  business_risks:
+    - "Market demand uncertainty"
+    - "Competitive response"
+    - "Revenue model validation"
+    - "Customer acquisition cost"
+
+  operational_risks:
+    - "Deployment complexity"
+    - "Support overhead"
+    - "Compliance requirements"
+    - "Scalability challenges"
+
+  resource_risks:
+    - "Budget overruns"
+    - "Timeline delays"
+    - "Skill gaps"
+    - "Team availability"
+
+decision_framework:
+  go_criteria:
+    - all_dimensions_feasible
+    - manageable_risk_profile
+    - clear_value_proposition
+    - sufficient_resources
+    - stakeholder_alignment
+
+  no_go_criteria:
+    - any_dimension_not_feasible
+    - unacceptable_risk_level
+    - unclear_value_proposition
+    - insufficient_resources
+    - lack_of_stakeholder_support
+
+  conditional_go_criteria:
+    - feasible_with_mitigation
+    - acceptable_risk_with_monitoring
+    - phased_approach_viable
+    - additional_resources_available
+
+success_indicators:
+  - feasibility_thoroughly_assessed
+  - evidence_based_conclusions
+  - clear_decision_rationale
+  - stakeholder_alignment_achieved
+  - next_steps_defined
+
+tags:
+  - feasibility
+  - viability
+  - risk-assessment
+  - decision-support
+  - analysis
+
+version: 1.0.0
+last_updated: 2024-01-14

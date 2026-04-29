@@ -1,0 +1,85 @@
+phase: iterate
+number: "06"
+
+entry_requirements:
+  automated:
+    - check: previous_phase_complete
+      phase: 05-deploy
+
+    - check: file_exists
+      path: docs/helix/05-deploy/deployment-checklist.md
+      description: "Deployment completed (checklist exists)"
+
+    - check: file_exists
+      path: docs/helix/05-deploy/monitoring-setup.md
+      description: "Monitoring configured from Deploy phase"
+
+  manual:
+    - "System deployed and operational in production"
+    - "Monitoring active and collecting data"
+    - "Users have access to system"
+
+exit_requirements:
+  automated:
+    # Iteration artifacts
+    - check: file_exists
+      path: docs/helix/06-iterate/metrics-dashboard.md
+      description: "Metrics dashboard analysis must exist"
+
+    - check: file_exists
+      path: docs/helix/06-iterate/feedback-analysis.md
+      description: "Feedback analysis must exist"
+
+    - check: file_exists
+      path: docs/helix/06-iterate/lessons-learned.md
+      description: "Lessons learned document must exist"
+
+    - check: file_exists
+      path: docs/helix/06-iterate/improvement-backlog.md
+      description: "Improvement backlog must exist"
+
+    - check: file_exists
+      path: .ddx/issues.jsonl
+      description: "Tracker must be initialized for actionable items"
+
+    - check: file_exists
+      path: docs/helix/06-iterate/retrospective.md
+      description: "Team retrospective must exist"
+
+    - check: file_exists
+      path: docs/helix/06-iterate/next-iteration.md
+      description: "Next iteration planning must exist"
+
+    # Security metrics
+    - check: file_exists
+      path: docs/helix/06-iterate/security-metrics.md
+      description: "Security metrics analysis must exist"
+
+    # Action items documented
+    - check: grep_present
+      pattern: "(action item|next step|improvement|TODO)"
+      path: docs/helix/06-iterate/retrospective.md
+      description: "Retrospective contains follow-up work to convert into issues"
+
+    # Backlog has prioritized items
+    - check: grep_present
+      pattern: "(P0|P1|P2|high|medium|low|priority)"
+      path: docs/helix/06-iterate/improvement-backlog.md
+      description: "Improvement backlog has prioritized items"
+
+    # Next iteration has defined goals
+    - check: grep_present
+      pattern: "(goal|objective|target|metric)"
+      path: docs/helix/06-iterate/next-iteration.md
+      description: "Next iteration has defined goals"
+
+  manual:
+    - "Backlog issues created in tracker (`ddx bead`)"
+    - "Improvement backlog references issue IDs or tracker queries"
+    - "Next iteration plan references selected issue IDs"
+    - "Team retrospective completed with all members"
+    - "Improvement priorities agreed by stakeholders"
+    - "Decision made: continue to next iteration or project complete"
+
+next_phase: frame
+cycle_complete: true

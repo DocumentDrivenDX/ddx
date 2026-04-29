@@ -1,0 +1,17 @@
+input_gates:
+  - criteria: All tests passing
+    required: true
+    source: 04-build
+    validation: Unit, integration, and E2E tests all green
+  - criteria: Performance validated
+    required: true
+    source: 04-build
+    validation: Load test results within SLA requirements
+  - criteria: Security scan completed
+    required: true
+    source: 04-build
+    validation: No critical or high vulnerabilities
+  - criteria: Documentation updated
+    required: true
+    source: 04-build
+    validation: API docs, README, and changelog current

@@ -1,0 +1,87 @@
+phase: design
+number: "02"
+
+entry_requirements:
+  automated:
+    - check: previous_phase_complete
+      phase: 01-frame
+
+    - check: file_exists
+      path: docs/helix/01-frame/prd.md
+      description: "PRD from Frame phase must exist"
+
+    - check: file_exists
+      path: docs/helix/01-frame/principles.md
+      description: "Principles from Frame phase must exist"
+
+    - check: grep_absent
+      pattern: "\\[NEEDS CLARIFICATION\\]"
+      path: docs/helix/01-frame/**/*.md
+      description: "No unresolved clarification markers from Frame"
+
+  manual:
+    - "PRD reviewed and approved"
+    - "Requirements and constraints clearly documented"
+
+exit_requirements:
+  automated:
+    # Core design artifacts
+    - check: file_exists
+      path: docs/helix/02-design/architecture.md
+      description: "Architecture document must exist"
+
+    - check: dir_not_empty
+      path: docs/helix/02-design/contracts
+      description: "API contracts directory must contain files"
+
+    - check: dir_not_empty
+      path: docs/helix/02-design/adr
+      description: "ADR directory must contain decision records"
+
+    # Security design artifacts
+    - check: file_exists
+      path: docs/helix/02-design/security-architecture.md
+      description: "Security architecture must exist"
+
+    - check: file_exists
+      path: docs/helix/02-design/data-design.md
+      description: "Data design document must exist"
+
+    # Quality checks
+    - check: grep_absent
+      pattern: "\\[TO BE DEFINED\\]"
+      path: docs/helix/02-design/**/*.md
+      description: "No TBD markers in design documents"
+
+    - check: grep_absent
+      pattern: "\\[TBD\\]"
+      path: docs/helix/02-design/**/*.md
+      description: "No TBD markers in design documents"
+
+    - check: grep_absent
+      pattern: "\\[TODO\\]"
+      path: docs/helix/02-design/contracts/**/*.md
+      description: "No TODO markers in contracts"
+
+    # Contract completeness
+    - check: grep_present
+      pattern: "API-[0-9]+"
+      path: docs/helix/02-design/contracts/**/*.md
+      description: "Contracts have API-XXX identifiers"
+
+    # ADR format validation
+    - check: grep_present
+      pattern: "ADR-[0-9]+"
+      path: docs/helix/02-design/adr/**/*.md
+      description: "ADRs have proper identifiers"
+
+    - check: grep_present
+      pattern: "(Status|Decision|Context|Consequences)"
+      path: docs/helix/02-design/adr/**/*.md
+      description: "ADRs contain required sections"
+
+  manual:
+    - "Technical Lead approval on architecture"
+    - "Security review completed"
+
+next_phase: test

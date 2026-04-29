@@ -1,0 +1,129 @@
+# Metadata for Threat Model
+
+artifact:
+  name: Threat Model
+  id: threat-model
+  type: document
+  phase: frame
+
+description: |
+  Systematic identification and analysis of security threats using
+  STRIDE methodology. Maps threats to system components, assesses
+  risk, and defines mitigation strategies.
+
+dependencies:
+  requires:
+    - input: Product Requirements Document
+      type: artifact
+      path: prd
+      required: true
+    - input: Security Requirements
+      type: artifact
+      path: security-requirements
+      required: true
+    - input: User Stories
+      type: artifact
+      path: user-stories
+      required: true
+    - input: System architecture
+      type: external
+      required: true
+    - input: Data flow diagrams
+      type: external
+      required: true
+
+  enables:
+    - output: Security Design Requirements
+      type: artifact
+      phase: design
+    - output: Security Controls Specification
+      type: artifact
+      phase: design
+    - output: Security Test Scenarios
+      type: artifact
+      phase: test
+
+output:
+  location: docs/helix/01-frame/threat-model.md
+  format: markdown
+  naming: threat-model.md
+
+validation:
+  required_sections:
+    - system_description
+    - stride_analysis
+    - risk_assessment
+    - mitigation_strategies
+
+  quality_checks:
+    - check: all_components_analyzed
+      description: Every system component must be included in the threat analysis
+      severity: blocking
+    - check: stride_categories_complete
+      description: All six STRIDE categories must be evaluated per component
+      severity: blocking
+    - check: risk_scores_calculated
+      description: Risk scores must be calculated for each identified threat
+      severity: warning
+    - check: mitigations_defined
+      description: Mitigation strategies must be defined for high and critical risks
+      severity: warning
+
+variables:
+  - name: project_name
+    description: Name of the project being threat-modeled
+    required: true
+  - name: system_components
+    description: List of system components to analyze
+    required: true
+  - name: data_flows
+    description: Data flow descriptions between components
+    required: true
+  - name: trust_boundaries
+    description: Trust boundary definitions
+    required: true
+  - name: external_interfaces
+    description: External system interfaces
+    required: true
+  - name: threat_actors
+    description: Known or anticipated threat actors
+    required: false
+  - name: existing_security_controls
+    description: Security controls already in place
+    required: false
+  - name: risk_tolerance
+    description: Organization's risk tolerance level
+    required: false
+  - name: compliance_requirements
+    description: Applicable compliance requirements
+    required: false
+
+prompts:
+  generation: prompt.md
+
+template:
+  file: template.md
+
+workflow:
+  creation_order: 5
+  review_cycles: 2
+  approval_required: true
+  approvers:
+    - Security Champion
+    - Technical Lead
+
+relationships:
+  informs:
+    - solution-design
+    - test-plan
+  referenced_by:
+    - adr
+
+tags:
+  - security
+  - threat-modeling
+  - stride
+  - risk
+
+version: 1.0.0
+last_updated: 2024-01-14

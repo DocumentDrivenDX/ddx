@@ -1,0 +1,14 @@
+# Metric Definition Template
+# File location: docs/helix/06-iterate/metrics/<name>.yaml
+# Default output format: METRIC <name>=<value>
+
+name: <name>
+description: <description>
+unit: <unit>                  # e.g. seconds, bytes, percent, count
+direction: <lower|higher>     # lower = smaller is better, higher = larger is better
+command: <command>             # must be deterministic
+
+# output_pattern: "<regex-with-capture-group>"  # override default METRIC format
+# tolerance: "<band>"                           # noise band, e.g. "5%", "100ms"
+# labels:
+#   <key>: <value>

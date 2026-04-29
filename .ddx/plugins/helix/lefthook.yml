@@ -1,0 +1,12 @@
+pre-commit:
+  commands:
+    validate-plugin:
+      run: claude plugin validate .
+      glob: "{.claude-plugin/**/*,commands/**/*,skills/**/*,agents/**/*}"
+    check-workflow-paths:
+      run: |
+        if grep -rn '`workflows/' skills/ workflows/ --include='*.md' --include='*.yaml' --include='*.yml' 2>/dev/null | grep -v '.ddx/plugins/helix/workflows/'; then
+          echo "ERROR: Found bare workflows/ paths. Use .ddx/plugins/helix/workflows/ instead."
+          exit 1
+        fi
+      glob: "{skills/**/*.md,workflows/**/*.md,workflows/**/*.yaml,workflows/**/*.yml}"

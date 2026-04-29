@@ -1,0 +1,29 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ddx
+        run: curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
+        env:
+          DDX_INSTALL_DIR: /usr/local/bin
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@helix.dev"
+          git config --global user.name "HELIX CI"
+
+      - name: Run CLI tests
+        run: bash tests/helix-cli.sh
+
+      - name: Validate skill packages
+        run: bash tests/validate-skills.sh

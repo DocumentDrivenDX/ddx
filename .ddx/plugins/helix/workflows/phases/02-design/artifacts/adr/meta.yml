@@ -1,0 +1,129 @@
+# Metadata for Architecture Decision Record (ADR)
+
+artifact:
+  name: Architecture Decision Record
+  id: adr
+  type: document
+  phase: design
+  level: project
+
+id_format:
+  prefix: ADR
+  pattern: "ADR-[0-9]{3}"
+  example: ADR-001
+  description: |
+    Sequential three-digit number. Each ADR captures one architecture decision.
+    Numbers are never reused; superseded ADRs are marked Superseded with a
+    forward reference to the replacement.
+
+description: |
+  An ADR documents a significant architectural decision: the context that drove
+  it, the alternatives considered, the chosen approach, and the consequences.
+  Each ADR covers exactly one decision. ADRs are immutable once accepted; new
+  decisions that revise them create a new ADR marked as superseding the old one.
+
+dependencies:
+  requires:
+    - input: Product Requirements Document
+      type: artifact
+      pattern: "prd.md"
+      phase: frame
+      required: false
+      note: "For decisions tied to product requirements"
+
+    - input: Feature Specification
+      type: artifact
+      pattern: "FEAT-[0-9]{3}-*.md"
+      phase: frame
+      required: false
+      note: "For feature-scoped architecture decisions"
+
+  enables:
+    - output: Solution Design
+      type: artifact
+      pattern: "SD-[0-9]{3}-*.md"
+      phase: design
+
+    - output: Technical Design
+      type: artifact
+      pattern: "TD-[0-9]{3}-*.md"
+      phase: design
+
+output:
+  location: docs/helix/02-design/adrs/ADR-{id}-{name}.md
+  format: markdown
+  naming: ADR-{number}-{decision-name}.md
+  examples:
+    - ADR-001-use-jsonl-for-tracker.md
+    - ADR-002-helix-phase-structure.md
+
+reuse_policy: |
+  ADRs are write-once. Once an ADR status is Accepted or Rejected it must not
+  be edited to change the decision. To revise a decision, create a new ADR with
+  status Supersedes: ADR-XXX. The old ADR status is then updated to
+  Superseded by ADR-YYY. This preserves the full decision history.
+
+validation:
+  required_sections:
+    - context
+    - decision
+    - alternatives
+    - consequences
+
+  pattern_checks:
+    - pattern: "ADR-[0-9]{3}"
+      expected: ">=1"
+      message: Must carry a valid ADR identifier
+
+    - pattern: "Proposed|Accepted|Rejected|Deprecated|Superseded"
+      expected: ">=1"
+      message: Status field must be one of the defined values
+
+  quality_checks:
+    - check: single_decision
+      description: Each ADR must capture exactly one decision
+      severity: blocking
+
+    - check: alternatives_evaluated
+      description: At least one alternative must be compared before selecting an approach
+      severity: blocking
+
+    - check: consequences_explicit
+      description: Both positive and negative consequences must be stated
+      severity: warning
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this ADR for:
+    1. One decision per record
+    2. Honest alternatives comparison
+    3. Clear consequences
+    4. Correct status value
+    5. Traceability to governing artifacts
+
+template:
+  file: template.md
+
+workflow:
+  review_cycles: 1
+  approval_required: true
+  approvers:
+    - Technical Lead
+
+relationships:
+  informed_by:
+    - prd
+    - feature-specification
+
+  informs:
+    - solution-design
+    - technical-design
+
+tags:
+  - architecture
+  - decision-record
+  - design
+
+version: 1.0.0
+last_updated: 2026-04-05

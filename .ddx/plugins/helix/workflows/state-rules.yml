@@ -1,0 +1,209 @@
+# HELIX Workflow State Detection Rules
+# This file defines how to detect workflow state from artifacts
+
+name: helix
+version: 1.0.0
+description: Test-driven development workflow with optional discovery and phase-based progression
+
+# Artifact patterns for state detection
+# Note: build/deploy execution is managed in the built-in tracker. Static file
+# matching is sufficient for canonical docs, but per-story build/deploy state
+# should be queried with the `query_command` hints below.
+artifact_patterns:
+  # Story-level artifacts (vertical slices)
+  story:
+    frame:
+      pattern: "docs/helix/01-frame/user-stories/US-{id}-*.md"
+      type: user-story
+      phase: frame
+
+    design:
+      pattern: "docs/helix/02-design/technical-designs/TD-{id}-*.md"
+      type: technical-design
+      phase: design
+
+    test:
+      pattern: "docs/helix/03-test/test-plans/TP-{id}-*.md"
+      type: story-test-plan
+      phase: test
+
+    build:
+      pattern: ".helix/"
+      type: build-issue
+      phase: build
+      query_command: "Inspect open tracker issues labeled helix, phase:build, story:US-{id}"
+
+    deploy:
+      pattern: ".helix/"
+      type: deploy-issue
+      phase: deploy
+      query_command: "Inspect open tracker issues labeled helix, phase:deploy, story:US-{id}"
+
+    iterate:
+      pattern: "docs/helix/06-iterate/iteration-reports/IR-{id}-*.md"
+      type: iteration-report
+      phase: iterate
+
+  # Feature-level artifacts (epics)
+  feature:
+    frame:
+      pattern: "docs/helix/01-frame/features/FEAT-{id}-*.md"
+      type: feature-specification
+      phase: frame
+
+    design:
+      pattern: "docs/helix/02-design/solution-designs/SD-{id}-*.md"
+      type: solution-design
+      phase: design
+
+    test:
+      pattern: "docs/helix/03-test/test-plan-FEAT-{id}.md"
+      type: feature-test-plan
+      phase: test
+
+    build:
+      pattern: "docs/helix/04-build/implementation-plan-FEAT-{id}.md"
+      type: feature-implementation
+      phase: build
+
+  # Phase-level artifacts (project-wide)
+  project:
+    discover:
+      - pattern: "docs/helix/00-discover/product-vision.md"
+        type: product-vision
+      - pattern: "docs/helix/00-discover/business-case.md"
+        type: business-case
+
+    frame:
+      - pattern: "docs/helix/01-frame/prd.md"
+        type: product-requirements
+      - pattern: "docs/helix/01-frame/principles.md"
+        type: principles
+      - pattern: "docs/helix/01-frame/stakeholder-map.md"
+        type: stakeholder-map
+
+    design:
+      - pattern: "docs/helix/02-design/architecture.md"
+        type: architecture
+      - pattern: "docs/helix/02-design/contracts/*.md"
+        type: api-contracts
+
+    test:
+      - pattern: "docs/helix/03-test/test-plan.md"
+        type: master-test-plan
+      - pattern: "docs/helix/03-test/test-procedures.md"
+        type: test-procedures
+
+    build:
+      - pattern: "docs/helix/04-build/implementation-plan.md"
+        type: master-implementation
+      - pattern: "docs/helix/04-build/build-procedures.md"
+        type: build-procedures
+
+# Phase detection strategy
+phase_detection:
+  strategy: highest-artifact  # Use the highest phase artifact found
+  order: [discover, frame, design, test, build, deploy, iterate]
+
+  # Additional checks for phase determination
+  additional_checks:
+    - type: test-status
+      description: Check if tests are passing to determine build vs test phase
+      test_command: "make test"
+      passing_phase: build
+      failing_phase: test
+
+    - type: deployment-status
+      description: Check if deployed to determine deploy vs build phase
+      check_file: "docs/helix/05-deploy/deployment-record.md"
+      exists_phase: deploy
+      missing_phase: build
+
+# Artifact naming conventions
+naming_conventions:
+  story:
+    pattern: "{prefix}-{id}-{name}"
+    examples:
+      - "US-001-initialize-ddx"
+      - "TD-001-initialize-ddx"
+      - "TP-001-initialize-ddx"
+    prefixes:
+      US: "User Story (Frame)"
+      TD: "Technical Design (Design)"
+      TP: "Test Plan (Test)"
+      ISSUE: "Execution tracked in built-in tracker"
+      IR: "Iteration Report (Iterate)"
+
+  feature:
+    pattern: "{prefix}-{id}-{name}"
+    examples:
+      - "FEAT-001-mcp-server-management"
+      - "SD-001-mcp-management"
+    prefixes:
+      FEAT: "Feature Specification"
+      SD: "Solution Design"
+
+# State transition rules
+transitions:
+  story:
+    frame_to_design:
+      requires: ["US-{id} exists"]
+      creates: "TD-{id}"
+
+    design_to_test:
+      requires: ["TD-{id} exists"]
+      creates: "TP-{id}"
+
+    test_to_build:
+      requires: ["TP-{id} exists", "tests failing"]
+      creates: "build issue(s) in tracker"
+
+    build_to_deploy:
+      requires: ["build issue(s) exist", "tests passing"]
+      creates: "deploy issue(s) in tracker"
+
+    deploy_to_iterate:
+      requires: ["deploy issue(s) exist", "deployed"]
+      creates: "IR-{id}"
+
+# Validation rules
+validation:
+  story_progression:
+    - rule: "TD cannot exist without US"
+      check: "If TD-{id} exists, then US-{id} must exist"
+
+    - rule: "TP cannot exist without TD"
+      check: "If TP-{id} exists, then TD-{id} must exist"
+
+    - rule: "Build issue work should not start without TP"
+      check: "If a build issue query returns work for story {id}, then TP-{id} must exist"
+
+  cross_references:
+    - rule: "TD must reference US"
+      check: "TD-{id} file contains [[US-{id}]]"
+
+    - rule: "TP must reference TD"
+      check: "TP-{id} file contains [[TD-{id}]]"
+
+# Workflow metadata
+metadata:
+  supports_vertical_slices: true
+  supports_parallel_stories: true
+  enforces_phase_gates: true
+  test_driven: true
+  documentation_first: true
+
+# Integration with HELIX execution
+execution_integration:
+  commands:
+    implementation:
+      description: "Execute one ready HELIX execution issue"
+      example: "helix implement"
+
+    check:
+      description: "Decide whether to implement, align, backfill, wait, ask for guidance, or stop"
+      example: "helix check"
+
+    run:
+      description: "Run the bounded wrapper loop"
+      example: "helix run"

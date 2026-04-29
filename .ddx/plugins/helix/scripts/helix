@@ -1,0 +1,3121 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_dir() {
+  local source="${BASH_SOURCE[0]}"
+  while [[ -L "$source" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$source")" && pwd)"
+    source="$(readlink "$source")"
+    [[ "$source" != /* ]] && source="$dir/$source"
+  done
+  cd -P "$(dirname "$source")" && pwd
+}
+
+# Use HELIX_ROOT if set (e.g., by bin/helix plugin wrapper), otherwise
+# resolve from this script's location.
+if [[ -n "${HELIX_ROOT:-}" ]]; then
+  library_root="$HELIX_ROOT"
+else
+  script_dir="$(resolve_script_dir)"
+  library_root="$(cd "$script_dir/.." && pwd)"
+fi
+HELIX_VERSION="0.3.3"
+helix_docs_root="${HELIX_LIBRARY_ROOT:-$library_root/workflows}"
+target_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# DDx bead-backed tracker settings
+tracker_dir="${DDX_BEAD_DIR:-${HELIX_TRACKER_DIR:-${target_root}/.ddx}}"
+tracker_file="${tracker_dir}/beads.jsonl"
+export DDX_BEAD_DIR="$tracker_dir"
+export DDX_BEAD_PREFIX="${DDX_BEAD_PREFIX:-hx}"
+
+agent="${HELIX_AGENT:-codex}"
+agent_model="${HELIX_MODEL:-}"
+agent_effort="${HELIX_EFFORT:-}"
+review_every=15
+force_ephemeral="${HELIX_FORCE_EPHEMERAL:-0}"
+session_active=0  # 1 = reusable session exists for the current epic
+max_cycles=0
+auto_align="${HELIX_AUTO_ALIGN:-1}"
+auto_review=1
+review_threshold=100
+
+# Model tiers: "smart" for reasoning-heavy stages, "cheap" for mechanical stages.
+# Override with HELIX_SMART_MODEL / HELIX_CHEAP_MODEL for the primary agent.
+smart_model="${HELIX_SMART_MODEL:-}"
+cheap_model="${HELIX_CHEAP_MODEL:-}"
+
+# resolve_model <tier> — return the model name for the current $agent and tier.
+# tier: "smart" or "cheap"
+# HELIX_SMART_MODEL / HELIX_CHEAP_MODEL override defaults for the PRIMARY agent.
+# When the current agent is the alternate (adversarial rotation), use that
+# agent's own defaults — the env overrides don't cross agent boundaries.
+resolve_model() {
+  local tier="${1:-smart}"
+  local primary="${HELIX_AGENT:-codex}"
+  case "$agent" in
+    claude)
+      if [[ "$tier" == "smart" ]]; then
+        if [[ "$agent" == "$primary" && -n "$smart_model" ]]; then
+          printf '%s' "$smart_model"
+        else
+          printf '%s' "claude-opus-4-6"
+        fi
+      else
+        if [[ "$agent" == "$primary" && -n "$cheap_model" ]]; then
+          printf '%s' "$cheap_model"
+        else
+          printf '%s' "claude-sonnet-4-6"
+        fi
+      fi
+      ;;
+    codex)
+      if [[ "$tier" == "smart" ]]; then
+        if [[ "$agent" == "$primary" && -n "$smart_model" ]]; then
+          printf '%s' "$smart_model"
+        else
+          printf '%s' "gpt-5.4"
+        fi
+      else
+        if [[ "$agent" == "$primary" && -n "$cheap_model" ]]; then
+          printf '%s' "$cheap_model"
+        else
+          printf '%s' "gpt-5.4-mini"
+        fi
+      fi
+      ;;
+    *)
+      # Unknown agent — fall through to agent default
+      printf '%s' "${agent_model:-}"
+      ;;
+  esac
+}
+
+# Adversarial agent rotation: reasoning stages use the primary agent,
+# mechanical stages (build, polish, check) use the alternate agent.
+# This ensures different models review each other's work.
+# Set HELIX_ALT_AGENT=none to explicitly disable auto-detection.
+if [[ "${HELIX_ALT_AGENT:-auto}" != "auto" ]]; then
+  alt_agent="${HELIX_ALT_AGENT}"
+  [[ "$alt_agent" == "none" ]] && alt_agent=""
+elif [[ "${agent}" == "codex" ]] && command -v claude >/dev/null 2>&1; then
+  alt_agent="claude"
+elif [[ "${agent}" == "claude" ]] && command -v codex >/dev/null 2>&1; then
+  alt_agent="codex"
+else
+  alt_agent=""
+fi
+# review_agent kept as alias for backward compat with --review-agent flag
+review_agent="${HELIX_REVIEW_AGENT:-$alt_agent}"
+dry_run=0
+quiet=0
+summary=0
+total_tokens=0
+
+# Session log — stderr is copied to a log file for post-hoc inspection.
+# We use a background tee with explicit PID tracking so the tee process
+# is cleaned up on exit.  This prevents $() subshells (used by the test
+# harness) from hanging on an orphan tee that holds the captured pipe open.
+helix_log_dir="${target_root}/.helix-logs"
+mkdir -p "$helix_log_dir"
+helix_log="${helix_log_dir}/helix-$(date +%Y%m%d-%H%M%S).log"
+exec 3>&2
+exec 2> >(tee -a "$helix_log" >&3)
+_helix_tee_pid=$!
+_helix_cleanup() {
+  exec 2>&3 3>&-  # restore stderr, close fd 3
+  if [[ -n "${_helix_tee_pid:-}" ]]; then
+    kill "$_helix_tee_pid" 2>/dev/null
+    wait "$_helix_tee_pid" 2>/dev/null || true
+  fi
+}
+trap _helix_cleanup EXIT
+
+# Summary-mode helpers: concise output to fd 3, verbose to fd 2 (log only).
+# In normal mode both go to stderr (which tee's to log anyway).
+
+# Current line count in the log file (for referencing ranges)
+log_line() {
+  wc -l < "$helix_log" 2>/dev/null | tr -d ' '
+}
+
+# Write a concise one-liner to the user (fd 3) — always visible
+summary_line() {
+  local fmt="$1"; shift
+  # shellcheck disable=SC2059
+  printf "helix: ${fmt}\n" "$@" >&3
+}
+
+# Write verbose detail — goes to log file only in summary mode, stderr in normal mode
+verbose_line() {
+  local fmt="$1"; shift
+  if (( summary )); then
+    # Write directly to log file only (skip fd 3 / user-visible stderr)
+    # shellcheck disable=SC2059
+    printf "helix: ${fmt}\n" "$@" >> "$helix_log"
+  else
+    # shellcheck disable=SC2059
+    printf "helix: ${fmt}\n" "$@" >&2
+  fi
+}
+
+
+usage() {
+  cat <<EOF
+Usage:
+  helix run [--agent codex|claude] [--review-every N] [--max-cycles N] [--no-auto-align] [--no-auto-review] [--summary] [--dry-run]
+  helix frame [--agent codex|claude] [scope]
+  helix build [--agent codex|claude] [selector]
+  helix check [--agent codex|claude] [scope]
+  helix align [--agent codex|claude] [scope]
+  helix backfill [--agent codex|claude] [scope]
+  helix design [--agent codex|claude] [--rounds N] [scope]
+  helix polish [--agent codex|claude] [--rounds N] [scope]
+  helix doctor [--fix]
+  helix start [helix run options...]
+  helix stop
+  helix status [--json]
+  helix next
+  helix review [--agent codex|claude] [scope]
+  helix experiment [--agent codex|claude] [--close] [issue-id|goal]
+  helix evolve [--agent codex|claude] [--scope S] [--artifact ID] [--from source] "requirement"
+  helix triage "Title" [--type task|epic|bug|chore] [ddx bead create options...]
+  ddx bead <command> [args...]
+  helix help
+
+Commands:
+  run         Loop over ready HELIX work, then check whether to continue
+  doctor      Check installation health; --fix auto-repairs plugin symlinks and skills
+  start       Launch helix run as a background process (PID file written)
+  stop        Kill the background helix run cleanly
+  frame       Create or refine product vision, PRD, and feature specs
+  build       Run one bounded implementation pass
+  check       Run the bounded HELIX queue-health check
+  align       Run reconcile-alignment for a scope (default: repo)
+  backfill    Run documentation backfill for a scope (default: repo)
+  design      Create a comprehensive design document through iterative refinement
+  polish      Refine issues before implementation (dedup, coverage, criteria)
+  next        Show recommended next issue
+  review      Fresh-eyes review of recent work
+  experiment  Run one experiment iteration for metric-driven optimization
+  evolve      Thread a new requirement through the artifact stack
+  commit      Commit with HELIX format, run build gate, push, close issue
+  triage      Create a bead via ddx bead create
+
+Options:
+  --agent           Agent to use: codex or claude (default: ${agent})
+  --claude          Shorthand for --agent claude
+  --codex           Shorthand for --agent codex
+  --model           Model to use (e.g., claude-sonnet-4-6, gpt-5.4)
+  --effort          Reasoning effort: low, medium, high, max (defaults vary by action)
+  --review-every    Run alignment every N completed implementation cycles
+  --max-cycles      Stop after N completed implementation cycles
+  --no-auto-align   Do not auto-run alignment when check returns ALIGN
+  --no-auto-review  Do not run fresh-eyes review after each implementation
+  --review-threshold N  Skip review for changes below N lines (default: 100)
+  --review-agent    Use a different agent for reviews (default: adversarial alternate)
+  --smart-model     Model for reasoning-heavy stages (frame, design, align, review)
+  --cheap-model     Model for mechanical stages (build, polish, check)
+  --dry-run         Print the agent command instead of executing it
+  --quiet, -q       Suppress progress output (command echo, prompt sizes)
+  --summary, -s     Concise output with log-file line pointers (implies --quiet)
+
+Environment:
+  HELIX_AGENT          Default primary agent (codex or claude)
+  HELIX_ALT_AGENT      Alternate agent for adversarial rotation (auto-detected)
+  HELIX_AGENT_TIMEOUT  Agent timeout in seconds (default: 2700)
+  HELIX_SMART_MODEL    Model for reasoning stages (default: opus / gpt-5.4)
+  HELIX_CHEAP_MODEL    Model for mechanical stages (default: sonnet / gpt-5.4-mini)
+  HELIX_LIBRARY_ROOT   Override the library root that contains workflows/
+  HELIX_TRACKER_DIR    Override the tracker directory (default: .helix/)
+
+Adversarial rotation:
+  Primary agent (frame, design, evolve, align, review) uses the smart model.
+  Alternate agent (build, polish, check) uses the cheap model.
+  This ensures different models review each other's work.
+
+Logs:
+  Session logs are written to .helix-logs/helix-YYYYMMDD-HHMMSS.log
+  in the project root. All stderr output is captured for post-hoc inspection.
+
+Notes:
+  Codex runs as `codex --dangerously-bypass-approvals-and-sandbox exec`.
+EOF
+}
+
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "missing required command: $1" >&2
+    exit 1
+  fi
+}
+
+run_doctor() {
+  local fix="${1:-0}"
+  local ok=0 warn=0 fail=0 fixed=0
+
+  _check() {
+    local name="$1" required="${2:-1}"
+    if command -v "$name" >/dev/null 2>&1; then
+      local ver
+      ver="$("$name" --version 2>/dev/null || "$name" -V 2>/dev/null || "$name" version 2>/dev/null || echo "ok")"
+      ver="$(printf '%s' "$ver" | head -1)"
+      printf '  ✓  %-12s %s\n' "$name" "$ver"
+      ok=$((ok + 1))
+    elif (( required )); then
+      printf '  ✗  %-12s MISSING (required)\n' "$name"
+      fail=$((fail + 1))
+    else
+      printf '  -  %-12s not found (optional)\n' "$name"
+      warn=$((warn + 1))
+    fi
+  }
+
+  _fix_symlink() {
+    local target="$1" link_path="$2" label="$3"
+    if [[ -L "$link_path" ]]; then
+      # Resolve both to absolute paths for comparison
+      local resolved_link resolved_target
+      resolved_link="$(cd "$(dirname "$link_path")" && cd "$(readlink "$link_path")" 2>/dev/null && pwd)" || resolved_link=""
+      resolved_target="$(cd "$target" 2>/dev/null && pwd)" || resolved_target="$target"
+      if [[ -n "$resolved_link" && "$resolved_link" == "$resolved_target" ]]; then
+        printf '  ✓  %-12s %s\n' "$label" "$link_path"
+        ok=$((ok + 1))
+        return 0
+      elif [[ -d "$link_path" ]]; then
+        # Symlink resolves to a valid directory, just not the expected one
+        printf '  ✓  %-12s %s\n' "$label" "$link_path"
+        ok=$((ok + 1))
+        return 0
+      else
+        if (( fix )); then
+          ln -sfn "$target" "$link_path"
+          printf '  ✓  %-12s %s (updated)\n' "$label" "$link_path"
+          fixed=$((fixed + 1))
+          return 0
+        else
+          printf '  ✗  %-12s %s (stale: points to %s)\n' "$label" "$link_path" "$(readlink "$link_path")"
+          fail=$((fail + 1))
+          return 1
+        fi
+      fi
+    elif [[ -e "$link_path" ]]; then
+      printf '  ✗  %-12s %s exists but is not a symlink\n' "$label" "$link_path"
+      fail=$((fail + 1))
+      return 1
+    else
+      if (( fix )); then
+        mkdir -p "$(dirname "$link_path")"
+        ln -s "$target" "$link_path"
+        printf '  ✓  %-12s %s (created)\n' "$label" "$link_path"
+        fixed=$((fixed + 1))
+        return 0
+      else
+        printf '  ✗  %-12s NOT FOUND at %s\n' "$label" "$link_path"
+        fail=$((fail + 1))
+        return 1
+      fi
+    fi
+  }
+
+  printf 'HELIX Doctor\n'
+  printf '============\n\n'
+  printf 'Version:  helix %s\n' "$HELIX_VERSION"
+  printf 'Root:     %s\n' "$library_root"
+  (( fix )) && printf 'Mode:     --fix (will auto-repair)\n'
+  printf '\n'
+
+  printf 'Required:\n'
+  _check bash 1
+  _check git 1
+  _check ddx 1
+
+  printf '\nAgent CLIs (at least one required):\n'
+  local has_agent=0
+  if command -v claude >/dev/null 2>&1; then
+    _check claude 0; has_agent=1
+  fi
+  if command -v codex >/dev/null 2>&1; then
+    _check codex 0; has_agent=1
+  fi
+  if (( ! has_agent )); then
+    printf '  ✗  No agent CLI found (need claude or codex)\n'
+    fail=$((fail + 1))
+  fi
+
+  printf '\nOptional:\n'
+  _check tmux 0
+  _check asciinema 0
+  _check hugo 0
+  _check docker 0
+
+  printf '\nWorkflows:\n'
+  if [[ -d "$helix_docs_root" ]]; then
+    printf '  ✓  %-12s %s\n' "workflows" "$helix_docs_root"
+  else
+    printf '  ✗  %-12s NOT FOUND at %s\n' "workflows" "$helix_docs_root"
+    fail=$((fail + 1))
+  fi
+
+  # Skills reference .ddx/plugins/helix/workflows/ from the target repo.
+  # Verify that path resolves so agents can find workflow docs.
+  printf '\nPlugin path:\n'
+  local plugin_dir="${target_root}/.ddx/plugins/helix"
+  _fix_symlink "$library_root" "$plugin_dir" "plugin"
+
+  printf '\nSkills:\n'
+  local skill_count=0
+  if [[ -d "$library_root/skills" ]]; then
+    skill_count="$(find "$library_root/skills" -name SKILL.md 2>/dev/null | wc -l)"
+  fi
+  printf '  %-14s %s skills found in library\n' "" "$skill_count"
+
+  # Check .agents/skills and .claude/skills symlinks in target repo
+  printf '\nSkill symlinks:\n'
+  local skills_dir="${library_root}/skills"
+  local agents_dir="${target_root}/.agents/skills"
+  local claude_dir="${target_root}/.claude/skills"
+  local stale_links=0
+
+  for skill_src in "$skills_dir"/helix-*/SKILL.md; do
+    [[ -e "$skill_src" ]] || continue
+    local skill_name
+    skill_name="$(basename "$(dirname "$skill_src")")"
+    local rel_target="../../skills/$skill_name"
+
+    # .agents/skills/<name>
+    if [[ -L "$agents_dir/$skill_name" ]]; then
+      local current
+      current="$(readlink "$agents_dir/$skill_name")"
+      if [[ "$current" != "$rel_target" ]] && (( fix )); then
+        ln -sfn "$rel_target" "$agents_dir/$skill_name"
+        fixed=$((fixed + 1))
+      elif [[ "$current" != "$rel_target" ]]; then
+        stale_links=$((stale_links + 1))
+      fi
+    elif (( fix )); then
+      mkdir -p "$agents_dir"
+      ln -s "$rel_target" "$agents_dir/$skill_name"
+      fixed=$((fixed + 1))
+    else
+      stale_links=$((stale_links + 1))
+    fi
+
+    # .claude/skills/<name>
+    if [[ -L "$claude_dir/$skill_name" ]]; then
+      local current
+      current="$(readlink "$claude_dir/$skill_name")"
+      if [[ "$current" != "$rel_target" ]] && (( fix )); then
+        ln -sfn "$rel_target" "$claude_dir/$skill_name"
+        fixed=$((fixed + 1))
+      elif [[ "$current" != "$rel_target" ]]; then
+        stale_links=$((stale_links + 1))
+      fi
+    elif (( fix )); then
+      mkdir -p "$claude_dir"
+      ln -s "$rel_target" "$claude_dir/$skill_name"
+      fixed=$((fixed + 1))
+    else
+      stale_links=$((stale_links + 1))
+    fi
+  done
+
+  if (( stale_links > 0 )); then
+    printf '  ✗  %d missing or stale skill symlinks (run helix doctor --fix)\n' "$stale_links"
+    fail=$((fail + 1))
+  else
+    printf '  ✓  .agents/skills and .claude/skills up to date\n'
+    ok=$((ok + 1))
+  fi
+
+  printf '\nTracker:\n'
+  if [[ -f "$tracker_file" ]]; then
+    local bead_count
+    bead_count="$(wc -l < "$tracker_file")"
+    printf '  ✓  %-12s %s beads\n' "$tracker_file" "$bead_count"
+  else
+    printf '  -  %-12s no tracker in this directory\n' "$tracker_file"
+  fi
+
+  printf '\n'
+  if (( fixed > 0 )); then
+    printf 'Fixed: %d items repaired\n' "$fixed"
+  fi
+  if (( fail > 0 )); then
+    printf 'Result: %s ok, %s warnings, %s FAILURES\n' "$ok" "$warn" "$fail"
+    (( ! fix )) && printf 'Hint: run "helix doctor --fix" to auto-repair\n'
+    return 1
+  else
+    printf 'Result: %s ok, %s warnings — ready to go\n' "$ok" "$warn"
+    return 0
+  fi
+}
+
+tracker_init() {
+  ddx bead init >/dev/null
+}
+
+tracker_ensure() {
+  need_cmd ddx
+
+  if [[ ! -f "$tracker_file" ]]; then
+    tracker_init
+  fi
+}
+
+require_tracker() {
+  tracker_ensure
+}
+
+tracker_exec() {
+  ddx bead "$@"
+}
+
+tracker_create() {
+  local title="" type="task" labels="" deps="" parent="" spec_id=""
+  local description="" design="" acceptance="" priority=2 execution_eligible=""
+  local superseded_by="" replaces=""
+  local -a cmd=(ddx bead create)
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --type)       type="$2"; shift 2 ;;
+      --labels)     labels="$2"; shift 2 ;;
+      --deps)       deps="$2"; shift 2 ;;
+      --parent)     parent="$2"; shift 2 ;;
+      --spec-id)    spec_id="$2"; shift 2 ;;
+      --description) description="$2"; shift 2 ;;
+      --design)     design="$2"; shift 2 ;;
+      --acceptance) acceptance="$2"; shift 2 ;;
+      --priority)   priority="$2"; shift 2 ;;
+      --execution-eligible) execution_eligible="$2"; shift 2 ;;
+      --superseded-by) superseded_by="$2"; shift 2 ;;
+      --replaces)   replaces="$2"; shift 2 ;;
+      --set)        cmd+=(--set "$2"); shift 2 ;;
+      --silent)     shift ;;
+      -h|--help|help)
+        tracker_exec create --help
+        return 0
+        ;;
+      *) title="$1"; shift ;;
+    esac
+  done
+
+  if [[ -z "$title" ]]; then
+    echo "tracker: title required" >&2
+    return 1
+  fi
+
+  cmd+=( "$title" --type "$type" --priority "$priority" )
+  [[ -n "$labels" ]]      && cmd+=(--labels "$labels")
+  [[ -n "$parent" ]]      && cmd+=(--parent "$parent")
+  [[ -n "$description" ]] && cmd+=(--description "$description")
+  [[ -n "$acceptance" ]]  && cmd+=(--acceptance "$acceptance")
+
+  [[ -n "$spec_id" ]]     && cmd+=(--set "spec-id=$spec_id")
+  [[ -n "$design" ]]      && cmd+=(--set "design=$design")
+  [[ -n "$superseded_by" ]] && cmd+=(--set "superseded-by=$superseded_by")
+  [[ -n "$replaces" ]]    && cmd+=(--set "replaces=$replaces")
+
+  if [[ -z "$execution_eligible" ]]; then
+    case ",${labels}," in
+      *,phase:build,*|*,phase:deploy,*|*,phase:iterate,*)
+        execution_eligible="true" ;;
+      *)
+        execution_eligible="false" ;;
+    esac
+  fi
+  [[ -n "$execution_eligible" ]] && cmd+=(--set "execution-eligible=$execution_eligible")
+
+  local id
+  id="$("${cmd[@]}")" || return 1
+
+  if [[ -n "$deps" ]]; then
+    local dep
+    for dep in ${deps//,/ }; do
+      ddx bead dep add "$id" "$dep" >/dev/null || return 1
+    done
+  fi
+
+  printf '%s\n' "$id"
+}
+
+tracker_show() {
+  tracker_exec show "$@"
+}
+
+tracker_update() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" || "${1:-}" == "help" ]]; then
+    tracker_exec update --help
+    return 0
+  fi
+
+  local id="$1"
+  shift
+
+  local -a cmd=(ddx bead update "$id")
+  local claim=0 unclaim=0 deps_to_add=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)      cmd+=(--title "$2"); shift 2 ;;
+      --status)     cmd+=(--status "$2"); shift 2 ;;
+      --priority)   cmd+=(--priority "$2"); shift 2 ;;
+      --labels)     cmd+=(--labels "$2"); shift 2 ;;
+      --acceptance) cmd+=(--acceptance "$2"); shift 2 ;;
+      --assignee)   cmd+=(--assignee "$2"); shift 2 ;;
+      --notes)      cmd+=(--set "notes=$2"); shift 2 ;;
+      --claim)      claim=1; shift ;;
+      --unclaim)    unclaim=1; shift ;;
+      --set)        cmd+=(--set "$2"); shift 2 ;;
+      --spec-id)    cmd+=(--set "spec-id=$2"); shift 2 ;;
+      --design)     cmd+=(--set "design=$2"); shift 2 ;;
+      --deps)       deps_to_add="$2"; shift 2 ;;
+      --execution-eligible) cmd+=(--set "execution-eligible=$2"); shift 2 ;;
+      --superseded-by)      cmd+=(--set "superseded-by=$2"); shift 2 ;;
+      --replaces)           cmd+=(--set "replaces=$2"); shift 2 ;;
+      --parent)     cmd+=(--parent "$2"); shift 2 ;;
+      *)            shift ;;
+    esac
+  done
+
+  if (( claim )); then
+    ddx bead update "$id" --claim
+    return $?
+  fi
+
+  if (( unclaim )); then
+    ddx bead update "$id" --unclaim
+    return $?
+  fi
+
+  if ! "${cmd[@]}"; then
+    return 1
+  fi
+
+  if [[ -n "$deps_to_add" ]]; then
+    local dep
+    for dep in ${deps_to_add//,/ }; do
+      ddx bead dep add "$id" "$dep" >/dev/null || true
+    done
+  fi
+}
+
+tracker_close() {
+  tracker_exec close "$@"
+}
+
+# Unclaim an issue only if it is still in-progress.
+# Never unclaims a closed bead — semantically wrong and kept as a guard;
+# ddx bead update --unclaim only clears claim metadata on closed beads
+# without changing their status (does not reopen them).
+safe_unclaim() {
+  local issue_id="$1"
+  local current_status
+  current_status="$(tracker_show "$issue_id" --json 2>/dev/null | ddx jq -r '.status // ""')" || return 0
+  if [[ "$current_status" == "closed" ]]; then
+    verbose_line "safe_unclaim: %s is already closed — skipping unclaim to prevent state revert" "$issue_id"
+    return 0
+  fi
+  tracker_update "$issue_id" --unclaim 2>/dev/null || true
+}
+
+tracker_list() {
+  tracker_exec list "$@"
+}
+
+tracker_ready() {
+  tracker_exec ready "$@"
+}
+
+tracker_blocked() {
+  tracker_exec blocked "$@"
+}
+
+tracker_dep() {
+  local subcmd="$1"
+  shift
+
+  case "$subcmd" in
+    add|remove|tree) tracker_exec dep "$subcmd" "$@" ;;
+    *) echo "tracker: dep $subcmd: unknown subcommand" >&2; return 1 ;;
+  esac
+}
+
+tracker_status() {
+  tracker_exec status "$@"
+}
+
+tracker_import() {
+  tracker_exec import "$@"
+}
+
+tracker_export() {
+  tracker_exec export "$@"
+}
+
+# ---------- PID file helpers (hx-407ed8b8) ----------
+
+_helix_pid_file() {
+  printf '%s/helix.pid' "$tracker_dir"
+}
+
+_helix_pid_alive() {
+  local pid_file
+  pid_file="$(_helix_pid_file)"
+  [[ -f "$pid_file" ]] || return 1
+  local pid
+  pid="$(cat "$pid_file" 2>/dev/null)"
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+}
+
+run_start() {
+  require_tracker
+  local pid_file
+  pid_file="$(_helix_pid_file)"
+
+  if _helix_pid_alive; then
+    local pid; pid="$(cat "$pid_file")"
+    echo "helix: run already active (pid=$pid). Use 'helix stop' first." >&2
+    return 1
+  fi
+
+  # Clean stale PID file
+  rm -f "$pid_file"
+
+  # Launch helix run in background with --summary
+  "$0" run --summary "$@" &
+  local bg_pid=$!
+  printf '%s\n' "$bg_pid" > "$pid_file"
+  printf 'helix: started (pid=%s, log=%s)\n' "$bg_pid" "$helix_log" >&2
+}
+
+run_stop() {
+  require_tracker
+  local pid_file
+  pid_file="$(_helix_pid_file)"
+
+  if [[ ! -f "$pid_file" ]]; then
+    echo "helix: no active run (no PID file)" >&2
+    return 1
+  fi
+
+  local pid; pid="$(cat "$pid_file" 2>/dev/null)"
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    rm -f "$pid_file"
+    echo "helix: stale PID file removed (pid=$pid was not running)" >&2
+    return 1
+  fi
+
+  kill "$pid" 2>/dev/null
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null && (( waited < 10 )); do
+    sleep 1
+    (( waited++ ))
+  done
+
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$pid_file"
+  printf 'helix: stopped (pid=%s)\n' "$pid" >&2
+}
+
+# ---------- DDx exec run integration (FEAT-005) ----------
+#
+# When ddx exec is available, helix CLI dispatch wraps skill invocations
+# with ddx exec run for observability. Run records persist after each
+# skill invocation.
+#
+# Recursion protection: when scripts/helix is invoked BY ddx exec run,
+# the env var HELIX_EXEC_CONTEXT=1 is set. In that case the exec wrap
+# is skipped and the skill executes directly.
+#
+# Pattern:
+#   helix build
+#     → scripts/helix main() detects exec available, HELIX_EXEC_CONTEXT unset
+#     → HELIX_EXEC_CONTEXT=1 ddx exec run helix:build
+#       → ddx exec run invokes: helix build (with HELIX_EXEC_CONTEXT=1)
+#       → scripts/helix main() sees HELIX_EXEC_CONTEXT=1 → skips exec wrap
+#       → executes run_implementation directly
+#       → ddx records the run
+#
+# All skill command arguments are preserved because ddx exec run re-invokes
+# the full helix CLI command from the exec definition.
+
+_ddx_exec_available() {
+  command -v ddx &>/dev/null || return 1
+  ddx exec list &>/dev/null 2>&1
+}
+
+# Returns 0 if we should wrap this dispatch in ddx exec run.
+_exec_wrap_enabled() {
+  local skill="$1"
+  [[ "${HELIX_EXEC_CONTEXT:-0}" == "1" ]] && return 1  # already inside exec run
+  (( dry_run )) && return 1                               # dry-run: skip
+  _ddx_exec_available || return 1                         # ddx exec not available
+  ddx exec validate "helix:${skill}" &>/dev/null 2>&1 || return 1  # definition missing
+  return 0
+}
+
+# exec_wrap <skill> <helix-args...>
+# Wraps a top-level skill dispatch with ddx exec run when available.
+# On exec wrap: re-invokes helix with HELIX_EXEC_CONTEXT=1.
+# On fallback: calls "$@" (the original function + args) directly.
+exec_wrap() {
+  local skill="$1"; shift
+  if _exec_wrap_enabled "$skill"; then
+    verbose_line "wrapping helix:%s with ddx exec run" "$skill"
+    HELIX_EXEC_CONTEXT=1 ddx exec run "helix:${skill}"
+  else
+    "$@"
+  fi
+}
+# ----------------------------------------------------------
+
+tracker_dispatch() {
+  local subcmd="${1:-}"
+  require_tracker
+  shift || true
+
+  case "$subcmd" in
+    help|-h|--help|"") tracker_exec --help ;;
+    create) tracker_create "$@" ;;
+    update) tracker_update "$@" ;;
+    import) tracker_import "$@" ;;
+    export) tracker_export "$@" ;;
+    *) tracker_exec "$subcmd" "$@" ;;
+  esac
+}
+
+extract_codex_tokens() {
+  # Extract the token count from codex output (appears as "tokens used\nNNN").
+  # Prints the count or 0 if not found.
+  local prev=""
+  while IFS= read -r line; do
+    if [[ "$prev" == "tokens used" ]] && [[ "$line" =~ ^[0-9,]+$ ]]; then
+      printf '%s' "${line//,/}"
+      return
+    fi
+    prev="$line"
+  done
+  printf '0'
+}
+
+reset_session() {
+  session_active=0
+  if (( ! quiet )); then
+    printf 'helix: session reset (next cycle starts fresh)\n' >&2
+  fi
+}
+
+run_agent_prompt() {
+  local prompt="$1"
+  # Only apply agent_model when no explicit override is given AND
+  # the current agent matches the configured primary agent.
+  # This prevents passing claude models to codex during cross-model review.
+  local model_override="${2:-}"
+  if [[ -z "$model_override" ]] && [[ "$agent" == "${HELIX_AGENT:-codex}" ]]; then
+    model_override="$agent_model"
+  fi
+  local effort_override="${3:-$agent_effort}"
+  local prompt_bytes
+  prompt_bytes="$(printf '%s' "$prompt" | wc -c)"
+  local agent_timeout="${HELIX_AGENT_TIMEOUT:-2700}"
+
+  # Prefer ddx agent run for unified dispatch (token tracking, session logging,
+  # harness-agnostic interface). Fall back to direct dispatch only when ddx
+  # agent is unavailable. Set HELIX_DIRECT_AGENT=1 to skip ddx and dispatch
+  # to agent binaries directly (used by tests with mock agents).
+  if [[ "${HELIX_DIRECT_AGENT:-0}" != "1" ]] \
+     && command -v ddx &>/dev/null \
+     && ddx agent list &>/dev/null 2>&1; then
+    _run_agent_ddx "$prompt" "$model_override" "$effort_override" "$agent_timeout"
+    return $?
+  fi
+
+  # Fallback: direct agent dispatch (no ddx)
+  _run_agent_direct "$prompt" "$model_override" "$effort_override" "$agent_timeout"
+}
+
+# Extract agent text result from ddx agent run JSON output.
+# Claude: output is a JSON blob with .result field.
+# Codex: output is JSONL stream; text is in item.completed .item.text fields.
+# Other: emit output as-is.
+_extract_agent_text() {
+  local harness="$1" raw_output="$2"
+
+  case "$harness" in
+    claude)
+      # Claude output is a JSON result blob — extract .result
+      printf '%s' "$raw_output" | ddx jq -r '.result // ""' 2>/dev/null || printf '%s' "$raw_output"
+      ;;
+    codex)
+      # Codex output is JSONL — extract text from item.completed events
+      printf '%s\n' "$raw_output" | while IFS= read -r line; do
+        local text
+        text="$(printf '%s' "$line" | ddx jq -r 'select(.type == "item.completed") | .item.text // empty' 2>/dev/null || true)"
+        [[ -n "$text" ]] && printf '%s\n' "$text"
+      done
+      ;;
+    *)
+      printf '%s' "$raw_output"
+      ;;
+  esac
+}
+
+# Primary dispatch via ddx agent run.
+_run_agent_ddx() {
+  local prompt="$1" model_override="$2" effort_override="$3" agent_timeout="$4"
+  local prompt_bytes
+  prompt_bytes="$(printf '%s' "$prompt" | wc -c)"
+
+  local -a ddx_flags=(
+    --harness "$agent"
+    --permissions unrestricted
+    --timeout "${agent_timeout}s"
+  )
+  [[ -n "$model_override" ]] && ddx_flags+=(--model "$model_override")
+  [[ -n "$effort_override" ]] && ddx_flags+=(--effort "$effort_override")
+
+  if (( dry_run )); then
+    printf 'ddx agent run %s --text %q\n' "${ddx_flags[*]}" "$prompt"
+    return 0
+  fi
+
+  # Write prompt to temp file (avoids shell arg-length limits for large prompts)
+  local _prompt_tmp
+  _prompt_tmp="$(mktemp)"
+  printf '%s' "$prompt" > "$_prompt_tmp"
+
+  local _start_ts
+  _start_ts="$(date +%s)"
+
+  if (( ! quiet )); then
+    printf 'helix: [%s] ddx agent run --harness %s %s <prompt %s bytes> (timeout %ss)\n' \
+      "$(date +%H:%M:%S)" "$agent" "${model_override:+(model: $model_override)}" "$prompt_bytes" "$agent_timeout" >&2
+  fi
+
+  # Dispatch via ddx agent run with JSON output for metrics
+  local _agent_tmp _agent_rc=0
+  _agent_tmp="$(mktemp)"
+  ddx agent run "${ddx_flags[@]}" --json --prompt "$_prompt_tmp" > "$_agent_tmp" 2>&1 &
+  local _agent_pid=$!
+
+  # Watchdog: periodic heartbeat while ddx handles its own timeout
+  local _watchdog_elapsed=0
+  while kill -0 "$_agent_pid" 2>/dev/null; do
+    sleep 5
+    _watchdog_elapsed=$((_watchdog_elapsed + 5))
+    if (( ! quiet )) && (( _watchdog_elapsed % 60 == 0 )); then
+      printf 'helix: [%s] %s still running (%ss elapsed)\n' "$(date +%H:%M:%S)" "$agent" "$_watchdog_elapsed" >&2
+    fi
+  done
+  wait "$_agent_pid" || _agent_rc=$?
+
+  rm -f "$_prompt_tmp"
+
+  local _agent_json
+  _agent_json="$(cat "$_agent_tmp")"
+  rm -f "$_agent_tmp"
+
+  local _elapsed=$(( $(date +%s) - _start_ts ))
+
+  # Extract metrics from ddx JSON output
+  local _cycle_tokens _cost _exit_code _raw_output
+  _exit_code="$(printf '%s' "$_agent_json" | ddx jq -r '.exit_code // 1' 2>/dev/null || echo 1)"
+  _cycle_tokens="$(printf '%s' "$_agent_json" | ddx jq -r '(.input_tokens // 0) + (.output_tokens // 0)' 2>/dev/null || echo 0)"
+  _cost="$(printf '%s' "$_agent_json" | ddx jq -r '.cost_usd // 0' 2>/dev/null || echo 0)"
+  _raw_output="$(printf '%s' "$_agent_json" | ddx jq -r '.output // ""' 2>/dev/null || echo '')"
+  total_tokens=$((total_tokens + _cycle_tokens))
+
+  # Log full output for post-hoc inspection
+  local _log_start _log_end
+  _log_start="$(log_line)"
+  {
+    printf -- '--- ddx agent run [%s] harness=%s rc=%s exit=%s elapsed=%ss cost=$%s tokens=%s ---\n' \
+      "$(date +%H:%M:%S)" "$agent" "$_agent_rc" "$_exit_code" "$_elapsed" "$_cost" "$_cycle_tokens"
+    printf -- '%s\n' "$_raw_output"
+    printf -- '--- end ddx agent output ---\n'
+  } >> "$helix_log"
+  _log_end="$(log_line)"
+
+  if (( summary )); then
+    summary_line "[%s] %s complete (rc=%s, %ss, %s tokens, \$%s) — log L%s–L%s in %s" \
+      "$(date +%H:%M:%S)" "$agent" "$_exit_code" "$_elapsed" "$_cycle_tokens" "$_cost" "$_log_start" "$_log_end" "$helix_log"
+  elif (( ! quiet )); then
+    printf 'helix: [%s] %s complete (rc=%s, %ss, %s tokens, $%s, %s total)\n' \
+      "$(date +%H:%M:%S)" "$agent" "$_exit_code" "$_elapsed" "$_cycle_tokens" "$_cost" "$total_tokens" >&2
+  fi
+
+  # Emit the agent's text result to stdout for downstream parsing
+  _extract_agent_text "$agent" "$_raw_output"
+
+  return "$_exit_code"
+}
+
+# Fallback dispatch when ddx agent is not available.
+_run_agent_direct() {
+  local prompt="$1" model_override="$2" effort_override="$3" agent_timeout="$4"
+  local prompt_bytes
+  prompt_bytes="$(printf '%s' "$prompt" | wc -c)"
+
+  case "$agent" in
+    codex)
+      need_cmd codex
+      local _codex_model_flag=""
+      [[ -n "$model_override" ]] && _codex_model_flag="-m $model_override"
+      local _codex_effort_flag=""
+      [[ -n "$effort_override" ]] && _codex_effort_flag="-c reasoning.effort=$effort_override"
+      if (( dry_run )); then
+        printf 'codex --dangerously-bypass-approvals-and-sandbox exec -C %q %s --ephemeral %q\n' "$target_root" "$_codex_model_flag" "$prompt"
+      else
+        local _start_ts _elapsed
+        _start_ts="$(date +%s)"
+
+        if (( ! quiet )); then
+          printf 'helix: [%s] codex exec -C %s %s <prompt %s bytes> (timeout %ss)\n' \
+            "$(date +%H:%M:%S)" "$target_root" "${model_override:+(model: $model_override)}" "$prompt_bytes" "$agent_timeout" >&2
+        fi
+
+        # Run codex with timeout — uses timeout(1) to avoid zombie race
+        # conditions with kill -0 polling loops.
+        local _codex_tmp _codex_rc=0
+        _codex_tmp="$(mktemp)"
+        # Codex does not support feeding new prompts to resumed sessions.
+        # Always use --ephemeral for codex to avoid broken resume attempts.
+        # shellcheck disable=SC2086
+        timeout "${agent_timeout}s" \
+          codex --dangerously-bypass-approvals-and-sandbox exec \
+          -C "$target_root" $_codex_model_flag $_codex_effort_flag --ephemeral "$prompt" > "$_codex_tmp" 2>&1 || _codex_rc=$?
+        if (( _codex_rc == 124 )); then
+          printf 'helix: [%s] codex timeout after %ss\n' "$(date +%H:%M:%S)" "$agent_timeout" >&2
+          rm -f "$_codex_tmp"
+          return 1
+        fi
+
+        local _codex_raw
+        _codex_raw="$(cat "$_codex_tmp")"
+        rm -f "$_codex_tmp"
+
+        _elapsed=$(( $(date +%s) - _start_ts ))
+
+        # Log full output for post-hoc inspection
+        local _log_start _log_end
+        _log_start="$(log_line)"
+        {
+          printf -- '--- codex output [%s] rc=%s elapsed=%ss ---\n' "$(date +%H:%M:%S)" "$_codex_rc" "$_elapsed"
+          printf -- '%s\n' "$_codex_raw"
+          printf -- '--- end codex output ---\n'
+        } >> "$helix_log"
+        _log_end="$(log_line)"
+
+        # Extract and accumulate token usage
+        local _cycle_tokens
+        _cycle_tokens="$(printf -- '%s\n' "$_codex_raw" | extract_codex_tokens)"
+        total_tokens=$((total_tokens + _cycle_tokens))
+
+        if (( summary )); then
+          summary_line "[%s] codex complete (rc=%s, %ss, %s tokens) — log L%s–L%s in %s" \
+            "$(date +%H:%M:%S)" "$_codex_rc" "$_elapsed" "$_cycle_tokens" "$_log_start" "$_log_end" "$helix_log"
+        elif (( ! quiet )); then
+          printf 'helix: [%s] codex complete (rc=%s, %ss, %s tokens, %s total)\n' \
+            "$(date +%H:%M:%S)" "$_codex_rc" "$_elapsed" "$_cycle_tokens" "$total_tokens" >&2
+        fi
+
+        # Emit condensed output via DDx (strips diffs, boilerplate, and bulk verbose content).
+        # Fall back to raw output if ddx agent condense fails (pipefail would otherwise abort).
+        printf -- '%s\n' "$_codex_raw" | ddx agent condense || printf -- '%s\n' "$_codex_raw"
+        return "$_codex_rc"
+      fi
+      ;;
+    claude)
+      need_cmd claude
+      local _claude_model_flag=""
+      [[ -n "$model_override" ]] && _claude_model_flag="--model $model_override"
+      local _claude_effort_flag=""
+      [[ -n "$effort_override" ]] && _claude_effort_flag="--effort $effort_override"
+      # Always use --no-session-persistence for claude in the run loop.
+      # Session reuse across different operations (review, alignment,
+      # implementation) causes rc=2 failures when the session context
+      # doesn't match the new prompt.
+      local _claude_session_flag="--no-session-persistence"
+      if (( dry_run )); then
+        printf 'cd %q && claude -p --permission-mode bypassPermissions --dangerously-skip-permissions %s %s %q\n' "$target_root" "$_claude_session_flag" "$_claude_model_flag" "$prompt"
+      else
+        if (( ! quiet )); then
+          printf 'helix: [%s] claude -p %s %s (timeout %ss)\n' "$(date +%H:%M:%S)" "$_claude_session_flag" "${model_override:+(model: $model_override)}" "$agent_timeout" >&2
+          printf '%s\n' "$prompt" | sed 's/^/helix: │ /' >&2
+          printf 'helix: └─ %s bytes\n' "$prompt_bytes" >&2
+        fi
+
+        local claude_pid _claude_log_start
+        _claude_log_start="$(log_line)"
+        if (( ! quiet )) && command -v ddx >/dev/null 2>&1; then
+          # Stream JSON mode: show live tool-call progress on stderr,
+          # emit final text result on stdout.
+          # shellcheck disable=SC2086
+          (cd "$target_root" && printf '%s' "$prompt" | claude -p \
+            --permission-mode bypassPermissions \
+            --dangerously-skip-permissions \
+            $_claude_session_flag \
+            $_claude_model_flag \
+            $_claude_effort_flag \
+            --output-format stream-json \
+            --verbose \
+          | while IFS= read -r line; do
+              # Show tool calls with key details
+              tool_info="$(printf '%s' "$line" | ddx jq -r '
+                select(.type == "assistant")
+                | .message.content[]?
+                | select(.type == "tool_use")
+                | .name as $n
+                | .input as $i
+                | if $n == "Read" then "\($n)(\($i.file_path // "" | split("/") | last))"
+                  elif $n == "Write" then "\($n)(\($i.file_path // "" | split("/") | last))"
+                  elif $n == "Edit" then "\($n)(\($i.file_path // "" | split("/") | last))"
+                  elif $n == "Glob" then "\($n)(\($i.pattern // ""))"
+                  elif $n == "Grep" then "\($n)(\($i.pattern // ""))"
+                  elif $n == "Bash" then "\($n)(\($i.command // "" | .[0:80]))"
+                  elif $n == "Agent" then "\($n)(\($i.description // ""))"
+                  elif $n == "Skill" then "\($n)(\($i.skill // ""))"
+                  else $n
+                  end
+              ' 2>/dev/null || true)"
+              if [[ -n "$tool_info" ]]; then
+                printf 'helix: [%s] → %s\n' "$(date +%H:%M:%S)" "$tool_info" >&2
+              fi
+              # Show thinking/text progress
+              think="$(printf '%s' "$line" | ddx jq -r '
+                select(.type == "assistant")
+                | .message.content[]?
+                | select(.type == "thinking")
+                | .thinking // empty
+                | .[0:500]
+              ' 2>/dev/null || true)"
+              if [[ -n "$think" ]]; then
+                printf 'helix: [%s] 💭 %s\n' "$(date +%H:%M:%S)" "$think" >&2
+              fi
+              # Show tool result summaries (first line, truncated)
+              tool_result="$(printf '%s' "$line" | ddx jq -r '
+                select(.type == "user")
+                | .message.content[]?
+                | select(.type == "tool_result")
+                | .content // ""
+                | if type == "array" then .[0].text // "" else . end
+                | split("\n")[0]
+                | .[0:120]
+              ' 2>/dev/null || true)"
+              if [[ -n "$tool_result" ]]; then
+                local is_err
+                is_err="$(printf '%s' "$line" | ddx jq -r '
+                  select(.type == "user")
+                  | .message.content[]?
+                  | select(.type == "tool_result")
+                  | if .is_error then "!" else " " end
+                ' 2>/dev/null || true)"
+                printf 'helix: [%s]  %s %s\n' "$(date +%H:%M:%S)" "${is_err:-" "}" "$tool_result" >&2
+              fi
+              # Emit final result text to stdout
+              result="$(printf '%s' "$line" | ddx jq -r '
+                select(.type == "result") | .result // empty
+              ' 2>/dev/null || true)"
+              if [[ -n "$result" ]]; then
+                printf '%s\n' "$result"
+              fi
+            done) &
+        else
+          # Quiet / no ddx: plain text mode
+          # shellcheck disable=SC2086
+          (cd "$target_root" && printf '%s' "$prompt" | claude -p \
+            --permission-mode bypassPermissions \
+            --dangerously-skip-permissions \
+            $_claude_session_flag \
+            $_claude_model_flag \
+            $_claude_effort_flag \
+            --verbose) &
+        fi
+        claude_pid=$!
+
+        # Watchdog: timeout
+        local elapsed=0
+        while kill -0 "$claude_pid" 2>/dev/null; do
+          sleep 10
+          elapsed=$((elapsed + 10))
+          if (( elapsed >= agent_timeout )); then
+            printf 'helix: [%s] agent timeout after %ss — killing\n' "$(date +%H:%M:%S)" "$elapsed" >&2
+            kill "$claude_pid" 2>/dev/null
+            wait "$claude_pid" 2>/dev/null
+            return 1
+          fi
+        done
+        local _claude_rc=0
+        wait "$claude_pid" || _claude_rc=$?
+        if (( summary )); then
+          local _claude_log_end
+          _claude_log_end="$(log_line)"
+          summary_line "[%s] claude complete (rc=%s, %ss) — log L%s–L%s in %s" \
+            "$(date +%H:%M:%S)" "$_claude_rc" "$elapsed" "$_claude_log_start" "$_claude_log_end" "$helix_log"
+        fi
+        return "$_claude_rc"
+      fi
+      ;;
+    *)
+      echo "unsupported agent: $agent" >&2
+      exit 1
+      ;;
+  esac
+}
+
+inline_action() {
+  local action_file="$1"
+  printf 'Read and follow the action at %s.\n' "$action_file"
+}
+
+implementation_prompt() {
+  local selector="${1:-}"
+  local context_file="${target_root}/.helix/context.md"
+  cat <<EOF
+$(if [[ -f "$context_file" ]]; then cat "$context_file"; printf '\n---\n\n'; fi)
+Execute the following HELIX implementation action.
+$(inline_action "${helix_docs_root}/actions/implementation.md")
+Use supporting references at ${helix_docs_root}/README.md and ${helix_docs_root}/phases/04-build/enforcer.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead ready --json\`, \`ddx bead show <id>\`, \`ddx bead update <id> --claim\`, \`ddx bead close <id>\`.
+Concurrency rule: re-read the selected issue immediately before claim and immediately before close. If tracker metadata drifted materially, do not claim or close from stale assumptions; re-check instead.
+${selector:+Implementation target: ${selector}.}
+CRITICAL: If tests fail after your changes, fix them. 99% of test failures are caused by your changes, not by pre-existing breakage. Do not blame external causes, do not skip tests, do not commit with failing tests. Fix the code or fix the test. Retry up to 3 times before giving up. Never commit broken work.
+Follow the action exactly. Do the work — do not just describe what you would do.
+Session log: ${helix_log}
+EOF
+}
+
+# Build a prompt that instructs the agent to implement multiple related issues
+# in one invocation. Each issue is claimed, implemented, verified, and closed
+# individually within the same session.
+batch_implementation_prompt() {
+  local issues="$1"  # newline-separated issue IDs
+  local context_file="${target_root}/.helix/context.md"
+  local issue_count
+  issue_count="$(printf '%s\n' "$issues" | wc -l)"
+
+  cat <<EOF
+$(if [[ -f "$context_file" ]]; then cat "$context_file"; printf '\n---\n\n'; fi)
+Execute the following HELIX implementation action for ${issue_count} related issues.
+$(inline_action "${helix_docs_root}/actions/implementation.md")
+Use supporting references at ${helix_docs_root}/README.md and ${helix_docs_root}/phases/04-build/enforcer.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+
+BATCH MODE: Implement these ${issue_count} related issues sequentially in this session:
+$(printf '%s\n' "$issues" | while read -r id; do
+  local title
+  title="$(tracker_show "$id" --json 2>/dev/null | ddx jq -r '.title // "?"')" || title="?"
+  printf '  - %s: %s\n' "$id" "$title"
+done)
+
+For each issue: claim it, implement it, run scoped verification on changed crates,
+commit with the issue ID, close it, then move to the next issue. If one issue
+fails, commit and close what you completed and leave the rest open.
+
+Concurrency rule: re-read each issue immediately before claim and before close.
+CRITICAL: If tests fail after your changes, fix them. Retry up to 3 times. Never commit broken work.
+Follow the action exactly. Do the work — do not just describe what you would do.
+Session log: ${helix_log}
+EOF
+}
+
+check_prompt() {
+  local scope="${1:-repo}"
+  cat <<EOF
+Execute the following HELIX check action.
+$(inline_action "${helix_docs_root}/actions/check.md")
+Use supporting references at ${helix_docs_root}/README.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead ready --json\`, \`ddx bead list --json\`, \`ddx bead blocked --json\`.
+Review scope: ${scope}.
+CRITICAL: Your output MUST contain the line "NEXT_ACTION: CODE" where CODE is one of BUILD, DESIGN, POLISH, ALIGN, BACKFILL, WAIT, GUIDANCE, or STOP. This line must appear on its own, not inside a code block or backticks. Without this line the automation cannot continue. Output this line FIRST, before any other analysis.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+alignment_prompt() {
+  local scope="${1:-repo}"
+  cat <<EOF
+Execute the following HELIX alignment action.
+$(inline_action "${helix_docs_root}/actions/reconcile-alignment.md")
+Use supporting references at ${helix_docs_root}/README.md and ${helix_docs_root}/templates/alignment-review.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+Review scope: ${scope}.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+backfill_prompt() {
+  local scope="${1:-repo}"
+  cat <<EOF
+Execute the following HELIX backfill action.
+$(inline_action "${helix_docs_root}/actions/backfill-helix-docs.md")
+Use supporting references at ${helix_docs_root}/README.md and ${helix_docs_root}/templates/backfill-report.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+This is a writable live session: run real tracker commands, update docs/helix/, and do not claim that you need another session unless a concrete command actually fails.
+Backfill scope: ${scope}.
+Return the required BACKFILL_STATUS, BACKFILL_REPORT, and RESEARCH_EPIC trailer lines exactly.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+frame_prompt() {
+  local scope="${1:-}"
+  cat <<EOF
+Execute the following HELIX frame action.
+$(inline_action "${helix_docs_root}/actions/frame.md")
+Use artifact templates at ${helix_docs_root}/phases/00-discover/artifacts/ and ${helix_docs_root}/phases/01-frame/artifacts/ as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+Frame scope: ${scope:-repo}.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+run_frame() {
+  local scope="${1:-}"
+  # Frame is reasoning-heavy — use primary agent with smart model
+  run_agent_prompt "$(frame_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}"
+}
+
+plan_prompt() {
+  local scope="${1:-}"
+  local rounds="${2:-5}"
+  cat <<EOF
+Execute the following HELIX plan action.
+$(inline_action "${helix_docs_root}/actions/plan.md")
+Use supporting references at ${helix_docs_root}/README.md and phase docs under ${helix_docs_root}/phases/ as needed.
+Execute in the current repository rooted at ${target_root}.
+Plan scope: ${scope:-repo}.
+Refinement rounds: ${rounds}.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+polish_prompt() {
+  local scope="${1:-}"
+  local rounds="${2:-6}"
+  cat <<EOF
+Execute the following HELIX polish action.
+$(inline_action "${helix_docs_root}/actions/polish.md")
+Use supporting references at ${helix_docs_root}/README.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+Polish scope: ${scope:-all open issues}.
+Maximum refinement rounds: ${rounds}.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+review_prompt() {
+  local scope="${1:-last-commit}"
+  local in_loop="${2:-0}"
+  cat <<EOF
+Execute the following HELIX fresh-eyes review action.
+$(inline_action "${helix_docs_root}/actions/fresh-eyes-review.md")
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+Review scope: ${scope}.
+${in_loop:+This review is running inside the automated helix run loop after an implementation cycle.}
+IMPORTANT: File each actionable finding (critical, high, medium severity) as a tracker issue with label \`review-finding\` so findings are durable and queryable via \`ddx bead list --label review-finding\`. See the "Filing Findings as Tracker Issues" section in the action for the exact command pattern.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+experiment_prompt() {
+  local target="${1:-}"
+  local close="${2:-0}"
+  cat <<EOF
+Execute the following HELIX experiment action.
+$(inline_action "${helix_docs_root}/actions/experiment.md")
+Use supporting references at ${helix_docs_root}/README.md and ${helix_docs_root}/ratchets.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+Experiment target: ${target:-auto-select from ready phase:iterate issues}.
+$([ "${close}" = "1" ] && echo 'CLOSE SESSION: Execute Phase 3 (Session Close) — squash-merge the experiment branch, update ratchet floors, and close the issue. Do not run another iteration.')
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+require_clean_worktree() {
+  if ! (cd "$target_root" && git diff --quiet && git diff --cached --quiet); then
+    echo "helix: worktree has uncommitted changes" >&2
+    echo "helix: please commit your changes before starting an experiment" >&2
+    echo "helix: experiment needs a clean worktree to safely branch and revert" >&2
+    return 1
+  fi
+}
+
+run_experiment() {
+  local target="${1:-}"
+  local close="${2:-0}"
+  if (( ! dry_run )); then
+    require_tracker
+    require_clean_worktree
+  fi
+  run_agent_prompt "$(experiment_prompt "$target" "$close")"
+}
+
+evolve_prompt() {
+  local requirement="${1:-}"
+  local scope="${2:-}"
+  local artifact="${3:-}"
+  local source="${4:-}"
+  cat <<EOF
+Execute the following HELIX evolve action.
+$(inline_action "${helix_docs_root}/actions/evolve.md")
+Use supporting references at ${helix_docs_root}/README.md as needed.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+Requirement: ${requirement}
+${scope:+Scope: ${scope}.}
+${artifact:+Target artifact: ${artifact}.}
+${source:+Requirement source: ${source}.}
+CRITICAL: Output the EVOLUTION_STATUS, ARTIFACTS_UPDATED, ISSUES_CREATED, and CONFLICTS trailer lines exactly. Without these lines the automation cannot parse your result.
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+run_evolve() {
+  local requirement="${1:-}"
+  local scope="${2:-}"
+  local artifact="${3:-}"
+  local source="${4:-}"
+  if [[ -z "$requirement" ]]; then
+    echo "helix: evolve requires a requirement description" >&2
+    return 1
+  fi
+  if (( ! dry_run )); then
+    require_tracker
+  fi
+  # Evolve is reasoning-heavy — use primary agent with smart model
+  run_agent_prompt "$(evolve_prompt "$requirement" "$scope" "$artifact" "$source")" "$(resolve_model smart)" "${agent_effort:-high}"
+}
+
+extract_agents_md_commands() {
+  # Extract the first ```bash block from the Quick Reference section of AGENTS.md.
+  # Prints the block contents or nothing if not found.
+  local agents_file="${target_root}/AGENTS.md"
+  [[ -f "$agents_file" ]] || return 0
+  awk '
+    /^#.*[Qq]uick [Rr]eference/ { in_section=1; next }
+    in_section && /^```bash/ { in_block=1; next }
+    in_block && /^```/ { exit }
+    in_block { print }
+  ' "$agents_file"
+}
+
+generate_run_context() {
+  # Generate a condensed context file for the agent to reduce token usage.
+  # Called at run start and on epic switch. Non-fatal if it fails.
+  local epic_id="${1:-}"
+  local context_file="${target_root}/.helix/context.md"
+  mkdir -p "${target_root}/.helix" 2>/dev/null || true
+  local ready_count open_count in_progress_count closed_count
+  ready_count="$(tracker_ready --json --execution 2>/dev/null | ddx jq 'length' 2>/dev/null)" || ready_count="?"
+  open_count="$(tracker_list --status open --json 2>/dev/null | ddx jq 'length' 2>/dev/null)" || open_count="?"
+  in_progress_count="$(tracker_list --status in_progress --json 2>/dev/null | ddx jq 'length' 2>/dev/null)" || in_progress_count="?"
+  closed_count="$(tracker_list --status closed --json 2>/dev/null | ddx jq 'length' 2>/dev/null)" || closed_count="?"
+
+  {
+    printf '# HELIX Execution Context\n\n'
+    printf 'Project root: %s\n' "$target_root"
+    printf 'Tracker: %s\n' "$tracker_file"
+    printf 'Issue counts: ready=%s, open=%s, in-progress=%s, closed=%s\n\n' \
+      "$ready_count" "$open_count" "$in_progress_count" "$closed_count"
+
+    # Include build/test commands from AGENTS.md Quick Reference
+    local agents_cmds
+    agents_cmds="$(extract_agents_md_commands)" || true
+    if [[ -n "$agents_cmds" ]]; then
+      printf '## Build/Test Commands\n\n'
+      printf '```bash\n%s\n```\n\n' "$agents_cmds"
+    fi
+
+    if [[ -n "$epic_id" ]]; then
+      local epic_title epic_spec epic_ac
+      epic_title="$(tracker_show "$epic_id" --json 2>/dev/null | ddx jq -r '.title // "?"')" || epic_title="?"
+      epic_spec="$(tracker_show "$epic_id" --json 2>/dev/null | ddx jq -r '.["spec-id"] // ""')" || epic_spec=""
+      epic_ac="$(tracker_show "$epic_id" --json 2>/dev/null | ddx jq -r '.acceptance // ""')" || epic_ac=""
+      printf '## Current Epic\n\n'
+      printf 'ID: %s\nTitle: %s\n' "$epic_id" "$epic_title"
+      [[ -n "$epic_spec" ]] && printf 'Spec: %s\n' "$epic_spec"
+      [[ -n "$epic_ac" ]] && printf 'Acceptance: %s\n' "$epic_ac"
+      printf '\n'
+    fi
+
+    printf -- '## Key Rules\n\n'
+    printf -- '- Implement all listed issues in one cycle. Claim each before work, close each after verification.\n'
+    printf -- '- Authority order: Vision > PRD > Specs > Architecture > Designs > Tests > Code\n'
+    printf -- '- Verify only changed crates/packages, not the full workspace.\n'
+    printf -- '- Absorb small adjacent work (<100 lines, same module) instead of creating tickets.\n'
+    printf -- '- Use ddx bead subcommands for all issue operations.\n'
+    printf -- '- Commit with issue ID in message. Push to remote.\n'
+  } > "$context_file"
+
+  if (( ! quiet )); then
+    printf 'helix: generated context at %s\n' "$context_file" >&2
+  fi
+}
+
+helix_ready_count() {
+  need_cmd ddx
+  tracker_ready --json --execution | ddx jq 'length'
+}
+
+helix_select_ready_issue() {
+  local skip_json="${1:-[]}"
+  need_cmd ddx
+  tracker_ready --json --execution | ddx jq -r --argjson skip "$skip_json" '
+    [.[] | select(.id as $id | $skip | index($id) | not)] as $candidates |
+
+    # Prefer leaf tasks (non-epic) with execution metadata over epics.
+    # Epics waste cycles on decomposition instead of implementation.
+    [ $candidates[] | select(.issue_type != "epic") | select(
+        (.["spec-id"] // "") != "" or
+        (.acceptance // "") != "" or
+        (.design // "") != ""
+      )] as $leaf_with_meta |
+    if ($leaf_with_meta | length) > 0 then $leaf_with_meta
+    else
+      # Fall back: any non-epic task
+      [ $candidates[] | select(.issue_type != "epic") ] as $leaf_any |
+      if ($leaf_any | length) > 0 then $leaf_any
+      else
+        # Last resort: epics (when only epics remain)
+        $candidates
+      end
+    end | .[0].id // empty
+  '
+}
+
+# Select a batch of related issues that can be implemented together.
+# Given a primary issue ID, finds up to N siblings with the same parent
+# or same spec-id. Returns newline-separated IDs (primary first).
+helix_select_batch() {
+  local primary_id="$1"
+  local max_batch="${2:-3}"
+  local skip_json="${3:-[]}"
+  need_cmd ddx
+
+  local primary_json
+  primary_json="$(tracker_show "$primary_id" --json 2>/dev/null)" || { printf '%s\n' "$primary_id"; return; }
+
+  local parent spec_id
+  parent="$(printf '%s' "$primary_json" | ddx jq -r '.parent // ""')"
+  spec_id="$(printf '%s' "$primary_json" | ddx jq -r '.["spec-id"] // ""')"
+
+  # Extract area:* labels from the primary issue for fallback matching
+  local primary_areas
+  primary_areas="$(printf '%s' "$primary_json" | ddx jq -c '[(.labels // [])[] | select(startswith("area:"))]')"
+
+  # Find siblings: same parent OR same spec-id OR overlapping area labels (fallback)
+  local siblings
+  siblings="$(tracker_ready --json --execution 2>/dev/null | ddx jq -r --arg primary "$primary_id" \
+    --arg parent "$parent" --arg spec "$spec_id" --argjson skip "$skip_json" \
+    --argjson max "$max_batch" --argjson areas "$primary_areas" '
+    [.[] | select(
+      .id != $primary and
+      .issue_type != "epic" and
+      (.id as $id | $skip | index($id) | not) and
+      (
+        ($parent != "" and .parent == $parent) or
+        ($spec != "" and .["spec-id"] == $spec) or
+        (($areas | length) > 0 and ([(.labels // [])[] | select(startswith("area:"))] | [.[] | select(. as $a | $areas | index($a))]) | length > 0)
+      )
+    )] | .[0:($max - 1)] | .[].id
+  ' 2>/dev/null)" || true
+
+  printf '%s\n' "$primary_id"
+  if [[ -n "$siblings" ]]; then
+    printf '%s\n' "$siblings"
+  fi
+}
+
+tracker_issue_fingerprint() {
+  local id="$1"
+  need_cmd ddx
+  tracker_show "$id" --json | ddx jq -c '{
+    "spec-id": .["spec-id"],
+    parent: .parent,
+    "superseded-by": (.["superseded-by"] // ""),
+    replaces: (.replaces // "")
+  }'
+}
+
+handle_issue_queue_drift() {
+  local issue_id="$1"
+  local before_fingerprint="$2"
+  local after_json
+
+  if ! after_json="$(tracker_show "$issue_id" --json 2>/dev/null)"; then
+    printf 'helix: queue drift detected for %s: issue disappeared during execution\n' "$issue_id" >&2
+    return 0
+  fi
+
+  local after_fingerprint
+  after_fingerprint="$(printf '%s' "$after_json" | ddx jq -c '{
+    "spec-id": .["spec-id"],
+    parent: .parent,
+    "superseded-by": (.["superseded-by"] // ""),
+    replaces: (.replaces // "")
+  }')"
+
+  if [[ "$before_fingerprint" == "$after_fingerprint" ]]; then
+    return 1
+  fi
+
+  # Upstream governance fields changed — genuine external drift
+  local status
+  status="$(printf '%s' "$after_json" | ddx jq -r '.status')"
+  printf 'helix: queue drift detected for %s; refusing stale completion\n' "$issue_id" >&2
+
+  local superseded_by
+  superseded_by="$(printf '%s' "$after_json" | ddx jq -r '.["superseded-by"] // ""')"
+
+  # Unclaim logic for drift cases:
+  # - in_progress: always unclaim (agent didn't close it, reset for retry)
+  # - closed + superseded-by set: reopen to surface the supersession; silently
+  #   closing a superseded bead hides a governance change that needs attention.
+  #   Must use --status open rather than --unclaim because --unclaim is a no-op
+  #   on closed beads (it only transitions in_progress → open).
+  # - closed + no supersession: respect the agent's close — do NOT reopen.
+  if [[ "$status" == "in_progress" ]]; then
+    tracker_update "$issue_id" --unclaim >/dev/null || true
+  elif [[ "$status" == "closed" ]] && [[ -n "$superseded_by" ]]; then
+    tracker_update "$issue_id" --status open >/dev/null || true
+  fi
+
+  return 0
+}
+
+extract_next_action() {
+  local stripped
+  # Strip markdown bold/backtick formatting but preserve underscores
+  stripped="$(printf '%s\n' "$1" | sed 's/[*`]//g')"
+  local result
+  result="$(printf '%s\n' "$stripped" | grep -oE 'NEXT_ACTION: *(BUILD|DESIGN|POLISH|ALIGN|BACKFILL|WAIT|GUIDANCE|STOP)' | head -n1 | sed 's/^NEXT_ACTION: *//')"
+  printf '%s' "$result"
+}
+
+extract_backfill_status() {
+  printf '%s\n' "$1" | grep -oE 'BACKFILL_STATUS: *(COMPLETE|GUIDANCE_NEEDED|BLOCKED)' | head -n1 | sed 's/^BACKFILL_STATUS: *//'
+}
+
+extract_backfill_report() {
+  printf '%s\n' "$1" | grep -oE 'BACKFILL_REPORT: *[^ ]+' | head -n1 | sed 's/^BACKFILL_REPORT: *//'
+}
+
+extract_research_epic() {
+  printf '%s\n' "$1" | grep -oE 'RESEARCH_EPIC: *[^ ]+' | head -n1 | sed 's/^RESEARCH_EPIC: *//'
+}
+
+extract_review_status() {
+  local stripped
+  stripped="$(printf '%s\n' "$1" | sed 's/[*`]//g')"
+  printf '%s\n' "$stripped" | grep -oE 'REVIEW_STATUS: *(CLEAN|ISSUES_FOUND)' | head -n1 | sed 's/^REVIEW_STATUS: *//'
+}
+
+extract_review_issues_count() {
+  local stripped
+  stripped="$(printf '%s\n' "$1" | sed 's/[*`]//g')"
+  printf '%s\n' "$stripped" | grep -oE 'ISSUES_COUNT: *[0-9]+' | head -n1 | sed 's/^ISSUES_COUNT: *//'
+}
+
+extract_findings_filed() {
+  local stripped
+  stripped="$(printf '%s\n' "$1" | sed 's/[*`]//g')"
+  printf '%s\n' "$stripped" | grep -oE 'FINDINGS_FILED: *[0-9]+' | head -n1 | sed 's/^FINDINGS_FILED: *//'
+}
+
+parse_common_flags() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --agent)
+        agent="$2"
+        shift 2
+        ;;
+      --claude)
+        agent="claude"
+        shift
+        ;;
+      --codex)
+        agent="codex"
+        shift
+        ;;
+      --model)
+        agent_model="$2"
+        shift 2
+        ;;
+      --effort)
+        agent_effort="$2"
+        shift 2
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      --quiet|-q)
+        quiet=1
+        shift
+        ;;
+      --summary|-s)
+        summary=1
+        quiet=1  # summary implies quiet (no agent startup noise)
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  REMAINING_ARGS=("$@")
+}
+
+run_implementation() {
+  local selector="${1:-}"
+  if (( ! dry_run )); then
+    require_tracker
+  fi
+  # Build is mechanical — use alternate agent with cheap model
+  local _saved_agent=""
+  if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
+    _saved_agent="$agent"
+    agent="$alt_agent"
+    (( ! quiet )) && printf 'helix: adversarial build: switching to %s\n' "$agent" >&2
+  fi
+  local _rc=0
+  run_agent_prompt "$(implementation_prompt "$selector")" "$(resolve_model cheap)" "${agent_effort:-medium}" || _rc=$?
+  [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
+  return "$_rc"
+}
+
+run_batch_implementation() {
+  local issues="$1"  # newline-separated issue IDs
+  if (( ! dry_run )); then
+    require_tracker
+  fi
+  # Build is mechanical — use alternate agent with cheap model
+  local _saved_agent=""
+  if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
+    _saved_agent="$agent"
+    agent="$alt_agent"
+    (( ! quiet )) && printf 'helix: adversarial build: switching to %s\n' "$agent" >&2
+  fi
+  local _rc=0
+  run_agent_prompt "$(batch_implementation_prompt "$issues")" "$(resolve_model cheap)" "${agent_effort:-medium}" || _rc=$?
+  [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
+  return "$_rc"
+}
+
+run_check() {
+  local scope="${1:-repo}"
+  if (( ! dry_run )); then
+    require_tracker
+  fi
+  # Check is mechanical — use alternate agent with cheap model
+  local _saved_agent=""
+  if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
+    _saved_agent="$agent"
+    agent="$alt_agent"
+    (( ! quiet )) && printf 'helix: adversarial check: switching to %s\n' "$agent" >&2
+  fi
+  local _rc=0
+  run_agent_prompt "$(check_prompt "$scope")" "$(resolve_model cheap)" "${agent_effort:-low}" || _rc=$?
+  [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
+  return "$_rc"
+}
+
+run_alignment() {
+  local scope="${1:-repo}"
+  if (( ! dry_run )); then
+    require_tracker
+  fi
+  # Alignment is reasoning-heavy — use primary agent with smart model
+  run_agent_prompt "$(alignment_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}"
+}
+
+run_backfill() {
+  local scope="${1:-repo}"
+
+  if (( dry_run )); then
+    # Backfill is reasoning-heavy — use primary agent with smart model
+    run_agent_prompt "$(backfill_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}"
+    return 0
+  fi
+
+  require_tracker
+
+  local output
+  # Backfill is reasoning-heavy — use primary agent with smart model
+  output="$(run_agent_prompt "$(backfill_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}")"
+  printf '%s\n' "$output"
+
+  local status
+  status="$(extract_backfill_status "$output" || true)"
+  if [[ -z "$status" ]]; then
+    echo "helix: backfill output missing BACKFILL_STATUS trailer" >&2
+    return 1
+  fi
+
+  local report
+  report="$(extract_backfill_report "$output" || true)"
+  if [[ -z "$report" ]]; then
+    echo "helix: backfill output missing BACKFILL_REPORT trailer" >&2
+    return 1
+  fi
+
+  if [[ ! -f "$target_root/$report" ]]; then
+    echo "helix: declared backfill report does not exist: $report" >&2
+    return 1
+  fi
+
+  local epic
+  epic="$(extract_research_epic "$output" || true)"
+  if [[ -n "$epic" ]]; then
+    printf 'helix: research epic=%s\n' "$epic" >&2
+  fi
+  printf 'helix: backfill report=%s\n' "$report" >&2
+
+  case "$status" in
+    COMPLETE|GUIDANCE_NEEDED)
+      return 0
+      ;;
+    BLOCKED)
+      return 1
+      ;;
+    *)
+      echo "helix: unknown BACKFILL_STATUS: $status" >&2
+      return 1
+      ;;
+  esac
+}
+
+plan_critique_prompt() {
+  local scope="${1:-}"
+  local plan_file="${2:-}"
+  cat <<EOF
+You are reviewing a HELIX design plan for errors, omissions, blunders,
+mischaracterizations, and ambiguities.
+
+Read the plan at ${plan_file} and the action template at
+${helix_docs_root}/actions/plan.md.
+
+Execute in the current repository rooted at ${target_root}.
+Plan scope: ${scope:-repo}.
+
+Review the plan against:
+1. The project's actual code and artifacts (read them, don't guess)
+2. The authority order (vision > requirements > specs > architecture > designs > tests > code)
+3. Every section required by the plan template
+
+For each issue found, categorize it:
+- ERROR: factually wrong, contradicts existing code or artifacts
+- OMISSION: missing section, edge case, failure mode, or dependency
+- BLUNDER: architecturally unsound, will cause problems at scale or under failure
+- MISCHARACTERIZATION: describes existing system incorrectly
+- AMBIGUITY: could be interpreted multiple ways, needs to be precise
+
+Update the plan file directly — fix errors, fill omissions, resolve ambiguities.
+For issues you cannot resolve, add a clearly marked OPEN QUESTION.
+
+After updating, append to the plan:
+
+## Cross-Model Review Round
+- Reviewer: [your model identity]
+- Issues found: [count by category]
+- Summary of changes made
+
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
+run_plan() {
+  local scope="${1:-}"
+  local rounds="${2:-5}"
+  # Planning does NOT require tracker — it happens before issue creation
+  # Design/plan is reasoning-heavy — use primary agent with smart model
+  run_agent_prompt "$(plan_prompt "$scope" "$rounds")" "$(resolve_model smart)" "${agent_effort:-high}"
+
+  # Cross-model critique: if review_agent is configured, alternate agents
+  # for additional refinement passes on the written plan
+  if [[ -n "$review_agent" ]] && [[ "$review_agent" != "$agent" ]] && (( ! dry_run )); then
+    # Find the plan file just written
+    local plan_file
+    plan_file="$(find "${target_root}/docs" -name "plan-*${scope}*.md" -newer "$helix_log" 2>/dev/null | head -1)" || true
+    if [[ -z "$plan_file" ]]; then
+      plan_file="$(find "${target_root}/docs" -name "plan-*.md" -newer "$helix_log" 2>/dev/null | head -1)" || true
+    fi
+
+    if [[ -n "$plan_file" ]]; then
+      local agents=("$review_agent" "$agent")
+      local critique_rounds=2
+      local i
+      for ((i = 0; i < critique_rounds; i++)); do
+        local critique_agent="${agents[$((i % 2))]}"
+        local _saved_agent="$agent"
+        agent="$critique_agent"
+        printf 'helix: cross-model plan critique round %s using %s\n' "$((i + 1))" "$agent" >&2
+        run_agent_prompt "$(plan_critique_prompt "$scope" "$plan_file")"
+        agent="$_saved_agent"
+      done
+    else
+      printf 'helix: no plan file found for cross-model critique\n' >&2
+    fi
+  fi
+}
+
+run_polish() {
+  local scope="${1:-}"
+  local rounds="${2:-6}"
+  if (( ! dry_run )); then
+    require_tracker
+  fi
+  # Polish is mechanical — use alternate agent with cheap model
+  local _saved_agent=""
+  if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
+    _saved_agent="$agent"
+    agent="$alt_agent"
+    (( ! quiet )) && printf 'helix: adversarial polish: switching to %s\n' "$agent" >&2
+  fi
+  local _rc=0
+  run_agent_prompt "$(polish_prompt "$scope" "$rounds")" "$(resolve_model cheap)" "${agent_effort:-medium}" || _rc=$?
+  [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
+  return "$_rc"
+}
+
+run_review() {
+  local scope="${1:-last-commit}"
+  local in_loop="${2:-0}"
+
+  # Review is reasoning-heavy and adversarial — the primary agent reviews
+  # the alternate agent's build work. If we're currently running as the
+  # alternate (inside a build cycle), switch back to primary for review.
+  # If review_agent is explicitly set, honor that.
+  local _saved_agent=""
+  if [[ -n "$review_agent" ]] && [[ "$review_agent" != "$agent" ]]; then
+    _saved_agent="$agent"
+    agent="$review_agent"
+    if (( ! quiet )); then
+      printf 'helix: adversarial review: switching to %s\n' "$agent" >&2
+    fi
+  fi
+
+  if (( dry_run )); then
+    local _rc=0
+    run_agent_prompt "$(review_prompt "$scope" "$in_loop")" "$(resolve_model smart)" "${agent_effort:-high}" || _rc=$?
+    [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
+    return "$_rc"
+  fi
+
+  local output
+  output="$(run_agent_prompt "$(review_prompt "$scope" "$in_loop")" "$(resolve_model smart)" "${agent_effort:-high}")"
+  printf '%s\n' "$output"
+
+  # Restore agent before returning
+  _restore_review_agent() { [[ -z "$_saved_agent" ]] || agent="$_saved_agent"; }
+
+  local status
+  status="$(extract_review_status "$output" || true)"
+  if [[ -z "$status" ]]; then
+    echo "helix: review output missing REVIEW_STATUS trailer" >&2
+    _restore_review_agent; return 1
+  fi
+
+  case "$status" in
+    CLEAN)
+      _restore_review_agent; return 0
+      ;;
+    ISSUES_FOUND)
+      local issues_count findings_filed
+      issues_count="$(extract_review_issues_count "$output" || true)"
+      findings_filed="$(extract_findings_filed "$output" || true)"
+      if [[ -z "$issues_count" ]]; then
+        echo "helix: review output missing ISSUES_COUNT trailer" >&2
+        _restore_review_agent; return 1
+      fi
+      printf 'helix: review reported %s issue(s), %s filed as tracker issues\n' \
+        "$issues_count" "${findings_filed:-0}" >&2
+      _restore_review_agent; return 10
+      ;;
+    *)
+      echo "helix: unknown REVIEW_STATUS: $status" >&2
+      _restore_review_agent; return 1
+      ;;
+  esac
+}
+
+run_next() {
+  require_tracker
+  tracker_ready --json --execution | ddx jq -r '.[0].id // "no ready issues"'
+}
+
+run_status() {
+  require_tracker
+  local json_flag=0
+  [[ "${1:-}" == "--json" ]] && json_flag=1
+
+  local state_file="${tracker_dir}/run-state.json"
+
+  # Get live tracker counts
+  local tracker_json
+  tracker_json="$(tracker_status --json 2>/dev/null || echo '{}')"
+
+  # Get run state if available
+  local run_state='{}'
+  if [[ -f "$state_file" ]]; then
+    run_state="$(cat "$state_file")"
+  fi
+
+  # Get claimed issues
+  local claimed
+  claimed="$(tracker_list --status in_progress --json 2>/dev/null | ddx jq -c '[.[] | {id, title}]' 2>/dev/null || echo '[]')"
+
+  # Execution history (FEAT-005)
+  local exec_history='[]'
+  if command -v ddx &>/dev/null && ddx exec history --json &>/dev/null 2>&1; then
+    exec_history="$(ddx exec history --json 2>/dev/null | ddx jq -c 'sort_by(.started_at) | reverse | .[0:10] | [.[] | {skill: (.definition_id | ltrimstr("helix:")), artifact: (.artifact_ids | join(",")), status, started_at}]' 2>/dev/null || echo '[]')"
+  fi
+
+  # Active run PID check
+  local active_run='null'
+  local pid_file
+  pid_file="$(_helix_pid_file)"
+  if _helix_pid_alive; then
+    local active_pid; active_pid="$(cat "$pid_file")"
+    active_run="$(ddx jq -n --arg pid "$active_pid" --arg log "$helix_log" '{pid: ($pid | tonumber), log: $log}')"
+  elif [[ -f "$pid_file" ]]; then
+    rm -f "$pid_file"  # clean stale
+  fi
+
+  if (( json_flag )); then
+    ddx jq -n \
+      --argjson tracker "$tracker_json" \
+      --argjson run "$run_state" \
+      --argjson claimed "$claimed" \
+      --argjson recent_actions "$exec_history" \
+      --argjson active_run "$active_run" \
+      '{tracker: $tracker, run: $run, claimed: $claimed, active_run: $active_run, recent_actions: $recent_actions}'
+  else
+    printf 'HELIX Status\n'
+    printf '============\n\n'
+
+    # Tracker health
+    printf 'Tracker:\n'
+    printf '%s' "$tracker_json" | ddx jq -r '
+      "  Total:   \(.total // 0)",
+      "  Open:    \(.open // 0)",
+      "  Closed:  \(.closed // 0)",
+      "  Ready:   \(.ready // 0)",
+      "  Blocked: \(.blocked // 0)"
+    ' 2>/dev/null
+
+    # Active run (PID check)
+    local pid_file
+    pid_file="$(_helix_pid_file)"
+    if _helix_pid_alive; then
+      local active_pid; active_pid="$(cat "$pid_file")"
+      printf '\nActive Run:\n'
+      printf '  PID:  %s\n' "$active_pid"
+      printf '  Log:  %s\n' "$helix_log"
+    elif [[ -f "$pid_file" ]]; then
+      rm -f "$pid_file"  # clean stale
+    fi
+
+    # Claimed work
+    local claimed_count
+    claimed_count="$(printf '%s' "$claimed" | ddx jq 'length')"
+    if (( claimed_count > 0 )); then
+      printf '\nClaimed:\n'
+      printf '%s' "$claimed" | ddx jq -r '.[] | "  \(.id)  \(.title)"'
+    fi
+
+    # Run state
+    if [[ -f "$state_file" ]]; then
+      printf '\nLast Run:\n'
+      printf '%s' "$run_state" | ddx jq -r '
+        "  Agent:       \(.agent // "unknown")",
+        "  Completed:   \(.completed_cycles // 0) cycles",
+        "  Attempted:   \(.attempted_cycles // 0) cycles",
+        "  Tokens:      \(.total_tokens // 0)",
+        "  Stop reason: \(.stop_reason // "unknown")",
+        "  Timestamp:   \(.last_run // "unknown")"
+      ' 2>/dev/null
+      if [[ "$(printf '%s' "$run_state" | ddx jq -r '.focused_epic // ""')" != "" ]]; then
+        printf '  Epic focus:  %s\n' "$(printf '%s' "$run_state" | ddx jq -r '.focused_epic')"
+      fi
+    else
+      printf '\nNo run state found. Run `helix run` to generate.\n'
+    fi
+
+    # Recent execution history (FEAT-005)
+    if command -v ddx &>/dev/null && ddx exec history --json &>/dev/null 2>&1; then
+      local exec_history
+      exec_history="$(ddx exec history --json 2>/dev/null || echo '[]')"
+      local exec_count
+      exec_count="$(printf '%s' "$exec_history" | ddx jq 'length' 2>/dev/null || echo 0)"
+      if (( exec_count > 0 )); then
+        printf '\nRecent Actions:\n'
+        printf '%s' "$exec_history" | ddx jq -r '
+          sort_by(.started_at) | reverse | .[0:10] | .[] |
+          "  \(.started_at | split("T") | .[0]) \(.started_at | split("T") | .[1] | split(".") | .[0])  \(.definition_id | ltrimstr("helix:"))  \(.status)  \(.artifact_ids | join(","))"
+        ' 2>/dev/null
+      fi
+    fi
+  fi
+}
+
+run_commit() {
+  local issue_id="${1:-}"
+
+  # Check for staged changes
+  if ! (cd "$target_root" && git diff --cached --quiet 2>/dev/null); then
+    : # has staged changes
+  elif ! (cd "$target_root" && git diff --quiet 2>/dev/null); then
+    echo "helix: no staged changes — staging all modified files" >&2
+    (cd "$target_root" && git add -u)
+  else
+    echo "helix: nothing to commit" >&2
+    return 1
+  fi
+
+  # Build commit message
+  local summary files_changed
+  files_changed="$(cd "$target_root" && git diff --cached --stat | tail -1)"
+
+  if [[ -n "$issue_id" ]]; then
+    local title
+    title="$(tracker_show "$issue_id" --json 2>/dev/null | ddx jq -r '.title // ""')" || title=""
+    # Use issue title as summary, truncated to 72 chars
+    summary="${issue_id} ${title:0:$((72 - ${#issue_id} - 1))}"
+  else
+    # No issue — use a generic summary from the diff
+    summary="$(cd "$target_root" && git diff --cached --name-only | head -3 | paste -sd, )"
+    summary="update ${summary:0:65}"
+  fi
+
+  local msg
+  msg="$(printf '%s\n\n%s\n' "$summary" "$files_changed")"
+
+  # Pre-push build gate
+  echo "helix: running build gate..." >&2
+  local gate_cmd=""
+  if [[ -f "${target_root}/lefthook.yml" ]] && command -v lefthook >/dev/null 2>&1; then
+    gate_cmd="cd '$target_root' && lefthook run pre-commit"
+  elif [[ -f "${target_root}/Cargo.toml" ]]; then
+    gate_cmd="cd '$target_root' && cargo check --workspace"
+  elif [[ -f "${target_root}/package.json" ]]; then
+    gate_cmd="cd '$target_root' && npm test"
+  fi
+
+  if [[ -n "$gate_cmd" ]]; then
+    if ! eval "$gate_cmd" >&2; then
+      echo "helix: BUILD GATE FAILED — fix before committing" >&2
+      return 1
+    fi
+    echo "helix: build gate passed" >&2
+  fi
+
+  # Commit
+  (cd "$target_root" && git commit -m "$msg")
+  echo "helix: committed: $summary" >&2
+
+  # Push
+  (cd "$target_root" && git pull --rebase 2>/dev/null && git push 2>/dev/null) || true
+  echo "helix: pushed" >&2
+
+  # Tracker update
+  if [[ -n "$issue_id" ]]; then
+    tracker_close "$issue_id" 2>/dev/null || true
+    echo "helix: closed $issue_id" >&2
+  fi
+}
+
+recover_prompt() {
+  local issue_id="$1"
+  local issue_info="$2"
+  local git_status="$3"
+  local log_tail="$4"
+  cat <<EOF
+You are recovering from a crashed or timed-out HELIX implementation session.
+
+Issue ${issue_id} is in_progress but the previous agent session ended without
+closing it. Your job is to assess the partial work and either complete it
+or revert it cleanly.
+
+Read and follow the action at ${helix_docs_root}/actions/implementation.md.
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
+
+ISSUE STATE:
+${issue_info}
+
+GIT STATUS (uncommitted changes):
+${git_status}
+
+PREVIOUS SESSION LOG (last 50 lines):
+${log_tail}
+
+RECOVERY RULES:
+1. If the worktree has uncommitted changes related to this issue:
+   - Read the changed files and assess quality
+   - If the work looks substantially complete: run tests, fix failures, commit, close the issue
+   - If the work is broken or too incomplete: revert the changes with git checkout on the affected files, unclaim with ddx bead update <id> --unclaim (ONLY if not already closed)
+2. If the worktree is clean (no uncommitted changes):
+   - The previous session either committed successfully or never started editing
+   - Check if the issue's acceptance criteria are already met
+   - If met: close with ddx bead close <id> (if not already closed)
+   - If not met: unclaim with ddx bead update <id> --unclaim (ONLY if not already closed) so the next cycle picks it up fresh
+   - CRITICAL: Never call --unclaim or --status open on an already-closed bead — doing so reverts it to open.
+3. CRITICAL: If tests fail after your changes, fix them. 99% of test failures are caused by your changes. Retry up to 3 times. Never commit broken work.
+
+Do the work — do not just describe what you would do.
+Session log: ${helix_log}
+EOF
+}
+
+run_recovery() {
+  local issue_id="$1"
+  local issue_info="$2"
+  local git_status="$3"
+  local log_tail="$4"
+  run_agent_prompt "$(recover_prompt "$issue_id" "$issue_info" "$git_status" "$log_tail")"
+}
+
+recover_orphaned_issues() {
+  # Reclaim in-progress issues whose claiming process is no longer alive
+  # and whose claim is older than the staleness threshold.
+  local in_progress
+  in_progress="$(tracker_list --status in_progress --label helix --json 2>/dev/null || echo '[]')"
+  local count
+  count="$(printf '%s' "$in_progress" | ddx jq 'length' 2>/dev/null || echo 0)"
+
+  if (( count == 0 )); then
+    return 0
+  fi
+
+  verbose_line "found %s in-progress issue(s), checking for orphans..." "$count"
+  local now_epoch
+  now_epoch="$(date +%s)"
+  local stale_threshold="${HELIX_ORPHAN_THRESHOLD:-7200}"  # default 2 hours
+  local recovered=0
+
+  local i
+  for ((i = 0; i < count; i++)); do
+    local issue_id claimed_at claimed_pid
+    issue_id="$(printf '%s' "$in_progress" | ddx jq -r ".[$i].id" 2>/dev/null)"
+    claimed_at="$(printf '%s' "$in_progress" | ddx jq -r ".[$i][\"claimed-at\"] // \"\"" 2>/dev/null)"
+    claimed_pid="$(printf '%s' "$in_progress" | ddx jq -r ".[$i][\"claimed-pid\"] // \"\"" 2>/dev/null)"
+
+    # Skip if another helix process is actively working on this issue
+    if pgrep -f "helix.*implement.*${issue_id}" >/dev/null 2>&1; then
+      verbose_line "issue %s is being worked on by another process, skipping" "$issue_id"
+      continue
+    fi
+
+    # Skip if the claiming PID is still alive
+    if [[ -n "$claimed_pid" && "$claimed_pid" != "null" ]] && kill -0 "$claimed_pid" 2>/dev/null; then
+      verbose_line "issue %s claimed by PID %s which is still alive, skipping" "$issue_id" "$claimed_pid"
+      continue
+    fi
+
+    # Determine claim age (use claimed-at if available, fall back to updated)
+    local claim_epoch=0
+    if [[ -n "$claimed_at" && "$claimed_at" != "null" ]]; then
+      claim_epoch="$(date -d "$claimed_at" +%s 2>/dev/null || echo 0)"
+    else
+      local updated
+      updated="$(printf '%s' "$in_progress" | ddx jq -r ".[$i].updated_at // \"\"" 2>/dev/null)"
+      [[ -n "$updated" && "$updated" != "null" ]] && claim_epoch="$(date -d "$updated" +%s 2>/dev/null || echo 0)"
+    fi
+
+    local age=$(( now_epoch - claim_epoch ))
+    if (( claim_epoch > 0 && age < stale_threshold )); then
+      verbose_line "issue %s claimed %ss ago (threshold %ss), too fresh to reclaim" "$issue_id" "$age" "$stale_threshold"
+      continue
+    fi
+
+    # Orphan confirmed: reclaim — but only if still in-progress (it may have
+    # been closed by its agent after the snapshot was taken above).
+    local current_orphan_status
+    current_orphan_status="$(tracker_show "$issue_id" --json 2>/dev/null | ddx jq -r '.status // ""')" || current_orphan_status=""
+    if [[ "$current_orphan_status" == "closed" ]]; then
+      verbose_line "orphan %s is now closed — skipping reclaim" "$issue_id"
+      continue
+    fi
+    if (( summary )); then
+      summary_line "reclaiming orphaned %s (age=%ss, pid=%s dead)" "$issue_id" "$age" "${claimed_pid:-unknown}"
+    else
+      printf 'helix: reclaiming orphaned %s (age=%ss, pid=%s dead)\n' "$issue_id" "$age" "${claimed_pid:-unknown}" >&2
+    fi
+    tracker_update "$issue_id" --unclaim 2>/dev/null || true
+    recovered=$((recovered + 1))
+  done
+
+  if (( recovered > 0 )); then
+    if (( summary )); then
+      summary_line "recovered %s orphaned issue(s)" "$recovered"
+    else
+      printf 'helix: recovered %s orphaned issue(s)\n' "$recovered" >&2
+    fi
+  fi
+}
+
+run_loop() {
+  local attempted_cycles=0
+  local completed_cycles=0
+  local post_drain_alignment_ran=0
+  local post_drain_backfill_ran=0
+  local consecutive_failures=0
+  local consecutive_empty_builds=0
+  local -A skipped_issues=()
+  local -A skip_reasons=()
+  local -A issue_attempts=()
+
+  # Write a structured blocker report when the loop finishes.
+  # Called from finish_loop before every return.
+  write_blocker_report() {
+    local report_file="${target_root}/.helix-logs/blockers-$(date +%Y%m%d-%H%M%S).md"
+    local skip_count="${#skipped_issues[@]}"
+
+    # Always print summary line
+    printf '\nhelix: ═══ run complete: %s attempted, %s completed, %s skipped, %s tokens ═══\n' \
+      "$attempted_cycles" "$completed_cycles" "$skip_count" "$total_tokens" >&2
+
+    if (( skip_count == 0 )); then
+      return 0
+    fi
+
+    # Print blockers to stderr and mark them in the tracker
+    printf 'helix: BLOCKERS (%s issues):\n' "$skip_count" >&2
+    local id
+    for id in "${!skipped_issues[@]}"; do
+      local title
+      title="$(tracker_show "$id" --json 2>/dev/null | ddx jq -r '.title // "?"')" || title="?"
+      local reason="${skip_reasons[$id]:-unknown}"
+      printf 'helix:   %s — %s\n' "$id" "$reason" >&2
+      printf 'helix:     %s\n' "$title" >&2
+      # Mark blocked in tracker — deduplicate notes to avoid bloat on retries.
+      # Only append a BLOCKED note if the existing notes don't already contain
+      # the same reason text (ignoring the timestamp).
+      local existing_notes
+      existing_notes="$(tracker_show "$id" --json 2>/dev/null | ddx jq -r '.notes // ""')" || existing_notes=""
+      if [[ "$existing_notes" != *"$reason"* ]]; then
+        tracker_update "$id" \
+          --labels "helix,blocked" \
+          --notes "BLOCKED [$(date -Iseconds)]: $reason" \
+          >/dev/null 2>&1 || true
+      else
+        # Reason already recorded — just ensure blocked label is set
+        tracker_update "$id" \
+          --labels "helix,blocked" \
+          >/dev/null 2>&1 || true
+      fi
+    done
+
+    # Write structured report file
+    {
+      printf '# HELIX Run Blocker Report\n\n'
+      printf 'Generated: %s\n' "$(date -Iseconds)"
+      printf 'Cycles: %s attempted, %s completed, %s skipped\n' \
+        "$attempted_cycles" "$completed_cycles" "$skip_count"
+      printf 'Log: %s\n\n' "$helix_log"
+      printf '## Blocked Issues\n\n'
+      for id in "${!skipped_issues[@]}"; do
+        local title
+        title="$(tracker_show "$id" --json 2>/dev/null | ddx jq -r '.title // "?"')" || title="?"
+        printf '### %s\n\n' "$id"
+        printf '**Title:** %s\n' "$title"
+        printf '**Reason:** %s\n\n' "${skip_reasons[$id]:-unknown}"
+      done
+    } > "$report_file"
+    printf 'helix: blocker report written to %s\n' "$report_file" >&2
+  }
+
+  # Wrap all loop exits through this so the report always gets written.
+  finish_loop() {
+    local rc="${1:-0}"
+    write_blocker_report
+    persist_run_state "$rc"
+    return "$rc"
+  }
+
+  persist_run_state() {
+    local exit_rc="${1:-0}"
+    local state_file="${tracker_dir}/run-state.json"
+    local stop_reason="completed"
+    (( exit_rc != 0 )) && stop_reason="error"
+    (( ${#skipped_issues[@]} > 0 )) && stop_reason="blocked"
+
+    local skip_count="${#skipped_issues[@]}"
+
+    ddx jq -n \
+      --arg current_issue "${current_issue_id:-}" \
+      --arg focused_epic "${epic_id:-}" \
+      --argjson completed_cycles "$completed_cycles" \
+      --argjson attempted_cycles "$attempted_cycles" \
+      --argjson skipped_count "$skip_count" \
+      --argjson total_tokens "$total_tokens" \
+      --arg stop_reason "$stop_reason" \
+      --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg agent "${HELIX_AGENT:-claude}" \
+      '{
+        current_issue: $current_issue,
+        focused_epic: $focused_epic,
+        completed_cycles: $completed_cycles,
+        attempted_cycles: $attempted_cycles,
+        skipped_count: $skipped_count,
+        total_tokens: $total_tokens,
+        stop_reason: $stop_reason,
+        last_run: $timestamp,
+        agent: $agent
+      }' > "$state_file" 2>/dev/null || true
+  }
+
+  # Backoff delay for a given attempt count (exponential: 5s, 10s, 20s, 40s cap)
+  backoff_delay() {
+    local attempts="$1"
+    local delay=$(( 5 * (1 << (attempts - 1)) ))
+    (( delay > 40 )) && delay=40
+    printf '%s' "$delay"
+  }
+
+  # Check if an issue is an epic with open children.
+  # Prints the first open child ID if one exists; empty otherwise.
+  epic_next_child() {
+    local epic_id="$1"
+    local epic_type
+    epic_type="$(tracker_show "$epic_id" --json 2>/dev/null | ddx jq -r '.issue_type // ""')" || true
+    if [[ "$epic_type" != "epic" ]]; then
+      return
+    fi
+    # Find open children of this epic
+    tracker_list --json 2>/dev/null | ddx jq -r --arg parent "$epic_id" '
+      [.[] | select(.parent == $parent and .status == "open")] | .[0].id // empty
+    '
+  }
+
+  need_cmd ddx
+  require_tracker
+
+  # Recover orphaned issues from crashed sessions before starting the loop
+  recover_orphaned_issues
+
+  # Generate context file for token efficiency (non-fatal)
+  generate_run_context "" || true
+
+  # Epic focus: when set, the loop stays on this epic until done or blocked.
+  local focused_epic=""
+
+  while true; do
+    local ready_count
+    if ! ready_count="$(helix_ready_count)"; then
+      printf 'helix: failed to read ready count, retrying\n' >&2
+      sleep 2
+      continue
+    fi
+
+    local skip_json selected_issue=""
+    skip_json="$(printf '%s\n' "${!skipped_issues[@]}" | ddx jq -R . | ddx jq -s .)"
+
+    # Epic focus mode: if we're focused on an epic, try its children first.
+    if [[ -n "$focused_epic" ]]; then
+      local child
+      child="$(epic_next_child "$focused_epic")" || true
+      if [[ -n "$child" ]]; then
+        # Verify the child is execution-eligible and not skipped
+        local child_in_skip
+        child_in_skip="$(printf '%s' "$skip_json" | ddx jq --arg id "$child" '[.[] | select(. == $id)] | length')"
+        if (( child_in_skip == 0 )); then
+          selected_issue="$child"
+          verbose_line "epic focus: %s → child %s" "$focused_epic" "$selected_issue"
+        fi
+      fi
+      # If no eligible children remain, check if epic is done
+      if [[ -z "$selected_issue" ]]; then
+        local remaining_children
+        remaining_children="$(tracker_list --json 2>/dev/null | ddx jq --arg parent "$focused_epic" '
+          [.[] | select(.parent == $parent and .status != "closed")] | length
+        ')" || remaining_children=0
+        if (( remaining_children == 0 )); then
+          verbose_line "epic %s has no remaining open children — closing epic" "$focused_epic"
+          tracker_close "$focused_epic" 2>/dev/null || true
+          completed_cycles=$((completed_cycles + 1))
+          if (( completed_cycles % 5 == 0 )); then
+            generate_run_context "$focused_epic" || true
+          fi
+
+          # Post-epic review: verify acceptance criteria and catch gaps
+          if (( auto_review )); then
+            local epic_spec
+            epic_spec="$(tracker_show "$focused_epic" --json 2>/dev/null | ddx jq -r '.["spec-id"] // ""')" || epic_spec=""
+            local review_scope="${epic_spec:-last-commit}"
+            verbose_line "post-epic review for %s (scope: %s)" "$focused_epic" "$review_scope"
+            if run_review "$review_scope" 1; then
+              :
+            else
+              local review_rc="$?"
+              if (( review_rc == 10 )); then
+                verbose_line "epic review found gaps — issues created, continuing"
+              else
+                verbose_line "epic review output not parseable (rc=%s), continuing" "$review_rc"
+              fi
+            fi
+          fi
+        else
+          verbose_line "epic %s has %s open children but none are eligible — releasing focus" "$focused_epic" "$remaining_children"
+        fi
+        focused_epic=""
+        reset_session
+      fi
+    fi
+
+    # Normal selection if epic focus didn't produce a candidate
+    if [[ -z "$selected_issue" ]] && (( ready_count > 0 )); then
+      selected_issue="$(helix_select_ready_issue "$skip_json" 2>/dev/null)" || true
+    fi
+
+    if [[ -n "$selected_issue" ]]; then
+      consecutive_empty_builds=0
+      local attempt_number="$((attempted_cycles + 1))"
+      local closed_before
+      local selected_fingerprint
+      if ! closed_before="$(tracker_list --status closed --json | ddx jq 'length')"; then
+        printf 'helix: failed to read closed count, retrying\n' >&2
+        sleep 2
+        continue
+      fi
+
+      if ! selected_fingerprint="$(tracker_issue_fingerprint "$selected_issue")"; then
+        printf 'helix: failed to fingerprint %s, retrying\n' "$selected_issue" >&2
+        sleep 2
+        continue
+      fi
+
+      # Check if this is an epic — if so, enter epic focus mode
+      local issue_type
+      issue_type="$(tracker_show "$selected_issue" --json 2>/dev/null | ddx jq -r '.issue_type // ""')" || true
+      if [[ "$issue_type" == "epic" ]] && [[ -z "$focused_epic" ]]; then
+        focused_epic="$selected_issue"
+        verbose_line "entering epic focus mode for %s" "$focused_epic"
+        generate_run_context "$focused_epic" || true
+        # Try to get a child to implement instead of the epic itself
+        local child
+        child="$(epic_next_child "$selected_issue")" || true
+        if [[ -n "$child" ]]; then
+          selected_issue="$child"
+          verbose_line "epic focus: %s → child %s" "$focused_epic" "$selected_issue"
+          # Re-fingerprint the child
+          if ! selected_fingerprint="$(tracker_issue_fingerprint "$selected_issue")"; then
+            printf 'helix: failed to fingerprint child %s, retrying\n' "$selected_issue" >&2
+            sleep 2
+            continue
+          fi
+        fi
+      fi
+
+      # Exponential backoff: delay before retrying a previously-attempted issue
+      local prev_attempts="${issue_attempts[$selected_issue]:-0}"
+      if (( prev_attempts > 0 )); then
+        local delay
+        delay="$(backoff_delay "$prev_attempts")"
+        verbose_line "attempt %s for %s (backoff %ss)" "$((prev_attempts + 1))" "$selected_issue" "$delay"
+        sleep "${HELIX_BACKOFF_SLEEP:-$delay}"
+      fi
+
+      # Batch related issues for token efficiency
+      local batch_issues
+      batch_issues="$(helix_select_batch "$selected_issue" 3 "$skip_json")"
+      local batch_count
+      batch_count="$(printf '%s\n' "$batch_issues" | wc -l)"
+
+      local _cycle_start
+      _cycle_start="$(date +%s)"
+      if (( summary )); then
+        if (( batch_count > 1 )); then
+          summary_line "[%s] cycle %s: batch %s issues (%s), %s ready" \
+            "$(date +%H:%M:%S)" "$attempt_number" "$batch_count" \
+            "$(printf '%s\n' "$batch_issues" | paste -sd, )" "$ready_count"
+        else
+          summary_line "[%s] cycle %s: %s (%s ready)" \
+            "$(date +%H:%M:%S)" "$attempt_number" "$selected_issue" "$ready_count"
+        fi
+      else
+        if (( batch_count > 1 )); then
+          printf 'helix: [%s] ready=%s, cycle=%s, batch=%s issues (%s)\n' \
+            "$(date +%H:%M:%S)" "$ready_count" "$attempt_number" "$batch_count" \
+            "$(printf '%s\n' "$batch_issues" | paste -sd, )" >&2
+        else
+          printf 'helix: [%s] ready=%s, cycle=%s, issue=%s\n' "$(date +%H:%M:%S)" "$ready_count" "$attempt_number" "$selected_issue" >&2
+        fi
+      fi
+      attempted_cycles=$((attempted_cycles + 1))
+      local _impl_cmd
+      if (( batch_count > 1 )); then
+        _impl_cmd="run_batch_implementation \"$batch_issues\""
+      else
+        _impl_cmd="run_implementation \"$selected_issue\""
+      fi
+      local _impl_rc=0
+      if (( summary )); then
+        eval "$_impl_cmd" >> "$helix_log" 2>&1 || _impl_rc=$?
+      else
+        eval "$_impl_cmd" || _impl_rc=$?
+      fi
+
+      # Even when the agent exits non-zero (timeout, minor error), it may
+      # have successfully closed the issue in the tracker. Check before
+      # declaring failure — the tracker is the source of truth, not the
+      # agent exit code.
+      if (( _impl_rc != 0 )); then
+        local _salvage_closed
+        _salvage_closed="$(tracker_list --status closed --json | ddx jq 'length' || echo 0)"
+        if (( _salvage_closed > closed_before )); then
+          verbose_line "agent exited %s but tracker shows progress (closed %s → %s) — counting as success" \
+            "$_impl_rc" "$closed_before" "$_salvage_closed"
+          if (( summary )); then
+            summary_line "[%s] cycle %s: %s → SALVAGED (agent rc=%s but issue closed)" \
+              "$(date +%H:%M:%S)" "$attempt_number" "$selected_issue" "$_impl_rc"
+          fi
+          # Update closed_before so the downstream success path sees the
+          # change and increments completed_cycles correctly.
+          closed_before="$_salvage_closed"
+          _impl_rc=0
+        else
+          verbose_line "implementation failed during cycle %s (will not count toward completed cycles)" "$attempt_number"
+          if (( summary )); then
+            summary_line "[%s] cycle %s: FAILED" "$(date +%H:%M:%S)" "$attempt_number"
+          fi
+          # Clean up after failed implementation attempt
+          (cd "$target_root" && git checkout -- . 2>/dev/null) || true
+          # Unclaim the issue so it can be retried cleanly.
+          # Use safe_unclaim — the agent may have closed the bead before exiting
+          # non-zero; --unclaim on a closed bead reverts it to open (state drift).
+          safe_unclaim "$selected_issue"
+          consecutive_failures=$((consecutive_failures + 1))
+          issue_attempts["$selected_issue"]=$(( prev_attempts + 1 ))
+          # Exponential backoff: skip after 4 attempts (5s + 10s + 20s + 40s = 75s total backoff)
+          if (( issue_attempts["$selected_issue"] >= 4 )); then
+            skipped_issues["$selected_issue"]=1
+            skip_reasons["$selected_issue"]="intractable after ${issue_attempts[$selected_issue]} attempts with exponential backoff"
+            if (( summary )); then
+              summary_line "[%s] BLOCKED %s after %s attempts" "$(date +%H:%M:%S)" "$selected_issue" "${issue_attempts[$selected_issue]}"
+            else
+              printf 'helix: blocking %s after %s failed attempts\n' "$selected_issue" "${issue_attempts[$selected_issue]}" >&2
+            fi
+            # If this was part of a focused epic, mark the epic as blocked too
+            if [[ -n "$focused_epic" ]]; then
+              local parent
+              parent="$(tracker_show "$selected_issue" --json 2>/dev/null | ddx jq -r '.parent // ""')" || true
+              if [[ "$parent" == "$focused_epic" ]]; then
+                skipped_issues["$focused_epic"]=1
+                skip_reasons["$focused_epic"]="child $selected_issue intractable after ${issue_attempts[$selected_issue]} attempts"
+                verbose_line "blocking parent epic %s due to intractable child %s" "$focused_epic" "$selected_issue"
+                focused_epic=""
+                reset_session
+              fi
+            fi
+          fi
+          sleep "${HELIX_BACKOFF_SLEEP:-5}"
+          recover_orphaned_issues
+        fi
+      fi
+      if (( _impl_rc == 0 )); then
+        if handle_issue_queue_drift "$selected_issue" "$selected_fingerprint"; then
+          skipped_issues["$selected_issue"]=1
+          skip_reasons["$selected_issue"]="queue drift: upstream governance fields changed during execution"
+          verbose_line "skipping %s after queue drift (continuing with next issue)" "$selected_issue"
+          continue
+        fi
+
+        # Build-health gate: verify the workspace still compiles after
+        # the agent's changes. Agent sandboxes may bypass pre-commit hooks,
+        # so this catches cross-crate breakage the agent missed.
+        if (( ! dry_run )); then
+          local _gate_cmd=""
+          if [[ -f "${target_root}/lefthook.yml" ]] && command -v lefthook >/dev/null 2>&1; then
+            _gate_cmd="cd '$target_root' && lefthook run pre-commit"
+          elif [[ -f "${target_root}/Cargo.toml" ]]; then
+            _gate_cmd="cd '$target_root' && cargo check --workspace 2>&1 | tail -5"
+          elif [[ -f "${target_root}/package.json" ]]; then
+            _gate_cmd="cd '$target_root' && npm test 2>&1 | tail -5"
+          fi
+          if [[ -n "$_gate_cmd" ]]; then
+            if ! eval "$_gate_cmd" >/dev/null 2>&1; then
+              if (( summary )); then
+                summary_line "[%s] cycle %s: BUILD GATE FAILED — reverting" "$(date +%H:%M:%S)" "$attempt_number"
+              else
+                printf 'helix: BUILD GATE FAILED after cycle %s — the agent pushed broken code\n' "$attempt_number" >&2
+                printf 'helix: reverting last commit and reopening issue\n' >&2
+              fi
+              (cd "$target_root" && git revert --no-edit HEAD 2>/dev/null && git push 2>/dev/null) || true
+              # Use safe_unclaim — the agent may have closed the bead before the
+              # build gate ran; --unclaim on a closed bead reverts it to open.
+              safe_unclaim "$selected_issue"
+              consecutive_failures=$((consecutive_failures + 1))
+              continue
+            fi
+          fi
+        fi
+
+        # Epic promotion: if the agent decomposed a task into children,
+        # promote the parent to an epic so epic focus mode kicks in.
+        local _child_count
+        _child_count="$(tracker_list --json 2>/dev/null | ddx jq --arg parent "$selected_issue" '[.[] | select(.parent == $parent)] | length' 2>/dev/null)" || _child_count=0
+        if (( _child_count > 1 )); then
+          local _current_type
+          _current_type="$(tracker_show "$selected_issue" --json 2>/dev/null | ddx jq -r '.issue_type // ""')" || _current_type=""
+          if [[ "$_current_type" != "epic" ]]; then
+            verbose_line "promoting %s to epic (agent created %s children)" "$selected_issue" "$_child_count"
+            if ! tracker_update "$selected_issue" --set "issue_type=epic" 2>/dev/null; then
+              echo "helix: failed to promote $selected_issue to epic" >&2
+              finish_loop 1; return $?
+            fi
+            _current_type="$(tracker_show "$selected_issue" --json 2>/dev/null | ddx jq -r '.issue_type // ""')" || _current_type=""
+            if [[ "$_current_type" != "epic" ]]; then
+              echo "helix: promotion of $selected_issue did not stick" >&2
+              finish_loop 1; return $?
+            fi
+            if [[ -z "$focused_epic" ]]; then
+              focused_epic="$selected_issue"
+              verbose_line "entering epic focus mode for promoted %s" "$focused_epic"
+              generate_run_context "$focused_epic" || true
+            fi
+          fi
+        fi
+
+        # Acceptance gate: run project acceptance scripts if they exist.
+        # Failures are filed as tracker issues (label: acceptance-failure)
+        # so they appear in the ready queue for the next cycle.
+        if (( ! dry_run )); then
+          local _ac_failed=0
+          for _ac_script in \
+            "${target_root}/scripts/check-acceptance-traceability.sh" \
+            "${target_root}/scripts/check-acceptance-coverage.sh"; do
+            if [[ -x "$_ac_script" ]]; then
+              local _ac_output=""
+              if ! _ac_output="$(bash "$_ac_script" 2>&1)"; then
+                local _ac_name
+                _ac_name="$(basename "$_ac_script")"
+                verbose_line "ACCEPTANCE CHECK FAILED: %s" "$_ac_name"
+                _ac_failed=1
+                # File acceptance failure as a tracker issue
+                local _ac_issue_id=""
+                _ac_issue_id="$(tracker_create \
+                  "Acceptance failure: ${_ac_name} after ${selected_issue}" \
+                  --type task \
+                  --labels "helix,phase:build,acceptance-failure" \
+                  --spec-id "$_ac_name" \
+                  --description "Acceptance check ${_ac_name} failed after implementing ${selected_issue}.
+Output: ${_ac_output:0:500}" \
+                  --acceptance "${_ac_name} passes cleanly" \
+                  --silent 2>/dev/null)" || true
+                if [[ -n "$_ac_issue_id" ]]; then
+                  verbose_line "filed acceptance failure as %s" "$_ac_issue_id"
+                fi
+              fi
+            fi
+          done
+          if (( _ac_failed )); then
+            if (( summary )); then
+              summary_line "[%s] cycle %s: acceptance failures filed as issues" "$(date +%H:%M:%S)" "$attempt_number"
+            else
+              printf 'helix: acceptance criteria not met after cycle %s — failures filed as tracker issues\n' "$attempt_number" >&2
+            fi
+          fi
+        fi
+
+        # Post-implementation review: catch bugs and capture learnings
+        # Skip review for small changes (below threshold) to save tokens.
+        # Epic close reviews always run regardless of threshold.
+        if (( auto_review )); then
+          local _diff_lines _diff_files _skip_review=0
+          _diff_lines="$(cd "$target_root" && git diff --stat HEAD~1 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion|[0-9]+ deletion' | grep -oE '[0-9]+' | paste -sd+ | bc 2>/dev/null)" || _diff_lines=999
+          _diff_files="$(cd "$target_root" && git diff --name-only HEAD~1 2>/dev/null | wc -l)" || _diff_files=999
+          if (( review_threshold > 0 && _diff_lines < review_threshold && _diff_files < 3 )); then
+            _skip_review=1
+            verbose_line "skipping review for small change (%s lines, %s files < threshold %s)" "$_diff_lines" "$_diff_files" "$review_threshold"
+          fi
+          if (( ! _skip_review )); then
+          verbose_line "post-implementation review after cycle %s" "$attempt_number"
+          if run_review last-commit 1; then
+            :
+          else
+            local review_status="$?"
+            case "$review_status" in
+              10)
+                # Review findings are now filed as tracker issues by the review
+                # action itself (label: review-finding). Continue the loop —
+                # findings will appear in the ready queue for future cycles.
+                verbose_line "review filed actionable findings as tracker issues — continuing"
+                ;;
+              *)
+                verbose_line "review output was not safely interpretable after cycle %s — continuing" "$attempt_number"
+                ;;
+            esac
+          fi
+          fi  # _skip_review
+        fi
+
+        local closed_after
+        closed_after="$(tracker_list --status closed --json | ddx jq 'length' || echo 0)"
+        if (( closed_after > closed_before )); then
+          completed_cycles=$((completed_cycles + 1))
+          consecutive_failures=0
+          issue_attempts["$selected_issue"]=0
+          if (( summary )); then
+            summary_line "[%s] cycle %s: %s → COMPLETE (%s/%s done, %s tokens)" \
+              "$(date +%H:%M:%S)" "$attempt_number" "$selected_issue" "$completed_cycles" "$attempted_cycles" "$total_tokens"
+          fi
+          if (( completed_cycles % 5 == 0 )); then
+            generate_run_context "$focused_epic" || true
+          fi
+        else
+          verbose_line "cycle %s did not complete a tracked issue; completed cycles remain %s" "$attempt_number" "$completed_cycles"
+          consecutive_failures=$((consecutive_failures + 1))
+          issue_attempts["$selected_issue"]=$(( prev_attempts + 1 ))
+          # Exponential backoff: skip after 4 non-completing attempts
+          if (( issue_attempts["$selected_issue"] >= 4 )); then
+            skipped_issues["$selected_issue"]=1
+            skip_reasons["$selected_issue"]="failed to complete after ${issue_attempts[$selected_issue]} attempts with exponential backoff"
+            if (( summary )); then
+              summary_line "[%s] BLOCKED %s after %s non-completing attempts" "$(date +%H:%M:%S)" "$selected_issue" "${issue_attempts[$selected_issue]}"
+            else
+              printf 'helix: blocking %s after %s non-completing attempts\n' "$selected_issue" "${issue_attempts[$selected_issue]}" >&2
+            fi
+          fi
+        fi
+      fi
+      post_drain_alignment_ran=0
+      post_drain_backfill_ran=0
+
+      if (( completed_cycles > 0 )) && (( review_every > 0 )) && (( completed_cycles % review_every == 0 )); then
+        verbose_line "periodic alignment after %s cycles" "$completed_cycles"
+        if ! run_alignment repo; then
+          verbose_line "periodic alignment failed after %s cycles" "$completed_cycles"
+          finish_loop 1; return $?
+        fi
+      fi
+
+      if (( max_cycles > 0 )) && (( completed_cycles >= max_cycles )); then
+        printf 'helix: reached max cycles (%s)\n' "$max_cycles" >&2
+        finish_loop 0; return $?
+      fi
+
+      continue
+    fi
+
+    local check_output=""
+    if ! check_output="$(run_check repo)"; then
+      echo "helix: check failed after queue drain" >&2
+      finish_loop 1; return $?
+    fi
+    if (( summary )); then
+      printf '%s\n' "$check_output" >> "$helix_log"
+    else
+      printf '%s\n' "$check_output"
+    fi
+
+    local next_action
+    next_action="$(extract_next_action "$check_output" || true)"
+
+    case "$next_action" in
+      BUILD)
+        consecutive_empty_builds=$((consecutive_empty_builds + 1))
+        if (( consecutive_empty_builds >= 2 )); then
+          verbose_line "%s consecutive BUILD cycles with no selectable issues" "$consecutive_empty_builds"
+          # Try orphan recovery before giving up
+          local pre_recover_ready post_recover_ready
+          pre_recover_ready="$(helix_ready_count 2>/dev/null)" || pre_recover_ready=0
+          recover_orphaned_issues
+          post_recover_ready="$(helix_ready_count 2>/dev/null)" || post_recover_ready=0
+          if (( post_recover_ready > pre_recover_ready )); then
+            if (( summary )); then
+              summary_line "orphan recovery freed issues (%s → %s ready), retrying" "$pre_recover_ready" "$post_recover_ready"
+            else
+              printf 'helix: orphan recovery freed issues (%s → %s ready), retrying\n' "$pre_recover_ready" "$post_recover_ready" >&2
+            fi
+            consecutive_empty_builds=0
+            continue
+          fi
+          printf 'helix: no selectable issues after orphan recovery — stopping\n' >&2
+          finish_loop 0; return $?
+        fi
+        continue
+        ;;
+      DESIGN)
+        verbose_line "queue drained, running design"
+        if ! run_plan repo; then
+          echo "helix: design failed after queue drain" >&2
+          finish_loop 1; return $?
+        fi
+        continue
+        ;;
+      POLISH)
+        verbose_line "queue drained, running polish"
+        if ! run_polish repo; then
+          echo "helix: polish failed after queue drain" >&2
+          finish_loop 1; return $?
+        fi
+        continue
+        ;;
+      ALIGN)
+        if (( auto_align )) && (( post_drain_alignment_ran == 0 )); then
+          verbose_line "queue drained, running alignment"
+          if ! run_alignment repo; then
+            echo "helix: post-drain alignment failed" >&2
+            finish_loop 1; return $?
+          fi
+          post_drain_alignment_ran=1
+          continue
+        fi
+        echo "helix: stopping after check returned ALIGN" >&2
+        finish_loop 0; return $?
+        ;;
+      WAIT)
+        printf 'helix: stopping after check returned WAIT\n' >&2
+        finish_loop 0; return $?
+        ;;
+      BACKFILL)
+        if (( post_drain_backfill_ran )); then
+          printf 'helix: stopping after check returned BACKFILL\n' >&2
+          finish_loop 0; return $?
+        fi
+        verbose_line "queue drained, running backfill"
+        if ! run_backfill repo; then
+          echo "helix: backfill failed after queue drain" >&2
+          finish_loop 1; return $?
+        fi
+        post_drain_backfill_ran=1
+        continue
+        ;;
+      STOP)
+        if (( auto_align )) && (( post_drain_alignment_ran == 0 )); then
+          verbose_line "queue empty, running alignment before stopping"
+          if run_alignment repo; then
+            post_drain_alignment_ran=1
+          else
+            echo "helix: pre-stop alignment failed" >&2
+          fi
+        fi
+        printf 'helix: stopping after check returned STOP\n' >&2
+        finish_loop 0; return $?
+        ;;
+      GUIDANCE)
+        printf 'helix: stopping after check returned %s\n' "$next_action" >&2
+        finish_loop 0; return $?
+        ;;
+      *)
+        echo "helix: unable to determine NEXT_ACTION from check output" >&2
+        finish_loop 1; return $?
+        ;;
+    esac
+  done
+}
+
+main() {
+  local command="${1:-help}"
+  shift || true
+
+  case "$command" in
+    help|-h|--help)
+      usage
+      ;;
+    version|--version|-V)
+      printf 'helix %s\n' "$HELIX_VERSION"
+      ;;
+    doctor)
+      local doctor_fix=0
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --fix) doctor_fix=1; shift ;;
+          *) break ;;
+        esac
+      done
+      run_doctor "$doctor_fix"
+      ;;
+    run)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --review-every)
+            review_every="$2"
+            shift 2
+            ;;
+          --max-cycles)
+            max_cycles="$2"
+            shift 2
+            ;;
+          --no-auto-align)
+            auto_align=0
+            shift
+            ;;
+          --no-auto-review)
+            auto_review=0
+            shift
+            ;;
+          --review-threshold)
+            review_threshold="$2"
+            shift 2
+            ;;
+          --ephemeral)
+            force_ephemeral=1
+            shift
+            ;;
+          --smart-model)
+            smart_model="$2"
+            shift 2
+            ;;
+          --cheap-model)
+            cheap_model="$2"
+            shift 2
+            ;;
+          --review-agent)
+            review_agent="$2"
+            shift 2
+            ;;
+          *)
+            echo "unknown option for run: $1" >&2
+            exit 1
+            ;;
+        esac
+      done
+
+      run_loop
+      ;;
+    frame)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      exec_wrap frame run_frame "${1:-}"
+      ;;
+    build|implement)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      exec_wrap build run_implementation "${1:-}"
+      ;;
+    check)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      exec_wrap check run_check "${1:-repo}"
+      ;;
+    align)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      exec_wrap align run_alignment "${1:-repo}"
+      ;;
+    backfill)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      exec_wrap backfill run_backfill "${1:-repo}"
+      ;;
+    design|plan)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      local plan_rounds=5
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --rounds) plan_rounds="$2"; shift 2 ;;
+          *) break ;;
+        esac
+      done
+      exec_wrap design run_plan "${1:-}" "$plan_rounds"
+      ;;
+    polish)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      local polish_rounds=6
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --rounds) polish_rounds="$2"; shift 2 ;;
+          *) break ;;
+        esac
+      done
+      exec_wrap polish run_polish "${1:-}" "$polish_rounds"
+      ;;
+    start)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      run_start "$@"
+      ;;
+    stop)
+      parse_common_flags "$@"
+      run_stop
+      ;;
+    status)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      run_status "$@"
+      ;;
+    next)
+      parse_common_flags "$@"
+      run_next
+      ;;
+    review)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      exec_wrap review run_review "${1:-last-commit}"
+      ;;
+    experiment)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      local experiment_close=0
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --close) experiment_close=1; shift ;;
+          *) break ;;
+        esac
+      done
+      exec_wrap experiment run_experiment "${1:-}" "$experiment_close"
+      ;;
+    evolve)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      local evolve_scope="" evolve_artifact="" evolve_from=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --scope) evolve_scope="$2"; shift 2 ;;
+          --artifact) evolve_artifact="$2"; shift 2 ;;
+          --from) evolve_from="$2"; shift 2 ;;
+          *) break ;;
+        esac
+      done
+      exec_wrap evolve run_evolve "${1:-}" "$evolve_scope" "$evolve_artifact" "$evolve_from"
+      ;;
+    commit)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      require_tracker
+      exec_wrap commit run_commit "${1:-}"
+      ;;
+    triage)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      require_tracker
+      exec_wrap triage tracker_create "$@"
+      ;;
+    *)
+      echo "unknown command: $command" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

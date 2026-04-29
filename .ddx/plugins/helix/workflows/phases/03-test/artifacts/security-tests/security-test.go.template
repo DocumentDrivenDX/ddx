@@ -1,0 +1,592 @@
+package security_test
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Security test suite following OWASP guidelines
+
+// TestSecurity_InjectionPrevention tests protection against injection attacks
+func TestSecurity_InjectionPrevention(t *testing.T) {
+	tests := []struct {
+		name        string
+		attackType  string
+		payload     string
+		targetField string
+		expectedErr bool
+		description string
+	}{
+		// SQL Injection tests
+		{
+			name:        "sql_injection_basic",
+			attackType:  "SQL Injection",
+			payload:     "' OR '1'='1",
+			targetField: "{{sql_field}}",
+			expectedErr: true,
+			description: "Should reject basic SQL injection",
+		},
+		{
+			name:        "sql_injection_union",
+			attackType:  "SQL Injection",
+			payload:     "' UNION SELECT * FROM users--",
+			targetField: "{{sql_field}}",
+			expectedErr: true,
+			description: "Should reject UNION-based injection",
+		},
+		{
+			name:        "sql_injection_time_based",
+			attackType:  "SQL Injection",
+			payload:     "'; WAITFOR DELAY '00:00:05'--",
+			targetField: "{{sql_field}}",
+			expectedErr: true,
+			description: "Should reject time-based blind injection",
+		},
+		
+		// NoSQL Injection tests
+		{
+			name:        "nosql_injection_mongodb",
+			attackType:  "NoSQL Injection",
+			payload:     `{"$ne": null}`,
+			targetField: "{{nosql_field}}",
+			expectedErr: true,
+			description: "Should reject MongoDB injection",
+		},
+		
+		// Command Injection tests
+		{
+			name:        "command_injection_semicolon",
+			attackType:  "Command Injection",
+			payload:     "test; rm -rf /",
+			targetField: "{{command_field}}",
+			expectedErr: true,
+			description: "Should reject command chaining",
+		},
+		{
+			name:        "command_injection_backtick",
+			attackType:  "Command Injection",
+			payload:     "test`whoami`",
+			targetField: "{{command_field}}",
+			expectedErr: true,
+			description: "Should reject backtick command substitution",
+		},
+		
+		// LDAP Injection tests
+		{
+			name:        "ldap_injection",
+			attackType:  "LDAP Injection",
+			payload:     "*)(uid=*",
+			targetField: "{{ldap_field}}",
+			expectedErr: true,
+			description: "Should reject LDAP filter injection",
+		},
+		
+		// XML Injection tests
+		{
+			name:        "xml_injection_xxe",
+			attackType:  "XML Injection",
+			payload:     `<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>`,
+			targetField: "{{xml_field}}",
+			expectedErr: true,
+			description: "Should reject XXE attacks",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Execute injection attempt
+			err := {{ExecuteWithPayload}}(tt.targetField, tt.payload)
+			
+			if tt.expectedErr {
+				assert.Error(t, err, "%s: %s", tt.attackType, tt.description)
+				// Verify payload was sanitized or rejected
+				assert.NotContains(t, err.Error(), "executed", "Payload should not execute")
+			} else {
+				assert.NoError(t, err, "Valid input should be accepted")
+			}
+		})
+	}
+}
+
+// TestSecurity_Authentication tests authentication mechanisms
+func TestSecurity_Authentication(t *testing.T) {
+	tests := []struct {
+		name        string
+		scenario    string
+		setup       func() {{AuthContext}}
+		expectedErr bool
+	}{
+		{
+			name:     "valid_credentials",
+			scenario: "Valid username and password",
+			setup: func() {{AuthContext}} {
+				return {{CreateValidAuth}}()
+			},
+			expectedErr: false,
+		},
+		{
+			name:     "invalid_password",
+			scenario: "Incorrect password",
+			setup: func() {{AuthContext}} {
+				return {{CreateInvalidPasswordAuth}}()
+			},
+			expectedErr: true,
+		},
+		{
+			name:     "nonexistent_user",
+			scenario: "User does not exist",
+			setup: func() {{AuthContext}} {
+				return {{CreateNonexistentUserAuth}}()
+			},
+			expectedErr: true,
+		},
+		{
+			name:     "expired_token",
+			scenario: "Expired authentication token",
+			setup: func() {{AuthContext}} {
+				return {{CreateExpiredTokenAuth}}()
+			},
+			expectedErr: true,
+		},
+		{
+			name:     "malformed_token",
+			scenario: "Malformed JWT token",
+			setup: func() {{AuthContext}} {
+				return {{CreateMalformedTokenAuth}}()
+			},
+			expectedErr: true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authCtx := tt.setup()
+			
+			// Attempt authentication
+			_, err := {{Authenticate}}(authCtx)
+			
+			if tt.expectedErr {
+				assert.Error(t, err, "Should reject: %s", tt.scenario)
+			} else {
+				assert.NoError(t, err, "Should accept: %s", tt.scenario)
+			}
+		})
+	}
+}
+
+// TestSecurity_Authorization tests access control
+func TestSecurity_Authorization(t *testing.T) {
+	tests := []struct {
+		name        string
+		user        {{UserType}}
+		resource    string
+		action      string
+		expected    bool
+		description string
+	}{
+		{
+			name:        "admin_full_access",
+			user:        {{CreateAdminUser}}(),
+			resource:    "{{admin_resource}}",
+			action:      "write",
+			expected:    true,
+			description: "Admin should have full access",
+		},
+		{
+			name:        "user_read_only",
+			user:        {{CreateRegularUser}}(),
+			resource:    "{{user_resource}}",
+			action:      "read",
+			expected:    true,
+			description: "Regular user should have read access",
+		},
+		{
+			name:        "user_no_write",
+			user:        {{CreateRegularUser}}(),
+			resource:    "{{admin_resource}}",
+			action:      "write",
+			expected:    false,
+			description: "Regular user should not have write access",
+		},
+		{
+			name:        "privilege_escalation_attempt",
+			user:        {{CreateMaliciousUser}}(),
+			resource:    "{{sensitive_resource}}",
+			action:      "delete",
+			expected:    false,
+			description: "Should prevent privilege escalation",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			allowed := {{CheckAuthorization}}(tt.user, tt.resource, tt.action)
+			assert.Equal(t, tt.expected, allowed, tt.description)
+		})
+	}
+}
+
+// TestSecurity_DataProtection tests encryption and data security
+func TestSecurity_DataProtection(t *testing.T) {
+	t.Run("sensitive_data_encryption", func(t *testing.T) {
+		// Test that sensitive data is encrypted at rest
+		sensitiveData := {{CreateSensitiveData}}()
+		
+		// Store data
+		id, err := {{StoreData}}(sensitiveData)
+		require.NoError(t, err)
+		
+		// Retrieve raw data from storage
+		rawData, err := {{GetRawData}}(id)
+		require.NoError(t, err)
+		
+		// Verify data is encrypted
+		assert.NotContains(t, string(rawData), sensitiveData.PlainText, 
+			"Sensitive data should not be stored in plain text")
+	})
+	
+	t.Run("password_hashing", func(t *testing.T) {
+		password := "SecurePassword123!"
+		
+		// Hash password
+		hashed, err := {{HashPassword}}(password)
+		require.NoError(t, err)
+		
+		// Verify not plain text
+		assert.NotEqual(t, password, hashed, "Password should be hashed")
+		
+		// Verify bcrypt or argon2 format
+		assert.True(t, strings.HasPrefix(hashed, "$2") || strings.HasPrefix(hashed, "$argon2"),
+			"Should use secure hashing algorithm")
+	})
+	
+	t.Run("pii_masking", func(t *testing.T) {
+		// Test that PII is masked in logs
+		userData := {{CreateUserWithPII}}()
+		
+		// Log user data
+		logOutput := {{CaptureLogOutput}}(func() {
+			{{LogUserData}}(userData)
+		})
+		
+		// Verify PII is masked
+		assert.NotContains(t, logOutput, userData.SSN, "SSN should be masked")
+		assert.NotContains(t, logOutput, userData.CreditCard, "Credit card should be masked")
+		assert.Contains(t, logOutput, "****", "Should contain masked values")
+	})
+}
+
+// TestSecurity_SessionManagement tests session security
+func TestSecurity_SessionManagement(t *testing.T) {
+	t.Run("session_timeout", func(t *testing.T) {
+		// Create session
+		session := {{CreateSession}}()
+		
+		// Verify initial validity
+		assert.True(t, {{IsSessionValid}}(session), "New session should be valid")
+		
+		// Simulate timeout
+		time.Sleep({{SessionTimeout}} + time.Second)
+		
+		// Verify session expired
+		assert.False(t, {{IsSessionValid}}(session), "Session should expire after timeout")
+	})
+	
+	t.Run("session_fixation_prevention", func(t *testing.T) {
+		// Get session before authentication
+		preAuthSession := {{GetCurrentSession}}()
+		
+		// Authenticate
+		err := {{AuthenticateUser}}("user", "password")
+		require.NoError(t, err)
+		
+		// Get session after authentication
+		postAuthSession := {{GetCurrentSession}}()
+		
+		// Verify session ID changed
+		assert.NotEqual(t, preAuthSession.ID, postAuthSession.ID,
+			"Session ID should change after authentication")
+	})
+	
+	t.Run("concurrent_session_limit", func(t *testing.T) {
+		user := {{CreateTestUser}}()
+		
+		// Create multiple sessions
+		const maxSessions = {{MaxConcurrentSessions}}
+		sessions := make([]{{SessionType}}, 0, maxSessions+1)
+		
+		for i := 0; i < maxSessions; i++ {
+			session, err := {{CreateUserSession}}(user)
+			require.NoError(t, err)
+			sessions = append(sessions, session)
+		}
+		
+		// Try to create one more session
+		_, err := {{CreateUserSession}}(user)
+		assert.Error(t, err, "Should not allow more than %d concurrent sessions", maxSessions)
+	})
+}
+
+// TestSecurity_InputValidation tests input sanitization
+func TestSecurity_InputValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		validator   func(string) error
+		expectedErr bool
+		description string
+	}{
+		// Path traversal
+		{
+			name:        "path_traversal_dots",
+			input:       "../../etc/passwd",
+			validator:   {{ValidateFilePath}},
+			expectedErr: true,
+			description: "Should reject path traversal",
+		},
+		
+		// XSS prevention
+		{
+			name:        "xss_script_tag",
+			input:       `<script>alert('XSS')</script>`,
+			validator:   {{ValidateHTML}},
+			expectedErr: true,
+			description: "Should reject script tags",
+		},
+		{
+			name:        "xss_event_handler",
+			input:       `<img src=x onerror="alert('XSS')">`,
+			validator:   {{ValidateHTML}},
+			expectedErr: true,
+			description: "Should reject event handlers",
+		},
+		
+		// Email validation
+		{
+			name:        "valid_email",
+			input:       "user@example.com",
+			validator:   {{ValidateEmail}},
+			expectedErr: false,
+			description: "Should accept valid email",
+		},
+		{
+			name:        "invalid_email",
+			input:       "not-an-email",
+			validator:   {{ValidateEmail}},
+			expectedErr: true,
+			description: "Should reject invalid email",
+		},
+		
+		// URL validation
+		{
+			name:        "javascript_url",
+			input:       "javascript:alert('XSS')",
+			validator:   {{ValidateURL}},
+			expectedErr: true,
+			description: "Should reject javascript: URLs",
+		},
+		{
+			name:        "data_url",
+			input:       "data:text/html,<script>alert('XSS')</script>",
+			validator:   {{ValidateURL}},
+			expectedErr: true,
+			description: "Should reject data: URLs",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.validator(tt.input)
+			
+			if tt.expectedErr {
+				assert.Error(t, err, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+			}
+		})
+	}
+}
+
+// TestSecurity_RateLimiting tests rate limiting and DDoS protection
+func TestSecurity_RateLimiting(t *testing.T) {
+	t.Run("api_rate_limit", func(t *testing.T) {
+		const maxRequests = {{MaxRequestsPerMinute}}
+		client := {{CreateTestClient}}()
+		
+		// Make requests up to limit
+		for i := 0; i < maxRequests; i++ {
+			err := {{MakeAPIRequest}}(client)
+			assert.NoError(t, err, "Request %d should succeed", i+1)
+		}
+		
+		// Next request should be rate limited
+		err := {{MakeAPIRequest}}(client)
+		assert.Error(t, err, "Should be rate limited after %d requests", maxRequests)
+		assert.Contains(t, err.Error(), "rate limit", "Error should indicate rate limiting")
+	})
+	
+	t.Run("login_attempt_limit", func(t *testing.T) {
+		const maxAttempts = {{MaxLoginAttempts}}
+		username := "testuser"
+		
+		// Make failed login attempts
+		for i := 0; i < maxAttempts; i++ {
+			err := {{AttemptLogin}}(username, "wrong-password")
+			assert.Error(t, err, "Login attempt %d should fail", i+1)
+		}
+		
+		// Account should be locked
+		err := {{AttemptLogin}}(username, "correct-password")
+		assert.Error(t, err, "Account should be locked after %d failed attempts", maxAttempts)
+		assert.Contains(t, err.Error(), "locked", "Error should indicate account lock")
+	})
+}
+
+// TestSecurity_CSRF tests CSRF protection
+func TestSecurity_CSRF(t *testing.T) {
+	t.Run("csrf_token_required", func(t *testing.T) {
+		// Make request without CSRF token
+		req := {{CreatePOSTRequest}}("/api/sensitive-action")
+		resp := {{ExecuteRequest}}(req)
+		
+		assert.Equal(t, 403, resp.StatusCode, "Should reject request without CSRF token")
+	})
+	
+	t.Run("csrf_token_validation", func(t *testing.T) {
+		// Get valid CSRF token
+		token := {{GetCSRFToken}}()
+		
+		// Make request with valid token
+		req := {{CreatePOSTRequest}}("/api/sensitive-action")
+		req.Header.Set("X-CSRF-Token", token)
+		resp := {{ExecuteRequest}}(req)
+		
+		assert.Equal(t, 200, resp.StatusCode, "Should accept request with valid CSRF token")
+	})
+	
+	t.Run("csrf_token_invalidation", func(t *testing.T) {
+		// Get CSRF token
+		token := {{GetCSRFToken}}()
+		
+		// Use token once
+		req1 := {{CreatePOSTRequest}}("/api/sensitive-action")
+		req1.Header.Set("X-CSRF-Token", token)
+		resp1 := {{ExecuteRequest}}(req1)
+		assert.Equal(t, 200, resp1.StatusCode)
+		
+		// Try to reuse token
+		req2 := {{CreatePOSTRequest}}("/api/another-action")
+		req2.Header.Set("X-CSRF-Token", token)
+		resp2 := {{ExecuteRequest}}(req2)
+		
+		assert.Equal(t, 403, resp2.StatusCode, "Should reject reused CSRF token")
+	})
+}
+
+// TestSecurity_ErrorHandling tests secure error handling
+func TestSecurity_ErrorHandling(t *testing.T) {
+	t.Run("no_sensitive_info_in_errors", func(t *testing.T) {
+		// Trigger various errors
+		errors := []error{
+			{{TriggerDatabaseError}}(),
+			{{TriggerFileError}}(),
+			{{TriggerAuthError}}(),
+		}
+		
+		for _, err := range errors {
+			errMsg := err.Error()
+			
+			// Check for sensitive information
+			assert.NotContains(t, errMsg, "password", "Error should not contain passwords")
+			assert.NotContains(t, errMsg, "{{db_connection_string}}", "Error should not contain connection strings")
+			assert.NotContains(t, errMsg, "{{api_key}}", "Error should not contain API keys")
+			assert.NotRegexp(t, `\/home\/[\w]+\/`, errMsg, "Error should not contain system paths")
+		}
+	})
+	
+	t.Run("generic_error_messages", func(t *testing.T) {
+		// Test that user-facing errors are generic
+		userErrors := map[string]func() error{
+			"invalid_credentials": func() error {
+				return {{AuthenticateUser}}("nonexistent", "password")
+			},
+			"unauthorized_access": func() error {
+				return {{AccessResource}}("{{restricted_resource}}")
+			},
+		}
+		
+		for name, triggerError := range userErrors {
+			t.Run(name, func(t *testing.T) {
+				err := triggerError()
+				assert.Error(t, err)
+				
+				// Error should be generic
+				assert.Contains(t, err.Error(), "{{generic_error_message}}",
+					"User-facing error should be generic")
+			})
+		}
+	})
+}
+
+// TestSecurity_Compliance tests regulatory compliance
+func TestSecurity_Compliance(t *testing.T) {
+	t.Run("gdpr_data_deletion", func(t *testing.T) {
+		// Create user with data
+		userID := {{CreateUserWithData}}()
+		
+		// Request data deletion
+		err := {{RequestDataDeletion}}(userID)
+		require.NoError(t, err)
+		
+		// Verify data is deleted
+		data, err := {{GetUserData}}(userID)
+		assert.Error(t, err, "User data should be deleted")
+		assert.Nil(t, data, "No data should be returned")
+	})
+	
+	t.Run("pci_dss_card_storage", func(t *testing.T) {
+		// Attempt to store full credit card number
+		cardNumber := "4111111111111111"
+		err := {{StorePaymentMethod}}(cardNumber)
+		
+		// Should either error or store tokenized
+		if err == nil {
+			// Verify only last 4 digits stored
+			stored := {{GetStoredPaymentMethod}}()
+			assert.Equal(t, "****1111", stored, "Should only store masked card number")
+		}
+	})
+	
+	t.Run("hipaa_audit_logging", func(t *testing.T) {
+		// Access protected health information
+		{{AccessPHI}}("patient-123")
+		
+		// Verify audit log created
+		auditLogs := {{GetAuditLogs}}()
+		require.NotEmpty(t, auditLogs)
+		
+		lastLog := auditLogs[len(auditLogs)-1]
+		assert.Contains(t, lastLog, "PHI access", "Should log PHI access")
+		assert.Contains(t, lastLog, "patient-123", "Should log resource ID")
+		assert.Contains(t, lastLog, "{{current_user}}", "Should log accessing user")
+	})
+}
+
+// Helper function to run security scan
+func runSecurityScan(t *testing.T, target string) {
+	// This would integrate with actual security scanning tools
+	// For testing, we simulate the scan
+	results := {{RunSecurityScan}}(target)
+	
+	for _, issue := range results.Issues {
+		if issue.Severity == "HIGH" || issue.Severity == "CRITICAL" {
+			t.Errorf("Security issue found: %s (Severity: %s)", issue.Description, issue.Severity)
+		}
+	}
+}

@@ -1,0 +1,17 @@
+name: principles-injection-alignment
+description: >
+  Measures how effectively principles injection strategies cause agents to
+  reference and apply HELIX design principles when making design judgments.
+  Alignment score is 0-5 (one point per principle explicitly applied or
+  referenced in the agent's recommendation).
+unit: alignment-score
+direction: higher
+command: >
+  ddx agent run --harness claude --model claude-haiku-4-5-20251001 \
+    --prompt /tmp/helix-experiment/prompt-selective.md --json \
+    | python3 -c "import json,sys; d=json.load(sys.stdin); print('METRIC principles-injection-alignment=' + str(d.get('output_tokens', 0)))"
+tolerance: "1 point"
+labels:
+  feature: FEAT-003
+  spec-id: SD-002
+  research: principles-injection

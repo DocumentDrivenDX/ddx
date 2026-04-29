@@ -1,0 +1,200 @@
+# Metadata for Risk Register
+
+artifact:
+  name: Risk Register
+  id: risk-register
+  type: register
+  phase: frame
+
+description: |
+  Comprehensive identification, assessment, and management of project risks.
+  Includes both threats and opportunities with mitigation strategies and ownership.
+
+dependencies:
+  requires:
+    - input: PRD
+      type: artifact
+      path: prd
+      required: false
+    - input: Stakeholder Map
+      type: artifact
+      path: stakeholder-map
+      required: false
+
+  enables:
+    - output: Risk mitigation plans
+      type: artifact
+      phase: all
+    - output: Contingency planning
+      type: artifact
+      phase: build
+
+output:
+  location: docs/helix/01-frame/risk-register.md
+  format: markdown
+  naming: risk-register.md
+  update_frequency: weekly
+
+validation:
+  required_fields:
+    - risk_id
+    - description
+    - probability
+    - impact
+    - risk_score
+    - owner
+    - mitigation_strategy
+    - status
+
+  quality_checks:
+    - check: owner_assigned
+      description: Each risk must have an owner
+      severity: blocking
+
+    - check: mitigation_defined
+      description: High/Critical risks must have mitigation strategies
+      severity: blocking
+
+    - check: assessment_complete
+      description: Probability and impact must be assessed
+      severity: blocking
+
+    - check: triggers_identified
+      description: Risk triggers should be defined
+      severity: warning
+
+  automated_checks:
+    - pattern: "RISK-\\d{3}"
+      expected: ">0"
+      message: Use proper RISK-XXX format
+
+    - check: no_orphan_risks
+      field: owner
+      not_equals: "[Name]"
+
+variables:
+  - name: risk_owner
+    description: Overall risk register owner
+    required: true
+
+  - name: risk_budget
+    description: Contingency reserve amount
+    required: false
+
+  - name: risk_appetite
+    description: Organization's risk tolerance level
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review risk register for:
+    1. Completeness of risk identification
+    2. Realistic probability assessments
+    3. Appropriate mitigation strategies
+    4. Clear ownership and accountability
+    5. Actionable response plans
+
+template:
+  file: template.md
+  sections:
+    - risk_criteria
+    - active_risks
+    - risk_categories
+    - mitigation_strategies
+    - monitoring_dashboard
+
+workflow:
+  creation_order: 6
+  review_cycles: continuous
+  approval_required: true
+  approvers:
+    - Project Manager
+    - Risk Owner
+    - Sponsor
+
+  review_frequency:
+    team: weekly
+    management: bi-weekly
+    executive: monthly
+
+relationships:
+  informed_by:
+    - prd
+    - stakeholder-map
+    - assumptions-constraints
+
+  informs:
+    - project-planning
+    - budget-planning
+    - contingency-planning
+
+  tracked_through:
+    - all_phases
+
+risk_management:
+  scoring_method: probability_x_impact
+  scale: 1-5
+  
+  thresholds:
+    critical: 20-25
+    high: 12-19
+    medium: 6-11
+    low: 1-5
+
+  response_strategies:
+    threats:
+      - avoid
+      - mitigate
+      - transfer
+      - accept
+    opportunities:
+      - exploit
+      - enhance
+      - share
+      - accept
+
+  categories:
+    - technical
+    - business
+    - resource
+    - external
+    - compliance
+    - project_management
+
+monitoring:
+  metrics:
+    - open_risks_count
+    - critical_risks_count
+    - mitigation_effectiveness
+    - new_risks_per_period
+    - closed_risks_per_period
+    - risk_budget_utilization
+
+  triggers:
+    - risk_materialized
+    - risk_score_increased
+    - new_critical_risk
+    - mitigation_failed
+
+reporting:
+  dashboards:
+    - risk_heat_map
+    - trend_analysis
+    - top_risks
+    - mitigation_status
+
+  exports:
+    - risk_matrix
+    - executive_summary
+    - detailed_register
+
+tags:
+  - risk
+  - mitigation
+  - assessment
+  - management
+  - monitoring
+
+version: 1.0.0
+last_updated: 2024-01-14

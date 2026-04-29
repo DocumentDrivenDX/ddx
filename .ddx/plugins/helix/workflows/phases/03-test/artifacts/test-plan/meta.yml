@@ -1,0 +1,131 @@
+# Metadata for Test Plan (Project-Level)
+
+artifact:
+  name: Test Plan
+  id: test-plan
+  type: document
+  phase: test
+  level: project
+
+id_format:
+  prefix: TP
+  pattern: "TP-[0-9]{3}"
+  example: TP-001
+  description: |
+    Sequential three-digit number. Test plans use TP-XXX identifiers.
+    Each test plan number is unique across the project and is never reused.
+
+description: |
+  The project-level test plan defines the testing strategy for the full
+  project: test levels and scope, framework choices, coverage targets,
+  critical paths, test data strategy, infrastructure requirements, and
+  sequencing. It drives failing tests before implementation begins and
+  provides traceability from requirements to test execution.
+
+dependencies:
+  requires:
+    - input: Architecture / Solution Design
+      type: artifact
+      pattern: "SD-[0-9]{3}-*.md"
+      phase: design
+      required: false
+      note: "Provides component boundaries that shape test scope"
+
+    - input: Feature Specifications
+      type: artifact
+      pattern: "FEAT-[0-9]{3}-*.md"
+      phase: frame
+      required: false
+      note: "Source of acceptance criteria that tests must trace to"
+
+  enables:
+    - output: Build Phase Issues
+      type: issue
+      pattern: "tracker issue labeled helix,phase:build"
+      phase: build
+
+output:
+  location: docs/helix/03-test/test-plan.md
+  format: markdown
+  naming: test-plan.md
+  examples:
+    - test-plan.md
+
+reuse_policy: |
+  One project-level test plan per project. It is updated in place as the
+  project evolves. Each update should preserve prior decisions unless they
+  are explicitly superseded.
+
+validation:
+  required_sections:
+    - testing_strategy
+    - test_levels
+    - coverage_requirements
+    - critical_paths
+
+  pattern_checks:
+    - pattern: "P0|P1|P2|Critical"
+      expected: ">=1"
+      message: Must identify test priority levels
+
+    - pattern: "[0-9]+%"
+      expected: ">=1"
+      message: Must include at least one numeric coverage target
+
+  quality_checks:
+    - check: requirements_traced
+      description: Every test must trace to a requirement or user story
+      severity: blocking
+
+    - check: coverage_targets_defined
+      description: Coverage targets must be numeric and enforcement mechanism must be stated
+      severity: blocking
+
+    - check: infrastructure_specified
+      description: CI tool and required services must be listed
+      severity: warning
+
+    - check: risks_identified
+      description: At least one test execution risk and mitigation must be listed
+      severity: warning
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this test plan for:
+    1. Traceability from requirements to tests
+    2. Realistic coverage targets with enforcement
+    3. Complete infrastructure requirements
+    4. Identified risks and mitigations
+    5. Clear implementation order
+
+template:
+  file: template.md
+
+workflow:
+  creation_order: 1
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Technical Lead
+
+relationships:
+  informed_by:
+    - feature-specification
+    - solution-design
+    - user-stories
+
+  informs:
+    - implementation-plan
+
+  referenced_by:
+    - prd
+
+tags:
+  - test
+  - quality
+  - coverage
+  - project-level
+
+version: 1.0.0
+last_updated: 2026-04-05

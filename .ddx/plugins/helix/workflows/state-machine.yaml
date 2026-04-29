@@ -1,0 +1,285 @@
+# HELIX Workflow State Machine
+# Defines artifact ordering, parallelization strategy, and phase transitions
+# Used by orchestrators to determine what to do next
+
+version: 1
+workflow: helix
+
+# Phase definitions with artifact ordering
+phases:
+  - name: discover
+    number: "00"
+    description: Validate ideas and opportunities before committing to Frame
+    artifacts:
+      ordered:
+        - product-vision      # Must come first - north star
+        - business-case       # Justifies investment
+        - competitive-analysis # Market positioning
+      parallel:
+        - opportunity-canvas  # Can be done alongside analysis
+    entry_gate:
+      automated:
+        - check: idea_received
+          type: manual  # Human provides initial idea
+    exit_gate:
+      automated:
+        - check: file_exists
+          path: docs/helix/00-discover/product-vision.md
+        - check: file_exists
+          path: docs/helix/00-discover/business-case.md
+      manual:
+        - "Investment decision approved"
+    next_phase: frame
+
+  - name: frame
+    number: "01"
+    description: Define WHAT to build and WHY
+    artifacts:
+      ordered:
+        - prd                    # Problem definition first
+        - principles             # Design principles
+        - feature-specification  # Break down features
+        - user-stories           # Actionable stories
+      parallel:
+        - stakeholder-map        # Can parallel with ordered
+        - risk-register
+        - compliance-requirements
+        - security-requirements
+        - threat-model
+        - research-plan
+        - feasibility-study
+        - validation-checklist
+    entry_gate:
+      automated:
+        - check: phase_complete
+          phase: discover
+    exit_gate:
+      automated:
+        - check: file_exists
+          path: docs/helix/01-frame/prd.md
+        - check: grep_absent
+          pattern: "\\[NEEDS CLARIFICATION\\]"
+          path: docs/helix/01-frame/**/*.md
+        - check: user_stories_have_acceptance_criteria
+      manual:
+        - "PRD approved by product owner"
+        - "Stakeholders aligned (RACI complete)"
+    next_phase: design
+
+  - name: design
+    number: "02"
+    description: Define HOW to build it
+    artifacts:
+      ordered:
+        - architecture           # System-level first
+        - solution-design        # Feature-level designs
+        - technical-design       # Implementation details
+        - contracts              # API contracts
+      parallel:
+        - adr                    # Decisions can be captured anytime
+        - security-architecture
+        - data-design
+        - auth-design
+        - data-protection
+        - proof-of-concept
+        - tech-spike
+    entry_gate:
+      automated:
+        - check: phase_complete
+          phase: frame
+    exit_gate:
+      automated:
+        - check: file_exists
+          path: docs/helix/02-design/architecture.md
+        - check: file_exists
+          path: docs/helix/02-design/contracts/*.yaml
+        - check: grep_absent
+          pattern: "\\[NEEDS CLARIFICATION\\]"
+          path: docs/helix/02-design/**/*.md
+      manual:
+        - "Architecture reviewed by tech lead"
+    next_phase: test
+
+  - name: test
+    number: "03"
+    description: Write failing tests (TDD Red phase)
+    artifacts:
+      ordered:
+        - test-plan              # Strategy first
+        - test-procedures        # How to test
+        - test-suites            # Actual test files
+      parallel:
+        - story-test-plan        # Per-story plans
+        - security-tests         # Security test suite
+    entry_gate:
+      automated:
+        - check: phase_complete
+          phase: design
+    exit_gate:
+      automated:
+        - check: file_exists
+          path: docs/helix/03-test/test-plan.md
+        - check: tests_exist
+          path: tests/
+        - check: tests_failing
+          message: "Tests must fail before implementation (TDD)"
+      manual: []
+    next_phase: build
+
+  - name: build
+    number: "04"
+    description: Implement code to pass tests (TDD Green phase)
+    artifacts:
+      ordered:
+        - implementation-plan    # Plan the build
+        - story-implementation-plan  # Emits per-story build issues
+      parallel:
+        - build-procedures       # Build documentation
+        - secure-coding          # Security guidelines
+    entry_gate:
+      automated:
+        - check: phase_complete
+          phase: test
+        - check: tests_failing
+          message: "Must have failing tests to implement against"
+    exit_gate:
+      automated:
+        - check: tests_passing
+          path: tests/
+        - check: coverage_threshold
+          minimum: 80
+        - check: security_scan_clean
+      manual:
+        - "Code review completed"
+    next_phase: deploy
+
+  - name: deploy
+    number: "05"
+    description: Release to production with monitoring
+    artifacts:
+      ordered:
+        - deployment-checklist   # Technical deployment
+        - launch-checklist       # Cross-functional launch
+        - release-notes          # User communication
+      parallel:
+        - gtm-plan              # Go-to-market
+    entry_gate:
+      automated:
+        - check: phase_complete
+          phase: build
+        - check: tests_passing
+    exit_gate:
+      automated:
+        - check: deployment_verified
+        - check: monitoring_active
+      manual:
+        - "Go/no-go decision by stakeholders"
+        - "Release notes published"
+    next_phase: iterate
+
+  - name: iterate
+    number: "06"
+    description: Learn from production, plan next cycle
+    artifacts:
+      ordered:
+        - metrics-dashboard      # Collect data
+        - feedback-analysis      # Analyze feedback
+        - lessons-learned        # Document learnings
+        - improvement-backlog    # Plan improvements
+        - iteration-planning     # Next cycle
+      parallel: []
+    entry_gate:
+      automated:
+        - check: phase_complete
+          phase: deploy
+    exit_gate:
+      automated:
+        - check: file_exists
+          path: docs/helix/06-iterate/lessons-learned.md
+      manual:
+        - "Next iteration scope decided"
+    next_phase: frame  # Loop back
+
+# Story-level state machine (parallel to project-level)
+story_flow:
+  prefixes:
+    user_story: US
+    technical_design: TD
+    test_plan: TP
+    implementation_issue: "ddx bead issue labeled phase:build"
+    deployment_issue: "ddx bead issue labeled phase:deploy"
+    iteration_report: IR
+
+  transitions:
+    - from: US-{id}
+      to: TD-{id}
+      phase_change: frame -> design
+    - from: TD-{id}
+      to: TP-{id}
+      phase_change: design -> test
+    - from: TP-{id}
+      to: "tracker issue(s) labeled helix, phase:build, story:US-{id}"
+      phase_change: test -> build
+    - from: "tracker issue(s) labeled helix, phase:build, story:US-{id}"
+      to: "tracker issue(s) labeled helix, phase:deploy, story:US-{id}"
+      phase_change: build -> deploy
+    - from: "tracker issue(s) labeled helix, phase:deploy, story:US-{id}"
+      to: IR-{id}
+      phase_change: deploy -> iterate
+
+  state_detection:
+    rule: "Story phase = phase of latest artifact with matching ID"
+    example: |
+      If exists US-036: Story is in FRAME
+      If exists TD-036: Story is in DESIGN
+      If exists TP-036: Story is in TEST
+      If open HELIX build issues exist for story US-036: Story is in BUILD
+      If open HELIX deploy issues exist for story US-036: Story is in DEPLOY
+      If exists IR-036: Story is in ITERATE
+
+# Parallelization rules
+parallelization:
+  story_level:
+    description: "Stories without shared dependencies can be parallel"
+    conflict_detection:
+      - shared_module_changes
+      - shared_api_changes
+      - shared_database_changes
+    max_parallel_stories: 5
+
+  artifact_level:
+    description: "Parallel artifacts within a phase can be worked simultaneously"
+    example: "stakeholder-map and risk-register can be done in parallel"
+
+# Error states and recovery
+error_handling:
+  gate_failure:
+    action: log_failure
+    retry: 3
+    escalate_after: 3
+    escalate_to: human
+
+  test_failure:
+    action: trigger_refinement
+    refinement_type: bugs
+
+  deployment_failure:
+    action: rollback
+    notify: stakeholders
+
+# Refinement triggers (loop back to earlier phase)
+refinement:
+  triggers:
+    - condition: test_failure_persistent
+      threshold: 3
+      action: refine_to_design
+    - condition: integration_conflict
+      action: refine_to_frame
+    - condition: requirements_change
+      action: refine_to_frame
+
+  process:
+    - identify_issue_type
+    - determine_target_phase
+    - create_refinement_story
+    - link_to_original

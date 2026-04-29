@@ -1,0 +1,42 @@
+# Architecture Dependencies
+artifact: architecture
+prefix: ARCH
+
+inputs:
+  required:
+    - artifact: prd
+      phase: "01-frame"
+      relationship: "defines system scope"
+    - artifact: feature-specification
+      phase: "01-frame"
+      relationship: "lists features to support"
+  optional:
+    - artifact: security-requirements
+      phase: "01-frame"
+      relationship: "informs security architecture"
+    - artifact: threat-model
+      phase: "01-frame"
+      relationship: "guides security controls"
+
+outputs:
+  produces:
+    - artifact: solution-design
+      relationship: "feature-level designs reference architecture"
+    - artifact: technical-design
+      relationship: "implementation details follow architecture"
+    - artifact: adr
+      relationship: "documents architectural decisions"
+
+completion:
+  automated_checks:
+    - type: file_exists
+    - type: no_markers
+      pattern: "\\[NEEDS CLARIFICATION\\]"
+    - type: section_exists
+      sections:
+        - "System Context"
+        - "Container Diagram"
+        - "Component Diagram"
+  manual_checks:
+    - "Architecture reviewed by tech lead"
+    - "Non-functional requirements addressed"

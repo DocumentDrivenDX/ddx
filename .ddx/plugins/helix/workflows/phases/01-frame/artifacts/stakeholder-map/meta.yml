@@ -1,0 +1,160 @@
+# Metadata for Stakeholder Map
+
+artifact:
+  name: Stakeholder Map
+  id: stakeholder-map
+  type: document
+  phase: frame
+
+description: |
+  Comprehensive identification and analysis of all project stakeholders,
+  their influence, interests, and engagement strategies. Includes RACI
+  matrix for clear accountability.
+
+dependencies:
+  requires:
+    - input: Project charter or initiative
+      type: external
+      required: true
+    - input: Organizational structure
+      type: external
+      required: true
+
+  enables:
+    - output: Communication plan
+      type: artifact
+      phase: all
+    - output: Risk mitigation strategies
+      type: artifact
+      phase: frame
+
+output:
+  location: docs/helix/01-frame/stakeholder-map.md
+  format: markdown
+  naming: stakeholder-map.md
+  update_frequency: monthly
+
+validation:
+  required_sections:
+    - stakeholder_identification
+    - raci_matrix
+    - power_interest_grid
+    - communication_plan
+    - engagement_strategy
+    - escalation_path
+
+  quality_checks:
+    - check: raci_completeness
+      description: Each activity must have one A and at least one R
+      severity: blocking
+
+    - check: contact_information
+      description: Key stakeholders must have contact details
+      severity: warning
+
+    - check: engagement_defined
+      description: Each stakeholder must have engagement strategy
+      severity: blocking
+
+    - check: escalation_clear
+      description: Escalation path must be defined
+      severity: blocking
+
+  automated_checks:
+    - pattern: "\\[Stakeholder Name/Role\\]"
+      expected: 0
+      message: Replace all placeholder names
+
+    - pattern: "@|email"
+      expected: ">0"
+      message: Include contact information
+
+variables:
+  - name: organization_name
+    description: Name of the organization
+    required: true
+
+  - name: project_sponsor
+    description: Executive sponsor name
+    required: true
+
+  - name: project_manager
+    description: PM responsible for stakeholder management
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review stakeholder map for:
+    1. Completeness of stakeholder identification
+    2. Accuracy of influence assessment
+    3. Clarity of RACI assignments
+    4. Feasibility of communication plan
+    5. Specificity of engagement strategies
+
+template:
+  file: template.md
+  includes:
+    - raci_matrix
+    - power_interest_grid
+    - communication_matrix
+
+workflow:
+  creation_order: 0
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Project Manager
+    - Sponsor
+
+relationships:
+  informs:
+    - prd
+    - risk-register
+    - communication-plan
+
+  updated_by:
+    - organizational_changes
+    - project_phases
+    - stakeholder_feedback
+
+engagement_levels:
+  - inform: One-way communication
+  - consult: Two-way communication
+  - collaborate: Joint decision making
+  - empower: Delegate decision authority
+
+raci_rules:
+  accountable:
+    max_per_activity: 1
+    must_be_assigned: true
+  responsible:
+    min_per_activity: 1
+    can_be_multiple: true
+  consulted:
+    limit_to_necessary: true
+  informed:
+    keep_manageable: true
+
+monitoring:
+  metrics:
+    - stakeholder_satisfaction
+    - meeting_attendance
+    - feedback_rate
+    - issue_resolution_time
+
+  review_triggers:
+    - phase_transitions
+    - major_decisions
+    - stakeholder_changes
+    - monthly_review
+
+tags:
+  - stakeholders
+  - communication
+  - engagement
+  - raci
+  - governance
+
+version: 1.0.0
+last_updated: 2024-01-14

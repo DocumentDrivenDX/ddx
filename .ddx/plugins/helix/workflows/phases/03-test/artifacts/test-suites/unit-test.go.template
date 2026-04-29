@@ -1,0 +1,219 @@
+package {{package_name}}
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Test{{ComponentName}}_{{TestScenario}} tests {{description}}
+func Test{{ComponentName}}_{{TestScenario}}(t *testing.T) {
+	// Table-driven tests for comprehensive coverage
+	tests := []struct {
+		name        string
+		description string
+		input       {{InputType}}
+		setup       func(t *testing.T) {{SetupReturnType}}
+		expected    {{ExpectedType}}
+		expectError bool
+		validate    func(t *testing.T, actual {{ActualType}}, err error)
+	}{
+		{
+			name:        "{{test_case_1_name}}",
+			description: "{{test_case_1_description}}",
+			input:       {{test_case_1_input}},
+			setup: func(t *testing.T) {{SetupReturnType}} {
+				// Arrange: Set up test conditions
+				{{setup_code}}
+			},
+			expected:    {{test_case_1_expected}},
+			expectError: false,
+			validate: func(t *testing.T, actual {{ActualType}}, err error) {
+				// Additional validation beyond simple equality
+				{{validation_code}}
+			},
+		},
+		{
+			name:        "{{test_case_2_name}}",
+			description: "{{test_case_2_description}}",
+			input:       {{test_case_2_input}},
+			setup: func(t *testing.T) {{SetupReturnType}} {
+				{{setup_code_2}}
+			},
+			expected:    {{test_case_2_expected}},
+			expectError: {{expect_error}},
+		},
+		// Edge cases
+		{
+			name:        "handles_nil_input",
+			description: "Should handle nil input gracefully",
+			input:       nil,
+			expectError: true,
+			validate: func(t *testing.T, actual {{ActualType}}, err error) {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "{{expected_error_message}}")
+			},
+		},
+		{
+			name:        "handles_empty_input",
+			description: "Should handle empty input correctly",
+			input:       {{empty_input}},
+			expected:    {{empty_expected}},
+			expectError: false,
+		},
+		{
+			name:        "handles_large_input",
+			description: "Should handle large input efficiently",
+			input:       {{large_input}},
+			setup: func(t *testing.T) {{SetupReturnType}} {
+				// Create large test data
+				{{large_data_setup}}
+			},
+			validate: func(t *testing.T, actual {{ActualType}}, err error) {
+				// Verify performance constraints
+				{{performance_validation}}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var setupResult {{SetupReturnType}}
+			if tt.setup != nil {
+				setupResult = tt.setup(t)
+			}
+
+			// Act
+			actual, err := {{FunctionUnderTest}}(tt.input)
+
+			// Assert
+			if tt.expectError {
+				assert.Error(t, err, "Expected error for: %s", tt.description)
+			} else {
+				assert.NoError(t, err, "Unexpected error for: %s", tt.description)
+				if tt.expected != nil {
+					assert.Equal(t, tt.expected, actual, "Mismatch for: %s", tt.description)
+				}
+			}
+
+			// Custom validation
+			if tt.validate != nil {
+				tt.validate(t, actual, err)
+			}
+
+			// Cleanup if needed
+			if setupResult != nil {
+				// Cleanup code
+				{{cleanup_code}}
+			}
+		})
+	}
+}
+
+// Test{{ComponentName}}_Benchmarks benchmarks performance-critical operations
+func Benchmark{{ComponentName}}_{{Operation}}(b *testing.B) {
+	// Setup benchmark data
+	{{benchmark_setup}}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Benchmark the operation
+		{{benchmark_operation}}
+	}
+}
+
+// Test{{ComponentName}}_Concurrent tests thread safety
+func Test{{ComponentName}}_Concurrent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping concurrent test in short mode")
+	}
+
+	// Number of concurrent operations
+	const numGoroutines = {{num_goroutines}}
+	const numOperations = {{num_operations}}
+
+	// Setup shared resource
+	{{shared_resource_setup}}
+
+	// Use WaitGroup for synchronization
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	// Track errors from goroutines
+	errors := make(chan error, numGoroutines*numOperations)
+
+	// Launch concurrent operations
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < numOperations; j++ {
+				// Perform concurrent operation
+				err := {{concurrent_operation}}
+				if err != nil {
+					errors <- err
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+	close(errors)
+
+	// Check for any errors
+	for err := range errors {
+		t.Errorf("Concurrent operation failed: %v", err)
+	}
+
+	// Verify final state
+	{{concurrent_validation}}
+}
+
+// Test{{ComponentName}}_Fuzz tests with random inputs
+func Fuzz{{ComponentName}}(f *testing.F) {
+	// Add seed corpus
+	f.Add({{seed_value_1}})
+	f.Add({{seed_value_2}})
+	f.Add({{seed_value_3}})
+
+	f.Fuzz(func(t *testing.T, input {{FuzzInputType}}) {
+		// Execute function with fuzzed input
+		result, err := {{FunctionUnderTest}}(input)
+
+		// Verify invariants that should always hold
+		if err == nil {
+			// Property-based assertions
+			{{property_assertions}}
+		}
+
+		// Function should not panic
+		assert.NotPanics(t, func() {
+			{{FunctionUnderTest}}(input)
+		})
+	})
+}
+
+// Helper functions
+
+func setup{{ComponentName}}TestEnvironment(t *testing.T) func() {
+	// Setup test environment
+	{{environment_setup}}
+
+	// Return cleanup function
+	return func() {
+		{{environment_cleanup}}
+	}
+}
+
+func create{{ComponentName}}TestData(t *testing.T) {{TestDataType}} {
+	// Create test data
+	{{test_data_creation}}
+	return testData
+}
+
+func assert{{ComponentName}}State(t *testing.T, expected, actual {{StateType}}) {
+	// Custom assertion for complex state
+	{{state_assertion}}
+}

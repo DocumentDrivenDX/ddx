@@ -1,0 +1,7 @@
+input_gates:
+  - criteria: Problem or opportunity identified
+    required: true
+    source: external
+  - criteria: Time allocated for analysis
+    required: true
+    source: external

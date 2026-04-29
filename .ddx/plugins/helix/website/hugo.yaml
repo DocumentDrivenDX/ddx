@@ -1,0 +1,64 @@
+baseURL: https://documentdrivendx.github.io/helix/
+languageCode: en-us
+title: HELIX — Supervised Autopilot for AI-Assisted Development
+
+module:
+  imports:
+    - path: github.com/imfing/hextra
+
+enableRobotsTXT: true
+enableGitInfo: true
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    noClasses: false
+
+menu:
+  main:
+    - name: Docs
+      pageRef: /docs
+      weight: 1
+    - name: Background
+      pageRef: /docs/background
+      weight: 2
+    - name: Workflow
+      pageRef: /docs/workflow
+      weight: 3
+    - name: CLI Reference
+      pageRef: /docs/cli
+      weight: 4
+    - name: Skills
+      pageRef: /docs/skills
+      weight: 5
+    - name: Glossary
+      pageRef: /docs/glossary
+      weight: 6
+    - name: Demos
+      pageRef: /docs/demos
+      weight: 7
+    - name: GitHub
+      url: https://github.com/easel/helix
+      weight: 10
+      params:
+        icon: github
+
+params:
+  description: Supervised autopilot that advances the weakest ready layer of your development stack until human input is needed.
+
+  navbar:
+    displayTitle: true
+    displayLogo: false
+
+  page:
+    width: wide
+
+  footer:
+    displayCopyright: true
+    displayPoweredBy: false
+
+  editURL:
+    enable: true
+    base: https://github.com/easel/helix/edit/main/website/content

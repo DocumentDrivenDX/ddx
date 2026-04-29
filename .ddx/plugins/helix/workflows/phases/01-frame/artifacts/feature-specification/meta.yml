@@ -1,0 +1,167 @@
+# Metadata for Feature Specification
+
+artifact:
+  name: Feature Specification
+  id: feature-specification
+  type: collection
+  phase: frame
+
+description: |
+  Detailed specifications for each feature including functional and
+  non-functional requirements, constraints, and edge cases. Uses
+  [NEEDS CLARIFICATION] markers for ambiguous requirements.
+
+dependencies:
+  requires:
+    - input: PRD
+      type: artifact
+      path: prd
+      required: true
+    - input: Principles
+      type: artifact
+      path: principles
+      required: true
+
+  enables:
+    - output: Solution design
+      type: artifact
+      phase: design
+    - output: API contracts
+      type: artifact
+      phase: design
+    - output: Test specifications
+      type: artifact
+      phase: test
+
+output:
+  location: docs/helix/01-frame/features/
+  format: markdown
+  naming: FEAT-{number}-{title-with-hyphens}.md
+  structure: per-feature
+
+validation:
+  required_sections:
+    - problem_statement
+    - functional_requirements
+    - non_functional_requirements
+    - edge_cases
+    - success_metrics
+    - constraints
+    - out_of_scope
+
+  quality_checks:
+    - check: requirements_testable
+      description: All requirements must be testable
+      severity: blocking
+
+    - check: nfr_measurable
+      description: NFRs must have measurable criteria
+      severity: blocking
+
+    - check: edge_cases_identified
+      description: Edge cases must be documented
+      severity: warning
+
+    - check: no_implementation_details
+      description: Should not specify HOW, only WHAT
+      severity: warning
+
+  automated_checks:
+    - pattern: "\\[NEEDS CLARIFICATION"
+      expected: 0
+      message: Resolve all clarification markers for P0 features
+      severity: blocking_for_p0
+
+    - pattern: "must|shall|will"
+      expected: ">0"
+      message: Use clear requirement language
+
+variables:
+  - name: feature_id
+    description: FEAT-XXX identifier
+    required: true
+
+  - name: feature_title
+    description: Descriptive feature name
+    required: true
+
+  - name: priority
+    description: P0/P1/P2 priority level
+    required: true
+
+prompts:
+  generation: prompt.md
+  clarification: |
+    Mark unclear requirements with [NEEDS CLARIFICATION: specific question]
+    Focus on WHAT not HOW
+    Make everything testable
+
+template:
+  file: template.md
+  clarification_markers: true
+  focus: requirements_not_implementation
+
+examples:
+  - file: example.md
+    description: Sample specification for CLI template management
+
+workflow:
+  creation_order: 4
+  review_cycles: 2-3
+  approval_required: true
+  approvers:
+    - Product Owner
+    - Technical Lead
+    - QA Lead
+
+relationships:
+  derived_from:
+    - prd
+
+  informs:
+    - user-stories
+    - solution-design
+    - api-contracts
+    - test-plan
+
+  registered_in:
+    - feature-registry
+
+specification_rules:
+  language:
+    - use: "The system must..."
+    - avoid: "The system should..."
+    - avoid: "Using PostgreSQL..."
+    - avoid: "Implemented with..."
+
+  requirements:
+    functional:
+      prefix: FR-
+      numbering: sequential
+    non_functional:
+      prefix: NFR-
+      categories:
+        - performance
+        - security
+        - scalability
+        - usability
+        - reliability
+
+tracking:
+  id_format: FEAT-XXX
+  id_scope: project
+  status_values:
+    - draft
+    - in_review
+    - approved
+    - superseded
+
+tags:
+  - requirements
+  - specification
+  - features
+  - functional
+  - non-functional
+
+version: 1.0.0
+last_updated: 2024-01-14

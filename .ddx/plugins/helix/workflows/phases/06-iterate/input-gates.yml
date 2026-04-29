@@ -1,0 +1,10 @@
+input_gates:
+  - criteria: System deployed and operational
+    required: true
+    source: 05-deploy
+  - criteria: Monitoring active and collecting data
+    required: true
+    source: 05-deploy
+  - criteria: Users have access
+    required: true
+    source: 05-deploy

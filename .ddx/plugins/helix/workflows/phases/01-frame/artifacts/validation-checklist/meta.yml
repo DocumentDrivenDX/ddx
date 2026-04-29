@@ -1,0 +1,189 @@
+# Metadata for Validation Checklist
+
+artifact:
+  name: Validation Checklist
+  id: validation-checklist
+  type: checklist
+  phase: frame
+
+description: |
+  Comprehensive checklist to validate Frame phase completeness, quality,
+  and readiness for Design phase. Ensures all deliverables meet standards
+  and stakeholders are aligned.
+
+dependencies:
+  requires:
+    - input: All Frame artifacts
+      type: artifact
+      path: all
+      required: true
+    - input: Exit gates criteria
+      type: configuration
+      path: exit-gates.yml
+      required: true
+
+  enables:
+    - output: Phase gate approval
+      type: decision
+      phase: frame
+    - output: Design phase kickoff
+      type: milestone
+      phase: design
+
+output:
+  location: docs/helix/01-frame/validation-checklist.md
+  format: markdown
+  naming: validation-checklist.md
+  timing: end_of_phase
+
+validation:
+  required_sections:
+    - documentation_completeness
+    - quality_gates
+    - stakeholder_validation
+    - cross_reference_validation
+    - exit_criteria_verification
+    - sign_off
+
+  quality_checks:
+    - check: all_artifacts_validated
+      description: Every Frame artifact must be checked
+      severity: blocking
+
+    - check: approvals_obtained
+      description: Required approvals must be documented
+      severity: blocking
+
+    - check: issues_addressed
+      description: Blocking issues must be resolved
+      severity: blocking
+
+    - check: evidence_provided
+      description: Validation must be evidence-based
+      severity: warning
+
+variables:
+  - name: validator_name
+    description: Person performing validation
+    required: true
+
+  - name: validation_date
+    description: Date of validation
+    required: true
+
+  - name: phase_gate_decision
+    description: Pass/Conditional/Fail
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Use this checklist to:
+    1. Systematically review all artifacts
+    2. Identify gaps and issues
+    3. Document validation results
+    4. Make go/no-go decision
+    5. Plan remediation if needed
+
+template:
+  file: template.md
+  type: checklist
+  format:
+    - checkboxes
+    - tables
+    - sign_off_section
+
+workflow:
+  creation_order: last
+  timing: before_phase_gate
+  execution:
+    - self_assessment
+    - formal_validation
+    - remediation
+    - final_approval
+
+  participants:
+    - Product Owner
+    - Technical Lead
+    - QA Lead
+    - Project Manager
+
+relationships:
+  validates:
+    - prd
+    - principles
+    - feature-specification
+    - user-stories
+    - feature-registry
+    - stakeholder-map
+    - risk-register
+
+  references:
+    - exit-gates.yml
+    - input-gates.yml
+
+  enables:
+    - design-phase-start
+
+validation_criteria:
+  must_pass:
+    - prd_approved
+    - p0_requirements_specified
+    - success_metrics_defined
+    - stakeholder_alignment
+    - critical_risks_addressed
+
+  should_pass:
+    - all_artifacts_complete
+    - examples_provided
+    - glossary_defined
+    - assumptions_documented
+
+  nice_to_have:
+    - lessons_learned
+    - process_improvements
+    - knowledge_transfer
+
+outcomes:
+  pass:
+    description: All criteria met, proceed to Design
+    next_action: kickoff_design_phase
+
+  conditional_pass:
+    description: Proceed with specific conditions
+    next_action: address_conditions_then_proceed
+
+  fail:
+    description: Must address issues before proceeding
+    next_action: remediate_and_revalidate
+
+checklist_items:
+  categories:
+    - documentation
+    - quality
+    - stakeholders
+    - technical
+    - process
+
+  evidence_types:
+    - document_review
+    - stakeholder_approval
+    - metric_verification
+    - cross_reference_check
+
+monitoring:
+  track:
+    - validation_pass_rate
+    - common_issues
+    - remediation_time
+    - phase_gate_delays
+
+tags:
+  - validation
+  - quality
+  - phase-gate
+  - checklist
+  - approval
+
+version: 1.0.0
+last_updated: 2024-01-14

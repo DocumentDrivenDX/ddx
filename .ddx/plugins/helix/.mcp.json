@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "_comment": "DDx MCP Server configurations. Set required environment variables before enabling servers.",
+  "_documentation": "See mcp-servers/servers/*.yml for detailed setup instructions for each server.",
+  "mcpServers": {
+    "filesystem": {
+      "_comment": "Local filesystem access - enabled by default for project directory",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${CLAUDE_PLUGIN_ROOT}/../.."]
+    },
+    "sequential-thinking": {
+      "_comment": "Extended thinking for complex problem-solving",
+      "_disabled": true,
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "playwright": {
+      "_comment": "Browser automation with Playwright",
+      "_disabled": true,
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp-server"]
+    }
+  }
+}

@@ -1,0 +1,131 @@
+# Metadata for Compliance Requirements
+
+artifact:
+  name: Compliance Requirements
+  id: compliance-requirements
+  type: document
+  phase: frame
+
+description: |
+  Comprehensive regulatory and compliance requirements analysis.
+  Identifies applicable regulations, maps requirements to implementation
+  controls, and defines a compliance validation plan.
+
+dependencies:
+  requires:
+    - input: Product Requirements Document
+      type: artifact
+      path: prd
+      required: true
+    - input: Security Requirements
+      type: artifact
+      path: security-requirements
+      required: true
+    - input: Stakeholder Map
+      type: artifact
+      path: stakeholder-map
+      required: false
+    - input: Business context
+      type: external
+      required: true
+    - input: Regulatory landscape
+      type: external
+      required: true
+    - input: Legal counsel input
+      type: external
+      required: true
+
+  enables:
+    - output: Compliance Design Constraints
+      type: artifact
+      phase: design
+    - output: Security Controls Requirements
+      type: artifact
+      phase: design
+    - output: Audit Requirements
+      type: artifact
+      phase: deploy
+
+output:
+  location: docs/helix/01-frame/compliance-requirements.md
+  format: markdown
+  naming: compliance-requirements.md
+
+validation:
+  required_sections:
+    - regulatory_landscape_analysis
+    - compliance_requirements_matrix
+    - data_classification
+    - implementation_plan
+
+  quality_checks:
+    - check: all_applicable_regulations_identified
+      description: All regulations relevant to the project must be listed
+      severity: blocking
+    - check: requirements_mapped_to_implementation
+      description: Each compliance requirement must map to an implementation control
+      severity: blocking
+    - check: risk_assessment_completed
+      description: Compliance risk assessment must be completed
+      severity: warning
+    - check: timeline_defined
+      description: Implementation and audit timelines must be defined
+      severity: warning
+
+variables:
+  - name: business_sector
+    description: Business sector for regulatory context
+    required: true
+  - name: operating_jurisdictions
+    description: Jurisdictions where the system will operate
+    required: true
+  - name: data_types_processed
+    description: Types of data the system processes
+    required: true
+  - name: customer_types
+    description: Types of customers (B2B, B2C, government, etc.)
+    required: true
+  - name: deployment_locations
+    description: Geographic locations of deployment infrastructure
+    required: true
+  - name: company_size
+    description: Company size for regulatory threshold determination
+    required: false
+  - name: public_private_status
+    description: Whether the company is publicly traded
+    required: false
+  - name: existing_compliance_obligations
+    description: Compliance frameworks already in place
+    required: false
+  - name: risk_tolerance
+    description: Organization's risk tolerance level
+    required: false
+
+prompts:
+  generation: prompt.md
+
+template:
+  file: template.md
+
+workflow:
+  creation_order: 4
+  review_cycles: 2
+  approval_required: true
+  approvers:
+    - Compliance Officer
+    - Legal Counsel
+
+relationships:
+  informs:
+    - solution-design
+  referenced_by:
+    - test-plan
+
+tags:
+  - compliance
+  - regulatory
+  - legal
+  - risk
+
+version: 1.0.0
+last_updated: 2024-01-14

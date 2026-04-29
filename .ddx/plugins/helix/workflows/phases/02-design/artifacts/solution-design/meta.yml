@@ -1,0 +1,154 @@
+# Metadata for Solution Design (Feature-Level)
+
+artifact:
+  name: Solution Design
+  id: solution-design
+  type: document
+  phase: design
+  level: feature
+
+description: |
+  Feature-level solution design that explains the chosen approach for a
+  feature or cross-component capability. It maps requirements to a concrete
+  system shape, evaluates alternatives, and defines the decomposition that
+  story-level technical designs should inherit.
+
+dependencies:
+  requires:
+    - input: Feature Specification
+      type: artifact
+      pattern: "FEAT-XXX-*.md"
+      phase: frame
+      required: true
+
+    - input: Product Requirements Document
+      type: artifact
+      pattern: "prd.md"
+      phase: frame
+      required: false
+      note: "Project-level framing when the feature affects core product behavior"
+
+  enables:
+    - output: Technical Design
+      type: artifact
+      pattern: "TD-XXX-*.md"
+      phase: design
+      note: "Story-level slice design derived from the chosen solution"
+
+    - output: Story Test Plan
+      type: artifact
+      pattern: "TP-XXX-*.md"
+      phase: test
+
+output:
+  location: docs/helix/02-design/solution-designs/SD-{id}-{name}.md
+  format: markdown
+  naming: SD-{feature-number}-{feature-name}.md
+  examples:
+    - SD-001-mcp-management.md
+    - SD-001-helix-supervisory-control.md
+
+validation:
+  required_sections:
+    - scope
+    - requirements_mapping
+    - solution_approaches
+    - domain_model
+    - system_decomposition
+    - traceability
+
+  quality_checks:
+    - check: alternatives_evaluated
+      description: At least one alternative must be considered before selecting an approach
+      severity: blocking
+
+    - check: feature_level_scope
+      description: The design must stay feature-level and avoid collapsing into one-story implementation details
+      severity: blocking
+
+    - check: decomposition_defined
+      description: Major components or subsystems must be identified
+      severity: blocking
+
+  automated_checks:
+    - pattern: "SD-\\d{3}-"
+      expected: ">=1"
+      message: Must use numbered SD naming
+
+    - pattern: "Feature"
+      expected: ">=1"
+      message: Must identify the feature scope
+
+cross_references:
+  must_reference:
+    - Feature Specification (FEAT-XXX)
+
+  may_reference:
+    - PRD
+    - ADR-XXX
+    - Architecture
+    - Contracts
+
+variables:
+  - name: feature_id
+    description: Feature ID (e.g., 014)
+    required: true
+
+  - name: feature_name
+    description: Feature descriptive name
+    required: true
+
+prompts:
+  generation: prompt.md
+  review: |
+    Review this solution design for:
+    1. Clear feature-level scope
+    2. Explicit alternatives and trade-offs
+    3. Sound decomposition and domain model
+    4. Traceability from requirements to system shape
+    5. Clear boundary from story-level technical design work
+
+template:
+  file: template.md
+  sections:
+    - scope: "Feature scope and governing artifacts"
+    - requirements_mapping: "Requirements translated into technical capabilities"
+    - solution_approaches: "Alternatives and selected approach"
+    - domain_model: "Core entities and rules"
+    - system_decomposition: "Major components and interactions"
+    - traceability: "Requirement-to-design mapping"
+
+workflow:
+  creation_order: 1
+  review_cycles: 1-2
+  approval_required: true
+  approvers:
+    - Technical Lead
+    - Product Lead
+
+relationships:
+  informed_by:
+    - feature-specification
+    - prd
+    - adr
+
+  informs:
+    - technical-design
+    - test-plan
+
+  references:
+    - architecture
+
+feature_progression:
+  previous: FEAT-XXX (Frame)
+  current: SD-XXX (Design)
+  next: TD-XXX / TP-XXX (Story-level design and test)
+
+tags:
+  - feature-level
+  - solution-design
+  - decomposition
+  - tradeoffs
+
+version: 1.0.0
+last_updated: 2026-03-27

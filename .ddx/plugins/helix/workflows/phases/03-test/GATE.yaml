@@ -1,0 +1,86 @@
+phase: test
+number: "03"
+
+entry_requirements:
+  automated:
+    - check: previous_phase_complete
+      phase: 02-design
+
+    - check: file_exists
+      path: docs/helix/02-design/architecture.md
+      description: "Architecture from Design phase must exist"
+
+    - check: dir_not_empty
+      path: docs/helix/02-design/contracts
+      description: "API contracts from Design phase must exist"
+
+    - check: grep_absent
+      pattern: "\\[TO BE DEFINED\\]"
+      path: docs/helix/02-design/**/*.md
+      description: "No TBD markers in design documents"
+
+  manual:
+    - "Design documents approved"
+    - "User stories have clear acceptance criteria"
+
+exit_requirements:
+  automated:
+    # Test plan and documentation
+    - check: file_exists
+      path: docs/helix/03-test/test-plan.md
+      description: "Test plan document must exist"
+
+    - check: file_exists
+      path: docs/helix/03-test/test-procedures.md
+      description: "Test procedures document must exist"
+
+    # Test suite existence
+    - check: tests_exist
+      path: tests/unit
+      description: "Unit tests directory must contain test files"
+
+    - check: tests_exist
+      path: tests/integration
+      description: "Integration tests must exist"
+
+    - check: tests_exist
+      path: tests/contracts
+      description: "Contract tests must exist"
+
+    # Tests are failing (Red phase of TDD)
+    - check: tests_failing
+      command: "npm test || go test ./... || pytest"
+      description: "Tests must be failing (Red phase) before Build"
+
+    # CI/CD configuration
+    - check: file_exists
+      path: .github/.ddx/plugins/helix/workflows/test.yml
+      fallback_paths:
+        - .github/.ddx/plugins/helix/workflows/ci.yml
+        - .gitlab-ci.yml
+        - Jenkinsfile
+        - .circleci/config.yml
+      description: "CI/CD pipeline configuration must exist"
+
+    # Security tests
+    - check: tests_exist
+      path: tests/security
+      description: "Security test suite must exist"
+
+    # Quality checks on test files
+    - check: grep_present
+      pattern: "(describe|test|it|func Test|def test_)"
+      path: tests/**/*
+      description: "Test files contain test definitions"
+
+    # Coverage targets defined
+    - check: grep_present
+      pattern: "coverage|threshold|target"
+      path: docs/helix/03-test/test-plan.md
+      description: "Test plan defines coverage targets"
+
+  manual:
+    - "Test coverage plan reviewed and approved"
+    - "Test infrastructure verified operational"
+
+next_phase: build

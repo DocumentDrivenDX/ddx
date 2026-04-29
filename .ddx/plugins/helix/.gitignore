@@ -1,0 +1,33 @@
+# HELIX tracker data (local issue database)
+.helix/
+
+# Legacy Beads database
+.beads/
+
+# HELIX session logs
+.helix-logs/
+
+# Experiment session files (ephemeral, gitignored on experiment branches)
+autoresearch.md
+autoresearch.sh
+autoresearch.jsonl
+experiments/
+
+# DDx runtime state (tracked data like beads.jsonl is NOT ignored)
+.ddx/agent-logs/
+.ddx/exec-runs.d/
+.ddx/exec-runs.jsonl
+.ddx/run-state.json
+.ddx/plugins/
+
+# Codex config
+.codex
+
+# Hugo build output
+website/public/
+website/resources/
+
+# Playwright test output
+website/test-results/
+website/playwright-report/
+website/node_modules/

@@ -1,0 +1,99 @@
+phase: deploy
+number: "05"
+
+entry_requirements:
+  automated:
+    - check: previous_phase_complete
+      phase: 04-build
+
+    - check: tests_passing
+      command: "npm test || go test ./... || pytest"
+      description: "All tests from Build phase must pass"
+
+    - check: coverage_threshold
+      threshold: 80
+      command: "npm run coverage || go test -cover ./..."
+      description: "Coverage threshold from Build phase met"
+
+    - check: security_scan_clean
+      command: "npm audit --audit-level=high || gosec ./..."
+      severity: high
+      description: "Security scan from Build phase clean"
+
+    - check: file_exists
+      path: README.md
+      description: "Documentation updated"
+
+    - check: file_exists
+      path: CHANGELOG.md
+      description: "Changelog updated"
+
+  manual:
+    - "Performance validated and within SLA"
+    - "Documentation review completed"
+
+exit_requirements:
+  automated:
+    # Deployment artifacts
+    - check: file_exists
+      path: docs/helix/05-deploy/deployment-checklist.md
+      description: "Deployment checklist must exist"
+
+    - check: file_exists
+      path: docs/helix/05-deploy/monitoring-setup.md
+      description: "Monitoring setup documentation must exist"
+
+    - check: file_exists
+      path: docs/helix/05-deploy/runbook.md
+      description: "Runbook must exist"
+
+    - check: file_exists
+      path: docs/helix/05-deploy/security-monitoring.md
+      description: "Security monitoring setup must exist"
+
+    # Infrastructure as code
+    - check: file_exists
+      path: deployment.yml
+      fallback_paths:
+        - docker-compose.yml
+        - kubernetes/deployment.yaml
+        - terraform/main.tf
+        - infrastructure/main.tf
+      description: "Infrastructure configuration must exist"
+
+    # Health check endpoint or verification
+    - check: grep_present
+      pattern: "(health|ready|live|ping)"
+      path: src/**/*
+      fallback_paths:
+        - lib/**/*
+        - pkg/**/*
+        - docs/helix/05-deploy/**/*.md
+      description: "Health check endpoint documented or implemented"
+
+    # Rollback procedures documented
+    - check: grep_present
+      pattern: "(rollback|revert|previous version)"
+      path: docs/helix/05-deploy/runbook.md
+      description: "Rollback procedures documented"
+
+    # Monitoring configuration
+    - check: grep_present
+      pattern: "(alert|metric|dashboard|monitor)"
+      path: docs/helix/05-deploy/monitoring-setup.md
+      description: "Monitoring and alerting configured"
+
+    # Environment configuration
+    - check: file_exists
+      path: .env.example
+      fallback_paths:
+        - config/environments/production.yml
+        - docs/helix/05-deploy/environment-config.md
+      description: "Environment configuration template exists"
+
+  manual:
+    - "Staging deployment verified successful"
+    - "Production go/no-go decision approved"
+    - "Stakeholders notified of deployment"
+
+next_phase: iterate

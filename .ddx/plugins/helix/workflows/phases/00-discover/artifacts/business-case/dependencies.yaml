@@ -1,0 +1,82 @@
+# Dependencies for Business Case
+
+artifact:
+  name: Business Case
+  id: business-case
+  type: document
+  phase: discover
+
+description: |
+  Investment justification with market sizing, ROI projections,
+  and risk assessment. Informs go/no-go decision.
+
+dependencies:
+  requires:
+    - input: Product Vision
+      type: artifact
+      path: product-vision
+      required: true
+    - input: Market research data
+      type: external
+      required: true
+
+  enables:
+    - output: Opportunity Canvas
+      type: artifact
+      path: opportunity-canvas
+    - output: Go/No-Go Decision
+      type: decision
+    - output: PRD (budget/timeline)
+      type: artifact
+      phase: frame
+
+output:
+  location: docs/helix/00-discover/business-case.md
+  format: markdown
+
+validation:
+  required_sections:
+    - executive_summary
+    - opportunity_sizing
+    - investment_required
+    - expected_roi
+    - risk_assessment
+    - strategic_alignment
+    - recommendation
+
+  quality_checks:
+    - check: tam_sam_som_present
+      description: Market sizing includes TAM, SAM, SOM
+      severity: blocking
+
+    - check: numbers_sourced
+      description: Key numbers have sources cited
+      severity: warning
+
+    - check: risks_mitigated
+      description: Each risk has mitigation strategy
+      severity: blocking
+
+workflow:
+  creation_order: 2
+  review_cycles: 2-3
+  approval_required: true
+  approvers:
+    - Sponsor
+    - Finance Lead
+    - Business Stakeholder
+
+relationships:
+  depends_on:
+    - product-vision
+
+  informs:
+    - opportunity-canvas
+    - prd
+    - resource-planning
+
+tags:
+  - finance
+  - investment
+  - strategy
+  - risk
