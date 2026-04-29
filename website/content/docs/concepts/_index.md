@@ -5,88 +5,89 @@ weight: 2
 
 The ideas behind DDx and document-driven development.
 
+## What DDx Is
+
+DDx (Document-Driven Development eXperience) is the **shared infrastructure
+platform for document-driven development**. It provides the primitives that
+developers and workflow tools use to maintain, compose, and deliver the
+documents AI agents consume to build software.
+
+The core thesis: **document quality, not agent capability, is the bottleneck.**
+Well-maintained abstractions — requirements, architecture, design, tests —
+produce better software than working at the code level alone. DDx encodes that
+insight into infrastructure.
+
+<!-- diagram: documents-drive-agents -->
+
+## The Three-Layer Stack
+
+DDx is one layer in a three-project stack with explicit boundaries. Each layer
+is independently useful and replaceable.
+
+| Layer | Project | Owns |
+|-------|---------|------|
+| **Platform** | [DDx](https://github.com/DocumentDrivenDX/ddx) | Document library, bead tracker, agent dispatch, personas, templates, git sync |
+| **Workflow** | [HELIX](https://github.com/DocumentDrivenDX/helix) | Phases, gates, supervisory dispatch, methodology |
+| **Quality** | [Dun](https://github.com/DocumentDrivenDX/dun) | Check discovery, execution, agent-friendly output |
+
+DDx provides primitives. HELIX and others provide opinions. Dun verifies the
+result.
+
+<!-- diagram: three-layer-stack -->
+
+{{< callout type="info" >}}
+**Why three layers?** Mixing methodology into platform code locks teams into
+one way of working. Keeping the platform opinion-free lets HELIX evolve, lets
+alternative workflows exist, and lets DDx serve both fully-autonomous and
+human-driven teams from the same primitives.
+{{< /callout >}}
+
 ## Documents Are the Product
 
 The fundamental shift: **you maintain documents, agents produce code.**
 
-In traditional development, code is the primary artifact. In document-driven development, the primary artifacts are the documents that tell agents what to build and how to build it:
+In traditional development, code is the primary artifact. In document-driven
+development, the primary artifacts are the documents that tell agents what to
+build and how to build it:
 
 - **Prompts** — instructions that direct agent behavior for specific tasks
 - **Personas** — behavioral definitions that shape how agents approach work
-- **Patterns** — proven solutions to recurring problems, written for agent consumption
+- **Patterns** — proven solutions to recurring problems, written for agent
+  consumption
 - **Templates** — project and file blueprints with variable substitution
 - **Specs** — requirements and designs that define what to build
 
-The quality of agent output follows directly from the quality of these documents. Better documents produce better code, every time.
+The quality of agent output follows directly from the quality of these
+documents. Better documents produce better code, every time.
 
-## The Document Library
+## What DDx Provides
 
-DDx organizes agent-facing documents into a structured library:
+- **Document library** — structured, versioned, agent-discoverable artifacts
+  in the repository.
+- **Bead tracker** — work items with a dependency DAG, ready/blocked queues,
+  and JSONL interchange. Beads are the unit of work agents execute.
+- **Agent service** — unified harness dispatch (Claude, Codex, Gemini, local
+  models) with quorum review, session logging, and a single prompt envelope.
+- **Execute-loop** — drain the bead queue with isolated worktrees, automatic
+  review, and recovery. Cheap models do, strong models review.
+- **Project-local install** — `ddx init` and `ddx install <plugin>` only touch
+  `<projectRoot>`. The only global artifact is `ddx-server`.
+- **Single `ddx` skill** — one consolidated skill, not a fleet. One surface
+  for agents to learn.
 
-```
-.ddx/library/
-├── prompts/        # Agent instructions
-├── personas/       # Behavioral definitions
-├── patterns/       # Reusable solutions
-├── templates/      # Project blueprints
-├── configs/        # Tool configurations
-├── mcp-servers/    # MCP server registry
-└── environments/   # Environment-specific docs
-```
+## What DDx Is Not
 
-These are plain Markdown and YAML files. Any agent can read them. Any developer can edit them. Git tracks every change.
+- **Not a methodology.** No phases, no gates, no prescribed artifact types —
+  workflow tools own those.
+- **Not a storage system.** Files in Git. No proprietary backend.
+- **Not an editor or IDE.** Editing happens wherever you already work.
+- **Not opinionated about agents.** Any harness with a prompt-in/output-out
+  contract plugs in.
 
-## Composition Over Monoliths
+## Read Next
 
-Instead of maintaining one giant instruction set, DDx encourages **small, focused documents combined on demand**:
-
-- A persona defines behavior ("be a strict code reviewer")
-- A pattern defines an approach ("handle errors this way")
-- A spec defines requirements ("build this feature")
-
-Composed together, they give an agent everything it needs for a specific task. Each piece is independently maintainable and reusable.
-
-## Personas
-
-A persona is a document that shapes how an agent behaves. DDx ships with personas like:
-
-| Persona | Behavior |
-|---------|----------|
-| `code-reviewer` | Pedantic about quality, catches edge cases, demands tests |
-| `implementer` | Ships working code fast, avoids over-engineering |
-| `test-engineer` | Writes tests first, validates thoroughly |
-| `architect` | Chooses the simplest design that works |
-
-You **bind** personas to **roles** in your project configuration:
-
-```yaml
-# .ddx.yml
-persona_bindings:
-  code-reviewer: code-reviewer
-  architect: architect
-```
-
-When an agent is assigned to a role, it picks up the bound persona and adjusts its approach.
-
-## Git-Native Sync
-
-DDx uses git subtree to synchronize document libraries:
-
-- **Pull** community improvements into your project
-- **Push** your improvements back to the upstream library
-- **Override** specific documents locally without losing sync
-
-No external services. No lock-in. Standard git workflows.
-
-## Infrastructure, Not Methodology
-
-DDx is deliberately **general and abstract**. It provides primitives:
-
-- Document library management
-- Persona system with role bindings
-- Template engine with variables
-- Git-based sync
-- Meta-prompt injection
-- MCP server management
-
-Specific development methodologies — how to structure your development process, what phases to follow, what gates to enforce — are built as **separate tools on top of DDx**. DDx provides the foundation; workflow tools provide the opinions.
+- [Principles](principles/) — the load-bearing decisions behind DDx.
+- [Architecture](architecture/) — how beads, the execute-loop, personas, and
+  the project-local install model fit together.
+- [Glossary](glossary/) — quick definitions for the terms used across the
+  docs.
