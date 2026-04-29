@@ -1,0 +1,79 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff only contains execution evidence (manifest.json + result.json) under .ddx/executions/. No changes to execute_bead_loop.go, tests, or docs are visible, so none of the 7 acceptance criteria can be evaluated as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes to cli/internal/agent/execute_bead_loop.go in this diff — AC1 (move attempted[] after pre-claim hook) cannot be verified.",
+      "location": "cli/internal/agent/execute_bead_loop.go"
+    },
+    {
+      "severity": "block",
+      "summary": "No regression tests added for pre-claim hook retry or store-error continuation paths — AC1, AC3 unverifiable.",
+      "location": "cli/internal/agent/execute_bead_loop_test.go"
+    },
+    {
+      "severity": "block",
+      "summary": "No conversion of post-Execute Store.* error returns into log+event+cooldown+continue — AC2 unverifiable.",
+      "location": "cli/internal/agent/execute_bead_loop.go"
+    },
+    {
+      "severity": "block",
+      "summary": "No integration test seeding 3 ready beads with mixed outcomes — AC4 unverifiable.",
+      "location": "cli/internal/agent/execute_bead_loop_test.go"
+    },
+    {
+      "severity": "block",
+      "summary": "No documentation update describing loop-termination conditions — AC6 unmet.",
+      "location": "docs/agents/execute-loop.md"
+    },
+    {
+      "severity": "block",
+      "summary": "No README change retiring the 'restart if ddx work exits early' guidance — AC7 unmet.",
+      "location": "README.md"
+    },
+    {
+      "severity": "warn",
+      "summary": "Diff shows only execution evidence artifacts; the merge commit d57f1ddf referenced in result.json may carry the actual fix, but the supplied diff for review does not include it.",
+      "location": ".ddx/executions/20260429T203909-e46a1ac0/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 7774,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T203909-e46a1ac0/manifest.json",
+          ".ddx/executions/20260429T203909-e46a1ac0/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 10399,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 19979,
+    "output_bytes": 1774,
+    "elapsed_ms": 11832,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
