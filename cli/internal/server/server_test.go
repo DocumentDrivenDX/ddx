@@ -1284,8 +1284,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 49 {
-		t.Fatalf("expected 49 MCP tools, got %d", len(tools))
+	if len(tools) != 52 {
+		t.Fatalf("expected 52 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -1297,6 +1297,7 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_list_documents", "ddx_read_document", "ddx_search", "ddx_list_personas", "ddx_resolve_persona",
 		"ddx_list_beads", "ddx_show_bead", "ddx_bead_ready", "ddx_bead_status",
 		"ddx_bead_blocked", "ddx_bead_dep_tree",
+		"ddx_bead_evidence", "ddx_bead_cooldown", "ddx_bead_routing",
 		"ddx_bead_create", "ddx_bead_update", "ddx_bead_claim",
 		"ddx_doc_graph", "ddx_doc_stale", "ddx_doc_show", "ddx_doc_deps", "ddx_doc_dependents",
 		"ddx_agent_sessions",
