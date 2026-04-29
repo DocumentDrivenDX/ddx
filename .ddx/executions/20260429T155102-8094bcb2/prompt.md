@@ -1,0 +1,407 @@
+<bead-review>
+  <bead id="ddx-fdd3ea36" iter=1>
+    <title>Adopt ddx-agent routing point release: zero-interaction defaults, usable profiles, sharp overrides (DDx-side consumer)</title>
+    <description>
+## Status after codex review (2026-04-22)
+
+Original plan was consolidated in this bead but **reduced in scope** after codex's review surfaced that most of the compatibility and data-model work belongs upstream in ddx-agent. This bead is now the **DDx-side tracker only**. Upstream work is queued as separate beads in `~/Projects/agent/.ddx/` (prefix `agent-*`) and will land as a single tagged point release; nothing in DDx lands until that release is pulled.
+
+## Goals (unchanged — user stated 2026-04-22)
+
+**G1. Zero-interaction defaults.** `ddx agent run` and `ddx agent execute-bead` just work with no flags.
+
+**G2. Usable profiles.** `--profile standard`, `--profile local` force clear, documented rules.
+
+**G3. Usable overrides.** `--harness claude` forces claude. `--model opus-4.7` forces opus-4.7. Within requirements: available, quota OK, lowest cost.
+
+## Upstream dependencies (tracked in ~/Projects/agent/.ddx/)
+
+This bead blocks on a single upstream point release that carries:
+
+- Profile catalog with first-class `default`, `local`, `standard` (and any others DDx needs to expose) + documented provider-preference rules.
+- Supported-models allow-list on routing-inputs `HarnessEntry`; gating rejects non-allowed models even when `ExactPinSupport: true`.
+- Typed `ErrHarnessModelIncompatible` surfaced from `Execute` so explicit `--harness X --model Y` conflicts fail fast with actionable detail.
+- Public `RouteDecision.Candidates` + typed error for "no viable candidate" with per-candidate rejection reasons — DDx's decision-trace consumers need this.
+- Cost dimension on `ProviderEntry` (`CostUSDPer1kTokens`) + scoring tiebreak that prefers lower cost, with unknown-cost fallback, subscription-quota pricing, and near-quota demotion.
+- Documentation for the profile catalog, override precedence, and "best provider" contract.
+
+Once that release is tagged, DDx work below proceeds.
+
+## DDx-side changes (reduced scope)
+
+**D1. Dispatch sends a real spec.**
+
+`workerDispatchAdapter.DispatchWorker` treats empty input as `{Profile: "default"}` explicitly. Dashboard Drain button calls the same path. No DDx-side default synthesis beyond "profile=default if unset."
+
+**D2. Stop synthesizing a tier ladder by default.**
+
+Default `ddx agent run` / `ddx agent execute-bead` / `ddx work` path calls `agentlib.ResolveRoute(Profile: spec.Profile)` with no Model string unless `spec.Model` was explicitly given. No per-tier iteration, no `ResolveTierModelRef` lookup, no preference-order fallback. The tier-ladder machinery becomes opt-in via `--escalate` only.
+
+**D3. Preflight gate (defensive only, post-upstream).**
+
+After `ResolveRoute` returns, DDx verifies the decision's `(Harness, Model)` is not in the typed-incompatibility set surfaced by upstream. The compatibility data comes from upstream — DDx does **not** duplicate the allow-list. Insertion point: `execute_bead_loop.go:352`, **before** `Claim`. Route/preflight failure exits the loop with a worker-level failure record; no bead is claimed, no burn cycle.
+
+**D4. Deprecate DDx-side routing config.**
+
+Deliberate breaking change in the same release that pulls the upstream point release:
+- `agent.routing.default_harness` — field deleted; upstream's profile model makes it redundant.
+- `agent.routing.profile_ladders` — kept but gated behind explicit `--escalate` only. Not read on the default path. Warning at config-load if set without `--escalate` ever being used in the life of the process.
+- `agent.routing.model_overrides` — same treatment as `profile_ladders`: explicit-opt-in only, warning otherwise.
+- `agent.harness` (top-level) — kept, clarified as a **preference for tie-breaks**, not a default override.
+
+Migration note published in DDx changelog.
+
+**D5. CLI surface parity with goals.**
+
+- `ddx agent run` with zero flags → `ResolveRoute(Profile: "default")`. No other DDx inputs.
+- `ddx agent run --profile local` → pass through unchanged to upstream.
+- `ddx agent run --harness claude` → `ResolveRoute(Profile: "default", Harness: "claude")`. Upstream picks best provider within claude.
+- `ddx agent run --model opus-4.7` → `ResolveRoute(Profile: "default", Model: "opus-4.7")`. Upstream picks lowest-cost available quota-OK provider.
+- `ddx agent run --harness claude --model opus-4.7` → typed `ErrHarnessModelIncompatible` from upstream when incompatible; clean success otherwise.
+- `ddx work` (drain) default → same as `ddx agent run` default.
+
+## Explicitly dropped from this bead (per codex)
+
+- **D6 — `ddx agent route-status` / providers UI decision-trace consumers.** Adjacent but not required. Files as a follow-up once A4 lands upstream. Hooks into `ddx-23978824` (providers UI).
+- **D7 — `workersByProject` id/path filter.** Independent bug. Stays as `ddx-05b4cc9d`; not blocked by this bead and does not block this bead.
+
+## Sequencing
+
+1. **Upstream beads land and point release is tagged.** (Separate queue in `~/Projects/agent/.ddx/`.)
+2. DDx `go.mod` bumps to that release.
+3. D1, D2, D3, D5 land together in one DDx PR — no compensating paths retained.
+4. D4 lands with D1-D3-D5 or in the immediate follow-up PR. Migration warning + changelog.
+5. **Then** D6 / `ddx-23978824` / sessions-billing-mode (`ddx-6904a90b`) work can consume the new decision-trace surface.
+
+## Cross-references
+
+- Upstream beads: see `~/Projects/agent/.ddx/beads.jsonl` under label `routing-plan`.
+- Direct codex review feedback logged in bead notes below.
+- Supersedes original 3-step proposal from conversation history.
+- Addresses `project_endpoint_routing_design.md` memory directive (2026-04-21): "kill named-provider profiles, move to endpoints + live discovery + fuzzy model match."
+- Hard downstream dependents (wait for this bead):
+  - `ddx-b6cf025c` — drain-worker count control (default profile must mean something first)
+  - `ddx-23978824` — providers UI (needs decision trace from A4)
+  - `ddx-6904a90b` — sessions billing-mode (benefits from richer session.routing metadata)
+- Independent of this bead: `ddx-05b4cc9d` (workers filter).
+
+## Codex review — key corrections folded in
+
+1. A3 confirmed by code inspection: `HarnessEntry` has no model-allow-list field; `engine.go:456` `resolveModel` returns `req.Model` directly when no provider discovery; `gating.go:88` only checks `ExactPinSupport`. Allow-list must be added to routing inputs/capabilities, not just "fix ExactPin semantics."
+2. A4 bigger than originally written: public `RouteDecision` has no `Candidates` field; service drops rejection data on error. Needs typed error + public surface.
+3. Earlier claim that codex/claude have `Models: nil` was wrong — that's DDx's local `harness_config.go`, not upstream's `internal/harnesses/registry.go`. Upstream has codex=[gpt-5.4], claude=[sonnet, opus, claude-sonnet-4-6]. Allow-list work is universal upstream.
+4. Upstream catalog has no `default` or `local` profile today (models.yaml:195). Must be added before DDx materializes them.
+5. D3 restricted to defensive-only; all compatibility logic belongs upstream.
+6. G2 precedence conflict (`--profile local --harness claude`): resolved in upstream docs as explicit-pin-wins but upstream returns typed error if the pin violates the profile's hard constraint (e.g., local-only with non-local harness).
+7. G3 cost needs explicit data model — no price field on ProviderEntry today.
+8. D4 reframed as deliberate breaking change, not warning-only drift.
+9. D6 + D7 dropped from epic scope.
+10. Quick-test gates added: upstream exact-pin regression; service-layer typed error preserves reasons; `ResolveRoute(Profile: "default")` against endpoint-only config; DDx worker exits before any bead claim.
+    </description>
+    <acceptance>
+**User story:** After the upstream point release lands and DDx pulls it, `ddx agent run` with no flags just works on my machine. `--profile local`, `--harness claude`, `--model opus-4.7` behave per the upstream contract. The drain-queue failure mode (empty spec → gemini+minimax → 19-burn) is impossible.
+
+**Acceptance criteria:**
+
+1. **Upstream prerequisite tagged and pulled.** Go.mod references a ddx-agent version whose CHANGELOG documents: first-class `default` and `local` profiles; supported-models allow-list in routing inputs + gating; `ErrHarnessModelIncompatible`; public decision-trace (`RouteDecision.Candidates` + typed error); cost dimension on `ProviderEntry` with unknown-cost fallback. All upstream beads in `~/Projects/agent/.ddx/` labeled `routing-plan` are closed.
+
+2. **No DDx-side synthesis on default path.**
+   - `ddx agent run` with zero flags issues exactly one `ResolveRoute(Profile: "default")` call, no Model, no Harness, no Provider.
+   - `ddx work` default: same shape.
+   - `ddx agent execute-bead` with no overrides: same shape.
+   - Integration test: same config that caused the drain-queue failure (real `~/.local/share/ddx/.ddx/config.yaml`) now either succeeds or returns a single typed error — never 19-burn.
+   - Unit test: `workerDispatchAdapter.DispatchWorker({})` → spec with `Profile: "default"`, no other fields. No `ResolveTierModelRef`, no `ResolveProfileLadder` in the call graph on the default path.
+
+3. **Preflight before claim.**
+   - Call sequence at `execute_bead_loop.go:352`: next-candidate → `ResolveRoute` → (preflight gate, new) → `Claim` → invoke. Route error OR preflight rejection exits the loop with a `worker-level` failure — no bead claimed.
+   - Test: seed a pathological route (harness with allow-list that excludes the decision's model — fabricated via upstream test seam). Assert `beadStore.Claim` is never called; worker record shows `status: execution_failed` with detail naming the rejected pair; no bead has a `kind:tier-attempt` event from this attempt.
+
+4. **Config deprecation is deliberate, not warning-only.**
+   - Loading a config with `agent.routing.default_harness` set produces a **hard error** at startup with a migration pointer. Field is deleted from the config schema.
+   - Loading a config with `agent.routing.profile_ladders` or `agent.routing.model_overrides` set produces a one-time warning per process AND causes the default path to ignore them. Opt-in with `--escalate` or `--override-model` explicit flags.
+   - CHANGELOG entry + migration guide in DDx docs.
+   - Migration test: fixture config containing all three deprecated fields, run `ddx agent run` with no flags, assert warnings printed and default path honored (not the deprecated config).
+
+5. **Override behavior matches G3 exactly.**
+   - `--harness claude` → `ResolveRoute(Profile: "default", Harness: "claude")`. If claude fails upstream's gates (binary missing, quota exhausted), surfaces the typed error; no silent substitution. E2E test mocks each gate failure.
+   - `--model opus-4.7` → `ResolveRoute(Profile: "default", Model: "opus-4.7")`. Lowest-cost available quota-OK provider wins. E2E test seeds 3 providers at different cost with shared model; asserts lowest-cost pick.
+   - `--harness claude --model opus-4.7` → typed `ErrHarnessModelIncompatible` when combo is invalid; clean dispatch otherwise.
+   - `--profile local --harness claude` → upstream typed error ("claude is non-local, profile=local is local-only"); DDx surfaces it unmodified. E2E test.
+
+6. **Playwright — drain-queue goldens.**
+   - Fixture matches user's real config (endpoints: lmstudio + omlx + lmstudio + lmstudio, no gemini binary test or with gemini installed but not in allow-list for the chosen model).
+   - Click Drain on project home → within 5s: worker row appears with harness = `agent` (or another live-endpoint-backed harness). Never gemini + non-gemini model. Never 19 failures.
+   - After drain completes: worker status `success` (or typed error exit with reason recorded on the bead). Attempts count matches actual work done.
+
+7. **No compensating DDx logic retained.**
+   - Search DDx for code that re-implements any of: allow-list checks, exact-pin filtering, profile-to-preference mapping, provider cost scoring. Must be absent. If found, PR fails review.
+   - `ResolveProfileLadder`, `ResolveTierModelRef`, `workersByHarness` escalation helpers are deleted from the default path. They remain reachable via `--escalate` only. Dead-code detector run in CI catches orphans.
+
+8. **D6 / D7 are explicitly out of scope and filed as follow-ups.**
+   - `ddx-05b4cc9d` (workers filter) remains its own bead and may land before or after this one.
+   - A new bead is filed post-release for the route-status / providers-UI decision-trace consumer work, pointing at A4 upstream as satisfied.
+
+9. **Documentation.**
+   - DDx's CLAUDE.md / AGENTS.md links to upstream profile catalog + override precedence + best-provider contract docs. No re-documentation on the DDx side.
+   - DDx CHANGELOG entry covers the go.mod bump, D4 breaking changes, and new CLI surface semantics.
+
+10. **Regression goldens for the drain-queue bug.**
+    - Integration test exists that reproduces the original failure mode (empty spec + user's config + gemini binary installed + minimax model in overrides). Before this bead's work: test fails with 19-burn. After: test succeeds or exits with one clean error. Test stays in the suite as a regression guard.
+    </acceptance>
+    <labels>feat-006, feat-010, routing, upstream-agent, design</labels>
+  </bead>
+
+  <changed-files>
+    <file>.ddx/executions/20260429T152547-cea40d0b/manifest.json</file>
+    <file>.ddx/executions/20260429T152547-cea40d0b/result.json</file>
+  </changed-files>
+
+  <governing>
+    <note>No governing documents found. Evaluate the diff against the acceptance criteria alone.</note>
+  </governing>
+
+  <diff rev="3e2e8c3950ba5c783dc27cf3472ecdbde2ab4b60">
+diff --git a/.ddx/executions/20260429T152547-cea40d0b/manifest.json b/.ddx/executions/20260429T152547-cea40d0b/manifest.json
+new file mode 100644
+index 00000000..3ef7f7f7
+--- /dev/null
++++ b/.ddx/executions/20260429T152547-cea40d0b/manifest.json
+@@ -0,0 +1,174 @@
++{
++  "attempt_id": "20260429T152547-cea40d0b",
++  "bead_id": "ddx-fdd3ea36",
++  "base_rev": "d00a3980336de454f3b434be1af9418cecfa4932",
++  "created_at": "2026-04-29T15:25:48.853638154Z",
++  "requested": {
++    "harness": "claude",
++    "model": "sonnet",
++    "prompt": "synthesized"
++  },
++  "bead": {
++    "id": "ddx-fdd3ea36",
++    "title": "Adopt ddx-agent routing point release: zero-interaction defaults, usable profiles, sharp overrides (DDx-side consumer)",
++    "description": "## Status after codex review (2026-04-22)\n\nOriginal plan was consolidated in this bead but **reduced in scope** after codex's review surfaced that most of the compatibility and data-model work belongs upstream in ddx-agent. This bead is now the **DDx-side tracker only**. Upstream work is queued as separate beads in `~/Projects/agent/.ddx/` (prefix `agent-*`) and will land as a single tagged point release; nothing in DDx lands until that release is pulled.\n\n## Goals (unchanged — user stated 2026-04-22)\n\n**G1. Zero-interaction defaults.** `ddx agent run` and `ddx agent execute-bead` just work with no flags.\n\n**G2. Usable profiles.** `--profile standard`, `--profile local` force clear, documented rules.\n\n**G3. Usable overrides.** `--harness claude` forces claude. `--model opus-4.7` forces opus-4.7. Within requirements: available, quota OK, lowest cost.\n\n## Upstream dependencies (tracked in ~/Projects/agent/.ddx/)\n\nThis bead blocks on a single upstream point release that carries:\n\n- Profile catalog with first-class `default`, `local`, `standard` (and any others DDx needs to expose) + documented provider-preference rules.\n- Supported-models allow-list on routing-inputs `HarnessEntry`; gating rejects non-allowed models even when `ExactPinSupport: true`.\n- Typed `ErrHarnessModelIncompatible` surfaced from `Execute` so explicit `--harness X --model Y` conflicts fail fast with actionable detail.\n- Public `RouteDecision.Candidates` + typed error for \"no viable candidate\" with per-candidate rejection reasons — DDx's decision-trace consumers need this.\n- Cost dimension on `ProviderEntry` (`CostUSDPer1kTokens`) + scoring tiebreak that prefers lower cost, with unknown-cost fallback, subscription-quota pricing, and near-quota demotion.\n- Documentation for the profile catalog, override precedence, and \"best provider\" contract.\n\nOnce that release is tagged, DDx work below proceeds.\n\n## DDx-side changes (reduced scope)\n\n**D1. Dispatch sends a real spec.**\n\n`workerDispatchAdapter.DispatchWorker` treats empty input as `{Profile: \"default\"}` explicitly. Dashboard Drain button calls the same path. No DDx-side default synthesis beyond \"profile=default if unset.\"\n\n**D2. Stop synthesizing a tier ladder by default.**\n\nDefault `ddx agent run` / `ddx agent execute-bead` / `ddx work` path calls `agentlib.ResolveRoute(Profile: spec.Profile)` with no Model string unless `spec.Model` was explicitly given. No per-tier iteration, no `ResolveTierModelRef` lookup, no preference-order fallback. The tier-ladder machinery becomes opt-in via `--escalate` only.\n\n**D3. Preflight gate (defensive only, post-upstream).**\n\nAfter `ResolveRoute` returns, DDx verifies the decision's `(Harness, Model)` is not in the typed-incompatibility set surfaced by upstream. The compatibility data comes from upstream — DDx does **not** duplicate the allow-list. Insertion point: `execute_bead_loop.go:352`, **before** `Claim`. Route/preflight failure exits the loop with a worker-level failure record; no bead is claimed, no burn cycle.\n\n**D4. Deprecate DDx-side routing config.**\n\nDeliberate breaking change in the same release that pulls the upstream point release:\n- `agent.routing.default_harness` — field deleted; upstream's profile model makes it redundant.\n- `agent.routing.profile_ladders` — kept but gated behind explicit `--escalate` only. Not read on the default path. Warning at config-load if set without `--escalate` ever being used in the life of the process.\n- `agent.routing.model_overrides` — same treatment as `profile_ladders`: explicit-opt-in only, warning otherwise.\n- `agent.harness` (top-level) — kept, clarified as a **preference for tie-breaks**, not a default override.\n\nMigration note published in DDx changelog.\n\n**D5. CLI surface parity with goals.**\n\n- `ddx agent run` with zero flags → `ResolveRoute(Profile: \"default\")`. No other DDx inputs.\n- `ddx agent run --profile local` → pass through unchanged to upstream.\n- `ddx agent run --harness claude` → `ResolveRoute(Profile: \"default\", Harness: \"claude\")`. Upstream picks best provider within claude.\n- `ddx agent run --model opus-4.7` → `ResolveRoute(Profile: \"default\", Model: \"opus-4.7\")`. Upstream picks lowest-cost available quota-OK provider.\n- `ddx agent run --harness claude --model opus-4.7` → typed `ErrHarnessModelIncompatible` from upstream when incompatible; clean success otherwise.\n- `ddx work` (drain) default → same as `ddx agent run` default.\n\n## Explicitly dropped from this bead (per codex)\n\n- **D6 — `ddx agent route-status` / providers UI decision-trace consumers.** Adjacent but not required. Files as a follow-up once A4 lands upstream. Hooks into `ddx-23978824` (providers UI).\n- **D7 — `workersByProject` id/path filter.** Independent bug. Stays as `ddx-05b4cc9d`; not blocked by this bead and does not block this bead.\n\n## Sequencing\n\n1. **Upstream beads land and point release is tagged.** (Separate queue in `~/Projects/agent/.ddx/`.)\n2. DDx `go.mod` bumps to that release.\n3. D1, D2, D3, D5 land together in one DDx PR — no compensating paths retained.\n4. D4 lands with D1-D3-D5 or in the immediate follow-up PR. Migration warning + changelog.\n5. **Then** D6 / `ddx-23978824` / sessions-billing-mode (`ddx-6904a90b`) work can consume the new decision-trace surface.\n\n## Cross-references\n\n- Upstream beads: see `~/Projects/agent/.ddx/beads.jsonl` under label `routing-plan`.\n- Direct codex review feedback logged in bead notes below.\n- Supersedes original 3-step proposal from conversation history.\n- Addresses `project_endpoint_routing_design.md` memory directive (2026-04-21): \"kill named-provider profiles, move to endpoints + live discovery + fuzzy model match.\"\n- Hard downstream dependents (wait for this bead):\n  - `ddx-b6cf025c` — drain-worker count control (default profile must mean something first)\n  - `ddx-23978824` — providers UI (needs decision trace from A4)\n  - `ddx-6904a90b` — sessions billing-mode (benefits from richer session.routing metadata)\n- Independent of this bead: `ddx-05b4cc9d` (workers filter).\n\n## Codex review — key corrections folded in\n\n1. A3 confirmed by code inspection: `HarnessEntry` has no model-allow-list field; `engine.go:456` `resolveModel` returns `req.Model` directly when no provider discovery; `gating.go:88` only checks `ExactPinSupport`. Allow-list must be added to routing inputs/capabilities, not just \"fix ExactPin semantics.\"\n2. A4 bigger than originally written: public `RouteDecision` has no `Candidates` field; service drops rejection data on error. Needs typed error + public surface.\n3. Earlier claim that codex/claude have `Models: nil` was wrong — that's DDx's local `harness_config.go`, not upstream's `internal/harnesses/registry.go`. Upstream has codex=[gpt-5.4], claude=[sonnet, opus, claude-sonnet-4-6]. Allow-list work is universal upstream.\n4. Upstream catalog has no `default` or `local` profile today (models.yaml:195). Must be added before DDx materializes them.\n5. D3 restricted to defensive-only; all compatibility logic belongs upstream.\n6. G2 precedence conflict (`--profile local --harness claude`): resolved in upstream docs as explicit-pin-wins but upstream returns typed error if the pin violates the profile's hard constraint (e.g., local-only with non-local harness).\n7. G3 cost needs explicit data model — no price field on ProviderEntry today.\n8. D4 reframed as deliberate breaking change, not warning-only drift.\n9. D6 + D7 dropped from epic scope.\n10. Quick-test gates added: upstream exact-pin regression; service-layer typed error preserves reasons; `ResolveRoute(Profile: \"default\")` against endpoint-only config; DDx worker exits before any bead claim.",
++    "acceptance": "**User story:** After the upstream point release lands and DDx pulls it, `ddx agent run` with no flags just works on my machine. `--profile local`, `--harness claude`, `--model opus-4.7` behave per the upstream contract. The drain-queue failure mode (empty spec → gemini+minimax → 19-burn) is impossible.\n\n**Acceptance criteria:**\n\n1. **Upstream prerequisite tagged and pulled.** Go.mod references a ddx-agent version whose CHANGELOG documents: first-class `default` and `local` profiles; supported-models allow-list in routing inputs + gating; `ErrHarnessModelIncompatible`; public decision-trace (`RouteDecision.Candidates` + typed error); cost dimension on `ProviderEntry` with unknown-cost fallback. All upstream beads in `~/Projects/agent/.ddx/` labeled `routing-plan` are closed.\n\n2. **No DDx-side synthesis on default path.**\n   - `ddx agent run` with zero flags issues exactly one `ResolveRoute(Profile: \"default\")` call, no Model, no Harness, no Provider.\n   - `ddx work` default: same shape.\n   - `ddx agent execute-bead` with no overrides: same shape.\n   - Integration test: same config that caused the drain-queue failure (real `~/.local/share/ddx/.ddx/config.yaml`) now either succeeds or returns a single typed error — never 19-burn.\n   - Unit test: `workerDispatchAdapter.DispatchWorker({})` → spec with `Profile: \"default\"`, no other fields. No `ResolveTierModelRef`, no `ResolveProfileLadder` in the call graph on the default path.\n\n3. **Preflight before claim.**\n   - Call sequence at `execute_bead_loop.go:352`: next-candidate → `ResolveRoute` → (preflight gate, new) → `Claim` → invoke. Route error OR preflight rejection exits the loop with a `worker-level` failure — no bead claimed.\n   - Test: seed a pathological route (harness with allow-list that excludes the decision's model — fabricated via upstream test seam). Assert `beadStore.Claim` is never called; worker record shows `status: execution_failed` with detail naming the rejected pair; no bead has a `kind:tier-attempt` event from this attempt.\n\n4. **Config deprecation is deliberate, not warning-only.**\n   - Loading a config with `agent.routing.default_harness` set produces a **hard error** at startup with a migration pointer. Field is deleted from the config schema.\n   - Loading a config with `agent.routing.profile_ladders` or `agent.routing.model_overrides` set produces a one-time warning per process AND causes the default path to ignore them. Opt-in with `--escalate` or `--override-model` explicit flags.\n   - CHANGELOG entry + migration guide in DDx docs.\n   - Migration test: fixture config containing all three deprecated fields, run `ddx agent run` with no flags, assert warnings printed and default path honored (not the deprecated config).\n\n5. **Override behavior matches G3 exactly.**\n   - `--harness claude` → `ResolveRoute(Profile: \"default\", Harness: \"claude\")`. If claude fails upstream's gates (binary missing, quota exhausted), surfaces the typed error; no silent substitution. E2E test mocks each gate failure.\n   - `--model opus-4.7` → `ResolveRoute(Profile: \"default\", Model: \"opus-4.7\")`. Lowest-cost available quota-OK provider wins. E2E test seeds 3 providers at different cost with shared model; asserts lowest-cost pick.\n   - `--harness claude --model opus-4.7` → typed `ErrHarnessModelIncompatible` when combo is invalid; clean dispatch otherwise.\n   - `--profile local --harness claude` → upstream typed error (\"claude is non-local, profile=local is local-only\"); DDx surfaces it unmodified. E2E test.\n\n6. **Playwright — drain-queue goldens.**\n   - Fixture matches user's real config (endpoints: lmstudio + omlx + lmstudio + lmstudio, no gemini binary test or with gemini installed but not in allow-list for the chosen model).\n   - Click Drain on project home → within 5s: worker row appears with harness = `agent` (or another live-endpoint-backed harness). Never gemini + non-gemini model. Never 19 failures.\n   - After drain completes: worker status `success` (or typed error exit with reason recorded on the bead). Attempts count matches actual work done.\n\n7. **No compensating DDx logic retained.**\n   - Search DDx for code that re-implements any of: allow-list checks, exact-pin filtering, profile-to-preference mapping, provider cost scoring. Must be absent. If found, PR fails review.\n   - `ResolveProfileLadder`, `ResolveTierModelRef`, `workersByHarness` escalation helpers are deleted from the default path. They remain reachable via `--escalate` only. Dead-code detector run in CI catches orphans.\n\n8. **D6 / D7 are explicitly out of scope and filed as follow-ups.**\n   - `ddx-05b4cc9d` (workers filter) remains its own bead and may land before or after this one.\n   - A new bead is filed post-release for the route-status / providers-UI decision-trace consumer work, pointing at A4 upstream as satisfied.\n\n9. **Documentation.**\n   - DDx's CLAUDE.md / AGENTS.md links to upstream profile catalog + override precedence + best-provider contract docs. No re-documentation on the DDx side.\n   - DDx CHANGELOG entry covers the go.mod bump, D4 breaking changes, and new CLI surface semantics.\n\n10. **Regression goldens for the drain-queue bug.**\n    - Integration test exists that reproduces the original failure mode (empty spec + user's config + gemini binary installed + minimax model in overrides). Before this bead's work: test fails with 19-burn. After: test succeeds or exits with one clean error. Test stays in the suite as a regression guard.",
++    "labels": [
++      "feat-006",
++      "feat-010",
++      "routing",
++      "upstream-agent",
++      "design"
++    ],
++    "metadata": {
++      "claimed-at": "2026-04-29T15:25:45Z",
++      "claimed-machine": "eitri",
++      "claimed-pid": "932496",
++      "events": [
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
++          "created_at": "2026-04-28T22:30:21.53104064Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260428T222708-3b6ff345\",\"harness\":\"claude\",\"input_tokens\":23,\"output_tokens\":10155,\"total_tokens\":10178,\"cost_usd\":1.044931,\"duration_ms\":176594,\"exit_code\":0}",
++          "created_at": "2026-04-28T22:30:21.610923227Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=10178 cost_usd=1.0449"
++        },
++        {
++          "actor": "ddx",
++          "body": "no_changes\nrationale: # No-changes rationale — ddx-fdd3ea36 (routing point release adoption)\n\n## Decision\n\nStopping without a commit. This bead's acceptance criteria describe a\nmulti-PR release-adoption epic, not a single bounded change. Attempting it\nin one execute-bead pass would produce either (a) a partial commit that\nfails most AC items, or (b) a sprawling change touching dispatch, config\nschema, CLI surface, frontend Playwright fixtures, and CHANGELOG/docs\nwithout the up-front design alignment the bead itself calls for.\n\n## What is already done (verified in this worktree)\n\n1. **Upstream routing-plan beads are all closed.** All six beads under\n   label `routing-plan` in `~/Projects/agent/.ddx/beads.jsonl` are in\n   `closed` status:\n     - agent-0dafc7f0 (cost-aware routing)\n     - agent-191a74f9 (default + local + standard profiles)\n     - agent-1f46cf22 (routing docs)\n     - agent-53f38d95 (public decision trace)\n     - agent-bab52778 (supported-models allow-list)\n     - agent-dfabb10b (typed errors)\n\n2. **Their closing commits are in DDx's currently-pinned upstream tag.**\n   `cli/go.mod` references `github.com/DocumentDrivenDX/agent v0.9.23`.\n   `git tag --contains` for each routing-plan closing commit returns\n   v0.9.10 as the earliest containing tag. v0.9.23 (and v0.9.24 latest)\n   transitively contain all of them. So the *binary surface* AC #1\n   wants is already accessible via the pinned go.mod.\n\n## What is NOT done — and why this can't be a one-shot pass\n\n### AC #1 — CHANGELOG-as-released-narrative\n\nAC #1 asks for \"a ddx-agent version whose CHANGELOG documents: first-class\ndefault and local profiles; supported-models allow-list in routing inputs +\ngating; ErrHarnessModelIncompatible; public decision-trace …; cost\ndimension on ProviderEntry with unknown-cost fallback.\"\n\nReading `~/Projects/agent/CHANGELOG.md`:\n  - v0.9.10 documents prompt-caching work, not the routing-plan work.\n  - v0.9.11 documents ADR-006 override-as-failure-signal.\n  - v0.9.12-v0.9.24 cover lucebox/vllm, conformance, corpus, terminal-bench,\n    pi-runner panic. None of these releases bundles a coherent\n    \"routing point release\" narrative.\n\nThe closing commits for the six beads landed scattered between tags as\nside-quest work; none of those tags' release notes call out the\ncombined contract DDx now wants to consume. AC #1 effectively requires\neither (a) an upstream re-release that publishes a \"v0.9.25 — routing\npoint release\" entry covering exactly those items, OR (b) DDx's bead\ndescription must be relaxed to accept \"the code is in v0.9.23, even if\nno single CHANGELOG block summarizes it.\" Either resolution is a\ngovernance decision, not a coding task this worktree can execute.\n\n### AC #2-7 — DDx-side surface (D1-D5)\n\nThese criteria collectively require:\n  - rewriting the worker dispatch path so the default issues exactly one\n    `ResolveRoute(Profile: \"default\")` call with no Model / no Harness /\n    no Provider, removing all DDx-side ladder synthesis;\n  - inserting a typed-incompatibility preflight gate before bead claim\n    (`execute_bead_loop.go` ~line 341);\n  - making `agent.routing.default_harness` a hard error at config load,\n    `profile_ladders` and `model_overrides` opt-in via `--escalate`/`--override-model`,\n    with one-time process warnings;\n  - guaranteeing override flag combinations route through unchanged to\n    upstream and surface upstream typed errors;\n  - removing `ResolveProfileLadder` / `ResolveTierModelRef` /\n    `workersByHarness` escalation helpers from the default path with\n    dead-code detection in CI;\n  - adding an integration test that reproduces the historical 19-burn\n    drain-queue bug AND new e2e tests covering each override\n    combination (claude+opus, model-only, harness-only, profile+harness\n    conflict);\n  - adding Playwright drain-queue golden fixtures matching the user's\n    real config;\n  - updating CHANGELOG and docs.\n\nThis is on the order of 1-3k LOC delta across:\n  - `cli/internal/agent/execute_bead_loop.go`\n  - `cli/internal/agent/profile_ladder.go`\n  - `cli/internal/agent/dispatch.go`\n  - `cli/internal/agent/serviceconfig.go`\n  - `cli/internal/server/graphql_adapters.go` (workerDispatchAdapter)\n  - `cli/internal/config/*` (deprecated field schema)\n  - `cli/cmd/agent_*.go` (override flag plumbing)\n  - new tests (unit, integration, regression, Playwright)\n\nThat work spans D1-D5 in the bead's own sequencing list, which the bead\nexplicitly bundles into \"one DDx PR\" — but a PR of that size needs\narchitectural alignment with the user (especially around the breaking\nconfig change in D4 and the dead-code detector in AC #7) before the\nfirst line is written. execute-bead's contract is to satisfy the AC\ndeterministically, not to make architecture decisions.\n\n### AC #8 — D6 / D7 follow-up beads\n\nThe bead requires that follow-up beads be filed:\n  - one for the route-status / providers-UI decision-trace consumer,\n  - acknowledgement that `ddx-05b4cc9d` (workersByProject filter)\n    stays independent.\n\nFiling beads requires `ddx bead create` invocations against the\nproject's tracker and a commit that mutates `.ddx/beads.jsonl`. This is\nmechanical but should ride along with the substantive PR, not a no-op.\n\n### AC #10 — drain-queue regression golden\n\nA net-new integration test that reproduces the user's historical\n19-burn failure with their real config. Designing this test\n(particularly the gemini-binary-installed assertion, since CI may not\nhave gemini available) is itself a sub-bead.\n\n## What a follow-up attempt needs\n\nTo make this bead landable in a single execute-bead pass, the bead\nmust be split into smaller beads, each of which is a well-defined PR:\n\n1. **routing-bump** — bump `cli/go.mod` from v0.9.23 to whatever\n   tag (v0.9.25?) the upstream cuts as the routing point release; add\n   DDx CHANGELOG entry citing upstream release notes. Trivially\n   satisfies AC #1 once upstream cuts the tag.\n\n2. **routing-default-path** — D1 + D2 only. Worker dispatch + default\n   `ddx agent run` and `ddx work` issue `ResolveRoute(Profile:\n   \"default\")`. New unit tests. Does not touch config schema yet.\n\n3. **routing-preflight-gate** — D3 only. Insert preflight before\n   `Claim` at `execute_bead_loop.go:~341`. Test with seeded\n   incompatibility.\n\n4. **routing-config-deprecation** — D4 only. Hard error on\n   `default_harness`, opt-in warnings on others. Migration test +\n   CHANGELOG breaking-change note.\n\n5. **routing-overrides-e2e** — D5 + AC #5 e2e tests for each override\n   combination.\n\n6. **routing-drain-regression** — AC #10. Standalone regression test\n   that reproduces the historical 19-burn bug.\n\n7. **routing-cleanup** — AC #7 dead-code detector + removal of\n   compensating logic.\n\n8. **routing-frontend-goldens** — AC #6 Playwright fixtures.\n\n9. **routing-followups** — AC #8 file the route-status / providers-UI\n   bead.\n\nEach of those is a clean execute-bead pass with provable AC. The\ncurrent bead's AC list is the union of all nine — too broad for one\nattempt.\n\n## Recommendation to the orchestrator\n\nReopen this bead with `helix-evolve` (or equivalent) to split it into\nthe nine sub-beads above, then queue them in order. The first three\n(bump + default-path + preflight-gate) unblock the user's stated\ngoals (G1/G2/G3) in the smallest possible PR.\n\nThe reduced-scope language in the bead's own description (\"DDx-side\ntracker only\", \"blocks on a single upstream point release\") suggests\nthis bead was meant as the EPIC, not the deliverable. Treating it as\nthe deliverable in execute-bead is what produced this no-op outcome.\nresult_rev=891112dee30444c8925bbc101abd3b1da50a3441\nbase_rev=891112dee30444c8925bbc101abd3b1da50a3441\nretry_after=2026-04-29T04:30:22Z",
++          "created_at": "2026-04-28T22:30:22.575970819Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "no_changes"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
++          "created_at": "2026-04-28T23:53:00.616033009Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260428T235035-a45c067b\",\"harness\":\"claude\",\"input_tokens\":23,\"output_tokens\":8922,\"total_tokens\":8945,\"cost_usd\":0.9517777499999999,\"duration_ms\":144784,\"exit_code\":0}",
++          "created_at": "2026-04-28T23:53:00.699839427Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=8945 cost_usd=0.9518"
++        },
++        {
++          "actor": "ddx",
++          "body": "no_changes\nrationale: # No-changes rationale — ddx-fdd3ea36 (routing point release adoption)\n\nThis is the second consecutive no_changes for this bead (prior attempt\n20260428T222708-3b6ff345 reached the same conclusion). I re-verified the\nupstream / DDx state and concur with that prior analysis: the bead is a\nmulti-PR epic, not a single bounded execute-bead pass, and it should be\nsplit before another implementation attempt.\n\n## What is verified done\n\n1. All six upstream routing-plan beads in `~/Projects/agent/.ddx/` are\n   `closed`:\n     agent-0dafc7f0, agent-191a74f9, agent-1f46cf22,\n     agent-53f38d95, agent-bab52778, agent-dfabb10b.\n\n2. Their closing commits are reachable from the tag DDx already pins:\n   `cli/go.mod` → `github.com/DocumentDrivenDX/agent v0.9.23`.\n   `git merge-base --is-ancestor \u003cSHA\u003e v0.9.23` succeeds for the\n   closing commits of every routing-plan bead checked\n   (db26108, b645280, 0bc2bf4, b85e90e). So the upstream binary\n   surface AC #1 wants is already on the consumer's classpath; no\n   `go.mod` bump is even required.\n\n## Why this still cannot be a single-pass commit\n\nThe bead's AC enumerates 10 items spanning D1–D5 plus follow-ups:\n\n  - D1+D2: rip out DDx-side tier-ladder synthesis from the default\n    `ddx agent run` / `ddx work` / `ddx agent execute-bead` paths so\n    each issues exactly one `ResolveRoute(Profile: \"default\")` call —\n    touches `workerDispatchAdapter`, `execute_bead_loop.go`,\n    `agent_cmd.go`, `profile_ladder.go`, `serviceconfig.go`.\n  - D3: insert a typed-incompatibility preflight gate before\n    `beadStore.Claim` at `execute_bead_loop.go:~352`.\n  - D4: deliberate breaking config change — `default_harness` becomes\n    a hard error at load; `profile_ladders` and `model_overrides`\n    move to opt-in-only with one-time warnings, requires schema\n    deletion + migration test + CHANGELOG breaking-change note.\n  - D5: CLI override surface — flag plumbing + per-flag e2e tests\n    covering harness-only, model-only, harness+model conflict, and\n    profile+harness conflict.\n  - AC #6: Playwright drain-queue golden matching the user's real\n    endpoint config + a \"no gemini + non-gemini-model fallback\"\n    assertion.\n  - AC #7: search-and-delete pass for any DDx-side\n    allow-list / exact-pin / cost-scoring re-implementation, plus a\n    dead-code detector wired into CI to catch orphans of\n    `ResolveProfileLadder` / `ResolveTierModelRef`.\n  - AC #8: file follow-up beads for D6 (route-status / providers UI)\n    and reaffirm `ddx-05b4cc9d` independence.\n  - AC #9: link DDx CLAUDE.md / AGENTS.md to upstream docs and write\n    DDx CHANGELOG entry.\n  - AC #10: net-new regression integration test that reproduces the\n    19-burn drain-queue failure mode with the user's exact config —\n    requires fixture work (gemini binary presence, minimax override)\n    that is itself a sub-bead.\n\nConservatively: 1–3k LOC across ~10 Go files plus frontend Playwright\nfixtures plus CI wiring plus tracker mutations. Crucially D4 is a\ndeliberate breaking change to user-facing config schema; landing it\nwithout explicit user alignment risks breaking real `.ddx.yml` files\nin the wild. The bead description itself describes the work as \"one\nDDx PR\" but the AC list is the union of nine independent\ndeliverables.\n\nexecute-bead's contract is to satisfy AC deterministically, not to\nmake architecture or breaking-change decisions across nine\nsub-deliverables in one pass. A partial commit would fail most AC\nitems; a sprawling commit would couple breaking schema changes to\nmechanical refactors and frontend fixtures, which is exactly the\nshape of PR the bead's own sequencing tries to avoid.\n\n## What a follow-up attempt needs\n\nSplit this bead into the nine smaller beads listed in the prior\nattempt's rationale (`.ddx/executions/20260428T222708-3b6ff345/result.json`,\nsection \"What a follow-up attempt needs\"):\n\n  1. routing-bump (trivial; AC #1 — though arguably already\n     satisfied by v0.9.23)\n  2. routing-default-path (D1 + D2)\n  3. routing-preflight-gate (D3)\n  4. routing-config-deprecation (D4 — breaking, needs explicit\n     user sign-off in its own bead description)\n  5. routing-overrides-e2e (D5 + AC #5)\n  6. routing-drain-regression (AC #10)\n  7. routing-cleanup (AC #7 dead-code detector)\n  8. routing-frontend-goldens (AC #6)\n  9. routing-followups (AC #8)\n\nRecommendation: reopen this bead with helix-evolve to perform the\nsplit, keep ddx-fdd3ea36 as the epic tracker, and queue beads 2 and 3\nfirst — they unblock G1/G2/G3 with the smallest reasonable PR.\n\nThe reduced-scope language in the bead's own description (\"DDx-side\ntracker only\", \"blocks on a single upstream point release\") confirms\nthis was meant as an EPIC, not a deliverable. Two consecutive\nexecute-bead passes have now reached the same conclusion; further\nre-execution at higher model tiers will not change the outcome —\nthe blocker is bead shape, not capability.\nresult_rev=e4b048ebe768c8cf081ec745aebbddd23e73d786\nbase_rev=e4b048ebe768c8cf081ec745aebbddd23e73d786\nretry_after=2026-04-29T05:53:03Z",
++          "created_at": "2026-04-28T23:53:04.027587348Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "no_changes"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
++          "created_at": "2026-04-29T00:33:04.349409535Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260429T003007-e136e75e\",\"harness\":\"claude\",\"input_tokens\":25,\"output_tokens\":10022,\"total_tokens\":10047,\"cost_usd\":1.0400142500000003,\"duration_ms\":175993,\"exit_code\":0}",
++          "created_at": "2026-04-29T00:33:04.430412378Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=10047 cost_usd=1.0400"
++        },
++        {
++          "actor": "ddx",
++          "body": "no_changes\nrationale: Bead: ddx-fdd3ea36 — Adopt ddx-agent routing point release (DDx-side consumer)\nAttempt: 20260429T003007-e136e75e (no-op)\n\n(a) WHAT IS DONE\n================\n- AC #1 is satisfied by prior work on this branch:\n  * cli/go.mod pins github.com/DocumentDrivenDX/agent at v0.9.23 (verified).\n  * CHANGELOG.md (commit 7d50a792) documents the consumed upstream\n    capabilities and cites each upstream commit + bead. The changelog\n    explicitly notes that upstream shipped routing capabilities incrementally\n    across v0.9.10..v0.9.24 rather than as a single tag.\n  * All six upstream beads labeled `routing-plan` in\n    ~/Projects/agent/.ddx/beads.jsonl are CLOSED:\n      agent-0dafc7f0 (cost-aware tiebreak)\n      agent-191a74f9 (first-class default + local + standard profiles)\n      agent-1f46cf22 (routing reference docs)\n      agent-53f38d95 (public RouteDecision.Candidates trace)\n      agent-bab52778 (supported-models allow-list)\n      agent-dfabb10b (typed ErrHarnessModelIncompatible / ErrProfilePinConflict)\n  * The needed public types are present in the pinned module at\n    /home/erik/go/pkg/mod/github.com/!document!driven!d!x/agent@v0.9.23/routing_errors.go:\n      ErrHarnessModelIncompatible, ErrProfilePinConflict, ErrNoProfileCandidate,\n      ErrUnknownProfile, ErrNoLiveProvider, DecisionWithCandidates interface\n      with RouteCandidates() []RouteCandidate.\n\n(b) WHAT IS BLOCKING THIS ATTEMPT\n=================================\nThe bead is an epic-tracker, not a single deliverable. AC #2 through #10\ncollectively require — in one PR with no compensating paths retained — all of:\n\n  D1. workerDispatchAdapter.DispatchWorker rewrite + Drain-button parity.\n  D2. Removal of default-path tier-ladder synthesis from\n      ddx agent run / ddx agent execute-bead / ddx work; ResolveProfileLadder\n      and ResolveTierModelRef gated behind --escalate only.\n  D3. Preflight gate inserted before beadStore.Claim in execute_bead_loop.go\n      (the bead points at line 352, which has already drifted — the actual\n      Claim site is now line 341; the loop is 1052 lines and has substantial\n      surrounding dispatch state to thread through).\n  D4. Hard-error breaking change for `agent.routing.default_harness`;\n      one-time warnings + default-path ignore for `profile_ladders` and\n      `model_overrides`. Schema deletion in\n      cli/internal/config/schema/config.schema.json. Config-load test fixtures.\n  D5. CLI surface parity for ddx agent run (no flags / --profile / --harness /\n      --model / combos), ddx work, ddx agent execute-bead.\n\n  Plus tests demanded by the AC:\n  - AC #2 integration test reproducing the original 19-burn drain failure\n    against the user's real config shape.\n  - AC #3 worker-level failure record assertion with seeded pathological route\n    via an upstream test seam that does not currently exist on the DDx side.\n  - AC #5 four end-to-end override-behavior tests (incl. cost-tiebreak\n    seeded-providers test).\n  - AC #6 Playwright golden for the drain-queue UI path\n    (cli/internal/server/frontend); fixture must mirror user's real\n    endpoint config.\n  - AC #7 dead-code detector wired into CI catching orphaned ladder helpers.\n  - AC #10 regression-guard integration test that fails before this work and\n    succeeds after.\n\n  Plus the directive in AC #7 — \"Search DDx for code that re-implements any\n  of: allow-list checks, exact-pin filtering, profile-to-preference mapping,\n  provider cost scoring. Must be absent. If found, PR fails review.\" —\n  requires a deliberate audit + removal pass spanning at least:\n      cli/internal/agent/harness_config.go\n      cli/internal/agent/profile_ladder.go\n      cli/internal/agent/profile_ladder_test.go\n      cli/internal/config/config.go\n      cli/internal/config/types.go\n      cli/internal/config/routing_ladder_test.go\n      cli/internal/config/schema/config.schema.json\n      cli/internal/server/workers.go\n      cli/cmd/agent_cmd.go\n      cli/cmd/agent_run_profile_test.go\n      cli/internal/agent/execute_bead_loop.go (1052 lines)\n      cli/internal/agent/execute_bead_loop_test.go\n      cli/internal/agent/execute_bead_loop_runwithconfig_test.go\n      cli/internal/agent/execute_bead_loop_resolvers_e2e_test.go\n      cli/internal/agent/execute_bead_loop_pin_propagation_test.go\n\nThis is a multi-thousand-line, multi-subsystem refactor with a hard\nbreaking-change config migration and a new Playwright golden. It cannot be\nlanded responsibly in a single execute-bead pass without a much narrower\nsub-bead breakdown. Attempting it as one commit risks: half-finished tier-\nladder removal that leaves the default path in an undefined state; a config\nschema break that hard-errors existing user configs without the migration\nwarnings actually firing; or merging a Playwright golden whose fixture\nsilently passes because the underlying dispatch path was not fully rewired.\n\nThe previous attempt already correctly scoped this bead to AC #1 only and\ndocumented the upstream prerequisite. Doing more here without\ndecomposition would either produce a bad commit or violate\nDOWITYTD on a bead whose own description acknowledges it is a\n\"DDx-side tracker only\" for an upstream-driven epic.\n\n(c) WHAT A FOLLOW-UP ATTEMPT NEEDS\n==================================\nDecompose ddx-fdd3ea36 into independently shippable sub-beads, each\nsmall enough to land in one execute-bead pass with focused tests:\n\n  ddx-\u003cnew\u003e-D1: workerDispatchAdapter + Drain button — empty-spec defaults to\n                Profile:\"default\"; no other synthesis. Unit test +\n                dashboard wiring. Closes AC #2 partially.\n\n  ddx-\u003cnew\u003e-D2a: Default path stops calling ResolveTierModelRef /\n                 ResolveProfileLadder. Add --escalate flag that re-enables\n                 them. Tests assert call graph. Closes AC #2 fully.\n\n  ddx-\u003cnew\u003e-D3: Preflight gate before Claim using upstream's typed\n                ErrHarnessModelIncompatible. Targeted test using upstream\n                test seam (file the upstream test-seam ask as a separate\n                ddx-agent bead if missing). Closes AC #3.\n\n  ddx-\u003cnew\u003e-D4: Config breaking-change migration. Hard-error on\n                default_harness; warn-and-ignore on profile_ladders/\n                model_overrides; schema update; migration fixture tests;\n                CHANGELOG migration guide. Closes AC #4.\n\n  ddx-\u003cnew\u003e-D5: CLI flag-surface parity tests for ddx agent run / work /\n                execute-bead with the four override permutations from AC #5.\n                Closes AC #5.\n\n  ddx-\u003cnew\u003e-Audit: Audit pass for AC #7 (compensating logic removal +\n                   dead-code orphan detector in CI). Closes AC #7.\n\n  ddx-\u003cnew\u003e-Regression: AC #10 regression-guard integration test that\n                        reproduces the 19-burn drain bug; AC #2's\n                        integration sibling. Closes AC #10 (and validates\n                        D1+D2+D3 together).\n\n  ddx-\u003cnew\u003e-Playwright: AC #6 frontend golden against the rewired Drain\n                        path. Last in sequence — depends on D1+D2+D3 +\n                        Regression. Closes AC #6.\n\n  ddx-\u003cnew\u003e-Docs: Cross-link DDx CLAUDE.md / AGENTS.md to upstream profile\n                  catalog + override precedence + best-provider contract\n                  docs (AC #9 second half — CHANGELOG half is already in\n                  CHANGELOG.md from the prior commit).\n\n  ddx-\u003cnew\u003e-D6-followup: Decision-trace consumers in route-status /\n                         providers UI — explicitly out of scope per the\n                         bead description but should be filed now so the\n                         tracking exists (bead description's own AC #8\n                         requires this).\n\nddx-fdd3ea36 should remain open as the umbrella tracker until all\nsub-beads close, at which point AC #2..#10 can be re-verified end-to-end\nin one final review pass.\n\nNO CODE CHANGES IN THIS ATTEMPT.\nresult_rev=3dc94e0a7f4cf67a86bd4583757f7263aa957568\nbase_rev=3dc94e0a7f4cf67a86bd4583757f7263aa957568\nretry_after=2026-04-29T06:33:06Z",
++          "created_at": "2026-04-29T00:33:06.128992877Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "no_changes"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
++          "created_at": "2026-04-29T06:55:30.446084298Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260429T065203-5c940767\",\"harness\":\"claude\",\"input_tokens\":16,\"output_tokens\":7347,\"total_tokens\":7363,\"cost_usd\":0.85627645,\"duration_ms\":205854,\"exit_code\":0}",
++          "created_at": "2026-04-29T06:55:30.527606283Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=7363 cost_usd=0.8563"
++        },
++        {
++          "actor": "ddx",
++          "body": "no_changes\nrationale: Bead: ddx-fdd3ea36 — Adopt ddx-agent routing point release (DDx-side consumer epic)\n\nDisposition: no_changes — this is an epic/tracker bead whose work has been\ndeliberately decomposed into nine child beads. Some are closed; four remain\nopen. The tracker cannot close until those four close. There is no\nimplementation work that belongs at the epic level itself.\n\n================================================================================\nWhat is done\n================================================================================\n\nUpstream prerequisite (AC #1):\n  All six routing-plan beads in ~/Projects/agent/.ddx/ are closed and merged\n  into tagged ddx-agent releases (v0.9.10..v0.9.24):\n    agent-191a74f9  profiles (default/local/standard)         closed\n    agent-bab52778  supported-models allow-list + gating      closed\n    agent-dfabb10b  ErrHarnessModelIncompatible / PinConflict closed\n    agent-53f38d95  public RouteDecision.Candidates           closed\n    agent-0dafc7f0  CostUSDPer1kTokens + cost tiebreak        closed\n    agent-1f46cf22  routing documentation                     closed\n  cli/go.mod pins github.com/DocumentDrivenDX/agent v0.9.23, which contains\n  every routing-plan commit (verified via `git tag --contains \u003csha\u003e` against\n  closing_commit_sha for each upstream bead).\n\nDDx-side child beads already closed:\n  ddx-967e9802  routing-bump (go.mod pin + CHANGELOG)         closed\n  ddx-755f5881  routing-default-path (D1 + D2)                closed   → AC #2\n  ddx-98e6e9ef  routing-preflight-gate (D3)                   closed   → AC #3\n  ddx-dd4c423d  routing-drain-regression test                 closed   → AC #10\n\nCode evidence the closed work is in tree:\n  cli/internal/agent/profile_ladder.go:20-21\n    test seams verify ResolveProfileLadder/ResolveTierModelRef are NOT called\n    on the default path (per ddx-755f5881 AC #3)\n  cli/internal/server/graphql_adapters.go:84-120\n    DispatchWorker normalizes empty input to {Profile: \"default\"} only\n  cli/internal/agent/execute_bead_loop.go:360-392\n    routing preflight gate runs BEFORE Claim at line 394 (D3, ddx-98e6e9ef)\n  cli/cmd/agent_cmd.go:1683-1684\n    --escalate / --override-model flags exist; tier ladder + model_overrides\n    are off by default (consistent with D2/D4 design)\n  cli/internal/config/types.go:230-234\n    migration note: agent.routing.default_harness was REMOVED in ddx-87fb72c2\n\n================================================================================\nWhat is open (blocks tracker close)\n================================================================================\n\nddx-87fb72c2  routing-config-deprecation                      open  → AC #4\n              hard error on default_harness; ladders/overrides opt-in only;\n              CHANGELOG migration entry. (Note: the field-removal half appears\n              landed per types.go:230-234 — verify what residual scope this\n              bead still owns before executing it.)\n\nddx-2589e256  routing-overrides-e2e                           open  → AC #5\n              --harness/--model/--profile flag plumbing parity tests for\n              ResolveRoute(Profile, Harness, Model) shape; cost-tiebreak e2e;\n              typed-error surfacing for incompatible combos.\n\nddx-950321ef  routing-frontend-goldens                        open  → AC #6\n              Playwright drain-queue fixtures matching the real failing\n              config; Drain button → live-endpoint-backed harness;\n              never gemini+non-gemini-model; never 19-burn.\n\nddx-653f6ac9  routing-cleanup                                 open  → AC #7\n              dead-code detector for orphaned compensating logic;\n              remove residual allow-list / exact-pin / cost-scoring code\n              that re-implements upstream behavior.\n\nddx-a0cf398b  routing-followups                               open  → AC #8\n              file the route-status / providers-UI decision-trace consumer\n              bead; close out D6/D7 housekeeping.\n\n================================================================================\nWhy this bead does not get implementation in this pass\n================================================================================\n\n1. The epic's AC is the union of its children's AC. Every remaining AC item\n   (#4, #5, #6, #7, #8, plus the documentation half of #9) is the contract of\n   a specific open child bead. Implementing them here would either duplicate\n   work that the child bead will redo, or steal scope that another worker\n   may already be planning to claim.\n\n2. The bead description's \"Sequencing\" section explicitly orders:\n     1. upstream lands (done)\n     2. go.mod bump (done — ddx-967e9802)\n     3. D1+D2+D3+D5 land together (D1+D2=ddx-755f5881 done; D3=ddx-98e6e9ef\n        done; D5=ddx-2589e256 OPEN)\n     4. D4 (ddx-87fb72c2) lands with or right after the above (OPEN)\n     5. follow-ups (ddx-a0cf398b, ddx-950321ef, ddx-653f6ac9) (OPEN)\n   The tracker is meant to close once steps 3–5 complete via their child\n   beads, not to carry independent code.\n\n3. Attempting any of {D4, override e2e, playwright goldens, dead-code sweep}\n   in this single execute-bead pass would land a sprawling cross-cutting\n   commit that violates the per-child-bead acceptance contracts and is\n   hard to review. Per CLAUDE.md \"DOWITYTD\" and the merge-policy memory,\n   the right action is to execute the children individually.\n\n================================================================================\nWhat a follow-up attempt should do\n================================================================================\n\nThis tracker should NOT be re-queued for direct execution. Instead:\n\n  a) Execute the four open child beads in their natural order:\n        ddx-87fb72c2 (D4 — config deprecation residue + CHANGELOG)\n        ddx-2589e256 (D5 — override flag e2e)\n        ddx-950321ef (D6-equivalent — Playwright goldens)\n        ddx-653f6ac9 (cleanup / dead-code sweep)\n        ddx-a0cf398b (file follow-up beads)\n     Each closes one or two AC items on this tracker.\n\n  b) When all five close, re-open this tracker briefly to:\n        - verify every AC item maps to a closed child or in-tree evidence\n        - update DDx CHANGELOG (AC #9) if not already done by ddx-967e9802\n        - close ddx-fdd3ea36 with a closing-comment that points at each\n          child bead's closing commit.\n\nThat close step is documentation/bookkeeping — a single small commit, well\nsuited to a future execute-bead pass once the children are green.\n\nNo code changes were made in this pass. Workspace is clean.\nresult_rev=fc0e1f025bee228c60897213652c99acbcdac72f\nbase_rev=fc0e1f025bee228c60897213652c99acbcdac72f\nretry_after=2026-04-29T12:55:31Z",
++          "created_at": "2026-04-29T06:55:32.027577055Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "no_changes"
++        },
++        {
++          "actor": "erik",
++          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
++          "created_at": "2026-04-29T12:56:08.849907204Z",
++          "kind": "tier-attempt",
++          "source": "ddx agent execute-loop",
++          "summary": "skipped"
++        },
++        {
++          "actor": "erik",
++          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
++          "created_at": "2026-04-29T12:56:08.959961119Z",
++          "kind": "tier-attempt",
++          "source": "ddx agent execute-loop",
++          "summary": "skipped"
++        },
++        {
++          "actor": "erik",
++          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
++          "created_at": "2026-04-29T12:56:09.05974201Z",
++          "kind": "escalation-summary",
++          "source": "ddx agent execute-loop",
++          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
++        },
++        {
++          "actor": "erik",
++          "body": "execute-loop: all tiers exhausted — no viable provider found",
++          "created_at": "2026-04-29T12:56:09.258029458Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "execution_failed"
++        }
++      ],
++      "execute-loop-heartbeat-at": "2026-04-29T15:25:45.67345257Z",
++      "execute-loop-last-detail": "no_changes",
++      "execute-loop-last-status": "no_changes",
++      "execute-loop-no-changes-count": 4,
++      "execute-loop-retry-after": "2026-04-29T12:55:31Z",
++      "feature": "FEAT-006"
++    }
++  },
++  "paths": {
++    "dir": ".ddx/executions/20260429T152547-cea40d0b",
++    "prompt": ".ddx/executions/20260429T152547-cea40d0b/prompt.md",
++    "manifest": ".ddx/executions/20260429T152547-cea40d0b/manifest.json",
++    "result": ".ddx/executions/20260429T152547-cea40d0b/result.json",
++    "checks": ".ddx/executions/20260429T152547-cea40d0b/checks.json",
++    "usage": ".ddx/executions/20260429T152547-cea40d0b/usage.json",
++    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fdd3ea36-20260429T152547-cea40d0b"
++  }
++}
+\ No newline at end of file
+diff --git a/.ddx/executions/20260429T152547-cea40d0b/result.json b/.ddx/executions/20260429T152547-cea40d0b/result.json
+new file mode 100644
+index 00000000..814e6889
+--- /dev/null
++++ b/.ddx/executions/20260429T152547-cea40d0b/result.json
+@@ -0,0 +1,23 @@
++{
++  "bead_id": "ddx-fdd3ea36",
++  "attempt_id": "20260429T152547-cea40d0b",
++  "base_rev": "d00a3980336de454f3b434be1af9418cecfa4932",
++  "result_rev": "86307ebc4663e3b68c21fd63795dff4daa489c0b",
++  "outcome": "task_succeeded",
++  "status": "success",
++  "detail": "success",
++  "harness": "claude",
++  "model": "sonnet",
++  "session_id": "eb-642eb05c",
++  "duration_ms": 1507994,
++  "tokens": 32319,
++  "cost_usd": 4.772446800000003,
++  "exit_code": 0,
++  "execution_dir": ".ddx/executions/20260429T152547-cea40d0b",
++  "prompt_file": ".ddx/executions/20260429T152547-cea40d0b/prompt.md",
++  "manifest_file": ".ddx/executions/20260429T152547-cea40d0b/manifest.json",
++  "result_file": ".ddx/executions/20260429T152547-cea40d0b/result.json",
++  "usage_file": ".ddx/executions/20260429T152547-cea40d0b/usage.json",
++  "started_at": "2026-04-29T15:25:48.854307903Z",
++  "finished_at": "2026-04-29T15:50:56.848929853Z"
++}
+\ No newline at end of file
+  </diff>
+
+  <instructions>
+You are reviewing a bead implementation against its acceptance criteria.
+
+For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
+
+- APPROVE — every AC item is fully and correctly implemented.
+- REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
+
+## Required output format (schema_version: 1)
+
+Respond with EXACTLY one JSON object as your final response, fenced as a single ```json … ``` code block. Do not include any prose outside the fenced block. The JSON must match this schema:
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "≤300 char human-readable verdict justification",
+  "findings": [
+    { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
+  ]
+}
+```
+
+Rules:
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "severity" must be exactly one of "info", "warn", "block".
+- Output the JSON object inside ONE fenced ```json … ``` block. No additional prose, no extra fences, no markdown headings.
+- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.
+  </instructions>
+</bead-review>
