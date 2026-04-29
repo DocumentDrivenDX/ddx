@@ -621,6 +621,7 @@ func (s *Server) routes() {
 	// Doc graph — legacy
 	legacy("GET /api/docs/graph", s.handleDocGraph)
 	legacy("GET /api/docs/stale", s.handleDocStale)
+	legacy("GET /api/docs/changed", s.handleDocChanged)
 	legacy("GET /api/docs/{id}/deps", s.handleDocDeps)
 	legacy("GET /api/docs/{id}/dependents", s.handleDocDependents)
 	legacy("GET /api/docs/{id}/history", s.handleDocHistory)
@@ -631,6 +632,7 @@ func (s *Server) routes() {
 	// Doc graph — project-scoped (FEAT-002: canonical)
 	scoped("GET /api/projects/{project}/docs/graph", s.handleDocGraph)
 	scoped("GET /api/projects/{project}/docs/stale", s.handleDocStale)
+	scoped("GET /api/projects/{project}/docs/changed", s.handleDocChanged)
 	scoped("GET /api/projects/{project}/docs/{id}/deps", s.handleDocDeps)
 	scoped("GET /api/projects/{project}/docs/{id}/dependents", s.handleDocDependents)
 	scoped("GET /api/projects/{project}/docs/{id}/history", s.handleDocHistory)
@@ -1548,6 +1550,23 @@ func (s *Server) handleDocStale(w http.ResponseWriter, r *http.Request) {
 		stale = []docgraph.StaleReason{}
 	}
 	writeJSON(w, http.StatusOK, stale)
+}
+
+func (s *Server) handleDocChanged(w http.ResponseWriter, r *http.Request) {
+	since := r.URL.Query().Get("since")
+	wd := s.workingDirForRequest(r)
+	result := s.mcpDocChanged(wd, since)
+	if result.IsError {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": result.Content[0].Text})
+		return
+	}
+	// mcpDocChanged returns JSON-encoded array as text; decode and re-encode for HTTP.
+	var entries any
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &entries); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
 }
 
 func (s *Server) handleDocShow(w http.ResponseWriter, r *http.Request) {
