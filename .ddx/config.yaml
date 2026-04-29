@@ -25,21 +25,3 @@ agent:
           host: grendel
           port: 1234
           api_key: lmstudio
-    routing:
-        profile_ladders:
-            default:
-                - cheap
-                - standard
-                - smart
-            cheap:
-                - cheap
-            fast:
-                - fast
-                - smart
-            smart:
-                - smart
-        model_overrides:
-            cheap: qwen/qwen3.6
-            fast: kimi/k2.5
-            standard: codex/gpt-5.4
-            smart: minimax/minimax-m2.7
