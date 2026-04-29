@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260429T175223-fc7d9a1b",
+  "bead_id": "ddx-33e07890",
+  "base_rev": "255c18f9c2f3d6b01f4e9bea785b595b4a2ce026",
+  "created_at": "2026-04-29T17:52:24.576812577Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-33e07890",
+    "title": "[artifact-run-arch] update product-vision.md for artifact + 3-layer architecture",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md.\n\nScope of vision update:\n\n(0) PREAMBLE for Core Thesis (canonical wording — use verbatim):\n\n\u003e Software is leverage. Fifty years of practice has shown that there are physics of software that must be respected to produce and maintain systems at scale. The agentic era allows every team to produce systems at scale and makes this even more important.\n\u003e\n\u003e Generative AI brings its own physics. DDx exists at the seam where these two meet — the fulcrum that lets software's lever do work. Without it, shipping software with agents quietly degrades into prompt-and-pray. The six principles below are the load-bearing claims on both sides.\n\nThe preamble REPLACES the existing two-paragraph Core Thesis. Existing paragraph 2 (\"Creating documentation and using it as an abstraction... DDx encodes that insight into infrastructure...\") drifts into positioning rather than thesis — its substance is captured by principle #1 plus existing 'What DDx Is' section. Drop it from Core Thesis when this bead lands.\n\n(1) Thesis principles — restructure Core Thesis around 6 principles in 3 groups (Physics of Software / Physics of Generative AI / The intersection — DDx's reason to exist). Final formulations:\n\nA. Physics of Software (engineering truths agents amplify):\n1. Abstraction is the lever. Multi-level artifact stacks (vision -\u003e spec -\u003e test -\u003e code) with maintained relationships are how intent propagates without being lost. True for human teams; load-bearing for agents because they don't carry tacit knowledge between invocations.\n2. Software is iteration over tracked work. Repeated trials over an explicit work substrate — beads, queues, dependency DAGs — is how software gets built. Pre-existed agents; agents make the substrate non-optional.\n3. Methodology is plural. Different teams, projects, and problem domains demand different workflows — waterfall, agile, kanban, HELIX, ad-hoc. No tool that bakes one in survives the rest. DDx provides primitives (artifacts, runs, beads) that any methodology composes.\n\nB. Physics of Generative AI (claims about LLM behavior):\n4. LLMs are stochastic, unreliable, and costly. Cost-tier ladders, ensemble verification, and 'cheapest model that works' are the operating shape of agentic work, not optimizations.\n5. Evidence provides memory. Agents carry no state between invocations and outputs aren't bit-reproducible. The only thing that survives a run is what we captured as it happened. That captured evidence is the substrate for evaluation, trust, debugging, and learning — without it, every other principle degrades to anecdote.\n\nC. The intersection — DDx's reason to exist:\n6. Human-AI collaboration is the fulcrum. Abstraction levers intent across the artifact stack, but only collaboration converts leverage into shipped software. Humans supply intent and accountability; AI supplies volume and execution. DDx is the toolkit at the seam — handoffs in both directions, at every level.\n\nNote: #1 and #6 form a deliberate rhetorical bookend (lever + fulcrum = leverage). The preamble primes the metaphor without spoiling it.\n\n(2) Operating principles — keep existing list (Git-native, file-first, etc.) but add one-line preamble: 'Operating principles are the choices DDx makes in response to the physics above.' Update Principle #1 from 'Documents are the product' to 'Artifacts are the product (documents primary, other media supported).'\n\n(3) Artifact + 3-layer architecture changes (per original bead scope):\n- Thesis copy: 'documents AI agents consume' -\u003e 'artifacts agents produce and consume'\n- Artifact-management bullet: broaden to non-document media + generators\n- One sentence acknowledging four-way producer/consumer space (no separate matrix subsection)\n- New Design-Philosophy subsection: Three-layer run architecture (ddx run / ddx try / ddx work)\n- KVP table additions: 'Multi-media artifact graph'; 'Three-layer run architecture (run/try/work)'; note invocation is upstream\n\nDo NOT touch docs/helix/01-frame/principles.md — that's HELIX engineering decision-guide, separate concern.",
+    "labels": [
+      "frame",
+      "plan-2026-04-29"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T17:52:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T17:52:21.707469295Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T175223-fc7d9a1b",
+    "prompt": ".ddx/executions/20260429T175223-fc7d9a1b/prompt.md",
+    "manifest": ".ddx/executions/20260429T175223-fc7d9a1b/manifest.json",
+    "result": ".ddx/executions/20260429T175223-fc7d9a1b/result.json",
+    "checks": ".ddx/executions/20260429T175223-fc7d9a1b/checks.json",
+    "usage": ".ddx/executions/20260429T175223-fc7d9a1b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-33e07890-20260429T175223-fc7d9a1b"
+  }
+}
