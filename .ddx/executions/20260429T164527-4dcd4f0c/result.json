@@ -1,0 +1,68 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no CLI, doctor diagnostics, classification logic, or docs are present to evaluate against AC1–AC5.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No reset CLI implementation visible in diff (AC1)",
+      "location": ".ddx/executions/20260429T162702-2c963978/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "No doctor/route-status diagnostic output changes visible (AC2)",
+      "location": ".ddx/executions/20260429T162702-2c963978/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "No exclusion logic for no-viable-provider/config errors visible (AC3)",
+      "location": ".ddx/executions/20260429T162702-2c963978/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "No documentation under docs/ added or modified (AC4)",
+      "location": ".ddx/executions/20260429T162702-2c963978/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "Diff insufficient to verify post-reset behavior (AC5)",
+      "location": ".ddx/executions/20260429T162702-2c963978/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 4332,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T162702-2c963978/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1207,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 7273,
+    "output_bytes": 1095,
+    "elapsed_ms": 6747,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
