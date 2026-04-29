@@ -65,18 +65,18 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	if dir == "" {
 		dir = envOr("DDX_BEAD_DIR", ".ddx")
 	}
+	workingDir := dir
+	if filepath.Base(dir) == ".ddx" {
+		workingDir = filepath.Dir(dir)
+	}
 	prefix := envOr("DDX_BEAD_PREFIX", "")
 	if prefix == "" {
-		workingDir := dir
-		if filepath.Base(dir) == ".ddx" {
-			workingDir = filepath.Dir(dir)
-		}
 		if cfg, err := config.LoadWithWorkingDir(workingDir); err == nil && cfg != nil && cfg.Bead != nil && cfg.Bead.IDPrefix != "" {
 			prefix = cfg.Bead.IDPrefix
 		}
 	}
 	if prefix == "" {
-		prefix = detectPrefix()
+		prefix = detectPrefix(workingDir)
 	}
 	backendType := envOr("DDX_BEAD_BACKEND", BackendJSONL)
 
@@ -1579,17 +1579,24 @@ func (s *Store) validateBead(b *Bead) error {
 
 // detectPrefix derives the bead ID prefix from the repository/directory name,
 // following the bd convention (e.g., repo "my-project" → prefix "my-project").
-// Falls back to DefaultPrefix if detection fails.
-func detectPrefix() string {
-	// Try git repo root name first
-	cmd := gitpkg.Command(context.Background(), "", "rev-parse", "--show-toplevel")
+// workingDir is the project root to use for git commands; when empty the
+// process working directory is used (legacy behaviour, prone to worktree
+// path contamination). Falls back to DefaultPrefix if detection fails.
+func detectPrefix(workingDir string) string {
+	// Try git repo root name first, running from the known project root so
+	// that linked worktrees (e.g. execute-bead isolated worktrees) do not
+	// contaminate the prefix with their ephemeral directory names.
+	cmd := gitpkg.Command(context.Background(), workingDir, "rev-parse", "--show-toplevel")
 	if out, err := cmd.Output(); err == nil {
 		root := strings.TrimSpace(string(out))
 		if root != "" {
 			return filepath.Base(root)
 		}
 	}
-	// Fall back to current directory name
+	// Fall back to the provided working dir, then cwd.
+	if workingDir != "" {
+		return filepath.Base(workingDir)
+	}
 	if wd, err := os.Getwd(); err == nil {
 		return filepath.Base(wd)
 	}
