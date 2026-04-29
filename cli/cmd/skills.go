@@ -26,7 +26,7 @@ Examples:
   ddx skills check
   ddx skills check skills
   ddx skills check .agents/skills
-  ddx skills check ~/.ddx/plugins/helix/skills`,
+  ddx skills check .ddx/plugins/helix/skills`,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},

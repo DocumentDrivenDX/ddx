@@ -77,28 +77,27 @@ test_ac002_plugin_install() {
     
     docker run --rm ddx-test:with-ddx /bin/bash -c '
         set -e
-        
-        # Install helix plugin
-        ddx install helix
-        
-        # Verify plugin directory
-        if [ ! -d "$HOME/.ddx/plugins/helix" ]; then
-            echo "FAIL: helix not in ~/.ddx/plugins/"
+
+        # Install helix plugin into the project
+        cd /tmp/proj && ddx init && ddx install helix
+
+        # Verify plugin directory (project-local)
+        if [ ! -d ".ddx/plugins/helix" ]; then
+            echo "FAIL: helix not in .ddx/plugins/"
             exit 1
         fi
-        
-        # Verify skills exist
-        if [ ! -d "$HOME/.agents/skills/helix-align" ]; then
-            echo "FAIL: helix-align skill not found"
+
+        # Verify skills copied into project
+        if [ ! -d ".agents/skills/helix-align" ]; then
+            echo "FAIL: helix-align skill not found in .agents/skills/"
             exit 1
         fi
-        
-        # Verify Claude symlinks
-        if [ ! -L "$HOME/.claude/skills/helix-align" ]; then
-            echo "FAIL: helix-align not symlinked in ~/.claude/skills/"
+
+        if [ ! -d ".claude/skills/helix-align" ]; then
+            echo "FAIL: helix-align skill not found in .claude/skills/"
             exit 1
         fi
-        
+
         echo "PASS: AC-002"
     '
 }

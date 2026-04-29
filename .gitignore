@@ -431,7 +431,6 @@ cli/internal/agent/.ddx/
 .ddx/run-state.json
 .ddx/exec-runs.d/
 .ddx/tsnet/
-.ddx/plugins/
 .helix-logs/
 
 # DDx tracked execution evidence — explicitly un-ignored
@@ -442,14 +441,6 @@ cli/internal/agent/.ddx/
 !.ddx/executions/*/result.json
 !.ddx/executions/*/checks.json
 !.ddx/executions/*/usage.json
-
-# Skills target links (rewritten per-machine by skill materializer / ddx install)
-# Matches both directory contents (old) and symlink entries (new — entries are
-# file-mode symlinks pointing at plugin trees, unique per machine).
-.claude/skills/*
-.agents/skills/*
-cli/.claude/skills/*
-cli/.agents/skills/*
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/

@@ -15,8 +15,11 @@ A plugin is a git repository that ships some combination of:
 |----------|-------------|-----------------|
 | **Root** | The entire plugin tree | `.ddx/plugins/<name>/` |
 | **Skills** | SKILL.md files agents discover as slash commands | `.agents/skills/` and `.claude/skills/` |
-| **Scripts** | CLI tools | `~/.local/bin/` |
-| **Symlinks** | Post-install convenience links | Anywhere |
+
+All install outputs are project-local — DDx writes nothing under `~/`.
+Skills are real-file copies, not symlinks. The project-local tree
+(`.ddx/plugins/`, `.agents/skills/`, `.claude/skills/`) is committed to
+git so teammates and CI get the same skills on clone.
 
 The plugin root at `.ddx/plugins/<name>/` can contain any DDx resource type:
 
@@ -41,14 +44,13 @@ When you run `ddx install <name>`:
 1. DDx fetches the latest release tarball from the plugin's GitHub repo
 2. Extracts it to a temp directory
 3. Copies the **Root** (the entire plugin) to `.ddx/plugins/<name>/`
-4. **Symlinks** each skill from `.ddx/plugins/<name>/` into the agent skill
-   directories — skills stay in sync with the plugin, no duplicates
-5. **Symlinks** the CLI script from `.ddx/plugins/<name>/` to `~/.local/bin/`
-6. Records the installation in `~/.ddx/installed.yaml`
+4. Copies each skill from the plugin into `.agents/skills/` and
+   `.claude/skills/` as real files (no symlinks)
+5. Records the installation in the project's local install manifest
 
-Skills and scripts are symlinked from the installed root, not copied
-independently. This means updates to the plugin root automatically update
-all skills and scripts.
+Every file written is a real file under the project root. DDx creates
+zero symlinks and writes nothing under `~/` — the resulting tree is
+portable across Linux, macOS, and Windows and can be committed to git.
 
 ## Plugin Structure
 
@@ -58,13 +60,13 @@ you need:
 ```
 my-plugin/
 ├── .agents/
-│   └── skills/             # agent skills (symlinked on install)
+│   └── skills/             # agent skills (copied to project on install)
 │       ├── my-build/
 │       │   └── SKILL.md
 │       └── my-review/
 │           └── SKILL.md
 ├── bin/
-│   └── my-plugin           # CLI entry point (symlinked on install)
+│   └── my-plugin           # CLI entry point
 ├── prompts/                # AI prompts and instructions
 ├── templates/              # project or artifact templates
 ├── patterns/               # reusable code patterns
@@ -163,12 +165,9 @@ install:
     target: ".ddx/plugins/my-plugin"      # project-local install
   skills:
     - source: ".agents/skills/"           # skills dir in repo
-      target: ".agents/skills/"           # symlinked here
+      target: ".agents/skills/"           # copied here
     - source: ".agents/skills/"
       target: ".claude/skills/"           # and here
-  scripts:
-    source: "bin/my-plugin"               # CLI in repo
-    target: "~/.local/bin/my-plugin"      # symlinked here
   executable:                              # files that must be executable
     - "bin/my-plugin"
     - "scripts/main"
@@ -189,14 +188,11 @@ install:
 | Field | Purpose | Behavior |
 |-------|---------|----------|
 | `root` | Copy entire plugin to `.ddx/plugins/<name>/` | Full directory copy from tarball |
-| `skills` | Symlink skill directories into agent paths | Each entry in source dir gets a symlink in target dir |
-| `scripts` | Symlink CLI binary | Single symlink from target to root's script |
-| `symlinks` | Additional post-install symlinks | Arbitrary source→target symlinks |
+| `skills` | Copy skill directories into agent paths | Each entry in source dir is copied into target dir |
 | `executable` | Paths (relative to root) that must be +x | Execute bit set after root copy |
 
-When `root` is set, skills and scripts are **symlinked from the installed
-root** rather than copied from the tarball. This keeps everything in sync. When
-`root` is not set, skills and scripts are copied directly.
+All install outputs are real files under the project root. DDx never
+creates symlinks during install and never writes outside `<projectRoot>/`.
 
 ## Registering Your Plugin
 
@@ -231,10 +227,6 @@ Package{
         Skills: []InstallMapping{
             {Source: ".agents/skills/", Target: ".agents/skills/"},
             {Source: ".agents/skills/", Target: ".claude/skills/"},
-        },
-        Scripts: &InstallMapping{
-            Source: "bin/helix",
-            Target: "~/.local/bin/helix",
         },
         Executable: []string{"bin/helix", "scripts/helix"},
     },
@@ -338,12 +330,9 @@ ddx install my-plugin
 # Verify the plugin root
 ls .ddx/plugins/my-plugin/
 
-# Verify skills are symlinked
-ls -la .agents/skills/my-*
-ls -la .claude/skills/my-*
-
-# Verify the CLI is symlinked (if applicable)
-ls -la ~/.local/bin/my-plugin
+# Verify skills are copied
+ls .agents/skills/my-*
+ls .claude/skills/my-*
 
 # Run your doctor (if applicable)
 my-plugin doctor

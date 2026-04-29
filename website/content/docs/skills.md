@@ -18,7 +18,8 @@ flag combinations.
 | `/ddx-review` | Multi-agent quorum and fresh-eyes code review |
 | `/ddx-run` | Execute a bead end-to-end: claim → build → verify → close |
 
-Skills are installed automatically by `ddx init` to `~/.agents/skills/ddx-*/`.
+Skills are installed automatically by `ddx init` to the project's
+`.agents/skills/` and `.claude/skills/` directories as real files.
 
 ## `/ddx-bead` — Create Work Items
 

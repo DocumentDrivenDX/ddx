@@ -76,7 +76,7 @@ type_command ddx doctor
 
 echo ""
 echo "Available HELIX skills:"
-ls ~/.agents/skills/ | grep helix | tr '\n' ' '
+ls .agents/skills/ | grep helix | tr '\n' ' '
 echo ""
 sleep 2
 

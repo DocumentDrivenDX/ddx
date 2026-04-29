@@ -17,10 +17,9 @@ Run the install script to set up DDx globally:
 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 ```
 
-This installs:
-- `ddx` CLI binary to `~/.local/bin/ddx`
-- DDx skills to `~/.ddx/skills/`
-- Symlinks in `~/.agents/skills/` and `~/.claude/skills/` for Claude Code
+This installs the `ddx` CLI binary to `~/.local/bin/ddx`. DDx skills
+are installed per-project by `ddx init` and `ddx install <plugin>` —
+nothing is written under `~/` outside the binary itself.
 
 Verify the installation:
 
@@ -38,9 +37,9 @@ ddx init
 ```
 
 This creates:
-- `.ddx/` - DDx configuration and project-local skills
-- `.ddx/skills/` - Bootstrap skills (ddx-doctor, ddx-run)
-- `.agents/skills` → `.ddx/skills` - Symlink for Claude Code
+- `.ddx/` - DDx configuration and project-local plugin tree
+- `.agents/skills/` and `.claude/skills/` - copied skill files for
+  Claude Code (real files, no symlinks)
 
 ## Install HELIX Workflow
 
@@ -48,7 +47,8 @@ This creates:
 ddx install helix
 ```
 
-This installs HELIX to `~/.ddx/plugins/helix/` and adds its skills to your skill search path.
+This installs HELIX to `.ddx/plugins/helix/` and copies its skills
+into the project's `.agents/skills/` and `.claude/skills/` trees.
 
 ## Track Work
 

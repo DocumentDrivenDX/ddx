@@ -20,7 +20,3 @@ install:
       target: .agents/skills/
     - source: .agents/skills/
       target: .claude/skills/
-    - source: .agents/skills/
-      target: ~/.agents/skills/
-    - source: .agents/skills/
-      target: ~/.claude/skills/

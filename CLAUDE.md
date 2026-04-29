@@ -25,7 +25,11 @@ This monorepo produces three artifacts:
   - `internal/` - Internal packages (config, bead, persona, git, mcp, metaprompt, etc.)
   - `main.go` - Application entry point
 - `website/` - Hugo site with Hextra theme
-- `library/` - DDx default plugin source (installed to `.ddx/plugins/ddx/` by `ddx init`)
+- `library/` - DDx default plugin source (installed to `.ddx/plugins/ddx/` by `ddx init`).
+  All plugins are project-local: `ddx install <name>` writes only under
+  `<projectRoot>/.ddx/plugins/`, `<projectRoot>/.agents/skills/`, and
+  `<projectRoot>/.claude/skills/`. Home-directory install paths
+  (under `~/`) and the `ddx install --global` surface are retired.
   - `templates/` - Project templates
   - `patterns/` - Reusable code patterns
   - `prompts/` - AI prompts and instructions
