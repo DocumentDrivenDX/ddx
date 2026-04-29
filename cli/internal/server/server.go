@@ -654,6 +654,14 @@ func (s *Server) routes() {
 	scoped("POST /api/projects/{project}/beads/{id}/reopen", s.handleReopenBead)
 	scoped("POST /api/projects/{project}/beads/{id}/deps", s.handleBeadDeps)
 
+	// Agent model/catalog/capabilities — legacy + project-scoped (FEAT-006)
+	legacy("GET /api/agent/models", s.handleAgentModels)
+	legacy("GET /api/agent/catalog", s.handleAgentCatalog)
+	legacy("GET /api/agent/capabilities", s.handleAgentCapabilities)
+	scoped("GET /api/projects/{project}/agent/models", s.handleAgentModels)
+	scoped("GET /api/projects/{project}/agent/catalog", s.handleAgentCatalog)
+	scoped("GET /api/projects/{project}/agent/capabilities", s.handleAgentCapabilities)
+
 	// Execution dispatch — legacy
 	legacy("POST /api/exec/run/{id}", s.handleExecDispatch)
 	legacy("POST /api/agent/run", s.handleAgentDispatch)
@@ -2887,6 +2895,37 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_agent_models",
+			Description: "List models for a configured provider (or all providers)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"provider": map[string]any{"type": "string", "description": "Provider name (default: configured default)"},
+					"all":      map[string]any{"type": "boolean", "description": "If true, return models for every configured provider"},
+					"project":  projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_agent_catalog",
+			Description: "Show the current model catalog (tier→surface→model assignments and model metadata)",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "ddx_agent_capabilities",
+			Description: "Show model and reasoning-level capabilities for a harness",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"harness": map[string]any{"type": "string", "description": "Harness name (default: first available)"},
+					"project": projectProp,
+				},
+			},
+		},
+		{
 			Name:        "ddx_bead_create",
 			Description: "Create a new bead (work item)",
 			InputSchema: map[string]any{
@@ -3152,6 +3191,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_provider_show":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpProviderShow(harness)
+	case "ddx_agent_catalog":
+		return s.mcpAgentCatalog()
 	}
 
 	// From here on: project-local tools. Resolve the project arg to a working
@@ -3205,6 +3246,13 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_agent_sessions":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentSessions(workingDir, harness)
+	case "ddx_agent_models":
+		providerName, _ := call.Arguments["provider"].(string)
+		showAll, _ := call.Arguments["all"].(bool)
+		return s.mcpAgentModels(workingDir, providerName, showAll)
+	case "ddx_agent_capabilities":
+		harness, _ := call.Arguments["harness"].(string)
+		return s.mcpAgentCapabilities(workingDir, harness)
 	case "ddx_bead_create":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
