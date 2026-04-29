@@ -1,0 +1,69 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review only contains execution evidence artifacts (manifest.json, result.json) for the epic attempt. No code, spec, or test changes are present to evaluate against the epic's acceptance criteria (all 5 child beads closed, grep gate clean, repo dogfoods committed project-local trees).",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Diff contains no implementation changes—only execution evidence files. Cannot verify child beads 0-4 are closed with passing AC.",
+      "location": ".ddx/executions/20260429T171213-3ddd3bf9/"
+    },
+    {
+      "severity": "block",
+      "summary": "Cannot confirm final grep gate (no hits for ~/.ddx/plugins, ~/.agents/skills, ~/.claude/skills outside FEAT-015 history/CHANGELOG) from this diff.",
+      "location": "repo-wide"
+    },
+    {
+      "severity": "block",
+      "summary": "Cannot confirm repo dogfoods the change (committed .agents/skills/, .claude/skills/, .ddx/plugins/) from this diff.",
+      "location": "repo-root"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1536,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T171213-3ddd3bf9/manifest.json",
+          ".ddx/executions/20260429T171213-3ddd3bf9/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-015",
+        "bytes_included": 23061,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-015-installation-architecture.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4340,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 30828,
+    "output_bytes": 1021,
+    "elapsed_ms": 8026,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

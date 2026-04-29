@@ -1,0 +1,58 @@
+{
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "/Users/erik/Projects/ddx/.ddx/agent-logs/svc-1777485038912798670.jsonl",
+  "base_rev": "263b5eff331ecdc85af568efc437d39987dab5b5",
+  "result_rev": "8f316b5aaed94e943d457243b35cf2d772409d50",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-3562c48c",
+  "execution_dir": ".ddx/executions/20260429T175036-a6ee1a33",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1536,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T171213-3ddd3bf9/manifest.json",
+          ".ddx/executions/20260429T171213-3ddd3bf9/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-015",
+        "bytes_included": 23061,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-015-installation-architecture.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4340,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 30828,
+    "output_bytes": 1021,
+    "elapsed_ms": 8026,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
