@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Both navigation.spec.ts (TC-006/007 + TC-002 brand fix) and layout.e2e.ts migrated to live fixture harness via runtime nodeInfo/projects lookup filtered to ddx-e2e-* workspaces. Demo config/spec untouched. Result reports task_succeeded with exit 0.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "TC-002 and layout brand assertion narrowed from getByText('DDx') to getByRole('link', {name:'DDx'}) — minor scope creep beyond stated TC-006/TC-007 targets but justified to disambiguate svelte-announcer and within the spec file.",
+      "location": "cli/internal/server/frontend/e2e/navigation.spec.ts:51"
+    },
+    {
+      "severity": "info",
+      "summary": "Fixture lookup filters /api/projects by ddx-e2e-* path/name prefix, which correctly avoids picking up developer-local persisted projects per the rollback/cleanup guidance.",
+      "location": "cli/internal/server/frontend/e2e/navigation.spec.ts:88"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2271,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T050823-5979c8d4/manifest.json",
+          ".ddx/executions/20260429T050823-5979c8d4/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4821,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8898,
+    "output_bytes": 973,
+    "elapsed_ms": 24174,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
