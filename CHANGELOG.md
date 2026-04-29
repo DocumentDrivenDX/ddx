@@ -4,6 +4,28 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fix: `latency_ms` in claude harness traces now reflects per-call duration
+
+Previously every `llm.response` event in `.ddx/agent-logs/agent-claude-*.jsonl`
+had `latency_ms == elapsed_ms` because the claude stream parser wrote the
+cumulative wall-clock value into both fields. Per-call LLM latency was
+therefore unrecoverable from captured traces.
+
+The parser now tracks the time the most recent LLM request was sent (session
+start, then reset on each `user`/tool_result event) and emits
+`latency_ms = now - lastRequestSentAt` for each assistant turn. `elapsed_ms`
+remains cumulative, so for any event past turn 1 the two values diverge.
+
+Legacy traces produced before this commit have `latency_ms == elapsed_ms` and
+should be ignored by latency-analysis tooling for runs predating the fix.
+
+Regression coverage: `TestParseClaudeStreamLatencyIsPerCall` in
+`cli/internal/agent/claude_stream_test.go` drives two assistant turns through
+the parser with real sleeps and asserts (a) `latency_ms != elapsed_ms` for
+turn 2, (b) the second-turn latency excludes the prior turn and tool window,
+and (c) the sum of per-call latencies does not exceed the final event's
+`elapsed_ms`.
+
 ### execute-loop: structured `declined_needs_decomposition` outcome
 
 Adds a first-class outcome distinct from `no_changes` and `execution_failed`

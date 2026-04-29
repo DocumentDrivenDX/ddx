@@ -122,6 +122,13 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 	}
 
 	wroteStart := false
+	// lastRequestSentAt tracks when the most recent LLM request was sent.
+	// For the first turn it equals startTime (the session began with a
+	// request). After every "user" event (tool_result returned to the model)
+	// we reset it: the next assistant event represents a new round-trip.
+	// Per-call latency is then `now - lastRequestSentAt`, distinct from
+	// cumulative elapsed_ms.
+	lastRequestSentAt := startTime
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -133,7 +140,8 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 			continue
 		}
 
-		elapsedMS := time.Since(startTime).Milliseconds()
+		now := time.Now()
+		elapsedMS := now.Sub(startTime).Milliseconds()
 		switch ev.Type {
 		case "system":
 			if ev.Subtype == "init" && !wroteStart {
@@ -195,9 +203,13 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 				}
 			}
 
+			latencyMS := now.Sub(lastRequestSentAt).Milliseconds()
+			if latencyMS < 0 {
+				latencyMS = 0
+			}
 			data, _ := json.Marshal(map[string]any{
 				"model":         res.Model,
-				"latency_ms":    elapsedMS,
+				"latency_ms":    latencyMS,
 				"tool_calls":    toolNames,
 				"turn":          res.TurnCount,
 				"bead_id":       beadID,
@@ -244,7 +256,10 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 
 		case "user":
 			// user events carry tool_result content. Not useful for progress,
-			// already captured by the tool.call timing above.
+			// already captured by the tool.call timing above. They do mark
+			// the moment the next LLM request is sent, so we reset the
+			// per-call latency baseline here.
+			lastRequestSentAt = now
 
 		case "result":
 			// Final event. Extract authoritative usage/cost/result text.

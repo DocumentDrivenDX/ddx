@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -270,6 +272,94 @@ func findClaudeProgressLog(t *testing.T, dir string) string {
 	}
 	require.Len(t, found, 1, "expected exactly one agent-*.jsonl in %s, got %v", dir, found)
 	return found[0]
+}
+
+// TestParseClaudeStreamLatencyIsPerCall feeds two assistant turns separated
+// by a tool round-trip and asserts that latency_ms reflects per-call duration
+// (request → response wall time), not cumulative elapsed_ms. This is the
+// regression guard for the bug where every llm.response had
+// `latency_ms == elapsed_ms`.
+func TestParseClaudeStreamLatencyIsPerCall(t *testing.T) {
+	pr, pw := io.Pipe()
+
+	// Drive the parser through a pipe with real sleeps between events so
+	// time.Now() advances and the parser computes meaningful intervals.
+	const (
+		firstCallDelay  = 80 * time.Millisecond
+		toolExecDelay   = 120 * time.Millisecond
+		secondCallDelay = 60 * time.Millisecond
+	)
+
+	go func() {
+		defer pw.Close()
+		fmt.Fprintln(pw, `{"type":"system","subtype":"init","session_id":"sess-lat","model":"claude-sonnet-4-6"}`)
+		// First LLM call: takes firstCallDelay before the assistant turn arrives.
+		time.Sleep(firstCallDelay)
+		fmt.Fprintln(pw, `{"type":"assistant","message":{"id":"m-1","model":"claude-sonnet-4-6","content":[{"type":"tool_use","id":"tu-1","name":"Bash","input":{"command":"ls"}}],"usage":{"input_tokens":10,"output_tokens":5}}}`)
+		// Tool execution happens locally (LLM is idle).
+		time.Sleep(toolExecDelay)
+		fmt.Fprintln(pw, `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu-1","content":"ok"}]}}`)
+		// Second LLM call begins after the user event; takes secondCallDelay.
+		time.Sleep(secondCallDelay)
+		fmt.Fprintln(pw, `{"type":"assistant","message":{"id":"m-2","model":"claude-sonnet-4-6","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":20,"output_tokens":3}}}`)
+		fmt.Fprintln(pw, `{"type":"result","subtype":"success","is_error":false,"result":"done","usage":{"input_tokens":20,"output_tokens":3},"total_cost_usd":0.001,"session_id":"sess-lat"}`)
+	}()
+
+	var progressBuf bytes.Buffer
+	start := time.Now()
+	res, err := parseClaudeStream(pr, &progressBuf, "sess-lat", "ddx-test", start)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, 2, res.TurnCount)
+
+	// Collect llm.response entries in order.
+	type llmResp struct {
+		LatencyMS int64 `json:"latency_ms"`
+		ElapsedMS int64 `json:"elapsed_ms"`
+		Turn      int   `json:"turn"`
+	}
+	var responses []llmResp
+	for _, line := range strings.Split(strings.TrimSpace(progressBuf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var entry struct {
+			Type string  `json:"type"`
+			Data llmResp `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry.Type == "llm.response" {
+			responses = append(responses, entry.Data)
+		}
+	}
+	require.Len(t, responses, 2, "expected two llm.response events")
+
+	// Turn 1: latency ≈ firstCallDelay; elapsed ≈ firstCallDelay too (both
+	// measured from session start). They may be equal here, which is fine.
+	turn1 := responses[0]
+	assert.Equal(t, 1, turn1.Turn)
+	assert.GreaterOrEqual(t, turn1.LatencyMS, int64(50), "turn 1 latency should reflect first call duration")
+
+	// Turn 2: latency must be the per-call duration (≈ secondCallDelay),
+	// NOT the cumulative elapsed_ms. This is the core regression assertion.
+	turn2 := responses[1]
+	assert.Equal(t, 2, turn2.Turn)
+	assert.NotEqual(t, turn2.LatencyMS, turn2.ElapsedMS,
+		"turn 2 latency_ms must not equal cumulative elapsed_ms")
+	assert.Less(t, turn2.LatencyMS, turn2.ElapsedMS,
+		"per-call latency must be strictly less than cumulative elapsed for events past turn 1")
+	// The second call latency should exclude the tool execution window.
+	assert.Less(t, turn2.LatencyMS, int64(firstCallDelay/time.Millisecond)+int64(toolExecDelay/time.Millisecond),
+		"turn 2 latency should not include prior turn + tool exec time")
+
+	// Sum of per-call latencies must be <= elapsed_ms of the last event
+	// (intervals are disjoint within the session).
+	var sumLatency int64
+	for _, r := range responses {
+		sumLatency += r.LatencyMS
+	}
+	assert.LessOrEqual(t, sumLatency, responses[len(responses)-1].ElapsedMS,
+		"sum of per-call latencies must not exceed cumulative elapsed_ms")
 }
 
 // TestRunClaudeStreaming_OptsSessionLogDirOverridesConfig exercises the
