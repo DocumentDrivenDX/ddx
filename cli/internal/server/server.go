@@ -3086,6 +3086,40 @@ func (s *Server) mcpTools() []mcpTool {
 				},
 			},
 		},
+		{
+			Name:        "ddx_worker_list",
+			Description: "List agent workers for the project",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_worker_show",
+			Description: "Show details of a specific agent worker",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Worker ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_worker_log",
+			Description: "Get stdout/stderr log for a specific agent worker",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Worker ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
 	}
 }
 
@@ -3250,6 +3284,14 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		id, _ := call.Arguments["id"].(string)
 		ref, _ := call.Arguments["ref"].(string)
 		return s.mcpDocDiff(workingDir, id, ref)
+	case "ddx_worker_list":
+		return s.mcpWorkerList(workingDir)
+	case "ddx_worker_show":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpWorkerShow(workingDir, id)
+	case "ddx_worker_log":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpWorkerLog(workingDir, id)
 	default:
 		return mcpToolResult{
 			Content: []mcpContent{mcpText(fmt.Sprintf("unknown tool: %s", call.Name))},
@@ -4177,4 +4219,71 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(graphiqlHTML))
+}
+
+func (s *Server) mcpWorkerManager(workingDir string) *WorkerManager {
+	if workingDir == s.WorkingDir {
+		return s.workers
+	}
+	return NewWorkerManager(workingDir)
+}
+
+func (s *Server) mcpWorkerList(workingDir string) mcpToolResult {
+	m := s.mcpWorkerManager(workingDir)
+	recs, err := m.List()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
+	}
+	if recs == nil {
+		recs = []WorkerRecord{}
+	}
+	sort.Slice(recs, func(i, j int) bool {
+		return recs[i].StartedAt.After(recs[j].StartedAt)
+	})
+	data, _ := json.Marshal(recs)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpWorkerShow(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(`{"error":"id required"}`)},
+			IsError: true,
+		}
+	}
+	m := s.mcpWorkerManager(workingDir)
+	record, err := m.Show(id)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
+			IsError: true,
+		}
+	}
+	if record.ProjectRoot != "" {
+		metrics := s.workers.LandCoordinators.MetricsFor(record.ProjectRoot)
+		if metrics != nil {
+			record.LandSummary = metrics
+		}
+	}
+	data, _ := json.Marshal(record)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpWorkerLog(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(`{"error":"id required"}`)},
+			IsError: true,
+		}
+	}
+	m := s.mcpWorkerManager(workingDir)
+	stdout, stderr, err := m.Logs(id)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(map[string]string{"stdout": stdout, "stderr": stderr})
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
