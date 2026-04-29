@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T185004-ffa9adf1",
+  "bead_id": "ddx-44236615",
+  "base_rev": "dd76de752044dcb27de638bd234d190d3c344297",
+  "created_at": "2026-04-29T18:50:05.634532286Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-44236615",
+    "title": "[artifact-run-arch] read-coverage audit (enumerate gaps in HTTP/MCP)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. Enumerate every CLI-visible read surface; map to HTTP/MCP coverage; identify gaps. Survey already shows: FEAT-002 MCP exec parity, FEAT-007 dependents MCP tool, FEAT-006 agent log/sessions/providers/models HTTP, persona reads, MCP server registry, plugin manifest, hook config, FEAT-021 run-history routes. Output: per-gap bead list, sequenced by user-visibility impact.",
+    "labels": [
+      "audit",
+      "plan-2026-04-29",
+      "server"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T18:50:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T18:50:02.804968224Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T185004-ffa9adf1",
+    "prompt": ".ddx/executions/20260429T185004-ffa9adf1/prompt.md",
+    "manifest": ".ddx/executions/20260429T185004-ffa9adf1/manifest.json",
+    "result": ".ddx/executions/20260429T185004-ffa9adf1/result.json",
+    "checks": ".ddx/executions/20260429T185004-ffa9adf1/checks.json",
+    "usage": ".ddx/executions/20260429T185004-ffa9adf1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1"
+  }
+}
