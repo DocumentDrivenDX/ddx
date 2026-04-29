@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260429T034538-9aa875d6",
+  "bead_id": "ddx-87fb72c2",
+  "base_rev": "3f0173545b449059093034b28ace64b4c13a355d",
+  "created_at": "2026-04-29T03:45:39.210664917Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-87fb72c2",
+    "title": "routing-config-deprecation: hard error on default_harness; opt-in for ladders/overrides",
+    "description": "Cover D4 from ddx-fdd3ea36. Deliberate breaking change. - agent.routing.default_harness: field DELETED from config schema. Loading a config with it set produces a HARD ERROR at startup with a migration pointer. - agent.routing.profile_ladders: kept but gated behind explicit --escalate only; one-time process warning at config-load if set without --escalate ever being invoked. - agent.routing.model_overrides: same treatment as profile_ladders — explicit-opt-in via --override-model only; one-time warning otherwise. - agent.harness (top-level): kept, clarified in comments/docs as a tie-break preference, NOT a default override. Migration note in DDx CHANGELOG and docs/migrations/.",
+    "acceptance": "1. Migration test: config containing agent.routing.default_harness fails at startup with migration message; exit code != 0. 2. Migration test: config containing agent.routing.profile_ladders + model_overrides loads with one-time warning; default path does NOT consult them; --escalate / --override-model do consult them. 3. Config schema: default_harness field removed (Go struct + JSON schema + sample config). 4. CHANGELOG entry under 'Breaking changes' with migration pointer. 5. docs/migrations/ (or equivalent) gains a routing-config migration guide.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing",
+      "breaking-change"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T03:45:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "131811",
+      "execute-loop-heartbeat-at": "2026-04-29T03:45:38.662270725Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T034538-9aa875d6",
+    "prompt": ".ddx/executions/20260429T034538-9aa875d6/prompt.md",
+    "manifest": ".ddx/executions/20260429T034538-9aa875d6/manifest.json",
+    "result": ".ddx/executions/20260429T034538-9aa875d6/result.json",
+    "checks": ".ddx/executions/20260429T034538-9aa875d6/checks.json",
+    "usage": ".ddx/executions/20260429T034538-9aa875d6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-87fb72c2-20260429T034538-9aa875d6"
+  }
+}
