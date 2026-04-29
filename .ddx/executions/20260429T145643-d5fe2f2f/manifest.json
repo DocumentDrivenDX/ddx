@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260429T145643-d5fe2f2f",
+  "bead_id": "ddx-16a56025",
+  "base_rev": "13e7e08086279cb88ee7c3116c00cf409240d853",
+  "created_at": "2026-04-29T14:56:44.448090739Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-16a56025",
+    "title": "commit-by-default: .gitignore cleanup + docs update + repo dogfood",
+    "description": "Bead 4 of 4 children under epic ddx-3562c48c. Depends on bead 2 (ddx-908a6d5d). May run in parallel with bead 3.\n\nMake .ddx/plugins/, .agents/skills/, .claude/skills/ tracked-by-default; update all docs; dogfood by committing this repo's own.\n\nGITIGNORE (.gitignore):\n- DELETE line 434 (.ddx/plugins/).\n- DELETE lines 449-453 (.claude/skills/*, .agents/skills/*, cli/.claude/skills/*, cli/.agents/skills/*).\n\nDOCS:\n- CLAUDE.md architecture section: plugins are project-local; ~/.ddx/plugins/, ~/.agents/skills/, ~/.claude/skills/, ddx install --global all retired.\n- website/content/docs/plugins.md: update install model description.\n- website/content/docs/cli/commands/ddx_skills.md (generated): update — re-run gendoc if needed.\n- cli/cmd/skills.go:29 doc string: ~/.ddx/plugins/helix/skills → .ddx/plugins/helix/skills.\n- README install section: update where it references global state.\n\nREPO DOGFOOD (in this PR):\n- After all other beads land, run ddx init \u0026\u0026 ddx install helix locally.\n- git add .agents/skills/ .claude/skills/ .ddx/plugins/.\n- Commit as part of this bead's PR.\n\nFINAL GREP GATE:\nrg -n '~/(\\.ddx/plugins|\\.agents/skills|\\.claude/skills)' \\\n   --glob '!docs/helix/01-frame/features/FEAT-015*' \\\n   --glob '!CHANGELOG*' \\\n   --glob '!.git'\nmust return zero hits.\n\nOUT OF SCOPE: state.json (~/.ddx/installed.yaml) relocation — separate follow-up bead.",
+    "acceptance": "1. .gitignore line 434 (.ddx/plugins/) removed. 2. .gitignore lines 449-453 (.claude/skills/*, .agents/skills/*, cli/.claude/skills/*, cli/.agents/skills/*) removed. 3. CLAUDE.md, website/content/docs/plugins.md, website/content/docs/cli/commands/ddx_skills.md, README install section, cli/cmd/skills.go:29 all updated to project-local model. 4. Repo dogfoods: this repo's .agents/skills/, .claude/skills/, .ddx/plugins/ are committed in this bead's PR. 5. Final grep gate: rg -n '~/(\\.ddx/plugins|\\.agents/skills|\\.claude/skills)' with the documented exclusions returns zero hits. 6. cd cli \u0026\u0026 go build ./... \u0026\u0026 go test ./... still passes.",
+    "parent": "ddx-3562c48c",
+    "labels": [
+      "area:cli",
+      "kind:docs",
+      "area:docs",
+      "spec:FEAT-015"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-015",
+      "path": "docs/helix/01-frame/features/FEAT-015-installation-architecture.md",
+      "title": "Feature: DDx Installation Architecture"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260429T145643-d5fe2f2f",
+    "prompt": ".ddx/executions/20260429T145643-d5fe2f2f/prompt.md",
+    "manifest": ".ddx/executions/20260429T145643-d5fe2f2f/manifest.json",
+    "result": ".ddx/executions/20260429T145643-d5fe2f2f/result.json",
+    "checks": ".ddx/executions/20260429T145643-d5fe2f2f/checks.json",
+    "usage": ".ddx/executions/20260429T145643-d5fe2f2f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-16a56025-20260429T145643-d5fe2f2f"
+  }
+}
