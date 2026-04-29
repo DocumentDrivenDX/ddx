@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 380" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13">
+  <title>Persona / role binding</title>
+  <desc>A workflow declares abstract roles. The DDx library defines reusable personas. The project's .ddx/config.yaml binds roles to personas; agents pick up the bound persona at dispatch time.</desc>
+
+  <defs>
+    <marker id="pb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#333"/>
+    </marker>
+  </defs>
+
+  <text x="400" y="34" text-anchor="middle" font-weight="700" font-size="16">Persona / role binding</text>
+
+  <!-- Workflow roles (left) -->
+  <g>
+    <rect x="40" y="80" width="200" height="220" rx="10" fill="#e9f1fb" stroke="#4878c6" stroke-width="2"/>
+    <text x="140" y="108" text-anchor="middle" font-weight="700" fill="#1f3a68">workflow roles</text>
+    <text x="140" y="126" text-anchor="middle" font-size="11" fill="#1f3a68">(declared by HELIX, etc.)</text>
+    <g fill="#1f3a68" font-family="ui-monospace, SFMono-Regular, monospace">
+      <text x="60" y="160">code-reviewer</text>
+      <text x="60" y="184">implementer</text>
+      <text x="60" y="208">test-engineer</text>
+      <text x="60" y="232">architect</text>
+      <text x="60" y="256">…</text>
+    </g>
+  </g>
+
+  <!-- Project binding (middle) -->
+  <g>
+    <rect x="290" y="80" width="220" height="220" rx="10" fill="#fff4dc" stroke="#c9942a" stroke-width="2"/>
+    <text x="400" y="108" text-anchor="middle" font-weight="700" fill="#7a5a13">project binding</text>
+    <text x="400" y="126" text-anchor="middle" font-size="11" fill="#7a5a13">.ddx/config.yaml</text>
+    <g font-family="ui-monospace, SFMono-Regular, monospace" font-size="12" fill="#3a2c08">
+      <text x="306" y="156">persona_bindings:</text>
+      <text x="316" y="176">code-reviewer:</text>
+      <text x="320" y="194">  strict-reviewer</text>
+      <text x="316" y="216">implementer:</text>
+      <text x="320" y="234">  pragmatic-shipper</text>
+      <text x="316" y="256">architect: minimalist</text>
+    </g>
+  </g>
+
+  <!-- Persona library (right) -->
+  <g>
+    <rect x="560" y="80" width="200" height="220" rx="10" fill="#eaf6ee" stroke="#35a35f" stroke-width="2"/>
+    <text x="660" y="108" text-anchor="middle" font-weight="700" fill="#1c5a31">DDx persona library</text>
+    <text x="660" y="126" text-anchor="middle" font-size="11" fill="#1c5a31">library/personas/*.md</text>
+    <g fill="#1c5a31" font-family="ui-monospace, SFMono-Regular, monospace">
+      <text x="580" y="160">strict-reviewer</text>
+      <text x="580" y="184">pragmatic-shipper</text>
+      <text x="580" y="208">tdd-engineer</text>
+      <text x="580" y="232">minimalist</text>
+      <text x="580" y="256">…</text>
+    </g>
+  </g>
+
+  <!-- Arrows -->
+  <g fill="none" stroke="#333" stroke-width="1.6" marker-end="url(#pb)">
+    <path d="M240 190 L288 190"/>
+    <path d="M510 190 L558 190"/>
+  </g>
+  <text x="264" y="180" text-anchor="middle" font-size="11" fill="#444">role name</text>
+  <text x="534" y="180" text-anchor="middle" font-size="11" fill="#444">persona id</text>
+
+  <text x="400" y="340" text-anchor="middle" fill="#555" font-size="12">at dispatch: agent ← workflow role → bound persona → behavior contract</text>
+</svg>

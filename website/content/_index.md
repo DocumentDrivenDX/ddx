@@ -27,6 +27,18 @@ layout: hextra-home
 
 <div class="hx-mt-8"></div>
 
+<!-- HERO_GRAPHIC_PLACEHOLDER
+     Once website/static/hero/landing.webp (or .png) exists, uncomment the
+     block below to render the hero image above the feature grid. The asset
+     is generated via the nano-banana-pro-openrouter skill — see
+     website/static/hero/HERO_BLOCKER.md for the prompt and selection
+     criteria. Do not commit a generic-AI placeholder here.
+
+<div class="hx-mb-12 hx-flex hx-justify-center">
+  <img src="/hero/landing.webp" alt="Documents drive the agents — DDx drives the documents." class="hx-max-w-4xl hx-w-full hx-rounded-lg" />
+</div>
+-->
+
 {{< hextra/feature-grid >}}
   {{< hextra/feature-card
     title="Work Tracker"

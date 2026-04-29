@@ -5,6 +5,18 @@ weight: 2
 
 The ideas behind DDx and document-driven development.
 
+## The Three-Layer Stack
+
+DDx is one layer in a three-project stack. The platform stays general; opinions live in workflow tools; quality checks live in their own runner.
+
+![DDx / HELIX / Dun three-layer stack](/diagrams/three-layer-stack.svg)
+
+- **DDx** — platform services: document library, bead tracker, agent dispatch, personas, templates, git sync, MCP.
+- **HELIX** — a workflow methodology built on DDx. Phases, gates, supervisory dispatch, methodology-specific validation.
+- **Dun** — a quality runner. Discovers and runs checks; emits agent-friendly output.
+
+DDx provides primitives. HELIX (and others) provide opinions. Dun verifies the result.
+
 ## Documents Are the Product
 
 The fundamental shift: **you maintain documents, agents produce code.**
@@ -67,6 +79,26 @@ persona_bindings:
 ```
 
 When an agent is assigned to a role, it picks up the bound persona and adjusts its approach.
+
+![Persona / role binding](/diagrams/persona-binding.svg)
+
+## Beads: the Unit of Work
+
+Every task is a **bead**. Beads carry a description, acceptance criteria, dependencies, and a status. Agents claim ready beads, do the work, and close them. The queue drives what happens next.
+
+![Bead lifecycle](/diagrams/bead-lifecycle.svg)
+
+The execute-loop drains the queue end-to-end: claim a ready bead, render its prompt, run the agent in an isolated worktree, review the result, merge or push (with auto-recovery on race), and close.
+
+![Execute-loop flow](/diagrams/execute-loop.svg)
+
+Cheap models do the work; stronger models review; deterministic fixes sit at the top of the ladder. The metric is closed-bead throughput per dollar.
+
+## Project-Local Everything
+
+`ddx init` and `ddx install` only touch the project root. There is no shared mutable state outside the repo. The single global artifact is `ddx-server` — a long-running daemon — and it is optional.
+
+![Project-local install model](/diagrams/project-local-install.svg)
 
 ## Git-Native Sync
 

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 360" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13">
+  <title>Bead lifecycle</title>
+  <desc>A bead moves from open to ready when its dependencies are satisfied, then to in_progress when claimed, then to closed when the work merges. Review can reopen a bead; push conflicts auto-recover; declined work returns to ready.</desc>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#333"/>
+    </marker>
+    <marker id="arRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#b3361b"/>
+    </marker>
+  </defs>
+
+  <!-- States -->
+  <g font-weight="600" text-anchor="middle">
+    <g>
+      <rect x="40"  y="140" width="120" height="60" rx="30" fill="#f4f6fa" stroke="#5a6a85" stroke-width="2"/>
+      <text x="100" y="175">open</text>
+    </g>
+    <g>
+      <rect x="220" y="140" width="120" height="60" rx="30" fill="#e3eefc" stroke="#3b6db8" stroke-width="2"/>
+      <text x="280" y="175">ready</text>
+    </g>
+    <g>
+      <rect x="400" y="140" width="140" height="60" rx="30" fill="#fff4dc" stroke="#c9942a" stroke-width="2"/>
+      <text x="470" y="175">in_progress</text>
+    </g>
+    <g>
+      <rect x="620" y="140" width="140" height="60" rx="30" fill="#dff3e1" stroke="#2e7a3a" stroke-width="2"/>
+      <text x="690" y="175">closed</text>
+    </g>
+  </g>
+
+  <!-- Forward arrows -->
+  <g fill="none" stroke="#333" stroke-width="1.6" marker-end="url(#ar)">
+    <path d="M160 170 L218 170"/>
+    <path d="M340 170 L398 170"/>
+    <path d="M540 170 L618 170"/>
+  </g>
+  <g text-anchor="middle" fill="#333" font-size="12">
+    <text x="189" y="160">deps met</text>
+    <text x="369" y="160">claim</text>
+    <text x="579" y="160">merge ok</text>
+  </g>
+
+  <!-- Branches: review reopens -->
+  <g fill="none" stroke="#b3361b" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#arRed)">
+    <path d="M540 200 C 500 280, 320 280, 280 202"/>
+    <path d="M540 140 C 600 70, 700 70, 720 138"/>
+  </g>
+  <g fill="#b3361b" font-size="12" text-anchor="middle">
+    <text x="410" y="276">review reopens (escalate model)</text>
+    <text x="630" y="80">push conflict → auto-recover</text>
+  </g>
+
+  <!-- Declined -->
+  <g fill="none" stroke="#7a3aa6" stroke-width="1.6" stroke-dasharray="3,3" marker-end="url(#ar)">
+    <path d="M470 200 C 470 250, 320 240, 280 202"/>
+  </g>
+  <text x="380" y="240" fill="#7a3aa6" font-size="12" text-anchor="middle">declined / no_changes → re-queue</text>
+
+  <!-- Title -->
+  <text x="410" y="40" text-anchor="middle" font-weight="700" font-size="16" fill="#222">Bead lifecycle</text>
+  <text x="410" y="60" text-anchor="middle" fill="#555" font-size="12">solid = forward · dashed = recovery / re-queue</text>
+</svg>

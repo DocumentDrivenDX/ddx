@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="14">
+  <title>The DDx / HELIX / Dun three-layer stack</title>
+  <desc>DDx is the platform layer. HELIX is the workflow layer that consumes DDx primitives. Dun is the quality layer that runs checks against the working tree.</desc>
+
+  <!-- Workflow layer -->
+  <rect x="40" y="40" width="640" height="90" rx="10" fill="#e9f1fb" stroke="#4878c6" stroke-width="2"/>
+  <text x="60" y="70" font-weight="700" fill="#1f3a68">HELIX (workflow layer)</text>
+  <text x="60" y="92" fill="#1f3a68">phases · gates · supervisory dispatch · methodology-specific validation</text>
+  <text x="60" y="112" fill="#1f3a68" font-style="italic" font-size="12">consumes: beads, personas, agent dispatch, templates, document library</text>
+
+  <!-- Platform layer -->
+  <rect x="40" y="160" width="640" height="120" rx="10" fill="#eaf6ee" stroke="#35a35f" stroke-width="2"/>
+  <text x="60" y="190" font-weight="700" fill="#1c5a31">DDx (platform layer)</text>
+  <text x="60" y="212" fill="#1c5a31">document library · bead tracker · agent dispatch · personas · templates · git sync · MCP</text>
+  <g fill="#fff" stroke="#35a35f" stroke-width="1.5">
+    <rect x="60"  y="226" width="120" height="38" rx="6"/>
+    <rect x="190" y="226" width="120" height="38" rx="6"/>
+    <rect x="320" y="226" width="120" height="38" rx="6"/>
+    <rect x="450" y="226" width="100" height="38" rx="6"/>
+    <rect x="560" y="226" width="100" height="38" rx="6"/>
+  </g>
+  <g fill="#1c5a31" text-anchor="middle">
+    <text x="120" y="250">beads</text>
+    <text x="250" y="250">personas</text>
+    <text x="380" y="250">agent dispatch</text>
+    <text x="500" y="250">templates</text>
+    <text x="610" y="250">git sync</text>
+  </g>
+
+  <!-- Quality layer -->
+  <rect x="40" y="310" width="640" height="80" rx="10" fill="#f5ecf7" stroke="#8e35a3" stroke-width="2"/>
+  <text x="60" y="340" font-weight="700" fill="#5b1f6a">Dun (quality layer)</text>
+  <text x="60" y="362" fill="#5b1f6a">check discovery · execution · agent-friendly output</text>
+  <text x="60" y="382" fill="#5b1f6a" font-style="italic" font-size="12">consumed by: HELIX gates, CI, ad-hoc developer runs</text>
+
+  <!-- Arrows: workflow consumes platform -->
+  <g fill="none" stroke="#1f3a68" stroke-width="1.5" marker-end="url(#a1)">
+    <path d="M360 130 L360 158"/>
+  </g>
+  <g fill="none" stroke="#5b1f6a" stroke-width="1.5" marker-end="url(#a2)">
+    <path d="M360 308 L360 282"/>
+  </g>
+
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1f3a68"/>
+    </marker>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5b1f6a"/>
+    </marker>
+  </defs>
+</svg>
