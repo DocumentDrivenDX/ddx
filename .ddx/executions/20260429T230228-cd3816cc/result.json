@@ -1,0 +1,42 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Skill shipped at skills/ddx/bead-breakdown/SKILL.md (245 lines) per plan-2026-04-29; well-structured workflow skill covering decomposition, drafting, dependency wiring, and ddx bead create primitives.",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 419,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T230057-01686eb4/manifest.json",
+          ".ddx/executions/20260429T230057-01686eb4/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 2925,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5150,
+    "output_bytes": 391,
+    "elapsed_ms": 11826,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
