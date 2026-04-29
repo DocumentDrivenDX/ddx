@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260429T131728-ca327f53",
+  "bead_id": "ddx-f6002d1a",
+  "base_rev": "6bb515723828b7f6d9b18ca5703a2e37caad290a",
+  "created_at": "2026-04-29T13:17:29.399996474Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f6002d1a",
+    "title": "agent workers: stale 'running' entries can't be cleaned without server restart",
+    "description": "When a local execute-bead/execute-loop process exits abnormally (killed, OOM, parent shell terminated, container crash) the worker entry can remain in the in-memory registry forever. `ddx agent workers` lists it as state=running with elapsed_ms continuously advancing, even though no PID exists.\n\nReproducing today (axon repo): worker local-20260429T030828-075a28c5 (bead hx-5f4d4ea1, harness=agent, model=qwen3.6) started at 03:08 UTC, has logged elapsed=10+ hours, and `ps -ef | grep execute-bead` shows nothing. The git worktree at /tmp/ddx-exec-wt/.execute-bead-wt-hx-5f4d4ea1-* has only the checkpoint commit (no actual work commits), confirming the worker died early.\n\nAvailable paths to clean up are all unsatisfying:\n1. `ddx agent workers stop --bead hx-5f4d4ea1` returns 'no matching workers' (because the matcher only finds live workers)\n2. `ddx agent workers stop \u003cworker-id\u003e` returns server error 400 'worker not running' (same contradiction — the registry says running, the stopper says not running)\n3. `systemctl --user restart ddx-server` works but kills every other active worker on the box, including ones for other repos that are doing real work\n4. Manual edit of server-state.json risks corruption and isn't documented\n\nThe bead itself wasn't blocked (status=open, owner=null) so the registry noise is mostly cosmetic — it pollutes `ddx agent workers` output and confuses operators trying to triage the queue. But over weeks of use these accumulate (saw 14+ stale entries from prior sessions on this same box, with ages 134h–268h).",
+    "acceptance": "AC1. `ddx agent workers prune` (or equivalent) exists and reaps registry entries whose recorded PID is no longer alive (or whose started_at is older than a configurable threshold). Output lists each reaped worker with id, bead_id, harness, age.\n\nAC2. `ddx agent workers stop --bead \u003cid\u003e` succeeds against a stale registry entry too — it should release the registry slot even when the underlying process has already exited. Current 'no matching workers' / 'worker not running' contradiction must be resolved.\n\nAC3. The local-worker registry persists or is reconstructed in a way that survives ddx-server restarts cleanly: either persisted with PID liveness check on restart, or rebuilt from execute-bead/execute-loop on-disk evidence (.ddx/executions/\u003cid\u003e/result.json).\n\nAC4. `ddx agent workers --json` includes a 'liveness' or 'pid_alive' field per entry so operators can see at a glance which entries are live vs stale, even before pruning.",
+    "labels": [
+      "area:agent",
+      "area:workers",
+      "kind:operability"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T131728-ca327f53",
+    "prompt": ".ddx/executions/20260429T131728-ca327f53/prompt.md",
+    "manifest": ".ddx/executions/20260429T131728-ca327f53/manifest.json",
+    "result": ".ddx/executions/20260429T131728-ca327f53/result.json",
+    "checks": ".ddx/executions/20260429T131728-ca327f53/checks.json",
+    "usage": ".ddx/executions/20260429T131728-ca327f53/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f6002d1a-20260429T131728-ca327f53"
+  }
+}
