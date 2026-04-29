@@ -22,6 +22,100 @@ const AdaptiveMinTierThreshold = 0.20
 // we do not starve it on insufficient evidence.
 const AdaptiveMinTierMinSamples = 3
 
+// DefaultAdaptiveMinTierWindow is the default trailing window size used by
+// execute-loop when --adaptive-min-tier-window is not specified.
+const DefaultAdaptiveMinTierWindow = 50
+
+// adaptiveResetFileName is the name of the reset marker file written under
+// .ddx/agent-logs/ by WriteAdaptiveResetMarker.
+const adaptiveResetFileName = "adaptive-reset.json"
+
+// AdaptiveResetMarker is persisted to .ddx/agent-logs/adaptive-reset.json
+// when the operator runs `ddx agent route-status reset`. AdaptiveMinTier
+// ignores execution results whose directory timestamp predates ResetAt,
+// returning the adaptive metric to a clean baseline without deleting history.
+type AdaptiveResetMarker struct {
+	ResetAt time.Time `json:"reset_at"`
+}
+
+// ReadAdaptiveResetMarker loads the reset marker from workingDir, returning
+// nil when no marker file exists or when the file is unreadable or corrupt.
+func ReadAdaptiveResetMarker(workingDir string) *AdaptiveResetMarker {
+	path := filepath.Join(workingDir, ".ddx", "agent-logs", adaptiveResetFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var m AdaptiveResetMarker
+	if json.Unmarshal(data, &m) != nil {
+		return nil
+	}
+	return &m
+}
+
+// WriteAdaptiveResetMarker writes a reset marker timestamped to now into
+// workingDir/.ddx/agent-logs/. Returns the absolute path of the file written.
+// Subsequent AdaptiveMinTier calls will ignore executions whose directory
+// timestamp predates the marker, effectively clearing the trailing window.
+func WriteAdaptiveResetMarker(workingDir string) (string, error) {
+	dir := filepath.Join(workingDir, ".ddx", "agent-logs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, adaptiveResetFileName)
+	data, err := json.Marshal(AdaptiveResetMarker{ResetAt: time.Now().UTC()})
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// AdaptiveMinTierInfraFailureModes contains failure_mode values that indicate
+// infrastructure or configuration failures that did not reach an actual model
+// invocation. Cheap-tier attempts with these failure modes are excluded from
+// the success-rate computation so that infra outages and misconfiguration do
+// not permanently condemn cheap tier after the root cause is resolved.
+var AdaptiveMinTierInfraFailureModes = map[string]bool{
+	"no_viable_provider":    true,
+	"harness_not_installed": true,
+}
+
+// AdaptiveMinTierDiagnostics carries the full state of the adaptive min-tier
+// computation. Used by 'ddx agent route-status --adaptive' to surface enough
+// information to debug a "why is cheap being skipped?" scenario without
+// reading source code.
+type AdaptiveMinTierDiagnostics struct {
+	// WindowSize is the trailing-window size passed to the computation.
+	WindowSize int
+	// TotalInWindow is the count of all tier-classified attempts in the window
+	// after reset filtering (any tier).
+	TotalInWindow int
+	// CheapAttempts is the count of cheap-tier attempts that contributed to
+	// the success-rate calculation (infra failures excluded).
+	CheapAttempts int
+	// CheapSuccesses is the count of cheap-tier attempts with outcome==task_succeeded.
+	CheapSuccesses int
+	// CheapInfraSkipped is the count of cheap-tier attempts excluded because
+	// their failure_mode is in AdaptiveMinTierInfraFailureModes.
+	CheapInfraSkipped int
+	// CheapSuccessRate is CheapSuccesses/CheapAttempts, or 0 when CheapAttempts==0.
+	CheapSuccessRate float64
+	// Threshold is the success-rate boundary below which cheap tier is suppressed.
+	Threshold float64
+	// MinSamples is the minimum sample count required before the rate is
+	// considered statistically meaningful.
+	MinSamples int
+	// EffectiveFloor is the recommended minimum tier (TierCheap or TierStandard).
+	EffectiveFloor ModelTier
+	// IsSkippingCheap is true when cheap tier is currently suppressed.
+	IsSkippingCheap bool
+	// ResetAt is the time of the most recent reset marker, or zero when none.
+	ResetAt time.Time
+}
+
 // SuccessStatus mirrors agent.ExecuteBeadStatusSuccess. The agent package's
 // TestEscalatableStatusesMatchAgentVocab guard catches drift if either side
 // renames. Defined locally so escalation does not import agent.
@@ -59,9 +153,10 @@ type AdaptiveMinTierResult struct {
 // captures only the fields AdaptiveMinTier needs. Defined locally so the
 // escalation package does not depend on the agent package.
 type taskResultLite struct {
-	Harness string `json:"harness"`
-	Model   string `json:"model"`
-	Outcome string `json:"outcome"`
+	Harness     string `json:"harness"`
+	Model       string `json:"model"`
+	Outcome     string `json:"outcome"`
+	FailureMode string `json:"failure_mode,omitempty"`
 }
 
 // TierResolver resolves a (harness, tier) pair to a concrete model name. This
@@ -80,14 +175,59 @@ type TierResolver func(harness string, tier ModelTier) string
 //
 // A tier is identified by resolving (harness, model) back through the
 // supplied resolver — attempts whose harness/model do not match any known
-// tier mapping are ignored for the purpose of this calculation. When
-// workingDir has no executions directory (e.g. a fresh project), the cheap
-// tier is kept in-range so a first run is not artificially restricted.
+// tier mapping are ignored. Infrastructure failures (failure_mode in
+// AdaptiveMinTierInfraFailureModes) are excluded from the success-rate
+// calculation. Executions before a reset marker are ignored. When
+// workingDir has no executions directory (fresh project) the cheap tier
+// is kept in-range so a first run is not artificially restricted.
 func AdaptiveMinTier(workingDir string, window int, resolver TierResolver) AdaptiveMinTierResult {
+	diag := computeAdaptiveDiagnostics(workingDir, window, resolver)
+	return AdaptiveMinTierResult{
+		Tier:             diag.EffectiveFloor,
+		CheapAttempts:    diag.CheapAttempts,
+		CheapSuccessRate: diag.CheapSuccessRate,
+		Skipped:          diag.IsSkippingCheap,
+	}
+}
+
+// ComputeAdaptiveMinTierDiagnostics returns the full diagnostic state for the
+// adaptive min-tier computation. Callers use this to power the
+// 'ddx agent route-status --adaptive' display without re-implementing the
+// traversal logic.
+func ComputeAdaptiveMinTierDiagnostics(workingDir string, window int, resolver TierResolver) AdaptiveMinTierDiagnostics {
+	return computeAdaptiveDiagnostics(workingDir, window, resolver)
+}
+
+// parseDirTimestamp parses the timestamp prefix from an execution directory
+// name (format YYYYMMDDTHHMMSS-<hex>) into a UTC time. Returns false when
+// the name does not match the expected format.
+func parseDirTimestamp(name string) (time.Time, bool) {
+	if len(name) < 15 {
+		return time.Time{}, false
+	}
+	t, err := time.Parse("20060102T150405", name[:15])
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t.UTC(), true
+}
+
+func computeAdaptiveDiagnostics(workingDir string, window int, resolver TierResolver) AdaptiveMinTierDiagnostics {
+	diag := AdaptiveMinTierDiagnostics{
+		WindowSize:     window,
+		Threshold:      AdaptiveMinTierThreshold,
+		MinSamples:     AdaptiveMinTierMinSamples,
+		EffectiveFloor: TierCheap,
+	}
+
+	if m := ReadAdaptiveResetMarker(workingDir); m != nil {
+		diag.ResetAt = m.ResetAt
+	}
+
 	execRoot := filepath.Join(workingDir, ".ddx", "executions")
 	entries, err := os.ReadDir(execRoot)
 	if err != nil {
-		return AdaptiveMinTierResult{Tier: TierCheap}
+		return diag
 	}
 
 	names := make([]string, 0, len(entries))
@@ -100,13 +240,20 @@ func AdaptiveMinTier(workingDir string, window int, resolver TierResolver) Adapt
 	// lexicographic sort is chronological.
 	sort.Strings(names)
 
-	// Collect usable attempts, then truncate to the most recent `window`.
 	type attempt struct {
 		tier    ModelTier
 		success bool
+		infra   bool // excluded from success rate: infra/config failure
 	}
 	collected := make([]attempt, 0, len(names))
 	for _, name := range names {
+		// Skip executions that predate the reset marker.
+		if !diag.ResetAt.IsZero() {
+			if ts, ok := parseDirTimestamp(name); ok && ts.Before(diag.ResetAt) {
+				continue
+			}
+		}
+
 		resultPath := filepath.Join(execRoot, name, "result.json")
 		raw, err := os.ReadFile(resultPath)
 		if err != nil {
@@ -126,31 +273,40 @@ func AdaptiveMinTier(workingDir string, window int, resolver TierResolver) Adapt
 		collected = append(collected, attempt{
 			tier:    tier,
 			success: res.Outcome == "task_succeeded",
+			infra:   AdaptiveMinTierInfraFailureModes[res.FailureMode],
 		})
 	}
 	if window > 0 && len(collected) > window {
 		collected = collected[len(collected)-window:]
 	}
 
-	var cheapAttempts, cheapSuccesses int
+	diag.TotalInWindow = len(collected)
+	var cheapAttempts, cheapSuccesses, cheapInfraSkipped int
 	for _, a := range collected {
-		if a.tier == TierCheap {
-			cheapAttempts++
-			if a.success {
-				cheapSuccesses++
-			}
+		if a.tier != TierCheap {
+			continue
+		}
+		if a.infra {
+			cheapInfraSkipped++
+			continue
+		}
+		cheapAttempts++
+		if a.success {
+			cheapSuccesses++
 		}
 	}
+	diag.CheapAttempts = cheapAttempts
+	diag.CheapSuccesses = cheapSuccesses
+	diag.CheapInfraSkipped = cheapInfraSkipped
 
-	result := AdaptiveMinTierResult{Tier: TierCheap, CheapAttempts: cheapAttempts}
 	if cheapAttempts > 0 {
-		result.CheapSuccessRate = float64(cheapSuccesses) / float64(cheapAttempts)
+		diag.CheapSuccessRate = float64(cheapSuccesses) / float64(cheapAttempts)
 	}
-	if cheapAttempts >= AdaptiveMinTierMinSamples && result.CheapSuccessRate < AdaptiveMinTierThreshold {
-		result.Tier = TierStandard
-		result.Skipped = true
+	if cheapAttempts >= AdaptiveMinTierMinSamples && diag.CheapSuccessRate < AdaptiveMinTierThreshold {
+		diag.EffectiveFloor = TierStandard
+		diag.IsSkippingCheap = true
 	}
-	return result
+	return diag
 }
 
 // classifyAttemptTier returns the ModelTier that corresponds to a (harness,
