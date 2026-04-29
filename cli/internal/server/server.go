@@ -610,6 +610,9 @@ func (s *Server) routes() {
 	legacy("GET /api/beads/status", s.handleBeadsStatus)
 	legacy("GET /api/beads/dep/tree/{id}", s.handleBeadDepTree)
 	legacy("GET /api/beads/{id}", s.handleShowBead)
+	legacy("GET /api/beads/{id}/evidence", s.handleBeadEvidence)
+	legacy("GET /api/beads/{id}/cooldown", s.handleBeadCooldown)
+	legacy("GET /api/beads/{id}/routing", s.handleBeadRouting)
 
 	// Beads — project-scoped (FEAT-002: canonical)
 	scoped("GET /api/projects/{project}/beads", s.handleListBeads)
@@ -618,6 +621,9 @@ func (s *Server) routes() {
 	scoped("GET /api/projects/{project}/beads/status", s.handleBeadsStatus)
 	scoped("GET /api/projects/{project}/beads/dep/tree/{id}", s.handleBeadDepTree)
 	scoped("GET /api/projects/{project}/beads/{id}", s.handleShowBead)
+	scoped("GET /api/projects/{project}/beads/{id}/evidence", s.handleBeadEvidence)
+	scoped("GET /api/projects/{project}/beads/{id}/cooldown", s.handleBeadCooldown)
+	scoped("GET /api/projects/{project}/beads/{id}/routing", s.handleBeadRouting)
 
 	// Doc graph — legacy
 	legacy("GET /api/docs/graph", s.handleDocGraph)
@@ -1296,6 +1302,67 @@ func (s *Server) handleBeadDepTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": id, "tree": tree})
+}
+
+func (s *Server) handleBeadEvidence(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	store := s.beadStoreForRequest(r)
+	events, err := store.Events(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+func (s *Server) handleBeadCooldown(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	store := s.beadStoreForRequest(r)
+	b, err := store.Get(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
+		return
+	}
+	retry, _ := b.Extra["execute-loop-retry-after"].(string)
+	lastStatus, _ := b.Extra["execute-loop-last-status"].(string)
+	lastDetail, _ := b.Extra["execute-loop-last-detail"].(string)
+	writeJSON(w, http.StatusOK, struct {
+		BeadID     string `json:"bead_id"`
+		RetryAfter string `json:"retry_after,omitempty"`
+		LastStatus string `json:"last_status,omitempty"`
+		LastDetail string `json:"last_detail,omitempty"`
+	}{BeadID: b.ID, RetryAfter: retry, LastStatus: lastStatus, LastDetail: lastDetail})
+}
+
+func (s *Server) handleBeadRouting(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	store := s.beadStoreForRequest(r)
+	events, err := store.EventsByKind(id, "routing")
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
+		return
+	}
+	parsed := make([]beadRoutingEvent, 0, len(events))
+	for _, e := range events {
+		re := beadRoutingEvent{CreatedAt: e.CreatedAt, Summary: e.Summary}
+		if e.Body != "" {
+			_ = json.Unmarshal([]byte(e.Body), &re)
+		}
+		parsed = append(parsed, re)
+	}
+	writeJSON(w, http.StatusOK, parsed)
 }
 
 // --- Bead Mutation Endpoints ---
@@ -2690,6 +2757,17 @@ type mcpTool struct {
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
+// beadRoutingEvent is the parsed body of a kind:routing bead event.
+type beadRoutingEvent struct {
+	ResolvedProvider string    `json:"resolved_provider"`
+	ResolvedModel    string    `json:"resolved_model,omitempty"`
+	RouteReason      string    `json:"route_reason,omitempty"`
+	FallbackChain    []string  `json:"fallback_chain"`
+	BaseURL          string    `json:"base_url,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	Summary          string    `json:"summary,omitempty"`
+}
+
 type mcpToolResult struct {
 	Content []mcpContent `json:"content"`
 	IsError bool         `json:"isError,omitempty"`
@@ -2871,6 +2949,42 @@ func (s *Server) mcpTools() []mcpTool {
 		{
 			Name:        "ddx_bead_dep_tree",
 			Description: "Get the dependency tree for a specific bead",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Bead ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_bead_evidence",
+			Description: "List all execution evidence events recorded for a bead",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Bead ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_bead_cooldown",
+			Description: "Show the execute-loop cooldown fields for a bead (retry-after, last-status, last-detail)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Bead ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_bead_routing",
+			Description: "Show routing decisions recorded for a bead (provider, model, reason, fallback chain)",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -3394,6 +3508,15 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_bead_dep_tree":
 		id, _ := call.Arguments["id"].(string)
 		return s.mcpBeadDepTree(workingDir, id)
+	case "ddx_bead_evidence":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpBeadEvidence(workingDir, id)
+	case "ddx_bead_cooldown":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpBeadCooldown(workingDir, id)
+	case "ddx_bead_routing":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpBeadRouting(workingDir, id)
 	case "ddx_doc_graph":
 		return s.mcpDocGraph(workingDir)
 	case "ddx_doc_stale":
@@ -4625,5 +4748,60 @@ func (s *Server) mcpMetricTrend(workingDir, id string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	data, _ := json.Marshal(trend)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpBeadEvidence(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
+	}
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	events, err := store.Events(id)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}
+	}
+	data, _ := json.Marshal(events)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpBeadCooldown(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
+	}
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	b, err := store.Get(id)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}
+	}
+	retry, _ := b.Extra["execute-loop-retry-after"].(string)
+	lastStatus, _ := b.Extra["execute-loop-last-status"].(string)
+	lastDetail, _ := b.Extra["execute-loop-last-detail"].(string)
+	data, _ := json.Marshal(struct {
+		BeadID     string `json:"bead_id"`
+		RetryAfter string `json:"retry_after,omitempty"`
+		LastStatus string `json:"last_status,omitempty"`
+		LastDetail string `json:"last_detail,omitempty"`
+	}{BeadID: b.ID, RetryAfter: retry, LastStatus: lastStatus, LastDetail: lastDetail})
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpBeadRouting(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
+	}
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	events, err := store.EventsByKind(id, "routing")
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}
+	}
+	parsed := make([]beadRoutingEvent, 0, len(events))
+	for _, e := range events {
+		re := beadRoutingEvent{CreatedAt: e.CreatedAt, Summary: e.Summary}
+		if e.Body != "" {
+			_ = json.Unmarshal([]byte(e.Body), &re)
+		}
+		parsed = append(parsed, re)
+	}
+	data, _ := json.Marshal(parsed)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
