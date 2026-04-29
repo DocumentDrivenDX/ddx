@@ -2731,6 +2731,16 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_list_personas",
+			Description: "List all available personas",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
+			},
+		},
+		{
 			Name:        "ddx_resolve_persona",
 			Description: "Resolve the persona bound to a role",
 			InputSchema: map[string]any{
@@ -3211,6 +3221,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_search":
 		query, _ := call.Arguments["query"].(string)
 		return s.mcpSearch(workingDir, query)
+	case "ddx_list_personas":
+		return s.mcpListPersonas(workingDir)
 	case "ddx_resolve_persona":
 		role, _ := call.Arguments["role"].(string)
 		return s.mcpResolvePersona(workingDir, role)
@@ -3461,6 +3473,27 @@ func (s *Server) mcpSearch(workingDir, query string) mcpToolResult {
 	}
 
 	data, _ := json.Marshal(results)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpListPersonas(workingDir string) mcpToolResult {
+	loader := persona.NewPersonaLoader(workingDir)
+	personas, err := loader.ListPersonas()
+	if err != nil {
+		data, _ := json.Marshal([]any{})
+		return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+	}
+
+	result := make([]map[string]any, 0, len(personas))
+	for _, p := range personas {
+		result = append(result, map[string]any{
+			"name":        p.Name,
+			"description": p.Description,
+			"roles":       p.Roles,
+			"tags":        p.Tags,
+		})
+	}
+	data, _ := json.Marshal(result)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
