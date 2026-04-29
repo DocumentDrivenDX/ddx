@@ -1,0 +1,49 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review contains only execution evidence files (manifest.json, result.json) — no source code changes to evaluate against any AC item.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes present in diff; cannot verify ACs 1–6 (DispatchWorker default, single ResolveRoute call, absence of tier-ladder on default path, integration test, --escalate regression).",
+      "location": ".ddx/executions/20260429T025051-28afce7c/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1720,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T025051-28afce7c/manifest.json",
+          ".ddx/executions/20260429T025051-28afce7c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5428,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8954,
+    "output_bytes": 531,
+    "elapsed_ms": 5512,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
