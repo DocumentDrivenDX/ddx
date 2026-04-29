@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T202423-4fc8564e",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-55635fd8",
+  "base_rev": "d969131fb344bcd33940ac4c920dbd8d59940c13",
+  "created_at": "2026-04-29T20:24:24.346836535Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-55635fd8",
+    "title": "[read-coverage] add bead evidence + cooldown + routing HTTP + MCP",
+    "description": "FEAT-004 gap. CLI has: ddx bead evidence list \u003cid\u003e, ddx bead cooldown show \u003cid\u003e, ddx bead routing. None of these are exposed over HTTP or MCP. Add GET /api/beads/{id}/evidence, GET /api/beads/{id}/cooldown, GET /api/beads/{id}/routing HTTP routes and corresponding MCP tools (ddx_bead_evidence, ddx_bead_cooldown). Low priority — these are operational details primarily consumed by the execute-loop itself.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "http",
+      "mcp",
+      "feat-004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T20:24:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T20:24:21.452582796Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T202423-4fc8564e",
+    "prompt": ".ddx/executions/20260429T202423-4fc8564e/prompt.md",
+    "manifest": ".ddx/executions/20260429T202423-4fc8564e/manifest.json",
+    "result": ".ddx/executions/20260429T202423-4fc8564e/result.json",
+    "checks": ".ddx/executions/20260429T202423-4fc8564e/checks.json",
+    "usage": ".ddx/executions/20260429T202423-4fc8564e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-55635fd8-20260429T202423-4fc8564e"
+  }
+}
