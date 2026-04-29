@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All six AC items implemented: new declined_needs_decomposition status, loop parks bead with 365d cooldown (terminal-for-loop equivalent), structured JSON decomposition-recommendation event, ddx bead cooldown show/clear, regression test, and CHANGELOG entry.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Bead status field is left as 'open' rather than 'blocked'; the long cooldown removes it from the dep-ready queue. AC #2 explicitly allows 'equivalent terminal-for-loop status', and the CHANGELOG documents this choice.",
+      "location": "cli/internal/agent/execute_bead_loop.go:644"
+    },
+    {
+      "severity": "info",
+      "summary": "Cooldown is hard-coded at 365 days; matches the push_failed long-park pattern.",
+      "location": "cli/internal/agent/execute_bead_loop.go:683"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 3114,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T003306-8f4ac0c1/manifest.json",
+          ".ddx/executions/20260429T003306-8f4ac0c1/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5591,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 10511,
+    "output_bytes": 854,
+    "elapsed_ms": 19722,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
