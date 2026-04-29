@@ -1,0 +1,72 @@
+{
+  "attempt_id": "20260429T034740-115acdc0",
+  "bead_id": "ddx-98e6e9ef",
+  "base_rev": "06609fe9aa60f101a3a308a0bde726bb2b7c7926",
+  "created_at": "2026-04-29T03:47:43.446476855Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen/qwen3.6-35b-a3b",
+    "provider": "lmstudio-bragi-1234",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-98e6e9ef",
+    "title": "routing-preflight-gate: typed-incompatibility check before bead Claim",
+    "description": "Cover D3 from ddx-fdd3ea36. After ResolveRoute returns, DDx verifies the decision's (Harness, Model) is not in the typed-incompatibility set surfaced by upstream. Compatibility data comes from upstream — DDx does NOT duplicate the allow-list. Insertion point: cli/internal/agent/execute_bead_loop.go (current line ~341–352, before Claim). Route error OR preflight rejection exits the loop with a worker-level failure record; no bead is claimed, no burn cycle. Defensive only.",
+    "acceptance": "1. Call sequence at execute_bead_loop.go (pre-Claim): next-candidate → ResolveRoute → preflight gate (new) → Claim → invoke. 2. Test: seed a pathological route (harness with allow-list that excludes the decision's model — fabricated via upstream test seam). Assert beadStore.Claim is NEVER called. 3. Test: worker record shows status: execution_failed with detail naming the rejected (harness, model) pair. 4. Test: no bead has a kind:tier-attempt event from this attempt. 5. No DDx-side allow-list logic — preflight only consumes the typed error / decision-trace surface from upstream.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T03:47:36Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "197208",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T03:33:28.268835626Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T03:33:28.417049924Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T03:33:28.536896441Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T03:33:28.750210339Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-29T03:47:36.394226276Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T034740-115acdc0",
+    "prompt": ".ddx/executions/20260429T034740-115acdc0/prompt.md",
+    "manifest": ".ddx/executions/20260429T034740-115acdc0/manifest.json",
+    "result": ".ddx/executions/20260429T034740-115acdc0/result.json",
+    "checks": ".ddx/executions/20260429T034740-115acdc0/checks.json",
+    "usage": ".ddx/executions/20260429T034740-115acdc0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-98e6e9ef-20260429T034740-115acdc0"
+  }
+}
