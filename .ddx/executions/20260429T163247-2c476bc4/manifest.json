@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260429T163247-2c476bc4",
+  "bead_id": "ddx-5028c8e6",
+  "base_rev": "4b593f1aec8bc1a7910be425d222a975d73b7c32",
+  "created_at": "2026-04-29T16:32:48.109353401Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5028c8e6",
+    "title": "visuals: SVG/Mermaid diagrams + nano-banana hero graphics for microsite",
+    "description": "V3 of 3 children under epic ddx-53c96967. Depends on V1 (ddx-c5dce902); benefits from but does not block on V2.\n\nGenerate two classes of visuals:\n\nA) TECHNICAL DIAGRAMS (SVG or Mermaid, committed alongside docs):\n- Three-layer stack: DDx (platform) ↔ HELIX (workflow) ↔ Dun (quality). Show how a workflow tool consumes DDx primitives.\n- Bead lifecycle: open → ready → in_progress → closed (with review, push-conflict, declined branches).\n- Execute-loop flow: claim bead → render prompt → run agent → review → merge/push (auto-recover on race) → close.\n- Persona/role binding: roles in workflow (e.g. code-reviewer) → persona definitions in library → project binding in .ddx/config.yaml.\n- Project-local install model: \u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e/, \u003cprojectRoot\u003e/.agents/skills/, \u003cprojectRoot\u003e/.claude/skills/ all real-files; ddx-server is the only global artifact.\n\nPlace SVGs at website/static/diagrams/\u003cname\u003e.svg or use Mermaid code blocks inside markdown. Wire them into the microsite concept pages where V2 left placeholders.\n\nB) HERO GRAPHIC (raster, polished, for the microsite landing page):\n- Use the nano-banana-pro-openrouter skill to generate a hero image.\n- Subject: visual metaphor for document-driven development with AI agents. Suggest: a structured document tree feeding into agent workflows, not generic 'AI' clip art. The user explicitly wants something distinctive, not generic AI aesthetic.\n- 2K output minimum. Multiple variants OK; pick the strongest.\n- Place at website/static/hero/landing.png (or .webp for size).\n- Wire into website/content/_index.md or wherever the landing hero is rendered.\n\nPREREQUISITES:\n- Set OPENROUTER_API_KEY in env or .env to use the nano-banana skill.\n- If the API key isn't available, this bead creates the SVG diagrams and prepares the prompt + integration point for the hero, then declines the hero portion with a clear blocker note.\n\nOUT OF SCOPE: animations, video, anything interactive. Static SVG/PNG only.",
+    "acceptance": "1. SVGs (or Mermaid) for: three-layer-stack, bead-lifecycle, execute-loop, persona-binding, project-local-install. Committed under website/static/diagrams/ or as Mermaid in markdown. 2. Diagram placeholders left by V2 are filled in. 3. Hero graphic generated and committed at website/static/hero/landing.* (PNG or WebP), wired into the landing page _index.md. OR: if OPENROUTER_API_KEY unavailable, this AC is replaced with a documented blocker note in the bead's notes field and a prompt+integration-point ready for follow-up. 4. Hugo build succeeds (or theme check passes) with the new assets. 5. No generic AI clip art — the hero is distinctive and on-message for document-driven development.",
+    "parent": "ddx-53c96967",
+    "labels": [
+      "kind:docs",
+      "area:docs",
+      "area:website",
+      "kind:design"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T163247-2c476bc4",
+    "prompt": ".ddx/executions/20260429T163247-2c476bc4/prompt.md",
+    "manifest": ".ddx/executions/20260429T163247-2c476bc4/manifest.json",
+    "result": ".ddx/executions/20260429T163247-2c476bc4/result.json",
+    "checks": ".ddx/executions/20260429T163247-2c476bc4/checks.json",
+    "usage": ".ddx/executions/20260429T163247-2c476bc4/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5028c8e6-20260429T163247-2c476bc4"
+  }
+}
