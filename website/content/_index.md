@@ -8,6 +8,19 @@ layout: hextra-home
   {{< icon name="arrow-circle-right" attributes="height=14" >}}
 {{< /hextra/hero-badge >}}
 
+<!-- HERO_GRAPHIC_PLACEHOLDER
+     V3 of bead ddx-5028c8e6 deferred the nano-banana hero graphic (no
+     OPENROUTER_API_KEY at execution time). Drop the generated image at
+     website/static/hero/landing.webp (or .png) and uncomment the block
+     below. See website/static/hero/HERO_BLOCKER.md for the prompt and
+     integration steps.
+
+<div class="hx-mt-6 hx-flex hx-justify-center">
+  <img src="hero/landing.webp" alt="DDx — documents drive the agents" class="hx-rounded-xl hx-shadow-xl" style="max-width: 960px; width: 100%; height: auto;" />
+</div>
+
+HERO_GRAPHIC_PLACEHOLDER -->
+
 <div class="hx-mt-6 hx-mb-6">
 {{< hextra/hero-headline >}}
   Documents drive the agents.&nbsp;<br class="sm:hx-block hx-hidden" />DDx drives the documents.
