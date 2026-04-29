@@ -48,7 +48,7 @@ test('TC-001: / redirects to /nodes/:nodeId', async ({ page }) => {
 test('TC-002: nav chrome renders DDx brand and dark-mode toggle', async ({ page }) => {
 	await mockGraphQL(page);
 	await page.goto('/');
-	await expect(page.getByText('DDx')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'DDx' })).toBeVisible();
 	await expect(page.getByRole('button', { name: /toggle dark mode/i })).toBeVisible();
 });
 
@@ -85,33 +85,81 @@ test('TC-005: project picker navigates to project URL on selection', async ({ pa
 	await expect(page).toHaveURL(/\/nodes\/node-abc\/projects\/proj-1/);
 });
 
+/**
+ * Resolve the harness-derived fixture node + project IDs at runtime by
+ * querying GraphQL nodeInfo and /api/projects. The fixture harness boots
+ * ddx-server from a `mktemp -d -t ddx-e2e-XXXXXX` workspace, so the fixture
+ * project's path/name is prefixed `ddx-e2e-`. Other entries in /api/projects
+ * (carried over in the developer's persisted server state) must not be
+ * picked up here — those would point the spec at unrelated, developer-local
+ * data.
+ */
+async function getFixtureIds(
+	request: import('@playwright/test').APIRequestContext
+): Promise<{ nodeId: string; projectId: string; nodeName: string }> {
+	const nodeResp = await request.post('/graphql', {
+		data: { query: '{ nodeInfo { id name } }' }
+	});
+	const nodeBody = (await nodeResp.json()) as {
+		data: { nodeInfo: { id: string; name: string } }
+	};
+	const projectsResp = await request.get('/api/projects');
+	const projects = (await projectsResp.json()) as Array<{
+		id: string;
+		name: string;
+		path: string;
+	}>;
+	const fixture = projects.find((p) => /(^|\/)ddx-e2e-/.test(p.path) || /^ddx-e2e-/.test(p.name));
+	if (!fixture) {
+		throw new Error(
+			`fixture server has no ddx-e2e-* project registered (got: ${projects
+				.map((p) => p.id)
+				.join(', ')})`
+		);
+	}
+	return {
+		nodeId: nodeBody.data.nodeInfo.id,
+		projectId: fixture.id,
+		nodeName: nodeBody.data.nodeInfo.name
+	};
+}
+
 // TC-006: Sidebar nav links are disabled (rendered as spans) when no project is selected
 test('TC-006: sidebar nav links are disabled without a project', async ({ page }) => {
-	// Empty project list — no project can be selected from picker
-	await mockGraphQL(page, NODE_INFO, []);
+	// Hit the live fixture harness without selecting a project. The picker
+	// does not auto-select, so projectStore stays empty and NavShell renders
+	// project-scoped links as <span> elements.
 	await page.goto('/');
+	await page.waitForSelector('nav');
 
-	// With no project, NavShell renders links as <span> elements
+	// The project-scoped Beads entry is visible…
 	const nav = page.locator('nav');
-	await expect(nav.locator('span', { hasText: 'Beads' })).toBeVisible();
+	await expect(nav.getByText('Beads', { exact: true })).toBeVisible();
 
-	// No real anchor for Beads should be present
-	await expect(nav.locator('a', { hasText: 'Beads' })).toHaveCount(0);
+	// …and is rendered as a <span>, not an <a>. Exact-label matching is
+	// required so the always-anchor "All Beads" node-scoped link below the
+	// divider is not picked up here.
+	const beadsAnchor = nav.locator('a').filter({ hasText: /^\s*Beads\s*$/ });
+	await expect(beadsAnchor).toHaveCount(0);
 });
 
 // TC-007: Sidebar nav links become active anchors after a project is selected
-test('TC-007: sidebar nav links activate after project selection', async ({ page }) => {
-	await mockGraphQL(page);
+test('TC-007: sidebar nav links activate after project selection', async ({ page, request }) => {
+	const ids = await getFixtureIds(request);
 	await page.goto('/');
 
-	const select = page.locator('select');
-	await expect(select.locator('option', { hasText: 'Project Alpha' })).toBeAttached();
-	await select.selectOption('proj-1');
+	const select = page.locator('select[aria-label="Project"]');
+	// Wait for the picker to finish loading the real fixture project list.
+	await expect(select).toBeEnabled();
+	await expect(select.locator(`option[value="${ids.projectId}"]`)).toBeAttached();
+	await select.selectOption(ids.projectId);
 
-	// After selection, sidebar links should be real <a> elements
+	// After selection, sidebar links should be real <a> elements pointing at
+	// the fixture project's routes.
+	const base = `/nodes/${ids.nodeId}/projects/${ids.projectId}`;
 	const nav = page.locator('nav');
-	await expect(nav.locator('a', { hasText: 'Beads' })).toBeVisible();
-	await expect(nav.locator('a', { hasText: 'Documents' })).toBeVisible();
+	await expect(nav.locator(`a[href="${base}/beads"]`)).toBeVisible();
+	await expect(nav.locator(`a[href="${base}/documents"]`)).toBeVisible();
 });
 
 /**
