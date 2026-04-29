@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T191744-2c90a8f1",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-3fbadf19",
+  "base_rev": "ffd7903f78f0407ec987479b702d2837fda191f8",
+  "created_at": "2026-04-29T19:17:45.633976743Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-3fbadf19",
+    "title": "[read-coverage] add MCP worker status tools (list/show/log)",
+    "description": "FEAT-002/013 gap. HTTP has GET /api/agent/workers, GET /api/agent/workers/{id}, GET /api/agent/workers/{id}/log. MCP has no worker tools at all. Agents coordinating or monitoring parallel workers cannot query worker state via MCP. Add ddx_worker_list, ddx_worker_show, ddx_worker_log MCP tools.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "mcp",
+      "feat-002",
+      "feat-013"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:17:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:17:44.673672469Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T191744-2c90a8f1",
+    "prompt": ".ddx/executions/20260429T191744-2c90a8f1/prompt.md",
+    "manifest": ".ddx/executions/20260429T191744-2c90a8f1/manifest.json",
+    "result": ".ddx/executions/20260429T191744-2c90a8f1/result.json",
+    "checks": ".ddx/executions/20260429T191744-2c90a8f1/checks.json",
+    "usage": ".ddx/executions/20260429T191744-2c90a8f1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-3fbadf19-20260429T191744-2c90a8f1"
+  }
+}
