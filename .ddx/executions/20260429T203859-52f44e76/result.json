@@ -1,0 +1,49 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review only contains execution evidence artifacts (manifest.json, result.json). No HTTP routes or MCP tools are present in the diff to evaluate against the acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Diff contains only .ddx/executions/ evidence files; no server, HTTP route, or MCP tool implementation visible to verify evidence/cooldown/routing endpoints",
+      "location": ".ddx/executions/20260429T202423-4fc8564e/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 721,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T202423-4fc8564e/manifest.json",
+          ".ddx/executions/20260429T202423-4fc8564e/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3407,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5934,
+    "output_bytes": 539,
+    "elapsed_ms": 5095,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
