@@ -12,5 +12,7 @@
   "bugs": {
     "url": "https://github.com/easel/ddx/issues"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@google/design.md": "0.1.0"
+  }
 }
