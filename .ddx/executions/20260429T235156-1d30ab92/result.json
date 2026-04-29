@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No route handler added (expected something like `cli/internal/server/http/...` registering `GET /api/docs/changed` and parsing `?since=\u003cref\u003e`).\nNo test added (recent commit `d1b467ff test: add HTTP test for GET /api/docs/changed REST route` is referenced as `result_rev`, but its changes are not in this diff under review).\nNo wiring to the existing `ddx_doc_changed` MCP logic to share implementation.\nManifest events show a prior iteration was BLOCKed for the same reason (evidence-only diff); current iteration repeats the pattern."
+}
