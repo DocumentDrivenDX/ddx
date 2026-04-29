@@ -256,6 +256,18 @@ const (
 	ExecuteBeadStatusReviewRequestChanges = "review_request_changes"
 	ExecuteBeadStatusReviewBlock          = "review_block"
 	ExecuteBeadStatusReviewMalfunction    = "review_malfunction"
+
+	// ExecuteBeadStatusLandConflictUnresolvable is set when execute-loop
+	// attempted 3-way ort auto-resolution and (if configured) a focused
+	// conflict-resolve agent run for a preserved iteration, and both failed.
+	// The bead is parked under LandConflictCooldown for operator review.
+	ExecuteBeadStatusLandConflictUnresolvable = "land_conflict_unresolvable"
+
+	// ExecuteBeadStatusLandConflictNeedsHuman is set when the focused
+	// conflict-resolve agent escalated to BLOCKING — the conflict requires
+	// human judgment, not automated retry. Parked under the same short
+	// cooldown with a kind:land-conflict-needs-human event.
+	ExecuteBeadStatusLandConflictNeedsHuman = "land_conflict_needs_human"
 )
 
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible

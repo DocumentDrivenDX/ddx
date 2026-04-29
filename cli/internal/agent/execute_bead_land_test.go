@@ -712,6 +712,92 @@ func TestLand_PushAutoRecovery_UnresolvableConflictReportsPushConflict(t *testin
 	}
 }
 
+// TestLandConflictAutoRecover_OrtResolvesCleanly verifies AC #6a at the git
+// level: when both the preserved iteration and the current tip edit the same
+// file (a content conflict), landConflictAutoRecover uses ort -X ours to
+// resolve it cleanly, advancing the local target branch to a merge commit that
+// is reachable from both the current tip and the preserved iteration.
+func TestLandConflictAutoRecover_OrtResolvesCleanly(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	// Base: shared.txt = "line1\noriginal\nline3\n"
+	r.writeFile("shared.txt", "line1\noriginal\nline3\n")
+	r.runGit("add", "-A")
+	r.runGit("commit", "-m", "base: add shared.txt")
+	r.baseSHA = r.resolveRef("refs/heads/main")
+
+	// Preserved iteration: changes the middle line.
+	iterSHA := r.commitOn(r.baseSHA, "shared.txt", "line1\nITER-version\nline3\n", "iter: change line2")
+
+	// Current tip: changes the same line — creates a content conflict.
+	siblingSHA := r.commitOn(r.baseSHA, "shared.txt", "line1\nMAIN-version\nline3\n", "main: change line2")
+	r.runGit("update-ref", "refs/heads/main", siblingSHA)
+
+	// Create the preserve ref.
+	preserveRef := "refs/ddx/iterations/ddx-land-recover/20260429T000001-" + siblingSHA[:12]
+	r.runGit("update-ref", preserveRef, iterSHA)
+
+	// landConflictAutoRecover must resolve via ort -X ours (no error).
+	newTip, err := landConflictAutoRecover(r.dir, preserveRef, ops)
+	if err != nil {
+		t.Fatalf("landConflictAutoRecover must succeed on mechanical conflict via ort -X ours: %v", err)
+	}
+	if newTip == "" {
+		t.Fatal("expected non-empty newTip from landConflictAutoRecover")
+	}
+
+	// Local main must have advanced to the merge commit.
+	mainTip := r.resolveRef("refs/heads/main")
+	if mainTip != newTip {
+		t.Errorf("expected local main tip = %s (newTip), got %s", newTip, mainTip)
+	}
+	if mainTip == siblingSHA {
+		t.Errorf("main must advance past the current tip %s to the merge commit", siblingSHA)
+	}
+
+	// The preserved iteration commit is reachable from the new tip.
+	if !r.shaReachable(mainTip, iterSHA) {
+		t.Errorf("preserved iteration commit %s must be reachable from recovered tip %s", iterSHA, mainTip)
+	}
+
+	// The merge commit has two parents: [currentTip, iterSHA].
+	parents := r.commitParents(newTip)
+	if len(parents) != 2 {
+		t.Fatalf("recovered merge commit should have 2 parents, got %v", parents)
+	}
+	if parents[0] != siblingSHA {
+		t.Errorf("merge parent[0] = %s, want currentTip %s", parents[0], siblingSHA)
+	}
+	if parents[1] != iterSHA {
+		t.Errorf("merge parent[1] = %s, want iterSHA %s", parents[1], iterSHA)
+	}
+}
+
+// TestLandConflictAutoRecover_NonExistentPreserveRef_ReturnsError verifies that
+// landConflictAutoRecover returns a non-nil error when the preserve ref does not
+// resolve to a commit (e.g. was never written or was garbage-collected). The
+// target branch must remain unchanged.
+func TestLandConflictAutoRecover_NonExistentPreserveRef_ReturnsError(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	// preserve ref that was never created.
+	preserveRef := "refs/ddx/iterations/ddx-ghost/20260429T000000-000000000000"
+
+	beforeTip := r.resolveRef("refs/heads/main")
+	_, err := landConflictAutoRecover(r.dir, preserveRef, ops)
+	if err == nil {
+		t.Error("must return error when preserve ref does not exist")
+	}
+
+	// Target branch must be unchanged.
+	afterTip := r.resolveRef("refs/heads/main")
+	if afterTip != beforeTip {
+		t.Errorf("target branch must not advance when preserve ref is absent: before=%s after=%s", beforeTip, afterTip)
+	}
+}
+
 // Deterministic test clock helper — avoids unused time import when no test
 // overrides NowFunc.
 var _ = time.Now
