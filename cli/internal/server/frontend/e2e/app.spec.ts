@@ -1,58 +1,111 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 // TP-002: DDx Server Web UI — End-to-End Tests
 // Covers TC-001 through TC-008.
 
 // ---------------------------------------------------------------------------
-// TC-001: Dashboard
+// TC-001: Project overview (dashboard-level smoke)
+//
+// Since Stage 3.8, `/` redirects to `/nodes/<id>` and concrete project views
+// live under `/nodes/<nodeId>/projects/<projectId>/...`. TC-001 mirrors the
+// fixture-based pattern used in navigation.spec.ts: mock GraphQL for
+// NodeInfo / Projects / ProjectQueueSummary, navigate into the fixture
+// project, and assert the shell + project entry points render.
 // ---------------------------------------------------------------------------
-test.describe('TC-001: Dashboard', () => {
+const TC001_NODE = { id: 'node-abc', name: 'Test Node' }
+const TC001_PROJECT_ID = 'proj-1'
+const TC001_PROJECTS = [
+  { id: TC001_PROJECT_ID, name: 'Project Alpha', path: '/repos/alpha' },
+  { id: 'proj-2', name: 'Project Beta', path: '/repos/beta' }
+]
+const TC001_BASE_URL = `/nodes/${TC001_NODE.id}/projects/${TC001_PROJECT_ID}`
+
+async function mockProjectOverview(page: Page) {
+  await page.route('/graphql', async (route) => {
+    const body = route.request().postDataJSON() as { query: string }
+    if (body.query.includes('NodeInfo')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { nodeInfo: TC001_NODE } })
+      })
+    } else if (body.query.includes('Projects')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { projects: { edges: TC001_PROJECTS.map((p) => ({ node: p })) } }
+        })
+      })
+    } else if (body.query.includes('ProjectQueueSummary') || body.query.includes('queueSummary')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { queueSummary: { ready: 3, blocked: 1, inProgress: 0 } }
+        })
+      })
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: {} })
+      })
+    }
+  })
+}
+
+test.describe('TC-001: Project overview', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    await mockProjectOverview(page)
+    await page.goto(TC001_BASE_URL)
     await page.waitForSelector('h1')
   })
 
-  test('TC-001.1 — dashboard loads', async ({ page }) => {
-    await expect(page.locator('h1')).toContainText('Dashboard')
+  test('TC-001.1 — project overview loads', async ({ page }) => {
+    await expect(page.locator('h1')).toContainText('Project Alpha')
+    await expect(page.getByText('Project overview')).toBeVisible()
   })
 
-  test('TC-001.2 — document count card', async ({ page }) => {
-    const card = page.locator('h2:has-text("Documents")').locator('..')
-    await expect(card).toBeVisible()
-    // Card should contain a link to browse
-    await expect(card.locator('a[href="/documents"]')).toBeVisible()
+  test('TC-001.2 — sidebar exposes Documents entry point', async ({ page }) => {
+    const docsHref = `${TC001_BASE_URL}/documents`
+    const link = page.locator(`nav a[href="${docsHref}"]`)
+    await expect(link).toBeVisible()
   })
 
-  test('TC-001.3 — bead status card', async ({ page }) => {
-    const card = page.locator('h2:has-text("Beads")').locator('..')
-    await expect(card.locator('text=Ready')).toBeVisible()
-    await expect(card.locator('text=Open')).toBeVisible()
-    await expect(card.locator('text=Closed')).toBeVisible()
+  test('TC-001.3 — queue summary shows ready/blocked/in-progress', async ({ page }) => {
+    const summary = page.getByLabel('Queue summary')
+    await expect(summary).toBeVisible()
+    await expect(summary.locator('text=Ready')).toBeVisible()
+    await expect(summary.locator('text=Blocked')).toBeVisible()
+    await expect(summary.locator('text=In progress')).toBeVisible()
   })
 
-  test('TC-001.4 — stale docs card', async ({ page }) => {
-    const card = page.locator('text=Stale Docs').locator('..')
-    await expect(card).toBeVisible()
+  test('TC-001.4 — actions panel renders', async ({ page }) => {
+    const panel = page.getByRole('region', { name: /actions/i })
+    await expect(panel).toBeVisible()
   })
 
-  test('TC-001.5 — server health card', async ({ page }) => {
-    const card = page.locator('h2:has-text("Server")').locator('..')
-    await expect(card.locator('text=ok')).toBeVisible()
+  test('TC-001.5 — node identity visible in nav chrome', async ({ page }) => {
+    await expect(page.getByText(`Node: ${TC001_NODE.name}`).first()).toBeVisible()
   })
 
   test('TC-001.6 — navigate to documents', async ({ page }) => {
-    await page.click('a[href="/documents"]')
-    await expect(page).toHaveURL(/\/documents/)
+    const docsHref = `${TC001_BASE_URL}/documents`
+    await page.click(`nav a[href="${docsHref}"]`)
+    await expect(page).toHaveURL(new RegExp(`${TC001_BASE_URL}/documents`))
   })
 
   test('TC-001.7 — navigate to beads', async ({ page }) => {
-    await page.click('text=View board')
-    await expect(page).toHaveURL(/\/beads/)
+    const beadsHref = `${TC001_BASE_URL}/beads`
+    await page.click(`nav a[href="${beadsHref}"]`)
+    await expect(page).toHaveURL(new RegExp(`${TC001_BASE_URL}/beads`))
   })
 
   test('TC-001.8 — navigate to graph', async ({ page }) => {
-    await page.click('text=View graph')
-    await expect(page).toHaveURL(/\/graph/)
+    const graphHref = `${TC001_BASE_URL}/graph`
+    await page.click(`nav a[href="${graphHref}"]`)
+    await expect(page).toHaveURL(new RegExp(`${TC001_BASE_URL}/graph`))
   })
 })
 
