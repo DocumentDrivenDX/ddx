@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T044933-d9edf2a0",
+  "bead_id": "ddx-0724aaba",
+  "base_rev": "774707c2317843fe533bd0a312a31b9177ffab36",
+  "created_at": "2026-04-29T04:49:34.338557526Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0724aaba",
+    "title": "Migrate app.spec page-data tests to the seeded fixture",
+    "description": "## Context\n\nSeveral page-data tests in `cli/internal/server/frontend/e2e/app.spec.ts` fail because the default Playwright harness previously served static preview output with no backend data. Once the Go-server fixture harness is in place, TC-002, TC-003, TC-005, and TC-007 should navigate through `/nodes/\u003cfixture-node-id\u003e/projects/\u003cfixture-project-id\u003e/...` and assert against the seeded fixture documents, beads, personas, and graph data instead of assuming developer-local state.\n\nRewrite only those TC blocks to use the fixture-backed app and current node/project router. Preserve the intended coverage of the existing TC IDs; update selectors and data expectations only where the current UI and fixture data require it.\n\n## In-scope files\n\n- `cli/internal/server/frontend/e2e/app.spec.ts` — TC-002, TC-003, TC-005, and TC-007 only.\n\n## Out-of-scope\n\n- TC-001 and TC-008 in `e2e/app.spec.ts`.\n- Other e2e spec files.\n- `cli/internal/server/frontend/playwright.config.ts` and fixture seeding except for reading fixture IDs/data created by the prerequisite bead.\n- `cli/internal/server/frontend/e2e/demo-recording.spec.ts` and `playwright.demo.config.ts`.\n- Frontend source changes under `src/` or Go server changes under `cli/internal/server/`.\n- Deleting, skipping, or weakening TC coverage to get a green run.\n\n## Rollback / cleanup\n\nIf the fixture lacks data needed for these tests, stop and file a fixture-followup or coordinate with the harness bead rather than silently depending on the developer's home repository or config.",
+    "acceptance": "cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e e2e/app.spec.ts --grep \"TC-00(2|3|5|7)\"\ncd cli/internal/server/frontend \u0026\u0026 git diff --exit-code -- playwright.demo.config.ts e2e/demo-recording.spec.ts",
+    "parent": "ddx-ccdf9cf9",
+    "labels": [
+      "area:test",
+      "area:frontend",
+      "kind:test-infra",
+      "phase:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T04:49:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "131811",
+      "execute-loop-heartbeat-at": "2026-04-29T04:49:33.689842408Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T044933-d9edf2a0",
+    "prompt": ".ddx/executions/20260429T044933-d9edf2a0/prompt.md",
+    "manifest": ".ddx/executions/20260429T044933-d9edf2a0/manifest.json",
+    "result": ".ddx/executions/20260429T044933-d9edf2a0/result.json",
+    "checks": ".ddx/executions/20260429T044933-d9edf2a0/checks.json",
+    "usage": ".ddx/executions/20260429T044933-d9edf2a0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0724aaba-20260429T044933-d9edf2a0"
+  }
+}
