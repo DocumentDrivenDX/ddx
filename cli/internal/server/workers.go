@@ -147,6 +147,10 @@ type WorkerRecord struct {
 	// ReapReason is populated when the watchdog forcibly terminates a worker;
 	// set to "watchdog" today.
 	ReapReason string `json:"reap_reason,omitempty"`
+	// PIDAlive is a computed field populated by List(); it is never persisted
+	// to disk. True when PID > 0 and the process is alive, false when PID > 0
+	// but the process has exited. Omitted (nil) when PID == 0 (goroutine-only).
+	PIDAlive *bool `json:"pid_alive,omitempty"`
 }
 
 type WorkerExecutionResult struct {
@@ -1096,6 +1100,17 @@ func (m *WorkerManager) List() ([]WorkerRecord, error) {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].StartedAt.After(out[j].StartedAt)
 	})
+
+	// Compute PIDAlive for each record so operators can see liveness at a
+	// glance without running prune. This is a syscall per record; it's safe
+	// because List() is not on a hot path (workers are long-lived).
+	for i := range out {
+		if out[i].PID > 0 {
+			alive := isPIDAlive(out[i].PID)
+			out[i].PIDAlive = &alive
+		}
+	}
+
 	return out, nil
 }
 
@@ -1122,12 +1137,73 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 //
 // Stop is idempotent: a second call is a no-op. It returns an error only
 // when the worker is unknown to the manager (already exited / never existed).
+// stopStaleDiskEntry handles the case where a worker's disk record shows
+// state=running but no live goroutine exists (e.g. after a server restart).
+// It releases any held bead claim and flips the on-disk state to "stopped".
+func (m *WorkerManager) stopStaleDiskEntry(id string) error {
+	dir := filepath.Join(m.rootDir, id)
+	rec, err := m.readRecord(dir)
+	if err != nil {
+		return fmt.Errorf("worker not running")
+	}
+	// Terminal state — nothing left to clean up.
+	if rec.State != "running" && rec.State != "stopping" {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	beadID := ""
+	if rec.CurrentAttempt != nil {
+		beadID = rec.CurrentAttempt.BeadID
+	}
+	if beadID == "" {
+		beadID = rec.CurrentBead
+	}
+	projectRoot := rec.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = m.projectRoot
+	}
+
+	if beadID != "" {
+		store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+		body := fmt.Sprintf(
+			"worker=%s pid=%d reason=stop-stale",
+			id, rec.PID,
+		)
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "stop (stale)",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		_ = store.Unclaim(beadID)
+	}
+
+	rec.State = "stopped"
+	rec.Status = "stopped"
+	if rec.FinishedAt.IsZero() {
+		rec.FinishedAt = now
+	}
+	rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+		Action:    "stop",
+		Actor:     "local-operator",
+		Timestamp: now,
+		Detail:    fmt.Sprintf("reason=stop-stale pid=%d", rec.PID),
+		BeadID:    beadID,
+	})
+	return m.writeRecord(dir, rec)
+}
+
 func (m *WorkerManager) Stop(id string) error {
 	m.mu.Lock()
 	handle := m.workers[id]
 	if handle == nil || handle.cancel == nil {
 		m.mu.Unlock()
-		return fmt.Errorf("worker not running")
+		// Not in-memory: try to clean up a stale disk record left by a
+		// previous server run or an abruptly killed goroutine.
+		return m.stopStaleDiskEntry(id)
 	}
 	if handle.stopped {
 		m.mu.Unlock()
@@ -1651,6 +1727,7 @@ func (m *WorkerManager) writeRecord(dir string, record WorkerRecord) error {
 	if record.Status == "" {
 		record.Status = record.State
 	}
+	record.PIDAlive = nil // computed field; never persisted
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return err
@@ -1794,6 +1871,200 @@ func workerHarnessHealthy(ctx context.Context, svc agentlib.DdxAgent, harness st
 		}
 	}
 	return true
+}
+
+// WorkerPruneResult describes one worker entry reaped by Prune.
+type WorkerPruneResult struct {
+	ID      string `json:"id"`
+	BeadID  string `json:"bead_id,omitempty"`
+	Harness string `json:"harness,omitempty"`
+	Age     string `json:"age"`
+	Reason  string `json:"reason"`
+}
+
+// Prune reaps registry entries whose recorded PID is no longer alive, or
+// whose age exceeds maxAge (when maxAge > 0). Only entries with state=running
+// that are not attached to a live goroutine in this manager are eligible.
+// For each pruned entry the bead claim is released and the on-disk record is
+// updated to state=reaped. Returns the list of reaped entries.
+func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error) {
+	recs, err := m.List()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	var results []WorkerPruneResult
+
+	for _, rec := range recs {
+		if rec.State != "running" {
+			continue
+		}
+
+		// Skip workers that are genuinely alive in-memory.
+		m.mu.Lock()
+		_, inMemory := m.workers[rec.ID]
+		m.mu.Unlock()
+		if inMemory {
+			continue
+		}
+
+		// Determine staleness.
+		stale := false
+		reason := ""
+
+		if rec.PID > 0 {
+			if !isPIDAlive(rec.PID) {
+				stale = true
+				reason = fmt.Sprintf("pid=%d not alive", rec.PID)
+			}
+		} else {
+			// PID=0: goroutine-only worker not in m.workers — server restart.
+			stale = true
+			reason = "goroutine not running (server restarted?)"
+		}
+
+		if !stale && maxAge > 0 && !rec.StartedAt.IsZero() {
+			if age := now.Sub(rec.StartedAt); age > maxAge {
+				stale = true
+				reason = fmt.Sprintf("age=%s exceeds max-age=%s",
+					age.Round(time.Second), maxAge.Round(time.Second))
+			}
+		}
+
+		if !stale {
+			continue
+		}
+
+		beadID := ""
+		if rec.CurrentAttempt != nil {
+			beadID = rec.CurrentAttempt.BeadID
+		}
+		if beadID == "" {
+			beadID = rec.CurrentBead
+		}
+		projectRoot := rec.ProjectRoot
+		if projectRoot == "" {
+			projectRoot = m.projectRoot
+		}
+
+		if beadID != "" {
+			store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+			body := fmt.Sprintf("worker=%s pid=%d reason=prune %s", rec.ID, rec.PID, reason)
+			_ = store.AppendEvent(beadID, bead.BeadEvent{
+				Kind:      "bead.reaped",
+				Summary:   "prune",
+				Body:      body,
+				Actor:     "ddx",
+				Source:    "server-workers",
+				CreatedAt: now,
+			})
+			_ = store.Unclaim(beadID)
+		}
+
+		rec.State = "reaped"
+		rec.Status = "reaped"
+		rec.ReapReason = "prune"
+		if rec.FinishedAt.IsZero() {
+			rec.FinishedAt = now
+		}
+		rec.LastError = reason
+		rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+			Action:    "prune",
+			Actor:     "local-operator",
+			Timestamp: now,
+			Detail:    reason,
+			BeadID:    beadID,
+		})
+		dir := filepath.Join(m.rootDir, rec.ID)
+		_ = m.writeRecord(dir, rec)
+
+		age := "-"
+		if !rec.StartedAt.IsZero() {
+			age = now.Sub(rec.StartedAt).Round(time.Second).String()
+		}
+		results = append(results, WorkerPruneResult{
+			ID:      rec.ID,
+			BeadID:  beadID,
+			Harness: rec.Harness,
+			Age:     age,
+			Reason:  reason,
+		})
+	}
+
+	return results, nil
+}
+
+// ReconcileStaleWorkers scans the on-disk worker registry and marks entries
+// that are still in state=running but have a dead (or missing) PID as
+// "exited". Called once at server startup to repair records left running by a
+// previous server crash without starting new goroutines for them. Bead claims
+// are released so the queue drainer can pick up the work again.
+func (m *WorkerManager) ReconcileStaleWorkers() {
+	entries, err := os.ReadDir(m.rootDir)
+	if err != nil {
+		return
+	}
+	now := time.Now().UTC()
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dir := filepath.Join(m.rootDir, entry.Name())
+		rec, err := m.readRecord(dir)
+		if err != nil || rec.State != "running" {
+			continue
+		}
+
+		// Skip workers that are genuinely alive in-memory (shouldn't happen
+		// at startup but be defensive).
+		m.mu.Lock()
+		_, ok := m.workers[rec.ID]
+		m.mu.Unlock()
+		if ok {
+			continue
+		}
+
+		// PID > 0 and still alive: don't touch it.
+		if rec.PID > 0 && isPIDAlive(rec.PID) {
+			continue
+		}
+
+		beadID := ""
+		if rec.CurrentAttempt != nil {
+			beadID = rec.CurrentAttempt.BeadID
+		}
+		if beadID == "" {
+			beadID = rec.CurrentBead
+		}
+		projectRoot := rec.ProjectRoot
+		if projectRoot == "" {
+			projectRoot = m.projectRoot
+		}
+
+		if beadID != "" {
+			store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+			body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
+			_ = store.AppendEvent(beadID, bead.BeadEvent{
+				Kind:      "bead.reaped",
+				Summary:   "server-restart",
+				Body:      body,
+				Actor:     "ddx-server",
+				Source:    "server-workers",
+				CreatedAt: now,
+			})
+			_ = store.Unclaim(beadID)
+		}
+
+		rec.State = "exited"
+		rec.Status = "exited"
+		rec.ReapReason = "server-restart"
+		if rec.FinishedAt.IsZero() {
+			rec.FinishedAt = now
+		}
+		rec.LastError = "server restarted while worker was running"
+		_ = m.writeRecord(dir, rec)
+	}
 }
 
 func randomSuffix(n int) string {

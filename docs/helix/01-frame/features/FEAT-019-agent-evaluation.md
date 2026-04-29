@@ -5,10 +5,11 @@ ddx:
     - helix.prd
     - FEAT-004
     - FEAT-006
+    - FEAT-010
     - FEAT-012
     - FEAT-014
 ---
-# Feature: DDx Agent Evaluation and Prompt Comparison
+# Feature: DDx Agent Evaluation UX
 
 **ID:** FEAT-019
 **Status:** In Progress
@@ -17,17 +18,21 @@ ddx:
 
 ## Overview
 
-DDx can dispatch the same prompt to multiple agent harnesses and capture
-structured results. This feature adds the evaluation surface: sandboxed
-comparison runs that capture side effects, automated grading of outputs,
-and comparison records that make prompt quality measurable.
+FEAT-019 owns the **evaluation UX layer**: comparison views, grading rubric
+storage and display, and benchmark result aggregation in the web UI. It is a
+child of FEAT-010 (exec substrate) — not a peer.
 
-This is deliberately an **optional evaluation and reporting layer** built on
-top of the `ddx agent execute-bead` primitive (FEAT-006). The primary
-bead-execution workflow is `execute-bead`, which runs an agent, evaluates
-required executions, and lands or preserves the iteration. FEAT-019 provides:
-compare, grade, replay, and benchmark capabilities over those preserved
-iterations — it does not define a competing foundational execution model.
+Workflow shapes (comparison dispatch, replay, benchmark execution) live in the
+skills library (`compare-prompts`, `replay-bead`, `benchmark-suite`). FEAT-019
+provides the storage, display, and aggregation surfaces that those skills write
+into and that users read from.
+
+This is deliberately an **evaluation and reporting layer** built on top of the
+FEAT-010 run substrate and FEAT-006 agent service. The primary bead-execution
+workflow is `ddx try` (FEAT-010), which runs an agent, captures evidence, and
+lands or preserves the iteration. FEAT-019 adds: grading rubric management,
+comparison record display, and benchmark result aggregation — it does not define
+a competing foundational execution model or dispatch mechanism.
 
 ### Ownership split
 
@@ -37,31 +42,33 @@ iterations — it does not define a competing foundational execution model.
 - **FEAT-019** (this spec) owns **grading**, **replay**, and
   **benchmark suite execution** — the evaluation and reporting layer built
   on top of execute-bead preserved iterations and comparison dispatch.
-- **FEAT-010** owns the generic exec substrate. Comparison records may
-  use FEAT-010 storage if needed but comparison dispatch is not an exec
-  projection — it has a fundamentally different shape (N parallel arms
-  vs one sequential run).
+- **FEAT-010** owns the exec substrate. FEAT-019 is a child of FEAT-010:
+  comparison records, grading results, and benchmark aggregations are stored
+  in the FEAT-010 run substrate. Workflow dispatch shapes (comparison,
+  replay, benchmark) live in the skills library, not in DDx core.
 - **FEAT-004** owns bead semantics including evidence. FEAT-019 adds
   evidence fields (session linkage) but does not modify bead close
   behavior.
 
-### Relationship to execute-bead
+### Relationship to the run substrate (FEAT-010)
 
-`ddx agent execute-bead` is the primary primitive for agent-driven bead
-execution. FEAT-019 replay and benchmark capabilities are built on preserved
-`execute-bead` iterations: multiple `execute-bead --no-merge` attempts from
-the same base produce a corpus that FEAT-019 can compare, grade, and report
-on. "Try N ideas on this bead and pick the best" is a workflow plugin loop
-that calls `execute-bead --no-merge` repeatedly and then uses FEAT-019
-evaluation primitives — it is not a DDx execution mode.
+FEAT-019 is a child of FEAT-010. Comparison, replay, and benchmark records
+are stored in the FEAT-010 run substrate. FEAT-019 defines the storage schema
+extensions (`type: comparison`, `type: replay`, `type: benchmark`) and owns
+the web UI surfaces that display those records. It does not own worktree
+management, run lifecycle, or dispatch mechanics.
 
-### Relationship to workflow tools
+### Relationship to workflow skills and tools
 
-DDx owns the comparison, grading, and replay primitives. Workflow plugins own
-the policies that use them: when to experiment, which variables to sweep,
-quality gates using experiment results, automatic model selection, and
-exploration loops. "Try 10 ideas to improve metric X" is a workflow plugin loop
-that calls DDx comparison primitives — it is not a DDx execution mode.
+Workflow shapes live in the skills library:
+- `compare-prompts` — N-arm dispatch + aggregation
+- `replay-bead` — re-run with altered conditions + baseline diff
+- `benchmark-suite` — compare across prompt matrix
+
+DDx owns grading invocation (`ddx agent grade`) and the evaluation UX.
+Workflow plugins own the policies: when to experiment, which variables to
+sweep, quality gates using grading results, automatic model selection, and
+exploration loops.
 
 ## Problem Statement
 
@@ -95,34 +102,45 @@ The canonical architecture is
 
 ### Functional
 
-**Sandboxed comparison dispatch**
-1. `ddx agent run --compare --harnesses=agent,claude --prompt task.md` runs
-   each harness arm in an isolated environment and records a comparison.
-2. Each arm runs in a temporary git worktree created from the current HEAD.
-   Existing `resolveWorktree` infrastructure is reused.
-3. After each arm completes, capture `git diff HEAD` in the worktree as the
-   "effect diff" — the concrete artifact of what the agent changed.
-4. For DDx Agent arms, also capture the full `ToolCallLog` (every read, write,
-   edit, bash call with inputs and outputs).
-5. For subprocess arms (codex, claude, opencode), capture stdout/stderr and
-   the effect diff. Tool call detail is not available.
-6. Temporary worktrees are cleaned up after the comparison unless
-   `--keep-sandbox` is specified.
-7. Arms run in parallel by default (reuses quorum parallelism). Sequential
-   mode available via `--sequential` for resource-constrained environments.
+> **Note on workflow shapes:** Comparison dispatch, replay, and benchmark
+> execution are implemented as skills (`compare-prompts`, `replay-bead`,
+> `benchmark-suite`) in the skills library. FEAT-019 owns the storage schema
+> for their outputs and the web UI surfaces that display, aggregate, and manage
+> those records. Requirements below describe the evaluation UX layer.
 
-**Side-effect capture**
-8. The effect diff is captured as a unified diff string and stored in the
-   comparison record alongside the text output.
-9. For DDx Agent, the tool call log provides a complete audit trail: which files
-   were read, what edits were made, what commands were run, what output they
-   produced. This is richer than the diff alone.
-10. Optionally run a test suite in each worktree after the agent completes
-    (`--post-run "make test"`) and capture pass/fail as a quality signal.
+**Comparison record storage and display**
+1. Comparison records written by the `compare-prompts` skill (or any skill
+   that produces a `ComparisonRecord`) are stored in the FEAT-010 run
+   substrate with `type: comparison`.
+2. The web UI exposes a comparison detail view: per-arm output, effect diff,
+   tool-call summary, test results, and grades — all from the stored record.
+3. Comparison list view shows recent comparisons with per-arm summary
+   (tokens, cost, duration, pass/fail) sortable and filterable by date,
+   harness, and bead.
+4. `--format json` output for machine-readable consumption by dun checks
+   and CI pipelines.
 
-**Grading primitive**
+**Side-effect capture storage**
+5. Effect diffs (unified diff strings) and tool call log references are
+   stored in the comparison record alongside text output.
+6. The UI renders diffs with syntax highlighting; tool call logs are
+   available as collapsible detail.
+
+**Grading rubric storage and display**
+7. Grading rubrics are stored as named artifacts in the DDx artifact store.
+   `ddx agent grade --rubric <file>` loads a rubric by path; named rubrics
+   can be stored and referenced by name.
+8. The web UI provides a rubric browser: list, view, and edit stored rubrics.
+9. Grading results (score, max_score, pass, rationale per arm) are stored in
+   the comparison record and displayed in the comparison detail view.
+10. Custom grading rubric content is user/workflow-defined. DDx provides
+    the storage, retrieval, and display mechanism.
+
+**Grading invocation and display**
 11. `ddx agent grade --comparison <id>` sends a comparison record to a
-    grading harness and records the evaluation.
+    grading harness and records the evaluation. This is the DDx-owned
+    grading invocation surface; dispatch mechanics reuse FEAT-006 harness
+    registry.
 12. `ddx agent grade --comparison <id> --grader claude` specifies which
     harness performs the grading (default: highest-preference available).
 13. The grading prompt is a standardized template that presents:
@@ -130,7 +148,8 @@ The canonical architecture is
     - Each arm's text output
     - Each arm's effect diff
     - (Optional) test results
-14. The grader returns a structured evaluation per arm:
+14. The grader returns a structured evaluation per arm stored in the
+    comparison record:
     ```json
     {
       "arm": "agent",
@@ -140,27 +159,22 @@ The canonical architecture is
       "rationale": "Correct implementation but missed edge case in..."
     }
     ```
-15. Grades are appended to the comparison record in the session log.
+15. Grades are appended to the comparison record in the FEAT-010 substrate.
 16. Custom grading rubrics can be provided via `--rubric <file>` to
-    replace the default template. DDx provides the rubric loading
-    mechanism; the rubric content is user/workflow-defined.
+    replace the default template. DDx provides the rubric loading and
+    storage mechanism; rubric content is user/workflow-defined (see
+    requirements 7–10 above).
 
-**Comparison reporting**
-17. `ddx agent compare --list` shows recent comparison runs with summary.
-18. `ddx agent compare --show <id>` displays the full comparison record
-    including per-arm outputs, diffs, and grades.
+**Benchmark result aggregation**
+17. Benchmark run records (produced by the `benchmark-suite` skill) are
+    stored in the FEAT-010 substrate with `type: benchmark`.
+18. The web UI provides a benchmark results view: per-arm aggregate
+    statistics (completed, failed, total tokens, cost, avg duration) and
+    drill-down to individual comparison records per prompt.
 19. `--format json` for machine-readable output (consumed by dun checks,
     workflow evaluation gates, CI pipelines).
-
-**Benchmark suites**
-19a. `ddx agent benchmark --suite <path>` loads a JSON suite definition
-     with arms (harness/model/tier configurations) and prompts, runs all
-     prompts across all arms, and produces aggregate per-arm statistics.
-19b. Suite format: `BenchmarkSuite` JSON with `name`, `version`, `arms[]`,
-     `prompts[]`, optional `sandbox`, `post_run`, `timeout`.
-19c. Output: per-arm summary (completed, failed, total tokens, cost,
-     avg duration) plus full comparison records per prompt.
-19d. `--output <path>` saves full results as JSON for historical tracking.
+19a. Historical benchmark results are retained and queryable; the UI
+     supports trend views across benchmark runs of the same suite.
 
 **Bead-session linkage** (foundation for replay)
 20. When a bead is closed after an agent run, record the `session_id` (from
@@ -172,98 +186,54 @@ The canonical architecture is
     still works but reports "baseline session unknown" and cannot provide
     a diff comparison.
 
-**Replay from bead**
-22. `ddx agent replay <bead-id> --model <model> --harness <harness>` is the
-    key primitive for answering "what if we reran this bead with a different
-    model?"
-23. Replay reconstructs the original prompt from the linked session (not from
-    bead prose). If the session is unavailable, falls back to bead
-    title/description/acceptance as a degraded prompt.
-24. Replay base state: by default, replay checks out the `closing_commit_sha`
-    parent (the state before the original implementation). `--at-head` mode
-    replays against current HEAD instead ("would this model solve the task
-    today?"). The default answers "would this model have produced the same
-    result then?"
-    For tracker-only backfills, do not point `closing_commit_sha` at a later
-    metadata-only close commit; omit the field so replay falls back to the
-    sessionless/manual baseline instead of pretending the metadata commit was
-    the governed implementation diff.
-25. Replay runs in a sandbox worktree, captures diff, runs `--post-run`
-    evaluation, and reports a comparison of the new diff against the
-    original commit's diff.
+**Replay result display**
+22. Replay execution is handled by the `replay-bead` skill. FEAT-019 owns
+    the storage schema for replay records and the web UI display surface.
+23. Replay records are stored in the FEAT-010 substrate with `type: replay`,
+    linked to the originating bead via `bead_id` and `session_id`.
+24. The web UI shows a replay detail view: the new diff, the baseline diff,
+    a side-by-side comparison, and any `--post-run` test result.
+25. The bead detail view in the web UI includes a "Replays" tab listing all
+    replay records for that bead with model/harness/outcome summary.
 
 ### Non-Functional
 
-- **Isolation:** Worktree sandboxes must prevent cross-arm interference.
-  Each arm sees a clean copy of HEAD.
-- **Performance:** Parallel arm execution. Worktree creation is fast
-  (git worktree add is <1s for typical repos).
 - **Storage:** Comparison records include diffs and outputs which can be
   large. Use the same attachment-backed storage as session logs (FEAT-006).
-- **Determinism:** For DDx Agent with the virtual provider, comparison runs
-  are fully deterministic — enables CI-based prompt regression testing.
+- **Query performance:** Comparison list and benchmark aggregation views must
+  load without full record deserialization — store per-arm summary fields
+  at the record envelope level.
+- **Format compatibility:** `--format json` output must be stable for CI
+  consumers; schema changes must be additive.
 
 ## Design Principles
 
-### Platform primitive, not framework
+### Evaluation UX, not execution framework
 
-DDx provides the mechanics:
-- Run N harnesses on the same prompt in sandboxes
-- Capture outputs and side effects
-- Send results to a grading harness
-- Record everything
+FEAT-019 provides the storage schema and UI surfaces for evaluation results:
+- Store and display comparison records (written by skills)
+- Store, manage, and display grading rubrics
+- Aggregate and display benchmark results
+- Invoke the grading harness and record results
 
-DDx does **not** provide:
+FEAT-019 does **not** provide:
+- Comparison dispatch (→ `compare-prompts` skill)
+- Replay execution (→ `replay-bead` skill)
+- Benchmark execution (→ `benchmark-suite` skill)
 - Prompt optimization strategies
-- Benchmark suites or leaderboards
 - Model selection policies
 - Grading rubric content (beyond a sensible default)
 
-Workflow tools compose these primitives. For example, a workflow plugin might
-define: "Before promoting a bead, run the implementation prompt through
-agent+claude, require grade ≥8/10 on both arms." A check runner might define:
-"regression-test this prompt against the recorded baseline."
-
-### Sandboxing strategy
-
-Git worktrees are the natural sandbox for code-generating agents:
-- Fast to create (copy-on-write on modern filesystems)
-- Full git state (HEAD, index, config, hooks)
-- Clean isolation (separate working directory)
-- Cheap to clean up (`git worktree remove`)
-- Diff capture is trivial (`git diff HEAD`)
-
-For DDx Agent specifically, the tool sandbox is already built into the
-`WorkDir` parameter — setting it to the worktree path is sufficient.
-For subprocess harnesses, `WorkDirFlag` (codex: `-C`, opencode: `--dir`)
-achieves the same.
-
-No container or VM sandboxing is needed for comparison runs because:
-- The threat model is "prevent cross-arm interference," not "prevent
-  malicious code execution"
-- Worktrees provide filesystem isolation
-- Network isolation is out of scope (agents need API access)
-
-If stronger isolation is needed (e.g., untrusted model output running
-shell commands), that's a future concern addressed by DDx Agent's tool
-permission layer or external sandbox tooling.
+Skills compose DDx primitives into workflow shapes. FEAT-019 stores and
+surfaces what skills produce.
 
 ## CLI Interface
 
+> **Workflow dispatch shapes** (`compare`, `replay`, `benchmark`) are skills
+> in the skills library. FEAT-019 owns the grading invocation surface and the
+> record query/display surface.
+
 ```bash
-# Compare two harnesses on the same prompt
-ddx agent run --compare --harnesses=agent,claude --prompt task.md
-
-# Compare with per-arm model selection
-ddx agent run --compare \
-  --arm agent:qwen3.5-27b:fast \
-  --arm claude:claude-opus-4-6:smart \
-  --prompt task.md --sandbox
-
-# Compare with post-run test
-ddx agent run --compare --harnesses=agent,claude --prompt task.md \
-  --post-run "cd cli && make test"
-
 # Grade a comparison using claude as grader
 ddx agent grade --comparison cmp-abc123 --grader claude
 
@@ -276,15 +246,10 @@ ddx agent compare --list
 # Show comparison detail
 ddx agent compare --show cmp-abc123 --format json
 
-# Replay a closed bead with a different model
-ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness agent
-
-# Replay with post-run verification
-ddx agent replay ddx-52d42ccb --model qwen3.5-27b --harness agent \
-  --post-run "cd cli && make test"
-
-# Run a benchmark suite
-ddx agent benchmark --suite benchmarks/implementation.json --output results.json
+# Workflow dispatch shapes are skills — not DDx CLI core:
+# compare-prompts skill:  N-arm dispatch + aggregation
+# replay-bead skill:      re-run with altered conditions + baseline diff
+# benchmark-suite skill:  compare across prompt matrix
 ```
 
 ### Configuration
@@ -294,25 +259,22 @@ ddx agent benchmark --suite benchmarks/implementation.json --output results.json
 agent:
   compare:
     default_grader: claude         # harness to use for grading
-    keep_sandbox: false            # preserve worktrees after comparison
-    parallel: true                 # run arms in parallel
-    post_run: ""                   # command to run after each arm
 ```
 
 ## User Stories
 
-### US-190: Developer Compares Local vs Cloud Model
+### US-190: Developer Views Comparison Results in Web UI
 **As a** developer evaluating whether a local model can handle a task class
-**I want** to run the same prompt through DDx Agent (local) and claude (cloud)
+**I want** to view comparison records in the web UI after the `compare-prompts` skill runs
 **So that** I can see concrete differences in output quality and cost
 
 **Acceptance Criteria:**
-- Given I run `ddx agent run --compare --harnesses=agent,claude --prompt task.md`,
-  then both harnesses receive the same prompt text
-- Given both arms complete, then I see a comparison summary with per-arm
-  output, tokens, cost, and duration
-- Given I add `--keep-sandbox`, then I can inspect the worktree contents
-  after the run
+- Given a comparison record exists in the FEAT-010 substrate, then the web UI
+  comparison list shows per-arm summary (tokens, cost, duration)
+- Given I open a comparison detail view, then I see per-arm output, effect diff,
+  and grades (if graded)
+- Given `--format json`, then machine-readable comparison output is available
+  via CLI for CI consumption
 
 ### US-191: Developer Grades Agent Outputs
 **As a** developer assessing prompt quality
@@ -339,35 +301,30 @@ agent:
 - Given `--format json` output, then CI can parse the comparison and
   fail the pipeline on grade regression
 
-### US-193: Developer Captures Side Effects Safely
-**As a** developer running comparison experiments
-**I want** each agent arm to run in an isolated worktree
-**So that** file changes from one arm don't contaminate the other or my
-working tree
+### US-193: Developer Inspects Effect Diffs in Comparison View
+**As a** developer reviewing comparison experiment results
+**I want** to see each arm's effect diff in the comparison detail view
+**So that** I can understand what each model actually changed in the codebase
 
 **Acceptance Criteria:**
-- Given I run a comparison with two harnesses that both edit files, then
-  each arm's changes are captured as separate diffs
-- Given the comparison completes, then my original working tree is
-  unchanged
-- Given an arm fails mid-run, then its worktree is still cleaned up
-  (unless `--keep-sandbox`)
+- Given a comparison record with effect diffs, then the web UI comparison
+  detail view renders each arm's diff with syntax highlighting
+- Given a comparison has tool call logs, then they are accessible as
+  collapsible detail in the UI
+- Given an arm failed, then its failure reason is shown in the comparison view
 
-### US-194: Developer Replays a Bead With a Different Model
+### US-194: Developer Views Replay Results on Bead Detail
 **As a** developer evaluating local model capability
-**I want** to rerun a previously-closed bead with a different model
+**I want** to view replay results in the bead detail view after the `replay-bead` skill runs
 **So that** I can compare the new model's output against the known-good result
 
 **Acceptance Criteria:**
-- Given a closed bead with a linked session, when I run
-  `ddx agent replay <bead-id> --model qwen3.5-27b --harness agent`,
-  then the original prompt is reconstructed from the session and dispatched
-- Given the replay completes in a sandbox worktree checked out at the
-  parent of `closing_commit_sha`, then I see the diff compared against
-  the original commit's diff
-- Given `--at-head`, the replay runs against current HEAD instead
-- Given a bead without a linked session, then replay falls back to bead
-  prose and reports "baseline session unknown"
+- Given a replay record exists for a bead, then the bead detail view includes
+  a "Replays" tab listing all replays with model/harness/outcome summary
+- Given I open a replay detail view, then I see the new diff, the baseline diff,
+  and a side-by-side comparison
+- Given a replay has a `--post-run` test result, then pass/fail is shown in the
+  replay detail view
 
 ### US-195: Bead Links to Agent Session on Close
 **As a** developer building a replay corpus
@@ -382,29 +339,40 @@ working tree
 - Given a bead closed without an agent run, then no session link exists
   and `ddx bead show` omits agent metadata
 
-### US-196: Evaluation Primitives Consume Preserved Execute-bead Iterations
+### US-196: Evaluation UI Displays Records from Preserved Try Iterations
 **As** a developer evaluating bead execution quality
-**I want** FEAT-019 evaluation tools to operate on preserved execute-bead iterations
-**So that** comparison, grading, and benchmarking build on execute-bead results rather than a competing execution model
+**I want** FEAT-019 UI to display comparison/grading records sourced from preserved `ddx try` iterations
+**So that** the evaluation UX surfaces what skills produce from preserved iterations — not a parallel execution model
 
 **Acceptance Criteria:**
-- Given multiple `ddx agent execute-bead <id> --no-merge` runs from the same base revision exist, when `ddx agent compare` or `ddx agent benchmark` consumes them, then those preserved iterations are valid inputs — no separate evaluation-specific execution path is required to produce the corpus.
-- Given an evaluation consumes a preserved execute-bead iteration, when provenance is inspected, then it traces back to the originating execute-bead session ID and hidden ref — no evaluation-owned provenance record duplicates execute-bead evidence.
+- Given preserved `ddx try` iterations exist for a bead, when skills write
+  comparison or benchmark records referencing those iterations, then FEAT-019
+  UI displays them without requiring a separate evaluation execution path.
+- Given an evaluation record references a preserved try iteration, when
+  provenance is inspected in the UI, then it traces back to the originating
+  try session ID and hidden ref — no FEAT-019-owned duplicate provenance record exists.
 
 ## Dependencies
 
-- FEAT-006 (Agent Service) — harness registry, quorum parallelism, worktree
-  support, session logging, comparison dispatch
-- FEAT-014 (Token Awareness) — token/cost tracking per arm
-- FEAT-012 (Git Awareness) — git worktree operations
-- DDx Agent library — embedded agent with tool call logging
+- FEAT-010 (Executions) — run substrate; comparison/replay/benchmark records
+  are stored here; FEAT-019 is a child of FEAT-010
+- FEAT-006 (Agent Service) — harness registry, session logging, grading dispatch
+- FEAT-008 (Web UI) — UI rendering surfaces for comparison/replay/benchmark views
+- FEAT-014 (Token Awareness) — token/cost tracking per arm (displayed in comparison views)
+- FEAT-012 (Git Awareness) — git diff rendering in comparison views
+- Skills library — `compare-prompts`, `replay-bead`, `benchmark-suite` write the
+  records that FEAT-019 displays
 
 ## Out of Scope
 
-- **Exec projection** — comparison is a peer to FEAT-010 exec, not a
-  child. Do not model comparisons as exec runs.
+- **Comparison dispatch** — running N harnesses on the same prompt is the
+  `compare-prompts` skill, not DDx core.
+- **Replay execution** — running a bead with a different model is the
+  `replay-bead` skill, not DDx core.
+- **Benchmark execution** — running a prompt matrix is the `benchmark-suite`
+  skill, not DDx core.
 - **Exploration loops** — "try 10 ideas to improve metric X" is a workflow
-  plugin loop that calls DDx comparison primitives, not a DDx execution mode.
+  plugin loop that calls skills, not a DDx execution mode.
 - **Model selection policies** — workflow tools decide which model for which
   task based on comparison results. DDx provides the data.
 - **Prompt optimization** — automatic prompt rewriting is out of scope.

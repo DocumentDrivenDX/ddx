@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T181640-e2f523fc",
+  "bead_id": "ddx-e568e815",
+  "base_rev": "fc68469397205320e0375dffe8f6d334d709b0a4",
+  "created_at": "2026-04-29T18:16:41.223234086Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e568e815",
+    "title": "[artifact-run-arch] contract FEAT-019 to evaluation UX",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. Contract FEAT-019 to evaluation UX (comparison views, grading rubric storage/display, benchmark result aggregation in web UI). Workflow shapes (comparison/replay/benchmark) move to skills library. Remove peer-to-FEAT-010 assertions at FEAT-019:40 and :404.",
+    "labels": [
+      "frame",
+      "plan-2026-04-29",
+      "evaluation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T18:16:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T18:16:38.394028524Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T181640-e2f523fc",
+    "prompt": ".ddx/executions/20260429T181640-e2f523fc/prompt.md",
+    "manifest": ".ddx/executions/20260429T181640-e2f523fc/manifest.json",
+    "result": ".ddx/executions/20260429T181640-e2f523fc/result.json",
+    "checks": ".ddx/executions/20260429T181640-e2f523fc/checks.json",
+    "usage": ".ddx/executions/20260429T181640-e2f523fc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e568e815-20260429T181640-e2f523fc"
+  }
+}

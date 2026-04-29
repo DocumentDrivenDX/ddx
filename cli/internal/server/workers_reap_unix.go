@@ -7,6 +7,18 @@ import (
 	"time"
 )
 
+// isPIDAlive reports whether a process with the given PID is alive.
+// Returns false if pid <= 0 or if the process does not exist (ESRCH).
+// A zombie process (which has exited but not been waited) returns true
+// because its PID slot is still held; the caller treats it as dead for
+// prune purposes only when combined with an age check.
+func isPIDAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	return syscall.Kill(pid, 0) != syscall.ESRCH
+}
+
 // terminateProcessGroup sends SIGTERM to the worker's process group; if the
 // process is still alive after grace, follows up with SIGKILL. The negative
 // pid argument to syscall.Kill targets the whole process group, which is

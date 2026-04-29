@@ -46,7 +46,8 @@ type agentWorkerServerRecord struct {
 	LastResult     *struct {
 		BeadID string `json:"bead_id,omitempty"`
 	} `json:"last_result,omitempty"`
-	PID int `json:"pid,omitempty"`
+	PID      int   `json:"pid,omitempty"`
+	PIDAlive *bool `json:"pid_alive,omitempty"`
 }
 
 // agentWorkerDisplay is the unified display record for table output and JSON.
@@ -68,6 +69,9 @@ type agentWorkerDisplay struct {
 	// the process directly (e.g. `kill -TERM <pid>`) when the CLI stop
 	// path is unavailable.
 	PID int `json:"pid,omitempty"`
+	// PIDAlive is true when PID > 0 and the process is alive, false when PID
+	// is known dead. Nil when PID == 0 (goroutine-only worker).
+	PIDAlive *bool `json:"pid_alive,omitempty"`
 }
 
 func (f *CommandFactory) newAgentWorkersCommand() *cobra.Command {
@@ -93,6 +97,7 @@ Examples:
 	cmd.Flags().String("project", "", "Project root to query (default: detected from CWD)")
 
 	cmd.AddCommand(f.newAgentWorkersStopCommand())
+	cmd.AddCommand(f.newAgentWorkersPruneCommand())
 	return cmd
 }
 
@@ -327,6 +332,7 @@ func fetchServerAgentWorkers(projectRoot string) ([]agentWorkerDisplay, map[stri
 			Successes: r.Successes,
 			Failures:  r.Failures,
 			PID:       r.PID,
+			PIDAlive:  r.PIDAlive,
 		}
 		if d.Kind == "" {
 			d.Kind = "server"
@@ -496,6 +502,104 @@ func agentTruncateTitle(s string, max int) string {
 		return s
 	}
 	return string(runes[:max-1]) + "…"
+}
+
+// agentWorkerPruneResult mirrors server.PruneResult for JSON decoding.
+type agentWorkerPruneResult struct {
+	ID      string `json:"id"`
+	BeadID  string `json:"bead_id,omitempty"`
+	Harness string `json:"harness,omitempty"`
+	Age     string `json:"age"`
+	Reason  string `json:"reason"`
+}
+
+func (f *CommandFactory) newAgentWorkersPruneCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Reap stale worker registry entries whose process is no longer alive",
+		Long: `Scan the worker registry and reap entries that are still marked running
+but whose recorded process has already exited. This repairs registry noise left
+by crashes, OOM kills, or server restarts without affecting live workers.
+
+For each reaped entry the bead claim is released (status returns to open) and a
+bead.reaped event is appended to the tracker. The on-disk state is updated to
+state=reaped.
+
+Examples:
+  ddx agent workers prune
+  ddx agent workers prune --max-age 24h
+  ddx agent workers prune --json`,
+		Args: cobra.NoArgs,
+		RunE: f.runAgentWorkersPrune,
+	}
+	cmd.Flags().Duration("max-age", 0, "Also prune workers older than this duration regardless of PID liveness")
+	cmd.Flags().Bool("json", false, "Emit JSON array of pruned workers")
+	cmd.Flags().String("project", "", "Project root to query (default: detected from CWD)")
+	return cmd
+}
+
+func (f *CommandFactory) runAgentWorkersPrune(cmd *cobra.Command, _ []string) error {
+	maxAge, _ := cmd.Flags().GetDuration("max-age")
+	asJSON, _ := cmd.Flags().GetBool("json")
+	projectFlag, _ := cmd.Flags().GetString("project")
+
+	projectRoot := projectFlag
+	if projectRoot == "" {
+		projectRoot = gitpkg.FindProjectRoot(f.WorkingDir)
+	}
+
+	base := resolveServerURL(projectRoot)
+	client := newLocalServerClient()
+
+	url := base + "/api/agent/workers/prune"
+	if maxAge > 0 {
+		url += "?max_age=" + maxAge.String()
+	}
+	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("prune: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("prune: server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var results []agentWorkerPruneResult
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		return fmt.Errorf("prune: decode response: %w", err)
+	}
+
+	if asJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(results)
+	}
+
+	if len(results) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "no stale workers found")
+		return nil
+	}
+
+	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tBEAD\tHARNESS\tAGE\tREASON")
+	for _, r := range results {
+		beadID := r.BeadID
+		if beadID == "" {
+			beadID = "-"
+		}
+		harness := r.Harness
+		if harness == "" {
+			harness = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.ID, beadID, harness, r.Age, r.Reason)
+	}
+	return tw.Flush()
 }
 
 // agentFormatElapsed returns a human-readable elapsed duration like "4m32s".
