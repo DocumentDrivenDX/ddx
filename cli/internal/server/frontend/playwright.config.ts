@@ -10,16 +10,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // $HOME or the repository's live .ddx/ state.
 
 const CLI_PKG_DIR = path.resolve(__dirname, '../../..');
+const FRONTEND_DIR = __dirname;
 const FIXTURE_DIR = path.resolve(__dirname, 'e2e/fixtures');
 const PORT = Number(process.env.DDX_E2E_PORT ?? 4174);
 const BASE_URL = `https://127.0.0.1:${PORT}`;
 
-// Copy the fixture workspace into a fresh temp dir, build the ddx binary from
-// the cli module, and exec it from the temp dir. The temp dir has no .git so
-// FindProjectRoot falls back to it, and tsnet is disabled so the harness has
-// no Tailscale dependency.
+// Build the SvelteKit frontend (so cli/internal/server/embed.go has assets to
+// embed), copy the fixture workspace into a fresh temp dir, build the ddx
+// binary from the cli module, and exec it from the temp dir. The temp dir has
+// no .git so FindProjectRoot falls back to it, and tsnet is disabled so the
+// harness has no Tailscale dependency.
 const bootCommand = [
 	`set -e`,
+	`(cd "${FRONTEND_DIR}" && bun run build >&2)`,
 	`TMP=$(mktemp -d -t ddx-e2e-XXXXXX)`,
 	`cp -R "${FIXTURE_DIR}/." "$TMP/"`,
 	`(cd "${CLI_PKG_DIR}" && go build -o "$TMP/ddx" .)`,

@@ -59,13 +59,16 @@ API endpoints without reading `$HOME`, `~/.config/ddx`, or the repository's live
 
 What `bun run test:e2e` does on each run:
 
-1. Copies `e2e/fixtures/` into a fresh `mktemp -d` workspace.
-2. Runs `go build` from the `cli/` module to produce a `ddx` binary inside that
+1. Runs `bun run build` to populate `frontend/build/` so the assets embedded
+   into the Go binary by `cli/internal/server/embed.go` are fresh. You do
+   **not** need to pre-build the frontend manually.
+2. Copies `e2e/fixtures/` into a fresh `mktemp -d` workspace.
+3. Runs `go build` from the `cli/` module to produce a `ddx` binary inside that
    temp dir. You do **not** need to pre-build or install `ddx` — Playwright's
    `webServer` builds it for you. (`go run` is not used; the harness execs the
    built binary so startup is fast and reproducible.) The Go toolchain must be
    on `PATH`.
-3. Execs `./ddx server --tsnet=false --addr=127.0.0.1 --port=4174` from the
+4. Execs `./ddx server --tsnet=false --addr=127.0.0.1 --port=4174` from the
    temp workspace. Tailscale (tsnet) is disabled, and because the temp dir has
    no `.git`, `FindProjectRoot` falls back to it — the server sees only the
    fixture.
