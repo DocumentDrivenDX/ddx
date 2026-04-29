@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260429T194323-17780ddb",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-88c136e6",
+  "base_rev": "c3a75fb4328c59a7e2c91d0a74f6632eb95eda03",
+  "created_at": "2026-04-29T19:43:23.856475156Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-88c136e6",
+    "title": "[read-coverage] add MCP process metrics tools",
+    "description": "FEAT-016 gap. HTTP has /api/metrics/{summary,cost,cycle-time,rework}. MCP has no metrics tools at all. Cost-aware agents (cost-tiered-work standing goal) cannot query process metrics via MCP. Add ddx_metrics_summary, ddx_metrics_cost, ddx_metrics_cycle_time, ddx_metrics_rework MCP tools mirroring the HTTP endpoints.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "mcp",
+      "feat-016"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:43:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:43:21.000193615Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T194323-17780ddb",
+    "prompt": ".ddx/executions/20260429T194323-17780ddb/prompt.md",
+    "manifest": ".ddx/executions/20260429T194323-17780ddb/manifest.json",
+    "result": ".ddx/executions/20260429T194323-17780ddb/result.json",
+    "checks": ".ddx/executions/20260429T194323-17780ddb/checks.json",
+    "usage": ".ddx/executions/20260429T194323-17780ddb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-88c136e6-20260429T194323-17780ddb"
+  }
+}
