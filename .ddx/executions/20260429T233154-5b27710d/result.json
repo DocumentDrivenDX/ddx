@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No changes to MCP tool registration (expected under `cli/internal/mcp/` or similar) — neither `ddx_exec_run` nor `ddx_exec_run_log` is added.\nNo tests added for the new MCP tools despite the bead title mentioning \"MCP coverage\".\nThe result.json claims `outcome: task_succeeded` but the reviewable diff is purely evidence files; the actual implementation commit (if any) is not in this diff. Re-run with the implementation included, or point the review at the correct revision range."
+}
