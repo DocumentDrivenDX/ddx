@@ -57,6 +57,9 @@ type CommandFactory struct {
 	// without needing a real git repo.
 	executeBeadLandingAdvancerOverride func(res *agent.ExecuteBeadResult) (*agent.LandResult, error)
 
+	// syncGitRunnerOverride replaces the real git runner in 'ddx sync' (for testing).
+	syncGitRunnerOverride syncGitRunner
+
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper
 
@@ -102,6 +105,7 @@ func (f *CommandFactory) withWorkingDir(workingDir string) *CommandFactory {
 		executeBeadOrchestratorGitOverride: f.executeBeadOrchestratorGitOverride,
 		executeBeadLandingGitOverride:      f.executeBeadLandingGitOverride,
 		executeBeadLandingAdvancerOverride: f.executeBeadLandingAdvancerOverride,
+		syncGitRunnerOverride:              f.syncGitRunnerOverride,
 		viperInstance:                      f.viperInstance,
 		updateChecker:                      f.updateChecker,
 		updateDone:                         f.updateDone,
@@ -552,6 +556,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
 	rootCmd.AddCommand(f.newWorkCommand())
+	rootCmd.AddCommand(f.newSyncCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{
