@@ -102,6 +102,15 @@ requires:
 
 ### Install Flow
 
+> **Amended by FEAT-015 (2026-04-29):** `ddx install <plugin>` is now
+> project-local. Skills land in `<projectRoot>/.agents/skills/` and
+> `<projectRoot>/.claude/skills/` as real files (no symlinks, no home-
+> directory writes). The `~/.agents/skills/` / `~/.local/bin/helix`
+> targets and `~/.ddx/installed.yaml` flow described below are
+> historical context from the pre-amendment global model. See FEAT-015
+> for the authoritative install semantics and the no-`~` manifest
+> invariant.
+
 ```bash
 ddx install helix
 ```

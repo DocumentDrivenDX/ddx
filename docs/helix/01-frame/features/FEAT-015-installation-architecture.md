@@ -13,6 +13,25 @@ ddx:
 **Priority:** P0
 **Owner:** DDx Team
 
+> **Update 2026-04-29 (project-local install, no symlinks):** This feature
+> is amended to drop the global skill installation model entirely. DDx no
+> longer installs skills under `~/.agents/skills/` or `~/.claude/skills/`,
+> and `ddx install --global` is removed. `ddx init` and `ddx install
+> <plugin>` only touch the current `<projectRoot>`. The new project-local
+> tree (`<projectRoot>/.ddx/plugins/`, `<projectRoot>/.agents/skills/`,
+> `<projectRoot>/.claude/skills/`) is committed to git as real files.
+> **Zero symlinks are created by ddx install** — see the new
+> "Cross-platform invariant" section below for the Windows-compatibility
+> reasoning and how plugin-author symlinks are handled. Existing projects
+> with home-directory symlinks or stale `~/.ddx/installed.yaml` entries
+> are handled per the new "Migration" section. Plugin manifests whose
+> `Root.Target` begins with `~` are rejected with a non-zero exit.
+> Sections, bullets, and acceptance criteria below that describe
+> `ddx install --global`, `~/.ddx/skills/`, `~/.agents/skills/ddx-*`,
+> or `~/.claude/skills/ddx-*` should be read as historical context;
+> the amendment in this header and the two new sections are
+> authoritative.
+>
 > **Update 2026-04-17:** The skill roster referenced throughout this
 > document (ddx-bead, ddx-agent, ddx-install, ddx-status, ddx-review,
 > ddx-run, ddx-doctor) reflects the pre-consolidation layout. Per
@@ -33,9 +52,73 @@ ddx:
 
 Redesign the DDx installation architecture with a clean separation of concerns:
 - **install.sh** — binary only (minimal attack surface, fast)
-- **ddx install --global** — extract embedded skills to `~/.ddx/`, symlink to `~/.agents/` and `~/.claude/`
-- **ddx init** — project-local skills copied (not symlinked) into `.ddx/skills/`, `.agents/skills/`, `.claude/skills/`
-- **ddx install \<plugin\>** — project-scoped: plugin resources to `.ddx/plugins/`, skills to `.agents/` and `.claude/` via relative symlinks
+- **ddx init** — project-local: writes `<projectRoot>/.ddx/`,
+  `<projectRoot>/.agents/skills/`, and `<projectRoot>/.claude/skills/`
+  as real files (copied, never symlinked). Touches no path outside the
+  project root.
+- **ddx install \<plugin\>** — project-local: plugin tarball extracted
+  into `<projectRoot>/.ddx/plugins/<name>/`, then plugin skills copied
+  as real files into `<projectRoot>/.agents/skills/` and
+  `<projectRoot>/.claude/skills/`. Touches no path outside the project
+  root. Creates zero symlinks (see "Cross-platform invariant").
+- All project-local install outputs (`<projectRoot>/.ddx/plugins/`,
+  `<projectRoot>/.agents/skills/`, `<projectRoot>/.claude/skills/`)
+  are intended to be committed to git so teammates and CI get the
+  same skills on clone without re-running `ddx install`.
+
+## Cross-platform invariant
+
+**`ddx install` (and `ddx init`) creates zero symlinks.** Every file
+written is a real file copied from the binary's embedded tree or from
+an extracted plugin tarball.
+
+**Reasoning — Windows compatibility.** Symlinks on Windows require
+either Developer Mode, an elevated process, or specific filesystem
+features, and behave inconsistently across NTFS, ReFS, and shared
+filesystems. A single project-local layout that works identically on
+Linux, macOS, and Windows is worth the duplication cost of copied
+files.
+
+**Plugin-source symlinks are not materialized.** If a plugin tarball
+contains symlinks (e.g. an author symlinks `.claude/skills/foo` →
+`../.agents/skills/foo` inside their source tree), DDx does **not**
+materialize those symlinks on extract. Plugin authors are responsible
+for shipping each skill as a real directory in every target the
+plugin declares. A plugin that relies on tarball symlinks resolving
+on the install side is a malformed plugin.
+
+**Manifest validation.** Plugin manifests are scanned at install
+time. Any `Root.Target` (or equivalent install target) whose path
+begins with `~` is rejected and `ddx install` exits with a non-zero
+status. Targets must be project-relative paths under
+`<projectRoot>/`. This invariant is enforced even for plugins that
+worked under the pre-amendment global model.
+
+## Migration
+
+Pre-amendment installs may have left state in three places. This
+section describes how DDx heals or ignores each.
+
+- **Home-directory symlinked skills** (`~/.agents/skills/ddx-*`,
+  `~/.claude/skills/ddx-*` pointing into `~/.ddx/skills/` or a project
+  tree). `ddx update --force` (and `ddx init --force` inside an
+  existing project) heals the project by rewriting
+  `<projectRoot>/.agents/skills/` and `<projectRoot>/.claude/skills/`
+  as real files. DDx does **not** delete files outside the project
+  root; users may `rm -rf ~/.agents/skills/ddx-*
+  ~/.claude/skills/ddx-*` themselves if they want a clean home tree.
+
+- **Stale `~/.ddx/installed.yaml` entries** from a prior global
+  install. These are treated as **no-op uninstalls**: `ddx
+  uninstall <name>` succeeds without touching the filesystem when
+  the recorded paths are outside the current project root, and the
+  entry is removed from `installed.yaml`. No error is raised for
+  missing files.
+
+- **`~/.ddx/plugins/`** from a prior global install. DDx leaves this
+  directory in place as inert state — nothing reads from it under
+  the project-local model. Users may `rm -rf ~/.ddx/plugins/` at
+  their convenience; DDx will not recreate it.
 
 ## Problem Statement
 

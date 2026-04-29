@@ -124,9 +124,14 @@ skill-frontmatter directive.
 
 ### Installation
 
+> See FEAT-015 (2026-04-29 amendment) for the authoritative install
+> model: project-local copy semantics, zero symlinks created by
+> `ddx install`, and the no-`~` manifest invariant.
+
 - `ddx init` copies `skills/ddx/` into `.claude/skills/ddx/`,
   `.agents/skills/ddx/`, and `.ddx/skills/ddx/` as real files
-  (symlinks break after `git clone` on a fresh machine).
+  (symlinks break after `git clone` on a fresh machine, and DDx no
+  longer creates symlinks during install — see FEAT-015).
 - On init and on `ddx update`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
   `ddx-bead`, `ddx-run`, `ddx-agent`, `ddx-review`, `ddx-status`,
