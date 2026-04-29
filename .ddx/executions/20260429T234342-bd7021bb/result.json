@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No HTTP route registration for `/api/agent/models`, `/api/agent/catalog`, or `/api/agent/capabilities` (expected in `cli/internal/server/` route table).\nNo MCP tool definitions for agent models/catalog/capabilities (expected in `cli/internal/mcp/` tool registry).\nNo handler implementations bridging existing CLI commands (`ddx agent models`, `ddx agent catalog show`, `ddx agent capabilities`) to HTTP/MCP surfaces.\nNo tests covering the new routes or MCP tools.\nDiff consists entirely of `.ddx/executions/20260429T233924-ba29c9d6/manifest.json` and `result.json` — pure metadata, insufficient to evaluate any AC."
+}
