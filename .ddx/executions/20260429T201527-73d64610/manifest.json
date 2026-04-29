@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T201527-73d64610",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-ecea5b2b",
+  "base_rev": "de3bf172e21fbf2974567836c6180b107b8f7395",
+  "created_at": "2026-04-29T20:15:28.504861292Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-ecea5b2b",
+    "title": "[read-coverage] add per-metric-id history/trend HTTP + MCP",
+    "description": "FEAT-016 gap. CLI has ddx metric history \u003cid\u003e and ddx metric trend \u003cid\u003e for time-series drill-down per metric ID. HTTP has only aggregate endpoints (/api/metrics/summary etc.); no per-metric-id endpoint. MCP has no metrics tools. Add GET /api/metrics/{id}/history and GET /api/metrics/{id}/trend HTTP routes, and ddx_metric_history + ddx_metric_trend MCP tools.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "http",
+      "mcp",
+      "feat-016"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T20:15:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T20:15:25.560902708Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T201527-73d64610",
+    "prompt": ".ddx/executions/20260429T201527-73d64610/prompt.md",
+    "manifest": ".ddx/executions/20260429T201527-73d64610/manifest.json",
+    "result": ".ddx/executions/20260429T201527-73d64610/result.json",
+    "checks": ".ddx/executions/20260429T201527-73d64610/checks.json",
+    "usage": ".ddx/executions/20260429T201527-73d64610/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-ecea5b2b-20260429T201527-73d64610"
+  }
+}
