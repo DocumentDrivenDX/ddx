@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Fix tracks lastRequestSentAt (reset on user/tool_result events) and emits per-call latency_ms distinct from cumulative elapsed_ms. CHANGELOG documents legacy traces. Regression test asserts divergence, bounded second-turn latency, and sum\u003c=elapsed.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Fix limited to claude harness; if other harnesses share the bug they are out of scope here.",
+      "location": "cli/internal/agent/claude_stream.go:125"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2072,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T031155-01d2fc99/manifest.json",
+          ".ddx/executions/20260429T031155-01d2fc99/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4595,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8473,
+    "output_bytes": 737,
+    "elapsed_ms": 15844,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
