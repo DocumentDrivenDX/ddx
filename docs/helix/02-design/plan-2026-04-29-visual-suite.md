@@ -180,6 +180,8 @@ standard `bunx <pkg>` commands.
 - Alt text drafted and in sidecar
 - File size budget under 200KB (compress / downsize as needed)
 - Metaphor parses without explanatory copy
+- **Brand-fit: sober/utilitarian register matching DDx's docs surface; no
+  AI-gloss, no kitsch, no dreamy illustration**
 
 ## Risks
 
