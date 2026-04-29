@@ -1,0 +1,118 @@
+{
+  "attempt_id": "20260429T234356-c842a482",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-d98d4712",
+  "base_rev": "4a3f57cc1040e4a9ab1365bf249b15d7cc9c0641",
+  "created_at": "2026-04-29T23:43:57.31987975Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-d98d4712",
+    "title": "[read-coverage] add ddx_list_personas MCP tool",
+    "description": "FEAT-007/002 gap. HTTP has GET /api/personas (list all personas). MCP has ddx_resolve_persona (resolve by role) but no list tool. Agents selecting a persona cannot enumerate available options via MCP. Add ddx_list_personas MCP tool returning the same data as GET /api/personas.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "mcp",
+      "feat-002"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T23:43:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T19:43:08.91964705Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T193902-aaede585\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":20,\"output_tokens\":4994,\"total_tokens\":5014,\"cost_usd\":0.43467139999999993,\"duration_ms\":245926,\"exit_code\":0}",
+          "created_at": "2026-04-29T19:43:09.016073308Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=5014 cost_usd=0.4347 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T19:43:12.788349294Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only execution evidence files (manifest.json, result.json) under .ddx/executions/. No implementation of the ddx_list_personas MCP tool is present in the changed files, so AC cannot be verified.\nharness=claude\nmodel=opus\ninput_bytes=5590\noutput_bytes=509\nelapsed_ms=5481",
+          "created_at": "2026-04-29T19:43:20.477120277Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T19:43:20.58925023Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution evidence files (manifest.json, result.json) under .ddx/executions/. No implementation of the ddx_list_personas MCP tool is present in the changed files, so AC cannot be verified.\nresult_rev=8efb25ad96023446dc92193e46cac0461fce5737\nbase_rev=efe39d29eb54671bb0171b3b9c2216315c03d760",
+          "created_at": "2026-04-29T19:43:20.681570116Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:28:45.257091674Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:28:45.363833728Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:28:45.45629438Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:28:45.635711899Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-29T23:43:56.390503107Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T234356-c842a482",
+    "prompt": ".ddx/executions/20260429T234356-c842a482/prompt.md",
+    "manifest": ".ddx/executions/20260429T234356-c842a482/manifest.json",
+    "result": ".ddx/executions/20260429T234356-c842a482/result.json",
+    "checks": ".ddx/executions/20260429T234356-c842a482/checks.json",
+    "usage": ".ddx/executions/20260429T234356-c842a482/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-d98d4712-20260429T234356-c842a482"
+  }
+}
