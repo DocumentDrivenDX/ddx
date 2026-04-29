@@ -1,0 +1,84 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "Implementation of `ddx sync` and `--watch`, allowlist enforcement, no-destructive-flags, structured abort, and doctor integration are all present with tests. Missing: FEAT-NNN-sync.md spec under docs/helix/01-frame/features/ (AC8).",
+  "findings": [
+    {
+      "severity": "warn",
+      "summary": "AC8 unmet: no FEAT-NNN-sync.md spec was added under docs/helix/01-frame/features/. The acceptance criteria and standing 'specs first → beads' rule call for the spec to land first.",
+      "location": "docs/helix/01-frame/features/"
+    },
+    {
+      "severity": "info",
+      "summary": "AC1 met: `ddx sync` runs fetch → stash → merge origin/main → pop → commit DDx paths → push with single retry on non-fast-forward.",
+      "location": "cli/cmd/sync.go:161"
+    },
+    {
+      "severity": "info",
+      "summary": "AC2 met: `--watch` with configurable `--interval` (default 15m) loops in foreground until context cancel.",
+      "location": "cli/cmd/sync.go:96"
+    },
+    {
+      "severity": "info",
+      "summary": "AC3 met: stashing/staging restricted to ddxManagedPaths; TestSync_UnrelatedDirtyFilesUntouched and TestSync_CommitsOnlyDDxPaths assert the allowlist.",
+      "location": "cli/cmd/sync_test.go:106"
+    },
+    {
+      "severity": "info",
+      "summary": "AC4 met: TestSync_NoForceOrNoVerifyFlags asserts no --force/-f/--no-verify/--force-with-lease/--hard/--delete in any git call.",
+      "location": "cli/cmd/sync_test.go:140"
+    },
+    {
+      "severity": "info",
+      "summary": "AC5 met: stash-pop conflict and double push failure both write sync-failure.json and return non-nil error.",
+      "location": "cli/cmd/sync.go:186"
+    },
+    {
+      "severity": "info",
+      "summary": "AC6 met: doctor reads .ddx/sync-failure.json and surfaces a sync_aborted DiagnosticIssue with timestamp and remediation.",
+      "location": "cli/cmd/doctor.go:245"
+    },
+    {
+      "severity": "info",
+      "summary": "AC7 plausible: implementation uses filepath and pure Go git invocations; no bash-isms or symlinks. CI matrix not verified from the diff.",
+      "location": "cli/cmd/sync.go:1"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 4195,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T230740-8b27cef3/manifest.json",
+          ".ddx/executions/20260429T230740-8b27cef3/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6758,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 12759,
+    "output_bytes": 2042,
+    "elapsed_ms": 40149,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
