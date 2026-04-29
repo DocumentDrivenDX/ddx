@@ -2823,6 +2823,18 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_doc_dependents",
+			Description: "Get documents that depend on a given document (reverse dependency direction)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Document ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
 			Name:        "ddx_agent_sessions",
 			Description: "List recent agent sessions",
 			InputSchema: map[string]any{
@@ -3102,6 +3114,9 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_doc_deps":
 		id, _ := call.Arguments["id"].(string)
 		return s.mcpDocDeps(workingDir, id)
+	case "ddx_doc_dependents":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpDocDependents(workingDir, id)
 	case "ddx_agent_sessions":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpAgentSessions(workingDir, harness)
@@ -3536,6 +3551,31 @@ func (s *Server) mcpDocDeps(workingDir, id string) mcpToolResult {
 		}
 	}
 	data, _ := json.Marshal(deps)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpDocDependents(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText("id is required")},
+			IsError: true,
+		}
+	}
+	graph, err := docgraph.BuildGraphWithConfig(workingDir)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
+			IsError: true,
+		}
+	}
+	dependents, err := graph.DependentIDs(id)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(err.Error())},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(dependents)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
