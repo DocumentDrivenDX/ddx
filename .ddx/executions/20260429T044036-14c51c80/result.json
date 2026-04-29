@@ -1,0 +1,59 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "ResolveTierCandidates walks catalog surfaces with overrides layered first; execute-loop and worker iterate candidates recording per-surface rejections; catalog show probes reachability and warns. Unit tests cover AC1/AC5. All five ACs addressed.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Duplicate per-candidate rejection formatter (formatCandidateRejection vs formatTierCandidateRejection) in cmd vs server; fine but ripe to consolidate.",
+      "location": "cli/cmd/agent_cmd.go:940 and cli/internal/server/workers.go:1722"
+    },
+    {
+      "severity": "info",
+      "summary": "AC5 overrides remain gated behind --override-model in execute-loop (carried over from ddx-87fb72c2); overrides win only when flag is set, otherwise filtered out before catalog candidates.",
+      "location": "cli/cmd/agent_cmd.go:1985"
+    },
+    {
+      "severity": "info",
+      "summary": "AC2 (end-to-end fresh-project execute-loop succeeds) is not exercised by an integration test in this diff; relies on commit-message claim and unit coverage.",
+      "location": "cli/internal/agent/profile_ladder_test.go"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 4161,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T041456-2c6831a6/manifest.json",
+          ".ddx/executions/20260429T041456-2c6831a6/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6667,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 12634,
+    "output_bytes": 1143,
+    "elapsed_ms": 33239,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
