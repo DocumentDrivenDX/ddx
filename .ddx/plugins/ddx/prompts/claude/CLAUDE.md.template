@@ -1,0 +1,61 @@
+# {{project_name}}
+
+## Overview
+{{project_description}}
+
+## Tech Stack
+{{tech_stack}}
+
+## Architecture
+{{architecture_description}}
+
+## Development Guidelines
+
+### Code Style
+- Follow established patterns in the codebase
+- Use meaningful variable and function names
+- Keep functions focused and single-purpose
+- Add comments for complex business logic
+
+### Testing
+- Write tests for new features
+- Test edge cases and error conditions
+- Maintain good test coverage
+- Use descriptive test names
+
+### AI Development Notes
+- Preferred AI model: {{ai_model}}
+- Key files to understand: README.md, configuration files
+- Important patterns: {{key_patterns}}
+
+## Project Structure
+```
+{{project_name}}/
+├── {{main_directory}}/        # Main source code
+├── tests/                     # Test files
+├── docs/                      # Documentation
+├── {{config_directory}}/      # Configuration files
+└── README.md                  # Project overview
+```
+
+## Key Components
+{{key_components}}
+
+## Development Workflow
+1. Review existing patterns before implementing new features
+2. Run tests before committing changes
+3. Update documentation for significant changes
+4. Follow the established git workflow
+
+## Common Tasks
+- Build: {{build_command}}
+- Test: {{test_command}}
+- Lint: {{lint_command}}
+- Format: {{format_command}}
+
+## AI Assistance Guidelines
+When working with AI:
+- Provide context about the specific component being modified
+- Reference existing patterns and conventions
+- Ask for explanations of complex changes
+- Request tests for new functionality

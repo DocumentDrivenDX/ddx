@@ -1,0 +1,69 @@
+# Slack MCP Server Definition
+name: slack
+description: "Slack integration for channels, messages, and workflows"
+category: productivity
+author: modelcontextprotocol
+version: 1.0.0
+tags: [slack, messaging, channels, collaboration, communication, workflows]
+
+command:
+  executable: npx
+  args: ["-y", "@modelcontextprotocol/server-slack"]
+
+environment:
+  - name: SLACK_BOT_TOKEN
+    description: "Slack bot token for API access"
+    required: true
+    sensitive: true
+    validation: "^xoxb-[0-9]+-[0-9]+-[a-zA-Z0-9]+$"
+
+documentation:
+  setup: |
+    1. Go to https://api.slack.com/apps
+    2. Click "Create New App" → "From scratch"
+    3. Enter app name (e.g., "Claude MCP") and select your workspace
+    4. Go to "OAuth & Permissions" in the sidebar
+    5. Add the following Bot Token Scopes:
+       - channels:read
+       - channels:history
+       - chat:write
+       - users:read
+       - files:read
+    6. Click "Install to Workspace" and authorize
+    7. Copy the "Bot User OAuth Token" (starts with xoxb-)
+  permissions:
+    - channels:read
+    - channels:history
+    - chat:write
+    - users:read
+    - files:read
+  examples:
+    - "Send a message to the #general channel"
+    - "Get recent messages from #project-updates"
+    - "List all channels I have access to"
+    - "Search for messages containing 'deadline'"
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: recommended
+  network_access: required
+  file_access: none
+  data_handling: "Bot token stored encrypted in config file"
+  warnings:
+    - "Grant minimal required scopes to your bot"
+    - "Regularly review bot permissions and activity"
+    - "Be mindful of sensitive information in channels"
+
+verification:
+  test_command: "List my Slack channels"
+  expected_response: "List of accessible Slack channels"
+
+links:
+  homepage: https://github.com/modelcontextprotocol/servers
+  documentation: https://github.com/modelcontextprotocol/servers/tree/main/src/slack
+  issues: https://github.com/modelcontextprotocol/servers/issues

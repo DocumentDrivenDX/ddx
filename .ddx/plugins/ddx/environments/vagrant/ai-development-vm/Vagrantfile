@@ -1,0 +1,133 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# AI Development Virtual Machine Configuration
+# Provides a consistent, isolated development environment for AI projects
+
+Vagrant.configure("2") do |config|
+  # Base box - Ubuntu 22.04 LTS
+  config.vm.box = "ubuntu/jammy64"
+  config.vm.box_version = "20240117.0.0"
+
+  # VM hostname
+  config.vm.hostname = "ai-dev-vm"
+
+  # Network configuration
+  config.vm.network "private_network", ip: "192.168.56.10"
+
+  # Port forwarding for common services
+  config.vm.network "forwarded_port", guest: 8888, host: 8888  # Jupyter
+  config.vm.network "forwarded_port", guest: 3000, host: 3000  # Node.js apps
+  config.vm.network "forwarded_port", guest: 5000, host: 5000  # Flask/FastAPI
+  config.vm.network "forwarded_port", guest: 8000, host: 8000  # Django/ChromaDB
+  config.vm.network "forwarded_port", guest: 5432, host: 5432  # PostgreSQL
+  config.vm.network "forwarded_port", guest: 6379, host: 6379  # Redis
+
+  # Shared folders
+  config.vm.synced_folder ".", "/vagrant", type: "virtualbox"
+  config.vm.synced_folder "~/Development", "/home/vagrant/Development",
+    create: true, type: "virtualbox"
+
+  # VirtualBox specific configuration
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "ai-development-vm"
+    vb.gui = false
+
+    # Resource allocation (adjust based on your host system)
+    vb.memory = "8192"  # 8GB RAM
+    vb.cpus = 4
+
+    # Enable nested virtualization for Docker
+    vb.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+
+    # Improve performance
+    vb.customize ["modifyvm", :id, "--ioapic", "on"]
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+
+    # Enable clipboard sharing
+    vb.customize ["modifyvm", :id, "--clipboard-mode", "bidirectional"]
+
+    # Set video memory for GUI applications (if needed)
+    vb.customize ["modifyvm", :id, "--vram", "128"]
+  end
+
+  # VMware specific configuration
+  config.vm.provider "vmware_desktop" do |v|
+    v.vmx["memsize"] = "8192"
+    v.vmx["numvcpus"] = "4"
+    v.vmx["ethernet0.virtualdev"] = "vmxnet3"
+  end
+
+  # Parallels specific configuration
+  config.vm.provider "parallels" do |prl|
+    prl.name = "ai-development-vm"
+    prl.memory = 8192
+    prl.cpus = 4
+    prl.update_guest_tools = true
+  end
+
+  # Environment variables (loaded from .env if it exists)
+  if File.exist?('.env')
+    File.readlines('.env').each do |line|
+      next if line.strip.empty? || line.start_with?('#')
+      key, value = line.strip.split('=', 2)
+      ENV[key] = value if key && value
+    end
+  end
+
+  # Pass environment variables to VM
+  config.vm.provision "shell", inline: <<-SHELL
+    # Set environment variables
+    cat >> /etc/environment <<EOF
+OPENAI_API_KEY=#{ENV['OPENAI_API_KEY'] || ''}
+ANTHROPIC_API_KEY=#{ENV['ANTHROPIC_API_KEY'] || ''}
+GITHUB_TOKEN=#{ENV['GITHUB_TOKEN'] || ''}
+LANGCHAIN_API_KEY=#{ENV['LANGCHAIN_API_KEY'] || ''}
+EOF
+  SHELL
+
+  # Main provisioning script
+  config.vm.provision "shell", path: "provision.sh"
+
+  # Post-provisioning message
+  config.vm.post_up_message = <<-MESSAGE
+    AI Development VM is ready!
+
+    Access the VM:
+      vagrant ssh
+
+    Services available:
+      - Jupyter Notebook: http://localhost:8888
+      - Node.js apps: http://localhost:3000
+      - Python apps: http://localhost:5000
+      - Django/FastAPI: http://localhost:8000
+      - PostgreSQL: localhost:5432
+      - Redis: localhost:6379
+
+    Shared folders:
+      - /vagrant (current directory)
+      - ~/Development -> /home/vagrant/Development
+
+    To start Jupyter:
+      vagrant ssh -c "cd /vagrant && jupyter notebook --ip=0.0.0.0"
+
+    Enjoy your AI development environment!
+  MESSAGE
+
+  # Optional: Auto-install plugins
+  config.vagrant.plugins = ["vagrant-vbguest", "vagrant-env"]
+
+  # Triggers for lifecycle events
+  config.trigger.after :up do |trigger|
+    trigger.name = "Environment Ready"
+    trigger.info = "AI Development VM is up and running!"
+    trigger.run_remote = {inline: "echo 'VM started at $(date)' >> /var/log/vagrant-startup.log"}
+  end
+
+  config.trigger.before :destroy do |trigger|
+    trigger.name = "Cleanup"
+    trigger.info = "Cleaning up resources..."
+    trigger.run_remote = {inline: "echo 'VM destroyed at $(date)' >> /var/log/vagrant-cleanup.log"}
+  end
+end
