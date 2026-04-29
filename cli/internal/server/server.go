@@ -95,6 +95,7 @@ func New(addr, workingDir string) *Server {
 	state.workingDir = workingDir
 
 	workers := NewWorkerManager(workingDir)
+	workers.ReconcileStaleWorkers()
 	beadHub := bead.NewWatcherHub(250 * time.Millisecond)
 	s := &Server{
 		Addr:       addr,
@@ -658,6 +659,7 @@ func (s *Server) routes() {
 	legacy("POST /api/agent/run", s.handleAgentDispatch)
 	legacy("GET /api/agent/workers", s.handleAgentWorkers)
 	trusted("POST /api/agent/workers/execute-loop", s.handleStartExecuteLoopWorker)
+	trusted("POST /api/agent/workers/prune", s.handlePruneAgentWorkers)
 	legacy("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
 	trusted("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
 	legacy("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
@@ -2122,6 +2124,32 @@ func (s *Server) handleStopAgentWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "stopping"})
+}
+
+func (s *Server) handlePruneAgentWorkers(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+	var maxAge time.Duration
+	if v := r.URL.Query().Get("max_age"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid max_age: " + err.Error()})
+			return
+		}
+		maxAge = d
+	}
+	m := s.workerManagerForRequest(r)
+	results, err := m.Prune(maxAge)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if results == nil {
+		results = []WorkerPruneResult{}
+	}
+	writeJSON(w, http.StatusOK, results)
 }
 
 func (s *Server) handleAgentWorkerLog(w http.ResponseWriter, r *http.Request) {
