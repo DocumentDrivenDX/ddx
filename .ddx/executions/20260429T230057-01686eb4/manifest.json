@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T230057-01686eb4",
+  "bead_id": "ddx-3e21a299",
+  "base_rev": "9ff6420a009d5bf59befa95bb8c64561a70a1b5e",
+  "created_at": "2026-04-29T23:00:58.403294624Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3e21a299",
+    "title": "[artifact-run-arch] ship bead-breakdown skill",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. New skill at skills/ddx/bead-breakdown/. Workflow skill for breaking down work into beads composing ddx run primitives.",
+    "labels": [
+      "skill",
+      "plan-2026-04-29",
+      "library"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T23:00:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T23:00:55.606513099Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T230057-01686eb4",
+    "prompt": ".ddx/executions/20260429T230057-01686eb4/prompt.md",
+    "manifest": ".ddx/executions/20260429T230057-01686eb4/manifest.json",
+    "result": ".ddx/executions/20260429T230057-01686eb4/result.json",
+    "checks": ".ddx/executions/20260429T230057-01686eb4/checks.json",
+    "usage": ".ddx/executions/20260429T230057-01686eb4/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3e21a299-20260429T230057-01686eb4"
+  }
+}
