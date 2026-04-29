@@ -3117,6 +3117,52 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_metrics_summary",
+			Description: "Process metrics summary: throughput, lead time, and rework rate",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"since":   map[string]any{"type": "string", "description": "Time window: today, Nd (e.g. 7d), YYYY-MM-DD, or RFC3339"},
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_metrics_cost",
+			Description: "Token cost breakdown by bead or feature",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"since":   map[string]any{"type": "string", "description": "Time window: today, Nd (e.g. 7d), YYYY-MM-DD, or RFC3339"},
+					"bead":    map[string]any{"type": "string", "description": "Filter to a specific bead ID (mutually exclusive with feature)"},
+					"feature": map[string]any{"type": "string", "description": "Filter to a specific feature ID (mutually exclusive with bead)"},
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_metrics_cycle_time",
+			Description: "Cycle-time distribution: time from bead open to close",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"since":   map[string]any{"type": "string", "description": "Time window: today, Nd (e.g. 7d), YYYY-MM-DD, or RFC3339"},
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_metrics_rework",
+			Description: "Rework metrics: beads reopened or retried after closure",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"since":   map[string]any{"type": "string", "description": "Time window: today, Nd (e.g. 7d), YYYY-MM-DD, or RFC3339"},
+					"project": projectProp,
+				},
+			},
+		},
+		{
 			Name:        "ddx_list_projects",
 			Description: "List projects registered with this ddx-server node",
 			InputSchema: map[string]any{
@@ -3352,6 +3398,20 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_worker_log":
 		id, _ := call.Arguments["id"].(string)
 		return s.mcpWorkerLog(workingDir, id)
+	case "ddx_metrics_summary":
+		since, _ := call.Arguments["since"].(string)
+		return s.mcpMetricsSummary(workingDir, since)
+	case "ddx_metrics_cost":
+		since, _ := call.Arguments["since"].(string)
+		beadID, _ := call.Arguments["bead"].(string)
+		featureID, _ := call.Arguments["feature"].(string)
+		return s.mcpMetricsCost(workingDir, since, beadID, featureID)
+	case "ddx_metrics_cycle_time":
+		since, _ := call.Arguments["since"].(string)
+		return s.mcpMetricsCycleTime(workingDir, since)
+	case "ddx_metrics_rework":
+		since, _ := call.Arguments["since"].(string)
+		return s.mcpMetricsRework(workingDir, since)
 	default:
 		return mcpToolResult{
 			Content: []mcpContent{mcpText(fmt.Sprintf("unknown tool: %s", call.Name))},
@@ -4366,5 +4426,64 @@ func (s *Server) mcpWorkerLog(workingDir, id string) mcpToolResult {
 		}
 	}
 	data, _ := json.Marshal(map[string]string{"stdout": stdout, "stderr": stderr})
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpMetricsSummary(workingDir, since string) mcpToolResult {
+	q, err := processmetrics.ParseSince(since)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	query := processmetrics.Query{Since: q, HasSince: since != ""}
+	report, err := processmetrics.New(workingDir).Summary(query)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(report)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpMetricsCost(workingDir, since, beadID, featureID string) mcpToolResult {
+	if beadID != "" && featureID != "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("use either bead or feature, not both")}, IsError: true}
+	}
+	q, err := processmetrics.ParseSince(since)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	query := processmetrics.Query{Since: q, HasSince: since != "", BeadID: beadID, FeatureID: featureID}
+	report, err := processmetrics.New(workingDir).Cost(query)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(report)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpMetricsCycleTime(workingDir, since string) mcpToolResult {
+	q, err := processmetrics.ParseSince(since)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	query := processmetrics.Query{Since: q, HasSince: since != ""}
+	report, err := processmetrics.New(workingDir).CycleTime(query)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(report)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpMetricsRework(workingDir, since string) mcpToolResult {
+	q, err := processmetrics.ParseSince(since)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	query := processmetrics.Query{Since: q, HasSince: since != ""}
+	report, err := processmetrics.New(workingDir).Rework(query)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(report)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
