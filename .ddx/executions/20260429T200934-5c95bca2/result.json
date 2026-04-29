@@ -1,0 +1,59 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff only contains execution evidence files (manifest.json, result.json) under .ddx/executions/. No actual implementation of /api/mcp-servers, /api/plugins HTTP routes or ddx_list_mcp_servers, ddx_list_plugins MCP tools is present in this diff.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No HTTP route implementation for /api/mcp-servers or /api/plugins in diff",
+      "location": "cli/internal/server/"
+    },
+    {
+      "severity": "block",
+      "summary": "No MCP tool implementation for ddx_list_mcp_servers or ddx_list_plugins in diff",
+      "location": "cli/internal/mcp/"
+    },
+    {
+      "severity": "info",
+      "summary": "Diff only adds execution metadata files; the actual feature code may have landed in an earlier commit (40ccc39b) but is not visible in this review",
+      "location": ".ddx/executions/20260429T195516-aac5252f/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 698,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T195516-aac5252f/manifest.json",
+          ".ddx/executions/20260429T195516-aac5252f/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3386,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5890,
+    "output_bytes": 895,
+    "elapsed_ms": 6922,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
