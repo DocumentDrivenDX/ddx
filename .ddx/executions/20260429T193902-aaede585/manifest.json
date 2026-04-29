@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260429T193902-aaede585",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-d98d4712",
+  "base_rev": "efe39d29eb54671bb0171b3b9c2216315c03d760",
+  "created_at": "2026-04-29T19:39:02.989957763Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-d98d4712",
+    "title": "[read-coverage] add ddx_list_personas MCP tool",
+    "description": "FEAT-007/002 gap. HTTP has GET /api/personas (list all personas). MCP has ddx_resolve_persona (resolve by role) but no list tool. Agents selecting a persona cannot enumerate available options via MCP. Add ddx_list_personas MCP tool returning the same data as GET /api/personas.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "mcp",
+      "feat-002"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:39:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:39:00.165109006Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T193902-aaede585",
+    "prompt": ".ddx/executions/20260429T193902-aaede585/prompt.md",
+    "manifest": ".ddx/executions/20260429T193902-aaede585/manifest.json",
+    "result": ".ddx/executions/20260429T193902-aaede585/result.json",
+    "checks": ".ddx/executions/20260429T193902-aaede585/checks.json",
+    "usage": ".ddx/executions/20260429T193902-aaede585/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-d98d4712-20260429T193902-aaede585"
+  }
+}
