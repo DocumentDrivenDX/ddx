@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T033014-d66b91cf",
+  "bead_id": "ddx-98e6e9ef",
+  "base_rev": "87b93684abc757a0968e5a3509087b4c12bd2d89",
+  "created_at": "2026-04-29T03:30:15.404663659Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-98e6e9ef",
+    "title": "routing-preflight-gate: typed-incompatibility check before bead Claim",
+    "description": "Cover D3 from ddx-fdd3ea36. After ResolveRoute returns, DDx verifies the decision's (Harness, Model) is not in the typed-incompatibility set surfaced by upstream. Compatibility data comes from upstream — DDx does NOT duplicate the allow-list. Insertion point: cli/internal/agent/execute_bead_loop.go (current line ~341–352, before Claim). Route error OR preflight rejection exits the loop with a worker-level failure record; no bead is claimed, no burn cycle. Defensive only.",
+    "acceptance": "1. Call sequence at execute_bead_loop.go (pre-Claim): next-candidate → ResolveRoute → preflight gate (new) → Claim → invoke. 2. Test: seed a pathological route (harness with allow-list that excludes the decision's model — fabricated via upstream test seam). Assert beadStore.Claim is NEVER called. 3. Test: worker record shows status: execution_failed with detail naming the rejected (harness, model) pair. 4. Test: no bead has a kind:tier-attempt event from this attempt. 5. No DDx-side allow-list logic — preflight only consumes the typed error / decision-trace surface from upstream.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T03:30:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "131811",
+      "execute-loop-heartbeat-at": "2026-04-29T03:30:14.878973399Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T033014-d66b91cf",
+    "prompt": ".ddx/executions/20260429T033014-d66b91cf/prompt.md",
+    "manifest": ".ddx/executions/20260429T033014-d66b91cf/manifest.json",
+    "result": ".ddx/executions/20260429T033014-d66b91cf/result.json",
+    "checks": ".ddx/executions/20260429T033014-d66b91cf/checks.json",
+    "usage": ".ddx/executions/20260429T033014-d66b91cf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-98e6e9ef-20260429T033014-d66b91cf"
+  }
+}
