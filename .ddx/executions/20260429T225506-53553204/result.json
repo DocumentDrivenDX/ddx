@@ -1,0 +1,59 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Diff (commit 9d988853) deletes profile_ladder.go, AdaptiveMinTier helpers, --escalate/--override-model flags, collapses worker tier loop, hard-rejects removed config fields, adds reject tests, and stubs migration doc. Remaining grep hits are intentional: rejection tests, removal comments, and the stub doc.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "FEAT-006-agent-service.md still describes profile_ladders/model_overrides in present tense; not in the bead's listed doc scope but now stale.",
+      "location": "docs/helix/01-frame/features/FEAT-006-agent-service.md:68"
+    },
+    {
+      "severity": "info",
+      "summary": "library/skills/ddx/reference/agents.md still references profile_ladders + model_overrides; outside bead scope but stale.",
+      "location": "cli/internal/skills/ddx/reference/agents.md:40"
+    },
+    {
+      "severity": "info",
+      "summary": "runtimelint analyzer retains 'ProfileLadders'/'ModelOverrides' as deprecated-name guards — appropriate, not a violation.",
+      "location": "cli/tools/lint/runtimelint/analyzer.go:73"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 7693,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T220335-335a5db3/manifest.json",
+          ".ddx/executions/20260429T220335-335a5db3/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 10318,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 19817,
+    "output_bytes": 1109,
+    "elapsed_ms": 41536,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
