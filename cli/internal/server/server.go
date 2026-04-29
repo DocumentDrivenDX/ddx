@@ -32,6 +32,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
@@ -723,6 +724,14 @@ func (s *Server) routes() {
 	scoped("GET /api/projects/{project}/metrics/cost", s.handleMetricsCost)
 	scoped("GET /api/projects/{project}/metrics/cycle-time", s.handleMetricsCycleTime)
 	scoped("GET /api/projects/{project}/metrics/rework", s.handleMetricsRework)
+
+	// Per-metric-id history and trend — legacy
+	legacy("GET /api/metrics/{id}/history", s.handleMetricHistory)
+	legacy("GET /api/metrics/{id}/trend", s.handleMetricTrend)
+
+	// Per-metric-id history and trend — project-scoped (FEAT-016)
+	scoped("GET /api/projects/{project}/metrics/{id}/history", s.handleMetricHistory)
+	scoped("GET /api/projects/{project}/metrics/{id}/trend", s.handleMetricTrend)
 
 	// Providers (FEAT-002 §26-27, host+user global — not project-scoped)
 	trusted("GET /api/providers", s.handleListProviders)
@@ -2624,6 +2633,36 @@ func (s *Server) metricsQueryFromRequest(r *http.Request) (processmetrics.Query,
 	}, nil
 }
 
+func (s *Server) handleMetricHistory(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "metric id is required"})
+		return
+	}
+	store := metric.NewStore(s.workingDirForRequest(r))
+	history, err := store.History(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, history)
+}
+
+func (s *Server) handleMetricTrend(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "metric id is required"})
+		return
+	}
+	store := metric.NewStore(s.workingDirForRequest(r))
+	trend, err := store.Trend(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, trend)
+}
+
 // --- MCP Endpoint (JSON-RPC 2.0 over Streamable HTTP) ---
 
 type jsonRPCRequest struct {
@@ -3186,6 +3225,30 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_metric_history",
+			Description: "Observation history for a specific metric ID",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Metric artifact ID (MET-...)"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_metric_trend",
+			Description: "Trend summary (min, max, average, latest) for a specific metric ID",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Metric artifact ID (MET-...)"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
 			Name:        "ddx_list_projects",
 			Description: "List projects registered with this ddx-server node",
 			InputSchema: map[string]any{
@@ -3455,6 +3518,12 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_metrics_rework":
 		since, _ := call.Arguments["since"].(string)
 		return s.mcpMetricsRework(workingDir, since)
+	case "ddx_metric_history":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpMetricHistory(workingDir, id)
+	case "ddx_metric_trend":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpMetricTrend(workingDir, id)
 	case "ddx_list_mcp_servers":
 		return s.mcpListMCPServers(workingDir)
 	default:
@@ -4530,5 +4599,31 @@ func (s *Server) mcpMetricsRework(workingDir, since string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 	data, _ := json.Marshal(report)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpMetricHistory(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
+	}
+	store := metric.NewStore(workingDir)
+	history, err := store.History(id)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(history)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpMetricTrend(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
+	}
+	store := metric.NewStore(workingDir)
+	trend, err := store.Trend(id)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(trend)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
