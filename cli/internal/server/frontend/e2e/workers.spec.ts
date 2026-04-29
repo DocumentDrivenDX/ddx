@@ -1,11 +1,46 @@
 import { expect, test } from '@playwright/test';
 
-// Shared fixtures
-const NODE_INFO = { id: 'node-abc', name: 'Test Node' };
-const PROJECT_ID = 'proj-1';
-const BASE_URL = `/nodes/node-abc/projects/${PROJECT_ID}/workers`;
+// Fixture IDs resolved per-test from the live harness (see beforeEach below).
+let NODE_INFO: { id: string; name: string };
+let PROJECT_ID: string;
+let BASE_URL: string;
+let PROJECTS: Array<{ id: string; name: string; path: string }>;
 
-const PROJECTS = [{ id: PROJECT_ID, name: 'Project Alpha', path: '/repos/alpha' }];
+async function getFixtureIds(
+	request: import('@playwright/test').APIRequestContext
+): Promise<{ nodeId: string; projectId: string; nodeName: string; projectName: string; projectPath: string }> {
+	const nodeResp = await request.post('/graphql', {
+		data: { query: '{ nodeInfo { id name } }' }
+	});
+	const nodeBody = (await nodeResp.json()) as {
+		data: { nodeInfo: { id: string; name: string } };
+	};
+	const projectsResp = await request.get('/api/projects');
+	const projects = (await projectsResp.json()) as Array<{ id: string; name: string; path: string }>;
+	const fixture = projects.find((p) => /(^|\/)ddx-e2e-/.test(p.path) || /^ddx-e2e-/.test(p.name));
+	if (!fixture) {
+		throw new Error(
+			`fixture server has no ddx-e2e-* project registered (got: ${projects
+				.map((p) => p.id)
+				.join(', ')})`
+		);
+	}
+	return {
+		nodeId: nodeBody.data.nodeInfo.id,
+		projectId: fixture.id,
+		nodeName: nodeBody.data.nodeInfo.name,
+		projectName: fixture.name,
+		projectPath: fixture.path
+	};
+}
+
+test.beforeEach(async ({ request }) => {
+	const ids = await getFixtureIds(request);
+	NODE_INFO = { id: ids.nodeId, name: ids.nodeName };
+	PROJECT_ID = ids.projectId;
+	PROJECTS = [{ id: PROJECT_ID, name: ids.projectName, path: ids.projectPath }];
+	BASE_URL = `/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/workers`;
+});
 
 const WORKERS = [
 	{
@@ -99,6 +134,15 @@ function makeSessionsResponse(sessions: Record<string, unknown>[] = []) {
 			edges: sessions.map((node) => ({ node, cursor: String(node.id) })),
 			pageInfo: { hasNextPage: false, endCursor: null },
 			totalCount: sessions.length
+		},
+		// SessionsPage's loader requests both connections in one query and
+		// dereferences `sessionsCostSummary.localSessionCount` immediately —
+		// returning null here would crash the page render.
+		sessionsCostSummary: {
+			cashUsd: 0,
+			subscriptionEquivUsd: 0,
+			localSessionCount: 0,
+			localEstimatedUsd: 0
 		}
 	};
 }

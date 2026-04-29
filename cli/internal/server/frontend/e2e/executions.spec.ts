@@ -1,9 +1,46 @@
 import { expect, test } from '@playwright/test';
 
-const NODE_INFO = { id: 'node-abc', name: 'Test Node' };
-const PROJECT_ID = 'proj-1';
-const PROJECTS = [{ id: PROJECT_ID, name: 'Project Alpha', path: '/repos/alpha' }];
-const BASE_URL = `/nodes/node-abc/projects/${PROJECT_ID}/executions`;
+// Fixture IDs resolved per-test from the live harness (see beforeEach).
+let NODE_INFO: { id: string; name: string };
+let PROJECT_ID: string;
+let PROJECTS: Array<{ id: string; name: string; path: string }>;
+let BASE_URL: string;
+
+async function getFixtureIds(
+	request: import('@playwright/test').APIRequestContext
+): Promise<{ nodeId: string; projectId: string; nodeName: string; projectName: string; projectPath: string }> {
+	const nodeResp = await request.post('/graphql', {
+		data: { query: '{ nodeInfo { id name } }' }
+	});
+	const nodeBody = (await nodeResp.json()) as {
+		data: { nodeInfo: { id: string; name: string } };
+	};
+	const projectsResp = await request.get('/api/projects');
+	const projects = (await projectsResp.json()) as Array<{ id: string; name: string; path: string }>;
+	const fixture = projects.find((p) => /(^|\/)ddx-e2e-/.test(p.path) || /^ddx-e2e-/.test(p.name));
+	if (!fixture) {
+		throw new Error(
+			`fixture server has no ddx-e2e-* project registered (got: ${projects
+				.map((p) => p.id)
+				.join(', ')})`
+		);
+	}
+	return {
+		nodeId: nodeBody.data.nodeInfo.id,
+		projectId: fixture.id,
+		nodeName: nodeBody.data.nodeInfo.name,
+		projectName: fixture.name,
+		projectPath: fixture.path
+	};
+}
+
+test.beforeEach(async ({ request }) => {
+	const ids = await getFixtureIds(request);
+	NODE_INFO = { id: ids.nodeId, name: ids.nodeName };
+	PROJECT_ID = ids.projectId;
+	PROJECTS = [{ id: PROJECT_ID, name: ids.projectName, path: ids.projectPath }];
+	BASE_URL = `/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/executions`;
+});
 
 type ExecutionNode = {
 	id: string;
@@ -38,7 +75,7 @@ type ExecutionNode = {
 
 const passExec: ExecutionNode = {
 	id: '20260422T100000-aaaa1111',
-	projectId: PROJECT_ID,
+	projectId: '__fixture__',
 	beadId: 'ddx-alpha',
 	beadTitle: 'Alpha bead title',
 	sessionId: 'eb-aaaa1111',
@@ -69,7 +106,7 @@ const passExec: ExecutionNode = {
 
 const blockExec: ExecutionNode = {
 	id: '20260422T110000-bbbb2222',
-	projectId: PROJECT_ID,
+	projectId: '__fixture__',
 	beadId: 'ddx-alpha',
 	beadTitle: 'Alpha bead title',
 	sessionId: 'eb-bbbb2222',
@@ -115,7 +152,7 @@ function executionsListPayload(rows: ExecutionNode[], filtered?: (e: ExecutionNo
 			edges: rowsOut.map((node) => ({
 				node: {
 					id: node.id,
-					projectId: node.projectId,
+					projectId: PROJECT_ID,
 					beadId: node.beadId,
 					beadTitle: node.beadTitle,
 					sessionId: node.sessionId,
@@ -271,20 +308,24 @@ test('executions list and detail flow', async ({ page }) => {
 	await page.goto(BASE_URL);
 
 	await expect(page.getByRole('heading', { name: 'Executions' })).toBeVisible();
-	// 3 rows expected (one per execution).
+	// 3 rows expected (one per execution). The list cells show the formatted
+	// timestamp; the row's link href is the only reliable carrier of the
+	// execution ID, so we locate by href.
 	await expect(page.getByRole('row')).toHaveCount(4); // 1 header + 3 data rows
-	await expect(page.getByText(passExec.id, { exact: false })).toBeVisible();
-	await expect(page.getByText(blockExec.id, { exact: false })).toBeVisible();
+	const passLink = page.locator(`a[href$="/executions/${passExec.id}"]`);
+	const blockLink = page.locator(`a[href$="/executions/${blockExec.id}"]`);
+	await expect(passLink.first()).toBeVisible();
+	await expect(blockLink.first()).toBeVisible();
 
 	// Filter by verdict=BLOCK.
-	await page.locator('select').selectOption('BLOCK');
+	await page.getByLabel('Verdict').selectOption('BLOCK');
 	await page.getByRole('button', { name: 'Apply' }).click();
 	await expect(page.getByRole('row')).toHaveCount(2); // header + 1
-	await expect(page.getByText(blockExec.id, { exact: false })).toBeVisible();
-	await expect(page.getByText(passExec.id, { exact: false })).toHaveCount(0);
+	await expect(blockLink.first()).toBeVisible();
+	await expect(passLink).toHaveCount(0);
 
 	// Drill into the BLOCK execution detail.
-	await page.getByText(blockExec.id, { exact: false }).first().click();
+	await blockLink.first().click();
 	await expect(page.getByRole('heading', { name: blockExec.id })).toBeVisible();
 
 	// Default tab is Manifest.
@@ -296,7 +337,7 @@ test('executions list and detail flow', async ({ page }) => {
 
 	// Switch to Result.
 	await page.getByRole('button', { name: 'Result' }).click();
-	await expect(page.getByText('gate failed')).toBeVisible();
+	await expect(page.getByTestId('result-body')).toContainText('gate failed');
 
 	// Switch to Session — fetches in the background.
 	await page.getByRole('button', { name: 'Session' }).click();
@@ -312,7 +353,7 @@ test('executions list and detail flow', async ({ page }) => {
 
 	// Navigate to the bead from the detail page and confirm executions section
 	// lists this attempt.
-	await page.goto(`/nodes/node-abc/projects/${PROJECT_ID}/beads/ddx-alpha`);
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/beads/ddx-alpha`);
 	await expect(page.getByTestId('bead-executions')).toBeVisible();
 	await expect(page.getByTestId('bead-executions')).toContainText(passExec.id);
 	await expect(page.getByTestId('bead-executions')).toContainText(blockExec.id);
