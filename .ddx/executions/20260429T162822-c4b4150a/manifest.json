@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260429T162822-c4b4150a",
+  "bead_id": "ddx-c5dce902",
+  "base_rev": "3f86fca3528011e519848ea1247f54e991685dae",
+  "created_at": "2026-04-29T16:28:23.669392957Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c5dce902",
+    "title": "refine vision + principles (in-place sharpening of frame docs)",
+    "description": "V1 of 3 children under epic ddx-53c96967.\n\nREFINE (do not rewrite) docs/helix/00-discover/product-vision.md and docs/helix/01-frame/principles.md to reflect what's settled.\n\nCURRENT STATE:\n- product-vision.md (177 lines) — written before several decisions landed. Has aspirational language and outdated references.\n- principles.md (72 lines) — short list of guiding principles. Some are load-bearing, some are filler.\n- prd.md (370 lines) and concerns.md (257 lines) are reference context — read for background, but DO NOT modify them in this bead.\n\nDECISIONS THAT HAVE SETTLED AND SHOULD BE REFLECTED:\n1. DDx is the platform layer; HELIX is the workflow layer; Dun is the quality layer. Three-project stack with explicit boundaries.\n2. Project-local everything: ddx init/install only touch \u003cprojectRoot\u003e. The only global ddx artifact is ddx-server. (FEAT-015, just shipped.)\n3. Cost-tiered work: cheap models do, strong models review, deterministic fixes at the top of the ladder. Goal is closed-bead throughput per dollar.\n4. Endpoint-first routing redesign: providers are endpoints + live discovery + fuzzy model match (in progress; reference don't promise).\n5. Single-skill consolidation: DDx ships ONE 'ddx' skill (not seven). Per FEAT-011.\n6. Bead-driven work: beads are the unit of work; execute-loop drains the queue with auto-recovery and review.\n\nREFINEMENT GOALS:\n- Sharpen: every sentence load-bearing. Cut filler.\n- Prune principles to ones that drive actual decisions. If a principle isn't cited in any spec, remove it.\n- Surface the three-layer architecture early in the vision.\n- Make the 'platform vs workflow' boundary explicit.\n- Voice: confident, technical, concise. No marketing fluff.\n\nCONSTRAINT: in-place edits via Edit tool. Preserve sections that work. Do not full-rewrite. Do not change frontmatter/IDs.",
+    "acceptance": "1. docs/helix/00-discover/product-vision.md updated; net length within +/- 30% of current 177 lines. 2. docs/helix/01-frame/principles.md updated; principles list reduced to load-bearing items only. 3. Three-layer architecture (DDx/HELIX/Dun) introduced in vision overview. 4. 'Platform vs workflow' boundary explicit in vision and principles. 5. The 6 settled decisions (project-local, cost-tiered, endpoint-first, single-skill, bead-driven, three-layer) are reflected — not necessarily by name, but the underlying ideas are present and consistent. 6. No filler, no marketing language, no aspirational features that haven't shipped. 7. Frontmatter and HELIX IDs preserved.",
+    "parent": "ddx-53c96967",
+    "labels": [
+      "helix",
+      "phase:frame",
+      "kind:docs",
+      "area:docs"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T162822-c4b4150a",
+    "prompt": ".ddx/executions/20260429T162822-c4b4150a/prompt.md",
+    "manifest": ".ddx/executions/20260429T162822-c4b4150a/manifest.json",
+    "result": ".ddx/executions/20260429T162822-c4b4150a/result.json",
+    "checks": ".ddx/executions/20260429T162822-c4b4150a/checks.json",
+    "usage": ".ddx/executions/20260429T162822-c4b4150a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c5dce902-20260429T162822-c4b4150a"
+  }
+}
