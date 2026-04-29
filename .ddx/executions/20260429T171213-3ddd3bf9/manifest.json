@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260429T171213-3ddd3bf9",
+  "bead_id": "ddx-3562c48c",
+  "base_rev": "0db7c039e1ece4ec28d123fce08078d36ac4f4bb",
+  "created_at": "2026-04-29T17:12:14.200429278Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3562c48c",
+    "title": "epic: project-local installs, no symlinks, retire global ddx state",
+    "description": "Make every ddx install fully project-local. The only global ddx artifact is ddx-server. Children:\n- Bead 0: FEAT-015 spec amendment\n- Bead 1: shared skill installer + ddx init rewire\n- Bead 2: project-local plugin installs (registry + --local + remove install --global)\n- Bead 3: runtime fallback + audit migration\n- Bead 4: commit-by-default (.gitignore + docs)\n\nDecisions (locked):\n1. Drop global skills targets ~/.agents/skills/, ~/.claude/skills/.\n2. ddx init/install only ever touch \u003cprojectRoot\u003e.\n3. Stale ~/.ddx/installed.yaml entries: no-op uninstall.\n4. \u003cprojectRoot\u003e/.ddx/plugins/, \u003cprojectRoot\u003e/.agents/skills/, \u003cprojectRoot\u003e/.claude/skills/ are committed.\n5. Cross-platform invariant: ddx creates zero symlinks during install. Plugin source-side symlinks not materialized.\n6. ddx install --global is removed.\n7. Manifest with ~-prefixed Root.Target rejected with non-zero exit.\n8. Sequence: 5 beads (0 → 1 → 2 → {3,4} parallel).",
+    "acceptance": "All 5 child beads (0-4) closed with passing AC. Final grep gate (bead 4) returns no hits for ~/.ddx/plugins, ~/.agents/skills, ~/.claude/skills outside FEAT-015 history and CHANGELOG. Repo dogfoods the change: this repo's .agents/skills/, .claude/skills/, .ddx/plugins/ are committed.",
+    "labels": [
+      "helix",
+      "area:cli",
+      "area:install",
+      "kind:epic",
+      "spec:FEAT-015"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T17:12:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T17:12:11.359839344Z",
+      "spec-id": "FEAT-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-015",
+      "path": "docs/helix/01-frame/features/FEAT-015-installation-architecture.md",
+      "title": "Feature: DDx Installation Architecture"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260429T171213-3ddd3bf9",
+    "prompt": ".ddx/executions/20260429T171213-3ddd3bf9/prompt.md",
+    "manifest": ".ddx/executions/20260429T171213-3ddd3bf9/manifest.json",
+    "result": ".ddx/executions/20260429T171213-3ddd3bf9/result.json",
+    "checks": ".ddx/executions/20260429T171213-3ddd3bf9/checks.json",
+    "usage": ".ddx/executions/20260429T171213-3ddd3bf9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3562c48c-20260429T171213-3ddd3bf9"
+  }
+}
