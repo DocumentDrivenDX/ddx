@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260429T155821-4e6a4ccb",
+  "bead_id": "ddx-87fb72c2",
+  "base_rev": "7f37076af28002bfe07ad94391b82265b64fedbe",
+  "created_at": "2026-04-29T15:58:22.190526002Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-87fb72c2",
+    "title": "routing-config-deprecation: hard error on default_harness; opt-in for ladders/overrides",
+    "description": "Cover D4 from ddx-fdd3ea36. Deliberate breaking change. - agent.routing.default_harness: field DELETED from config schema. Loading a config with it set produces a HARD ERROR at startup with a migration pointer. - agent.routing.profile_ladders: kept but gated behind explicit --escalate only; one-time process warning at config-load if set without --escalate ever being invoked. - agent.routing.model_overrides: same treatment as profile_ladders — explicit-opt-in via --override-model only; one-time warning otherwise. - agent.harness (top-level): kept, clarified in comments/docs as a tie-break preference, NOT a default override. Migration note in DDx CHANGELOG and docs/migrations/.",
+    "acceptance": "1. Migration test: config containing agent.routing.default_harness fails at startup with migration message; exit code != 0. 2. Migration test: config containing agent.routing.profile_ladders + model_overrides loads with one-time warning; default path does NOT consult them; --escalate / --override-model do consult them. 3. Config schema: default_harness field removed (Go struct + JSON schema + sample config). 4. CHANGELOG entry under 'Breaking changes' with migration pointer. 5. docs/migrations/ (or equivalent) gains a routing-config migration guide.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing",
+      "breaking-change"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T15:58:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T03:58:24.867733018Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T034538-9aa875d6\",\"harness\":\"claude\",\"input_tokens\":82,\"output_tokens\":29974,\"total_tokens\":30056,\"cost_usd\":5.05551375,\"duration_ms\":765653,\"exit_code\":0}",
+          "created_at": "2026-04-29T03:58:24.960363714Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=30056 cost_usd=5.0555"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T03:58:30.542626943Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff under review contains only execution evidence (manifest.json, result.json) for the attempt. No actual code, schema, CHANGELOG, or migration-doc changes are visible, so none of the 5 AC items can be verified from this diff.\nharness=claude\nmodel=opus\ninput_bytes=7350\noutput_bytes=594\nelapsed_ms=6475",
+          "created_at": "2026-04-29T03:58:39.194189479Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T03:58:39.288575675Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff under review contains only execution evidence (manifest.json, result.json) for the attempt. No actual code, schema, CHANGELOG, or migration-doc changes are visible, so none of the 5 AC items can be verified from this diff.\nresult_rev=42d2c0806ae9c513e68cd1ba40e6ee10deb676fb\nbase_rev=3f0173545b449059093034b28ace64b4c13a355d",
+          "created_at": "2026-04-29T03:58:39.37350975Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-29T15:58:19.341251099Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T155821-4e6a4ccb",
+    "prompt": ".ddx/executions/20260429T155821-4e6a4ccb/prompt.md",
+    "manifest": ".ddx/executions/20260429T155821-4e6a4ccb/manifest.json",
+    "result": ".ddx/executions/20260429T155821-4e6a4ccb/result.json",
+    "checks": ".ddx/executions/20260429T155821-4e6a4ccb/checks.json",
+    "usage": ".ddx/executions/20260429T155821-4e6a4ccb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-87fb72c2-20260429T155821-4e6a4ccb"
+  }
+}
