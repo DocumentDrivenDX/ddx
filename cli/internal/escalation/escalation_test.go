@@ -382,3 +382,174 @@ func TestAdaptiveMinTierIgnoresUnknownHarnessModel(t *testing.T) {
 	assert.False(t, got.Skipped)
 	assert.Equal(t, 0, got.CheapAttempts, "attempts with non-catalog models must not count")
 }
+
+// --- Infra failure exclusion (AC3) ---
+
+// adaptiveFixtureWithMode is the full shape written by the new tests that
+// exercise failure_mode exclusion. It extends adaptiveFixture with FailureMode.
+type adaptiveFixtureWithMode struct {
+	BeadID      string `json:"bead_id"`
+	Harness     string `json:"harness"`
+	Model       string `json:"model"`
+	Outcome     string `json:"outcome"`
+	FailureMode string `json:"failure_mode,omitempty"`
+}
+
+// writeAdaptiveFixtureWithMode writes a result.json with an explicit
+// failure_mode under workingDir/.ddx/executions/<ts>/result.json.
+func writeAdaptiveFixtureWithMode(t *testing.T, workingDir string, seq int, harness, model, outcome, failureMode string) {
+	t.Helper()
+	ts := fmt.Sprintf("20260101T%06d-%08x", seq, seq)
+	dir := filepath.Join(workingDir, ".ddx", "executions", ts)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	res := adaptiveFixtureWithMode{
+		BeadID:      fmt.Sprintf("bead-%d", seq),
+		Harness:     harness,
+		Model:       model,
+		Outcome:     outcome,
+		FailureMode: failureMode,
+	}
+	raw, err := json.Marshal(res)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "result.json"), raw, 0o644))
+}
+
+// TestAdaptiveMinTierInfraFailuresExcluded verifies that cheap-tier attempts
+// with an infra failure_mode (no_viable_provider, harness_not_installed) do
+// not count toward the success-rate computation and are reported as
+// CheapInfraSkipped in the diagnostics.
+func TestAdaptiveMinTierInfraFailuresExcluded(t *testing.T) {
+	dir := t.TempDir()
+	// 5 infra failures (no_viable_provider) — should not trigger suppression.
+	for i := 0; i < 5; i++ {
+		writeAdaptiveFixtureWithMode(t, dir, i, "claude", "claude-haiku-4-5", "task_failed", "no_viable_provider")
+	}
+	// 1 real failure — below min-samples, no suppression.
+	writeAdaptiveFixtureWithMode(t, dir, 5, "claude", "claude-haiku-4-5", "task_failed", "")
+
+	got := AdaptiveMinTier(dir, 50, testResolver)
+	assert.Equal(t, TierCheap, got.Tier, "infra failures must not trigger cheap-tier suppression")
+	assert.False(t, got.Skipped)
+	assert.Equal(t, 1, got.CheapAttempts, "only real failures count toward cheap attempts")
+
+	diag := ComputeAdaptiveMinTierDiagnostics(dir, 50, testResolver)
+	assert.Equal(t, 5, diag.CheapInfraSkipped, "infra skip count must be reported")
+	assert.Equal(t, 1, diag.CheapAttempts)
+	assert.False(t, diag.IsSkippingCheap)
+}
+
+// TestAdaptiveMinTierHarnessNotInstalledExcluded mirrors the infra test for
+// the harness_not_installed failure mode.
+func TestAdaptiveMinTierHarnessNotInstalledExcluded(t *testing.T) {
+	dir := t.TempDir()
+	// 9 harness_not_installed failures — should NOT suppress cheap tier.
+	for i := 0; i < 9; i++ {
+		writeAdaptiveFixtureWithMode(t, dir, i, "claude", "claude-haiku-4-5", "task_failed", "harness_not_installed")
+	}
+
+	got := AdaptiveMinTier(dir, 50, testResolver)
+	assert.Equal(t, TierCheap, got.Tier)
+	assert.False(t, got.Skipped)
+	assert.Equal(t, 0, got.CheapAttempts)
+
+	diag := ComputeAdaptiveMinTierDiagnostics(dir, 50, testResolver)
+	assert.Equal(t, 9, diag.CheapInfraSkipped)
+}
+
+// TestAdaptiveMinTierMixedRealAndInfraFailures verifies that real failures
+// below threshold still suppress cheap tier even when infra failures exist.
+func TestAdaptiveMinTierMixedRealAndInfraFailures(t *testing.T) {
+	dir := t.TempDir()
+	// 5 infra failures (excluded) + 9 real failures + 1 success = 10% real rate.
+	for i := 0; i < 5; i++ {
+		writeAdaptiveFixtureWithMode(t, dir, i, "claude", "claude-haiku-4-5", "task_failed", "no_viable_provider")
+	}
+	for i := 5; i < 14; i++ {
+		writeAdaptiveFixtureWithMode(t, dir, i, "claude", "claude-haiku-4-5", "task_failed", "")
+	}
+	writeAdaptiveFixtureWithMode(t, dir, 14, "claude", "claude-haiku-4-5", "task_succeeded", "")
+
+	got := AdaptiveMinTier(dir, 50, testResolver)
+	assert.Equal(t, TierStandard, got.Tier, "real failures below threshold should still suppress cheap tier")
+	assert.True(t, got.Skipped)
+	assert.Equal(t, 10, got.CheapAttempts)
+	assert.InDelta(t, 0.10, got.CheapSuccessRate, 0.001)
+}
+
+// --- Reset marker (AC1, AC5) ---
+
+func TestWriteAndReadAdaptiveResetMarker(t *testing.T) {
+	dir := t.TempDir()
+	before := time.Now().UTC().Truncate(time.Second)
+	path, err := WriteAdaptiveResetMarker(dir)
+	require.NoError(t, err)
+	assert.Contains(t, path, adaptiveResetFileName)
+
+	m := ReadAdaptiveResetMarker(dir)
+	require.NotNil(t, m, "marker must be readable after write")
+	assert.False(t, m.ResetAt.IsZero())
+	assert.True(t, !m.ResetAt.Before(before), "reset_at must not predate the write call")
+}
+
+func TestReadAdaptiveResetMarkerMissing(t *testing.T) {
+	dir := t.TempDir()
+	assert.Nil(t, ReadAdaptiveResetMarker(dir), "missing marker must return nil")
+}
+
+func TestAdaptiveMinTierResetMarkerIgnoresOldExecutions(t *testing.T) {
+	dir := t.TempDir()
+	// Write 9 cheap failures with old timestamps (seq 0..8 → 20260101T000000-...
+	// through 20260101T000008-...).
+	for i := 0; i < 9; i++ {
+		writeAdaptiveFixture(t, dir, i, "claude", "claude-haiku-4-5", "task_failed")
+	}
+
+	// Before reset: cheap tier is suppressed.
+	got := AdaptiveMinTier(dir, 50, testResolver)
+	assert.Equal(t, TierStandard, got.Tier, "pre-reset: cheap tier should be suppressed")
+	assert.True(t, got.Skipped)
+
+	// Write the reset marker with a timestamp that predates our fixtures'
+	// directory names but is still "after" them in our fictional time. Since
+	// fixture timestamps are in 2026-01-01 and the reset marker uses time.Now()
+	// (2026-04-29), the reset marker is AFTER all fixtures → all are ignored.
+	path, err := WriteAdaptiveResetMarker(dir)
+	require.NoError(t, err)
+	assert.NotEmpty(t, path)
+
+	// After reset: no executions in window → cheap tier is eligible.
+	got = AdaptiveMinTier(dir, 50, testResolver)
+	assert.Equal(t, TierCheap, got.Tier, "post-reset: cheap tier must be eligible")
+	assert.False(t, got.Skipped)
+	assert.Equal(t, 0, got.CheapAttempts, "all pre-reset executions must be excluded")
+}
+
+// --- parseDirTimestamp ---
+
+func TestParseDirTimestamp(t *testing.T) {
+	cases := []struct {
+		name  string
+		wantY int
+		wantM time.Month
+		wantD int
+		ok    bool
+	}{
+		{"20260429T162702-2c963978", 2026, time.April, 29, true},
+		{"20260101T000000-00000000", 2026, time.January, 1, true},
+		{"", 0, 0, 0, false},
+		{"short", 0, 0, 0, false},
+		{"not-a-timestamp-at-all-x", 0, 0, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ts, ok := parseDirTimestamp(c.name)
+			assert.Equal(t, c.ok, ok)
+			if c.ok {
+				assert.Equal(t, c.wantY, ts.Year())
+				assert.Equal(t, c.wantM, ts.Month())
+				assert.Equal(t, c.wantD, ts.Day())
+				assert.Equal(t, time.UTC, ts.Location())
+			}
+		})
+	}
+}

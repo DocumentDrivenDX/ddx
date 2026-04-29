@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/spf13/cobra"
 )
 
@@ -180,6 +181,57 @@ func truncateRouteStr(value string, n int) string {
 	return value[:n-2] + ".."
 }
 
+// adaptiveStateJSON is the JSON shape for --adaptive output appended to
+// routeStatusJSON when --adaptive is set.
+type adaptiveStateJSON struct {
+	WindowSize        int     `json:"window_size"`
+	TotalInWindow     int     `json:"total_in_window"`
+	CheapAttempts     int     `json:"cheap_attempts"`
+	CheapSuccesses    int     `json:"cheap_successes"`
+	CheapInfraSkipped int     `json:"cheap_infra_skipped"`
+	CheapSuccessRate  float64 `json:"cheap_success_rate"`
+	Threshold         float64 `json:"threshold"`
+	MinSamples        int     `json:"min_samples"`
+	EffectiveFloor    string  `json:"effective_floor"`
+	IsSkippingCheap   bool    `json:"is_skipping_cheap"`
+	ResetAt           string  `json:"reset_at,omitempty"`
+}
+
+func (f *CommandFactory) newAgentRouteStatusResetCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "reset",
+		Short:        "Clear adaptive min-tier state, returning cheap-tier evaluation to a clean baseline",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			yes, _ := cmd.Flags().GetBool("yes")
+			out := cmd.OutOrStdout()
+
+			if !yes {
+				fmt.Fprintln(out, "This will write a reset marker that causes the adaptive min-tier logic")
+				fmt.Fprintln(out, "to ignore all execution history recorded before this moment.")
+				fmt.Fprintln(out, "Cheap-tier eligibility will be re-evaluated on its own merits.")
+				fmt.Fprintln(out)
+				fmt.Fprintln(out, "Re-run with --yes to confirm:")
+				fmt.Fprintln(out, "  ddx agent route-status reset --yes")
+				return nil
+			}
+
+			path, err := escalation.WriteAdaptiveResetMarker(f.WorkingDir)
+			if err != nil {
+				return fmt.Errorf("route-status reset: %w", err)
+			}
+			fmt.Fprintf(out, "Adaptive min-tier state cleared.\n\n")
+			fmt.Fprintf(out, "Touched: %s\n", path)
+			fmt.Fprintf(out, "\nCheap-tier will now be evaluated from a clean baseline.\n")
+			fmt.Fprintf(out, "Run 'ddx agent route-status --adaptive' to verify the new state.\n")
+			return nil
+		},
+	}
+	cmd.Flags().Bool("yes", false, "Confirm the reset without an interactive prompt")
+	return cmd
+}
+
 func (f *CommandFactory) newAgentRouteStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "route-status",
@@ -187,17 +239,49 @@ func (f *CommandFactory) newAgentRouteStatusCommand() *cobra.Command {
 		Long: `Shows the current provider routing state, recent routing decisions, and
 any health cooldowns currently in effect.
 
-Uses the ddx-agent Service.RouteStatus API. Requires model routes to be
-configured in .agent/config.yaml.
+Use --adaptive to display adaptive min-tier state (cheap-tier success rate,
+effective floor, reset status). This works without model routes configured.
+
+Use the 'reset' subcommand to clear the adaptive min-tier trailing window:
+  ddx agent route-status reset --yes
 
 Examples:
   ddx agent route-status
+  ddx agent route-status --adaptive
   ddx agent route-status --model qwen3.5-27b
   ddx agent route-status --json`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			model, _ := cmd.Flags().GetString("model")
 			asJSON, _ := cmd.Flags().GetBool("json")
+			showAdaptive, _ := cmd.Flags().GetBool("adaptive")
+			adaptiveWindow, _ := cmd.Flags().GetInt("adaptive-window")
+
+			// --adaptive: display adaptive min-tier state without requiring routes.
+			if showAdaptive {
+				diag := escalation.ComputeAdaptiveMinTierDiagnostics(f.WorkingDir, adaptiveWindow, agent.ResolveModelTier)
+				if asJSON {
+					aj := adaptiveStateJSON{
+						WindowSize:        diag.WindowSize,
+						TotalInWindow:     diag.TotalInWindow,
+						CheapAttempts:     diag.CheapAttempts,
+						CheapSuccesses:    diag.CheapSuccesses,
+						CheapInfraSkipped: diag.CheapInfraSkipped,
+						CheapSuccessRate:  diag.CheapSuccessRate,
+						Threshold:         diag.Threshold,
+						MinSamples:        diag.MinSamples,
+						EffectiveFloor:    string(diag.EffectiveFloor),
+						IsSkippingCheap:   diag.IsSkippingCheap,
+					}
+					if !diag.ResetAt.IsZero() {
+						aj.ResetAt = diag.ResetAt.UTC().Format(time.RFC3339)
+					}
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(aj)
+				}
+				return printAdaptiveState(cmd.OutOrStdout(), diag)
+			}
 
 			svc, err := agent.NewServiceFromWorkDir(f.WorkingDir)
 			if err != nil {
@@ -481,5 +565,41 @@ Examples:
 	}
 	cmd.Flags().String("model", "", "Requested model route key (e.g. qwen3.5-27b)")
 	cmd.Flags().Bool("json", false, "Output JSON")
+	cmd.Flags().Bool("adaptive", false, "Show adaptive min-tier state (window, success rate, effective floor)")
+	cmd.Flags().Int("adaptive-window", escalation.DefaultAdaptiveMinTierWindow, "Trailing window size for adaptive state display")
+	cmd.AddCommand(f.newAgentRouteStatusResetCommand())
 	return cmd
+}
+
+// printAdaptiveState writes a human-readable adaptive min-tier diagnostic
+// block to w. It provides enough information to answer "why is cheap being
+// skipped?" without reading source code.
+func printAdaptiveState(w interface{ Write([]byte) (int, error) }, diag escalation.AdaptiveMinTierDiagnostics) error {
+	wl := func(format string, args ...any) { fmt.Fprintf(w, format+"\n", args...) }
+
+	wl("Adaptive Min-Tier State")
+	wl("%s", strings.Repeat("-", 50))
+	wl("window size:      %d attempts", diag.WindowSize)
+	if diag.ResetAt.IsZero() {
+		wl("reset at:         (none)")
+	} else {
+		wl("reset at:         %s", diag.ResetAt.UTC().Format(time.RFC3339))
+	}
+	wl("total in window:  %d (all tiers)", diag.TotalInWindow)
+	wl("cheap attempts:   %d (contributing to success rate)", diag.CheapAttempts)
+	if diag.CheapInfraSkipped > 0 {
+		wl("infra-skipped:    %d (excluded: no_viable_provider / harness_not_installed)", diag.CheapInfraSkipped)
+	}
+	wl("cheap successes:  %d", diag.CheapSuccesses)
+	wl("success rate:     %.2f  (threshold: %.2f, min-samples: %d)",
+		diag.CheapSuccessRate, diag.Threshold, diag.MinSamples)
+	if diag.IsSkippingCheap {
+		wl("effective floor:  %s  [cheap tier is SKIPPED — success rate below threshold]",
+			string(diag.EffectiveFloor))
+		wl("")
+		wl("To reset: ddx agent route-status reset --yes")
+	} else {
+		wl("effective floor:  %s  [cheap tier is eligible]", string(diag.EffectiveFloor))
+	}
+	return nil
 }

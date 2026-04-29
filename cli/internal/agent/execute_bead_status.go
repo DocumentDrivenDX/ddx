@@ -21,15 +21,17 @@ const PushConflictReasonPrefix = "landed locally; push conflict:"
 // outcome (e.g. preserved) and one failure mode (e.g. merge_conflict) so
 // measurement surfaces can aggregate failures by cause.
 const (
-	FailureModeContextOverflow = "context_overflow"
-	FailureModeMergeConflict   = "merge_conflict"
-	FailureModeTestFailure     = "test_failure"
-	FailureModeBuildFailure    = "build_failure"
-	FailureModeTimeout         = "timeout"
-	FailureModeAuthError       = "auth_error"
-	FailureModeNoChanges       = "no_changes"
-	FailureModeRatchetMiss     = "ratchet_miss"
-	FailureModeUnknown         = "unknown"
+	FailureModeContextOverflow     = "context_overflow"
+	FailureModeMergeConflict       = "merge_conflict"
+	FailureModeTestFailure         = "test_failure"
+	FailureModeBuildFailure        = "build_failure"
+	FailureModeTimeout             = "timeout"
+	FailureModeAuthError           = "auth_error"
+	FailureModeNoChanges           = "no_changes"
+	FailureModeRatchetMiss         = "ratchet_miss"
+	FailureModeNoViableProvider    = "no_viable_provider"
+	FailureModeHarnessNotInstalled = "harness_not_installed"
+	FailureModeUnknown             = "unknown"
 )
 
 // ClassifyFailureMode derives a failure_mode for a worker-level result from
@@ -56,6 +58,18 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 
 	lower := strings.ToLower(errMsg)
 	switch {
+	case containsAny(lower,
+		"executable file not found in $path",
+		"executable file not found",
+		"no such file or directory") &&
+		containsAny(lower, "exec:", "harness", "claude", "agent", "codex", "gemini"):
+		return FailureModeHarnessNotInstalled
+	case containsAny(lower,
+		"no viable harness",
+		"no harness configured",
+		"failed to initialize routing service",
+		"no viable provider"):
+		return FailureModeNoViableProvider
 	case containsAny(lower,
 		"context length",
 		"context_length_exceeded",
