@@ -77,6 +77,28 @@ Escalation advances to the next tier for `execution_failed`,
 `structural_validation_failed`. `no_changes` keeps the existing cooldown and
 satisfaction-adjudication path rather than consuming a higher tier.
 
+### Conflict-recovery structured outcomes (bead ddx-0097af14)
+
+Before parking a bead on `land_conflict` (or on `execution_failed` when the
+agent produced a commit before failing), the execute-loop now attempts to reuse
+the preserved iteration ref rather than discarding the agent's work:
+
+1. **3-way ort auto-merge** (`git merge --no-ff -s ort -X ours`). If clean,
+   the bead closes as `success`.
+2. **Focused conflict-resolve agent** (if `ConflictResolver` is configured on
+   the worker). If clean, the bead closes as `success`.
+3. **Park with structured outcome.** Two new statuses replace the generic
+   reopen when both recovery paths fail:
+
+| Status | Event kind | Meaning |
+| --- | --- | --- |
+| `land_conflict_unresolvable` | `land-conflict-unresolvable` | All auto-recovery failed; retryable after 15-min cooldown. |
+| `land_conflict_needs_human` | `land-conflict-needs-human` | Focused-resolve agent returned BLOCKING; human input required. |
+
+Both statuses use `LandConflictCooldown` (15 min) rather than the 24h cap used
+for `push_failed`, because land conflicts typically unblock quickly as sibling
+beads advance the base branch.
+
 ## Asking ddx-agent for changes
 
 When DDx needs new behavior from the agent — a new method, a new field on

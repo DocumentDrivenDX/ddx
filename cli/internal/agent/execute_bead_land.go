@@ -831,6 +831,67 @@ func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) 
 	return true, mergeSHA, nil
 }
 
+// landConflictAutoRecover attempts a 3-way merge of a preserved iteration ref
+// onto the current target-branch tip using the ort strategy with -X ours. The
+// strategy resolves mechanical conflicts (positional drift from parallel beads)
+// by favouring the current tip's version of any conflicting sections while still
+// including the preserved iteration's non-conflicting changes in the merge
+// commit. If the merge succeeds the local target branch is advanced and the new
+// merge commit SHA is returned.
+//
+// A non-nil error means the ort merge failed (unresolvable content conflict or
+// git error) — the caller should escalate to a focused conflict-resolve agent.
+// The target branch is never modified on error.
+func landConflictAutoRecover(wd, preserveRef string, gitOps LandingGitOps) (string, error) {
+	targetBranch, err := gitOps.CurrentBranch(wd)
+	if err != nil {
+		return "", fmt.Errorf("resolving target branch: %w", err)
+	}
+	targetRef := "refs/heads/" + targetBranch
+
+	currentTip, err := gitOps.ResolveRef(wd, targetRef)
+	if err != nil {
+		return "", fmt.Errorf("resolving target tip %s: %w", targetRef, err)
+	}
+
+	iterSHA, err := gitOps.ResolveRef(wd, preserveRef)
+	if err != nil {
+		return "", fmt.Errorf("resolving preserved ref %s: %w", preserveRef, err)
+	}
+
+	tempWT, mkErr := os.MkdirTemp("", "ddx-conflict-recover-*")
+	if mkErr != nil {
+		return "", fmt.Errorf("creating temp worktree: %w", mkErr)
+	}
+	_ = os.RemoveAll(tempWT)
+	if addErr := gitOps.AddWorktree(wd, tempWT, currentTip); addErr != nil {
+		return "", fmt.Errorf("adding temp worktree at %s: %w", currentTip, addErr)
+	}
+	defer func() { _ = gitOps.RemoveWorktree(wd, tempWT) }()
+
+	mergeMsg := fmt.Sprintf("Merge preserved iteration %s after base drift (ort -X ours)", preserveRef)
+	out, mergeErr := internalgit.Command(
+		context.Background(), tempWT,
+		"-c", "user.name=ddx-land-coordinator",
+		"-c", "user.email=coordinator@ddx.local",
+		"merge", "--no-ff", "-s", "ort", "-X", "ours", "-m", mergeMsg, iterSHA,
+	).CombinedOutput()
+	if mergeErr != nil {
+		_ = internalgit.Command(context.Background(), tempWT, "merge", "--abort").Run()
+		return "", fmt.Errorf("ort merge: %s: %w", strings.TrimSpace(string(out)), mergeErr)
+	}
+
+	mergeSHA, headErr := gitOps.HeadRevAt(tempWT)
+	if headErr != nil {
+		return "", fmt.Errorf("reading merge HEAD: %w", headErr)
+	}
+	if updErr := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, currentTip); updErr != nil {
+		return "", fmt.Errorf("advancing %s to %s: %w", targetRef, mergeSHA, updErr)
+	}
+	_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
+	return mergeSHA, nil
+}
+
 // shortAttempt returns a 10-char slug derived from attemptID for use in temp
 // branch names. When attemptID is empty, it returns the current timestamp.
 func shortAttempt(attemptID string) string {
