@@ -2958,6 +2958,30 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_exec_run",
+			Description: "Get the result of a single execution run by run ID",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Execution run ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_exec_run_log",
+			Description: "Get the stdout and stderr log of a single execution run by run ID",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Execution run ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
 			Name:        "ddx_agent_dispatch",
 			Description: "Dispatch an agent invocation (localhost-only)",
 			InputSchema: map[string]any{
@@ -3167,6 +3191,12 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		}
 		id, _ := call.Arguments["id"].(string)
 		return s.mcpExecDispatch(workingDir, id)
+	case "ddx_exec_run":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpExecRun(workingDir, id)
+	case "ddx_exec_run_log":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpExecRunLog(workingDir, id)
 	case "ddx_agent_dispatch":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: dispatch tools require trusted origin")}, IsError: true}
@@ -3830,6 +3860,32 @@ func (s *Server) mcpDocDiff(workingDir, id, ref string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{mcpText("git diff failed")}, IsError: true}
 	}
 	data, _ := json.Marshal(map[string]string{"diff": string(out)})
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpExecRun(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
+	}
+	store := ddxexec.NewStore(workingDir)
+	result, err := store.Result(id)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(result)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpExecRunLog(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
+	}
+	store := ddxexec.NewStore(workingDir)
+	stdout, stderr, err := store.Log(id)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	data, _ := json.Marshal(map[string]string{"stdout": stdout, "stderr": stderr})
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
