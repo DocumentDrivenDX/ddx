@@ -10,168 +10,135 @@ ddx:
 
 ## Core Thesis
 
-Fifty years of software engineering has produced a reliable insight:
-well-maintained abstractions at multiple levels — requirements, architecture,
-design, tests — produce better software than working at the code level alone.
-The agentic era does not invalidate this; it amplifies it.
+Well-maintained abstractions — requirements, architecture, design, tests —
+produce better software than working at the code level alone. The agentic era
+amplifies this: document quality, not agent capability, is the bottleneck.
 
-Creating documentation and using it as an abstraction — then refining the
-details around that abstraction — is the best way to enable agents to write
-correct software. DDx encodes that insight into infrastructure, making
-documents first-class, agent-consumable artifacts with identity, relationships,
-and lifecycle tracking.
+DDx encodes that insight into infrastructure. Documents become first-class,
+agent-consumable artifacts with identity, relationships, and lifecycle. Beads
+turn intent into self-contained work items. Agents drain the queue.
 
-## Mission Statement
+## The Three-Layer Stack
 
-DDx makes documents the unit of software development — providing the shared infrastructure that developers and workflow tools use to maintain, compose, and deliver the documents AI agents consume to build software.
+DDx is one layer in a three-project stack with explicit boundaries:
 
-## What DDx Is
+| Layer | Project | Owns |
+|-------|---------|------|
+| Platform | **DDx** (this repo) | Document library, bead tracker, agent dispatch, personas, templates, git sync |
+| Workflow | **HELIX** | Phases, gates, supervisory dispatch, bounded actions, methodology |
+| Quality | **Dun** | Check discovery, execution, agent-friendly output |
 
-DDx (Document-Driven Development Experience) is a **toolkit and platform for
-document-driven agentic software development**. It is unopinionated about
-methodology — all methodology opinions live in plugins (e.g., HELIX).
+DDx provides primitives. HELIX and others provide opinions. Dun verifies the
+result. Each layer is independently useful and replaceable.
 
-DDx provides:
+## Mission
 
-- **Artifact management** — define, version, and manage structured documents
-  (visions, specs, designs, ADRs, etc.) within a repository
-- **Plugin infrastructure** — `ddx init`, `ddx install <plugin>` to add
-  methodology-specific capabilities. DDx stays lean; plugins bring opinions.
-- **Bead-based issue tracker** — ephemeral implementation tasks that synthesize
-  context from project documents into self-contained work items agents can
-  execute without loading additional context
-- **Agent execution infrastructure** — tools for running agents against beads,
-  including adversarial review workflows
-- **Artifact templates with props** — documents templated with typed properties
-  and relationships, forming a graph of interconnected artifacts
+Make documents the unit of software development. Provide the shared
+infrastructure that developers and workflow tools use to maintain, compose, and
+deliver the documents agents consume to build software.
+
+## What DDx Provides
+
+- **Document library** — structured, versioned, agent-discoverable artifacts in
+  the repository. Personas, patterns, templates, prompts, MCP server registry.
+- **Bead tracker** — work items with a dependency DAG, ready/blocked queues,
+  and JSONL interchange. Beads are the unit of work agents execute.
+- **Agent service** — unified harness dispatch (claude, codex, gemini, local
+  models) with quorum review, session logging, and a single prompt envelope.
+- **Execute-loop** — drain the bead queue with isolated worktrees, automatic
+  review, and recovery. Cheap models do, strong models review.
+- **Project-local install** — `ddx init` and `ddx install <plugin>` only touch
+  `<projectRoot>`. The only global artifact is `ddx-server`. No home-directory
+  state, no machine-wide opinions.
+- **Single `ddx` skill** — DDx ships one consolidated skill, not a fleet. One
+  surface for agents to learn.
 
 ## What DDx Is Not
 
-- **Not a methodology.** DDx does not prescribe phases, artifact types, or
-  workflows. Those come from plugins.
-- **Not a storage system.** Artifacts are versioned in Git. Future backends are
-  possible but not DDx's concern.
-- **Not an IDE or editor.** DDx manages documents and tasks; editing happens in
-  whatever tools the user prefers.
+- **Not a methodology.** No phases, no gates, no prescribed artifact types.
+  Workflow tools (HELIX) own those.
+- **Not a storage system.** Files in Git. No proprietary backend.
+- **Not an editor or IDE.** Editing happens wherever the user works.
+- **Not opinionated about agents.** Any harness with a prompt-in/output-out
+  contract plugs in.
 
 ## Key Differentiators
 
-### vs. Ad-Hoc Agentic Coding (Vibe Coding)
+### vs. Ad-Hoc Agentic Coding
 
-The mainstream approach — agents making changes with code as the system of
-record — leads to point changes without understanding coupling, no structured
-way to communicate intent, and constant context re-explanation. DDx makes
-documentation the system of record for intent and architecture, while code
-remains the system of record for implementation.
+Code-as-system-of-record produces point changes without coupling awareness, no
+structured intent, and constant context re-explanation. DDx makes documents the
+system of record for intent and architecture; code remains the system of record
+for implementation.
 
 ### vs. Code-Only Agent Tools
 
-Systems treating code as the sole system of record accumulate functionality
-without abstraction hierarchy, producing non-orthogonal interfaces and no way
-for agents to understand cross-cutting impact. DDx's progressive abstraction
-layers give every change a defined place and known impact boundary.
+Without an abstraction hierarchy, functionality accumulates in non-orthogonal
+interfaces and agents cannot reason about cross-cutting impact. DDx gives every
+change a defined place and a known impact boundary.
 
 ### vs. Traditional Documentation-Driven Development
 
-Prior art in DDD fails because documentation gets stale. DDx mitigates this by
-making documents first-class artifacts with relationships, using beads to
-create reconciliation tasks, supporting adversarial review for consistency
-checking, and detecting staleness automatically.
+Prior DDD failed because documents went stale. DDx counters that with
+relationships, content hashing, beads as reconciliation tasks, and adversarial
+review.
 
 ## Design Philosophy
 
+### Platform vs Workflow Boundary
+
+The hardest discipline is keeping platform code free of methodology opinions.
+The boundary is concrete:
+
+| DDx (Platform) | Workflow Tool (e.g., HELIX) |
+|----------------|------------------------------|
+| Document storage, versioning, sync | Artifact types and templates |
+| Bead CRUD, dependency DAG, ready queue | Phase definitions, gates, ratchets |
+| Agent dispatch, quorum, session logging | Methodology prompts, supervisory loops |
+| Persona binding mechanism | Which personas fulfill which roles |
+| Execute-loop runtime | When to run it, what to do with results |
+
+If a feature request would push opinions into the CLI, it belongs in a plugin.
+
 ### Multi-Directional Iteration
 
-DDx supports iteration in all directions through the artifact hierarchy:
+The artifact hierarchy is a set of lenses, not a pipeline. Vision changes
+propagate down; implementation discoveries feed up; spec refinements ripple
+both ways. DDx's primitives (beads, document relationships, content hashing)
+support all three directions equally.
 
-- **Top-down** — vision changes propagate through PRD, specs, tests, code
-- **Bottom-up** — implementation discoveries feed back up to specs or vision
-- **Middle-out** — spec refinements trigger updates both above and below
+### Cost-Tiered Execution
 
-The artifact hierarchy is a set of lenses at different zoom levels, not a
-linear pipeline.
+Closed-bead throughput per dollar is the optimization target. Cheap models do
+the work; stronger models review; deterministic checks (Dun) sit at the top of
+the ladder catching what review missed. The agent service routes by capability,
+not by name — endpoints with live model discovery, not hardcoded providers.
 
 ### Human-Agent Control Slider
 
-DDx supports a continuum of human involvement:
-
-- **Full agent autonomy** — one-shot prompt, agent runs the entire pipeline
-- **Guided autonomy** — human reviews at abstraction boundaries
-- **Collaborative** — human and agent co-author at every level
-- **Human-driven** — agent assists with research, drafting, review; human decides
-
-### Self-Documenting Workflows
-
-After `ddx init` and plugin install, the resulting project should explain
-itself well enough that a new team member — human or agent — can orient
-quickly.
-
-### Platform Services, Not Opinions
-
-| DDx (Platform) | Plugin (e.g., HELIX) |
-|----------------|---------------------|
-| Artifact storage and versioning | Artifact templates and types |
-| Bead creation, assignment, lifecycle | Phase definitions |
-| Agent execution and orchestration | Cross-cutting concern definitions |
-| Adversarial review infrastructure | Methodology-specific prompts |
-| Metric collection hooks | Metric definitions |
-| Feedback loop infrastructure | Feedback analysis and action |
-
-## 3-5 Year Vision
-
-| Timeframe | Market Position | Key Milestones |
-|-----------|----------------|----------------|
-| Year 1 | Established open-source toolkit used by early adopters building agent-driven workflows | CLI stable, server shipping, 3+ workflow tools building on DDx, active community library |
-| Year 3 | Standard infrastructure layer for document-driven development, analogous to what npm is for packages | Ecosystem of workflow tools, enterprise adoption, rich MCP integration, document analytics |
-| Year 5 | Foundational platform for the agent-driven development era — documents-as-code is the default practice | Industry-standard document formats, broad IDE integration, self-improving document libraries |
-
-**North Star:** Every developer working with AI agents uses DDx (or tools built on DDx) to manage the documents that drive those agents.
-
-## Target Market
-
-| Segment | Primary: Agent-First Developers | Secondary: Team Leads & Architects |
-|---------|-------------------------------|-------------------------------------|
-| Size | Millions of developers using AI coding agents daily | Hundreds of thousands managing teams using agents |
-| Pain | Documents scattered, no composition, no reuse — agents get bad context and produce bad output | No standardization across teams, no way to share what works, knowledge trapped in individual repos |
-| Current Solution | Ad-hoc markdown files, copy-paste between projects, manual context assembly | Internal wikis, tribal knowledge, per-project CLAUDE.md files maintained by hand |
-
-## Key Value Propositions
-
-| Capability | Benefit |
-|-----------|---------|
-| Structured document library | Agent-facing documents stay organized, discoverable, and current instead of rotting in random files |
-| Git-native sync | Proven patterns flow between projects and teams without reinventing sharing infrastructure |
-| Persona composition | Consistent agent behavior across projects — bind "strict-code-reviewer" once, get it everywhere |
-| Meta-prompt injection | Right baseline context injected into agents automatically, no manual assembly |
-| MCP server for document access | Agents can programmatically browse and consume document libraries |
-| Template engine | New projects start with proven document structures, not blank files |
-| Bead tracker | Portable work items with dependency DAG, ready queue, and import/export — shared across workflow tools |
-| Agent service | Unified harness dispatch (codex, claude, gemini, etc.) with quorum, session logging, and prompt envelope format |
-| Document dependency graph | Track which docs depend on which, detect staleness via content hashing, cascade invalidation when upstream docs change |
-| Workflow-agnostic primitives | Any methodology (HELIX, custom, etc.) can build on DDx without reimplementing infrastructure |
-
-## Success Definition
-
-| Metric | Target | Timeline |
-|--------|--------|----------|
-| Projects using DDx document libraries | 500+ | Year 1 |
-| Workflow tools built on DDx | 3+ | Year 1 |
-| Community-contributed personas/patterns | 100+ | Year 1 |
-| Document reuse rate across projects | >40% | Year 1 |
-| DDx server MCP endpoints adopted by agent tools | 2+ integrations | Year 1 |
+DDx supports a continuum from full autonomy (drain the queue overnight) to
+human-driven (agent assists, human commits). The same primitives serve both;
+the workflow layer chooses where to sit.
 
 ## Strategic Fit
 
-**Why us:** DDx grew out of real agent-driven development practice. The document management problems we're solving are ones we hit daily building software with AI agents.
+**Why us:** DDx grew out of daily agent-driven development. The problems we
+solve are the problems we hit shipping software with agents.
 
-**Why now:** AI agents crossed the capability threshold where document quality — not agent capability — is the bottleneck. Every team is independently discovering they need document infrastructure. No standard exists yet.
+**Why now:** Document quality is the bottleneck. Every team is independently
+rebuilding the same document infrastructure. No shared layer exists.
 
-**Resources:** Open source, community-driven. Go CLI (proven tech), static website (low maintenance), server component (Go, leveraging CLI internals). Single repo, three focused outputs.
+**North Star:** Every developer working with AI agents uses DDx, or tools built
+on DDx, to manage the documents that drive those agents.
 
 ## Principles
 
-1. **Documents are the product** — code is output, documents are what you maintain
-2. **Infrastructure, not methodology** — DDx provides primitives, workflow tools provide opinions
-3. **Git-native, file-first** — plain files, standard git, no lock-in
-4. **Composition over monoliths** — small focused documents combined on demand
-5. **Agent-agnostic** — documents work with any capable agent
+See `docs/helix/01-frame/principles.md`. The load-bearing ones:
+
+1. **Platform, not methodology** — DDx provides primitives; workflow tools provide opinions.
+2. **Project-local by default** — install touches the project, not the machine.
+3. **Documents are the product** — code is output; documents are what you maintain.
+4. **Bead-driven work** — beads are the unit of work; the queue is the interface.
+5. **Cost-tiered throughput** — optimize closed beads per dollar, not raw capability.
+6. **Git-native, file-first** — plain files, standard git, no lock-in.
+7. **Agent-agnostic** — any capable harness plugs in via the prompt envelope.
