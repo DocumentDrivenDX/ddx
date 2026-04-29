@@ -1621,7 +1621,8 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Bool("no-adaptive-min-tier", false, "Disable adaptive min-tier promotion based on trailing cheap-tier success rate")
 	cmd.Flags().Int("adaptive-min-tier-window", 50, "Trailing window size for adaptive min-tier evaluation")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
-	cmd.Flags().Bool("escalate", false, "Enable tier-ladder escalation. Off by default: a single ResolveRoute call drives each attempt (ddx-755f5881). Use this only when you explicitly want cheap→standard→smart fallback semantics.")
+	cmd.Flags().Bool("escalate", false, "Enable tier-ladder escalation. Off by default: a single ResolveRoute call drives each attempt (ddx-755f5881). Use this only when you explicitly want cheap→standard→smart fallback semantics. Consults agent.routing.profile_ladders.")
+	cmd.Flags().Bool("override-model", false, "Consult agent.routing.model_overrides when picking a per-tier model reference. Off by default; the field is ignored unless this flag is set (bead ddx-87fb72c2).")
 	return cmd
 }
 
@@ -1648,6 +1649,7 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	adaptiveWindow, _ := cmd.Flags().GetInt("adaptive-min-tier-window")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	escalate, _ := cmd.Flags().GetBool("escalate")
+	overrideModel, _ := cmd.Flags().GetBool("override-model")
 
 	// Adaptive min-tier: when the operator did not pin --min-tier and adaptation
 	// is not disabled, consult trailing cheap-tier success rate and promote to
@@ -1913,7 +1915,14 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			requestedTier := string(tiers[0])
 
 			for tierIdx, tier := range tiers {
-				modelRefForTier := agent.ResolveTierModelRef(routingCfg, tier)
+				// agent.routing.model_overrides is opt-in (bead ddx-87fb72c2):
+				// only consulted when --override-model is set. Otherwise pass
+				// the plain tier name to ResolveRoute and let upstream pick
+				// the model.
+				modelRefForTier := string(tier)
+				if overrideModel {
+					modelRefForTier = agent.ResolveTierModelRef(routingCfg, tier)
+				}
 				// Resolve the best harness for this tier via service.ResolveRoute.
 				dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
 					Profile:   profile,

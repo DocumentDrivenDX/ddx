@@ -4,6 +4,39 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Breaking changes
+
+#### Removed: `agent.routing.default_harness`
+
+The `agent.routing.default_harness` field has been removed from `.ddx/config.yaml`
+(bead ddx-87fb72c2). DDx now refuses to load any config that still carries it
+and prints a migration pointer instead.
+
+Why: `default_harness` was a silent fallback that competed with the top-level
+`agent.harness` setting and the live route-resolution call graph. It produced
+confusing routing decisions when the upstream service had no viable provider for
+the requested profile. The endpoint-first redesign (epic ddx-fdd3ea36) makes
+harness selection an explicit decision per dispatch — a config-level "default"
+no longer fits.
+
+Migration: delete the field. The top-level `agent.harness` is still honored as
+a tie-break preference on the resolution path (NOT a default override). See
+[docs/migrations/routing-config.md](docs/migrations/routing-config.md).
+
+#### Opt-in: `agent.routing.profile_ladders` and `agent.routing.model_overrides`
+
+These fields are no longer consulted on the default execute path. They are now
+explicit opt-in:
+
+- `profile_ladders` is consulted only when `--escalate` is passed.
+- `model_overrides` is consulted only when the new `--override-model` flag is
+  passed.
+
+Configs that still set these fields will load successfully but emit a one-time
+process warning at config-load time. To silence the warning, either pass the
+opt-in flag on the relevant invocation or remove the field. See the migration
+guide for details.
+
 ### Fix: `latency_ms` in claude harness traces now reflects per-call duration
 
 Previously every `llm.response` event in `.ddx/agent-logs/agent-claude-*.jsonl`

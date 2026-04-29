@@ -313,10 +313,6 @@
                 }
               }
             },
-            "default_harness": {
-              "type": "string",
-              "description": "Fallback harness when no profile matches"
-            },
             "model_overrides": {
               "type": "object",
               "description": "Per-tier model override map (e.g. { \"cheap\": \"qwen/qwen3.6\", \"standard\": \"codex/gpt-5.4\", \"smart\": \"claude-opus-4-6\" })",

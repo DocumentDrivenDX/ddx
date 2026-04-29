@@ -226,20 +226,27 @@ type AgentEndpoint struct {
 // Routing and epic ddx-bbb65768. ProfilePriority is the legacy flat list
 // and is deprecated in favour of ProfileLadders (per-profile tier lists).
 // When both are present, ProfileLadders wins.
+//
+// Note: agent.routing.default_harness was REMOVED in the routing-config
+// deprecation pass (bead ddx-87fb72c2). The top-level agent.harness field
+// is now a tie-break preference for harness selection, not a default
+// override. Configs that still carry default_harness fail to load with a
+// migration message; see docs/migrations/routing-config.md.
 type RoutingConfig struct {
 	// ProfilePriority is the deprecated flat-list form. New configs should
 	// use ProfileLadders.
 	ProfilePriority []string `yaml:"profile_priority,omitempty" json:"profile_priority,omitempty"`
 	// ProfileLadders maps a profile name to the ordered tier list that a
-	// dispatch should try. Example:
+	// dispatch should try. Opt-in: only consulted when the operator passes
+	// `--escalate`. The default execute path does not read this map.
+	// Example:
 	//   default: [cheap, standard, smart]
 	//   cheap:   [cheap]
 	//   fast:    [fast, smart]
 	//   smart:   [smart]
 	ProfileLadders map[string][]string `yaml:"profile_ladders,omitempty" json:"profile_ladders,omitempty"`
-	// DefaultHarness is the fallback harness when no profile match succeeds.
-	DefaultHarness string `yaml:"default_harness,omitempty" json:"default_harness,omitempty"`
 	// ModelOverrides maps a profile name to a concrete model reference.
+	// Opt-in: only consulted when the operator passes `--override-model`.
 	// e.g. { "cheap": "qwen/qwen3.6", "smart": "claude-opus-4-6" }.
 	ModelOverrides map[string]string `yaml:"model_overrides,omitempty" json:"model_overrides,omitempty"`
 }

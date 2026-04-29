@@ -62,7 +62,6 @@ func TestRoutingConfigClone(t *testing.T) {
 		ProfilePriority: []string{"a", "b"},
 		ProfileLadders:  map[string][]string{"default": {"cheap"}},
 		ModelOverrides:  map[string]string{"smart": "claude-opus"},
-		DefaultHarness:  "claude",
 	}
 
 	dst := src.Clone()
