@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260429T143710-c87f5cd2",
+  "bead_id": "ddx-908a6d5d",
+  "base_rev": "3915587ca0468a6ff9930146ca265f3bade40530",
+  "created_at": "2026-04-29T14:37:11.273532739Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-908a6d5d",
+    "title": "project-local plugin installs + remove ddx install --global",
+    "description": "Bead 2 of 4 children under epic ddx-3562c48c. Depends on bead 1 (ddx-c3efa754).\n\nMove plugin installs to project-local; route through skills.Install; reject home-rooted manifests; delete the install --global command.\n\nREGISTRY (cli/internal/registry/installer.go):\n- Add projectRoot string parameter to InstallPackage and SymlinkSkillsFromRoot (rename to InstallSkillsFromRoot).\n- Extraction target (lines 61-78): change from ~/.ddx/plugins/\u003cplugin\u003e/ to \u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e/. ZERO writes to ~/.ddx/plugins/, ~/.agents/skills/, ~/.claude/skills/.\n- Manifest with Root.Target starting '~/' returns non-nil error: 'FEAT-015: Root.Target must be project-relative; got \u003cvalue\u003e in package \u003cname\u003e; update the manifest to use a relative path'. Non-zero exit propagates through ddx install.\n- DELETE the \u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e → ~/.ddx/plugins/\u003cplugin\u003e symlink (lines 83-91).\n- DELETE symlinkSkills (lines 326-423), SymlinkSkillsFromRoot, pruneStaleSkillLinks. All callers route through skills.Install(os.DirFS(\u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e), projectRoot, opts).\n- DELETE writes to ~/.agents/skills/, ~/.claude/skills/ in registry.go:80-81 and 107-108.\n\nLOCAL INSTALL (cli/cmd/install.go:234-389, the installLocal function):\n- Same treatment: extract to \u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e/.\n- DELETE the legacy ~-symlink at line 318.\n- Replace SymlinkSkillsFromRoot call with skills.Install.\n\nREMOVE GLOBAL INSTALL:\n- DELETE cli/cmd/install_global.go.\n- DELETE cli/cmd/install_global_test.go.\n- Remove --global flag from cli/cmd/install.go (cobra default error on unknown flag is acceptable).\n\nCOMMIT HYGIENE:\n- commitPluginChanges: stage \u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e/ in addition to .agents/skills/ and .claude/skills/.\n\nTESTS:\n- TestSymlinkSkills_* (cli/internal/registry/registry_test.go:240-391) → rewrite as TestInstallSkills_*. TestSymlinkSkills_PluginRootSymlinkDoesNotEscape replaced with stronger test: walk all installed paths, assert (a) no symlinks, (b) no path resolves outside \u003cprojectRoot\u003e.\n- cli/cmd/installation_acceptance_test.go: rewrite to expect project-local layout (currently asserts ~/.ddx/plugins/ddx).\n- NEW TestInstall_NoSymlinksCreated: post-install of 'ddx init \u0026\u0026 ddx install \u003cplugin\u003e', walk \u003cprojectRoot\u003e/.agents/skills/, .claude/skills/, .ddx/plugins/\u003cplugin\u003e/ — assert ZERO symlinks anywhere. Locks the cross-platform invariant.\n- NEW TestInstall_RejectsHomeRootedManifestTarget: package with Root.Target: ~/.ddx/plugins/x → InstallPackage returns the FEAT-015 error.\n- NEW TestInstall_GlobalFlagRemoved: ddx install --global \u003cpkg\u003e exits non-zero with cobra unknown-flag error.\n- state.Files records project-relative paths after install (assertion in updated TestInstallPackage_*).\n\nOUT OF SCOPE: persona fallback, GraphQL pluginRootCandidates, doctor, ddx update behavior, .gitignore, docs. (Beads 3 and 4.)",
+    "acceptance": "1. registry.InstallPackage accepts projectRoot string. 2. Extraction target is \u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e/; zero writes to ~/.ddx/plugins/, ~/.agents/skills/, ~/.claude/skills/. 3. Manifest with ~-prefixed Root.Target returns the specified FEAT-015 error; ddx install exits non-zero. Verified by TestInstall_RejectsHomeRootedManifestTarget. 4. installLocal (install.go:234-389) does same; legacy ~-symlink at line 318 deleted. 5. symlinkSkills, SymlinkSkillsFromRoot, pruneStaleSkillLinks all deleted; callers route through skills.Install. 6. \u003cprojectRoot\u003e/.ddx/plugins/\u003cplugin\u003e → ~/.ddx/plugins/\u003cplugin\u003e symlink no longer created. 7. cli/cmd/install_global.go and install_global_test.go deleted; --global flag removed from install.go. TestInstall_GlobalFlagRemoved passes. 8. commitPluginChanges stages .ddx/plugins/\u003cplugin\u003e/. 9. TestSymlinkSkills_* rewritten as TestInstallSkills_*; PluginRootSymlinkDoesNotEscape replaced with no-symlinks + no-escape walk. 10. installation_acceptance_test.go rewritten to project-local layout. 11. TestInstall_NoSymlinksCreated walks all three target trees and asserts zero symlinks. 12. state.Files records project-relative paths. 13. End-to-end: 'ddx init \u0026\u0026 ddx install helix' in tmp dir produces tree with zero symlinks. 14. cd cli \u0026\u0026 go build ./... \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-3562c48c",
+    "labels": [
+      "area:cli",
+      "area:registry",
+      "kind:feature",
+      "spec:FEAT-015"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-015",
+      "path": "docs/helix/01-frame/features/FEAT-015-installation-architecture.md",
+      "title": "Feature: DDx Installation Architecture"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260429T143710-c87f5cd2",
+    "prompt": ".ddx/executions/20260429T143710-c87f5cd2/prompt.md",
+    "manifest": ".ddx/executions/20260429T143710-c87f5cd2/manifest.json",
+    "result": ".ddx/executions/20260429T143710-c87f5cd2/result.json",
+    "checks": ".ddx/executions/20260429T143710-c87f5cd2/checks.json",
+    "usage": ".ddx/executions/20260429T143710-c87f5cd2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-908a6d5d-20260429T143710-c87f5cd2"
+  }
+}
