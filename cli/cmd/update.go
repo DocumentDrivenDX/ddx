@@ -117,7 +117,7 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		// Install the latest version.
 		installPkg := *pkg
 		installPkg.Version = latestVersion
-		newEntry, err := registry.InstallPackage(&installPkg)
+		newEntry, err := registry.InstallPackage(&installPkg, workingDir)
 		if err != nil {
 			return nil, fmt.Errorf("updating %s: %w", entry.Name, err)
 		}

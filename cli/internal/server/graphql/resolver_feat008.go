@@ -550,7 +550,7 @@ func installRegistryPlugin(workingDir string, state *registry.InstalledState, na
 		defer func() { _ = os.Chdir(origDir) }()
 	}
 
-	entry, err := registry.InstallPackage(pkg)
+	entry, err := registry.InstallPackage(pkg, workingDir)
 	if err != nil {
 		return nil, fmt.Errorf("installing plugin %q: %w", name, err)
 	}

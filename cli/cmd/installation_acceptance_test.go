@@ -350,7 +350,8 @@ func (env *InstallationTestEnvironment) RunCommand(command string) InstallationR
 	if strings.Contains(command, "ddx install --offline") {
 		// Simulate offline installation by executing our install simulation
 		result := env.ExecuteInstallCommand("install")
-		// Create some library resources to simulate offline package content
+		// FEAT-015: simulate project-local plugin layout under the
+		// "project" (HomeDir acts as the project root for these tests).
 		libPath := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
 		_ = os.MkdirAll(libPath, 0755)
 		_ = os.WriteFile(filepath.Join(libPath, "README.md"), []byte("# DDx Library"), 0644)
@@ -755,8 +756,13 @@ func TestAcceptance_US034_OfflineInstallation(t *testing.T) {
 			version := env.RunCommand("ddx version")
 			assert.Equal(t, 0, version.ExitCode, "DDX should work after offline install")
 
-			// And: All library resources are included
-			assert.True(t, env.FileExists("~/.ddx/plugins/ddx"), "Library resources should be included")
+			// And: All library resources are included.
+			// FEAT-015: plugins live in the PROJECT layout (.ddx/plugins/<name>),
+			// not under $HOME. In this test, env.HomeDir is the project root
+			// (cmd.Dir is set to env.HomeDir for ddx doctor invocations).
+			projectPluginDir := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
+			_, statErr := os.Stat(projectPluginDir)
+			assert.NoError(t, statErr, "Library resources should be installed under <project>/.ddx/plugins/ddx (FEAT-015 project-local)")
 		})
 	}
 }

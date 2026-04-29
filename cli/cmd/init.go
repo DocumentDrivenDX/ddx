@@ -282,7 +282,7 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 			}
 		}
 
-		if entry, installErr := registry.InstallPackage(pkg); installErr != nil {
+		if entry, installErr := registry.InstallPackage(pkg, workingDir); installErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not install default library: %v\n", installErr)
 		} else {
 			_ = removeStaleFilesFromInstall(oldFiles, entry.Files)

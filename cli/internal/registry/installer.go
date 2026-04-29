@@ -10,17 +10,41 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/skills"
 )
 
-// InstallPackage downloads the source release tarball and copies declared install mappings.
-// It records installed files in the returned InstalledEntry.
-func InstallPackage(pkg *Package) (InstalledEntry, error) {
+// InstallPackage downloads the source release tarball and copies declared install mappings
+// into projectRoot. It records installed files (project-relative when possible) in the
+// returned InstalledEntry.
+func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        pkg.Name,
 		Version:     pkg.Version,
 		Type:        pkg.Type,
 		Source:      pkg.Source,
 		InstalledAt: time.Now(),
+	}
+
+	// FEAT-015 early validation: if the package argument already declares a
+	// home-rooted Root.Target, reject it before doing any I/O. The post-
+	// manifest check below covers manifest-supplied targets after download.
+	if pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
+	}
+
+	// Switch into projectRoot so relative install targets resolve against the
+	// project, not the caller's cwd. This keeps copyMapping, ExpandHome, and
+	// the recorded entry.Files paths project-relative.
+	if projectRoot != "" {
+		absProject, absErr := filepath.Abs(projectRoot)
+		if absErr == nil {
+			if origDir, gwdErr := os.Getwd(); gwdErr == nil && origDir != absProject {
+				if err := os.Chdir(absProject); err == nil {
+					defer func() { _ = os.Chdir(origDir) }()
+				}
+			}
+		}
 	}
 
 	// Download and extract the release tarball to a temp directory.
@@ -54,60 +78,58 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 		}
 	}
 
+	// FEAT-015: plugin install targets must be project-relative. Manifests
+	// that try to write into the user's home are rejected so plugins can't
+	// pollute global state.
+	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
+	}
+
 	if issues := ValidatePackageStructure(extractedDir, pkg); len(issues) > 0 {
 		return entry, fmt.Errorf("validating package structure: %s", JoinValidationIssues(issues))
 	}
 
-	// Process Root mapping first - copy the entire plugin to central location.
+	// Process Root mapping — copy the plugin tree into the project-local
+	// install location (e.g. .ddx/plugins/<name>/).
 	var installedRoot string
-	if pkg.Install.Root != nil {
-		files, err := copyMapping(extractedDir, pkg.Install.Root)
-		if err != nil {
-			return entry, fmt.Errorf("installing plugin root: %w", err)
-		}
-		entry.Files = append(entry.Files, files...)
-		installedRoot = ExpandHome(pkg.Install.Root.Target)
+	files, err := copyMapping(extractedDir, pkg.Install.Root)
+	if err != nil {
+		return entry, fmt.Errorf("installing plugin root: %w", err)
+	}
+	entry.Files = append(entry.Files, files...)
+	installedRoot = ExpandHome(pkg.Install.Root.Target)
 
-		// Ensure declared executables have the execute bit set.
-		for _, rel := range pkg.Install.Executable {
-			p := filepath.Join(installedRoot, filepath.FromSlash(rel))
-			if info, err := os.Stat(p); err == nil && !info.IsDir() {
-				_ = os.Chmod(p, info.Mode()|0111)
-			}
+	// Ensure declared executables have the execute bit set.
+	for _, rel := range pkg.Install.Executable {
+		p := filepath.Join(installedRoot, filepath.FromSlash(rel))
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			_ = os.Chmod(p, info.Mode()|0111)
 		}
 	}
 
-	// Create project-local symlink to global plugin root so that project-relative
-	// paths (e.g. .ddx/plugins/helix/workflows/) resolve correctly.
-	// Only when the root target is a global (~/...) path — skip for project-local targets.
-	if installedRoot != "" && pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
-		localPluginDir := filepath.Join(".ddx", "plugins", pkg.Name)
-		if err := os.MkdirAll(filepath.Dir(localPluginDir), 0755); err == nil {
-			// Remove existing file/symlink/directory.
-			if _, err := os.Lstat(localPluginDir); err == nil {
-				_ = os.RemoveAll(localPluginDir)
-			}
-			_ = os.Symlink(installedRoot, localPluginDir)
+	// Process Skills via the shared installer. skills.Install copies real
+	// files into <projectRoot>/.agents/skills/ and <projectRoot>/.claude/skills/.
+	// No symlinks are ever created — this is the cross-platform invariant
+	// that FEAT-015 relies on.
+	if len(pkg.Install.Skills) > 0 {
+		// Use the extracted tarball as the skill source rather than the
+		// post-copy installed root: copyMapping skips broken symlinks (a
+		// known GitHub-tarball quirk), so the installed tree may have an
+		// empty .agents/skills/. The extracted dir preserves the original
+		// layout — including broken symlinks — and skills.discoverSkills
+		// recovers them via the skills/<name> fallback.
+		absExtracted, absErr := filepath.Abs(extractedDir)
+		if absErr != nil {
+			absExtracted = extractedDir
 		}
-	}
-
-	// Process Skills mappings — symlink from installed root when available,
-	// otherwise fall back to copying from the extracted tarball.
-	for i := range pkg.Install.Skills {
-		skill := &pkg.Install.Skills[i]
-		if installedRoot != "" {
-			files, err := symlinkSkills(installedRoot, skill)
-			if err != nil {
-				return entry, fmt.Errorf("symlinking skills: %w", err)
-			}
-			entry.Files = append(entry.Files, files...)
-		} else {
-			files, err := copyMapping(extractedDir, skill)
-			if err != nil {
-				return entry, fmt.Errorf("installing skills: %w", err)
-			}
-			entry.Files = append(entry.Files, files...)
+		absProject, absErr := filepath.Abs(".")
+		if absErr != nil {
+			absProject = projectRoot
 		}
+		if err := skills.Install(os.DirFS(absExtracted), absProject, skills.Options{Force: true}); err != nil {
+			return entry, fmt.Errorf("installing skills: %w", err)
+		}
+		entry.Files = append(entry.Files, recordInstalledSkills(absExtracted, absProject)...)
 	}
 
 	// Process Scripts mapping — copy the script to the target path.
@@ -161,6 +183,39 @@ func InstallPackage(pkg *Package) (InstalledEntry, error) {
 	}
 
 	return entry, nil
+}
+
+// recordInstalledSkills returns project-relative paths to the skill directories
+// installed under .agents/skills/ and .claude/skills/ that came from the given
+// plugin root.
+func recordInstalledSkills(installedRoot, projectRoot string) []string {
+	var names []string
+	for _, candidate := range []string{
+		filepath.Join(installedRoot, ".agents", "skills"),
+		filepath.Join(installedRoot, "skills"),
+	} {
+		entries, err := os.ReadDir(candidate)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || e.Type()&os.ModeSymlink != 0 {
+				names = append(names, e.Name())
+			}
+		}
+		if len(names) > 0 {
+			break
+		}
+	}
+
+	var files []string
+	for _, name := range names {
+		for _, sub := range []string{".agents/skills", ".claude/skills"} {
+			rel := filepath.Join(filepath.FromSlash(sub), name)
+			files = append(files, rel)
+		}
+	}
+	return files
 }
 
 // InstallResource installs a single resource file (e.g. "persona/strict-code-reviewer")
@@ -314,209 +369,6 @@ func downloadAndExtract(url, destDir string) (string, error) {
 	return filepath.Join(destDir, topDir), nil
 }
 
-// symlinkSkills creates symlinks in the target skill directory pointing to the
-// corresponding entries in the installed plugin root. This keeps skills in sync
-// with the plugin rather than creating independent copies.
-//
-// The source entries may themselves be symlinks (e.g. HELIX's
-// .agents/skills/helix-align -> ../../skills/helix-align). We resolve through
-// all symlinks using filepath.EvalSymlinks so the output symlinks point to
-// real directories, not to intermediate symlinks that may contain stale or
-// Docker-only paths.
-func symlinkSkills(installedRoot string, skill *InstallMapping) ([]string, error) {
-	srcDir := filepath.Join(installedRoot, filepath.FromSlash(skill.Source))
-	dstDir := ExpandHome(skill.Target)
-	cleanSource := filepath.Clean(filepath.FromSlash(skill.Source))
-
-	entries, err := os.ReadDir(srcDir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("reading skills dir %s: %w", srcDir, err)
-	}
-	if len(entries) == 0 && (cleanSource == filepath.Join(".agents", "skills") || cleanSource == filepath.Join(".claude", "skills")) {
-		fallbackDir := filepath.Join(installedRoot, "skills")
-		fallbackEntries, fallbackErr := os.ReadDir(fallbackDir)
-		if fallbackErr == nil {
-			srcDir = fallbackDir
-			entries = fallbackEntries
-		}
-	}
-
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return nil, fmt.Errorf("creating skills dir %s: %w", dstDir, err)
-	}
-
-	allowed := make(map[string]bool, len(entries))
-	for _, e := range entries {
-		allowed[e.Name()] = true
-	}
-	if err := pruneStaleSkillLinks(installedRoot, dstDir, allowed); err != nil {
-		return nil, err
-	}
-
-	var written []string
-	for _, e := range entries {
-		src := filepath.Join(srcDir, e.Name())
-		dst := filepath.Join(dstDir, e.Name())
-
-		// Compute link target from the LOGICAL src path, NOT from the
-		// EvalSymlinks-resolved real path on disk (ddx-6365b2b3).
-		// Resolving real path follows indirections like
-		// <project>/.ddx/plugins/helix → ~/.ddx/plugins/helix, then
-		// filepath.Rel produces a repo-escaping link like
-		// ../../../../../../home/erik/.ddx/plugins/helix/.agents/skills/X
-		// which gets committed and re-rewritten to each machine's $HOME.
-		// Using the logical src keeps the link inside the project /
-		// inside the package's logical layout regardless of where the
-		// plugin physically lives.
-		logicalSrc := src
-
-		// Verify the source actually resolves to a directory. os.Stat
-		// follows symlinks for this check; we only use it to gate
-		// existence + recover broken tarball links, never to mutate
-		// linkTarget.
-		if info, statErr := os.Stat(logicalSrc); statErr != nil || !info.IsDir() {
-			// Tarball-build recovery: GitHub's archive tool sometimes
-			// bakes absolute paths from the build machine into symlink
-			// targets (e.g. /home/user/Projects/helix/skills/X), which
-			// break on every other machine. Fall back to looking up the
-			// entry by basename under installedRoot/skills/ (the canonical
-			// storage location for plugin skills).
-			candidate := filepath.Join(installedRoot, "skills", e.Name())
-			if cInfo, cErr := os.Stat(candidate); cErr == nil && cInfo.IsDir() {
-				logicalSrc = candidate
-			} else {
-				// Truly broken — skip this entry.
-				continue
-			}
-		}
-
-		// Remove existing file/symlink/directory at dst.
-		if _, err := os.Lstat(dst); err == nil {
-			if err := os.RemoveAll(dst); err != nil {
-				return nil, fmt.Errorf("removing existing %s: %w", dst, err)
-			}
-		}
-
-		// FEAT-015 §5 "Relative Symlinks for Plugins" — compute a
-		// path-relative target so the link survives clones, home-
-		// directory moves, and tarball rebuilds on a different machine.
-		// Fall back to the absolute path only when filepath.Rel refuses
-		// (different filesystem roots; extremely rare on Linux/macOS).
-		linkTarget := logicalSrc
-		absDstDir, dstAbsErr := filepath.Abs(filepath.Dir(dst))
-		absSrc, srcAbsErr := filepath.Abs(logicalSrc)
-		if dstAbsErr == nil && srcAbsErr == nil {
-			if rel, relErr := filepath.Rel(absDstDir, absSrc); relErr == nil {
-				linkTarget = rel
-			}
-		}
-
-		if err := os.Symlink(linkTarget, dst); err != nil {
-			return nil, fmt.Errorf("symlinking %s -> %s: %w", dst, linkTarget, err)
-		}
-		written = append(written, dst)
-	}
-	return written, nil
-}
-
-func pruneStaleSkillLinks(installedRoot, dstDir string, allowed map[string]bool) error {
-	if installedRoot == "" {
-		return nil
-	}
-
-	entries, err := os.ReadDir(dstDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("reading skills dir %s: %w", dstDir, err)
-	}
-
-	absRoot, err := filepath.Abs(installedRoot)
-	if err != nil {
-		absRoot = installedRoot
-	}
-
-	for _, e := range entries {
-		name := e.Name()
-		if allowed[name] {
-			continue
-		}
-
-		dstPath := filepath.Join(dstDir, name)
-		info, err := os.Lstat(dstPath)
-		if err != nil {
-			continue
-		}
-		if info.Mode()&os.ModeSymlink == 0 {
-			continue
-		}
-
-		target, err := resolveSymlinkTarget(dstPath)
-		if err != nil {
-			continue
-		}
-		if !isWithinRoot(target, absRoot) {
-			continue
-		}
-
-		if err := os.RemoveAll(dstPath); err != nil {
-			return fmt.Errorf("removing stale skill link %s: %w", dstPath, err)
-		}
-	}
-	return nil
-}
-
-func resolveSymlinkTarget(path string) (string, error) {
-	target, err := filepath.EvalSymlinks(path)
-	if err == nil {
-		if abs, absErr := filepath.Abs(target); absErr == nil {
-			return abs, nil
-		}
-		return target, nil
-	}
-
-	linkTarget, readErr := os.Readlink(path)
-	if readErr != nil {
-		return "", err
-	}
-
-	if !filepath.IsAbs(linkTarget) {
-		linkTarget = filepath.Join(filepath.Dir(path), linkTarget)
-	}
-	linkTarget = filepath.Clean(linkTarget)
-	if abs, absErr := filepath.Abs(linkTarget); absErr == nil {
-		linkTarget = abs
-	}
-	return linkTarget, nil
-}
-
-func isWithinRoot(target, root string) bool {
-	if root == "" || target == "" {
-		return false
-	}
-	rel, err := filepath.Rel(root, target)
-	if err != nil {
-		return false
-	}
-	if rel == "." {
-		return true
-	}
-	if rel == ".." {
-		return false
-	}
-	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-// SymlinkSkillsFromRoot creates skill symlinks from an installed plugin root.
-// Exported for use by local install path.
-func SymlinkSkillsFromRoot(installedRoot string, skill *InstallMapping) ([]string, error) {
-	return symlinkSkills(installedRoot, skill)
-}
-
 // CopyScriptFromRoot copies a script from an installed plugin root to the
 // target path. Exported for use by local install path.
 func CopyScriptFromRoot(installedRoot string, mapping *InstallMapping) (string, error) {
@@ -524,7 +376,6 @@ func CopyScriptFromRoot(installedRoot string, mapping *InstallMapping) (string, 
 	if err != nil {
 		return "", err
 	}
-	// Ensure executable.
 	dst := ExpandHome(mapping.Target)
 	if info, err := os.Stat(dst); err == nil && !info.IsDir() {
 		_ = os.Chmod(dst, info.Mode()|0111)

@@ -65,9 +65,14 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 	if pkg.Install.Root.Target != ".ddx/plugins/ddx" {
 		t.Errorf("expected root target=.ddx/plugins/ddx, got %q", pkg.Install.Root.Target)
 	}
-	// ddx plugin ships skills to project-local and global skill dirs.
-	if len(pkg.Install.Skills) != 4 {
-		t.Errorf("expected 4 skill mappings, got %d", len(pkg.Install.Skills))
+	// ddx plugin ships skills to project-local skill dirs only (FEAT-015).
+	if len(pkg.Install.Skills) != 2 {
+		t.Errorf("expected 2 skill mappings, got %d", len(pkg.Install.Skills))
+	}
+	for _, sk := range pkg.Install.Skills {
+		if strings.HasPrefix(sk.Target, "~") {
+			t.Errorf("skill target must be project-relative, got %q", sk.Target)
+		}
 	}
 	if pkg.Install.Scripts != nil {
 		t.Error("expected no scripts")
@@ -237,157 +242,91 @@ func TestLoadSaveState(t *testing.T) {
 	}
 }
 
-func TestSymlinkSkills_BrokenTarballSymlinks(t *testing.T) {
-	// Simulate the GitHub tarball bug: .agents/skills/ contains symlinks
-	// with absolute paths from the build machine (e.g. /home/erik/Projects/helix/skills/...)
-	// that don't exist on the installing machine.
-	root := t.TempDir()
+// FEAT-015 invariants for project-local plugin installs:
+//   - the plugin tree lives under <projectRoot>/.ddx/plugins/<name>/
+//   - skill copies live under <projectRoot>/.agents/skills/ and .claude/skills/
+//   - NO symlinks anywhere in the install output
+//   - NO file resolves outside <projectRoot>
+//
+// The TestInstallSkills_* tests below replace the legacy TestSymlinkSkills_*
+// tests deleted with symlinkSkills/pruneStaleSkillLinks.
 
-	// Create the real skill directories (as they exist after Root copy)
-	realSkillDir := filepath.Join(root, "skills", "helix-test")
-	require.NoError(t, os.MkdirAll(realSkillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(realSkillDir, "SKILL.md"), []byte("test"), 0o644))
-
-	// Create broken symlinks (as tarball would produce)
-	agentsSkillDir := filepath.Join(root, ".agents", "skills")
-	require.NoError(t, os.MkdirAll(agentsSkillDir, 0o755))
-	// This symlink points to an absolute path that doesn't exist
-	require.NoError(t, os.Symlink("/nonexistent/build-machine/skills/helix-test",
-		filepath.Join(agentsSkillDir, "helix-test")))
-
-	// symlinkSkills should recover by finding skills/helix-test in the root
-	dstDir := filepath.Join(t.TempDir(), ".claude", "skills")
-	written, err := symlinkSkills(root, &InstallMapping{
-		Source: ".agents/skills/",
-		Target: dstDir,
-	})
-	require.NoError(t, err)
-	require.Len(t, written, 1, "should have created 1 symlink despite broken source symlink")
-
-	// The created symlink should point to the real skill dir
-	target, err := os.Readlink(filepath.Join(dstDir, "helix-test"))
-	require.NoError(t, err)
-	assert.Contains(t, target, "skills/helix-test")
-
-	// And the target should actually exist
-	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
-	assert.NoError(t, err, "skill content should be accessible through symlink")
+func walkAndAssertNoSymlinks(t *testing.T, root, projectRoot string) int {
+	t.Helper()
+	count := 0
+	absProject, _ := filepath.Abs(projectRoot)
+	require.NoError(t, filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		count++
+		if info.Mode()&os.ModeSymlink != 0 {
+			t.Errorf("FEAT-015: unexpected symlink at %s", path)
+		}
+		abs, absErr := filepath.Abs(path)
+		require.NoError(t, absErr)
+		rel, relErr := filepath.Rel(absProject, abs)
+		require.NoError(t, relErr)
+		if strings.HasPrefix(rel, "..") {
+			t.Errorf("FEAT-015: path %s escapes projectRoot %s", path, absProject)
+		}
+		return nil
+	}))
+	return count
 }
 
-func TestSymlinkSkills_WorkingSymlinks(t *testing.T) {
-	// Normal case: .agents/skills/ has relative symlinks that resolve correctly
-	root := t.TempDir()
+func TestInstallSkills_NoSymlinksAnywhere(t *testing.T) {
+	// FEAT-015 cross-platform invariant: a plugin install in a project must
+	// produce zero symlinks anywhere in the three install trees and every
+	// path must resolve inside projectRoot.
+	projectRoot := t.TempDir()
 
-	realSkillDir := filepath.Join(root, "skills", "helix-test")
-	require.NoError(t, os.MkdirAll(realSkillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(realSkillDir, "SKILL.md"), []byte("test"), 0o644))
+	// Simulate the post-install layout: plugin tree + skill copies as real files.
+	pluginTree := filepath.Join(projectRoot, ".ddx", "plugins", "sample")
+	require.NoError(t, os.MkdirAll(filepath.Join(pluginTree, ".agents", "skills", "sample-skill"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pluginTree, ".agents", "skills", "sample-skill", "SKILL.md"),
+		[]byte("---\nname: sample-skill\ndescription: sample\n---\n"), 0o644))
 
-	agentsSkillDir := filepath.Join(root, ".agents", "skills")
-	require.NoError(t, os.MkdirAll(agentsSkillDir, 0o755))
-	// Relative symlink that works
-	require.NoError(t, os.Symlink("../../skills/helix-test",
-		filepath.Join(agentsSkillDir, "helix-test")))
+	for _, dir := range []string{".agents/skills/sample-skill", ".claude/skills/sample-skill"} {
+		full := filepath.Join(projectRoot, filepath.FromSlash(dir))
+		require.NoError(t, os.MkdirAll(full, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(full, "SKILL.md"),
+			[]byte("real file"), 0o644))
+	}
 
-	dstDir := filepath.Join(t.TempDir(), ".claude", "skills")
-	written, err := symlinkSkills(root, &InstallMapping{
-		Source: ".agents/skills/",
-		Target: dstDir,
-	})
-	require.NoError(t, err)
-	require.Len(t, written, 1)
-
-	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
-	assert.NoError(t, err)
+	for _, sub := range []string{".ddx/plugins/sample", ".agents/skills", ".claude/skills"} {
+		walkAndAssertNoSymlinks(t, filepath.Join(projectRoot, filepath.FromSlash(sub)), projectRoot)
+	}
 }
 
-func TestSymlinkSkills_RealDirectories(t *testing.T) {
-	// Case: .agents/skills/ has real directories (not symlinks)
-	// This happens after a clean ddx install (copyMapping resolves symlinks)
-	root := t.TempDir()
+func TestInstall_RejectsHomeRootedManifestTarget(t *testing.T) {
+	// InstallPackage must reject a manifest whose Root.Target starts with "~"
+	// without writing anything to disk. Uses an unreachable Source so the
+	// download path can't accidentally succeed; the validation must short-
+	// circuit before the network call.
+	t.Setenv("HOME", t.TempDir())
+	pkg := &Package{
+		Name:    "evil-plugin",
+		Version: "1.0.0",
+		Type:    PackageTypePlugin,
+		Source:  "https://invalid.invalid/should-not-be-fetched",
+		Install: PackageInstall{
+			Root: &InstallMapping{
+				Source: ".",
+				Target: "~/.ddx/plugins/evil-plugin",
+			},
+		},
+	}
 
-	skillDir := filepath.Join(root, ".agents", "skills", "helix-test")
-	require.NoError(t, os.MkdirAll(skillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("test"), 0o644))
-
-	dstDir := filepath.Join(t.TempDir(), ".claude", "skills")
-	written, err := symlinkSkills(root, &InstallMapping{
-		Source: ".agents/skills/",
-		Target: dstDir,
-	})
-	require.NoError(t, err)
-	require.Len(t, written, 1)
-
-	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
-	assert.NoError(t, err)
-}
-
-func TestSymlinkSkills_NoPreExistingTargetDir(t *testing.T) {
-	// Case: target .claude/skills/ doesn't exist yet (fresh user)
-	root := t.TempDir()
-
-	skillDir := filepath.Join(root, ".agents", "skills", "helix-test")
-	require.NoError(t, os.MkdirAll(skillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("test"), 0o644))
-
-	// Target directory does NOT exist — should be created
-	dstDir := filepath.Join(t.TempDir(), "fresh-user", ".claude", "skills")
-	written, err := symlinkSkills(root, &InstallMapping{
-		Source: ".agents/skills/",
-		Target: dstDir,
-	})
-	require.NoError(t, err)
-	require.Len(t, written, 1)
-
-	_, err = os.Stat(filepath.Join(dstDir, "helix-test", "SKILL.md"))
-	assert.NoError(t, err, "should create target dir and symlink even when .claude/ doesn't exist")
-}
-
-// Bug B regression (ddx-6365b2b3): when the plugin root is itself a
-// symlink pointing outside the project tree, link-target computation must
-// stay logical (in-repo). EvalSymlinks-resolved paths escape the project
-// and produce repo-leaving committed links that oscillate per-machine.
-func TestSymlinkSkills_PluginRootSymlinkDoesNotEscape(t *testing.T) {
-	// Layout:
-	//   <project>/.ddx/plugins/foo  → /tmp/<global>/.ddx/plugins/foo (symlink)
-	//   /tmp/<global>/.ddx/plugins/foo/.agents/skills/sample/SKILL.md (real)
-	//   <project>/.agents/skills/   (link target)
-	//
-	// Expected: <project>/.agents/skills/sample → ../../.ddx/plugins/foo/.agents/skills/sample
-	// Bug: <project>/.agents/skills/sample → ../../../../<absolute>/skills/sample
-	project := t.TempDir()
-	global := t.TempDir()
-
-	realPluginRoot := filepath.Join(global, ".ddx", "plugins", "foo")
-	skillDir := filepath.Join(realPluginRoot, ".agents", "skills", "sample")
-	require.NoError(t, os.MkdirAll(skillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"),
-		[]byte("---\nname: sample\ndescription: Sample\n---\n"), 0o644))
-
-	// Project-local plugin path is a symlink → global plugin root.
-	projectPluginParent := filepath.Join(project, ".ddx", "plugins")
-	require.NoError(t, os.MkdirAll(projectPluginParent, 0o755))
-	projectPluginRoot := filepath.Join(projectPluginParent, "foo")
-	require.NoError(t, os.Symlink(realPluginRoot, projectPluginRoot))
-
-	dstDir := filepath.Join(project, ".agents", "skills")
-	written, err := symlinkSkills(projectPluginRoot, &InstallMapping{
-		Source: ".agents/skills/",
-		Target: dstDir,
-	})
-	require.NoError(t, err)
-	require.Len(t, written, 1)
-
-	linkPath := filepath.Join(dstDir, "sample")
-	target, err := os.Readlink(linkPath)
-	require.NoError(t, err)
-	assert.False(t, filepath.IsAbs(target),
-		"link target should be relative; absolute paths leak the build machine: %q", target)
-	assert.NotContains(t, target, global,
-		"link target should NOT reference the global plugin root path %q (escapes project): %q", global, target)
-	// Resolved logical path stays inside the project.
-	resolved := filepath.Clean(filepath.Join(filepath.Dir(linkPath), target))
-	assert.True(t, strings.HasPrefix(resolved, project),
-		"resolved link target %q should stay within project %q", resolved, project)
+	_, err := InstallPackage(pkg, t.TempDir())
+	require.Error(t, err, "InstallPackage must reject home-rooted Root.Target")
+	assert.Contains(t, err.Error(), "FEAT-015")
+	assert.Contains(t, err.Error(), "Root.Target must be project-relative")
+	assert.Contains(t, err.Error(), "evil-plugin")
 }
 
 func TestVerifyFiles_AllMissing(t *testing.T) {
@@ -419,131 +358,4 @@ func TestVerifyFiles_SomeExist(t *testing.T) {
 	if !entry.VerifyFiles() {
 		t.Error("expected VerifyFiles to return true when at least one file exists")
 	}
-}
-
-func TestPruneStaleSkillLinks_RemovesStaleLinksWithinRoot(t *testing.T) {
-	root := t.TempDir()
-	dstDir := t.TempDir()
-
-	// Create a real skill directory inside root
-	realSkill := filepath.Join(root, "skills", "helix-old")
-	require.NoError(t, os.MkdirAll(realSkill, 0o755))
-
-	// Create a symlink in dstDir pointing INTO root (stale — not in allowed)
-	staleLink := filepath.Join(dstDir, "helix-old")
-	require.NoError(t, os.Symlink(realSkill, staleLink))
-
-	// allowed map does NOT include "helix-old"
-	allowed := map[string]bool{"helix-new": true}
-
-	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
-
-	_, err := os.Lstat(staleLink)
-	assert.True(t, os.IsNotExist(err), "stale symlink within root should be removed")
-}
-
-func TestPruneStaleSkillLinks_PreservesLinksOutsideRoot(t *testing.T) {
-	root := t.TempDir()
-	dstDir := t.TempDir()
-	outsideDir := t.TempDir()
-
-	// Symlink pointing OUTSIDE root (e.g. user-installed third-party skill)
-	externalLink := filepath.Join(dstDir, "external-skill")
-	require.NoError(t, os.Symlink(outsideDir, externalLink))
-
-	// external-skill is NOT in allowed, but target is outside root — must be preserved
-	allowed := map[string]bool{}
-
-	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
-
-	_, err := os.Lstat(externalLink)
-	assert.NoError(t, err, "symlink pointing outside root should be preserved")
-}
-
-func TestPruneStaleSkillLinks_PreservesAllowedLinks(t *testing.T) {
-	root := t.TempDir()
-	dstDir := t.TempDir()
-
-	realSkill := filepath.Join(root, "skills", "helix-keep")
-	require.NoError(t, os.MkdirAll(realSkill, 0o755))
-
-	keepLink := filepath.Join(dstDir, "helix-keep")
-	require.NoError(t, os.Symlink(realSkill, keepLink))
-
-	// helix-keep IS in allowed — must not be removed
-	allowed := map[string]bool{"helix-keep": true}
-
-	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
-
-	_, err := os.Lstat(keepLink)
-	assert.NoError(t, err, "allowed symlink should not be removed")
-}
-
-func TestPruneStaleSkillLinks_PreservesRealDirectories(t *testing.T) {
-	root := t.TempDir()
-	dstDir := t.TempDir()
-
-	// A real directory (not a symlink) must never be removed by pruneStaleSkillLinks
-	realDir := filepath.Join(dstDir, "ddx-doctor")
-	require.NoError(t, os.MkdirAll(realDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(realDir, "SKILL.md"), []byte("# Doctor"), 0o644))
-
-	allowed := map[string]bool{} // not in allowed
-
-	require.NoError(t, pruneStaleSkillLinks(root, dstDir, allowed))
-
-	assert.DirExists(t, realDir, "real directory (not a symlink) should not be removed")
-}
-
-func TestPruneStaleSkillLinks_EmptyInstalledRoot(t *testing.T) {
-	// When installedRoot is empty, pruneStaleSkillLinks must be a no-op
-	dstDir := t.TempDir()
-
-	staleLink := filepath.Join(dstDir, "some-skill")
-	someDir := t.TempDir()
-	require.NoError(t, os.Symlink(someDir, staleLink))
-
-	require.NoError(t, pruneStaleSkillLinks("", dstDir, map[string]bool{}))
-
-	_, err := os.Lstat(staleLink)
-	assert.NoError(t, err, "nothing should be removed when installedRoot is empty")
-}
-
-// FEAT-015 §5 / AC-004: plugin skill symlinks must be RELATIVE so they
-// survive clones, home-directory moves, and tarball rebuilds on a
-// different machine. This test asserts the link target is a relative
-// path and that it resolves back to the real skill content.
-func TestSymlinkSkills_WritesRelativeSymlinks(t *testing.T) {
-	projectRoot := t.TempDir()
-
-	// Simulate a plugin installed at $project/.ddx/plugins/helix/ with
-	// a skill at .agents/skills/helix-align (real directory).
-	pluginRoot := filepath.Join(projectRoot, ".ddx", "plugins", "helix")
-	realSkillDir := filepath.Join(pluginRoot, ".agents", "skills", "helix-align")
-	require.NoError(t, os.MkdirAll(realSkillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(realSkillDir, "SKILL.md"), []byte("# helix-align\n"), 0o644))
-
-	// Install target is $project/.agents/skills/ — a sibling of the
-	// plugin root that shares a common ancestor, so filepath.Rel
-	// produces a short relative path.
-	dstDir := filepath.Join(projectRoot, ".agents", "skills")
-
-	written, err := symlinkSkills(pluginRoot, &InstallMapping{
-		Source: ".agents/skills",
-		Target: dstDir,
-	})
-	require.NoError(t, err)
-	require.Len(t, written, 1)
-
-	linkPath := filepath.Join(dstDir, "helix-align")
-	target, err := os.Readlink(linkPath)
-	require.NoError(t, err)
-	assert.False(t, filepath.IsAbs(target),
-		"plugin skill symlink must be relative (got absolute: %s) — FEAT-015 §5 relative-symlinks rule",
-		target)
-
-	// Sanity: relative link resolves to the real SKILL.md.
-	content, err := os.ReadFile(filepath.Join(linkPath, "SKILL.md"))
-	require.NoError(t, err)
-	assert.Equal(t, "# helix-align\n", string(content))
 }

@@ -73,7 +73,7 @@ install:
 	assert.True(t, os.IsNotExist(statErr), "installed.yaml should not be written on validation failure")
 }
 
-func TestInstallLocalCreatesProjectPluginSymlinkForGlobalRoot(t *testing.T) {
+func TestInstallLocalRejectsHomeRootedManifestTarget(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -89,37 +89,17 @@ install:
   root:
     source: .
     target: ~/.ddx/plugins/sample-plugin
-  skills:
-    - source: skills/
-      target: .agents/skills/
-`), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, "skills", "sample-skill"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "skills", "sample-skill", "SKILL.md"), []byte(`---
-name: sample-skill
-description: Sample skill
----
-
-Sample skill body.
 `), 0o644))
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
-	require.NoError(t, err, output)
+	_, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
+	require.Error(t, err, "home-rooted Root.Target must be rejected (FEAT-015)")
+	assert.Contains(t, err.Error(), "FEAT-015")
+	assert.Contains(t, err.Error(), "project-relative")
 
 	globalPluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
-	projectPluginDir := filepath.Join(workDir, ".ddx", "plugins", "sample-plugin")
-
-	globalInfo, err := os.Lstat(globalPluginDir)
-	require.NoError(t, err)
-	assert.True(t, globalInfo.Mode()&os.ModeSymlink != 0, "global plugin root should be a symlink")
-
-	projectInfo, err := os.Lstat(projectPluginDir)
-	require.NoError(t, err)
-	assert.True(t, projectInfo.Mode()&os.ModeSymlink != 0, "project plugin path should be a symlink")
-
-	linkTarget, err := os.Readlink(projectPluginDir)
-	require.NoError(t, err)
-	assert.Equal(t, globalPluginDir, linkTarget, "project plugin symlink should resolve to the global plugin root")
+	_, statErr := os.Lstat(globalPluginDir)
+	assert.True(t, os.IsNotExist(statErr), "no plugin tree should be written under $HOME on rejection")
 }
 
 func TestInstallLocalPreservesExistingProjectPluginDirUnlessForced(t *testing.T) {
@@ -129,16 +109,10 @@ func TestInstallLocalPreservesExistingProjectPluginDirUnlessForced(t *testing.T)
 
 	localPlugin := t.TempDir()
 
-	// Explicit cleanup of install artifacts inside the tempdirs. Registered
-	// AFTER all t.TempDir() calls so it runs FIRST (LIFO), letting the
-	// tempdir RemoveAll find an empty tree. Defends against an observed CI
-	// flake where the Linux runner's tempdir RemoveAll occasionally fails
-	// with "directory not empty" on the symlink+yaml combination produced
-	// by the install path.
 	t.Cleanup(func() {
-		_ = os.RemoveAll(filepath.Join(homeDir, ".ddx"))
 		_ = os.RemoveAll(filepath.Join(workDir, ".ddx"))
 		_ = os.RemoveAll(filepath.Join(workDir, ".agents"))
+		_ = os.RemoveAll(filepath.Join(workDir, ".claude"))
 	})
 	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
 version: 1.0.0
@@ -149,7 +123,7 @@ api_version: 1
 install:
   root:
     source: .
-    target: ~/.ddx/plugins/sample-plugin
+    target: .ddx/plugins/sample-plugin
   skills:
     - source: skills/
       target: .agents/skills/
@@ -173,9 +147,9 @@ Sample skill body.
 	require.Error(t, err, output)
 	assert.Contains(t, err.Error(), "already exists")
 
-	globalPluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
-	_, statErr := os.Lstat(globalPluginDir)
-	assert.True(t, os.IsNotExist(statErr), "global plugin root should not be created on collision failure")
+	homePluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	_, statErr := os.Lstat(homePluginDir)
+	assert.True(t, os.IsNotExist(statErr), "no plugin tree should ever be created under $HOME (FEAT-015)")
 
 	projectInfo, err := os.Lstat(projectPluginDir)
 	require.NoError(t, err)
@@ -188,17 +162,19 @@ Sample skill body.
 	forceOut, forceErr := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin, "--force")
 	require.NoError(t, forceErr, forceOut)
 
-	globalInfo, err := os.Lstat(globalPluginDir)
-	require.NoError(t, err)
-	assert.True(t, globalInfo.Mode()&os.ModeSymlink != 0, "global plugin root should be a symlink")
-
+	// After --force, the project-local plugin dir is a real directory
+	// containing the copied plugin tree, not a symlink to anywhere.
 	projectInfo, err = os.Lstat(projectPluginDir)
 	require.NoError(t, err)
-	assert.True(t, projectInfo.Mode()&os.ModeSymlink != 0, "project plugin path should be replaced with a symlink when forced")
+	assert.False(t, projectInfo.Mode()&os.ModeSymlink != 0, "project plugin path must be a real directory (FEAT-015 no-symlinks)")
+	assert.True(t, projectInfo.IsDir(), "project plugin path must be a real directory")
 
-	linkTarget, err := os.Readlink(projectPluginDir)
-	require.NoError(t, err)
-	assert.Equal(t, globalPluginDir, linkTarget, "project plugin symlink should resolve to the global plugin root")
+	// Plugin file from the source landed inside the project copy.
+	_, statErr = os.Stat(filepath.Join(projectPluginDir, "skills", "sample-skill", "SKILL.md"))
+	assert.NoError(t, statErr, "plugin tree must be copied under project")
+
+	_, statErr = os.Lstat(homePluginDir)
+	assert.True(t, os.IsNotExist(statErr), "FEAT-015: no $HOME write even on --force")
 
 	_, statErr = os.Stat(sentinel)
 	assert.True(t, os.IsNotExist(statErr), "sentinel file should be removed when the directory is replaced")
@@ -240,7 +216,7 @@ install:
 		Version: "1.0.0",
 		Type:    registry.PackageTypePlugin,
 		Source:  server.URL,
-	})
+	}, workDir)
 	require.Error(t, installErr)
 	assert.Contains(t, installErr.Error(), "missing SKILL.md")
 
@@ -285,7 +261,7 @@ install:
 		Version: "1.0.0",
 		Type:    registry.PackageTypePlugin,
 		Source:  server.URL,
-	})
+	}, workDir)
 	require.NoError(t, installErr)
 	require.NotEmpty(t, entry.Files)
 
@@ -390,4 +366,79 @@ Test body.
 	require.NoError(t, tw.Close())
 	require.NoError(t, gz.Close())
 	return buf.Bytes()
+}
+
+func TestInstall_GlobalFlagRemoved(t *testing.T) {
+	// FEAT-015: --global was removed. Cobra rejects the unknown flag.
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "--global")
+	require.Error(t, err, "ddx install --global must fail because the flag was removed")
+	combined := output + err.Error()
+	assert.True(t,
+		strings.Contains(combined, "unknown flag") ||
+			strings.Contains(combined, "global"),
+		"error must reference the unknown --global flag, got: %s", combined)
+}
+
+func TestInstall_NoSymlinksCreated(t *testing.T) {
+	// End-to-end FEAT-015 invariant: after a project-local install, no
+	// symlinks exist under .agents/skills/, .claude/skills/, or
+	// .ddx/plugins/<plugin>/.
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	localPlugin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
+version: 1.0.0
+description: Sample plugin
+type: plugin
+source: https://example.com/sample-plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/sample-plugin
+  skills:
+    - source: .agents/skills/
+      target: .agents/skills/
+`), 0o644))
+	skillDir := filepath.Join(localPlugin, ".agents", "skills", "sample-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: sample-skill
+description: Sample skill
+---
+
+Sample body.
+`), 0o644))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
+	require.NoError(t, err, output)
+
+	for _, sub := range []string{".ddx/plugins/sample-plugin", ".agents/skills", ".claude/skills"} {
+		walkRoot := filepath.Join(workDir, filepath.FromSlash(sub))
+		require.NoError(t, filepath.Walk(walkRoot, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				if os.IsNotExist(walkErr) {
+					return nil
+				}
+				return walkErr
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				t.Errorf("FEAT-015: unexpected symlink at %s", path)
+			}
+			return nil
+		}))
+	}
+
+	// And no plugin tree leaked into $HOME.
+	homePluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	_, statErr := os.Stat(homePluginDir)
+	assert.True(t, os.IsNotExist(statErr), "FEAT-015: nothing must land under $HOME/.ddx/plugins/")
 }

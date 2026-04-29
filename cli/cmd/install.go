@@ -13,6 +13,7 @@ import (
 
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/spf13/cobra"
 )
@@ -20,45 +21,26 @@ import (
 // newInstallCommand creates the "ddx install <name>" command.
 func (f *CommandFactory) newInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install [<name>]",
-		Short: "Install a package, resource, or the embedded DDx skills",
-		Long: `Install a package or resource from the DDx registry, or extract the
-embedded DDx skill tree into the user's home with --global.
+		Use:   "install <name>",
+		Short: "Install a package or resource",
+		Long: `Install a package or resource from the DDx registry into the
+current project under .ddx/plugins/<name>/.
 
 Examples:
   ddx install helix                        # Install HELIX workflow
   ddx install helix --force                # Reinstall even if already up to date
-  ddx install persona/strict-code-reviewer # Install a single persona
-  ddx install --global                     # Extract embedded skills to ~/.ddx/ (FEAT-015 AC-002)
-  ddx install --global --force             # Overwrite existing ~/.ddx/skills/ files`,
-		Args: func(cmd *cobra.Command, args []string) error {
-			if global, _ := cmd.Flags().GetBool("global"); global {
-				return cobra.MaximumNArgs(1)(cmd, args)
-			}
-			return cobra.ExactArgs(1)(cmd, args)
-		},
+  ddx install persona/strict-code-reviewer # Install a single persona`,
+		Args: cobra.ExactArgs(1),
 		RunE: f.runInstall,
 	}
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
 	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
-	cmd.Flags().Bool("global", false, "Extract embedded DDx skills to ~/.ddx/ and link ~/.agents/, ~/.claude/")
 	return cmd
 }
 
 func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	force, _ := cmd.Flags().GetBool("force")
-
-	// Handle --global: extract embedded DDx skill tree into the user's
-	// home directory. Does not touch project-local state, so no cwd shuffle
-	// is required.
-	if global, _ := cmd.Flags().GetBool("global"); global {
-		return f.installGlobal(force, out)
-	}
-
-	if len(args) == 0 {
-		return fmt.Errorf("install: a package name is required unless --global is set")
-	}
 	name := args[0]
 
 	// Ensure install operations resolve relative paths against the project
@@ -139,7 +121,7 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(out, "Installing %s %s from %s...\n", pkg.Name, pkg.Version, pkg.Source)
 
-	entry, err := registry.InstallPackage(pkg)
+	entry, err := registry.InstallPackage(pkg, f.WorkingDir)
 	if err != nil {
 		return fmt.Errorf("install package: %w", err)
 	}
@@ -192,8 +174,12 @@ func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
 // commitPluginChanges stages and commits plugin-related changes in the working tree.
 // Non-fatal: if git operations fail (not a repo, nothing to commit), it's silently skipped.
 func commitPluginChanges(name, version string) {
-	// Stage skill symlinks and any other trackable plugin artifacts.
-	paths := []string{".agents/skills/", ".claude/skills/"}
+	// Stage the project-local plugin tree and the skill copies.
+	paths := []string{
+		filepath.Join(".ddx", "plugins", name) + string(filepath.Separator),
+		".agents/skills/",
+		".claude/skills/",
+	}
 	ctx := context.Background()
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
@@ -228,9 +214,10 @@ func prepareSymlinkTarget(target string, force bool) error {
 	return nil
 }
 
-// installLocal installs a plugin from a local directory. It creates the
-// declared plugin root symlink, then discovers and symlinks skills the same
-// way a registry install does.
+// installLocal installs a plugin from a local directory into the project
+// under .ddx/plugins/<name>/. The plugin tree is copied — never symlinked
+// out to a developer checkout. Skills are routed through skills.Install
+// (real-file copies into .agents/skills/ + .claude/skills/).
 func (f *CommandFactory) installLocal(name, localPath string, force bool, out io.Writer) error {
 	// Resolve to absolute path.
 	absPath, err := filepath.Abs(localPath)
@@ -286,41 +273,32 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		}
 	}
 
+	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		return fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
+	}
+
 	if issues := registry.ValidatePackageStructure(absPath, pkg); len(issues) > 0 {
 		return fmt.Errorf("validating package structure: %s", registry.JoinValidationIssues(issues))
 	}
 
-	pluginDir := registry.ExpandHome(pkg.Install.Root.Target)
-	var projectPluginDir string
-	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
-		projectPluginDir = filepath.Join(".ddx", "plugins", pkg.Name)
-	}
+	pluginDir := pkg.Install.Root.Target
 
 	if err := prepareSymlinkTarget(pluginDir, force); err != nil {
 		return err
 	}
-	if projectPluginDir != "" {
-		if err := prepareSymlinkTarget(projectPluginDir, force); err != nil {
-			return err
-		}
-	}
 
-	// Create the declared plugin root.
 	if err := os.MkdirAll(filepath.Dir(pluginDir), 0755); err != nil {
 		return fmt.Errorf("creating plugins dir: %w", err)
 	}
-	if projectPluginDir != "" {
-		if err := os.MkdirAll(filepath.Dir(projectPluginDir), 0755); err != nil {
-			return fmt.Errorf("creating project plugin dir: %w", err)
-		}
+
+	// Copy the plugin tree into the project. No symlinks back to the
+	// developer's checkout — the project owns its own copy.
+	written, err := copyDirTree(absPath, pluginDir)
+	if err != nil {
+		return fmt.Errorf("copying plugin into %s: %w", pluginDir, err)
 	}
 
-	// Create symlink to local path.
-	if err := os.Symlink(absPath, pluginDir); err != nil {
-		return fmt.Errorf("creating symlink %s -> %s: %w", pluginDir, absPath, err)
-	}
-
-	fmt.Fprintf(out, "Linked %s -> %s\n", pluginDir, absPath)
+	fmt.Fprintf(out, "Installed %s -> %s\n", absPath, pluginDir)
 
 	entry := registry.InstalledEntry{
 		Name:    pkg.Name,
@@ -328,24 +306,37 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		Type:    pkg.Type,
 		Source:  absPath,
 	}
-	entry.Files = append(entry.Files, pkg.Install.Root.Target)
+	entry.Files = append(entry.Files, written...)
 
-	if projectPluginDir != "" {
-		if err := os.Symlink(pluginDir, projectPluginDir); err != nil {
-			return fmt.Errorf("creating project symlink %s -> %s: %w", projectPluginDir, pluginDir, err)
+	// Install skills via the shared installer.
+	if len(pkg.Install.Skills) > 0 {
+		absPlugin, _ := filepath.Abs(pluginDir)
+		absProject := f.WorkingDir
+		if absProject == "" {
+			absProject, _ = os.Getwd()
 		}
-		entry.Files = append(entry.Files, projectPluginDir)
-	}
-
-	// Discover and symlink skills using the same logic as registry install.
-	for i := range pkg.Install.Skills {
-		skill := &pkg.Install.Skills[i]
-		files, err := registry.SymlinkSkillsFromRoot(absPath, skill)
-		if err != nil {
-			fmt.Fprintf(out, "Warning: skill symlink error: %v\n", err)
-			continue
+		if !filepath.IsAbs(absProject) {
+			absProject, _ = filepath.Abs(absProject)
 		}
-		entry.Files = append(entry.Files, files...)
+		if err := skills.Install(os.DirFS(absPlugin), absProject, skills.Options{Force: force}); err != nil {
+			return fmt.Errorf("installing skills: %w", err)
+		}
+		// Record skill dirs by name for state tracking.
+		for _, candidate := range []string{
+			filepath.Join(absPlugin, ".agents", "skills"),
+			filepath.Join(absPlugin, "skills"),
+		} {
+			if entries, derr := os.ReadDir(candidate); derr == nil {
+				for _, e := range entries {
+					for _, sub := range []string{".agents/skills", ".claude/skills"} {
+						entry.Files = append(entry.Files, filepath.Join(filepath.FromSlash(sub), e.Name()))
+					}
+				}
+				if len(entries) > 0 {
+					break
+				}
+			}
+		}
 	}
 
 	// Copy CLI script if defined (skip if target is a developer symlink).
@@ -356,7 +347,7 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 			fmt.Fprintf(out, "notice: %s is a symlink → %s (developer mode, skipping copy)\n", dst, target)
 			entry.Files = append(entry.Files, dst)
 		} else {
-			copied, err := registry.CopyScriptFromRoot(absPath, pkg.Install.Scripts)
+			copied, err := registry.CopyScriptFromRoot(pluginDir, pkg.Install.Scripts)
 			if err != nil {
 				fmt.Fprintf(out, "Warning: script copy error: %v\n", err)
 			} else {
@@ -365,9 +356,9 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		}
 	}
 
-	// Set execute bits.
+	// Set execute bits on installed plugin files.
 	for _, rel := range pkg.Install.Executable {
-		p := filepath.Join(absPath, filepath.FromSlash(rel))
+		p := filepath.Join(pluginDir, filepath.FromSlash(rel))
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
 			_ = os.Chmod(p, info.Mode()|0111)
 		}
@@ -387,6 +378,54 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 	fmt.Fprintf(out, "Installed %s (local) — %d file(s)\n", entry.Name, len(entry.Files))
 	commitPluginChanges(entry.Name, entry.Version)
 	return nil
+}
+
+// copyDirTree copies the source directory tree into dst as real files,
+// returning the list of written file paths (relative to cwd).
+func copyDirTree(src, dst string) ([]string, error) {
+	var written []string
+	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return relErr
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Skip plugin-source symlinks — never materialize.
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = in.Close() }()
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return err
+		}
+		if _, copyErr := io.Copy(out, in); copyErr != nil {
+			_ = out.Close()
+			return copyErr
+		}
+		if err := out.Close(); err != nil {
+			return err
+		}
+		written = append(written, target)
+		return nil
+	})
+	return written, err
 }
 
 // newInstalledCommand creates the "ddx installed" command.
