@@ -2779,6 +2779,28 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "ddx_bead_blocked",
+			Description: "List blocked beads (open beads with unmet dependencies)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_bead_dep_tree",
+			Description: "Get the dependency tree for a specific bead",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Bead ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
 			Name:        "ddx_doc_graph",
 			Description: "Get the full document dependency graph",
 			InputSchema: map[string]any{
@@ -3128,6 +3150,11 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpBeadReady(workingDir)
 	case "ddx_bead_status":
 		return s.mcpBeadStatus(workingDir)
+	case "ddx_bead_blocked":
+		return s.mcpBeadBlocked(workingDir)
+	case "ddx_bead_dep_tree":
+		id, _ := call.Arguments["id"].(string)
+		return s.mcpBeadDepTree(workingDir, id)
 	case "ddx_doc_graph":
 		return s.mcpDocGraph(workingDir)
 	case "ddx_doc_stale":
@@ -3474,6 +3501,38 @@ func (s *Server) mcpBeadStatus(workingDir string) mcpToolResult {
 		}
 	}
 	data, _ := json.Marshal(counts)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpBeadBlocked(workingDir string) mcpToolResult {
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	blocked, err := store.Blocked()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
+	}
+	if blocked == nil {
+		blocked = []bead.Bead{}
+	}
+	data, _ := json.Marshal(blocked)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpBeadDepTree(workingDir, id string) mcpToolResult {
+	if id == "" {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(`{"error":"id required"}`)},
+			IsError: true,
+		}
+	}
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	tree, err := store.DepTree(id)
+	if err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},
+			IsError: true,
+		}
+	}
+	data, _ := json.Marshal(map[string]string{"id": id, "tree": tree})
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
