@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260429T194952-6dc85c08",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-034b916f",
+  "base_rev": "af51200b26ce6e95149ed16e371347f7563479d0",
+  "created_at": "2026-04-29T19:49:53.550468032Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-034b916f",
+    "title": "[read-coverage] add layer-aware run-history HTTP + MCP routes",
+    "description": "FEAT-021/010 gap. No routes or tools exist for the three-layer run substrate (work → try → run drill-down). The unified substrate (plan-2026-04-29 bead #18) collapses .ddx/exec-runs/ and .ddx/executions/ into one record shape with layer metadata. Add HTTP routes and MCP tools that expose this hierarchy: /api/runs (layer-3 work records), /api/tries (layer-2 try records), /api/runs/{id}/tries, /api/tries/{id}/runs; plus MCP tools ddx_list_runs, ddx_list_tries, ddx_show_run, ddx_show_try. Gate on bead #18 substrate unification.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "http",
+      "mcp",
+      "feat-021",
+      "feat-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:49:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:49:50.411144628Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T194952-6dc85c08",
+    "prompt": ".ddx/executions/20260429T194952-6dc85c08/prompt.md",
+    "manifest": ".ddx/executions/20260429T194952-6dc85c08/manifest.json",
+    "result": ".ddx/executions/20260429T194952-6dc85c08/result.json",
+    "checks": ".ddx/executions/20260429T194952-6dc85c08/checks.json",
+    "usage": ".ddx/executions/20260429T194952-6dc85c08/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-034b916f-20260429T194952-6dc85c08"
+  }
+}
