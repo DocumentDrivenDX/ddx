@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No changes under `cli/internal/mcp/` (or wherever `ddx_*` MCP tools are registered) — `ddx_worker_list`, `ddx_worker_show`, `ddx_worker_log` are not declared, registered, or wired to the existing HTTP worker endpoints (`GET /api/agent/workers`, `/api/agent/workers/{id}`, `/api/agent/workers/{id}/log`).\nNo tests added for the three tools (e.g., MCP tool coverage tests akin to the prior `ce6663d0` test commit).\nThe merged result_rev `ce6663d0` is referenced as a successful test commit, but this review's diff is `a234fdbf` (evidence only). If the actual implementation landed elsewhere, re-run the review against the implementation commit; based on the diff provided, the work is not present."
+}
