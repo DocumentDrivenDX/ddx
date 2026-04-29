@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T184732-548d1720",
+  "bead_id": "ddx-24a9286f",
+  "base_rev": "83ca0b3fa97bea3f5d384a4915d8eb9454dc288b",
+  "created_at": "2026-04-29T18:47:33.018062298Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-24a9286f",
+    "title": "[artifact-run-arch] sidecar .ddx.yaml schema design",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. Sidecar pairing rule (foo.png \u003c-\u003e foo.png.ddx.yaml? or foo.ddx.yaml?); conflict rule when both frontmatter and sidecar exist; how sidecars participate in ddx doc validate orphan checks.",
+    "labels": [
+      "design",
+      "plan-2026-04-29",
+      "architecture"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T18:47:30Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T18:47:30.19948814Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T184732-548d1720",
+    "prompt": ".ddx/executions/20260429T184732-548d1720/prompt.md",
+    "manifest": ".ddx/executions/20260429T184732-548d1720/manifest.json",
+    "result": ".ddx/executions/20260429T184732-548d1720/result.json",
+    "checks": ".ddx/executions/20260429T184732-548d1720/checks.json",
+    "usage": ".ddx/executions/20260429T184732-548d1720/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-24a9286f-20260429T184732-548d1720"
+  }
+}
