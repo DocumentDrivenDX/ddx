@@ -6,8 +6,8 @@ ddx:
 ---
 # Product Requirements Document: DDx
 
-**Version:** 4.1.0
-**Date:** 2026-04-06
+**Version:** 4.2.0
+**Date:** 2026-04-29
 **Status:** Active
 
 ## Summary
@@ -15,9 +15,10 @@ ddx:
 DDx is a monorepo producing three artifacts that together form the shared
 local-first infrastructure for document-driven development:
 
-1. **`ddx` CLI** — document library management, artifact graph operations, bead
-   tracking, agent dispatch, execution definitions and runs, persona
-   composition, template application, and git sync
+1. **`ddx` CLI** — multi-media artifact library management, artifact graph
+   operations, bead tracking, three-layer run architecture (`ddx run` /
+   `ddx try` / `ddx work`) on a unified on-disk substrate, agent dispatch,
+   persona composition, template application, and git sync
 2. **`ddx-server`** — web server + MCP endpoints for browsing documents,
    artifacts, beads, agent session logs, and execution history over the network
 3. **`ddx.github.io`** — promotional website explaining DDx to developers and
@@ -30,16 +31,39 @@ methodology.
 Concrete command, API, and storage contracts belong in the DDx feature
 specifications. The PRD stays at the user- and capability-level:
 
-- FEAT-001 defines the CLI surface and operator experience
+- FEAT-001 defines the CLI surface and operator experience: top-level `run`,
+  `try`, and `work` commands; `ddx agent` as a structural mount of the
+  upstream agent Cobra root (no DDx-defined leaf subcommands beneath it);
+  hard-deprecation handlers for `ddx agent {run, execute-bead, execute-loop}`;
+  and `ddx runs`, `ddx tries`, `ddx work workers` namespaces for cross-layer
+  evidence introspection
 - FEAT-002 defines the server, HTTP, and MCP surfaces
 - FEAT-003 defines the promotional website and documentation
 - FEAT-004 defines shared work-item storage
-- FEAT-005 defines the artifact convention and frontmatter schema
-- FEAT-006 defines agent dispatch and session evidence
-- FEAT-007 defines the artifact graph and staleness model
-- FEAT-008 defines the embedded web UI for browsing and managing project state
+- FEAT-005 defines the artifact convention and sidecar schema: identity
+  broadens to non-markdown via sidecar `.ddx.yaml`; `media_type` and
+  `generated_by` fields added; any file with a sidecar is a first-class
+  artifact; authority rule: identity present → artifact
+- FEAT-006 defines the layer-1 agent-dispatch boundary: the `ddx run`
+  consumer-side wrapper that powers single agent invocation per CONTRACT-003;
+  `ddx agent` mounts the upstream agent Cobra root structurally; non-bead
+  profile and permissions selection; session-log envelope owned by DDx, inner
+  log shape by upstream
+- FEAT-007 defines the artifact graph and staleness model: sidecar-aware
+  scanner; `media_type` field; `generated_by` edge with a separate provenance
+  staleness rule (does not cascade like `depends_on`); 100% read endpoints for
+  graph state, generated-artifact metadata, and sidecar content
+- FEAT-008 defines the embedded web UI: media-type-aware rendering (markdown,
+  mermaid SVG, excalidraw embed, image inline, PDF embed); regenerate action
+  wired to `artifactRegenerate`; layer-aware run views (`work` → `try` → `run`
+  drill-down)
 - FEAT-009 defines the online library and plugin registry
-- FEAT-010 defines generic execution definitions and immutable run history
+- FEAT-010 defines the three-layer run architecture and unified substrate:
+  `ddx run` / `ddx try` / `ddx work` as explicit primitives; one on-disk
+  record shape with layer metadata; `.ddx/exec-runs/` and
+  `.ddx/executions/<attempt-id>/` collapse into one layout; `ddx work`
+  no-progress detection and stop conditions; `artifactRegenerate` as the only
+  write surface added in this plan
 - FEAT-011 defines agent-facing skills for DDx CLI operations
 - FEAT-012 defines git awareness: auto-commit for documents and bead tracker,
   document history, write-then-commit for MCP/UI clients, and agent guidance
@@ -61,9 +85,10 @@ specifications. The PRD stays at the user- and capability-level:
 - FEAT-018 defines plugin API documentation and stability: document existing
   extension surfaces (package.yaml, plugin directory layout, SKILL.md, hooks,
   bead conventions), add schema versioning, commit to backward compatibility
-- FEAT-019 defines agent evaluation and prompt comparison: dispatch the same
-  prompt to multiple harnesses, capture structured outputs, and surface
-  side-by-side comparisons for human review
+- FEAT-019 defines evaluation UX as a child of FEAT-010: comparison views,
+  grading rubric storage and display, and benchmark result aggregation.
+  Workflow shapes (comparison dispatch, replay, benchmark) move to the skills
+  library — FEAT-019 does not own run orchestration
 - FEAT-020 defines server node state and project registry: the server acquires
   a stable node identity (hostname or DDX_NODE_NAME), persists a project
   registry in an XDG-standard JSON file, writes a discovery addr file, and
@@ -71,9 +96,10 @@ specifications. The PRD stays at the user- and capability-level:
   forget background call
 - FEAT-021 defines the multi-node dashboard UI: extends the FEAT-008 web UI
   with node/project-aware routing so every view is bookmarkable
-  (/nodes/:nodeId/projects/:projectId/...), combined cross-project views for
-  beads and agent sessions, and project-scoped views for documents, dependency
-  graph, and commit log
+  (`/nodes/:nodeId/projects/:projectId/...`), combined cross-project views for
+  beads and agent sessions, project-scoped views for documents, dependency
+  graph, and commit log, and layer-aware run-history routes against the unified
+  substrate
 
 ## Problem
 
@@ -81,39 +107,64 @@ AI-assisted development needs more than prompt files. Teams need a shared way
 to manage declarative artifacts, reusable runtime evidence, and local
 automation infrastructure without hardcoding workflow semantics into each tool.
 
+The problems cluster by the physics they violate (see product-vision.md):
+
+**Abstraction** (Principle 1 — abstraction is the lever)
 - **No structure**: Artifacts, prompts, personas, and patterns accumulate as
   ad hoc files with weak identity and no explicit relationships
-- **No reusable work-item store**: Workflow tools reimplement issue storage,
-  dependency tracking, and coordination instead of sharing a local substrate
-- **No reusable agent dispatch**: Each tool grows its own harness registry,
-  logging, and output-capture behavior
-- **No reusable execution evidence**: Metrics, checks, and similar operations
-  fall back to bespoke scripts and logs with no shared history model
 - **No composition**: Assembling the right combination of persona + pattern +
   spec into agent context is manual and error-prone
-- **No reuse**: Every project reinvents its agent instructions and supporting
-  mechanics from scratch; proven patterns stay trapped in individual repos
-- **No network access**: Agents and tools can only read state from the local
-  filesystem unless projects build their own HTTP or MCP layer
-- **No discoverability**: Developers can't easily browse what documents,
-  artifacts, or local runtime evidence are available
-- **No feedback capture**: Lessons learned from agent interactions, project
-  completions, and bead lifecycle stay informal — no structured way to capture,
-  query, or act on what worked and what didn't
-- **No measurement**: No standard way to track bead lifecycle metrics, token
-  costs, or plugin-defined measures across projects
-- **No transferability**: Framework knowledge is trapped in its author;
-  onboarding new team members requires manual explanation
 - **No document integrity guarantees**: When an upstream document changes,
   dependent documents silently drift — no automatic staleness detection or
   reconciliation tasking
+- **No transferability**: Framework knowledge is trapped in its author;
+  onboarding new team members requires manual explanation
+
+**Iteration over tracked work** (Principle 2 — software is iteration over tracked work)
+- **No reusable work-item store**: Workflow tools reimplement issue storage,
+  dependency tracking, and coordination instead of sharing a local substrate
+- **No reusable execution evidence**: Metrics, checks, and similar operations
+  fall back to bespoke scripts and logs with no shared history model
+
+**Methodology plurality** (Principle 3 — methodology is plural)
+- **No reusable agent dispatch**: Each tool grows its own harness registry,
+  logging, and output-capture behavior — every workflow tool reinvents the same
+  invocation plumbing
+- **No reuse**: Every project reinvents its agent instructions and supporting
+  mechanics from scratch; proven patterns stay trapped in individual repos
+
+**LLM physics** (Principle 4 — LLMs are stochastic, unreliable, and costly)
+- **No cost-tier enforcement**: Token cost is a first-order constraint, not an
+  optimization. Without capability-keyed routing and model-selection guidance,
+  teams overspend on routine work and have no signal on the cheapest model that
+  reliably closes beads
+
+**Evidence and provenance** (Principle 5 — evidence provides memory)
+- **No provenance for generated artifacts**: Generated files carry no record of
+  which agent run, model, or prompt produced them — regeneration is ad hoc and
+  lineage is lost
+- **No measurement**: No standard way to track bead lifecycle metrics, token
+  costs, or plugin-defined measures across projects
+- **No feedback capture**: Lessons learned from agent interactions, project
+  completions, and bead lifecycle stay informal — no structured way to capture,
+  query, or act on what worked and what didn't
+
+**Human-AI collaboration** (Principle 6 — human-AI collaboration is the fulcrum)
+- **No composition for handoffs**: Assembling the right artifact context for a
+  human-to-agent or agent-to-human handoff is manual and ad hoc — no DDx
+  primitive covers that assembly
+- **No discoverability**: Developers can't easily browse what documents,
+  artifacts, or local runtime evidence are available
+- **No network access**: Agents and tools can only read state from the local
+  filesystem unless projects build their own HTTP or MCP layer
 
 ## Goals
 
 ### Primary
-1. **Manage artifacts and document libraries** — provide structure,
-   conventions, and CLI tooling so declarative project knowledge stays
-   organized
+1. **Manage multi-media artifact libraries** — provide structure, conventions,
+   and CLI tooling so declarative project knowledge — documents, diagrams,
+   wireframes, images, prompts, and other media — stays organized and
+   agent-discoverable
 2. **Provide reusable local runtime services** — expose beads, agent dispatch,
    and execution history as workflow-agnostic DDx primitives
 3. **Enable document composition** — combine personas, patterns, specs, and
@@ -144,6 +195,18 @@ automation infrastructure without hardcoding workflow semantics into each tool.
 12. **Stabilize the plugin API** — document existing extension surfaces, add
     schema versioning, and commit to backward compatibility so plugin authors
     can build with confidence (FEAT-018)
+13. **Provide a three-layer run architecture** — ship `ddx run` (single agent
+    invocation), `ddx try` (bead attempt in isolated worktree), and `ddx work`
+    (mechanical queue drain) as DDx-owned primitives on one unified on-disk
+    substrate; layer metadata distinguishes records (FEAT-010)
+14. **Enable source-hash-driven regeneration of generated artifacts** — track
+    which agent run, model, and prompt produced each generated artifact;
+    support on-demand regeneration when the source changes (FEAT-005, FEAT-007)
+15. **Expose 100% of DDx state via HTTP and MCP read endpoints** — every
+    piece of CLI-visible DDx state (artifacts, beads, run history, graph,
+    sidecar metadata) is readable over the network; write surfaces are added
+    case-by-case as workflows demand, starting with `artifactRegenerate`
+    (FEAT-002, FEAT-010)
 
 ### Secondary
 1. **Promote the practice** — website explains document-driven development and
@@ -170,9 +233,13 @@ automation infrastructure without hardcoding workflow semantics into each tool.
   `FEAT -> SD -> TD -> TP`) beyond storing IDs and relationships
 - Workflow-specific bead validation (phase labels, spec-id enforcement — that's
   the workflow layer via hooks)
-- Supervisory loop orchestration — deciding what to do next based on agent or
-  execution results is workflow-level. DDx provides single-invocation dispatch,
-  immutable evidence, and mechanical quorum, not decision loops.
+- Supervisory loop orchestration — DDx owns mechanical queue drain (`ddx
+  work`); content-aware supervisory decisions (deciding what to do next based
+  on agent or execution results — for example, "comparison failed → enqueue
+  reconciliation beads") remain plugin/HELIX territory
+- Cataloging run types beyond the three layers — comparison, replay,
+  benchmark, and similar workflow shapes are skill compositions; DDx does not
+  enshrine them in Go core or specs
 - An AI agent or agent framework
 - A standalone desktop GUI for editing documents (the embedded web UI editor
   in `ddx-server` is in-scope per FEAT-008; a separate desktop application is not)
