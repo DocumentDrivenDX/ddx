@@ -254,3 +254,37 @@ func TestValidatePackageStructure_IgnoresUninstalledSkillRoots(t *testing.T) {
 	issues := ValidatePackageStructure(root, pkg)
 	assert.Empty(t, issues, "non-installed top-level skills should not fail package validation: %+v", issues)
 }
+
+// TestAuditRecordedFiles_StaleHomeEntriesAreNoOp verifies that pre-migration
+// InstalledEntry records with ~/... Files paths do not produce audit issues
+// when the expanded paths do not exist on disk.
+func TestAuditRecordedFiles_StaleHomeEntriesAreNoOp(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	root := t.TempDir()
+	// Create a minimal package.yaml so AuditInstalledEntry has a valid manifest.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "package.yaml"), []byte(`name: helix
+version: "0.1.0"
+description: "Helix workflow"
+type: plugin
+source: "https://github.com/example/helix"
+api_version: "1"
+`), 0o644))
+
+	entry := InstalledEntry{
+		Name:    "helix",
+		Version: "0.1.0",
+		Type:    PackageTypePlugin,
+		Source:  "https://github.com/example/helix",
+		Files:   []string{root},
+	}
+
+	issues := AuditInstalledEntry(entry, nil)
+	for _, issue := range issues {
+		// Must not report missing recorded files for the root (it exists).
+		if strings.Contains(issue.Message, "missing recorded file") {
+			t.Errorf("unexpected 'missing recorded file' issue: %+v", issue)
+		}
+	}
+}

@@ -109,6 +109,11 @@ func auditRecordedFiles(entry InstalledEntry) []ValidationIssue {
 		info, err := os.Lstat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
+				// Pre-migration entries whose paths begin with ~ are outside the
+				// project root; treat missing paths as no-op (no issue raised).
+				if strings.HasPrefix(recorded, "~") {
+					continue
+				}
 				issues = append(issues, ValidationIssue{Path: path, Message: "missing recorded file or symlink"})
 				continue
 			}
@@ -332,11 +337,22 @@ func auditExecutable(root, rel string) []ValidationIssue {
 }
 
 func installedRootPath(entry InstalledEntry) string {
+	resolve := func(raw string) string {
+		expanded := ExpandHome(raw)
+		// Pre-migration entries with ~/... paths are outside the project root.
+		// Return empty string so callers skip audit for missing home paths.
+		if strings.HasPrefix(raw, "~") {
+			if _, err := os.Stat(expanded); err != nil {
+				return ""
+			}
+		}
+		return expanded
+	}
 	if len(entry.Files) > 0 {
-		return ExpandHome(entry.Files[0])
+		return resolve(entry.Files[0])
 	}
 	if strings.TrimSpace(entry.Source) != "" {
-		return ExpandHome(entry.Source)
+		return resolve(entry.Source)
 	}
 	return ""
 }

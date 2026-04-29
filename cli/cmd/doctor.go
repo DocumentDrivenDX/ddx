@@ -242,6 +242,18 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check 11: Legacy symlinks under project skill directories (FEAT-015).
+	// In the project-local model all skills are real files. Symlinks indicate
+	// a pre-migration install; ddx update --force replaces them.
+	if legacyDirs := legacySkillSymlinkDirs(f.WorkingDir); len(legacyDirs) > 0 {
+		errOut := cmd.ErrOrStderr()
+		for _, dir := range legacyDirs {
+			fmt.Fprintf(errOut, "symlink detected under %s; pre-migration install detected\n", dir)
+		}
+		fmt.Fprintln(errOut, "run: ddx update --force")
+		return fmt.Errorf("legacy skill symlinks detected")
+	}
+
 	fmt.Println()
 	if allGood && len(issues) == 0 {
 		fmt.Println("🎉 All critical checks passed! DDX is ready to use.")
@@ -259,6 +271,34 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// legacySkillSymlinkDirs returns the relative names of skill directories
+// (e.g. ".agents/skills", ".claude/skills") under workingDir that contain
+// at least one symlink. A symlink indicates a pre-FEAT-015 install.
+func legacySkillSymlinkDirs(workingDir string) []string {
+	if workingDir == "" {
+		return nil
+	}
+	var found []string
+	for _, rel := range []string{".agents/skills", ".claude/skills"} {
+		dir := filepath.Join(workingDir, rel)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				found = append(found, rel)
+				break
+			}
+		}
+	}
+	return found
 }
 
 // checkBinaryInstallLocation verifies the running binary is at the canonical install

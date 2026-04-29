@@ -97,7 +97,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 
 **DDx Skills (not started — FEAT-011)**
 42. DDx ships agent-facing skills (Claude Code slash commands) for its own CLI operations
-43. Skills are installed to `~/.agents/skills/ddx-*` and discoverable via `/ddx-<name>`
+43. Skills are installed project-locally to `<projectRoot>/.agents/skills/ddx-*` and discoverable via `/ddx-<name>` (FEAT-015: home-directory targets retired)
 44. Core skills: `ddx-bead` (guided bead create/triage), `ddx-agent` (guided agent dispatch with model/effort selection), `ddx-install` (guided package installation)
 45. Skills validate inputs, suggest flags, and provide contextual guidance that the raw CLI doesn't
 46. `ddx init` registers DDx skills alongside library content

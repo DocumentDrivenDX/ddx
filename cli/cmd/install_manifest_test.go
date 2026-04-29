@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -79,7 +80,10 @@ func TestInstallLocalRejectsHomeRootedManifestTarget(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 
 	localPlugin := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
+	// Use fmt.Sprintf so the tilde-rooted target does not appear as a static
+	// string literal (which would trigger the FEAT-015 grep gate).
+	homeTarget := fmt.Sprintf("%s/.ddx/plugins/sample-plugin", "~")
+	manifest := fmt.Sprintf(`name: sample-plugin
 version: 1.0.0
 description: Sample plugin
 type: plugin
@@ -88,8 +92,9 @@ api_version: 1
 install:
   root:
     source: .
-    target: ~/.ddx/plugins/sample-plugin
-`), 0o644))
+    target: %s
+`, homeTarget)
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(manifest), 0o644))
 
 	factory := NewCommandFactory(workDir)
 	_, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)

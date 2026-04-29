@@ -706,74 +706,40 @@ func pluginInfoFromInstalled(entry registry.InstalledEntry, workingDir string) *
 	return info
 }
 
-func enrichPluginInfoFromDisk(info *PluginInfo, workingDir string, name string, entry registry.InstalledEntry) {
-	for _, root := range pluginRootCandidates(workingDir, name, entry) {
-		if root == "" {
-			continue
-		}
-		if stat, err := os.Stat(root); err != nil || !stat.IsDir() {
-			continue
-		}
-		if info.DiskBytes == 0 {
-			info.DiskBytes = dirSize(root)
-		}
-		if pkg, _, err := registry.LoadPackageManifest(root); err == nil && pkg != nil {
-			if pkg.Version != "" {
-				info.Version = pkg.Version
-			}
-			if pkg.Description != "" {
-				info.Description = pkg.Description
-			}
-			if pkg.Type != "" {
-				info.Type = string(pkg.Type)
-			}
-			if pkg.Source != "" {
-				info.RegistrySource = pkg.Source
-			}
-			if len(pkg.Keywords) > 0 {
-				info.Keywords = append([]string(nil), pkg.Keywords...)
-			}
-			if manifest, err := json.Marshal(pkg); err == nil {
-				info.Manifest = strPtr(string(manifest))
-			}
-		}
-		info.Skills = uniqueStrings(append(info.Skills, scanNamedChildren(root, []string{"skills", ".agents/skills", ".claude/skills"}, "SKILL.md")...))
-		info.Prompts = uniqueStrings(append(info.Prompts, scanNamedChildren(root, []string{"prompts", "library/prompts"}, "")...))
-		info.Templates = uniqueStrings(append(info.Templates, scanNamedChildren(root, []string{"templates", "library/templates"}, "")...))
+func enrichPluginInfoFromDisk(info *PluginInfo, workingDir string, name string, _ registry.InstalledEntry) {
+	if workingDir == "" {
+		return
 	}
-}
-
-func pluginRootCandidates(workingDir string, name string, entry registry.InstalledEntry) []string {
-	var roots []string
-	if workingDir != "" {
-		roots = append(roots, filepath.Join(workingDir, ".ddx", "plugins", name))
+	root := filepath.Join(workingDir, ".ddx", "plugins", name)
+	if stat, err := os.Stat(root); err != nil || !stat.IsDir() {
+		return
 	}
-	roots = append(roots, registry.ExpandHome(filepath.Join("~", ".ddx", "plugins", name)))
-	for _, f := range entry.Files {
-		expanded := registry.ExpandHome(f)
-		if expanded == "" {
-			continue
+	if info.DiskBytes == 0 {
+		info.DiskBytes = dirSize(root)
+	}
+	if pkg, _, err := registry.LoadPackageManifest(root); err == nil && pkg != nil {
+		if pkg.Version != "" {
+			info.Version = pkg.Version
 		}
-		roots = append(roots, pluginRootFromRecordedFile(expanded, name))
-	}
-	return uniqueStrings(roots)
-}
-
-func pluginRootFromRecordedFile(path string, name string) string {
-	cleaned := filepath.Clean(path)
-	if filepath.Base(cleaned) == name {
-		return cleaned
-	}
-	for dir := cleaned; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
-		if filepath.Base(dir) == name && filepath.Base(filepath.Dir(dir)) == "plugins" {
-			return dir
+		if pkg.Description != "" {
+			info.Description = pkg.Description
 		}
-		next := filepath.Dir(dir)
-		if next == dir {
-			break
+		if pkg.Type != "" {
+			info.Type = string(pkg.Type)
+		}
+		if pkg.Source != "" {
+			info.RegistrySource = pkg.Source
+		}
+		if len(pkg.Keywords) > 0 {
+			info.Keywords = append([]string(nil), pkg.Keywords...)
+		}
+		if manifest, err := json.Marshal(pkg); err == nil {
+			info.Manifest = strPtr(string(manifest))
 		}
 	}
-	return cleaned
+	info.Skills = uniqueStrings(append(info.Skills, scanNamedChildren(root, []string{"skills", ".agents/skills", ".claude/skills"}, "SKILL.md")...))
+	info.Prompts = uniqueStrings(append(info.Prompts, scanNamedChildren(root, []string{"prompts", "library/prompts"}, "")...))
+	info.Templates = uniqueStrings(append(info.Templates, scanNamedChildren(root, []string{"templates", "library/templates"}, "")...))
 }
 
 func dirSize(root string) int {

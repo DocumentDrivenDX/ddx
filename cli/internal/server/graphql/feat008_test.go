@@ -25,7 +25,8 @@ func TestIntegration_FEAT008BackendOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pluginRoot := filepath.Join(t.TempDir(), "local-ui")
+	// Place the plugin at the project-local path (FEAT-015: no global installs).
+	pluginRoot := filepath.Join(workDir, ".ddx", "plugins", "local-ui")
 	if err := os.MkdirAll(filepath.Join(pluginRoot, "skills", "ui-polish"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ keywords: [ui, local]
 install:
   root:
     source: "."
-    target: "~/.ddx/plugins/local-ui"
+    target: ".ddx/plugins/local-ui"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}

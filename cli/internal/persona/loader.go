@@ -59,9 +59,12 @@ func NewPersonaLoaderWithDirs(libraryDir, projectDir string) PersonaLoader {
 // resolveLibraryPersonasDir resolves the library persona directory.
 func resolveLibraryPersonasDir(workingDir string) string {
 	cfg, err := config.LoadWithWorkingDir(workingDir)
-	if err != nil || cfg.Library == nil || cfg.Library.Path == "" {
-		homeDir, _ := os.UserHomeDir()
-		return filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "DDx config not found; run \"ddx init\" to bootstrap project\n")
+		return ""
+	}
+	if cfg.Library == nil || cfg.Library.Path == "" {
+		return ""
 	}
 	libPath := cfg.Library.Path
 	if !filepath.IsAbs(libPath) && workingDir != "" {

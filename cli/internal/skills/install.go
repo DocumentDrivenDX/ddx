@@ -55,6 +55,13 @@ func Install(src fs.FS, projectRoot string, opts Options) error {
 	for _, target := range targets {
 		for _, name := range skillNames {
 			destDir := filepath.Join(target, name)
+			// Symlinks are always removed and replaced with real files; skip the
+			// within-root check for them (the replacement write will be inside
+			// the root). This handles pre-migration symlinks pointing to
+			// locations outside the project root.
+			if info, err := os.Lstat(destDir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+				continue
+			}
 			if err := assertWithinRoot(destDir, absRoot); err != nil {
 				return err
 			}

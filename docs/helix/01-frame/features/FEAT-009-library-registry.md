@@ -6,6 +6,12 @@ ddx:
 ---
 # Feature: Online Library & Plugin Registry
 
+> **FEAT-015 amendment (2026-04-29):** Install paths described in this document
+> (global home-directory targets) describe the pre-amendment model.
+> The authoritative install architecture is in FEAT-015. All installs are now
+> project-local under `<projectRoot>/.ddx/plugins/`, `.agents/skills/`, and
+> `.claude/skills/`. No home-directory writes occur during `ddx install`.
+
 **ID:** FEAT-009
 **Status:** Complete
 **Priority:** P0
@@ -22,7 +28,7 @@ This replaces the current git-subtree-based sync model with a lighter, more prac
 **Current situation:**
 - `ddx-library` exists as a git repo but DDx's sync mechanism (`ddx update`) is a stub
 - Git subtree is complex, fragile, and overkill for distributing personas and templates
-- HELIX publishes skills independently (`~/.agents/skills/`) with no DDx integration
+- HELIX publishes skills independently (global home paths) with no DDx integration
 - Dun expects plugins at `~/.cache/ddx/library/plugins/` but nothing populates this path
 - There's no way to discover what's available or install a specific resource
 
@@ -92,7 +98,7 @@ source: https://github.com/DocumentDrivenDX/helix
 install:
   skills:
     source: .agents/skills/     # Path in source repo
-    target: ~/.agents/skills/   # Install destination
+    target: .agents/skills/     # Install destination (project-local; FEAT-015)
   scripts:
     source: scripts/helix
     target: ~/.local/bin/helix
@@ -105,11 +111,10 @@ requires:
 > **Amended by FEAT-015 (2026-04-29):** `ddx install <plugin>` is now
 > project-local. Skills land in `<projectRoot>/.agents/skills/` and
 > `<projectRoot>/.claude/skills/` as real files (no symlinks, no home-
-> directory writes). The `~/.agents/skills/` / `~/.local/bin/helix`
-> targets and `~/.ddx/installed.yaml` flow described below are
-> historical context from the pre-amendment global model. See FEAT-015
-> for the authoritative install semantics and the no-`~` manifest
-> invariant.
+> directory writes). The global home-directory install targets and
+> `~/.ddx/installed.yaml` flow described below are historical context
+> from the pre-amendment model. See FEAT-015 for the authoritative
+> install semantics and the no-tilde-prefix manifest invariant.
 
 ```bash
 ddx install helix
@@ -118,9 +123,9 @@ ddx install helix
 1. Fetch `registry.yaml` from ddx-library (cached, refreshed on `ddx update`)
 2. Find the `helix` entry → read `package.yaml`
 3. Clone/download the source repo (shallow, to temp dir)
-4. Copy skills to `~/.agents/skills/helix-*`
+4. Copy skills to `<projectRoot>/.agents/skills/helix-*` (FEAT-015: project-local)
 5. Copy scripts to `~/.local/bin/helix`
-6. Record installation in `~/.ddx/installed.yaml`
+6. Record installation in `.ddx/installed.yaml`
 
 For simple resources (individual personas, templates):
 
@@ -193,7 +198,7 @@ ddx uninstall <name>                # Remove an installed resource
 
 **Acceptance Criteria:**
 - Given I run `ddx search workflow`, then I see HELIX and any other registered workflows with descriptions
-- Given I run `ddx install helix`, then HELIX skills are installed to `~/.agents/skills/` and the CLI to `~/.local/bin/`
+- Given I run `ddx install helix`, then HELIX skills are installed to `.agents/skills/` (project-local; FEAT-015) and the CLI to `~/.local/bin/`
 
 ### US-091: Developer Installs Individual Resources
 **As a** developer customizing my project
