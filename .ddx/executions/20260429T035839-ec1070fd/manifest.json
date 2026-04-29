@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260429T035839-ec1070fd",
+  "bead_id": "ddx-dd4c423d",
+  "base_rev": "3b31a2e61544c4a8ae02a8dbee503a122ecc50cb",
+  "created_at": "2026-04-29T03:58:40.336078943Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dd4c423d",
+    "title": "routing-drain-regression: 19-burn historical bug regression test",
+    "description": "Cover AC #10 from ddx-fdd3ea36. Standalone integration test that reproduces the historical drain-queue failure mode (empty spec + user's real config + gemini binary installed + minimax model in overrides → 19 failures). Before parent's work: test fails with 19-burn. After: test succeeds or exits with one clean typed error. Test stays in the suite as a permanent regression guard. Note: handle gemini-binary availability — either skip when absent, OR use a stub binary fixture. Document the choice.",
+    "acceptance": "1. New integration test file (e.g. cli/internal/agent/drain_regression_test.go) exists. 2. Test reproduces the original failure: empty spec, user-config-shaped fixture (lmstudio + omlx + lmstudio + lmstudio endpoints + gemini-in-overrides). 3. Test asserts: at most 1 failed attempt, never 19. 4. gemini-binary presence handled deterministically (either fixture stub or t.Skip with clear message). 5. Test is wired into go test ./... default run, not behind a tag (unless gemini-binary requirement makes that necessary — document the rationale).",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing",
+      "regression"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T03:58:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "131811",
+      "execute-loop-heartbeat-at": "2026-04-29T03:58:39.662184Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T035839-ec1070fd",
+    "prompt": ".ddx/executions/20260429T035839-ec1070fd/prompt.md",
+    "manifest": ".ddx/executions/20260429T035839-ec1070fd/manifest.json",
+    "result": ".ddx/executions/20260429T035839-ec1070fd/result.json",
+    "checks": ".ddx/executions/20260429T035839-ec1070fd/checks.json",
+    "usage": ".ddx/executions/20260429T035839-ec1070fd/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dd4c423d-20260429T035839-ec1070fd"
+  }
+}
