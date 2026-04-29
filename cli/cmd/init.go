@@ -252,8 +252,24 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	}
 
 	// Copy bootstrap skills to .ddx/skills/, .agents/skills/, and .claude/skills/
-	// All as real files (not symlinks) so they're git-trackable
-	registerProjectSkills(workingDir, opts.Force)
+	// All as real files (not symlinks) so they're git-trackable.
+	// Stale pre-consolidation ddx-* skill dirs (ddx-bead, ddx-run, etc.) are
+	// removed first so harnesses don't see drifted skills.
+	bootstrapSkillNames := []string{"ddx"}
+	for _, dir := range []string{
+		filepath.Join(workingDir, ".ddx", "skills"),
+		filepath.Join(workingDir, ".agents", "skills"),
+		filepath.Join(workingDir, ".claude", "skills"),
+	} {
+		_ = os.MkdirAll(dir, 0755)
+		cleanupBootstrapSkills(dir, bootstrapSkillNames)
+	}
+	// .agents/skills/ + .claude/skills/ via shared installer.
+	if err := skills.Install(skills.SkillFiles, workingDir, skills.Options{Force: opts.Force}); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill install failed: %v\n", err)
+	}
+	// .ddx/skills/ stays bootstrap-only (plugin skills do NOT register here).
+	registerBootstrapDDxSkills(workingDir, opts.Force)
 
 	// Auto-install the default ddx plugin (library resources).
 	// Non-fatal: if offline or install fails, warn and continue.
@@ -331,73 +347,6 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	return result, nil
 }
 
-// registerSkills writes embedded skill files to ~/.agents/skills/.
-// Non-fatal: if ~/.agents/ doesn't exist or isn't writable, logs a warning and returns.
-// Does not overwrite existing files to respect user customizations.
-func registerSkills() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: could not determine home directory for skill registration: %v\n", err)
-		return
-	}
-
-	agentsDir := filepath.Join(homeDir, ".agents")
-	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
-		return
-	}
-
-	skillsDir := filepath.Join(agentsDir, "skills")
-
-	err = fs.WalkDir(skills.SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if path == "." {
-			return nil
-		}
-
-		destPath := filepath.Join(skillsDir, path)
-
-		if d.IsDir() {
-			if mkErr := os.MkdirAll(destPath, 0755); mkErr != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Warning: could not create skill directory %s: %v\n", destPath, mkErr)
-			}
-			return nil
-		}
-
-		// Don't overwrite existing files
-		if _, statErr := os.Stat(destPath); statErr == nil {
-			return nil
-		}
-
-		data, readErr := skills.SkillFiles.ReadFile(path)
-		if readErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not read embedded skill %s: %v\n", path, readErr)
-			return nil
-		}
-
-		if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not write skill file %s: %v\n", destPath, writeErr)
-		}
-		return nil
-	})
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill registration failed: %v\n", err)
-	}
-
-	// Create ~/.claude/skills symlink for Claude Code compatibility
-	claudeSkillsDir := filepath.Join(homeDir, ".claude", "skills")
-	if _, err := os.Stat(claudeSkillsDir); os.IsNotExist(err) {
-		if mkErr := os.MkdirAll(filepath.Join(homeDir, ".claude"), 0755); mkErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not create .claude directory: %v\n", mkErr)
-		} else {
-			if symErr := os.Symlink(skillsDir, claudeSkillsDir); symErr != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Warning: could not create .claude/skills symlink: %v\n", symErr)
-			}
-		}
-	}
-}
-
 // writeProjectVersions writes .ddx/versions.yaml with the current binary version.
 // This file is system-managed and committed to git for version gating.
 func writeProjectVersions(workingDir, ddxVersion string) {
@@ -461,68 +410,40 @@ func cleanupBootstrapSkills(targetDir string, keep []string) {
 	}
 }
 
-// registerProjectSkills copies the embedded `ddx` skill tree to project
-// directories as real files (not symlinks) so they are tracked by git and
-// survive clone on a fresh machine. Any stale ddx-prefixed skill directories
-// from prior DDx versions are removed so harnesses don't see drifted skills.
-// Copies to: .ddx/skills/, .agents/skills/, .claude/skills/
-// When force is true, overwrites existing files (for ddx init --force).
-func registerProjectSkills(workingDir string, force bool) {
-	// The sole ship-with skill (post-consolidation per FEAT-011).
-	shippedSkills := []string{"ddx"}
+// registerBootstrapDDxSkills copies the embedded `ddx` skill tree into
+// <workingDir>/.ddx/skills/ as real files. This path is bootstrap-only —
+// plugin skills do NOT register here. Cleanup of stale pre-consolidation
+// dirs is done by the caller.
+func registerBootstrapDDxSkills(workingDir string, force bool) {
+	targetDir := filepath.Join(workingDir, ".ddx", "skills")
+	_ = os.MkdirAll(targetDir, 0755)
 
-	targetDirs := []string{
-		filepath.Join(workingDir, ".ddx", "skills"),
-		filepath.Join(workingDir, ".agents", "skills"),
-		filepath.Join(workingDir, ".claude", "skills"),
-	}
-
-	for _, targetDir := range targetDirs {
-		_ = os.MkdirAll(targetDir, 0755)
-		cleanupBootstrapSkills(targetDir, shippedSkills)
-
-		for _, skillName := range shippedSkills {
-			_ = os.MkdirAll(filepath.Join(targetDir, skillName), 0755)
-
-			err := fs.WalkDir(skills.SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
-				if err != nil || path == "." {
-					return nil
-				}
-
-				skillPrefix := skillName + "/"
-				if !strings.HasPrefix(path, skillPrefix) {
-					return nil
-				}
-
-				destPath := filepath.Join(targetDir, path)
-
-				if d.IsDir() {
-					_ = os.MkdirAll(destPath, 0755)
-					return nil
-				}
-
-				// Don't overwrite existing files unless force is set
-				if !force {
-					if _, statErr := os.Stat(destPath); statErr == nil {
-						return nil
-					}
-				}
-
-				data, readErr := skills.SkillFiles.ReadFile(path)
-				if readErr != nil {
-					_, _ = fmt.Fprintf(os.Stderr, "Warning: could not read embedded skill %s: %v\n", path, readErr)
-					return nil
-				}
-
-				if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
-					_, _ = fmt.Fprintf(os.Stderr, "Warning: could not write skill file %s: %v\n", destPath, writeErr)
-				}
+	err := fs.WalkDir(skills.SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || path == "." {
+			return nil
+		}
+		destPath := filepath.Join(targetDir, path)
+		if d.IsDir() {
+			_ = os.MkdirAll(destPath, 0755)
+			return nil
+		}
+		if !force {
+			if _, statErr := os.Stat(destPath); statErr == nil {
 				return nil
-			})
-			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Warning: skill registration to %s failed: %v\n", targetDir, err)
 			}
 		}
+		data, readErr := skills.SkillFiles.ReadFile(path)
+		if readErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not read embedded skill %s: %v\n", path, readErr)
+			return nil
+		}
+		if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not write skill file %s: %v\n", destPath, writeErr)
+		}
+		return nil
+	})
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: bootstrap skill registration failed: %v\n", err)
 	}
 }
 

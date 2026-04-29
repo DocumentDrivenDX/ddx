@@ -85,19 +85,19 @@ func TestCleanupBootstrapSkills_SkipsDirsWithoutSKILLMD(t *testing.T) {
 	assert.DirExists(t, noSkillDir, "ddx-* dir without SKILL.md should not be removed")
 }
 
-// TestRegisterProjectSkills_CleansUpStaleBootstrapSkills verifies stale ddx-*
-// skills from prior DDx versions (pre-consolidation: ddx-bead, ddx-run, etc.)
-// are removed when registerProjectSkills runs, leaving only the single `ddx`
-// skill from the current shipped set.
-func TestRegisterProjectSkills_CleansUpStaleBootstrapSkills(t *testing.T) {
-	workingDir := t.TempDir()
+// TestInitCleansUpStaleBootstrapSkills verifies stale ddx-* skills from prior
+// DDx versions (pre-consolidation: ddx-bead, ddx-run, etc.) are removed when
+// `ddx init` runs, leaving only the single `ddx` skill from the current
+// shipped set.
+func TestInitCleansUpStaleBootstrapSkills(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
 
 	// Manually plant stale pre-consolidation skills in all three target dirs
 	stalePreConsolidationSkills := []string{"ddx-bead", "ddx-run", "ddx-agent", "ddx-review", "ddx-status", "ddx-doctor", "ddx-install", "ddx-release"}
 	targetDirs := []string{
-		filepath.Join(workingDir, ".ddx", "skills"),
-		filepath.Join(workingDir, ".agents", "skills"),
-		filepath.Join(workingDir, ".claude", "skills"),
+		filepath.Join(te.Dir, ".ddx", "skills"),
+		filepath.Join(te.Dir, ".agents", "skills"),
+		filepath.Join(te.Dir, ".claude", "skills"),
 	}
 	for _, dir := range targetDirs {
 		for _, stale := range stalePreConsolidationSkills {
@@ -107,8 +107,8 @@ func TestRegisterProjectSkills_CleansUpStaleBootstrapSkills(t *testing.T) {
 		}
 	}
 
-	// registerProjectSkills ships only the `ddx` skill
-	registerProjectSkills(workingDir, false)
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
 
 	// All stale pre-consolidation skills must be cleaned up
 	for _, dir := range targetDirs {

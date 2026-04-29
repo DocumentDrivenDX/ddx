@@ -10,6 +10,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -141,12 +142,24 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 
 // refreshShippedSkills re-copies the embedded `ddx` skill into the project's
 // skill directories and refreshes the AGENTS.md DDx block. Safe to call on
-// every `ddx update` because registerProjectSkills with force=true handles
-// the "existing files should be updated" case, and generateAgentsMD's
+// every `ddx update` because skills.Install with Force=true handles the
+// "existing files should be updated" case, and generateAgentsMD's
 // marker-based merge is idempotent. Stale pre-consolidation skill dirs
-// (ddx-bead, ddx-run, etc.) are swept by the cleanup logic shared with init.
+// (ddx-bead, ddx-run, etc.) are swept by cleanupBootstrapSkills.
 func refreshShippedSkills(workingDir string) {
-	registerProjectSkills(workingDir, true)
+	bootstrapSkillNames := []string{"ddx"}
+	for _, dir := range []string{
+		filepath.Join(workingDir, ".ddx", "skills"),
+		filepath.Join(workingDir, ".agents", "skills"),
+		filepath.Join(workingDir, ".claude", "skills"),
+	} {
+		_ = os.MkdirAll(dir, 0755)
+		cleanupBootstrapSkills(dir, bootstrapSkillNames)
+	}
+	if err := skills.Install(skills.SkillFiles, workingDir, skills.Options{Force: true}); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill install failed: %v\n", err)
+	}
+	registerBootstrapDDxSkills(workingDir, true)
 	generateAgentsMD(workingDir)
 }
 
