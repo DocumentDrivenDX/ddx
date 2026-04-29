@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "nano-banana-pro-openrouter": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/nano-banana-pro-openrouter/SKILL.md",
+      "computedHash": "7f46510390d2871286717f8db72edd123fdefcfeec771ec608b3da48e2abe09c"
+    }
+  }
+}
