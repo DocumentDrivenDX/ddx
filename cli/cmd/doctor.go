@@ -242,7 +242,24 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check 11: package.json locations — detect missing/stale node_modules.
+	// Check 11: Sync failure marker — surfaces aborted 'ddx sync' runs.
+	fmt.Print("✓ Checking Sync Status... ")
+	syncFailurePath := filepath.Join(f.WorkingDir, ".ddx", "sync-failure.json")
+	if ws := gitpkg.FindNearestDDxWorkspace(f.WorkingDir); ws != "" {
+		syncFailurePath = filepath.Join(ws, ".ddx", "sync-failure.json")
+	}
+	if syncIssue := checkSyncFailure(syncFailurePath); syncIssue != nil {
+		fmt.Println("⚠️  Sync aborted")
+		fmt.Printf("   ⚠️  %s\n", syncIssue.Description)
+		for _, r := range syncIssue.Remediation {
+			fmt.Printf("   💡 %s\n", r)
+		}
+		issues = append(issues, *syncIssue)
+	} else {
+		fmt.Println("✅ Sync Status")
+	}
+
+	// Check 12: package.json locations — detect missing/stale node_modules.
 	fmt.Print("✓ Checking package.json locations... ")
 	pkgIssues := checkPackageJSONLocations(f.WorkingDir)
 	if len(pkgIssues) == 0 {
