@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No changes under `cli/internal/server/` for HTTP routes `/api/metrics/{id}/history` or `/api/metrics/{id}/trend`.\nNo changes under `cli/internal/mcp/` (or wherever MCP tools are registered) adding `ddx_metric_history` or `ddx_metric_trend`.\nNo test files added or modified covering the new HTTP routes or MCP tools.\nDiff consists solely of `.ddx/executions/20260429T235209-c7215004/manifest.json` and `result.json` — execution metadata, not implementation. Re-run review against `result_rev=7d9818a3da475621c06506ddca1249710183443d` (or its merge) to evaluate actual code."
+}
