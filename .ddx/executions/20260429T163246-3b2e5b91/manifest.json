@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260429T163246-3b2e5b91",
+  "bead_id": "ddx-676efeab",
+  "base_rev": "9cdc5955db76dd53041d210cef3f80ee512b48ef",
+  "created_at": "2026-04-29T16:32:47.261620258Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-676efeab",
+    "title": "expand microsite concepts docs from refined frame",
+    "description": "V2 of 3 children under epic ddx-53c96967. Depends on V1 (ddx-c5dce902).\n\nPort the refined product-vision.md and principles.md into user-facing microsite docs at website/content/docs/concepts/.\n\nCURRENT STATE:\n- website/content/docs/_index.md and getting-started.md exist.\n- website/content/docs/concepts/ exists (check current contents — may have stubs).\n- website/content/docs/cli/, ecosystem/, server/ also exist.\n\nAUDIENCE DIFFERENCE FROM FRAME DOCS:\n- Frame docs (docs/helix/) are for contributors and AI agents — terse, decision-focused.\n- Microsite docs are for users discovering DDx — needs introduction, examples, why-this-not-that comparisons.\n\nREQUIRED PAGES (create or refine):\n1. concepts/_index.md or overview — what is DDx, three-layer stack, how DDx/HELIX/Dun differ. Pull from refined vision.\n2. concepts/principles.md — the load-bearing principles (from refined principles.md), with brief examples of each in practice.\n3. concepts/architecture.md — concrete: bead lifecycle, execute-loop, persona/role binding, project-local install model. Reference (don't duplicate) FEAT-* spec IDs.\n4. concepts/glossary.md — key terms (bead, harness, persona, plugin, project-local, etc.) with one-line definitions.\n\nVoice: clear, friendly but technical. Hugo with Hextra theme. Use Hextra components where they help (callouts, tabs).\n\nOUT OF SCOPE: redesigning the microsite layout, changing the theme, generating visuals (V3 handles those — leave placeholders like '\u003c!-- diagram: three-layer-stack --\u003e' where they belong).",
+    "acceptance": "1. website/content/docs/concepts/ contains an overview/index, principles, architecture, glossary pages (create or refine). 2. Three-layer stack (DDx/HELIX/Dun) explained early. 3. Each principle has a brief in-practice example. 4. Architecture page covers: bead lifecycle, execute-loop with review, persona binding, project-local install model. 5. Glossary defines: bead, harness, persona, plugin, project-local, execute-loop, three-layer stack, at minimum. 6. Hugo build succeeds: cd website \u0026\u0026 hugo --quiet (if hugo available) or theme rendering check. 7. Diagram placeholders use HTML comments, e.g. \u003c!-- diagram: bead-lifecycle --\u003e, so V3 can fill them in.",
+    "parent": "ddx-53c96967",
+    "labels": [
+      "kind:docs",
+      "area:docs",
+      "area:website"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T163246-3b2e5b91",
+    "prompt": ".ddx/executions/20260429T163246-3b2e5b91/prompt.md",
+    "manifest": ".ddx/executions/20260429T163246-3b2e5b91/manifest.json",
+    "result": ".ddx/executions/20260429T163246-3b2e5b91/result.json",
+    "checks": ".ddx/executions/20260429T163246-3b2e5b91/checks.json",
+    "usage": ".ddx/executions/20260429T163246-3b2e5b91/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-676efeab-20260429T163246-3b2e5b91"
+  }
+}
