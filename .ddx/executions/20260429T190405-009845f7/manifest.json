@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260429T190405-009845f7",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-e630aeae",
+  "base_rev": "e2398c76bd0bbc0551d67438adb0a210abb11642",
+  "created_at": "2026-04-29T19:04:05.886083442Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-e630aeae",
+    "title": "[read-coverage] add ddx_exec_run + ddx_exec_run_log MCP tools",
+    "description": "FEAT-002/010 gap. HTTP has GET /api/exec/runs/{id} (result) and GET /api/exec/runs/{id}/log. MCP has ddx_exec_history (list runs) but no tool for a single run result or log. Agents dispatch runs via ddx_exec_dispatch then cannot inspect results/logs without switching to HTTP. Add ddx_exec_run and ddx_exec_run_log MCP tools.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "mcp",
+      "feat-002",
+      "feat-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T19:04:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T19:04:03.03046073Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T190405-009845f7",
+    "prompt": ".ddx/executions/20260429T190405-009845f7/prompt.md",
+    "manifest": ".ddx/executions/20260429T190405-009845f7/manifest.json",
+    "result": ".ddx/executions/20260429T190405-009845f7/result.json",
+    "checks": ".ddx/executions/20260429T190405-009845f7/checks.json",
+    "usage": ".ddx/executions/20260429T190405-009845f7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-e630aeae-20260429T190405-009845f7"
+  }
+}
