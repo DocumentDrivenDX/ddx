@@ -941,22 +941,13 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	// is claimed, no executor invocation, no tier-attempt event burn.
 	// DDx does NOT duplicate the upstream allow-list; this gate only
 	// consumes the typed-incompatibility surface.
-	var preflightSvc agentlib.DdxAgent
-	preflightSvc, preflightSvcErr := agent.NewServiceFromWorkDir(projectRoot)
-	preflightErr := preflightSvcErr
-
-	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:         spec.Once,
-		PollInterval: spec.PollInterval,
-		Log:          log,
-		EventSink:    eventSink,
-		WorkerID:     id,
-		ProjectRoot:  projectRoot,
-		LabelFilter:  spec.LabelFilter,
-		ProgressCh:   progressCh,
-		PreClaimHook: buildPreClaimHook(projectRoot, landingOps),
-		NoReview:     spec.NoReview,
-		RoutePreflight: func(ctx context.Context, harness, model string) error {
+	// Skipped when BeadWorkerFactory is set (test injection path).
+	var routePreflight func(ctx context.Context, harness, model string) error
+	if m.BeadWorkerFactory == nil {
+		var preflightSvc agentlib.DdxAgent
+		preflightSvc, preflightSvcErr := agent.NewServiceFromWorkDir(projectRoot)
+		preflightErr := preflightSvcErr
+		routePreflight = func(ctx context.Context, harness, model string) error {
 			svc := preflightSvc
 			if svc == nil {
 				return preflightErr
@@ -972,7 +963,21 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			_, rErr := svc.ResolveRoute(ctx, req)
 			return rErr
-		},
+		}
+	}
+
+	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
+		Once:           spec.Once,
+		PollInterval:   spec.PollInterval,
+		Log:            log,
+		EventSink:      eventSink,
+		WorkerID:       id,
+		ProjectRoot:    projectRoot,
+		LabelFilter:    spec.LabelFilter,
+		ProgressCh:     progressCh,
+		PreClaimHook:   buildPreClaimHook(projectRoot, landingOps),
+		NoReview:       spec.NoReview,
+		RoutePreflight: routePreflight,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)
