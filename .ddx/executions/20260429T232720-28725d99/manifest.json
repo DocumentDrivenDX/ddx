@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260429T232720-28725d99",
+  "bead_id": "ddx-c47f1828",
+  "base_rev": "fafb9de5bc7150444abdf73e8d9590b62453775e",
+  "created_at": "2026-04-29T23:27:21.401528542Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c47f1828",
+    "title": "[artifact-run-arch] update FEAT-013 (concurrency note for regenerate)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. One-sentence touch: concurrent regenerate covered by existing FEAT-013 multi-agent locking.",
+    "labels": [
+      "frame",
+      "plan-2026-04-29",
+      "multi-agent"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T23:27:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "932496",
+      "execute-loop-heartbeat-at": "2026-04-29T23:27:18.569084522Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T232720-28725d99",
+    "prompt": ".ddx/executions/20260429T232720-28725d99/prompt.md",
+    "manifest": ".ddx/executions/20260429T232720-28725d99/manifest.json",
+    "result": ".ddx/executions/20260429T232720-28725d99/result.json",
+    "checks": ".ddx/executions/20260429T232720-28725d99/checks.json",
+    "usage": ".ddx/executions/20260429T232720-28725d99/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c47f1828-20260429T232720-28725d99"
+  }
+}
