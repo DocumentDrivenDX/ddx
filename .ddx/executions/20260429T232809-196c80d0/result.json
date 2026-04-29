@@ -1,0 +1,42 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Diff under review is execution evidence (manifest/result) for the bead. The actual doc change landed in 1ac80f6b per result.json. No acceptance criteria specified; labels and task scope match.",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 419,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260429T232720-28725d99/manifest.json",
+          ".ddx/executions/20260429T232720-28725d99/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 2924,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5149,
+    "output_bytes": 288,
+    "elapsed_ms": 4216,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
