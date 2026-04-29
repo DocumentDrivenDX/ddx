@@ -75,6 +75,81 @@ func ResolveTierModelRef(routing *config.RoutingConfig, tier escalation.ModelTie
 	return tierRef
 }
 
+// TierCandidate is one (harness, model) pair to try for a ladder tier.
+// It is produced by ResolveTierCandidates and consumed by the escalation
+// loop in execute-loop. Source carries the provenance (override|catalog) so
+// diagnostics can distinguish caller-provided overrides from defaults.
+type TierCandidate struct {
+	Surface string // catalog surface (empty for override candidates)
+	Harness string // harness name (empty for override candidates — upstream picks)
+	Model   string // concrete model string to pass to ResolveRoute
+	Source  string // "override" or "catalog"
+}
+
+// catalogSurfaceOrder is the deterministic order surfaces are tried within a
+// tier. Walking surfaces in a stable order makes tier-attempt diagnostics
+// reproducible across runs.
+var catalogSurfaceOrder = []string{"codex", "claude", "embedded-openai"}
+
+// surfaceToHarnessName returns the harness name that owns a catalog surface.
+// Inverse of harnessToSurface.
+func surfaceToHarnessName(surface string) string {
+	for h, s := range harnessToSurface {
+		if s == surface {
+			return h
+		}
+	}
+	return ""
+}
+
+// ResolveTierCandidates returns ordered (harness, model) candidates for a
+// ladder tier. agent.routing.model_overrides wins when set (an override has
+// no associated harness — upstream picks); catalog surfaces in
+// catalogSurfaceOrder follow as defaults so projects without
+// model_overrides still resolve a concrete model per tier via the catalog.
+//
+// Healthy-harness and provider-reachability checks are NOT performed here:
+// callers should iterate the returned candidates and probe each via
+// svc.ResolveRoute / svc.RouteStatus, recording per-candidate rejections in
+// tier-attempt diagnostics. ResolveTierCandidates is purely the "what could
+// be tried" enumeration.
+func ResolveTierCandidates(routing *config.RoutingConfig, cat *Catalog, tier escalation.ModelTier) []TierCandidate {
+	var out []TierCandidate
+	tierStr := string(tier)
+
+	if routing != nil && routing.ModelOverrides != nil {
+		if override := strings.TrimSpace(routing.ModelOverrides[tierStr]); override != "" {
+			out = append(out, TierCandidate{Model: override, Source: "override"})
+		}
+	}
+
+	if cat == nil {
+		cat = BuiltinCatalog
+	}
+	if entry, ok := cat.Entry(tierStr); ok {
+		for _, surface := range catalogSurfaceOrder {
+			model, ok := entry.Surfaces[surface]
+			if !ok || strings.TrimSpace(model) == "" {
+				continue
+			}
+			if cat.IsBlockedModelID(model) {
+				continue
+			}
+			harness := surfaceToHarnessName(surface)
+			if harness == "" {
+				continue
+			}
+			out = append(out, TierCandidate{
+				Surface: surface,
+				Harness: harness,
+				Model:   model,
+				Source:  "catalog",
+			})
+		}
+	}
+	return out
+}
+
 func tierWithinBounds(tier, minTier, maxTier string) bool {
 	rank, ok := profileTierRank[tier]
 	if !ok {
