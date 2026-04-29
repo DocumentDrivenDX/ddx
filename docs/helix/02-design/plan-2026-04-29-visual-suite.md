@@ -1,25 +1,25 @@
 # Visual Suite — Principles, Tools, User Workflow
 
 Date: 2026-04-29
-Status: Draft v2 (pending review)
+Status: Draft v5 (pending review)
 
 ## Summary
 
 DDx ships a coordinated graphical suite covering three lenses on the product:
 **principles**, **tools**, and **user workflow**. Each lens gets per-element
-graphics plus a composite; the user-workflow lens is the capstone.
+prompts plus a composite; the user-workflow lens is the capstone.
 
 Visual style is established via Google's **DESIGN.md** format spec
-(github.com/google-labs-code/design.md) — a markdown-with-YAML-frontmatter
-format describing tokens (colors, typography, spacing, components) plus
-prose rationale. Comes with a `@google/design.md` npm CLI for `lint`,
-`diff`, `export` (Tailwind/DTCG), and `spec`. **Status: alpha; format under
-active development.**
+(github.com/google-labs-code/design.md) — markdown + YAML frontmatter
+describing tokens (colors, typography, spacing, components) plus prose
+rationale. Comes with a `@google/design.md` npm CLI for `lint`, `diff`,
+`export` (Tailwind/DTCG), and `spec`. **Status: alpha, version `0.1.0`.**
 
-DDx integrates DESIGN.md as the first real user of a new **tools registry**
-(FEAT-024) that declares external dependencies in `.ddx.yml` and installs
-them via `ddx install`. This eliminates README-ritual installation
-instructions for npx-delivered tools.
+Project standardizes on **bun/bunx** for Node-ecosystem tooling, matching
+existing precedent (the SvelteKit frontend at `cli/internal/server/frontend/`
+already uses Bun per CLAUDE.md). `package.json` is the canonical declaration
+surface for npm-delivered tools — no DDx wrapper, no FEAT-024 spec, no
+DDx-owned lockfile.
 
 All visuals are generated artifacts (per the artifact-and-run-architecture
 plan), live in the helix phase tree alongside the docs they depict, with
@@ -28,14 +28,12 @@ sidecar metadata and `generated_by` provenance.
 ## Architecture
 
 ```
-FEAT-024 tools registry (extends existing skills-lock.json pattern)
+DESIGN.md authored at repo root
       ↓
-DESIGN.md integration (declared in .ddx.yml; installed via ddx install)
-      ↓
-DDx DESIGN.md authored at repo root
-      ↓
-DESIGN.md → Hugo/Hextra Tailwind theme (export)
+DESIGN.md → website palette via Hextra theme overrides (spike — see V3.5)
 DESIGN.md tokens → image-generation prompts (palette anchors)
+      ↓
+Visual generation (one at a time, $10 cap, pressure-test gated)
       ↓
 ┌────────────────────────────────┐
 │ Principle prompts (×6)         │
@@ -49,7 +47,7 @@ DESIGN.md tokens → image-generation prompts (palette anchors)
 │ User-workflow diagram (capstone)
 └────────────────────────────────┘
       ↓
-Website redesign (existing beads 28, 29 to be created) consumes
+Website redesign (beads to be created — 28, 29) consumes
 ```
 
 ## The three lenses
@@ -76,7 +74,7 @@ the composite reads well alone.
 | Tool | Visual concept |
 |---|---|
 | Bead tracker | DAG with priority queue + ready/blocked states |
-| Document graph (artifacts) | Multi-node graph with depends_on and generated_by edges |
+| Document graph (artifacts) | Multi-node graph with `depends_on` and `generated_by` edges |
 | Agentic execution (run/try/work) | Three-layer wrapping; worktree isolation visible |
 | Plugins | Modular composition; HELIX/Dun snapping into shared core |
 
@@ -89,11 +87,13 @@ closes. Explanatory register; load-bearing artifact.
 
 ## Storage — helix phase tree
 
-Visuals live alongside the docs they depict, not in a separate `assets/`
-directory. The DESIGN.md style guide is the one cross-cutting exception.
+Visuals live alongside the docs they depict. DESIGN.md is the cross-cutting
+exception at repo root.
 
 ```
 DESIGN.md                                          ← cross-cutting; repo root
+package.json                                       ← repo root (bun-managed)
+bun.lock                                           ← repo root (text lockfile)
 docs/helix/00-discover/
 ├── product-vision.md
 └── visuals/
@@ -111,9 +111,9 @@ docs/helix/01-frame/
     └── user-workflow.{prompt.md,png,png.ddx.yaml}
 ```
 
-Each visual artifact has `depends_on` pointing to the source doc (vision,
-PRD, FEAT-006, etc.) and `generated_by` pointing to its prompt source.
-First real test of `generated_by` edges across the helix tree.
+Each visual artifact has `depends_on` pointing to the source doc and
+`generated_by` pointing to its prompt source. First real test of
+`generated_by` edges across the helix tree.
 
 ## DESIGN.md is the visual style brief
 
@@ -122,188 +122,173 @@ carry metaphor system and composition rules; its YAML carries tokens. No
 separate STYLE.md needed.
 
 Two consumers:
-- **Website (Hugo + Hextra):** `npx @google/design.md export --format tailwind`
-  produces theme JSON the site can consume directly. Hextra is Tailwind-based.
+- **Website (Hugo + Hextra):** spike palette injection via Hextra's
+  `params.theme` / CSS variables (V3.5). Hextra ships precompiled CSS via
+  Hugo Pipes; project-level Tailwind config consumption is unverified.
+  Fall back to accept-divergence (DESIGN.md drives prompts only) if
+  Hextra reach is insufficient.
 - **Image prompts:** prompts reference DESIGN.md palette by hex and named
-  tokens for cross-prompt consistency.
+  tokens for cross-prompt consistency anchor.
 
 Repo placement: `/DESIGN.md` (brand-level artifact for the whole product).
 
-## FEAT-024 — Tools Registry (new)
+## Tool dependency declaration: `package.json` (no DDx wrapper)
 
-DDx needs a declarative way to specify external dependencies so installation
-isn't a README ritual. Partial precedent exists: `skills-lock.json` already
-provides reproducibility for npx-delivered Claude/Anthropic skills (recent
-commit `619027bf`).
+Standard Node convention. No FEAT-024 spec, no DDx-owned lockfile, no
+`ddx tool run` wrapper.
 
-### Scope
-
-**Declaration** in `.ddx.yml`:
-
-```yaml
-tools:
-  npx:
-    "@google/design.md": "^0.1.0"
-  system:
-    - mermaid-cli      # version optional; verify-only
-  plugins:
-    helix: "0.3.3"
+```bash
+bun add --dev @google/design.md@0.1.0      # adds to package.json + bun.lock
+bunx @google/design.md lint DESIGN.md      # standard invocation
 ```
 
-**Lifecycle:**
-- `ddx install` walks the declaration; resolves npx tools project-locally
-  (extends or generalizes `skills-lock.json` pattern); verifies system
-  binaries; reports missing.
-- `ddx doctor` re-verifies tool availability with actionable install hints.
-- `ddx tool run <name> [args…]` thin wrapper for invocation (replaces
-  ad-hoc `npx @google/design.md` calls in scripts; gains version pinning
-  and diagnostics).
+`ddx doctor` extension scans known `package.json` locations (root,
+`website/`, `cli/internal/server/frontend/`) and reports `bun install` if
+`node_modules/` is missing or out of date. `ddx init` summary mentions
+discovered `package.json` files.
 
-**Out of scope initially:** pip/uv, cargo, brew (defer until needed).
-
-### Lock-file integration — open question
-
-- **(a) Generalize `skills-lock.json` → `tools-lock.json`.** No real distinction
-  between "skill delivered via npx" and "CLI delivered via npx." Cleaner
-  long-term; touches more existing code; needs migration.
-- **(b) Parallel `tools-lock.json`.** Skills lock unchanged; new parallel
-  file for tools. Smaller blast radius; consolidation pressure later.
-
-Plan default: (a). Decision lives in V2a (FEAT-024 spec).
-
-### Cross-cutting with FEAT-018
-
-Plugins are already declared/installed via `ddx install <plugin>`. FEAT-024
-generalizes the pattern to non-plugin tools. Standalone feature rather than
-extending FEAT-018, since plugins have richer lifecycle (subtree, config
-injection) than tools.
+DDx never wraps `bunx`; users invoke npm-ecosystem tools directly via
+standard `bunx <pkg>` commands.
 
 ## Generation strategy
 
-- **Generator:** `nano-banana-pro-openrouter` (Gemini 3 Pro Image) by default.
+- **Generator:** `nano-banana-pro-openrouter` (Gemini 3 Pro Image preview)
+  by default.
 - **Each visual is a `generate-artifact` run** per the artifact-and-run plan.
 - **`SYSTEM_TEMPLATE` override** for sober/utilitarian style (default
   pulls toward "dreamy illustration").
 - **DESIGN.md tokens injected** into every prompt for palette/typography
   consistency.
+- **Sequential rendering with $10 budget cap.** Render one visual at a
+  time; evaluate against acceptance criteria before generating the next.
+  Halt on cap exceeded.
 - **First real dogfood** of the artifact infrastructure (sidecar I/O,
   `generated_by` edges, `ddx artifact regenerate` CLI). Bugs surfaced here
   feed back into beads `ddx-d5e71fb3` (FEAT-010), `ddx-5d92b873` (FEAT-007),
   and the artifact-regenerate implementation.
+- **Regen policy:** every visual `depends_on` DESIGN.md and its prompt
+  source. Either-source change marks the visual stale via the separate
+  `generated_by` staleness rule. Regen is explicit (`ddx artifact regenerate`),
+  not automatic — operator decides when to spend tokens.
+
+## Acceptance criteria per visual
+
+- Renders cleanly at intended placement (homepage hero, docs page, README)
+- Contrast OK in light and dark mode
+- Mobile crop preserves the message
+- Alt text drafted and in sidecar
+- File size budget under 200KB (compress / downsize as needed)
+- Metaphor parses without explanatory copy
 
 ## Risks
 
-- **DESIGN.md is alpha** — format may break. Pin a specific version of
-  `@google/design.md`; budget for migration when it bumps.
-- **Hextra Tailwind integration unverified** — V3.5 must confirm Hextra
-  accepts a custom Tailwind config override before committing the export
-  pipeline. If Hextra is opinionated, a theme overlay or fork is needed.
+- **DESIGN.md is alpha** (`0.1.0`). Pin exact `0.1.0`; budget for both
+  format spec AND `--format tailwind` exporter breaking on bumps (two
+  alpha surfaces stack).
+- **Hextra Tailwind path unverified.** V3.5 is a spike. Expected outcome:
+  palette override via Hextra theme params works; if not, fall back to
+  accept-divergence rather than fork Hextra.
 - **Cross-prompt style consistency** on `gemini-3-pro-image-preview` is
   unproven. DESIGN.md tokens anchor palette but composition consistency
-  across 6+ subsections is a real risk. Composite-first sequencing
+  across 6+ subsections is genuine risk. Composite-first sequencing
   (V6 before V7) limits exposure.
-- **Metaphor strain when rendered.** Lever/fulcrum/load may not render
-  cleanly. Pressure-test in V6 before committing further. If the metaphor
-  doesn't carry, revise the visual concept (not principle wording).
+- **Metaphor strain when rendered.** Pressure-test in V6 before committing
+  further. If lever/fulcrum/load doesn't carry, revise the visual concept
+  (not principle wording).
 - **Artifact-infra bugs** could block visual generation. Plan accepts
   iteration: bugs → fixes in artifact-and-run beads → resume.
-- **Scope creep.** 11+ visuals plus FEAT-024 design + implementation is a
-  lot. Prioritization order if compressed: FEAT-024 minimum (V2a/b/c) →
-  DESIGN.md (V3) → principle composite (V6) → workflow capstone (V10) →
-  tool composite (V9) → per-tool standalones (V8) → per-principle
-  standalones (V7).
+- **Cost overrun.** $10 cap is for the full run; halt at cap and reassess.
+  Sequential generation gives visibility; cache-on-prompt-hash prevents
+  accidental re-spending.
+- **Two alpha surfaces.** DESIGN.md format and exporter both alpha.
+  Pinning `0.1.0` exactly mitigates but doesn't eliminate risk; budget
+  ~half a day per bump for migration.
 
 ## Bead breakdown
 
-### Discovery (done)
+### Tooling foundation (gates the rest)
 
-- ~~V1.~~ Identify DESIGN.md — done; it's a Google Labs format spec + npm CLI.
-
-### Tools registry (FEAT-024) — gates everything below
-
-- **V2a.** Author FEAT-024 spec at `docs/helix/01-frame/features/FEAT-024-tools-registry.md`.
-  Address npx parity with skills-lock, system-binary declaration,
-  `ddx tool run`, lifecycle, lockfile relationship (decide a vs b).
-  Audit existing `skills-lock.json` implementation as input.
-- **V2b.** Implement npx tools support: extend or generalize skills-lock;
-  `ddx install` resolves `tools.npx` declarations; `ddx tool run` wrapper
-  CLI; `ddx doctor` extension for tool availability.
-- **V2c.** Declare `@google/design.md` in `.ddx.yml`; smoke test
-  `ddx install` and `ddx tool run design.md lint`.
+- **V2.** Extend `ddx doctor` (and optionally `ddx init` summary) to detect
+  `package.json` at known locations (root, `website/`, `cli/internal/server/frontend/`)
+  and report `bun install` if `node_modules/` is missing or stale. ~100 LoC.
 
 ### DESIGN.md integration
 
 - **V3.** Author `DESIGN.md` at repo root. Capture existing precedent
-  (logo, current rgba triad, terminal-demo tone). Tokens (colors, typography,
-  spacing, components); prose Overview, Do's/Don'ts, metaphor system. Lint
-  via V2b before commit.
-- **V3.5.** Wire DESIGN.md → Hugo/Hextra Tailwind theme.
-  `npx @google/design.md export --format tailwind` into website build.
-  **Verify Hextra accepts custom Tailwind config first**; if not, scope
-  expands to theme overlay or fork.
-- **V4.** Lint integration in lefthook + CI: `ddx tool run design.md lint`
-  on commit if DESIGN.md is modified.
+  (logo, current rgba triad, terminal-demo tone). Tokens (colors,
+  typography, spacing, components); prose Overview, Do's/Don'ts, metaphor
+  system. Run `bun add --dev @google/design.md@0.1.0` at repo root; lint
+  with `bunx @google/design.md lint DESIGN.md`.
+- **V3.5.** Spike DESIGN.md → website palette integration. Try Hextra
+  `params.theme` / CSS-variable override path first. Fall back to
+  accept-divergence if Hextra reach insufficient. Document outcome in
+  the bead resolution.
+- **V4.** Lefthook + CI lint integration: `bunx @google/design.md lint
+  DESIGN.md` runs on commit if DESIGN.md is modified.
 
 ### Principles lens
 
 - **V5.** Author all 6 principle-graphic prompts at
   `docs/helix/00-discover/visuals/principle-N-*.prompt.md`.
-- **V6.** Author principle-composite prompt + generate. **Pressure-test
-  gate** — if the lever/fulcrum/load metaphor doesn't render usefully,
-  pause and revise before proceeding.
-- **V7** *(optional)*. Render the 6 principle subsections standalone if
-  composite reads well alone. Skip if composite suffices or if cross-prompt
+- **V6.** Author principle-composite prompt + generate **(first render —
+  pressure-test gate; budget tracking starts here)**. If the lever/fulcrum/
+  load metaphor doesn't render usefully, pause and revise before proceeding.
+- **V7** *(optional, conditional on V6 outcome).* Render the 6 principle
+  subsections standalone. Skip if composite suffices or if cross-prompt
   consistency fails.
 
 ### Tools lens
 
 - **V8.** Author 4 tool-graphic prompts at `docs/helix/01-frame/visuals/`.
-- **V9.** Generate 4 tool graphics + tool composite.
+- **V9.** Generate 4 tool graphics + tool composite **(sequential, budget-tracked)**.
 
 ### Workflow capstone
 
-- **V10.** Author user-workflow prompt + generate. Explanatory register;
-  artifact in helix tree; load-bearing.
+- **V10.** Author user-workflow prompt + generate **(sequential,
+  budget-tracked)**. Explanatory register; load-bearing.
 
-### Website integration (downstream — existing planned beads, not yet created)
+### Website integration (downstream — beads not yet created)
 
-- **28** website refactor — consumes V3.5 (Tailwind theme), V6 (principle
-  composite), V9 (tool composite), V10 (workflow); replaces 6 feature cards
-  with 6 principle cards; new Why DDx page.
-- **29** README refactor — consumes V6/V10; replaces tagline with thesis.
+- Replace 6 feature cards on landing with 6 principle cards.
+- Add Why DDx top-nav page (exposition around principles).
+- Concept "Why this exists" callouts.
+- Replace README tagline with thesis.
+- E2E test updates.
+- Visual integration consumes V6/V9/V10 outputs.
 
 ## Reviewer ask
 
-1. **FEAT-024 scope boundary.** Right shape — declaration in `.ddx.yml`,
-   `ddx install` resolves, `ddx tool run` wraps invocation? Anything missing
-   (caching, version-range resolution, security, supply-chain concerns)?
-2. **Lock-file integration (a vs b).** Default leans (a) generalize. Push
-   back if (b) parallel makes more sense given existing skills-lock semantics.
-3. **Plugins inside or outside tools registry.** Plan keeps them outside
-   (richer lifecycle). Reconsider?
-4. **Helix-tree storage of visuals.** Visuals live in `docs/helix/00-discover/visuals/`
-   and `docs/helix/01-frame/visuals/`. Anti-patterns? Helix convention violations?
-5. **DESIGN.md alpha risk.** Pinning + migration budget; sufficient
-   mitigation, or should we wait until v1?
-6. **Hextra Tailwind override** — known behavior or unknown? V3.5 should
-   verify before commit.
-7. **Cross-prompt consistency** — DESIGN.md tokens enough? Or do we need
-   reference-image compositing or a different generator for the principles
-   and tools lenses?
-8. **Sequencing realism.** V2a/b/c (FEAT-024 design + implementation) is
-   serious work — does this plan budget it correctly, or is it under-scoped
-   given DDx's "DDx provides primitives, opinions in plugins" stance?
-9. **Anything missing.**
+1. **Tool-declaration simplification** — `package.json` + `ddx doctor`
+   detection only, no FEAT-024, no DDx wrapper. Right reduction, or did we
+   lose something load-bearing?
+2. **bun standardization** — repo already uses Bun for the frontend per
+   CLAUDE.md. Any subdirectory or build step that breaks if root tooling
+   moves to bun (e.g., CI assumed npm)?
+3. **Multiple `package.json` scan in `ddx doctor`** — known set (root,
+   `website/`, `cli/internal/server/frontend/`) vs glob discovery? Static
+   list is simpler; glob risks scanning user output dirs.
+4. **`package.json` placement for `@google/design.md`** — root chosen for
+   cross-cutting linter. Concerns about polluting repo root with a
+   `package.json`/`node_modules` when most of the project is Go?
+5. **Hextra spike fallback (accept-divergence)** — if Hextra can't consume
+   DESIGN.md tokens, website CSS stays Hextra-default and DESIGN.md drives
+   image prompts only. Is image-prompt-only consumption sufficient ROI to
+   justify the DESIGN.md effort?
+6. **Cost cap $10 sequential** — realistic for 11+ Gemini-3-Pro-Image
+   generations at 2K? Should we set a per-image cost ceiling too?
+7. **Acceptance criteria** — anything missing? Brand-fit / kitsch judgment?
+8. **Alpha-stack risk** — two alpha surfaces (DESIGN.md format + exporter).
+   Sufficient to pin `0.1.0`, or should we wait until v1?
+9. **Helix-tree storage of visuals** — `docs/helix/00-discover/visuals/`
+   and `docs/helix/01-frame/visuals/`. Anti-patterns or convention violations?
+10. **Anything missing.**
 
 Codebase context:
-- `/Users/erik/Projects/ddx/docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md` (artifact infra plan; visuals are first dogfood)
-- `/Users/erik/Projects/ddx/skills-lock.json` (existing npx skills lock)
-- `/Users/erik/Projects/ddx/.ddx.yml` (existing config)
-- `/Users/erik/Projects/ddx/docs/helix/01-frame/features/FEAT-018-plugin-api.md`
-- `/Users/erik/Projects/ddx/docs/helix/01-frame/features/FEAT-011-skills.md`
-- `/Users/erik/Projects/ddx/website/` — Hugo + Hextra
+- `/Users/erik/Projects/ddx/docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md`
+- `/Users/erik/Projects/ddx/CLAUDE.md` (bun precedent)
+- `/Users/erik/Projects/ddx/website/` (Hugo + Hextra; no Tailwind today)
+- `/Users/erik/Projects/ddx/cli/internal/server/frontend/` (existing bun/SvelteKit setup)
 - `/Users/erik/Projects/ddx/.agents/skills/nano-banana-pro-openrouter/`
-- `/Users/erik/Projects/ddx/CLAUDE.md` (project-local install convention)
 - DESIGN.md spec: github.com/google-labs-code/design.md
 
 Respond with sections (omit empty):
