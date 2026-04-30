@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No changes under `cli/internal/server/` adding `/api/beads/{id}/evidence`, `/api/beads/{id}/cooldown`, or `/api/beads/{id}/routing` HTTP handlers or routes.\nNo changes under `cli/internal/mcp/` (or wherever MCP tools are registered) adding `ddx_bead_evidence` or `ddx_bead_cooldown` tools.\nNo HTTP/MCP tests added covering the new endpoints/tools (despite the prior commit message `e6c36568` claiming such coverage, this review's diff at `b67961b1` shows only evidence files).\nRe-run implementation in a fresh worktree to actually produce the server + MCP code, then re-review."
+}
