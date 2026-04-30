@@ -1,0 +1,116 @@
+{
+  "attempt_id": "20260430T003141-2fa3773d",
+  "bead_id": "ddx-27586b57",
+  "base_rev": "0a7bc065e79aa1590f7f42ed0cad539158a3e130",
+  "created_at": "2026-04-30T00:31:42.692369456Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-27586b57",
+    "title": "[artifact-run-arch] update prd.md for artifact + 3-layer architecture",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md.\n\nScope of PRD update:\n\n(1) Restructure Problem section into 6 clusters keyed to thesis principles in product-vision.md:\n- Abstraction (no structure / no composition / no integrity guarantees / no transferability)\n- Iteration over tracked work (no reusable work-item store / no reusable execution evidence)\n- Methodology plurality (no reusable agent dispatch — every workflow tool reinvents)\n- LLM physics (NEW cluster — token cost as a permanent constraint; nothing in current PRD)\n- Evidence/provenance (no provenance for generated artifacts; no measurement; no feedback capture)\n- Human-AI collaboration (no composition for handoffs; no discoverability; no network access)\n\nExisting problem bullets re-grouped under these headers; add the LLM-physics cluster.\n\n(2) Goals (primary): reword #1; add three-layer-architecture goal; add generated-artifact-regeneration goal; add 100% read coverage on HTTP/MCP goal.\n\n(3) Non-goals: sharpen loop wording — DDx owns mechanical queue drain (ddx work); content-aware supervisory decisions remain plugin/HELIX. Add: 'DDx does not catalog run types beyond the three layers.'\n\n(4) Feature blurbs: FEAT-001 (CLI: run/try/work top-level + ddx agent passthrough); FEAT-005 (multi-media identity); FEAT-006 (layer-1 consumer + structural passthrough); FEAT-007 (sidecar + generated_by + separate staleness); FEAT-008/021 (media-type rendering + regenerate + layer-aware run views); FEAT-010 (3-layer architecture + substrate unification); FEAT-019 (child of FEAT-010 — evaluation UX, workflow shapes -\u003e skills).\n\nSummary: artifacts (multi-media); three-layer run architecture; one substrate; invocation upstream.\n\nDo NOT touch docs/helix/01-frame/principles.md.",
+    "labels": [
+      "frame",
+      "plan-2026-04-29"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:31:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T17:59:41.103483775Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T175518-a355fb38\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":21,\"output_tokens\":13400,\"total_tokens\":13421,\"cost_usd\":0.6535323000000001,\"duration_ms\":261595,\"exit_code\":0}",
+          "created_at": "2026-04-29T17:59:41.204289773Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=13421 cost_usd=0.6535 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T17:59:45.331178949Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff under review contains only execution evidence files (manifest.json, result.json) and no changes to docs/helix/01-frame/prd.md. The PRD restructure required by the bead is not present in this diff and cannot be evaluated.\nharness=claude\nmodel=opus\ninput_bytes=8383\noutput_bytes=883\nelapsed_ms=7525",
+          "created_at": "2026-04-29T17:59:55.075720122Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T17:59:55.173957748Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff under review contains only execution evidence files (manifest.json, result.json) and no changes to docs/helix/01-frame/prd.md. The PRD restructure required by the bead is not present in this diff and cannot be evaluated.\nresult_rev=5beb855d6875b46fa8e535a7c500e1b8aa43e0ea\nbase_rev=51ca473ba8f5c3e887646570329b08e1b22c14f8",
+          "created_at": "2026-04-29T17:59:55.26381488Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:07.172105256Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:07.29482171Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:29:07.380446744Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:29:07.555251684Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-30T00:31:41.897732881Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T003141-2fa3773d",
+    "prompt": ".ddx/executions/20260430T003141-2fa3773d/prompt.md",
+    "manifest": ".ddx/executions/20260430T003141-2fa3773d/manifest.json",
+    "result": ".ddx/executions/20260430T003141-2fa3773d/result.json",
+    "checks": ".ddx/executions/20260430T003141-2fa3773d/checks.json",
+    "usage": ".ddx/executions/20260430T003141-2fa3773d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-27586b57-20260430T003141-2fa3773d"
+  }
+}
