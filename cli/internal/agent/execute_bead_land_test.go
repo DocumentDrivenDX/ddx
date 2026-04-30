@@ -473,6 +473,101 @@ func TestLand_LargeDeletionAcknowledgementAllowsLand(t *testing.T) {
 	}
 }
 
+func TestLand_InvalidJSONSyntaxPreservedBeforeFastForward(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := r.commitOn(r.baseSHA, "config.json", "{broken-json\n", "feat: write config")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-json-syntax",
+		AttemptID:    "20260430T120100-json-syntax",
+		TargetBranch: "main",
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "preserved" {
+		t.Fatalf("expected status=preserved, got %q", land.Status)
+	}
+	if !strings.Contains(land.Reason, "syntax sanity gate") || !strings.Contains(land.Reason, "config.json") {
+		t.Fatalf("expected syntax sanity reason naming config.json, got %q", land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main tip = %s, want unchanged base %s", got, r.baseSHA)
+	}
+	if got := r.resolveRef(land.PreserveRef); got != workerSHA {
+		t.Fatalf("preserve ref resolves to %s, want %s", got, workerSHA)
+	}
+}
+
+func TestLand_InvalidGoSyntaxPreservedBeforeFastForward(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := r.commitOn(r.baseSHA, "broken.go", "package main\nfunc broken( {\n", "feat: write go")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-go-syntax",
+		AttemptID:    "20260430T120101-go-syntax",
+		TargetBranch: "main",
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "preserved" {
+		t.Fatalf("expected status=preserved, got %q", land.Status)
+	}
+	if !strings.Contains(land.Reason, "syntax sanity gate") || !strings.Contains(land.Reason, "broken.go") {
+		t.Fatalf("expected syntax sanity reason naming broken.go, got %q", land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main tip = %s, want unchanged base %s", got, r.baseSHA)
+	}
+}
+
+func TestLand_TruncatedSvelteSyntaxPreservedBeforeFastForward(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	r.writeFile("Page.svelte", "<script lang=\"ts\">\nlet count = 0;\n</script>\n\n<button>{count}</button>\n")
+	r.runGit("add", "-A")
+	r.runGit("commit", "-m", "test: add svelte page")
+	r.baseSHA = r.resolveRef("refs/heads/main")
+
+	workerSHA := r.commitOn(r.baseSHA, "Page.svelte", "import { onMount } from 'svelte';\nlet count = 0;\n", "feat: rewrite page")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-svelte-syntax",
+		AttemptID:    "20260430T120102-svelte-syntax",
+		TargetBranch: "main",
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "preserved" {
+		t.Fatalf("expected status=preserved, got %q", land.Status)
+	}
+	if !strings.Contains(land.Reason, "syntax sanity gate") || !strings.Contains(land.Reason, "Page.svelte") {
+		t.Fatalf("expected syntax sanity reason naming Page.svelte, got %q", land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main tip = %s, want unchanged base %s", got, r.baseSHA)
+	}
+}
+
 // TestLand_ConcurrentSubmissions_Serialized spawns N concurrent Land() calls
 // through a single coordinator-like serialization (sync.Mutex) and asserts
 // that (a) all N worker commits are reachable from main, (b) each non-first

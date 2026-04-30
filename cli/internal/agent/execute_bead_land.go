@@ -37,8 +37,12 @@ package agent
 // so Land() itself does not take any locks.
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -634,6 +638,11 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	} else if preserved != nil {
 		return preserved, nil
 	}
+	if preserved, err := preserveIfSyntaxSanityFails(wd, req, gitOps, currentTip, contribCount); err != nil {
+		return nil, err
+	} else if preserved != nil {
+		return preserved, nil
+	}
 
 	// Fast path: no sibling advanced the target branch → straight ff via
 	// update-ref. The worker's commit becomes the new tip unchanged; its
@@ -795,6 +804,111 @@ func landHasLargeDeletionAcknowledgement(wd, baseRev, resultRev string) (bool, e
 		}
 	}
 	return false, nil
+}
+
+type syntaxSanityFinding struct {
+	Path   string
+	Reason string
+}
+
+func preserveIfSyntaxSanityFails(wd string, req LandRequest, gitOps LandingGitOps, currentTip string, contribCount int) (*LandResult, error) {
+	finding, found, err := syntaxSanityFindingForResult(wd, req.BaseRev, req.ResultRev)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+
+	preserveRef := landIterationRef(req.BeadID, req.AttemptID, currentTip)
+	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
+		return nil, fmt.Errorf("preserving %s after syntax sanity gate: %w", preserveRef, upErr)
+	}
+	return &LandResult{
+		Status:            "preserved",
+		PreserveRef:       preserveRef,
+		Reason:            fmt.Sprintf("syntax sanity gate: %s: %s", finding.Path, finding.Reason),
+		MergedCommitCount: contribCount,
+	}, nil
+}
+
+func syntaxSanityFindingForResult(wd, baseRev, resultRev string) (syntaxSanityFinding, bool, error) {
+	paths, err := changedPaths(wd, baseRev, resultRev)
+	if err != nil {
+		return syntaxSanityFinding{}, false, err
+	}
+	for _, path := range paths {
+		result, ok, err := gitFileAt(wd, resultRev, path)
+		if err != nil {
+			return syntaxSanityFinding{}, false, err
+		}
+		if !ok {
+			continue // deleted files are handled by deletion gates, not syntax checks.
+		}
+		base, _, err := gitFileAt(wd, baseRev, path)
+		if err != nil {
+			return syntaxSanityFinding{}, false, err
+		}
+		if reason, bad := syntaxSanityFailure(path, base, result); bad {
+			return syntaxSanityFinding{Path: path, Reason: reason}, true, nil
+		}
+	}
+	return syntaxSanityFinding{}, false, nil
+}
+
+func changedPaths(wd, baseRev, resultRev string) ([]string, error) {
+	out, err := internalgit.Command(context.Background(), wd, "diff", "--name-only", baseRev, resultRev, "--").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("listing changed files for syntax sanity: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	var paths []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if path := strings.TrimSpace(line); path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}
+
+func gitFileAt(wd, rev, path string) ([]byte, bool, error) {
+	out, err := internalgit.Command(context.Background(), wd, "show", rev+":"+path).CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "does not exist") || strings.Contains(string(out), "exists on disk, but not in") {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("reading %s at %s: %s: %w", path, rev, strings.TrimSpace(string(out)), err)
+	}
+	return out, true, nil
+}
+
+func syntaxSanityFailure(path string, base, result []byte) (string, bool) {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		var v any
+		if err := json.Unmarshal(result, &v); err != nil {
+			return "invalid JSON: " + err.Error(), true
+		}
+	case ".go":
+		if _, err := parser.ParseFile(token.NewFileSet(), path, result, parser.AllErrors); err != nil {
+			return "invalid Go syntax: " + err.Error(), true
+		}
+	case ".svelte":
+		return svelteSanityFailure(base, result)
+	}
+	return "", false
+}
+
+func svelteSanityFailure(base, result []byte) (string, bool) {
+	baseHadScript := bytes.Contains(base, []byte("<script"))
+	resultHasScript := bytes.Contains(result, []byte("<script"))
+	resultClosesScript := bytes.Contains(result, []byte("</script>"))
+	if baseHadScript && (!resultHasScript || !resultClosesScript) {
+		return "Svelte file lost script structure", true
+	}
+	if resultHasScript && !resultClosesScript {
+		return "Svelte script tag is not closed", true
+	}
+	return "", false
 }
 
 // landPush pushes the new target tip to origin when a remote exists. Push
