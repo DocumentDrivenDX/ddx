@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260430T060817-7f5554b7",
+  "bead_id": "ddx-43118352",
+  "base_rev": "9af6b048a83a574f017619c44877d81ea93c4776",
+  "created_at": "2026-04-30T06:08:17.847310015Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-43118352",
+    "title": "Add DDx token system to Hugo website",
+    "description": "Update website/assets/css/custom.css: replace --ddx-color-* vars with lever/load/fulcrum tokens. Re-derive --primary-hue/saturation/lightness from accent-lever (#3B5B7A ≈ HSL 210, 36%, 35%). Add @import for Newsreader and Space Grotesk from Google Fonts. Expose --ddx-accent-lever/load/fulcrum, --ddx-bg-canvas/surface, --ddx-fg-ink/muted, --ddx-border-line as CSS vars. ~30 line change.",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:08:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:08:16.994884242Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T060817-7f5554b7",
+    "prompt": ".ddx/executions/20260430T060817-7f5554b7/prompt.md",
+    "manifest": ".ddx/executions/20260430T060817-7f5554b7/manifest.json",
+    "result": ".ddx/executions/20260430T060817-7f5554b7/result.json",
+    "checks": ".ddx/executions/20260430T060817-7f5554b7/checks.json",
+    "usage": ".ddx/executions/20260430T060817-7f5554b7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-43118352-20260430T060817-7f5554b7"
+  }
+}
