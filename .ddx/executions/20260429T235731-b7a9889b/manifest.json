@@ -1,0 +1,119 @@
+{
+  "attempt_id": "20260429T235731-b7a9889b",
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-55635fd8",
+  "base_rev": "c00f544b8c368a93fdb1f8422f4a9b3526df7364",
+  "created_at": "2026-04-29T23:57:32.557385213Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-55635fd8",
+    "title": "[read-coverage] add bead evidence + cooldown + routing HTTP + MCP",
+    "description": "FEAT-004 gap. CLI has: ddx bead evidence list \u003cid\u003e, ddx bead cooldown show \u003cid\u003e, ddx bead routing. None of these are exposed over HTTP or MCP. Add GET /api/beads/{id}/evidence, GET /api/beads/{id}/cooldown, GET /api/beads/{id}/routing HTTP routes and corresponding MCP tools (ddx_bead_evidence, ddx_bead_cooldown). Low priority — these are operational details primarily consumed by the execute-loop itself.",
+    "labels": [
+      "read-coverage",
+      "server",
+      "http",
+      "mcp",
+      "feat-004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-29T23:57:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T20:38:55.426645969Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T202423-4fc8564e\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":49,\"output_tokens\":19204,\"total_tokens\":19253,\"cost_usd\":1.6286221,\"duration_ms\":871076,\"exit_code\":0}",
+          "created_at": "2026-04-29T20:38:55.533018368Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=19253 cost_usd=1.6286 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T20:38:59.333022114Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff under review only contains execution evidence artifacts (manifest.json, result.json). No HTTP routes or MCP tools are present in the diff to evaluate against the acceptance criteria.\nharness=claude\nmodel=opus\ninput_bytes=5934\noutput_bytes=539\nelapsed_ms=5095",
+          "created_at": "2026-04-29T20:39:06.611858455Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T20:39:06.707601072Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff under review only contains execution evidence artifacts (manifest.json, result.json). No HTTP routes or MCP tools are present in the diff to evaluate against the acceptance criteria.\nresult_rev=5c5bf0201c3c8760c6c503a2369171b96d98e957\nbase_rev=d969131fb344bcd33940ac4c920dbd8d59940c13",
+          "created_at": "2026-04-29T20:39:06.802009815Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:28:58.942891581Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:28:59.041145852Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:28:59.127663261Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:28:59.304295865Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-29T23:57:31.714442331Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260429T235731-b7a9889b",
+    "prompt": ".ddx/executions/20260429T235731-b7a9889b/prompt.md",
+    "manifest": ".ddx/executions/20260429T235731-b7a9889b/manifest.json",
+    "result": ".ddx/executions/20260429T235731-b7a9889b/result.json",
+    "checks": ".ddx/executions/20260429T235731-b7a9889b/checks.json",
+    "usage": ".ddx/executions/20260429T235731-b7a9889b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-55635fd8-20260429T235731-b7a9889b"
+  }
+}
