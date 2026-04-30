@@ -283,6 +283,27 @@ func (s *stubBeadEventAppenderForPassthrough) AppendEvent(_ string, evt bead.Bea
 	return nil
 }
 
+// TestExecuteOnService_MinMaxPowerReachServiceRequest (AC1): Execute must receive
+// MinPower and MaxPower from the resolved config in ServiceExecuteRequest so the
+// upstream service can enforce power constraints.
+func TestExecuteOnService_MinMaxPowerReachServiceRequest(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 40, 90)
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if svc.lastReq.MinPower != 40 {
+		t.Errorf("ServiceExecuteRequest.MinPower = %d, want 40", svc.lastReq.MinPower)
+	}
+	if svc.lastReq.MaxPower != 90 {
+		t.Errorf("ServiceExecuteRequest.MaxPower = %d, want 90", svc.lastReq.MaxPower)
+	}
+}
+
 // TestAppendBeadRoutingEvidence_RecordsPassthroughConstraintsSeparately (AC5):
 // The routing evidence body must contain requested_harness/provider/model and
 // requested_min_power/max_power as distinct fields, separate from the
@@ -297,7 +318,7 @@ func TestAppendBeadRoutingEvidence_RecordsPassthroughConstraintsSeparately(t *te
 	appendBeadRoutingEvidence(app, "ddx-test-01",
 		"claude", "anthropic", "claude-3-5-sonnet-20241022", // actual/resolved
 		"route-reason", "https://api.anthropic.com",
-		pt, 40, 90)
+		pt, 40, 90, 70)
 
 	if len(app.events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(app.events))
@@ -337,5 +358,46 @@ func TestAppendBeadRoutingEvidence_RecordsPassthroughConstraintsSeparately(t *te
 	}
 	if body["requested_max_power"] != float64(90) {
 		t.Errorf("requested_max_power = %v, want 90", body["requested_max_power"])
+	}
+
+	// AC3: actual_power must be a top-level numeric field so retry policy can
+	// read prior actual_power without inspecting passthrough strings (AC4).
+	if body["actual_power"] != float64(70) {
+		t.Errorf("actual_power = %v, want 70", body["actual_power"])
+	}
+}
+
+// TestAppendBeadRoutingEvidence_ActualPowerReadableWithoutPassthrough (AC4):
+// actual_power is a top-level numeric field in the routing evidence body,
+// independent of the passthrough envelope strings. Retry policy can read it
+// directly from the JSON without inspecting harness/provider/model strings.
+func TestAppendBeadRoutingEvidence_ActualPowerReadableWithoutPassthrough(t *testing.T) {
+	app := &stubBeadEventAppenderForPassthrough{}
+	// Empty passthrough — actual_power must still be independently readable.
+	appendBeadRoutingEvidence(app, "ddx-test-02",
+		"codex", "", "gpt-4o",
+		"", "",
+		config.AgentPassthrough{}, 0, 0, 85)
+
+	if len(app.events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(app.events))
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(app.events[0].Body), &body); err != nil {
+		t.Fatalf("unmarshal routing body: %v", err)
+	}
+
+	// Verify actual_power is a plain number — readable without string parsing.
+	power, ok := body["actual_power"].(float64)
+	if !ok {
+		t.Fatalf("actual_power is not a number in routing evidence: %T %v", body["actual_power"], body["actual_power"])
+	}
+	if int(power) != 85 {
+		t.Errorf("actual_power = %d, want 85", int(power))
+	}
+	// Passthrough fields are absent (empty), confirming actual_power stands alone.
+	if body["requested_harness"] != nil {
+		t.Errorf("requested_harness should be absent when passthrough is empty, got %v", body["requested_harness"])
 	}
 }

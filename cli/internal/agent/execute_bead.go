@@ -468,7 +468,7 @@ func GenerateSessionID() string {
 // The body separates requested passthrough constraints (harness/provider/model
 // from the CLI envelope) and requested power bounds from the actual resolved
 // values so analytics can distinguish intent from outcome (AC5 of ddx-20047dd5).
-func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, provider, model, routeReason, baseURL string, passthrough config.AgentPassthrough, minPower, maxPower int) {
+func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, provider, model, routeReason, baseURL string, passthrough config.AgentPassthrough, minPower, maxPower, actualPower int) {
 	if appender == nil || beadID == "" {
 		return
 	}
@@ -487,6 +487,7 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 		RequestedModel    string   `json:"requested_model,omitempty"`
 		RequestedMinPower int      `json:"requested_min_power,omitempty"`
 		RequestedMaxPower int      `json:"requested_max_power,omitempty"`
+		ActualPower       int      `json:"actual_power,omitempty"`
 	}
 	body := routingBody{
 		ResolvedProvider:  resolvedProvider,
@@ -499,6 +500,7 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 		RequestedModel:    passthrough.Model,
 		RequestedMinPower: minPower,
 		RequestedMaxPower: maxPower,
+		ActualPower:       actualPower,
 	}
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -720,6 +722,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	resultModel := rcfg.Model()
 	resultHarness := rcfg.Harness()
 	resultProvider := ""
+	actualPower := 0
 	agentErrMsg := ""
 	if agentResult != nil {
 		exitCode = agentResult.ExitCode
@@ -738,6 +741,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 		if agentResult.Harness != "" {
 			resultHarness = agentResult.Harness
+		}
+		if agentResult.ActualPower > 0 {
+			actualPower = agentResult.ActualPower
 		}
 	}
 	if agentErr != nil {
@@ -935,7 +941,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Record routing evidence on the bead (best-effort; errors are discarded).
 	// Include requested passthrough constraints and power bounds so analytics
 	// can separate intent from resolved outcome (AC5 of ddx-20047dd5).
-	appendBeadRoutingEvidence(runtime.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL, rcfg.Passthrough(), rcfg.MinPower(), rcfg.MaxPower())
+	appendBeadRoutingEvidence(runtime.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL, rcfg.Passthrough(), rcfg.MinPower(), rcfg.MaxPower(), actualPower)
 
 	// Record per-attempt cost evidence so cost rollup never has to join
 	// against the session index. Best-effort; errors are discarded.
