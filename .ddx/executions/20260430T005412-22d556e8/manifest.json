@@ -1,0 +1,117 @@
+{
+  "attempt_id": "20260430T005412-22d556e8",
+  "bead_id": "ddx-905c07d0",
+  "base_rev": "b268e9f3ac73796b18be697bcb38a2c8a8bd8030",
+  "created_at": "2026-04-30T00:54:13.193100117Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-905c07d0",
+    "title": "[visual-suite] V3 author DESIGN.md at repo root + add @google/design.md",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Run 'bun add --dev @google/design.md@0.1.0' at repo root. Author /DESIGN.md capturing existing precedent (logo, current rgba triad rgba(72,120,198)/rgba(53,163,95)/rgba(142,53,163), terminal-demo tone). Tokens (colors, typography, spacing, components); prose Overview, Do's/Don'ts, metaphor system (lever/load/fulcrum). Lint via 'bunx @google/design.md lint DESIGN.md'. Foundation work, not throwaway spike — DDx has no visual language today; embedding is correct.",
+    "labels": [
+      "design",
+      "plan-2026-04-29-vis",
+      "foundation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:54:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T21:18:55.543591494Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T211615-01a64b5a\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":13,\"output_tokens\":8789,\"total_tokens\":8802,\"cost_usd\":0.36181765,\"duration_ms\":159096,\"exit_code\":0}",
+          "created_at": "2026-04-29T21:18:55.642420694Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=8802 cost_usd=0.3618 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T21:18:59.276249577Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff only contains execution manifest/result metadata. The actual DESIGN.md, package.json changes for @google/design.md, and lint evidence are not present in the changed files, so AC cannot be verified.\nharness=claude\nmodel=opus\ninput_bytes=5878\noutput_bytes=785\nelapsed_ms=7548",
+          "created_at": "2026-04-29T21:19:09.035872241Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T21:19:09.129352904Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff only contains execution manifest/result metadata. The actual DESIGN.md, package.json changes for @google/design.md, and lint evidence are not present in the changed files, so AC cannot be verified.\nresult_rev=9bf9f3aedf1e7f5a19919bedd4b552096a634427\nbase_rev=dfe58ddb065a51fbb712f34f80b70166f3c7ffba",
+          "created_at": "2026-04-29T21:19:09.22402765Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:12.610901339Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:12.733774418Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:29:12.824130531Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:29:13.003392133Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-30T00:54:12.286571023Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T005412-22d556e8",
+    "prompt": ".ddx/executions/20260430T005412-22d556e8/prompt.md",
+    "manifest": ".ddx/executions/20260430T005412-22d556e8/manifest.json",
+    "result": ".ddx/executions/20260430T005412-22d556e8/result.json",
+    "checks": ".ddx/executions/20260430T005412-22d556e8/checks.json",
+    "usage": ".ddx/executions/20260430T005412-22d556e8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-905c07d0-20260430T005412-22d556e8"
+  }
+}
