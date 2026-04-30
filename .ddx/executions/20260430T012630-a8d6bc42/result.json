@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The skill cleanly formalizes the 1-vs-baseline replay shape that the retired `ddx agent replay` CLI used to provide, composing `ddx try` with explicit baseline pinning, single-axis variation, and a code-diff-grounded report. Anti-patterns and CLI reference round it out. No governing docs and no formal AC list, so review is against the bead description, which is fully satisfied."
+}
