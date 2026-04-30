@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260430T004352-d9a11b36",
+  "bead_id": "ddx-ebf3c09b",
+  "base_rev": "a2d7da5e8a5ef09edfde6bb416eb9fd0a018d818",
+  "created_at": "2026-04-30T00:43:53.067185528Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ebf3c09b",
+    "title": "[artifact-run-arch] repo-wide verb migration + agent_*.go cleanup",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. ATOMIC with #3. (a) Delete DDx reimplementations of upstream subcommands: agent_list/capabilities/doctor/check/models/providers/route_status/catalog/reindex/benchmark/replay. (b) Migrate DDx-only subcommands: agent_executions-\u003etries_*, agent_log-\u003eruns_log, agent_metrics-\u003eruns_metrics, agent_usage folded into runs_metrics, agent_workers-\u003ework_workers. (c) Register DDx overrides on mounted subtree (deprecations + condense). (d) Update scripts/hooks/library skills/personas/docs/README/demos to new verbs. Critical files: scripts/eval-skill.sh, scripts/capture-omlx-fixture.sh, scripts/test-doc-snippets.sh, scripts/demos/06-full-journey.sh, library/.agents/skills/ddx-refine-plan/SKILL.md, library/personas/README.md, cli/cmd/init.go:757, cli/cmd/bead_review.go:30-33.",
+    "labels": [
+      "impl",
+      "plan-2026-04-29",
+      "cli",
+      "migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:43:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T00:43:52.205704092Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T004352-d9a11b36",
+    "prompt": ".ddx/executions/20260430T004352-d9a11b36/prompt.md",
+    "manifest": ".ddx/executions/20260430T004352-d9a11b36/manifest.json",
+    "result": ".ddx/executions/20260430T004352-d9a11b36/result.json",
+    "checks": ".ddx/executions/20260430T004352-d9a11b36/checks.json",
+    "usage": ".ddx/executions/20260430T004352-d9a11b36/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ebf3c09b-20260430T004352-d9a11b36"
+  }
+}
