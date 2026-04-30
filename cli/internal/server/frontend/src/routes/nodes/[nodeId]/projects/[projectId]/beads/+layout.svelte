@@ -289,8 +289,8 @@
 
 	function chipClass(active: boolean): string {
 		return active
-			? 'rounded-full border px-3 py-1 text-xs font-medium border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-300'
-			: 'rounded-full border px-3 py-1 text-xs font-medium border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800';
+			? 'rounded-sm border px-3 py-1 text-xs font-medium border-accent-lever bg-accent-lever/10 text-accent-lever dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever'
+			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line text-fg-muted hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface';
 	}
 
 	function priorityLabel(priority: number): string {
@@ -298,20 +298,20 @@
 	}
 
 	function priorityClass(priority: number): string {
-		return priority === 0 ? 'text-priority-p0' : 'text-gray-600 dark:text-gray-300';
+		return `text-priority-p${priority}`;
 	}
 </script>
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold dark:text-white">Beads</h1>
+		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">Beads</h1>
 		<div class="flex items-center gap-3">
-			<span class="text-sm text-gray-700 dark:text-gray-300">
+			<span class="text-sm text-fg-muted dark:text-dark-fg-muted">
 				{sortedEdges.length} of {totalCount}
 			</span>
 			<button
 				onclick={() => (showCreateForm = true)}
-				class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+				class="rounded-sm bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-lever/90"
 			>
 				New bead
 			</button>
@@ -324,13 +324,13 @@
 			type="search"
 			bind:value={searchInput}
 			placeholder="Search beads…"
-			class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400"
+			class="w-full rounded-none border border-border-line bg-bg-elevated px-3 py-2 text-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:placeholder-dark-fg-muted dark:focus:border-dark-accent-lever"
 		/>
 	</div>
 
 	<!-- Status filter chips -->
 	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-gray-700 dark:text-gray-300">Status:</span>
+		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Status:</span>
 		{#each STATUS_OPTIONS as status}
 			<button
 				type="button"
@@ -344,7 +344,7 @@
 		{#if data.activeStatus}
 			<button
 				type="button"
-				class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+				class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
 				onclick={() => setFilter('status', null)}
 			>
 				clear
@@ -354,7 +354,7 @@
 
 	<!-- Priority filter chips -->
 	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-gray-700 dark:text-gray-300">Priority:</span>
+		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Priority:</span>
 		{#each PRIORITY_OPTIONS as priority}
 			<button
 				type="button"
@@ -368,7 +368,7 @@
 		{#if data.activePriority}
 			<button
 				type="button"
-				class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+				class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
 				onclick={() => setFilter('priority', null)}
 			>
 				clear
@@ -379,7 +379,7 @@
 	<!-- Label filter chips (only shown when labels exist in current result) -->
 	{#if allLabels.length > 0}
 		<div class="flex flex-wrap gap-2">
-			<span class="self-center text-xs text-gray-700 dark:text-gray-300">Labels:</span>
+			<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Labels:</span>
 			{#each allLabels as label}
 				<button
 					type="button"
@@ -393,7 +393,7 @@
 			{#if data.activeLabel}
 				<button
 					type="button"
-					class="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+					class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
 					onclick={() => setFilter('labels', null)}
 				>
 					clear
@@ -402,26 +402,26 @@
 		</div>
 	{/if}
 
-	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
 		<table class="w-full border-collapse text-sm">
 			<thead>
-				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">ID</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Title</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Status</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">
+				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+					<th class="px-4 py-3 text-left font-medium text-fg-muted dark:text-dark-fg-muted">ID</th>
+					<th class="px-4 py-3 text-left font-medium text-fg-muted dark:text-dark-fg-muted">Title</th>
+					<th class="px-4 py-3 text-left font-medium text-fg-muted dark:text-dark-fg-muted">Status</th>
+					<th class="px-4 py-3 text-right font-medium text-fg-muted dark:text-dark-fg-muted">
 						<button
 							type="button"
 							aria-label="Sort by priority"
-							class="ml-auto inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white"
+							class="ml-auto inline-flex items-center gap-1 hover:text-fg-ink dark:hover:text-dark-fg-ink"
 							onclick={togglePrioritySort}
 						>
 							Priority
 							<span aria-hidden="true">{prioritySortAsc ? '↑' : '↓'}</span>
 						</button>
 					</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Owner</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Updated</th>
+					<th class="px-4 py-3 text-left font-medium text-fg-muted dark:text-dark-fg-muted">Owner</th>
+					<th class="px-4 py-3 text-left font-medium text-fg-muted dark:text-dark-fg-muted">Updated</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -430,15 +430,15 @@
 						data-testid="bead-row"
 						data-priority={edge.node.priority}
 						onclick={() => openBead(edge.node.id)}
-						class="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 {activeBead ===
+						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {activeBead ===
 						edge.node.id
-							? 'bg-blue-50 dark:bg-blue-900/20'
+							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 					>
 						<td class="px-4 py-3 font-mono text-xs text-lever">
 							{edge.node.id}
 						</td>
-						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
 							{edge.node.title}
 							{#if edge.node.labels?.length}
 								<div class="mt-2 flex flex-wrap gap-1">
@@ -471,23 +471,23 @@
 						<td class="px-4 py-3 text-right font-mono text-xs font-medium {priorityClass(edge.node.priority)}">
 							{priorityLabel(edge.node.priority)}
 						</td>
-						<td class="px-4 py-3 text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-fg-muted dark:text-dark-fg-muted">
 							{edge.node.owner ?? '—'}
 						</td>
-						<td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 text-xs text-fg-muted dark:text-dark-fg-muted">
 							{new Date(edge.node.updatedAt).toLocaleDateString()}
 						</td>
 					</tr>
 				{/each}
 				{#if sortedEdges.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
+						<td colspan="6" class="px-4 py-8 text-center text-fg-muted dark:text-dark-fg-muted">
 							{#if hasActiveFilters}
 								<div class="space-y-3">
 									<p>No beads match the current filters.</p>
 									<button
 										type="button"
-										class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+										class="rounded-sm border border-border-line px-3 py-1.5 text-sm text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 										onclick={clearFilters}
 									>
 										Clear filters
@@ -508,7 +508,7 @@
 			<button
 				onclick={loadMore}
 				disabled={loadingMore}
-				class="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+				class="rounded-sm border border-border-line px-4 py-2 text-sm text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 			>
 				{loadingMore ? 'Loading…' : 'Load more'}
 			</button>
@@ -531,12 +531,12 @@
 
 	<!-- Create form panel -->
 	<div
-		class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl dark:bg-gray-900"
+		class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-bg-elevated shadow-xl dark:bg-dark-bg-elevated"
 	>
 		<div
-			class="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700"
+			class="flex shrink-0 items-center justify-between border-b border-border-line px-6 py-4 dark:border-dark-border-line"
 		>
-			<h2 class="text-base font-semibold text-gray-900 dark:text-white">New bead</h2>
+			<h2 class="text-base font-semibold text-fg-ink dark:text-dark-fg-ink">New bead</h2>
 		</div>
 		<div class="flex-1 overflow-auto p-6">
 			<BeadForm

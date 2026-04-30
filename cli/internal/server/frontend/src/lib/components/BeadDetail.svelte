@@ -243,7 +243,7 @@
 			case 'in-progress':
 				return 'text-accent-load dark:text-dark-accent-load';
 			case 'closed':
-				return 'text-green-600 dark:text-green-400';
+				return 'text-status-closed dark:text-status-closed';
 			case 'blocked':
 				return 'text-error dark:text-dark-error';
 			default:
@@ -275,7 +275,7 @@
 				class="shrink-0 rounded-none p-1 text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink"
 			>
 				{#if idCopied}
-					<Check class="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+					<Check class="h-3.5 w-3.5 text-status-closed" />
 				{:else}
 					<Copy class="h-3.5 w-3.5" />
 				{/if}
