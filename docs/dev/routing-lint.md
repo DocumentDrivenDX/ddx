@@ -27,6 +27,9 @@ identifiers and flag/config-key strings must not reappear anywhere in
 `cli/` Go source. If they do, the routing cleanup has regressed and CI
 fails.
 
+These retired names are not active DDx routing APIs. They may appear only in
+lint fixtures, hard-error rejection paths, or migration/deprecation docs.
+
 ## What it checks
 
 Two closed lists, both maintained as Go constants in
