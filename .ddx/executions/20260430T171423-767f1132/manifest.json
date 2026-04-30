@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260430T171423-767f1132",
+  "bead_id": "ddx-a65fea8a",
+  "base_rev": "849956c5a49ee8632969c118a10fee0fb81ce5fb",
+  "created_at": "2026-04-30T17:14:23.940183015Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a65fea8a",
+    "title": "bug: endpoint and model policy still runs inside DDx service adapter",
+    "description": "Review finding from fresh-eyes review.\nFile: cli/internal/agent/serviceconfig.go:238\nCategory: integration\nSeverity: high\nDescription: DDx's service adapter filters configured endpoints by probing /models before constructing the upstream service config, synthesizes profile mappings from BuiltinCatalog, and infers thinking-model request timeouts from model names. These are provider/model policy decisions in DDx, not neutral execution intent.\nSuggested fix: Pass endpoint configuration through to upstream without live filtering or model-class inference. Keep only explicit user timeout values and status-only configured-provider snapshots. Delete DDx profile mappings from BuiltinCatalog/capabilities on execution paths.",
+    "acceptance": "NewServiceFromWorkDir does not filter endpoints by /models reachability; execution paths do not use BuiltinCatalog/ProfileMappings/isThinkingModel for routing policy; tests assert unreachable endpoints are passed to agent service and surfaced by status, not removed by DDx.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "helix",
+      "phase:build",
+      "review-finding",
+      "area:agent",
+      "area:routing"
+    ],
+    "metadata": {
+      "spec_id": "FEAT-006"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T171423-767f1132",
+    "prompt": ".ddx/executions/20260430T171423-767f1132/prompt.md",
+    "manifest": ".ddx/executions/20260430T171423-767f1132/manifest.json",
+    "result": ".ddx/executions/20260430T171423-767f1132/result.json",
+    "checks": ".ddx/executions/20260430T171423-767f1132/checks.json",
+    "usage": ".ddx/executions/20260430T171423-767f1132/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a65fea8a-20260430T171423-767f1132"
+  }
+}
