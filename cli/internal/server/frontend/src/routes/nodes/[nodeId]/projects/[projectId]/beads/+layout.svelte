@@ -266,18 +266,24 @@
 		goto(searchStr ? `${beadPath}?${searchStr}` : beadPath);
 	}
 
-	function statusClass(status: string): string {
+	function statusBadgeClass(status: string): string {
 		switch (status) {
 			case 'open':
-				return 'text-status-open';
+				return 'badge-status-open';
 			case 'in-progress':
-				return 'text-status-in-progress';
+				return 'badge-status-in-progress';
 			case 'closed':
-				return 'text-status-closed';
+				return 'badge-status-closed';
 			case 'blocked':
-				return 'text-status-blocked';
+				return 'badge-status-blocked';
+			case 'running':
+				return 'badge-status-running';
+			case 'completed':
+				return 'badge-status-completed';
+			case 'failed':
+				return 'badge-status-failed';
 			default:
-				return 'text-gray-500 dark:text-gray-400';
+				return 'badge-status-open';
 		}
 	}
 
@@ -289,6 +295,10 @@
 
 	function priorityLabel(priority: number): string {
 		return `P${priority}`;
+	}
+
+	function priorityClass(priority: number): string {
+		return priority === 0 ? 'text-priority-p0' : 'text-gray-600 dark:text-gray-300';
 	}
 </script>
 
@@ -393,7 +403,7 @@
 	{/if}
 
 	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-		<table class="w-full text-sm">
+		<table class="w-full border-collapse text-sm">
 			<thead>
 				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
 					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">ID</th>
@@ -425,7 +435,7 @@
 							? 'bg-blue-50 dark:bg-blue-900/20'
 							: ''}"
 					>
-						<td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 font-mono text-xs text-lever">
 							{edge.node.id}
 						</td>
 						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
@@ -451,14 +461,14 @@
 						</td>
 						<td class="px-4 py-3">
 							<span
-								class="font-medium {statusClass(
+								class="inline-block border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {statusBadgeClass(
 									liveStatusOverrides.get(edge.node.id) ?? edge.node.status
 								)}"
 							>
 								{liveStatusOverrides.get(edge.node.id) ?? edge.node.status}
 							</span>
 						</td>
-						<td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-right font-mono text-xs font-medium {priorityClass(edge.node.priority)}">
 							{priorityLabel(edge.node.priority)}
 						</td>
 						<td class="px-4 py-3 text-gray-600 dark:text-gray-300">

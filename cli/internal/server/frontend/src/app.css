@@ -169,5 +169,64 @@
 	.text-status-failed {
 		color: var(--status-failed-text);
 	}
+
+	/* lever-steel accent for ID column */
+	.text-lever {
+		color: var(--status-open-text);
+	}
+
+	/* status badges: tint surface + hairline border, sharp corners, label-caps */
+	.badge-status-open {
+		color: var(--status-open-text);
+		background-color: var(--status-open-surface);
+		border-color: var(--status-open-border);
+	}
+	.badge-status-in-progress {
+		color: var(--status-in-progress-text);
+		background-color: var(--status-in-progress-surface);
+		border-color: var(--status-in-progress-border);
+	}
+	.badge-status-closed {
+		color: var(--status-closed-text);
+		background-color: var(--status-closed-surface);
+		border-color: var(--status-closed-border);
+	}
+	.badge-status-blocked {
+		color: var(--status-blocked-text);
+		background-color: var(--status-blocked-surface);
+		border-color: var(--status-blocked-border);
+	}
+	.badge-status-running {
+		color: var(--status-running-text);
+		background-color: var(--status-running-surface);
+		border-color: var(--status-running-border);
+	}
+	.badge-status-completed {
+		color: var(--status-completed-text);
+		background-color: var(--status-completed-surface);
+		border-color: var(--status-completed-border);
+	}
+	.badge-status-failed {
+		color: var(--status-failed-text);
+		background-color: var(--status-failed-surface);
+		border-color: var(--status-failed-border);
+	}
+
+	/* priority text colors */
+	.text-priority-p0 {
+		color: var(--priority-p0-text);
+	}
+	.text-priority-p1 {
+		color: var(--priority-p1-text);
+	}
+	.text-priority-p2 {
+		color: var(--priority-p2-text);
+	}
+	.text-priority-p3 {
+		color: var(--priority-p3-text);
+	}
+	.text-priority-p4 {
+		color: var(--priority-p4-text);
+	}
 }
 
