@@ -87,7 +87,7 @@
 		<span
 			id={tooltipId}
 			role="tooltip"
-			class="absolute z-50 max-w-xs rounded-md bg-gray-950 px-2.5 py-1.5 text-xs leading-5 font-medium whitespace-nowrap text-white shadow-lg shadow-gray-950/20 dark:bg-gray-100 dark:text-gray-950 dark:shadow-black/30 {sideClass()} {alignClass()}"
+			class="absolute z-50 max-w-xs rounded-none bg-fg-ink px-2.5 py-1.5 text-xs leading-5 font-medium whitespace-nowrap text-white shadow-lg shadow-fg-ink/20 dark:bg-dark-fg-ink dark:text-fg-ink dark:shadow-black/30 {sideClass()} {alignClass()}"
 		>
 			{#if tooltip}
 				{@render tooltip()}

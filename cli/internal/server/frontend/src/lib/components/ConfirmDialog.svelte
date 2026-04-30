@@ -43,12 +43,12 @@
 	let restoreFocusTarget: HTMLElement | null = null;
 
 	const iconClass = $derived(
-		destructive ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'
+		destructive ? 'text-error dark:text-dark-error' : 'text-accent-lever dark:text-dark-accent-lever'
 	);
 	const actionClass = $derived(
 		destructive
-			? 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500 disabled:bg-red-400 dark:bg-red-600 dark:hover:bg-red-500 dark:disabled:bg-red-900'
-			: 'bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500 disabled:bg-blue-400 dark:bg-blue-600 dark:hover:bg-blue-500 dark:disabled:bg-blue-900'
+			? 'bg-error text-white hover:bg-error/90 focus-visible:ring-error disabled:bg-error/60 dark:bg-dark-error dark:text-fg-ink dark:hover:bg-dark-error/90 dark:disabled:bg-dark-error/40'
+			: 'bg-accent-lever text-white hover:bg-accent-lever/90 focus-visible:ring-accent-lever disabled:bg-accent-lever/60 dark:bg-dark-accent-lever dark:text-fg-ink dark:hover:bg-dark-accent-lever/90 dark:disabled:bg-dark-accent-lever/40'
 	);
 
 	$effect(() => {
@@ -117,16 +117,16 @@
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
 	<Dialog.Portal>
 		<Dialog.Overlay
-			class="fixed inset-0 z-50 bg-gray-950/45 backdrop-blur-[2px] dark:bg-black/60"
+			class="fixed inset-0 z-50 bg-fg-ink/45 backdrop-blur-[2px] dark:bg-black/60"
 		/>
 		<Dialog.Content
 			aria-label={title}
 			onEscapeKeydown={handleEscape}
-			class="fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-2xl shadow-gray-950/20 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:shadow-black/50"
+			class="fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-none border border-border-line bg-bg-elevated p-0 text-fg-ink shadow-2xl shadow-fg-ink/20 focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:shadow-black/50"
 		>
-			<div class="flex items-start gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+			<div class="flex items-start gap-3 border-b border-border-line px-5 py-4 dark:border-dark-border-line">
 				<div
-					class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-gray-800"
+					class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-none bg-bg-surface dark:bg-dark-bg-surface"
 				>
 					<AlertTriangle class="h-5 w-5 {iconClass}" aria-hidden="true" />
 				</div>
@@ -135,14 +135,14 @@
 						{title}
 					</Dialog.Title>
 					{#if summary}
-						<Dialog.Description class="mt-1 text-sm leading-5 text-gray-600 dark:text-gray-300">
+						<Dialog.Description class="mt-1 text-sm leading-5 text-fg-muted dark:text-dark-fg-muted">
 							{@render summary()}
 						</Dialog.Description>
 					{/if}
 				</div>
 				<button
 					type="button"
-					class="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+					class="rounded-none p-1.5 text-fg-muted hover:bg-bg-surface hover:text-fg-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-lever dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface dark:hover:text-dark-fg-ink"
 					aria-label="Close dialog"
 					onclick={() => cancel('cancel')}
 				>
@@ -151,24 +151,24 @@
 			</div>
 
 			{#if children}
-				<div class="px-5 py-4 text-sm leading-6 text-gray-700 dark:text-gray-300">
+				<div class="px-5 py-4 text-sm leading-6 text-fg-ink dark:text-dark-fg-ink">
 					{@render children()}
 				</div>
 			{/if}
 
 			<div
-				class="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-900/70"
+				class="flex items-center justify-end gap-2 border-t border-border-line bg-bg-canvas px-5 py-4 dark:border-dark-border-line dark:bg-dark-bg-canvas/70"
 			>
 				<button
 					type="button"
-					class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+					class="rounded-none border border-border-line bg-bg-elevated px-3 py-2 text-sm font-medium text-fg-ink hover:bg-bg-canvas focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-lever disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink dark:hover:bg-dark-bg-canvas"
 					onclick={() => cancel('cancel')}
 				>
 					{cancelLabel}
 				</button>
 				<button
 					type="button"
-					class="rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed {actionClass} dark:focus-visible:ring-offset-gray-900"
+					class="rounded-none px-3 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elevated disabled:cursor-not-allowed {actionClass} dark:focus-visible:ring-offset-dark-bg-elevated"
 					disabled={confirmDisabled || confirming}
 					onclick={confirm}
 				>
