@@ -1,0 +1,39 @@
+/*
+ * DDx palette overrides — sourced from /DESIGN.md (alpha 0.1.0).
+ *
+ * Hextra synthesizes primary tints/shades from --primary-hue/saturation/lightness
+ * (HSL). Setting them here re-tints links, accents, and focus rings to the DDx
+ * primary (#4878C6 ≈ HSL 217, 52%, 53%).
+ *
+ * Secondary (#35A35F) and tertiary (#8E35A3) are exposed as custom variables for
+ * future shortcodes/partials that want to reach beyond the primary scale. They
+ * intentionally do not override Hextra's own variables — Hextra only parameterises
+ * the primary scale, so trying to remap secondary/tertiary into the precompiled
+ * Tailwind utility classes would require forking the theme. See
+ * docs/helix/02-design/plan-2026-04-29-visual-suite.md §V3.5 for the spike notes.
+ */
+
+:root {
+  /* Primary scale — drives Hextra's link/accent/focus utilities. */
+  --primary-hue: 217deg;
+  --primary-saturation: 52%;
+  --primary-lightness: 53%;
+
+  /* DESIGN.md tokens, exposed for project-local layouts. */
+  --ddx-color-primary: #4878C6;
+  --ddx-color-secondary: #35A35F;
+  --ddx-color-tertiary: #8E35A3;
+  --ddx-color-background: #FFFFFF;
+  --ddx-color-surface: #F9FAFB;
+  --ddx-color-surface-dark: #0F1117;
+  --ddx-color-text: #111827;
+  --ddx-color-text-muted: #6B7280;
+  --ddx-color-border: #E5E7EB;
+  --ddx-color-terminal-bg: #0F1117;
+  --ddx-color-terminal-fg: #E8EAF0;
+}
+
+.dark {
+  /* Slightly lift lightness in dark mode so links remain legible on #0F1117. */
+  --primary-lightness: 62%;
+}
