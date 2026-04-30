@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260430T190901-f9463b3f",
+  "bead_id": "ddx-ccbf6172",
+  "base_rev": "f9ea4558d644a88f93754c67df3d522d6880f4fa",
+  "created_at": "2026-04-30T19:09:02.323827957Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ccbf6172",
+    "title": "artifacts backend: GraphQL Artifact type + artifacts query + resolver",
+    "description": "Add the GraphQL Artifact type and artifacts query to schema.graphql and implement the resolver.\n\nArtifact type fields: id, path, title, mediaType, generatedBy (runId, promptSummary, sourceHashMatch bool), staleness (fresh/stale/missing), ddxFrontmatter, description, updatedAt.\n\nartifacts(projectID, mediaType, search, first, after): query scanning .ddx sidecar files (.ddx.yaml alongside artifacts) and the document library. Resolver reads FEAT-007 doc graph for documents; reads .ddx/plugins/**/*.* sidecars for other artifact types. Returns Relay cursor connection.\n\nNote: existing ExecutionRun type in schema is unrelated (exec-definition results). New Artifact type is independent.",
+    "acceptance": "1. Artifact type present in schema with all fields.\n2. artifacts query returns paginated results scoped to a projectID.\n3. mediaType filter narrows results correctly.\n4. search parameter matches title and path.\n5. Resolver handles missing sidecars gracefully (no crash, artifact omitted or mediaType=unknown).\n6. Go tests cover resolver with fixture project containing markdown, image, and unknown-type artifacts.",
+    "labels": [
+      "area:graphql",
+      "area:server",
+      "feat-008",
+      "feat-021",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:01.293764736Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190901-f9463b3f",
+    "prompt": ".ddx/executions/20260430T190901-f9463b3f/prompt.md",
+    "manifest": ".ddx/executions/20260430T190901-f9463b3f/manifest.json",
+    "result": ".ddx/executions/20260430T190901-f9463b3f/result.json",
+    "checks": ".ddx/executions/20260430T190901-f9463b3f/checks.json",
+    "usage": ".ddx/executions/20260430T190901-f9463b3f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ccbf6172-20260430T190901-f9463b3f"
+  }
+}
