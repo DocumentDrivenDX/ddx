@@ -597,7 +597,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				return agent.ExecuteBeadReport{}, err
 			}
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, log); landErr != nil && err == nil {
+				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, postLandCommandFromConfig(projectRoot), log); landErr != nil && err == nil {
 					err = landErr
 				}
 			} else if res != nil && res.ResultRev == res.BaseRev {
@@ -1567,6 +1567,7 @@ func evaluateGatesAndSubmit(
 	res *agent.ExecuteBeadResult,
 	gitOps agent.GitOps,
 	coordinator gateLandSubmitter,
+	postLandCommand []string,
 	log io.Writer,
 ) error {
 	wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps)
@@ -1608,12 +1609,21 @@ func evaluateGatesAndSubmit(
 
 	// Gates passed (or no governing IDs / soft-failure): submit to coordinator.
 	landReq := agent.BuildLandRequestFromResult(projectRoot, res)
+	landReq.PostLandCommand = append([]string(nil), postLandCommand...)
 	landRes, landErr := coordinator.Submit(landReq)
 	if landErr != nil {
 		return landErr
 	}
 	agent.ApplyLandResultToExecuteBeadResult(res, landRes)
 	return nil
+}
+
+func postLandCommandFromConfig(projectRoot string) []string {
+	cfg, err := config.LoadWithWorkingDir(projectRoot)
+	if err != nil || cfg == nil || cfg.Git == nil || len(cfg.Git.PostLandCommand) == 0 {
+		return nil
+	}
+	return append([]string(nil), cfg.Git.PostLandCommand...)
 }
 
 func relToProject(projectRoot, path string) string {

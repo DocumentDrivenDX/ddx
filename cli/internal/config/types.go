@@ -190,9 +190,10 @@ type TsnetConfig struct {
 
 // GitConfig represents git integration configuration settings.
 type GitConfig struct {
-	AutoCommit       string `yaml:"auto_commit,omitempty" json:"auto_commit,omitempty"`
-	CommitPrefix     string `yaml:"commit_prefix,omitempty" json:"commit_prefix,omitempty"`
-	CheckpointPrefix string `yaml:"checkpoint_prefix,omitempty" json:"checkpoint_prefix,omitempty"`
+	AutoCommit       string   `yaml:"auto_commit,omitempty" json:"auto_commit,omitempty"`
+	CommitPrefix     string   `yaml:"commit_prefix,omitempty" json:"commit_prefix,omitempty"`
+	CheckpointPrefix string   `yaml:"checkpoint_prefix,omitempty" json:"checkpoint_prefix,omitempty"`
+	PostLandCommand  []string `yaml:"post_land_command,omitempty" json:"post_land_command,omitempty"`
 }
 
 // AgentConfig represents agent service configuration in .ddx/config.yaml

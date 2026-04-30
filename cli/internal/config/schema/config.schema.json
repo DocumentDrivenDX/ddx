@@ -162,6 +162,24 @@
             "checkpoint",
             "wip"
           ]
+        },
+        "post_land_command": {
+          "type": "array",
+          "description": "Command argv to run after a local automatic land advances the target ref and before push",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            [
+              "make",
+              "test"
+            ],
+            [
+              "sh",
+              "-c",
+              "go test ./..."
+            ]
+          ]
         }
       },
       "additionalProperties": false

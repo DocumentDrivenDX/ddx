@@ -139,6 +139,25 @@ func (r *recordingSubmitter) Submit(req agent.LandRequest) (*agent.LandResult, e
 	return r.inner.Submit(req)
 }
 
+func TestPostLandCommandFromConfig(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+git:
+  post_land_command:
+    - sh
+    - -c
+    - make test
+`), 0o644))
+
+	assert.Equal(t, []string{"sh", "-c", "make test"}, postLandCommandFromConfig(root))
+}
+
 // TestWorker_RequiredGatePass_LandsViaCoordinator: gate exits 0 → main
 // advances to ResultRev (via coordinator), checks.json exists with PASS.
 func TestWorker_RequiredGatePass_LandsViaCoordinator(t *testing.T) {
@@ -166,7 +185,7 @@ func TestWorker_RequiredGatePass_LandsViaCoordinator(t *testing.T) {
 	rec := &recordingSubmitter{inner: m.LandCoordinators.Get(root)}
 
 	var logBuf bytes.Buffer
-	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, &logBuf))
+	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, nil, &logBuf))
 
 	// Coordinator MUST have been called (gates passed).
 	assert.Len(t, rec.calls, 1, "coordinator must be called when required gates pass")
@@ -215,7 +234,7 @@ func TestWorker_RequiredGateFail_PreservesWithoutCoordinator(t *testing.T) {
 	rec := &recordingSubmitter{inner: m.LandCoordinators.Get(root)}
 
 	var logBuf bytes.Buffer
-	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, &logBuf))
+	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, nil, &logBuf))
 
 	// Coordinator MUST NOT have been called (gate failed → preserve directly).
 	assert.Empty(t, rec.calls, "coordinator must NOT be called when required gate fails")
@@ -281,7 +300,7 @@ func TestWorker_NoGoverningIDs_LandsViaCoordinator(t *testing.T) {
 	rec := &recordingSubmitter{inner: m.LandCoordinators.Get(root)}
 
 	var logBuf bytes.Buffer
-	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, &logBuf))
+	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, nil, &logBuf))
 
 	// Coordinator MUST have been called (no gates → submit path).
 	assert.Len(t, rec.calls, 1, "coordinator must be called when no governing IDs")

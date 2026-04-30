@@ -44,9 +44,11 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
@@ -91,6 +93,12 @@ type LandRequest struct {
 	// agent's commit SHA is NOT amended — the evidence commit is a separate
 	// child commit, preserving closing_commit_sha references.
 	EvidenceDir string
+
+	// PostLandCommand is an optional project verification command run after
+	// Land() advances the local target ref and syncs the worktree, but before
+	// evidence commit creation or push. A failure restores the target ref to
+	// its pre-land SHA and preserves ResultRev under refs/ddx/iterations.
+	PostLandCommand []string
 }
 
 // LandResult describes the outcome of a single Land() call.
@@ -665,6 +673,11 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 			Merged:            false,
 			MergedCommitCount: contribCount,
 		}
+		if preserved, err := preserveIfPostLandGateFails(wd, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
+			return nil, err
+		} else if preserved != nil {
+			return preserved, nil
+		}
 		if req.EvidenceDir != "" {
 			landEvidence(wd, targetBranch, req, gitOps, result)
 		}
@@ -726,11 +739,69 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		Merged:            true,
 		MergedCommitCount: contribCount,
 	}
+	if preserved, err := preserveIfPostLandGateFails(wd, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
+		return nil, err
+	} else if preserved != nil {
+		return preserved, nil
+	}
 	if req.EvidenceDir != "" {
 		landEvidence(wd, targetBranch, req, gitOps, result)
 	}
 	landPush(wd, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 	return result, nil
+}
+
+func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int) (*LandResult, error) {
+	if len(req.PostLandCommand) == 0 {
+		return nil, nil
+	}
+	output, err := runPostLandCommand(wd, req.PostLandCommand)
+	if err == nil {
+		return nil, nil
+	}
+
+	preserveRef := landIterationRef(req.BeadID, req.AttemptID, preLandTip)
+	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
+		return nil, fmt.Errorf("preserving %s after post-land gate: %w", preserveRef, upErr)
+	}
+	if revertErr := gitOps.UpdateRefTo(wd, targetRef, preLandTip, landedTip); revertErr != nil {
+		return nil, fmt.Errorf("restoring %s to %s after post-land gate failed: %w", targetRef, preLandTip, revertErr)
+	}
+	_ = gitOps.SyncWorkTreeToHead(wd, landedTip)
+
+	reason := fmt.Sprintf("post-land gate failed: %s: %v", strings.Join(req.PostLandCommand, " "), err)
+	if trimmed := strings.TrimSpace(output); trimmed != "" {
+		reason += ": " + truncatePostLandGateOutput(trimmed)
+	}
+	return &LandResult{
+		Status:            "preserved",
+		PreserveRef:       preserveRef,
+		Reason:            reason,
+		MergedCommitCount: contribCount,
+	}, nil
+}
+
+func runPostLandCommand(wd string, command []string) (string, error) {
+	if len(command) == 0 {
+		return "", nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+	cmd.Dir = wd
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return string(out), ctx.Err()
+	}
+	return string(out), err
+}
+
+func truncatePostLandGateOutput(output string) string {
+	const max = 2048
+	if len(output) <= max {
+		return output
+	}
+	return output[:max] + "...(truncated)"
 }
 
 type largeDeletionFinding struct {

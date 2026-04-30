@@ -568,6 +568,72 @@ func TestLand_TruncatedSvelteSyntaxPreservedBeforeFastForward(t *testing.T) {
 	}
 }
 
+func TestLand_PostLandGateFailureRestoresTargetAndPreserves(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:     r.dir,
+		BaseRev:         r.baseSHA,
+		ResultRev:       workerSHA,
+		BeadID:          "ddx-land-post-gate-fail",
+		AttemptID:       "20260430T120200-post-gate-fail",
+		TargetBranch:    "main",
+		PostLandCommand: []string{"sh", "-c", "printf 'build failed'; exit 7"},
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "preserved" {
+		t.Fatalf("expected status=preserved, got %q", land.Status)
+	}
+	if !strings.Contains(land.Reason, "post-land gate failed") || !strings.Contains(land.Reason, "build failed") {
+		t.Fatalf("expected post-land gate reason with command output, got %q", land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main tip = %s, want restored base %s", got, r.baseSHA)
+	}
+	if got := r.resolveRef(land.PreserveRef); got != workerSHA {
+		t.Fatalf("preserve ref resolves to %s, want %s", got, workerSHA)
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, "feature.txt")); !os.IsNotExist(err) {
+		t.Fatalf("feature.txt should not remain in main worktree after post-land rollback, stat err=%v", err)
+	}
+}
+
+func TestLand_PostLandGatePassLeavesTargetAdvanced(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:     r.dir,
+		BaseRev:         r.baseSHA,
+		ResultRev:       workerSHA,
+		BeadID:          "ddx-land-post-gate-pass",
+		AttemptID:       "20260430T120201-post-gate-pass",
+		TargetBranch:    "main",
+		PostLandCommand: []string{"sh", "-c", "test -f feature.txt"},
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != workerSHA {
+		t.Fatalf("main tip = %s, want worker %s", got, workerSHA)
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, "feature.txt")); err != nil {
+		t.Fatalf("feature.txt should remain in main worktree after passing post-land gate: %v", err)
+	}
+}
+
 // TestLand_ConcurrentSubmissions_Serialized spawns N concurrent Land() calls
 // through a single coordinator-like serialization (sync.Mutex) and asserts
 // that (a) all N worker commits are reachable from main, (b) each non-first
