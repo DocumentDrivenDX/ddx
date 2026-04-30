@@ -51,16 +51,28 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 18. Configurable ID prefix (auto-detected from repo name)
 19. Backend abstraction (jsonl/bd/br)
 
-**Agent Service (implemented — FEAT-006)**
-20. `ddx agent run --profile=<default|cheap|fast|smart> --prompt <file>` — invoke an AI agent through automatic routing
-20b. `ddx agent run --model <ref-or-exact> [--effort <level>]` — request a specific model ref, alias, or exact model pin
-20c. `ddx agent run --harness=<name>` — explicitly override automatic routing and force one harness
-21. `ddx agent run --quorum=majority --harnesses=a,b` — multi-agent consensus
-22. `ddx agent list` — show available harnesses with availability status
-23. `ddx agent doctor` — harness health and routing-readiness check (installed, reachable, authenticated, quota state, degradation)
-24. `ddx agent log [session-id]` — session history with token tracking
-25. `ddx agent capabilities [harness]` — show reasoning levels, exact-pin support, and effective profile/model mappings for a harness
-25b. `ddx agent usage [--since] [--harness] [--format]` — token and cost consumption summary (FEAT-014)
+**Three-Layer Run Architecture (top-level — FEAT-006/FEAT-010)**
+20. `ddx run --profile=<default|cheap|fast|smart> --prompt <file>` — layer-1: invoke an AI agent through automatic routing (single agent invocation atom)
+20b. `ddx run --model <ref-or-exact> [--effort <level>]` — request a specific model ref, alias, or exact model pin
+20c. `ddx run --harness=<name>` — explicitly override automatic routing and force one harness
+20d. `ddx try <bead> [--from <rev>] [--no-merge]` — layer-2: bead attempt in isolated worktree with merge-or-preserve semantics
+20e. `ddx work` — layer-3: drain the bead execution queue (mechanical drain; supervisory decisions stay in plugins/HELIX)
+21. ~~`--quorum=majority --harnesses=a,b`~~ — **removed**. Multi-agent consensus moves to the `compare-prompts` skill (FEAT-011); no `--quorum` flag in core.
+
+**Run Evidence & Layer Namespaces**
+21a. `ddx runs <subcommand>` — cross-layer evidence introspection (log, metrics, history) over the unified run substrate
+21b. `ddx tries <subcommand>` — layer-2 specifically (worktree start/end records, merge or preserve outcomes)
+21c. `ddx work workers <subcommand>` — layer-3 worker management
+
+**Agent Passthrough — Structural Mount (FEAT-006)**
+
+`ddx agent` mounts the upstream `ddx-agent` Cobra root structurally per CONTRACT-003. DDx imports the upstream agent module's Cobra root and grafts it under `ddx agent`; notionally `cli(ddx).agent(load_cli(agent))`. The entire upstream subcommand tree is the source of truth — DDx does not enumerate per-subcommand wrappers (no DDx reimplementations of `list`, `doctor`, `capabilities`, `models`, `providers`, etc.).
+
+22. `ddx agent <upstream-subcommand>` — every subcommand defined by the upstream agent CLI is reachable here without DDx-side enumeration
+23. DDx-side overrides on the mounted subtree:
+    - **Hard-deprecation handlers** for `ddx agent run`, `ddx agent execute-bead`, `ddx agent execute-loop` — exit non-zero with a bare redirect message pointing to `ddx run` / `ddx try` / `ddx work` respectively. No aliases, no grace period, no shims.
+    - `ddx agent condense` — DDx-specific output filter (override or upstream during impl pass)
+24. `ddx agent log` and related run-evidence surfaces are no longer DDx-defined under `agent` — they live under `ddx runs` (see 21a). Token/cost/usage surfaces likewise consolidate under `ddx runs metrics` (FEAT-014).
 
 **Execution Service (in progress — FEAT-010)**
 26. `ddx exec list [--artifact ID]` — list execution definitions
@@ -88,9 +100,6 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 39. `ddx search <query>` — search available resources
 40. `ddx installed` — list installed packages
 41. `ddx verify` — check integrity of installed packages
-
-**Queue Work (not started — FEAT-006)**
-48. `ddx work` — top-level alias for `ddx agent execute-loop`. All execute-loop flags pass through unchanged. "Work the queue" becomes `ddx work`. This is the primary operator-facing surface for draining the bead execution queue; `ddx agent execute-loop` remains available for scripts and backward compatibility.
 
 **Embedded Utilities**
 47. `ddx jq <filter> [file...]` — embedded jq processor (powered by gojq), eliminating external jq dependency for HELIX and other workflow tools. Supports standard jq flags: `-r`, `-c`, `-s`, `-n`, `-R`, `-e`, `-j`, `-S`, `--tab`, `--indent`, `--arg`, `--argjson`, `--slurpfile`. Reads from stdin or file arguments. Pure Go, no CGo.
