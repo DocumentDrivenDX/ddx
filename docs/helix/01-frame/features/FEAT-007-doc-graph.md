@@ -4,16 +4,22 @@ ddx:
   depends_on:
     - helix.prd
 ---
-# Feature: Document Dependency Graph
+# Feature: Artifact Dependency Graph
 
 **ID:** FEAT-007
-**Status:** Complete
+**Status:** In Progress
 **Priority:** P0
 **Owner:** DDx Team
 
 ## Overview
 
-DDx tracks dependencies between documents using YAML frontmatter metadata. When an upstream document changes, DDx detects which downstream documents are stale and need review. This is the "keep documents honest" capability — the infrastructure that prevents document drift.
+DDx tracks dependencies between artifacts using identity metadata. Markdown
+artifacts declare identity in YAML frontmatter under `ddx:`. Non-markdown
+artifacts (diagrams, images, prompts, PDFs, binaries, and other media) declare
+the same identity in a sidecar `<filename>.ddx.yaml` file. When an upstream
+artifact changes, DDx detects which downstream artifacts are stale and need
+review. This is the "keep artifacts honest" capability — the infrastructure
+that prevents document and generated-media drift.
 
 Workflow tools and check runners consume the graph to enforce document quality. DDx owns the graph model, staleness detection, hashing, and stamping. Check runners delegate graph operations to DDx rather than implementing their own.
 
@@ -27,7 +33,7 @@ Workflow tools and check runners consume the graph to enforce document quality. 
 - No MCP endpoint for agents to query document relationships
 - The `dun:` frontmatter prefix ties a generic concept to a specific tool
 
-**Desired outcome:** DDx owns the document graph as a first-class service. Any tool can query it. The `ddx:` frontmatter convention is the standard way to declare document identity and dependencies.
+**Desired outcome:** DDx owns the artifact graph as a first-class service. Any tool can query it. The `ddx:` frontmatter convention and `.ddx.yaml` sidecars are the standard ways to declare artifact identity and dependencies.
 
 ## The `ddx:` Frontmatter Convention
 
@@ -61,8 +67,10 @@ Content here...
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | yes | Unique document identifier (e.g., `helix.prd`, `SD-001`) |
+| `media_type` | string | no | IANA-style media type. Markdown frontmatter defaults to `text/markdown`; sidecars should set this explicitly. |
 | `depends_on` | []string | no | IDs of documents this one depends on |
 | `inputs` | []string | no | Input selectors for prompt context resolution |
+| `generated_by` | object | no | Provenance for generated artifacts: `{ run, prompt, source_hash }`. This creates a provenance edge, not an authority edge. |
 | `review` | object | no | Staleness tracking metadata (managed by `ddx doc stamp`) |
 | `review.self_hash` | string | auto | Content hash of this document (excluding review block) |
 | `review.deps` | map[string]string | auto | Map of dependency ID → hash at last review |
@@ -76,12 +84,63 @@ Content here...
 - Documents without `ddx:` frontmatter are ignored by the graph.
 - Unknown fields within the `ddx:` block are preserved on round-trip.
 
+## Sidecar Identity for Non-Markdown Artifacts
+
+Non-markdown artifacts use a sidecar whose filename is the full paired
+artifact filename plus `.ddx.yaml`:
+
+```text
+diagram.excalidraw       -> diagram.excalidraw.ddx.yaml
+hero.png                 -> hero.png.ddx.yaml
+system-prompt.txt        -> system-prompt.txt.ddx.yaml
+```
+
+The sidecar is plain YAML, not markdown frontmatter:
+
+```yaml
+id: DIAG-007
+media_type: application/vnd.excalidraw+json
+depends_on:
+  - SD-003
+generated_by:
+  run: run-20260429T120000Z
+  prompt: docs/prompts/diagram.prompt.md
+  source_hash: sha256:abc123
+review:
+  self_hash: "a3f2dd..."
+  deps:
+    SD-003: "7c6f43..."
+  reviewed_at: "2026-04-29T12:00:00Z"
+```
+
+Sidecar rules:
+
+- The sidecar and paired artifact must be in the same directory.
+- A sidecar with no paired artifact is a dangling-sidecar error.
+- Markdown files must use embedded `ddx:` frontmatter, not sidecars.
+- `media_type` is required for sidecar identity and may be inferred only as a
+  fallback for display.
+- The scanner reads sidecar YAML and hashes the paired artifact bytes for
+  `review.self_hash`.
+
+## Generated-By Provenance
+
+`generated_by` records how an artifact was produced. It is a provenance edge,
+not an authority edge:
+
+- It does not participate in dependency staleness cascade the way
+  `depends_on` does.
+- A `generated_by.source_hash` mismatch marks the generated artifact itself as
+  regeneration-eligible.
+- It is still indexed so graph consumers can answer "which run produced this?"
+  and "which artifacts came from this run?"
+
 ## Requirements
 
 ### Functional
 
-1. **Frontmatter parsing** — read `ddx:` (and legacy `dun:`) YAML frontmatter from markdown files
-2. **Graph construction** — scan a directory tree, parse frontmatter, build a directed acyclic graph of document dependencies
+1. **Identity parsing** — read `ddx:` (and legacy `dun:`) YAML frontmatter from markdown files and sidecar `*.ddx.yaml` identity from non-markdown artifacts
+2. **Graph construction** — scan a directory tree, parse identity, build a directed acyclic graph of artifact dependencies
 3. **Content hashing** — deterministic hash of document content excluding the `review` block. Same content = same hash always.
 4. **Staleness detection** — a document is stale when any dependency's current hash differs from the hash recorded in `review.deps`
 5. **Cascade propagation** — if a document is stale, all its dependents are transitively stale
@@ -90,7 +149,8 @@ Content here...
 8. **Stale query** (`ddx doc stale`) — list stale documents
 9. **Input resolution** — resolve `inputs` selectors (`node:`, `refs:`, `code_refs:`, `paths:`) to actual content for prompt assembly
 10. **Graph configuration** — optional `.ddx/graphs/*.yaml` files defining required roots, ID-to-path mappings, and cascade rules
-11. **Body-link indexing** — scan document bodies for `[[ID]]` reference syntax and index those as graph edges alongside frontmatter-declared `depends_on` edges. Support plain IDs (`[[FEAT-001]]`), slugged IDs (`[[US-036-list-mcp-servers]]`), and dotted IDs (`[[helix.workflow.artifact-hierarchy]]`). Return the union of body links and frontmatter edges without duplicate edges.
+11. **Body-link indexing** — scan markdown document bodies for `[[ID]]` reference syntax and index those as graph edges alongside frontmatter-declared `depends_on` edges. Support plain IDs (`[[FEAT-001]]`), slugged IDs (`[[US-036-list-mcp-servers]]`), and dotted IDs (`[[helix.workflow.artifact-hierarchy]]`). Return the union of body links and frontmatter edges without duplicate edges. Body-link indexing is markdown-only; binary/media artifacts are indexed only through sidecars.
+12. **Media metadata** — expose `media_type` and `generated_by` metadata on graph nodes, HTTP responses, and MCP responses.
 
 ### Non-Functional
 
@@ -118,6 +178,8 @@ ddx doc dependents <id>             # Show what depends on a document
 | `ddx_doc_stale` | `GET /api/docs/stale` | List stale documents |
 | `ddx_doc_show` | `GET /api/docs/:id` | Document metadata and status |
 | `ddx_doc_deps` | `GET /api/docs/:id/deps` | Dependencies of a document |
+| `ddx_doc_sidecar` | `GET /api/docs/:id/sidecar` | Sidecar identity payload for non-markdown artifacts |
+| `ddx_doc_generated_by` | `GET /api/docs/:id/generated-by` | Generated-artifact provenance |
 
 ## User Stories
 
@@ -189,7 +251,10 @@ The following dun source files contain the logic to port:
 - Circular dependencies — detect and report, don't infinite loop
 - Missing dependency (ID referenced but document not found) — report as warning, don't fail
 - Mixed `dun:` and `ddx:` in same repo — read both, prefer `ddx:` if both present on same file
-- Binary files or non-markdown — skip silently
+- Binary files or non-markdown without sidecars — skip silently
+- Sidecar file without paired artifact — report dangling-sidecar error
+- Sidecar beside markdown file — report validation error; markdown uses frontmatter
+- `generated_by` target missing — warn and keep the artifact indexed
 - Very large repos (1000+ markdown files) — incremental scanning with caching
 
 ## Dependencies
