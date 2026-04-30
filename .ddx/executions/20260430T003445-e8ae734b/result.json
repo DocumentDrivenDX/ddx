@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Frame-only doc refactor cleanly executes all six items in the bead description against `docs/helix/01-frame/features/FEAT-001-cli.md`. The structural-mount language correctly defers enumeration to upstream rather than re-listing subcommands, matching the plan's intent."
+}
