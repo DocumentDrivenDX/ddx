@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "No modifications to `cli/internal/server/frontend/tailwind.config.js` (or Tailwind v4 `@theme` CSS) are present in the reviewed diff.\nNo evidence of running `bunx @google/design.md export --format tailwind` or of an exported theme JSON being committed.\nThe reviewed commit is purely execution-evidence bookkeeping; the substantive change appears to live in commit `00ddabd9` (\"feat(frontend): wire DESIGN.md tokens into Tailwind v4 config\") which was not included in the diff. Re-run review against `00ddabd9` to evaluate the actual wiring."
+}

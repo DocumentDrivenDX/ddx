@@ -171,26 +171,26 @@
 	function billingBadgeClass(mode: SessionNode['billingMode']): string {
 		switch (mode) {
 			case 'paid':
-				return 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200';
+				return 'badge-billing-paid';
 			case 'subscription':
-				return 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200';
+				return 'badge-billing-subscription';
 			case 'local':
-				return 'border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200';
+				return 'badge-billing-local';
 			default:
-				return 'border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200';
+				return 'badge-billing-local';
 		}
 	}
 
-	function statusClass(status: string): string {
+	function statusBadgeClass(status: string): string {
 		switch (status) {
 			case 'completed':
-				return 'text-status-completed';
+				return 'badge-status-completed';
 			case 'running':
-				return 'text-status-running';
+				return 'badge-status-running';
 			case 'failed':
-				return 'text-status-failed';
+				return 'badge-status-failed';
 			default:
-				return 'text-gray-500 dark:text-gray-400';
+				return 'badge-status-open';
 		}
 	}
 
@@ -206,59 +206,55 @@
 <div class="space-y-4">
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 		<div>
-			<h1 class="text-xl font-semibold dark:text-white">Sessions</h1>
-			<p class="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-300">
+			<h1 class="text-headline-lg font-headline-lg text-fg-ink dark:text-dark-fg-ink">Sessions</h1>
+			<p class="mt-1 max-w-2xl text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				Sessions are immutable agent-run history; Workers are the live queue-draining processes that
 				can produce many sessions.
 			</p>
 			<a
-				class="mt-2 inline-flex text-sm text-blue-600 hover:underline dark:text-blue-400"
+				class="mt-2 inline-flex text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
 				href={workersHref()}
 			>
 				Workers →
 			</a>
 		</div>
-		<span class="text-sm text-gray-700 dark:text-gray-300">
+		<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 			{data.sessions.totalCount} sessions
 		</span>
 	</div>
 
 	{#if recordingGap}
-		<div
-			class="border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100"
-		>
+		<div class="alert-caution border-l-4 px-3 py-2 text-body-sm">
 			{recordingGap}
 		</div>
 	{/if}
 
 	<!-- Token summary -->
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-8">
-		<div
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
-		>
-			<div class="text-xs text-gray-700 dark:text-gray-300">Sessions</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{data.sessions.totalCount}</div>
+		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Sessions</div>
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">{data.sessions.totalCount}</div>
 		</div>
 		<div
 			aria-label="Cash paid. Billed by pay-per-token APIs (OpenRouter, direct API keys)"
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+			class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface"
 		>
 			<div
-				class="group relative inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300"
+				class="group relative inline-flex items-center gap-1 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 			>
 				<span>Cash paid</span>
 				<span
-					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] dark:border-gray-600"
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-[10px] dark:border-dark-border-line"
 					>?</span
 				>
 				<span
 					role="tooltip"
-					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-56 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-56 border border-border-line bg-bg-elevated p-2 text-body-sm text-fg-ink shadow-lg group-focus-within:block group-hover:block dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				>
 					Billed by pay-per-token APIs (OpenRouter, direct API keys)
 				</span>
 			</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 				{fmtCardCost(
 					data.costSummary.cashUsd,
 					summary.paidSessions > 0 || data.costSummary.cashUsd > 0
@@ -267,25 +263,25 @@
 		</div>
 		<div
 			aria-label="Subscription value. Dollar-equivalent for tokens consumed under Claude Code / Codex subscriptions. Not cash out of pocket."
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+			class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface"
 		>
 			<div
-				class="group relative inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300"
+				class="group relative inline-flex items-center gap-1 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 			>
 				<span>Subscription value</span>
 				<span
-					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] dark:border-gray-600"
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-[10px] dark:border-dark-border-line"
 					>?</span
 				>
 				<span
 					role="tooltip"
-					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-64 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-64 border border-border-line bg-bg-elevated p-2 text-body-sm text-fg-ink shadow-lg group-focus-within:block group-hover:block dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				>
 					Dollar-equivalent for tokens consumed under Claude Code / Codex subscriptions. Not cash
 					out of pocket.
 				</span>
 			</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 				{fmtCardCost(
 					data.costSummary.subscriptionEquivUsd,
 					summary.subscriptionSessions > 0 || data.costSummary.subscriptionEquivUsd > 0
@@ -294,73 +290,65 @@
 		</div>
 		<div
 			aria-label="Local sessions. Sessions served locally. Compute cost not modeled."
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+			class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface"
 		>
 			<div
-				class="group relative inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300"
+				class="group relative inline-flex items-center gap-1 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 			>
 				<span>Local sessions</span>
 				<span
-					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] dark:border-gray-600"
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-[10px] dark:border-dark-border-line"
 					>?</span
 				>
 				<span
 					role="tooltip"
-					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-56 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+					class="pointer-events-none absolute top-6 left-0 z-20 hidden w-56 border border-border-line bg-bg-elevated p-2 text-body-sm text-fg-ink shadow-lg group-focus-within:block group-hover:block dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				>
 					Sessions served locally. Compute cost not modeled.
 				</span>
 			</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{fmtLocalValue()}</div>
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">{fmtLocalValue()}</div>
 		</div>
-		<div
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
-		>
-			<div class="text-xs text-gray-700 dark:text-gray-300">Total Tokens</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">
+		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Total Tokens</div>
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 				{summary.totalTokens.toLocaleString()}
 			</div>
 		</div>
-		<div
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
-		>
-			<div class="text-xs text-gray-700 dark:text-gray-300">Prompt</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">
+		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Prompt</div>
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 				{summary.totalPrompt.toLocaleString()}
 			</div>
 		</div>
-		<div
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
-		>
-			<div class="text-xs text-gray-700 dark:text-gray-300">Completion</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">
+		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Completion</div>
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 				{summary.totalCompletion.toLocaleString()}
 			</div>
 		</div>
-		<div
-			class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
-		>
-			<div class="text-xs text-gray-700 dark:text-gray-300">Cache Hit</div>
-			<div class="mt-1 text-lg font-semibold dark:text-white">{summary.cacheRate}%</div>
+		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cache Hit</div>
+			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">{summary.cacheRate}%</div>
 		</div>
 	</div>
 
 	<!-- Sessions list -->
-	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-		<table class="w-full text-sm">
+	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
+		<table class="w-full border-collapse text-sm">
 			<thead>
-				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
+				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
 					<th class="w-6 px-4 py-3"></th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">ID</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">ID</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 						>Harness / Model</th
 					>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Status</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Started</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Duration</th
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Status</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Started</th>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Duration</th
 					>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Cost</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Tokens</th>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cost</th>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Tokens</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -369,34 +357,34 @@
 					{@const isExpanded = expanded.has(s.id)}
 					<tr
 						onclick={() => toggle(s.id)}
-						class="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 {isExpanded
-							? 'bg-blue-50 dark:bg-blue-900/20'
+						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {isExpanded
+							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 					>
-						<td class="px-4 py-3 text-gray-400 dark:text-gray-500">
+						<td class="px-4 py-3 text-fg-muted dark:text-dark-fg-muted">
 							{isExpanded ? '▾' : '▸'}
 						</td>
-						<td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 font-mono-code text-mono-code text-lever">
 							{s.id.slice(0, 8)}
 						</td>
-						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
 							<span>{s.harness}</span>
-							<span class="ml-1 text-xs text-gray-600 dark:text-gray-400">{s.model}</span>
+							<span class="ml-1 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{s.model}</span>
 						</td>
 						<td class="px-4 py-3">
-							<span class="font-medium {statusClass(s.status)}">{s.status}</span>
+							<span class="inline-block border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {statusBadgeClass(s.status)}">{s.status}</span>
 						</td>
-						<td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							{fmtDate(s.startedAt)}
 						</td>
-						<td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-right text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							{fmtDuration(s.durationMs)}
 						</td>
-						<td class="px-4 py-3 text-right font-mono text-xs text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-right font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							<div class="flex items-center justify-end gap-2">
 								<span>{fmtCost(s.cost)}</span>
 								<span
-									class="group relative inline-flex min-w-10 justify-center rounded border px-1.5 py-0.5 font-sans text-[10px] leading-none font-semibold uppercase {billingBadgeClass(
+									class="group relative inline-flex min-w-10 justify-center border px-1.5 py-0.5 text-[10px] leading-none font-semibold uppercase {billingBadgeClass(
 										s.billingMode
 									)}"
 									aria-label="{billingBadge(s.billingMode)}: {billingDescription(s.billingMode)}"
@@ -404,38 +392,38 @@
 									{billingBadge(s.billingMode)}
 									<span
 										role="tooltip"
-										class="pointer-events-none absolute top-5 right-0 z-20 hidden w-64 rounded border border-gray-200 bg-white p-2 text-left text-xs font-normal text-gray-700 normal-case shadow-lg group-focus-within:block group-hover:block dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+										class="pointer-events-none absolute top-5 right-0 z-20 hidden w-64 border border-border-line bg-bg-elevated p-2 text-left text-body-sm font-normal text-fg-ink normal-case shadow-lg group-focus-within:block group-hover:block dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 									>
 										{billingDescription(s.billingMode)}
 									</span>
 								</span>
 							</div>
 						</td>
-						<td class="px-4 py-3 text-right font-mono text-xs text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-right font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							{s.tokens?.total?.toLocaleString() ?? '—'}
 						</td>
 					</tr>
 					{#if isExpanded}
 						{@const bodies = sessionBodies[s.id]}
 						<tr
-							class="border-b border-gray-100 bg-blue-50/50 dark:border-gray-700 dark:bg-blue-900/10"
+							class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface"
 						>
 							<td colspan="8" class="px-6 py-4">
 								<div class="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
 									<div>
-										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Bead</div>
-										<div class="mt-1 font-mono text-xs dark:text-gray-200">
+										<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Bead</div>
+										<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 											{s.beadId ?? '—'}
 										</div>
 									</div>
 									<div>
-										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Worker</div>
-										<div class="mt-1 font-mono text-xs dark:text-gray-200">
+										<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Worker</div>
+										<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 											{#if s.workerId}
 												<a
 													href={workerHref(s.workerId)}
 													onclick={(event) => event.stopPropagation()}
-													class="text-blue-600 hover:underline dark:text-blue-400"
+													class="text-accent-lever hover:underline dark:text-dark-accent-lever"
 												>
 													{s.workerId}
 												</a>
@@ -445,21 +433,21 @@
 										</div>
 									</div>
 									<div>
-										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Effort</div>
-										<div class="mt-1 dark:text-gray-200">{s.effort}</div>
+										<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Effort</div>
+										<div class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{s.effort}</div>
 									</div>
 									<div>
-										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Outcome</div>
-										<div class="mt-1 dark:text-gray-200">{s.outcome ?? '—'}</div>
+										<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Outcome</div>
+										<div class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{s.outcome ?? '—'}</div>
 									</div>
 									<div>
-										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Execution</div>
-										<div class="mt-1 font-mono text-xs dark:text-gray-200">
+										<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Execution</div>
+										<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 											{#if sessionExecutions[s.id]}
 												<a
 													href={executionHref(sessionExecutions[s.id] as string)}
 													onclick={(event) => event.stopPropagation()}
-													class="text-blue-600 hover:underline dark:text-blue-400"
+													class="text-accent-lever hover:underline dark:text-dark-accent-lever"
 												>
 													{(sessionExecutions[s.id] as string).slice(0, 18)}…
 												</a>
@@ -469,72 +457,72 @@
 										</div>
 									</div>
 									<div>
-										<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Ended</div>
-										<div class="mt-1 text-xs dark:text-gray-200">
+										<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Ended</div>
+										<div class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">
 											{s.endedAt ? fmtDate(s.endedAt) : '—'}
 										</div>
 									</div>
 									{#if s.tokens}
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 												Prompt tokens
 											</div>
-											<div class="mt-1 font-mono text-xs dark:text-gray-200">
+											<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 												{s.tokens.prompt?.toLocaleString() ?? '—'}
 											</div>
 										</div>
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 												Completion tokens
 											</div>
-											<div class="mt-1 font-mono text-xs dark:text-gray-200">
+											<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 												{s.tokens.completion?.toLocaleString() ?? '—'}
 											</div>
 										</div>
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 												Cached tokens
 											</div>
-											<div class="mt-1 font-mono text-xs dark:text-gray-200">
+											<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 												{s.tokens.cached?.toLocaleString() ?? '—'}
 											</div>
 										</div>
 										<div>
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 												Total tokens
 											</div>
-											<div class="mt-1 font-mono text-xs dark:text-gray-200">
+											<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 												{s.tokens.total?.toLocaleString() ?? '—'}
 											</div>
 										</div>
 									{/if}
 									{#if s.detail}
 										<div class="col-span-2 sm:col-span-4">
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Detail</div>
-											<div class="mt-1 text-xs text-gray-700 dark:text-gray-300">{s.detail}</div>
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Detail</div>
+											<div class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{s.detail}</div>
 										</div>
 									{/if}
 									{#if bodies?.prompt}
 										<div class="col-span-2 sm:col-span-4">
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Prompt</div>
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Prompt</div>
 											<pre
-												class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.prompt}</pre>
+												class="mt-1 max-h-56 overflow-auto border border-border-line bg-terminal-bg p-3 font-mono-code text-mono-code whitespace-pre-wrap text-terminal-fg dark:border-dark-border-line">{bodies.prompt}</pre>
 										</div>
 									{/if}
 									{#if bodies?.response}
 										<div class="col-span-2 sm:col-span-4">
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 												Response
 											</div>
 											<pre
-												class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.response}</pre>
+												class="mt-1 max-h-56 overflow-auto border border-border-line bg-terminal-bg p-3 font-mono-code text-mono-code whitespace-pre-wrap text-terminal-fg dark:border-dark-border-line">{bodies.response}</pre>
 										</div>
 									{/if}
 									{#if bodies?.stderr}
 										<div class="col-span-2 sm:col-span-4">
-											<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Stderr</div>
+											<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Stderr</div>
 											<pre
-												class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{bodies.stderr}</pre>
+												class="mt-1 max-h-56 overflow-auto border border-border-line bg-terminal-bg p-3 font-mono-code text-mono-code whitespace-pre-wrap text-terminal-fg dark:border-dark-border-line">{bodies.stderr}</pre>
 										</div>
 									{/if}
 								</div>
@@ -544,7 +532,7 @@
 				{/each}
 				{#if data.sessions.edges.length === 0}
 					<tr>
-						<td colspan="8" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
+						<td colspan="8" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							No sessions found for this project.
 						</td>
 					</tr>

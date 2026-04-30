@@ -1,0 +1,22 @@
+{
+  "bead_id": ".execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-e630aeae",
+  "attempt_id": "20260430T040423-8733bd2a",
+  "base_rev": "57356d7f1b352496b60fe01a8bfbb92db11f2838",
+  "result_rev": "57356d7f1b352496b60fe01a8bfbb92db11f2838",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: execute: model \"Qwen3.6-35B-A3B-4bit\" is not supported by harness \"claude\"; supported models: sonnet, sonnet-4.6, opus, opus-4.7, claude-sonnet-4-6",
+  "harness": "claude",
+  "model": "Qwen3.6-35B-A3B-4bit",
+  "session_id": "eb-64187d0a",
+  "duration_ms": 2013,
+  "exit_code": 1,
+  "error": "agent: execute: model \"Qwen3.6-35B-A3B-4bit\" is not supported by harness \"claude\"; supported models: sonnet, sonnet-4.6, opus, opus-4.7, claude-sonnet-4-6",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260430T040423-8733bd2a",
+  "prompt_file": ".ddx/executions/20260430T040423-8733bd2a/prompt.md",
+  "manifest_file": ".ddx/executions/20260430T040423-8733bd2a/manifest.json",
+  "result_file": ".ddx/executions/20260430T040423-8733bd2a/result.json",
+  "started_at": "2026-04-30T04:04:24.856198337Z",
+  "finished_at": "2026-04-30T04:04:26.869204524Z"
+}

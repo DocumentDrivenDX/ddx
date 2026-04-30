@@ -116,19 +116,19 @@
 
 <section
 	data-testid="integrity-panel"
-	class="shrink-0 rounded border border-amber-200 bg-amber-50 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+	class="shrink-0 rounded-none border border-border-line bg-bg-surface text-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
 >
-	<header class="border-b border-amber-200 px-4 py-2 font-semibold dark:border-amber-800">
+	<header class="border-b border-border-line px-4 py-2 font-semibold dark:border-dark-border-line">
 		Integrity: {issues.length}
 		{issues.length === 1 ? 'issue' : 'issues'}
 	</header>
-	<ul class="divide-y divide-amber-200 dark:divide-amber-800">
+	<ul class="divide-y divide-border-line dark:divide-dark-border-line">
 		{#each groups as group (group.kind)}
 			{@const isOpen = expanded[group.kind] ?? false}
 			<li data-kind={group.kind}>
 				<button
 					type="button"
-					class="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-amber-100 dark:hover:bg-amber-900"
+					class="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-bg-canvas dark:hover:bg-dark-bg-canvas"
 					aria-expanded={isOpen}
 					data-testid={`integrity-group-${group.kind}`}
 					onclick={() => toggle(group.kind)}
@@ -139,12 +139,12 @@
 						<ChevronRight class="h-4 w-4" aria-hidden="true" />
 					{/if}
 					<span class="font-medium">{labelFor(group.kind)}</span>
-					<span class="text-amber-800 dark:text-amber-200">({group.issues.length})</span>
+					<span class="text-fg-muted dark:text-dark-fg-muted">({group.issues.length})</span>
 				</button>
 				{#if isOpen}
-					<ul class="bg-amber-100/50 px-4 pb-3 pt-1 dark:bg-amber-900/40">
+					<ul class="bg-bg-canvas px-4 pb-3 pt-1 dark:bg-dark-bg-canvas">
 						{#each group.issues as issue, idx (`${group.kind}-${idx}`)}
-							<li class="mt-2 flex flex-col gap-1 rounded bg-white/60 p-2 dark:bg-amber-950/40">
+							<li class="mt-2 flex flex-col gap-1 rounded-none bg-bg-elevated p-2 dark:bg-dark-bg-elevated">
 								<div class="flex flex-wrap items-center gap-2 font-mono text-xs">
 									{#if issue.path}
 										{@const href = docLink(issue.path)}
@@ -152,7 +152,7 @@
 											<a
 												href={href}
 												data-testid="integrity-path-link"
-												class="text-amber-900 underline hover:text-amber-700 dark:text-amber-100 dark:hover:text-amber-300"
+												class="text-accent-lever underline hover:text-accent-lever/80 dark:text-dark-accent-lever dark:hover:text-dark-accent-lever/80"
 												>{issue.path}</a
 											>
 										{:else}
@@ -161,12 +161,12 @@
 									{/if}
 									{#if issue.relatedPath}
 										{@const relHref = docLink(issue.relatedPath)}
-										<span class="text-amber-700 dark:text-amber-300">↔</span>
+										<span class="text-fg-muted dark:text-dark-fg-muted">↔</span>
 										{#if relHref}
 											<a
 												href={relHref}
 												data-testid="integrity-related-link"
-												class="text-amber-900 underline hover:text-amber-700 dark:text-amber-100 dark:hover:text-amber-300"
+												class="text-accent-lever underline hover:text-accent-lever/80 dark:text-dark-accent-lever dark:hover:text-dark-accent-lever/80"
 												>{issue.relatedPath}</a
 											>
 										{:else}
@@ -175,7 +175,7 @@
 									{/if}
 									{#if issue.id}
 										<span
-											class="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] uppercase dark:bg-amber-800"
+											class="rounded-none border px-1.5 py-0.5 text-[10px] uppercase badge-status-blocked"
 											>{issue.id}</span
 										>
 									{/if}
@@ -184,7 +184,7 @@
 									<p class="break-words">{issue.message}</p>
 									<button
 										type="button"
-										class="shrink-0 rounded border border-amber-300 bg-white px-2 py-1 text-xs hover:bg-amber-50 dark:border-amber-700 dark:bg-amber-900 dark:hover:bg-amber-800"
+										class="shrink-0 rounded-none border border-border-line bg-bg-elevated px-2 py-1 text-xs hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas"
 										title="Copy message"
 										aria-label="Copy message"
 										onclick={(e) => copyMessage(issue, e)}
@@ -196,7 +196,7 @@
 									<button
 										type="button"
 										data-testid="integrity-copy-suggestion"
-										class="self-start rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700"
+										class="self-start rounded-none border px-2 py-1 text-xs font-medium badge-status-blocked hover:opacity-90"
 										onclick={(e) => copySuggestion(issue, e)}
 									>
 										Copy suggested unique ID
@@ -206,17 +206,17 @@
 									{@const snippet = dependencyRemovalSnippet(issue)}
 									{#if snippet}
 										<div class="flex flex-wrap items-center gap-2 text-xs">
-											<span class="font-medium text-amber-800 dark:text-amber-200">
+											<span class="font-medium text-fg-muted dark:text-dark-fg-muted">
 												Remove from depends_on
 											</span>
 											<code
 												data-testid="integrity-missing-dep-snippet"
-												class="rounded bg-amber-200 px-2 py-1 font-mono dark:bg-amber-800"
+												class="rounded-none border px-2 py-1 font-mono-code badge-status-blocked"
 												>{snippet}</code
 											>
 											<button
 												type="button"
-												class="rounded border border-amber-300 bg-white px-2 py-1 hover:bg-amber-50 dark:border-amber-700 dark:bg-amber-900 dark:hover:bg-amber-800"
+												class="rounded-none border border-border-line bg-bg-elevated px-2 py-1 hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas"
 												title="Copy removal snippet"
 												aria-label="Copy missing dependency removal snippet"
 												onclick={(e) => copyDependencyRemovalSnippet(issue, e)}

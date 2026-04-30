@@ -151,14 +151,14 @@
 		data-testid="drain-indicator"
 		data-state={active ? 'active' : 'idle'}
 		href={workersHref}
-		class="flex items-center gap-1.5 rounded border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+		class="flex items-center gap-1.5 rounded-none border border-border-line px-2 py-1 text-xs font-medium text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 		aria-label="Drain queue status"
 		title="Click for worker overview"
 	>
 		{#if active}
-			<Loader2 class="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+			<Loader2 class="h-3.5 w-3.5 animate-spin text-accent-lever dark:text-dark-accent-lever" />
 		{:else}
-			<span class="inline-block h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500"></span>
+			<span class="inline-block h-2 w-2 rounded-none bg-fg-muted dark:bg-dark-fg-muted"></span>
 		{/if}
 		<span>{label || 'Queue: …'}</span>
 	</a>

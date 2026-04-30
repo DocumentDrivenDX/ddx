@@ -1,0 +1,52 @@
+import{t as e}from"../chunks/Dkx8MRxF.js";import{C as t,Dt as n,F as r,Ft as i,G as a,K as o,L as s,M as c,Ot as l,V as u,Z as d,at as f,dt as p,ft as ee,g as m,gt as h,h as g,mt as _,p as v,pt as y,q as b,vt as x,y as S,yt as te,z as C}from"../chunks/DkIPlaea.js";import{t as w}from"../chunks/DQ6KeVQs.js";import"../chunks/BEDIq91W.js";import{n as T,t as E}from"../chunks/vpGPUDNZ.js";import"../chunks/nt8TlDV5.js";var D=e({load:()=>A}),O=T`
+	query ExecutionsPage(
+		$projectId: ID!
+		$first: Int
+		$after: String
+		$beadId: String
+		$verdict: String
+		$harness: String
+		$search: String
+	) {
+		executions(
+			projectId: $projectId
+			first: $first
+			after: $after
+			beadId: $beadId
+			verdict: $verdict
+			harness: $harness
+			search: $search
+		) {
+			edges {
+				node {
+					id
+					projectId
+					beadId
+					beadTitle
+					sessionId
+					harness
+					model
+					verdict
+					status
+					createdAt
+					startedAt
+					finishedAt
+					durationMs
+					costUsd
+					tokens
+					exitCode
+					bundlePath
+				}
+				cursor
+			}
+			pageInfo {
+				hasNextPage
+				hasPreviousPage
+				startCursor
+				endCursor
+			}
+			totalCount
+		}
+	}
+`,k=50,A=async({params:e,url:t,fetch:n})=>{let r=t.searchParams.get(`after`)??void 0,i=t.searchParams.get(`bead`)??void 0,a=t.searchParams.get(`verdict`)??void 0,o=t.searchParams.get(`harness`)??void 0,s=t.searchParams.get(`q`)??void 0,c=await E(n).request(O,{projectId:e.projectId,first:k,after:r,beadId:i,verdict:a,harness:o,search:s});return{nodeId:e.nodeId,projectId:e.projectId,executions:c.executions,filters:{after:r??null,bead:i??``,verdict:a??``,harness:o??``,search:s??``}}},ne=u(`<div class="truncate text-xs text-gray-500 dark:text-gray-400"> </div>`),re=u(`<a class="font-mono text-xs text-blue-600 hover:underline dark:text-blue-400"> </a> <!>`,1),ie=u(`<span class="text-gray-400 dark:text-gray-500">—</span>`),ae=u(`<span class="ml-1 text-xs text-gray-600 dark:text-gray-400"> </span>`),oe=u(`<span> </span>`),se=u(`<span class="text-gray-400 dark:text-gray-500">—</span>`),ce=u(`<tr class="border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"><td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400"><a class="font-mono text-blue-600 hover:underline dark:text-blue-400"> </a></td><td class="px-4 py-3"><!></td><td class="px-4 py-3 text-gray-900 dark:text-gray-100"><span> </span> <!></td><td class="px-4 py-3"><!></td><td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300"> </td><td class="px-4 py-3 text-right font-mono text-xs text-gray-600 dark:text-gray-300"> </td></tr>`),j=u(`<tr><td colspan="6" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">No executions found.</td></tr>`),M=u(`<div class="space-y-4"><div class="flex items-start justify-between"><div><h1 class="text-xl font-semibold dark:text-white">Executions</h1> <p class="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-300">Each row is one <code>ddx agent execute-bead</code> attempt bundle from <code>.ddx/executions/</code>: the prompt that was sent, the verdict that came back, and
+				the linked bead and session.</p></div> <span class="text-sm text-gray-700 dark:text-gray-300"> </span></div> <form class="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"><label class="flex flex-col text-xs text-gray-600 dark:text-gray-300"><span class="mb-1">Bead</span> <input type="text" placeholder="ddx-…" class="w-40 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"/></label> <label class="flex flex-col text-xs text-gray-600 dark:text-gray-300"><span class="mb-1">Verdict</span> <select class="w-32 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"><option>Any</option><option>PASS</option><option>BLOCK</option><option>success</option><option>failure</option><option>no_changes</option></select></label> <label class="flex flex-col text-xs text-gray-600 dark:text-gray-300"><span class="mb-1">Harness</span> <input type="text" placeholder="claude / codex / agent" class="w-44 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"/></label> <label class="flex flex-1 flex-col text-xs text-gray-600 dark:text-gray-300"><span class="mb-1">Search</span> <input type="text" placeholder="bead title / id" class="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"/></label> <button type="submit" class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">Apply</button> <button type="button" class="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">Clear</button></form> <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"><table class="w-full text-sm"><thead><tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"><th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Created</th><th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Bead</th><th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Harness</th><th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Verdict</th><th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Duration</th><th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Cost</th></tr></thead><tbody><!><!></tbody></table></div> <div class="flex items-center justify-between"><button class="rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">← Previous</button> <span class="text-xs text-gray-400 dark:text-gray-500"> </span> <button class="rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">Next →</button></div></div>`);function N(e,a){l(a,!0);let u=x(_(a.data.filters.bead)),T=x(_(a.data.filters.verdict)),E=x(_(a.data.filters.harness)),D=x(_(a.data.filters.search));function O(){let e=new URLSearchParams;d(u)&&e.set(`bead`,d(u)),d(T)&&e.set(`verdict`,d(T)),d(E)&&e.set(`harness`,d(E)),d(D)&&e.set(`q`,d(D));let t=e.toString();w(`/nodes/${a.data.nodeId}/projects/${a.data.projectId}/executions${t?`?${t}`:``}`,{keepFocus:!0,noScroll:!0})}function k(){h(u,``),h(T,``),h(E,``),h(D,``),O()}function A(e){return`/nodes/${a.data.nodeId}/projects/${a.data.projectId}/executions/${e}`}function N(e){return`/nodes/${a.data.nodeId}/projects/${a.data.projectId}/beads/${e}`}function le(e){return e==null?`—`:e<1e3?`${e}ms`:e<6e4?`${(e/1e3).toFixed(1)}s`:`${Math.floor(e/6e4)}m ${Math.floor(e%6e4/1e3)}s`}function ue(e){return e==null?`—`:`$${e.toFixed(4)}`}function de(e){return e?new Date(e).toLocaleString():`—`}function fe(e){let t=(e??``).toLowerCase();return t===`pass`||t===`success`||t===`task_succeeded`?`border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200`:t===`block`||t===`failure`||t===`task_failed`?`border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200`:t===`no_changes`||t===`task_no_changes`?`border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200`:`border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200`}function pe(){let e=a.data.executions.pageInfo.endCursor;if(!e)return;let t=new URLSearchParams;d(u)&&t.set(`bead`,d(u)),d(T)&&t.set(`verdict`,d(T)),d(E)&&t.set(`harness`,d(E)),d(D)&&t.set(`q`,d(D)),t.set(`after`,e),w(`/nodes/${a.data.nodeId}/projects/${a.data.projectId}/executions?${t.toString()}`)}function me(){let e=new URLSearchParams;d(u)&&e.set(`bead`,d(u)),d(T)&&e.set(`verdict`,d(T)),d(E)&&e.set(`harness`,d(E)),d(D)&&e.set(`q`,d(D));let t=e.toString();w(`/nodes/${a.data.nodeId}/projects/${a.data.projectId}/executions${t?`?${t}`:``}`)}let P=te(()=>a.data.executions.edges.map(e=>e.node));var F=M(),I=p(F),L=y(p(I),2),he=p(L);i(L),i(I);var R=y(I,2),z=p(R),B=y(p(z),2);g(B),i(z);var V=y(z,2),H=y(p(V),2),U=p(H);U.value=U.__value=``;var W=y(U);W.value=W.__value=`PASS`;var G=y(W);G.value=G.__value=`BLOCK`;var K=y(G);K.value=K.__value=`success`;var q=y(K);q.value=q.__value=`failure`;var ge=y(q);ge.value=ge.__value=`no_changes`,i(H),i(V);var J=y(V,2),_e=y(p(J),2);g(_e),i(J);var Y=y(J,2),ve=y(p(Y),2);g(ve),i(Y);var ye=y(Y,4);i(R);var X=y(R,2),be=p(X),xe=y(p(be)),Se=p(xe);c(Se,17,()=>d(P),e=>e.id,(e,n)=>{var a=ce(),o=p(a),c=p(o),l=p(c,!0);i(c),i(o);var u=y(o),h=p(u),g=e=>{var t=re(),a=ee(t),o=p(a,!0);i(a);var c=y(a,2),l=e=>{var t=ne(),r=p(t,!0);i(t),f(()=>s(r,d(n).beadTitle)),C(e,t)};r(c,e=>{d(n).beadTitle&&e(l)}),f(e=>{m(a,`href`,e),s(o,d(n).beadId)},[()=>N(d(n).beadId)]),C(e,t)},_=e=>{C(e,ie())};r(h,e=>{d(n).beadId?e(g):e(_,-1)}),i(u);var v=y(u),b=p(v),x=p(b,!0);i(b);var S=y(b,2),te=e=>{var t=ae(),r=p(t,!0);i(t),f(()=>s(r,d(n).model)),C(e,t)};r(S,e=>{d(n).model&&e(te)}),i(v);var w=y(v),T=p(w),E=e=>{var r=oe(),a=p(r,!0);i(r),f(e=>{t(r,1,`inline-flex rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase ${e??``}`),s(a,d(n).verdict)},[()=>fe(d(n).verdict)]),C(e,r)},D=e=>{C(e,se())};r(T,e=>{d(n).verdict?e(E):e(D,-1)}),i(w);var O=y(w),k=p(O,!0);i(O);var j=y(O),M=p(j,!0);i(j),i(a),f((e,t,r,i)=>{m(c,`href`,e),s(l,t),s(x,d(n).harness??`—`),s(k,r),s(M,i)},[()=>A(d(n).id),()=>de(d(n).createdAt),()=>le(d(n).durationMs),()=>ue(d(n).costUsd)]),C(e,a)});var Ce=y(Se),we=e=>{C(e,j())};r(Ce,e=>{d(P).length===0&&e(we)}),i(xe),i(be),i(X);var Te=y(X,2),Z=p(Te),Q=y(Z,2),Ee=p(Q);i(Q);var $=y(Q,2);i(Te),i(F),f(()=>{s(he,`${a.data.executions.totalCount??``} executions`),Z.disabled=!a.data.filters.after,s(Ee,`${d(P).length??``} shown`),$.disabled=!a.data.executions.pageInfo.hasNextPage}),b(`submit`,R,e=>{e.preventDefault(),O()}),v(B,()=>d(u),e=>h(u,e)),S(H,()=>d(T),e=>h(T,e)),v(_e,()=>d(E),e=>h(E,e)),v(ve,()=>d(D),e=>h(D,e)),o(`click`,ye,k),o(`click`,Z,me),o(`click`,$,pe),C(e,F),n()}a([`click`]);export{N as component,D as universal};

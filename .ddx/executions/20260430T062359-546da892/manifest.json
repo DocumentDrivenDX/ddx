@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T062359-546da892",
+  "bead_id": "ddx-312503d6",
+  "base_rev": "e6e504455a939778e0dd2d5bda4c09e7d8e88744",
+  "created_at": "2026-04-30T06:24:00.040244132Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-312503d6",
+    "title": "Restyle workers views",
+    "description": "Apply tokens to workers/+layout.svelte (438 lines) and workers/[workerId]/+page.svelte (547 lines). Worker list: mono-code IDs, status indicators using CSS vars, bg-surface cards. Detail view: label-caps field headers, border-line sections.",
+    "parent": "ddx-04770087",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:23:59Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:23:59.193796154Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T062359-546da892",
+    "prompt": ".ddx/executions/20260430T062359-546da892/prompt.md",
+    "manifest": ".ddx/executions/20260430T062359-546da892/manifest.json",
+    "result": ".ddx/executions/20260430T062359-546da892/result.json",
+    "checks": ".ddx/executions/20260430T062359-546da892/checks.json",
+    "usage": ".ddx/executions/20260430T062359-546da892/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-312503d6-20260430T062359-546da892"
+  }
+}

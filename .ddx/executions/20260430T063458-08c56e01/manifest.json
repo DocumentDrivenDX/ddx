@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T063458-08c56e01",
+  "bead_id": "ddx-b2ce2335",
+  "base_rev": "ba5c1ed2de90d393fbbe8c5eb64a5ee73c6c684c",
+  "created_at": "2026-04-30T06:34:58.920814079Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b2ce2335",
+    "title": "Restyle documents, plugins, and providers views",
+    "description": "Apply tokens to documents/+page.svelte, documents/[...path]/+page.svelte (526 lines), plugins/+page.svelte (535 lines), plugins/[name]/+page.svelte (281 lines), providers/+page.svelte (459 lines), providers/[name]/+page.svelte (203 lines). Surface tokens, label-caps headers, sharp containers, doc CSS vars for prose rendering.",
+    "parent": "ddx-04770087",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:34:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:34:58.081548177Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T063458-08c56e01",
+    "prompt": ".ddx/executions/20260430T063458-08c56e01/prompt.md",
+    "manifest": ".ddx/executions/20260430T063458-08c56e01/manifest.json",
+    "result": ".ddx/executions/20260430T063458-08c56e01/result.json",
+    "checks": ".ddx/executions/20260430T063458-08c56e01/checks.json",
+    "usage": ".ddx/executions/20260430T063458-08c56e01/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b2ce2335-20260430T063458-08c56e01"
+  }
+}

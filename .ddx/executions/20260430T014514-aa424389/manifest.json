@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T014514-aa424389",
+  "bead_id": "ddx-1848bbaa",
+  "base_rev": "1e159384bdf6b2f014e219cfaf8a70a16b011d74",
+  "created_at": "2026-04-30T01:45:15.034789466Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1848bbaa",
+    "title": "[visual-suite] V8 author 4 tool-graphic prompts",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Author 4 prompts at docs/helix/01-frame/visuals/tool-*.prompt.md: (1) bead tracker — DAG with priority queue + ready/blocked states; (2) doc graph — multi-node with depends_on and generated_by edges; (3) agentic execution (run/try/work) — three-layer wrapping with worktree isolation; (4) plugins — modular composition with HELIX/Dun snapping into shared core. Reference DESIGN.md tokens; sober/utilitarian.",
+    "labels": [
+      "prompt",
+      "plan-2026-04-29-vis",
+      "tools"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:45:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:45:14.152746635Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T014514-aa424389",
+    "prompt": ".ddx/executions/20260430T014514-aa424389/prompt.md",
+    "manifest": ".ddx/executions/20260430T014514-aa424389/manifest.json",
+    "result": ".ddx/executions/20260430T014514-aa424389/result.json",
+    "checks": ".ddx/executions/20260430T014514-aa424389/checks.json",
+    "usage": ".ddx/executions/20260430T014514-aa424389/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1848bbaa-20260430T014514-aa424389"
+  }
+}

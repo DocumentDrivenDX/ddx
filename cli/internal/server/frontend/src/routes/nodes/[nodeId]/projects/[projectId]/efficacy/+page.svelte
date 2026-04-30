@@ -223,12 +223,12 @@
 	<header class="flex flex-wrap items-start justify-between gap-4">
 		<div>
 			<div
-				class="mb-2 inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+				class="mb-2 inline-flex items-center gap-2 border border-[#3B5B7A]/30 bg-[#3B5B7A]/8 px-2 py-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#3B5B7A] dark:border-[#7BA3CC]/30 dark:bg-[#7BA3CC]/10 dark:text-[#7BA3CC]"
 			>
 				<BarChart3 class="h-3.5 w-3.5" />
 				Model routing evidence
 			</div>
-			<h1 class="text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">Efficacy</h1>
+			<h1 class="text-xl font-bold tracking-[-0.02em] text-[#1F2125] dark:text-[#EDE6D6]">Efficacy</h1>
 		</div>
 		{#if filteredRows.length > 0}
 			{@const selectionCount = filteredRows.filter((r) => selectedRowKeys.has(rowKey(r))).length}
@@ -240,7 +240,7 @@
 				title={canCompare
 					? `Compare ${selectionCount} selected rows`
 					: 'Select 2 or more rows to compare'}
-				class="inline-flex items-center gap-2 rounded-md bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:focus:ring-offset-gray-950"
+				class="inline-flex items-center gap-2 bg-[#3B5B7A] px-3 py-2 text-[11px] font-bold tracking-[0.05em] uppercase text-white hover:opacity-90 focus:ring-2 focus:ring-[#3B5B7A] focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7BA3CC] dark:text-[#1A1815]"
 			>
 				<GitCompareArrows class="h-4 w-4" />
 				Compare selected{selectionCount >= 2 ? ` (${selectionCount})` : ''}
@@ -249,7 +249,7 @@
 	</header>
 
 	<form class="grid gap-3 md:grid-cols-[12rem_1fr_1fr]" aria-label="Efficacy filters">
-		<label class="space-y-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+		<label class="space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 			<span>Tier</span>
 			<select
 				name="tier"
@@ -259,7 +259,7 @@
 					tierFilter = value;
 					updateFilter('tier', value);
 				}}
-				class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+				class="w-full border border-[#E4DDD0] bg-[#FFFFFF] px-3 py-2 text-sm text-[#1F2125] focus:border-[#3B5B7A] focus:ring-1 focus:ring-[#3B5B7A] focus:outline-none dark:border-[#34302A] dark:bg-[#1A1815] dark:text-[#EDE6D6]"
 			>
 				<option value="">All tiers</option>
 				<option value="cheap">Cheap</option>
@@ -268,7 +268,7 @@
 			</select>
 		</label>
 
-		<label class="space-y-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+		<label class="space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 			<span>Label</span>
 			<input
 				name="label"
@@ -279,11 +279,11 @@
 					labelFilter = value;
 					updateFilter('label', value);
 				}}
-				class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+				class="w-full border border-[#E4DDD0] bg-[#FFFFFF] px-3 py-2 text-sm text-[#1F2125] focus:border-[#3B5B7A] focus:ring-1 focus:ring-[#3B5B7A] focus:outline-none dark:border-[#34302A] dark:bg-[#1A1815] dark:text-[#EDE6D6]"
 			/>
 		</label>
 
-		<label class="space-y-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+		<label class="space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 			<span>Spec ID</span>
 			<input
 				name="spec-id"
@@ -294,40 +294,40 @@
 					specIdFilter = value;
 					updateFilter('spec-id', value);
 				}}
-				class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+				class="w-full border border-[#E4DDD0] bg-[#FFFFFF] px-3 py-2 text-sm text-[#1F2125] focus:border-[#3B5B7A] focus:ring-1 focus:ring-[#3B5B7A] focus:outline-none dark:border-[#34302A] dark:bg-[#1A1815] dark:text-[#EDE6D6]"
 			/>
 		</label>
 	</form>
 
-	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+	<div class="overflow-hidden border border-[#E4DDD0] dark:border-[#34302A]">
 		<table aria-label="Efficacy table" class="w-full text-sm">
 			<thead>
-				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+				<tr class="border-b border-[#E4DDD0] bg-[#F4EFE6] dark:border-[#34302A] dark:bg-[#26231F]">
 					<th scope="col" class="w-10 px-4 py-3 text-left">
 						<span class="sr-only">Select row for comparison</span>
 					</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Harness</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Provider</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Model</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Attempts</th
+					<th class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Harness</th>
+					<th class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Provider</th>
+					<th class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Model</th>
+					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Attempts</th
 					>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">
+					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 						Success rate
 					</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">
+					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 						Tokens
 					</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">
+					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 						Duration
 					</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Cost</th>
+					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Cost</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each filteredRows as row (rowKey(row))}
 					<tr
 						onclick={() => openAttempts(row)}
-						class="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-emerald-50/60 dark:border-gray-800 dark:hover:bg-emerald-950/20"
+						class="cursor-pointer border-b border-[#E4DDD0] last:border-0 hover:bg-[#3B5B7A]/5 dark:border-[#34302A] dark:hover:bg-[#7BA3CC]/5"
 					>
 						<td class="px-4 py-3" onclick={(e) => e.stopPropagation()}>
 							<input
@@ -336,12 +336,12 @@
 								checked={selectedRowKeys.has(rowKey(row))}
 								onchange={(e) =>
 									toggleRowSelection(row, (e.currentTarget as HTMLInputElement).checked)}
-								class="h-4 w-4 cursor-pointer rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-700"
+								class="h-4 w-4 cursor-pointer border-[#E4DDD0] text-[#3B5B7A] focus:ring-[#3B5B7A] dark:border-[#34302A]"
 							/>
 						</td>
-						<td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{row.harness}</td>
-						<td class="px-4 py-3 text-gray-700 dark:text-gray-300">{row.provider}</td>
-						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+						<td class="px-4 py-3 font-medium text-[#1F2125] dark:text-[#EDE6D6]">{row.harness}</td>
+						<td class="px-4 py-3 text-[#6B6558] dark:text-[#8E8674]">{row.provider}</td>
+						<td class="px-4 py-3 text-[#1F2125] dark:text-[#EDE6D6]">
 							<div class="flex items-center gap-2">
 								<span class="font-mono text-xs">{row.model}</span>
 								{#if row.warning}
@@ -350,7 +350,7 @@
 											role="img"
 											aria-label="below adaptive floor"
 											viewBox="0 0 20 20"
-											class="warning-badge h-4 w-4 text-amber-600 focus:outline-none dark:text-amber-400"
+											class="warning-badge h-4 w-4 text-[#A8801F] focus:outline-none dark:text-[#D4A53D]"
 										>
 											<path
 												fill="currentColor"
@@ -359,14 +359,14 @@
 										</svg>
 										<span
 											role="tooltip"
-											class="warning-tooltip absolute top-6 left-1/2 z-20 hidden w-64 -translate-x-1/2 rounded-md border border-amber-200 bg-white p-3 text-xs leading-5 text-gray-800 shadow-lg dark:border-amber-900 dark:bg-gray-950 dark:text-gray-100"
+											class="warning-tooltip absolute top-6 left-1/2 z-20 hidden w-64 -translate-x-1/2 border border-[#A8801F]/30 bg-[#FFFFFF] p-3 text-xs leading-5 text-[#1F2125] dark:border-[#D4A53D]/30 dark:bg-[#2E2A25] dark:text-[#EDE6D6]"
 										>
 											Below adaptive floor threshold
 											{#if row.warning.threshold !== null}
 												({formatPercent(row.warning.threshold)}).
 											{/if}
 											<a
-												class="ml-1 font-medium text-emerald-700 underline dark:text-emerald-300"
+												class="ml-1 font-medium text-[#3B5B7A] underline dark:text-[#7BA3CC]"
 												href="/docs/routing-metrics"
 											>
 												Routing metrics
@@ -376,26 +376,26 @@
 								{/if}
 							</div>
 						</td>
-						<td class="px-4 py-3 text-right text-gray-700 tabular-nums dark:text-gray-300">
+						<td class="px-4 py-3 text-right text-[#6B6558] tabular-nums dark:text-[#8E8674]">
 							{row.attempts}
 						</td>
-						<td class="px-4 py-3 text-right text-gray-700 tabular-nums dark:text-gray-300">
+						<td class="px-4 py-3 text-right text-[#6B6558] tabular-nums dark:text-[#8E8674]">
 							{row.successes}/{row.attempts} · {formatPercent(row.successRate)}
 						</td>
-						<td class="px-4 py-3 text-right font-mono text-xs text-gray-700 dark:text-gray-300">
+						<td class="px-4 py-3 text-right font-mono text-xs text-[#6B6558] dark:text-[#8E8674]">
 							{formatTokens(row.medianInputTokens, row.medianOutputTokens)}
 						</td>
-						<td class="px-4 py-3 text-right text-gray-700 tabular-nums dark:text-gray-300">
+						<td class="px-4 py-3 text-right text-[#6B6558] tabular-nums dark:text-[#8E8674]">
 							{formatDuration(row.medianDurationMs)}
 						</td>
-						<td class="px-4 py-3 text-right text-gray-700 tabular-nums dark:text-gray-300">
+						<td class="px-4 py-3 text-right text-[#6B6558] tabular-nums dark:text-[#8E8674]">
 							{formatCost(row.medianCostUsd)}
 						</td>
 					</tr>
 				{/each}
 				{#if filteredRows.length === 0}
 					<tr>
-						<td colspan="9" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
+						<td colspan="9" class="px-4 py-8 text-center text-[#6B6558] dark:text-[#8E8674]">
 							No efficacy rows match the current filters.
 						</td>
 					</tr>
@@ -407,85 +407,85 @@
 	<div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
 		<section
 			aria-label="Comparisons"
-			class="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+			class="border border-[#E4DDD0] p-4 dark:border-[#34302A]"
 		>
 			<div class="mb-3 flex items-center justify-between">
-				<h2 class="text-base font-semibold text-gray-950 dark:text-white">Comparisons</h2>
-				<span class="text-xs text-gray-500 dark:text-gray-400"
+				<h2 class="text-base font-semibold text-[#1F2125] dark:text-[#EDE6D6]">Comparisons</h2>
+				<span class="text-xs text-[#6B6558] dark:text-[#8E8674]"
 					>{comparisonResults.length} records</span
 				>
 			</div>
 			{#if comparisonResults.length > 0}
-				<ul class="divide-y divide-gray-100 dark:divide-gray-800">
+				<ul class="divide-y divide-[#E4DDD0] dark:divide-[#34302A]">
 					{#each comparisonResults as comparison (comparison.id)}
 						<li class="flex items-center justify-between gap-3 py-2">
 							<a
 								href={`/comparisons/${comparison.id}`}
-								class="font-mono text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-300"
+								class="font-mono text-sm font-medium text-[#3B5B7A] hover:underline dark:text-[#7BA3CC]"
 							>
 								{comparison.id}
 							</a>
-							<span class="text-xs text-gray-600 dark:text-gray-300">
+							<span class="text-xs text-[#6B6558] dark:text-[#8E8674]">
 								{comparison.state} · {comparison.armCount} arms
 							</span>
 						</li>
 					{/each}
 				</ul>
 			{:else}
-				<p class="text-sm text-gray-700 dark:text-gray-300">No comparisons yet.</p>
+				<p class="text-sm text-[#6B6558] dark:text-[#8E8674]">No comparisons yet.</p>
 			{/if}
 		</section>
 
 		{#if selectedRowKey}
 			<aside
 				aria-label="Attempts detail"
-				class="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+				class="border border-[#E4DDD0] p-4 dark:border-[#34302A]"
 			>
-				<h2 class="text-base font-semibold text-gray-950 dark:text-white">Last 10 attempts</h2>
-				<p class="mt-1 mb-3 text-xs text-gray-600 dark:text-gray-400">{selectedRowLabel}</p>
+				<h2 class="text-base font-semibold text-[#1F2125] dark:text-[#EDE6D6]">Last 10 attempts</h2>
+				<p class="mt-1 mb-3 text-xs text-[#6B6558] dark:text-[#8E8674]">{selectedRowLabel}</p>
 				{#if attemptsLoading}
-					<p class="text-sm text-gray-700 dark:text-gray-300">Loading attempts...</p>
+					<p class="text-sm text-[#6B6558] dark:text-[#8E8674]">Loading attempts...</p>
 				{:else}
 					<table class="w-full text-sm">
 						<thead>
-							<tr class="border-b border-gray-200 dark:border-gray-800">
-								<th class="py-2 pr-3 text-left font-medium text-gray-600 dark:text-gray-300"
+							<tr class="border-b border-[#E4DDD0] dark:border-[#34302A]">
+								<th class="py-2 pr-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]"
 									>Bead</th
 								>
-								<th class="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">
+								<th class="px-3 py-2 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 									Outcome
 								</th>
-								<th class="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300">
+								<th class="px-3 py-2 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 									Cost
 								</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each attempts as attempt (attempt.beadId)}
-								<tr class="border-b border-gray-100 last:border-0 dark:border-gray-800">
+								<tr class="border-b border-[#E4DDD0] last:border-0 dark:border-[#34302A]">
 									<td class="py-2 pr-3 align-top">
 										<a
 											href={beadHref(attempt.beadId)}
-											class="font-mono text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-300"
+											class="font-mono text-xs font-medium text-[#3B5B7A] hover:underline dark:text-[#7BA3CC]"
 										>
 											{attempt.beadId}
 										</a>
 										<a
 											href={attempt.evidenceBundleUrl}
-											class="mt-1 flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100"
+											class="mt-1 flex items-center gap-1 text-xs text-[#6B6558] hover:text-[#1F2125] hover:underline dark:text-[#8E8674] dark:hover:text-[#EDE6D6]"
 										>
 											<Link2 class="h-3 w-3" />
 											Evidence bundle
 										</a>
 									</td>
-									<td class="px-3 py-2 align-top text-gray-700 dark:text-gray-300">
+									<td class="px-3 py-2 align-top text-[#6B6558] dark:text-[#8E8674]">
 										{attempt.outcome}
-										<div class="text-xs text-gray-500 dark:text-gray-500">
+										<div class="text-xs text-[#6B6558] dark:text-[#8E8674]">
 											{formatDuration(attempt.durationMs)}
 										</div>
 									</td>
 									<td
-										class="px-3 py-2 text-right align-top text-gray-700 tabular-nums dark:text-gray-300"
+										class="px-3 py-2 text-right align-top text-[#6B6558] tabular-nums dark:text-[#8E8674]"
 									>
 										{formatCost(attempt.costUsd)}
 									</td>
@@ -500,29 +500,29 @@
 </div>
 
 {#if compareOpen}
-	<div class="fixed inset-0 z-40 bg-black/40" aria-hidden="true"></div>
+	<div class="fixed inset-0 z-40 bg-[#1F2125]/40" aria-hidden="true"></div>
 	<div class="fixed inset-0 z-50 grid place-items-center p-4">
 		<dialog
 			open
 			aria-modal="true"
 			aria-labelledby="compare-title"
-			class="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-950"
+			class="max-h-[90vh] w-full max-w-2xl overflow-auto bg-[#FFFFFF] p-5 dark:bg-[#2E2A25]"
 		>
 			<div class="mb-4 flex items-center justify-between gap-3">
-				<h2 id="compare-title" class="text-lg font-semibold text-gray-950 dark:text-white">
+				<h2 id="compare-title" class="text-lg font-semibold text-[#1F2125] dark:text-[#EDE6D6]">
 					Compare
 				</h2>
 				<button
 					type="button"
 					onclick={() => (compareOpen = false)}
 					aria-label="Close compare dialog"
-					class="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-900 dark:hover:text-white"
+					class="p-1 text-[#6B6558] hover:bg-[#E4DDD0]/40 hover:text-[#1F2125] dark:hover:bg-[#34302A] dark:hover:text-[#EDE6D6]"
 				>
 					<X class="h-5 w-5" />
 				</button>
 			</div>
 
-			<p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
+			<p class="mb-3 text-sm text-[#6B6558] dark:text-[#8E8674]">
 				Comparing {comparisonArms.length} selected rows. They will all run the same prompt.
 			</p>
 
@@ -530,16 +530,16 @@
 				{#each comparisonArms as arm (`${arm.harness}|${arm.provider}|${arm.model}`)}
 					<li
 						data-testid="comparison-arm"
-						class="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm dark:border-gray-800"
+						class="flex items-center justify-between gap-3 border border-[#E4DDD0] px-3 py-2 text-sm dark:border-[#34302A]"
 					>
-						<span class="font-mono text-xs text-gray-800 dark:text-gray-200">
+						<span class="font-mono text-xs text-[#1F2125] dark:text-[#EDE6D6]">
 							{arm.harness} / {arm.provider} / {arm.model}
 						</span>
 					</li>
 				{/each}
 			</ul>
 
-			<label class="block space-y-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+			<label class="block space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
 				<span>Prompt</span>
 				<textarea
 					name="prompt"
@@ -548,7 +548,7 @@
 					oninput={(event) =>
 						setPromptForAllArms((event.currentTarget as HTMLTextAreaElement).value)}
 					placeholder="Prompt run against every selected arm"
-					class="w-full resize-y rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+					class="w-full resize-y border border-[#E4DDD0] bg-[#FFFFFF] px-3 py-2 text-sm text-[#1F2125] focus:border-[#3B5B7A] focus:ring-1 focus:ring-[#3B5B7A] focus:outline-none dark:border-[#34302A] dark:bg-[#1A1815] dark:text-[#EDE6D6]"
 				></textarea>
 			</label>
 
@@ -557,7 +557,7 @@
 					type="button"
 					onclick={submitComparison}
 					disabled={dispatching || comparisonArms.length === 0 || !comparisonPrompt.trim()}
-					class="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+					class="bg-[#3B5B7A] px-3 py-2 text-[11px] font-bold tracking-[0.05em] uppercase text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7BA3CC] dark:text-[#1A1815]"
 				>
 					{dispatching ? 'Starting...' : 'Start'}
 				</button>

@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T052535-c80c4007",
+  "bead_id": "ddx-14813e9d",
+  "base_rev": "bd14ad06133949de208ed5eb6a5022b2b827d33a",
+  "created_at": "2026-04-30T05:25:36.300197757Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-14813e9d",
+    "title": "Restyle bead list table view",
+    "description": "Restyle bead list table: border-collapse hairlines, mono-code ID column with accent-lever, label-caps status badges (sharp, tint+border), priority P0=error color. No functional changes. Playwright: run `bun run test:e2e -- --grep 'beads'` after changes, update screenshots with --update-snapshots.",
+    "parent": "ddx-04770087",
+    "metadata": {
+      "claimed-at": "2026-04-30T05:25:35Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T05:25:35.429956402Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T052535-c80c4007",
+    "prompt": ".ddx/executions/20260430T052535-c80c4007/prompt.md",
+    "manifest": ".ddx/executions/20260430T052535-c80c4007/manifest.json",
+    "result": ".ddx/executions/20260430T052535-c80c4007/result.json",
+    "checks": ".ddx/executions/20260430T052535-c80c4007/checks.json",
+    "usage": ".ddx/executions/20260430T052535-c80c4007/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-14813e9d-20260430T052535-c80c4007"
+  }
+}

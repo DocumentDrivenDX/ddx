@@ -144,58 +144,58 @@
 
 {#if !data.execution}
 	<div class="space-y-3">
-		<a href={listHref()} class="text-sm text-blue-600 hover:underline dark:text-blue-400">← Executions</a>
-		<div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-			Execution <code class="font-mono">{data.executionId}</code> not found.
+		<a href={listHref()} class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever">← Executions</a>
+		<div class="alert-caution border p-4">
+			Execution <code class="font-mono-code text-mono-code">{data.executionId}</code> not found.
 		</div>
 	</div>
 {:else}
 	{@const exec = data.execution}
 	<div class="space-y-4">
 		<div class="flex flex-col gap-1">
-			<a href={listHref()} class="text-sm text-blue-600 hover:underline dark:text-blue-400">← Executions</a>
-			<h1 class="font-mono text-lg font-semibold dark:text-white">{exec.id}</h1>
+			<a href={listHref()} class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever">← Executions</a>
+			<h1 class="font-mono-code text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">{exec.id}</h1>
 			{#if exec.beadTitle}
-				<div class="text-sm text-gray-700 dark:text-gray-300">{exec.beadTitle}</div>
+				<div class="text-body-sm text-fg-muted dark:text-dark-fg-muted">{exec.beadTitle}</div>
 			{/if}
 		</div>
 
 		<!-- Quick facts row -->
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-				<div class="text-xs text-gray-500 dark:text-gray-400">Verdict</div>
-				<div class="mt-1 font-mono text-sm dark:text-white">{exec.verdict ?? '—'}</div>
+			<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Verdict</div>
+				<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{exec.verdict ?? '—'}</div>
 			</div>
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-				<div class="text-xs text-gray-500 dark:text-gray-400">Bead</div>
-				<div class="mt-1 font-mono text-xs dark:text-white">
+			<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Bead</div>
+				<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 					{#if exec.beadId}
-						<a class="text-blue-600 hover:underline dark:text-blue-400" href={beadHref(exec.beadId)}>{exec.beadId}</a>
+						<a class="text-accent-lever hover:underline dark:text-dark-accent-lever" href={beadHref(exec.beadId)}>{exec.beadId}</a>
 					{:else}
 						—
 					{/if}
 				</div>
 			</div>
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-				<div class="text-xs text-gray-500 dark:text-gray-400">Harness</div>
-				<div class="mt-1 text-sm dark:text-white">{exec.harness ?? '—'}{exec.model ? ` / ${exec.model}` : ''}</div>
+			<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</div>
+				<div class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{exec.harness ?? '—'}{exec.model ? ` / ${exec.model}` : ''}</div>
 			</div>
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-				<div class="text-xs text-gray-500 dark:text-gray-400">Duration</div>
-				<div class="mt-1 text-sm dark:text-white">{fmtDuration(exec.durationMs)}</div>
+			<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Duration</div>
+				<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{fmtDuration(exec.durationMs)}</div>
 			</div>
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-				<div class="text-xs text-gray-500 dark:text-gray-400">Cost</div>
-				<div class="mt-1 font-mono text-sm dark:text-white">{fmtCost(exec.costUsd)}</div>
+			<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cost</div>
+				<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{fmtCost(exec.costUsd)}</div>
 			</div>
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-				<div class="text-xs text-gray-500 dark:text-gray-400">Exit code</div>
-				<div class="mt-1 font-mono text-sm dark:text-white">{exec.exitCode ?? '—'}</div>
+			<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Exit code</div>
+				<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{exec.exitCode ?? '—'}</div>
 			</div>
 		</div>
 
 		<!-- Tabs -->
-		<div class="border-b border-gray-200 dark:border-gray-700">
+		<div class="border-b border-border-line dark:border-dark-border-line">
 			<nav class="flex gap-1">
 				{#each [
 					{ id: 'manifest', label: 'Manifest' },
@@ -208,9 +208,9 @@
 						type="button"
 						data-tab={tab.id}
 						onclick={() => pickTab(tab.id as Tab)}
-						class="border-b-2 px-3 py-2 text-sm font-medium {activeTab === tab.id
-							? 'border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300'
-							: 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'}"
+						class="border-b-2 px-3 py-2 text-body-sm font-medium {activeTab === tab.id
+							? 'border-accent-lever text-accent-lever dark:border-dark-accent-lever dark:text-dark-accent-lever'
+							: 'border-transparent text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink'}"
 					>
 						{tab.label}
 					</button>
@@ -222,116 +222,116 @@
 			{#if activeTab === 'manifest'}
 				<div class="space-y-3">
 					<div class="flex items-center justify-between">
-						<div class="text-xs text-gray-500 dark:text-gray-400">
+						<div class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							{exec.manifestPath ?? `${exec.bundlePath}/manifest.json`}
 						</div>
 						<button
 							type="button"
-							class="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+							class="border border-border-line px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 							onclick={() => (manifestPretty = !manifestPretty)}
 						>
 							{manifestPretty ? 'Raw' : 'Pretty'}
 						</button>
 					</div>
-					<pre data-testid="manifest-body" class="max-h-[28rem] overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{manifestPretty ? tryPretty(exec.manifest) : (exec.manifest ?? '')}</pre>
+					<pre data-testid="manifest-body" class="max-h-[28rem] overflow-auto bg-terminal-bg px-4 py-3 font-mono-code text-mono-code leading-relaxed text-terminal-fg whitespace-pre-wrap">{manifestPretty ? tryPretty(exec.manifest) : (exec.manifest ?? '')}</pre>
 				</div>
 			{:else if activeTab === 'prompt'}
 				<div class="space-y-2">
-					<div class="text-xs text-gray-500 dark:text-gray-400">
+					<div class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 						{exec.promptPath ?? `${exec.bundlePath}/prompt.md`}
 					</div>
-					<pre data-testid="prompt-body" class="max-h-[40rem] overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{exec.prompt ?? '(no prompt body)'}</pre>
+					<pre data-testid="prompt-body" class="max-h-[40rem] overflow-auto bg-terminal-bg px-4 py-3 font-mono-code text-mono-code leading-relaxed text-terminal-fg whitespace-pre-wrap">{exec.prompt ?? '(no prompt body)'}</pre>
 				</div>
 			{:else if activeTab === 'result'}
 				<div class="space-y-3">
 					{#if exec.rationale}
-						<div class="rounded-lg border border-gray-200 bg-white p-3 text-sm whitespace-pre-wrap dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+						<div class="border border-border-line bg-bg-surface p-3 text-body-sm text-fg-ink whitespace-pre-wrap dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink">
 							{exec.rationale}
 						</div>
 					{/if}
 					<div class="flex items-center justify-between">
-						<div class="text-xs text-gray-500 dark:text-gray-400">
+						<div class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							{exec.resultPath ?? `${exec.bundlePath}/result.json`}
 						</div>
 						<button
 							type="button"
-							class="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+							class="border border-border-line px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 							onclick={() => (resultPretty = !resultPretty)}
 						>
 							{resultPretty ? 'Raw' : 'Pretty'}
 						</button>
 					</div>
-					<pre data-testid="result-body" class="max-h-[28rem] overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-800 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{resultPretty ? tryPretty(exec.result) : (exec.result ?? '')}</pre>
+					<pre data-testid="result-body" class="max-h-[28rem] overflow-auto bg-terminal-bg px-4 py-3 font-mono-code text-mono-code leading-relaxed text-terminal-fg whitespace-pre-wrap">{resultPretty ? tryPretty(exec.result) : (exec.result ?? '')}</pre>
 				</div>
 			{:else if activeTab === 'session'}
 				<div class="space-y-3">
 					{#if !exec.sessionId}
-						<div class="rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+						<div class="border border-border-line bg-bg-surface p-3 text-body-sm text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted">
 							No session id was recorded for this execution.
 						</div>
 					{:else if sessionLoading}
-						<div class="text-sm text-gray-500 dark:text-gray-400">Loading session…</div>
+						<div class="text-body-sm text-fg-muted dark:text-dark-fg-muted">Loading session…</div>
 					{:else if !sessionDetail}
-						<div class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-							Session <code class="font-mono">{exec.sessionId}</code> referenced by this execution
+						<div class="alert-caution border p-3 text-body-sm">
+							Session <code class="font-mono-code text-mono-code">{exec.sessionId}</code> referenced by this execution
 							is not (yet) recorded in the session index. Cost and token totals are not available.
 						</div>
 					{:else}
-						<dl class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Session</dt><dd class="mt-1 font-mono text-xs"><a class="text-blue-600 hover:underline dark:text-blue-400" href={sessionHref(sessionDetail.id)}>{sessionDetail.id}</a></dd></div>
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Harness</dt><dd class="mt-1">{sessionDetail.harness}</dd></div>
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Model</dt><dd class="mt-1">{sessionDetail.model}</dd></div>
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Status</dt><dd class="mt-1">{sessionDetail.status}</dd></div>
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Cost</dt><dd class="mt-1 font-mono">{fmtCost(sessionDetail.cost)}</dd></div>
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Billing</dt><dd class="mt-1">{sessionDetail.billingMode}</dd></div>
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Prompt tokens</dt><dd class="mt-1 font-mono">{sessionDetail.tokens?.prompt?.toLocaleString() ?? '—'}</dd></div>
-							<div><dt class="text-xs text-gray-500 dark:text-gray-400">Completion tokens</dt><dd class="mt-1 font-mono">{sessionDetail.tokens?.completion?.toLocaleString() ?? '—'}</dd></div>
+						<dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Session</dt><dd class="mt-1 font-mono-code text-mono-code"><a class="text-accent-lever hover:underline dark:text-dark-accent-lever" href={sessionHref(sessionDetail.id)}>{sessionDetail.id}</a></dd></div>
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</dt><dd class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{sessionDetail.harness}</dd></div>
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Model</dt><dd class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{sessionDetail.model}</dd></div>
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Status</dt><dd class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{sessionDetail.status}</dd></div>
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cost</dt><dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{fmtCost(sessionDetail.cost)}</dd></div>
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Billing</dt><dd class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{sessionDetail.billingMode}</dd></div>
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Prompt tokens</dt><dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{sessionDetail.tokens?.prompt?.toLocaleString() ?? '—'}</dd></div>
+							<div><dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Completion tokens</dt><dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{sessionDetail.tokens?.completion?.toLocaleString() ?? '—'}</dd></div>
 						</dl>
 					{/if}
 				</div>
 			{:else if activeTab === 'tools'}
 				<div class="space-y-2">
-					<div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+					<div class="flex items-center justify-between text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 						<span>
 							{toolCallsLoaded ? `${toolCalls.length} of ${toolCallsTotal} tool calls` : 'Loading…'}
 						</span>
 						{#if exec.agentLogPath}
-							<span>Source: <code class="font-mono">{exec.agentLogPath}</code></span>
+							<span>Source: <code class="font-mono-code text-mono-code">{exec.agentLogPath}</code></span>
 						{/if}
 					</div>
 					{#if toolCallsLoaded && toolCalls.length === 0}
-						<div class="rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+						<div class="border border-border-line bg-bg-surface p-3 text-body-sm text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted">
 							No tool calls were captured for this execution.
 						</div>
 					{/if}
 					<ul class="space-y-1">
 						{#each toolCalls as call (call.seq)}
 							{@const open = expanded.has(call.seq)}
-							<li class="rounded border border-gray-200 dark:border-gray-700">
+							<li class="border border-border-line dark:border-dark-border-line">
 								<button
 									type="button"
 									data-tool-seq={call.seq}
-									class="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
+									class="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-bg-surface dark:hover:bg-dark-bg-surface"
 									onclick={() => toggleCall(call.seq)}
 								>
 									<span class="flex items-center gap-2">
-										<span class="font-mono text-xs text-gray-400 dark:text-gray-500">#{call.seq}</span>
-										<span class="font-medium dark:text-white">{call.name}</span>
+										<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">#{call.seq}</span>
+										<span class="text-body-sm font-medium text-fg-ink dark:text-dark-fg-ink">{call.name}</span>
 									</span>
-									<span class="text-xs text-gray-500 dark:text-gray-400">{open ? '▾' : '▸'}</span>
+									<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">{open ? '▾' : '▸'}</span>
 								</button>
 								{#if open}
-									<div class="space-y-2 border-t border-gray-200 px-3 py-2 dark:border-gray-700">
+									<div class="space-y-2 border-t border-border-line px-3 py-2 dark:border-dark-border-line">
 										{#if call.inputs}
 											<div>
-												<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Inputs</div>
-												<pre class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-2 text-xs whitespace-pre-wrap dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{tryPretty(call.inputs)}</pre>
+												<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Inputs</div>
+												<pre class="mt-1 max-h-56 overflow-auto bg-terminal-bg px-3 py-2 font-mono-code text-mono-code text-terminal-fg whitespace-pre-wrap">{tryPretty(call.inputs)}</pre>
 											</div>
 										{/if}
 										{#if call.output}
 											<div>
-												<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Output{call.truncated ? ' (truncated)' : ''}</div>
-												<pre class="mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white p-2 text-xs whitespace-pre-wrap dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">{call.output}</pre>
+												<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Output{call.truncated ? ' (truncated)' : ''}</div>
+												<pre class="mt-1 max-h-56 overflow-auto bg-terminal-bg px-3 py-2 font-mono-code text-mono-code text-terminal-fg whitespace-pre-wrap">{call.output}</pre>
 											</div>
 										{/if}
 									</div>
@@ -345,7 +345,7 @@
 								type="button"
 								onclick={() => loadToolCalls(true)}
 								disabled={toolCallsLoading}
-								class="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+								class="border border-border-line px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 							>
 								{toolCallsLoading ? 'Loading…' : 'Load more'}
 							</button>

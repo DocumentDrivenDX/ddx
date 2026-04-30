@@ -3,13 +3,14 @@
 </script>
 
 {#if nodeStore.value}
-	<div class="space-y-2">
-		<h1 class="text-xl font-semibold dark:text-white">{nodeStore.value.name}</h1>
-		<p class="text-sm text-gray-600 dark:text-gray-300">Node ID: {nodeStore.value.id}</p>
+	<div class="space-y-3 border-b border-gray-200 pb-6 dark:border-gray-700">
+		<p class="text-xs font-semibold tracking-widest text-lever uppercase">Node</p>
+		<h1 class="text-3xl font-bold tracking-tight text-gray-950 dark:text-white">{nodeStore.value.name}</h1>
+		<p class="font-mono text-xs text-gray-500 dark:text-gray-400">ID: {nodeStore.value.id}</p>
 	</div>
 {:else}
-	<div class="space-y-2">
-		<h1 class="text-xl font-semibold dark:text-white">Node</h1>
-		<p class="text-sm text-gray-600 dark:text-gray-300">Loading...</p>
+	<div class="space-y-3 border-b border-gray-200 pb-6 dark:border-gray-700">
+		<p class="text-xs font-semibold tracking-widest text-lever uppercase">Node</p>
+		<h1 class="text-3xl font-bold tracking-tight text-gray-950 dark:text-white">Loading…</h1>
 	</div>
 {/if}

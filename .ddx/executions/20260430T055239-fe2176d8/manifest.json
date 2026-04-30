@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260430T055239-fe2176d8",
+  "bead_id": "ddx-569272d1",
+  "base_rev": "371675329bdf797bf39a8885713be7f058687d23",
+  "created_at": "2026-04-30T05:52:40.016033001Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-569272d1",
+    "title": "Apply token classes across lib/components",
+    "description": "EPIC: Token class sweep across all shared components. Children cover individual surfaces.",
+    "metadata": {
+      "claimed-at": "2026-04-30T05:52:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T05:52:39.122665856Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T055239-fe2176d8",
+    "prompt": ".ddx/executions/20260430T055239-fe2176d8/prompt.md",
+    "manifest": ".ddx/executions/20260430T055239-fe2176d8/manifest.json",
+    "result": ".ddx/executions/20260430T055239-fe2176d8/result.json",
+    "checks": ".ddx/executions/20260430T055239-fe2176d8/checks.json",
+    "usage": ".ddx/executions/20260430T055239-fe2176d8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-569272d1-20260430T055239-fe2176d8"
+  }
+}

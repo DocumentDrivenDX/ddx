@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260430T014954-6970132d",
+  "bead_id": "ddx-6036e1bc",
+  "base_rev": "5433e5d965841d6989b03855e01078e640b5f97f",
+  "created_at": "2026-04-30T01:49:55.920364331Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6036e1bc",
+    "title": "ddx agent route-status: consume upstream RouteDecision.Candidates + typed no-viable-candidate error",
+    "description": "## Context\n\nFollow-up to ddx-fdd3ea36 (D6, dropped from that bead's reduced scope). Upstream work (agent-53f38d95) is **satisfied**: `agent.RouteDecision.Candidates []RouteCandidate` and the typed no-viable-candidate error (recoverable via `errors.As`) are now public in the routing point release.\n\nThis bead tracks the DDx-side consumer work that hooks the new decision trace into operator-facing surfaces.\n\n## Scope\n\n1. **`ddx agent route-status` CLI.** Render per-profile decision trace. For each profile (default, local, standard, ...), call `agentlib.ResolveRoute` and print the full `Candidates` slice: harness, provider, endpoint, model, score, eligible, reason. On no-viable-candidate, render the rejection heatmap from the typed error.\n\n2. **Providers UI decision-trace.** Hooks into ddx-23978824 (providers UI). For each harness/provider row, surface the most recent rejection reason from `RouteDecision.Candidates`. Per-harness per-provider rejection heatmap as a secondary view.\n\n3. **Bead `kind:routing` evidence events.** Include the full `Candidates` trace in evidence records, not just the winning pick. Ties into ddx-fdd3ea36's D3 preflight gate so failed-route-before-claim records carry the trace.\n\n## Upstream dependency\n\nagent-53f38d95 — **satisfied**. Public types and typed error are tagged in the routing point release that ddx-fdd3ea36 pulls.\n\n## Independence note\n\nddx-05b4cc9d (`workersByProject` id/path filter) is independent of this work and **not blocked by this bead**. It is a separate GraphQL filter bug; this bead does not need to wait on it nor does it block it.",
+    "acceptance": "1. `ddx agent route-status` command exists and renders per-profile decision trace consuming `RouteDecision.Candidates`.\n2. On no-viable-candidate, command extracts the typed error via `errors.As` and renders rejection reasons per candidate.\n3. Providers UI (ddx-23978824 surface) renders rejection-reason column / heatmap from `RouteDecision.Candidates`.\n4. Routing evidence events include full `Candidates` slice, not just winning pick.\n5. Tests cover: success path trace, no-viable-candidate trace, rejection-reason rendering.\n6. Upstream dep agent-53f38d95 is referenced in this bead and confirmed satisfied at implementation time.",
+    "parent": "ddx-23978824",
+    "labels": [
+      "feat-006",
+      "feat-008",
+      "routing",
+      "follow-up",
+      "observability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:49:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:49:54.730716327Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T014954-6970132d",
+    "prompt": ".ddx/executions/20260430T014954-6970132d/prompt.md",
+    "manifest": ".ddx/executions/20260430T014954-6970132d/manifest.json",
+    "result": ".ddx/executions/20260430T014954-6970132d/result.json",
+    "checks": ".ddx/executions/20260430T014954-6970132d/checks.json",
+    "usage": ".ddx/executions/20260430T014954-6970132d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6036e1bc-20260430T014954-6970132d"
+  }
+}

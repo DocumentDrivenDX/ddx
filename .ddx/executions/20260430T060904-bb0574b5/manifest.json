@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T060904-bb0574b5",
+  "bead_id": "ddx-675f1170",
+  "base_rev": "64ee0ee03e9c47064f59ffbf83c758e8c0ac6192",
+  "created_at": "2026-04-30T06:09:05.503257648Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-675f1170",
+    "title": "Restyle CommandPalette",
+    "description": "Restyle CommandPalette.svelte: modal overlay with bg-elevated, border-line, rounded-none. Input: bg-elevated border-line focus:accent-lever. Results list: hover bg-canvas. No functional changes. Playwright: run `bun run test:e2e -- --grep 'command'` after changes, update screenshots with --update-snapshots.",
+    "parent": "ddx-569272d1",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:09:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:09:04.707257282Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T060904-bb0574b5",
+    "prompt": ".ddx/executions/20260430T060904-bb0574b5/prompt.md",
+    "manifest": ".ddx/executions/20260430T060904-bb0574b5/manifest.json",
+    "result": ".ddx/executions/20260430T060904-bb0574b5/result.json",
+    "checks": ".ddx/executions/20260430T060904-bb0574b5/checks.json",
+    "usage": ".ddx/executions/20260430T060904-bb0574b5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-675f1170-20260430T060904-bb0574b5"
+  }
+}

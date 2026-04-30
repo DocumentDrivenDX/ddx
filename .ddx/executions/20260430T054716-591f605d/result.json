@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "Snapshot updates missing: a visual restyle of the beads table will invalidate any Playwright screenshot baselines for the beads list. The commit contains zero changes under `cli/internal/server/frontend/` test/snapshot directories. Re-run `bun run test:e2e -- --grep 'beads' --update-snapshots` from `cli/internal/server/frontend/`, commit the regenerated `*-snapshots/` PNGs, and confirm the run is green.\nMinor (not blocking): the `default` branch of `statusBadgeClass` falls back to `badge-status-open`, which would silently mis-label any unknown future status as \"open\" styling. Consider a neutral fallback class instead."
+}

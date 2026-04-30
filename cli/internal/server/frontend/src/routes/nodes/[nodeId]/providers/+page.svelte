@@ -184,17 +184,14 @@
 	});
 
 	function statusClass(row: ProviderStatus): string {
-		if (row.reachable) {
-			return 'text-green-600 dark:text-green-400';
-		}
-		const status = row.status;
-		const lower = status.toLowerCase();
+		if (row.reachable) return 'text-status-closed';
+		const lower = row.status.toLowerCase();
 		if (
 			lower.includes('connected') ||
 			lower === 'available' ||
 			lower.includes('api key configured')
 		) {
-			return 'text-green-600 dark:text-green-400';
+			return 'text-status-closed';
 		}
 		if (
 			lower.includes('cooldown') ||
@@ -203,9 +200,9 @@
 			lower === 'unavailable' ||
 			lower.startsWith('unavailable')
 		) {
-			return 'text-red-600 dark:text-red-400';
+			return 'text-status-failed';
 		}
-		return 'text-yellow-600 dark:text-yellow-400';
+		return 'text-status-in-progress';
 	}
 
 	function formatTokens(n: number | null | undefined): string {
@@ -248,9 +245,9 @@
 
 <div class="space-y-6" data-testid="agent-endpoints">
 	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold dark:text-white">Agent endpoints</h1>
+		<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Agent endpoints</h1>
 		{#if !loading}
-			<span class="text-sm text-gray-500 dark:text-gray-400">
+			<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{rows.length} total ({rows.filter((r) => r.kind === 'ENDPOINT').length} endpoints · {rows.filter(
 					(r) => r.kind === 'HARNESS'
 				).length} harnesses)
@@ -261,39 +258,39 @@
 	<!-- Default route widget -->
 	{#if defaultRoute && defaultRoute.modelRef}
 		<div
-			class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50"
+			class="border border-border-line bg-bg-surface p-4 dark:border-dark-border-line dark:bg-dark-bg-surface"
 		>
-			<h2 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+			<h2 class="mb-2 text-body-sm font-medium text-fg-muted dark:text-dark-fg-muted">
 				Current route for default profile
 			</h2>
-			<div class="flex flex-wrap gap-4 text-sm">
-				<span class="text-gray-500 dark:text-gray-400">
-					Model ref: <span class="font-mono font-medium text-gray-900 dark:text-white"
+			<div class="flex flex-wrap gap-4 text-body-sm">
+				<span class="text-fg-muted dark:text-dark-fg-muted">
+					Model ref: <span class="font-mono-code text-mono-code font-medium text-fg-ink dark:text-dark-fg-ink"
 						>{defaultRoute.modelRef}</span
 					>
 				</span>
 				{#if defaultRoute.strategy}
-					<span class="text-gray-500 dark:text-gray-400">
-						Strategy: <span class="font-medium text-gray-700 dark:text-gray-300"
+					<span class="text-fg-muted dark:text-dark-fg-muted">
+						Strategy: <span class="font-medium text-fg-ink dark:text-dark-fg-ink"
 							>{defaultRoute.strategy}</span
 						>
 					</span>
 				{/if}
 				{#if defaultRoute.resolvedProvider}
-					<span class="text-gray-500 dark:text-gray-400">
+					<span class="text-fg-muted dark:text-dark-fg-muted">
 						Resolves to:
-						<span class="font-medium text-green-700 dark:text-green-400">
+						<span class="font-medium text-status-closed">
 							{defaultRoute.resolvedProvider}
 						</span>
 						{#if defaultRoute.resolvedModel}
 							/
-							<span class="font-mono text-gray-700 dark:text-gray-300"
+							<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"
 								>{defaultRoute.resolvedModel}</span
 							>
 						{/if}
 					</span>
 				{:else}
-					<span class="font-medium text-red-600 dark:text-red-400">
+					<span class="font-medium text-status-failed">
 						No healthy candidate available
 					</span>
 				{/if}
@@ -303,32 +300,32 @@
 
 	<!-- Unified table -->
 	{#if loading}
-		<div class="py-8 text-center text-sm text-gray-400 dark:text-gray-600" data-testid="loading">
+		<div class="py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted" data-testid="loading">
 			Loading agent endpoints…
 		</div>
 	{:else if error}
 		<div
-			class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+			class="border border-border-line bg-bg-surface p-4 text-body-sm text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error"
 		>
 			Error: {error}
 		</div>
 	{:else}
-		<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+		<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
 			<table class="w-full text-sm" data-testid="agent-endpoints-table">
 				<thead>
-					<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Name</th>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Kind</th>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Type</th>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Model</th>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Status</th>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+					<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Name</th>
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Kind</th>
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Type</th>
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Model</th>
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Status</th>
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 							>Tokens (1h / 24h)</th
 						>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 							>Utilization</th
 						>
-						<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 							>Trend (24h)</th
 						>
 					</tr>
@@ -336,25 +333,25 @@
 				<tbody>
 					{#each rows as row (row.kind + '|' + row.name)}
 						<tr
-							class="border-b border-gray-100 last:border-0 dark:border-gray-700"
+							class="border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
 							data-testid="endpoint-row-{row.name}"
 						>
-							<td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
+							<td class="px-4 py-3 font-medium text-fg-ink dark:text-dark-fg-ink">
 								<a
-									class="text-blue-600 hover:underline dark:text-blue-400"
+									class="text-accent-lever hover:underline dark:text-dark-accent-lever"
 									href={detailHref(row)}
 									data-testid="endpoint-link-{row.name}">{row.name}</a
 								>
 								{#if row.isDefault}
 									<span
-										class="ml-1 inline-flex items-center rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+										class="ml-1 inline-flex items-center border border-border-line px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
 									>
 										default
 									</span>
 								{/if}
 								{#if row.cooldownUntil}
 									<span
-										class="ml-1 inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300"
+										class="ml-1 inline-flex items-center border border-border-line bg-bg-surface px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error"
 										title="Cooldown until {row.cooldownUntil}"
 									>
 										cooldown
@@ -362,16 +359,16 @@
 								{/if}
 							</td>
 							<td
-								class="px-4 py-3 text-xs text-gray-500 uppercase dark:text-gray-400"
+								class="px-4 py-3 text-label-caps font-label-caps uppercase text-fg-muted dark:text-dark-fg-muted"
 								data-testid="endpoint-kind-{row.name}"
 							>
 								{row.kind === 'ENDPOINT' ? 'endpoint' : 'harness'}
 							</td>
-							<td class="px-4 py-3 text-gray-600 dark:text-gray-400">
+							<td class="px-4 py-3 text-fg-muted dark:text-dark-fg-muted">
 								{row.providerType}
 							</td>
 							<td
-								class="max-w-xs truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300"
+								class="max-w-xs truncate px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"
 								title={row.model}
 							>
 								{row.model || '—'}
@@ -383,17 +380,17 @@
 								>
 									{row.reachable ? 'reachable' : 'not reachable'}
 								</span>
-								<span class="ml-1 text-gray-500 dark:text-gray-400" title={row.detail}>
+								<span class="ml-1 text-fg-muted dark:text-dark-fg-muted" title={row.detail}>
 									{row.status}
 								</span>
 								{#if row.lastCheckedAt}
-									<span class="ml-1 text-xs text-gray-400" title="Last checked {row.lastCheckedAt}"
+									<span class="ml-1 text-label-caps text-fg-muted dark:text-dark-fg-muted" title="Last checked {row.lastCheckedAt}"
 										>·</span
 									>
 								{/if}
 							</td>
 							<td
-								class="px-4 py-3 text-gray-600 tabular-nums dark:text-gray-300"
+								class="px-4 py-3 tabular-nums text-fg-muted dark:text-dark-fg-muted"
 								data-testid="endpoint-tokens-{row.name}"
 							>
 								{#if row.usage}
@@ -401,24 +398,24 @@
 										row.usage.tokensUsedLast24h
 									)}
 								{:else}
-									<span class="text-gray-400">not reported</span>
+									<span class="text-fg-muted dark:text-dark-fg-muted">not reported</span>
 								{/if}
 							</td>
 							<td class="px-4 py-3">
 								{#if utilizationPct(row.usage, row.quota) != null}
 									<div class="flex items-center gap-2">
-										<div class="h-2 w-20 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+										<div class="h-2 w-20 overflow-hidden bg-border-line dark:bg-dark-border-line">
 											<div
-												class="h-full bg-blue-500"
+												class="h-full bg-accent-lever dark:bg-dark-accent-lever"
 												style="width: {utilizationPct(row.usage, row.quota)}%"
 											></div>
 										</div>
-										<span class="text-xs text-gray-500 tabular-nums dark:text-gray-400">
+										<span class="text-label-caps font-label-caps tabular-nums text-fg-muted dark:text-dark-fg-muted">
 											{utilizationPct(row.usage, row.quota)}%
 										</span>
 									</div>
 								{:else}
-									<span class="text-xs text-gray-400">not reported</span>
+									<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">not reported</span>
 								{/if}
 							</td>
 							<td class="px-4 py-3" data-testid="endpoint-sparkline-{row.name}">
@@ -432,21 +429,21 @@
 									>
 										{#each row.sparkline as v, i (i)}
 											<div
-												class="w-full bg-blue-400 dark:bg-blue-500"
+												class="w-full bg-accent-lever dark:bg-dark-accent-lever"
 												style="height: {sparkBarHeight(v, max)}"
 												title="{v} tokens"
 											></div>
 										{/each}
 									</div>
 								{:else}
-									<span class="text-xs text-gray-400">—</span>
+									<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">—</span>
 								{/if}
 							</td>
 						</tr>
 					{/each}
 					{#if rows.length === 0}
 						<tr>
-							<td colspan="8" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+							<td colspan="8" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 								No agent endpoints configured. Add providers to .ddx/config.yaml or install a
 								harness binary.
 							</td>

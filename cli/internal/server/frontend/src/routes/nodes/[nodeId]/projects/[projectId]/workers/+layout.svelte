@@ -192,15 +192,15 @@
 	function stateClass(state: string): string {
 		switch (state) {
 			case 'running':
-				return 'text-green-600 dark:text-green-400';
+				return 'text-status-running';
 			case 'idle':
-				return 'text-blue-600 dark:text-blue-400';
+				return 'text-status-open';
 			case 'stopped':
-				return 'text-gray-500 dark:text-gray-400';
+				return 'text-fg-muted dark:text-dark-fg-muted';
 			case 'error':
-				return 'text-red-600 dark:text-red-400';
+				return 'text-status-failed';
 			default:
-				return 'text-gray-500 dark:text-gray-400';
+				return 'text-fg-muted dark:text-dark-fg-muted';
 		}
 	}
 </script>
@@ -210,19 +210,19 @@
 	     worker; server enforces workers.default_spec + workers.max_count. -->
 	<div
 		data-testid="drain-count-panel"
-		class="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/30 sm:flex-row sm:items-center sm:justify-between"
+		class="flex flex-col gap-3 border border-border-line bg-bg-surface p-4 text-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:flex-row sm:items-center sm:justify-between"
 	>
 		<div>
-			<div class="text-xs font-medium uppercase tracking-wide text-blue-700 dark:text-blue-300">
+			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 				Drain workers
 			</div>
 			<div
 				data-testid="drain-worker-count"
-				class="text-3xl font-semibold text-blue-900 dark:text-blue-100"
+				class="mt-1 text-3xl font-semibold text-fg-ink dark:text-dark-fg-ink"
 			>
 				{runningDrainCount}
 			</div>
-			<p class="mt-1 text-xs text-blue-800/80 dark:text-blue-200/80">
+			<p class="mt-1 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				Adds a general-purpose drain worker. Use the per-harness picker below for custom specs.
 			</p>
 		</div>
@@ -233,7 +233,7 @@
 				onclick={() => void addDrainWorker()}
 				disabled={addDisabled}
 				title={addTooltip}
-				class="rounded border border-blue-700 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
+				class="border border-accent-lever bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-accent-lever dark:bg-dark-accent-lever"
 				aria-label="Add worker"
 			>
 				{adding ? '…' : '+ Add worker'}
@@ -243,7 +243,7 @@
 				data-testid="remove-drain-worker"
 				onclick={() => void removeDrainWorker()}
 				disabled={removing || runningDrainCount === 0}
-				class="rounded border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+				class="border border-border-line px-3 py-1.5 text-sm font-medium text-status-failed hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
 				aria-label="Remove worker"
 			>
 				{removing ? '…' : '− Remove worker'}
@@ -253,17 +253,17 @@
 
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 		<div>
-			<h1 class="text-xl font-semibold dark:text-white">Workers</h1>
-			<p class="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-300">
+			<h1 class="text-headline-lg font-headline-lg text-fg-ink dark:text-dark-fg-ink">Workers</h1>
+			<p class="mt-1 max-w-2xl text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				Workers drain the bead queue as long-lived processes; Sessions are the history of
 				what they ran.
 			</p>
-			<a class="mt-2 inline-flex text-sm text-blue-600 hover:underline dark:text-blue-400" href={sessionsHref()}>
+			<a class="mt-2 inline-flex text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever" href={sessionsHref()}>
 				Recent sessions →
 			</a>
 		</div>
 		<div class="flex items-center gap-3">
-			<span class="text-sm text-gray-500 dark:text-gray-400">
+			<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{data.workers.totalCount} total
 			</span>
 			<button
@@ -272,7 +272,7 @@
 					actionError = null;
 					showStartForm = !showStartForm;
 				}}
-				class="rounded border border-blue-600 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
+				class="border border-accent-lever bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-accent-lever dark:bg-dark-accent-lever"
 			>
 				Start worker
 			</button>
@@ -281,26 +281,26 @@
 
 	{#if showStartForm}
 		<form
-			class="grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-4"
+			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-4"
 			onsubmit={(event) => {
 				event.preventDefault();
 				void startWorker();
 			}}
 		>
 			<label class="space-y-1">
-				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Harness</span>
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</span>
 				<input
 					bind:value={harness}
 					placeholder="auto"
-					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				/>
 			</label>
 			<label class="space-y-1">
-				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Profile</span>
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Profile</span>
 				<select
 					bind:value={profile}
 					required
-					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				>
 					<option value="cheap">cheap</option>
 					<option value="fast">fast</option>
@@ -308,11 +308,11 @@
 				</select>
 			</label>
 			<label class="space-y-1">
-				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Effort</span>
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Effort</span>
 				<select
 					bind:value={effort}
 					required
-					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				>
 					<option value="low">low</option>
 					<option value="medium">medium</option>
@@ -320,25 +320,25 @@
 				</select>
 			</label>
 			<label class="space-y-1">
-				<span class="text-xs font-medium text-gray-600 dark:text-gray-300">Label filter</span>
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Label filter</span>
 				<input
 					bind:value={labelFilter}
 					placeholder="optional"
-					class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				/>
 			</label>
 			<div class="flex items-end gap-2 sm:col-span-4">
 				<button
 					type="submit"
 					disabled={starting || !profile.trim() || !effort.trim()}
-					class="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900"
+					class="border border-fg-ink bg-fg-ink px-3 py-1.5 text-sm font-medium text-bg-canvas hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-fg-ink dark:bg-dark-fg-ink dark:text-dark-bg-canvas"
 				>
 					{starting ? 'Starting…' : 'Start'}
 				</button>
 				<button
 					type="button"
 					onclick={() => (showStartForm = false)}
-					class="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+					class="px-3 py-1.5 text-sm text-fg-muted hover:bg-bg-canvas dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 				>
 					Cancel
 				</button>
@@ -347,42 +347,42 @@
 	{/if}
 
 	{#if actionError}
-		<div class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+		<div class="border border-border-line bg-bg-surface px-3 py-2 text-body-sm text-status-failed dark:border-dark-border-line dark:bg-dark-bg-surface">
 			{actionError}
 		</div>
 	{/if}
 
-	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
 		<table class="w-full text-sm">
 			<thead>
-				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">ID</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Kind</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">ID</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Kind</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 						>State / Phase</th
 					>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300"
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 						>Current Bead</th
 					>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300"
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 						>Attempts</th
 					>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Actions</th>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Actions</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each data.workers.edges as edge (edge.cursor)}
 					<tr
 						onclick={() => openWorker(edge.node.id)}
-						class="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 {activeWorker ===
+						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {activeWorker ===
 						edge.node.id
-							? 'bg-blue-50 dark:bg-blue-900/20'
+							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 					>
-						<td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 font-mono-code text-mono-code text-lever">
 							{edge.node.id.slice(0, 8)}
 						</td>
-						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
 							{edge.node.kind}
 						</td>
 						<td class="px-4 py-3">
@@ -394,10 +394,10 @@
 								{livePhaseOverrides.get(edge.node.id) ?? edge.node.state}
 							</span>
 						</td>
-						<td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							{edge.node.currentBead ?? '—'}
 						</td>
-						<td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-right text-fg-muted dark:text-dark-fg-muted">
 							{#if edge.node.attempts != null}
 								<span title="{edge.node.successes ?? 0}✓ / {edge.node.failures ?? 0}✗">
 									{edge.node.attempts}
@@ -412,19 +412,19 @@
 									type="button"
 									onclick={(event) => stopWorker(event, edge.node.id)}
 									disabled={stoppingId === edge.node.id}
-									class="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+									class="border border-border-line px-2 py-1 text-xs font-medium text-status-failed hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
 								>
 									{stoppingId === edge.node.id ? 'Stopping…' : 'Stop'}
 								</button>
 							{:else}
-								<span class="text-xs text-gray-400 dark:text-gray-600">—</span>
+								<span class="text-mono-code text-fg-muted dark:text-dark-fg-muted">—</span>
 							{/if}
 						</td>
 					</tr>
 				{/each}
 				{#if data.workers.edges.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+						<td colspan="6" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							No workers found. Nothing is draining this queue right now; start a worker here
 							or run ddx work from a terminal.
 						</td>

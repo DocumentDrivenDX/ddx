@@ -99,13 +99,9 @@
 	}
 
 	function statusClass(status: string): string {
-		if (status === 'installed') {
-			return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300';
-		}
-		if (status === 'update-available') {
-			return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300';
-		}
-		return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-300';
+		if (status === 'installed') return 'badge-status-closed';
+		if (status === 'update-available') return 'badge-status-in-progress';
+		return 'badge-status-open';
 	}
 
 	function pluginByName(name: string): PluginInfo | null {
@@ -310,8 +306,8 @@
 <div class="space-y-6">
 	<div class="flex flex-wrap items-start justify-between gap-4">
 		<div>
-			<h1 class="text-xl font-semibold text-gray-950 dark:text-white">Plugins</h1>
-			<p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+			<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Plugins</h1>
+			<p class="mt-1 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{plugins.length} registry entries
 			</p>
 		</div>
@@ -324,11 +320,11 @@
 							projectId: $page.params.projectId!,
 							workerId: id
 						})}
-						class="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900"
+						class="inline-flex items-center gap-2 border border-border-line bg-bg-surface px-3 py-2 text-body-sm font-medium text-accent-lever hover:bg-bg-elevated dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-accent-lever dark:hover:bg-dark-bg-elevated"
 					>
 						<ExternalLink class="h-4 w-4" aria-hidden="true" />
 						<span class="font-medium">{pluginName}</span>
-						<span class="font-mono">{id}</span>
+						<span class="font-mono-code text-mono-code">{id}</span>
 					</a>
 				{/each}
 			</div>
@@ -337,7 +333,7 @@
 
 	{#if dispatchError}
 		<div
-			class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+			class="border border-border-line bg-bg-surface px-4 py-3 text-body-sm text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error"
 		>
 			{dispatchError}
 		</div>
@@ -351,7 +347,7 @@
 			{@const busy = isBusy(plugin.name)}
 			<article
 				aria-label={plugin.name}
-				class="flex min-h-72 flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-sm shadow-gray-900/5 dark:border-gray-800 dark:bg-gray-900 dark:shadow-black/20"
+				class="flex min-h-72 flex-col border border-border-line bg-bg-elevated p-5 dark:border-dark-border-line dark:bg-dark-bg-elevated"
 			>
 				<div class="flex items-start justify-between gap-3">
 					<div class="min-w-0">
@@ -361,12 +357,12 @@
 								projectId: $page.params.projectId!,
 								name: plugin.name
 							})}
-							class="text-lg font-semibold break-words text-gray-950 hover:text-blue-700 dark:text-white dark:hover:text-blue-300"
+							class="text-headline-md font-headline-md break-words text-fg-ink hover:text-accent-lever dark:text-dark-fg-ink dark:hover:text-dark-accent-lever"
 						>
 							{plugin.name}
 						</a>
 						<div
-							class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300"
+							class="mt-1 flex flex-wrap items-center gap-2 text-label-caps font-label-caps uppercase text-fg-muted dark:text-dark-fg-muted"
 						>
 							<span>{plugin.type}</span>
 							<span aria-hidden="true">/</span>
@@ -376,14 +372,14 @@
 					<div class="flex shrink-0 flex-wrap justify-end gap-2">
 						{#if workerId && action}
 							<span
-								class="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
+								class="inline-flex items-center gap-1.5 border border-border-line bg-bg-surface px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted"
 							>
 								<Loader2 class="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
 								{inFlightActionLabel(action)}
 							</span>
 						{:else}
 							<span
-								class="shrink-0 rounded-full border px-2 py-1 text-xs font-medium {statusClass(
+								class="shrink-0 border px-1.5 py-0.5 text-label-caps font-label-caps uppercase {statusClass(
 									plugin.status
 								)}"
 							>
@@ -397,7 +393,7 @@
 										workerId: failure.workerId
 									})}
 									title="{actionFailedLabel(failure.action)} — view worker"
-									class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
+									class="inline-flex items-center gap-1.5 border border-border-line bg-bg-surface px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-error hover:bg-bg-elevated dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error dark:hover:bg-dark-bg-elevated"
 								>
 									<AlertCircle class="h-3.5 w-3.5" aria-hidden="true" />
 									{actionFailedLabel(failure.action)}
@@ -407,26 +403,26 @@
 					</div>
 				</div>
 
-				<p class="mt-4 flex-1 text-sm leading-6 text-gray-700 dark:text-gray-300">
+				<p class="mt-4 flex-1 text-body-sm leading-6 text-fg-muted dark:text-dark-fg-muted">
 					{plugin.description}
 				</p>
 
-				<div class="mt-4 grid gap-2 text-sm">
+				<div class="mt-4 grid gap-2 text-body-sm">
 					<div class="flex items-center justify-between gap-3">
-						<span class="text-gray-500 dark:text-gray-400">Registry</span>
-						<span class="font-mono text-gray-900 dark:text-gray-100">{plugin.version}</span>
+						<span class="text-fg-muted dark:text-dark-fg-muted">Registry</span>
+						<span class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{plugin.version}</span>
 					</div>
 					{#if plugin.installedVersion}
 						<div class="flex items-center justify-between gap-3">
-							<span class="text-gray-500 dark:text-gray-400">Current</span>
-							<span class="font-mono text-gray-900 dark:text-gray-100"
+							<span class="text-fg-muted dark:text-dark-fg-muted">Current</span>
+							<span class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink"
 								>{plugin.installedVersion}</span
 							>
 						</div>
 					{/if}
 					<div class="flex items-center justify-between gap-3">
-						<span class="text-gray-500 dark:text-gray-400">Disk</span>
-						<span class="font-mono text-gray-900 dark:text-gray-100"
+						<span class="text-fg-muted dark:text-dark-fg-muted">Disk</span>
+						<span class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink"
 							>{formatDisk(plugin.diskBytes)}</span
 						>
 					</div>
@@ -436,7 +432,7 @@
 					<div class="mt-4 flex flex-wrap gap-2">
 						{#each plugin.keywords as keyword (keyword)}
 							<span
-								class="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-300"
+								class="border border-border-line px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
 							>
 								{keyword}
 							</span>
@@ -454,7 +450,7 @@
 							<button
 								type="button"
 								title={workerId ? `Worker ${workerId}` : undefined}
-								class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 dark:bg-blue-600 dark:hover:bg-blue-500"
+								class="inline-flex items-center gap-2 bg-accent-lever px-3 py-2 text-body-sm font-medium text-bg-elevated hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-dark-accent-lever dark:text-dark-bg-canvas"
 								disabled={busy}
 								onclick={() => openInstall(plugin)}
 							>
@@ -472,7 +468,7 @@
 								type="button"
 								aria-label="Update plugin"
 								title={workerId ? `Worker ${workerId}` : undefined}
-								class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500"
+								class="inline-flex h-9 w-9 items-center justify-center bg-accent-load text-bg-elevated hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-dark-accent-load"
 								disabled={busy}
 								onclick={() => dispatchPlugin(plugin.name, 'update')}
 							>
@@ -481,7 +477,7 @@
 						</Tooltip>
 					{:else}
 						<span
-							class="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
+							class="inline-flex items-center gap-2 text-body-sm font-medium text-status-closed"
 						>
 							<PackageCheck class="h-4 w-4" aria-hidden="true" />
 							Ready
@@ -508,23 +504,23 @@
 	{/snippet}
 	{#if installingPlugin}
 		<div class="space-y-4">
-			<div class="rounded-md bg-gray-50 p-3 dark:bg-gray-800">
-				<div class="text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
+			<div class="bg-bg-surface p-3 dark:bg-dark-bg-surface">
+				<div class="text-label-caps font-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">
 					Disk estimate
 				</div>
-				<div class="mt-1 font-mono text-base text-gray-950 dark:text-white">
+				<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
 					{formatDisk(installingPlugin.diskBytes)}
 				</div>
 			</div>
 			<div role="radiogroup" aria-label="Scope" class="grid gap-2">
 				<label
-					class="flex items-center gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-700"
+					class="flex items-center gap-3 border border-border-line p-3 dark:border-dark-border-line"
 				>
 					<input type="radio" name="install-scope" value="global" bind:group={installScope} />
 					<span>Global</span>
 				</label>
 				<label
-					class="flex items-center gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-700"
+					class="flex items-center gap-3 border border-border-line p-3 dark:border-dark-border-line"
 				>
 					<input type="radio" name="install-scope" value="project" bind:group={installScope} />
 					<span>Project</span>

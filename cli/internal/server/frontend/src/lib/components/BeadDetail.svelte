@@ -239,32 +239,32 @@
 	function statusClass(status: string): string {
 		switch (status) {
 			case 'open':
-				return 'text-blue-600 dark:text-blue-400';
+				return 'text-accent-lever dark:text-dark-accent-lever';
 			case 'in-progress':
-				return 'text-yellow-600 dark:text-yellow-400';
+				return 'text-accent-load dark:text-dark-accent-load';
 			case 'closed':
-				return 'text-green-600 dark:text-green-400';
+				return 'text-status-closed dark:text-status-closed';
 			case 'blocked':
-				return 'text-red-600 dark:text-red-400';
+				return 'text-error dark:text-dark-error';
 			default:
-				return 'text-gray-500 dark:text-gray-400';
+				return 'text-fg-muted dark:text-dark-fg-muted';
 		}
 	}
 </script>
 
 <!-- Right-side detail panel -->
 <div
-	class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-xl dark:bg-gray-900"
+	class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-bg-elevated shadow-xl dark:bg-dark-bg-canvas"
 >
 	<!-- Header -->
 	<div
-		class="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700"
+		class="flex shrink-0 items-center justify-between border-b border-border-line px-6 py-4 dark:border-dark-border-line"
 	>
 		<div class="flex min-w-0 items-center gap-3">
 			<span
 				title={bead.id}
 				data-testid="bead-detail-id"
-				class="min-w-0 truncate font-mono text-xs text-gray-500 dark:text-gray-400"
+				class="min-w-0 truncate font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted"
 				>{bead.id}</span
 			>
 			<button
@@ -272,17 +272,17 @@
 				onclick={handleCopyId}
 				aria-label="Copy bead id"
 				data-testid="bead-detail-copy-id"
-				class="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+				class="shrink-0 rounded-none p-1 text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink"
 			>
 				{#if idCopied}
-					<Check class="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+					<Check class="h-3.5 w-3.5 text-status-closed" />
 				{:else}
 					<Copy class="h-3.5 w-3.5" />
 				{/if}
 			</button>
 			<span class="shrink-0 font-medium {statusClass(bead.status)}">{bead.status}</span>
 			{#if bead.owner}
-				<span class="shrink-0 truncate text-xs text-gray-500 dark:text-gray-400">@ {bead.owner}</span>
+				<span class="shrink-0 truncate text-xs text-fg-muted dark:text-dark-fg-muted">@ {bead.owner}</span>
 			{/if}
 		</div>
 		<div class="ml-3 flex shrink-0 items-center gap-2">
@@ -291,7 +291,7 @@
 					<button
 						onclick={handleClaim}
 						disabled={busy}
-						class="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex items-center gap-1.5 rounded-none bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-lever/90 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						<UserPlus class="h-3.5 w-3.5" />
 						Claim
@@ -300,7 +300,7 @@
 					<button
 						onclick={handleUnclaim}
 						disabled={busy}
-						class="flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+						class="flex items-center gap-1.5 rounded-none border border-border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
 					>
 						<UserMinus class="h-3.5 w-3.5" />
 						Unclaim
@@ -309,7 +309,7 @@
 				<button
 					onclick={() => (editing = true)}
 					disabled={busy}
-					class="flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+					class="flex items-center gap-1.5 rounded-none border border-border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
 				>
 					<Pencil class="h-3.5 w-3.5" />
 					Edit
@@ -318,7 +318,7 @@
 					bind:this={deleteButton}
 					onclick={openDeleteDialog}
 					disabled={busy}
-					class="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+					class="flex items-center gap-1.5 rounded-none border border-error/30 px-3 py-1.5 text-sm font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-error/30 dark:text-dark-error dark:hover:bg-dark-error/10"
 				>
 					<Trash2 class="h-3.5 w-3.5" />
 					Delete
@@ -326,7 +326,7 @@
 			{/if}
 			<button
 				onclick={onClose}
-				class="rounded p-1.5 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+				class="rounded-none p-1.5 text-fg-muted hover:bg-bg-canvas dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated"
 				aria-label="Close panel"
 			>
 				<X class="h-4 w-4" />
@@ -337,7 +337,7 @@
 	<!-- Action error banner -->
 	{#if actionError}
 		<div
-			class="shrink-0 border-b border-red-200 bg-red-50 px-6 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
+			class="shrink-0 border-b border-error/30 bg-error/10 px-6 py-2 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 		>
 			{actionError}
 		</div>
@@ -358,34 +358,34 @@
 			{/key}
 		{:else}
 			<!-- Read mode -->
-			<h2 class="mb-5 text-xl font-semibold text-gray-900 dark:text-white">{bead.title}</h2>
+			<h2 class="mb-5 text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">{bead.title}</h2>
 
 			<dl class="space-y-4 text-sm">
 				<div class="grid grid-cols-2 gap-4">
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Priority
 						</dt>
-						<dd class="mt-1 text-gray-900 dark:text-gray-100">{bead.priority}</dd>
+						<dd class="mt-1 text-fg-ink dark:text-dark-fg-ink">{bead.priority}</dd>
 					</div>
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Type
 						</dt>
-						<dd class="mt-1 text-gray-900 dark:text-gray-100">{bead.issueType || '—'}</dd>
+						<dd class="mt-1 text-fg-ink dark:text-dark-fg-ink">{bead.issueType || '—'}</dd>
 					</div>
 					{#if bead.parent}
 						<div class="col-span-2">
 							<dt
-								class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+								class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 							>
 								Parent
 							</dt>
-							<dd class="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">{bead.parent}</dd>
+							<dd class="mt-1 font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted">{bead.parent}</dd>
 						</div>
 					{/if}
 				</div>
@@ -393,14 +393,14 @@
 				{#if bead.labels && bead.labels.length > 0}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Labels
 						</dt>
 						<dd class="mt-1 flex flex-wrap gap-1">
 							{#each bead.labels as label}
 								<span
-									class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+									class="rounded-none bg-bg-canvas px-2 py-0.5 text-xs text-fg-muted dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 									>{label}</span
 								>
 							{/each}
@@ -411,11 +411,11 @@
 				{#if bead.description}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Description
 						</dt>
-						<dd class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+						<dd class="mt-1 whitespace-pre-wrap text-fg-muted dark:text-dark-fg-ink">
 							{bead.description}
 						</dd>
 					</div>
@@ -424,11 +424,11 @@
 				{#if bead.acceptance}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Acceptance
 						</dt>
-						<dd class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+						<dd class="mt-1 whitespace-pre-wrap text-fg-muted dark:text-dark-fg-ink">
 							{bead.acceptance}
 						</dd>
 					</div>
@@ -437,34 +437,34 @@
 				{#if bead.notes}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Notes
 						</dt>
-						<dd class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">{bead.notes}</dd>
+						<dd class="mt-1 whitespace-pre-wrap text-fg-muted dark:text-dark-fg-ink">{bead.notes}</dd>
 					</div>
 				{/if}
 
 				{#if executions.length > 0}
 					<div data-testid="bead-executions">
-						<dt class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400">
+						<dt class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted">
 							Executions ({executions.length})
 						</dt>
 						<dd class="mt-1 space-y-1">
 							{#each executions as exec (exec.id)}
 								<a
 									href={executionHref(exec.id)}
-									class="flex items-center justify-between rounded border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+									class="flex items-center justify-between rounded-none border border-border-line px-2 py-1 text-xs hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-elevated"
 								>
 									<span class="flex items-center gap-2">
-										<span class="font-mono text-gray-700 dark:text-gray-200">{exec.id}</span>
+										<span class="font-mono-code text-accent-lever dark:text-dark-accent-lever">{exec.id}</span>
 										{#if exec.verdict}
-											<span class="rounded border px-1 py-0.5 text-[10px] uppercase">
+											<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
 												{exec.verdict}
 											</span>
 										{/if}
 									</span>
-									<span class="text-gray-500 dark:text-gray-400">{fmtExecDate(exec.createdAt)}</span>
+									<span class="text-fg-muted dark:text-dark-fg-muted">{fmtExecDate(exec.createdAt)}</span>
 								</a>
 							{/each}
 						</dd>
@@ -474,15 +474,15 @@
 				{#if bead.dependencies && bead.dependencies.length > 0}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Dependencies
 						</dt>
 						<dd class="mt-1 space-y-1">
 							{#each bead.dependencies as dep}
-								<div class="font-mono text-xs text-gray-500 dark:text-gray-400">
+								<div class="font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted">
 									{dep.dependsOnId}
-									<span class="text-gray-400">({dep.type})</span>
+									<span class="text-fg-muted dark:text-dark-fg-muted">({dep.type})</span>
 								</div>
 							{/each}
 						</dd>
@@ -490,7 +490,7 @@
 				{/if}
 
 				<div
-					class="border-t border-gray-100 pt-4 text-xs text-gray-400 dark:border-gray-800 dark:text-gray-500"
+					class="border-t border-border-line pt-4 text-xs text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
 				>
 					<div>
 						Created: {new Date(bead.createdAt).toLocaleString()}{bead.createdBy
@@ -522,16 +522,16 @@
 
 		{#if hasChildBeads}
 			<label
-				class="mt-4 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-100"
+				class="mt-4 flex items-start gap-3 rounded-none border border-error/30 bg-error/10 p-3 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 			>
 				<input
 					type="checkbox"
 					bind:checked={cascadeToChildren}
-					class="mt-1 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500 dark:border-red-700 dark:bg-gray-900"
+					class="mt-1 h-4 w-4 rounded-none border-error/50 text-error focus:ring-error dark:border-dark-error/50 dark:bg-dark-bg-elevated"
 				/>
 				<span>
 					<span class="block font-medium">Cascade to child beads</span>
-					<span class="block text-xs text-red-700 dark:text-red-300">
+					<span class="block text-xs text-error dark:text-dark-error">
 						Apply the delete intent to {bead.childCount} child {bead.childCount === 1
 							? 'bead'
 							: 'beads'}.

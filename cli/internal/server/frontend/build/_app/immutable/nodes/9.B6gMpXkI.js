@@ -1,0 +1,1 @@
+import{V as e,z as t}from"../chunks/DkIPlaea.js";import"../chunks/BEDIq91W.js";var n=e(`<h1>Playwright e2e test demo</h1>`);function r(e){t(e,n())}export{r as component};

@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260430T060214-0f657e2c",
+  "bead_id": "ddx-04770087",
+  "base_rev": "7a27043fb7aa48219f66dcc55758aa428d653a03",
+  "created_at": "2026-04-30T06:02:15.673330624Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-04770087",
+    "title": "Restyle bead list, detail, and form views",
+    "description": "EPIC: Token class sweep across all route views. Children cover individual surfaces.",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:02:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:02:14.898684963Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T060214-0f657e2c",
+    "prompt": ".ddx/executions/20260430T060214-0f657e2c/prompt.md",
+    "manifest": ".ddx/executions/20260430T060214-0f657e2c/manifest.json",
+    "result": ".ddx/executions/20260430T060214-0f657e2c/result.json",
+    "checks": ".ddx/executions/20260430T060214-0f657e2c/checks.json",
+    "usage": ".ddx/executions/20260430T060214-0f657e2c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-04770087-20260430T060214-0f657e2c"
+  }
+}

@@ -119,15 +119,15 @@
 		<div class="min-w-0">
 			<a
 				href={pluginsHref()}
-				class="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-950 dark:text-gray-300 dark:hover:text-white"
+				class="inline-flex items-center gap-2 text-body-sm font-medium text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
 			>
 				<ArrowLeft class="h-4 w-4" aria-hidden="true" />
 				Plugins
 			</a>
-			<h1 class="mt-3 text-2xl font-semibold break-words text-gray-950 dark:text-white">
+			<h1 class="mt-3 text-headline-lg font-headline-lg break-words text-fg-ink dark:text-dark-fg-ink">
 				{plugin.name}
 			</h1>
-			<p class="mt-2 max-w-3xl text-sm leading-6 text-gray-700 dark:text-gray-300">
+			<p class="mt-2 max-w-3xl text-body-sm leading-6 text-fg-muted dark:text-dark-fg-muted">
 				{plugin.description}
 			</p>
 		</div>
@@ -135,7 +135,7 @@
 			{#if plugin.status === 'update-available'}
 				<button
 					type="button"
-					class="inline-flex items-center gap-2 rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500"
+					class="inline-flex items-center gap-2 bg-accent-load px-3 py-2 text-body-sm font-medium text-bg-elevated hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-dark-accent-load dark:text-dark-bg-canvas"
 					disabled={busyAction === 'update'}
 					onclick={() => dispatchPlugin('update')}
 				>
@@ -146,7 +146,7 @@
 			{#if plugin.installedVersion}
 				<button
 					type="button"
-					class="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-400 dark:bg-red-600 dark:hover:bg-red-500"
+					class="inline-flex items-center gap-2 bg-error px-3 py-2 text-body-sm font-medium text-bg-elevated hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-dark-error dark:text-dark-bg-canvas"
 					disabled={busyAction === 'uninstall'}
 					onclick={() => (uninstallOpen = true)}
 				>
@@ -160,7 +160,7 @@
 	{#if workerId}
 		<a
 			href={workerHref(workerId)}
-			class="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900"
+			class="inline-flex items-center gap-2 border border-border-line bg-bg-surface px-3 py-2 text-body-sm font-medium text-accent-lever hover:bg-bg-elevated dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-accent-lever dark:hover:bg-dark-bg-elevated"
 		>
 			<ExternalLink class="h-4 w-4" aria-hidden="true" />
 			{workerId}
@@ -169,7 +169,7 @@
 
 	{#if dispatchError}
 		<div
-			class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+			class="border border-border-line bg-bg-surface px-4 py-3 text-body-sm text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error"
 		>
 			{dispatchError}
 		</div>
@@ -178,37 +178,37 @@
 	<div class="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
 		<section
 			aria-label="Manifest"
-			class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
+			class="border border-border-line bg-bg-elevated p-5 dark:border-dark-border-line dark:bg-dark-bg-elevated"
 		>
-			<h2 class="text-base font-semibold text-gray-950 dark:text-white">Manifest</h2>
+			<h2 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Manifest</h2>
 			<pre
-				class="mt-4 overflow-auto rounded-md bg-gray-950 p-4 text-sm leading-6 text-gray-100"><code
+				class="mt-4 overflow-auto bg-terminal-bg p-4 font-mono-code text-mono-code text-terminal-fg"><code
 					>{manifestYaml}</code
 				></pre>
 		</section>
 
 		<section
-			class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
+			class="border border-border-line bg-bg-elevated p-5 dark:border-dark-border-line dark:bg-dark-bg-elevated"
 		>
-			<h2 class="text-base font-semibold text-gray-950 dark:text-white">Versions</h2>
-			<div class="mt-4 grid gap-3 text-sm">
+			<h2 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Versions</h2>
+			<div class="mt-4 grid gap-3 text-body-sm">
 				<div class="flex items-center justify-between gap-4">
-					<span class="text-gray-500 dark:text-gray-400">Registry</span>
-					<span class="font-mono text-gray-950 dark:text-white">{plugin.version}</span>
+					<span class="text-fg-muted dark:text-dark-fg-muted">Registry</span>
+					<span class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{plugin.version}</span>
 				</div>
 				<div class="flex items-center justify-between gap-4">
-					<span class="text-gray-500 dark:text-gray-400">Installed</span>
-					<span class="font-mono text-gray-950 dark:text-white"
+					<span class="text-fg-muted dark:text-dark-fg-muted">Installed</span>
+					<span class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink"
 						>{plugin.installedVersion ?? 'Not installed'}</span
 					>
 				</div>
 				<div class="flex items-center justify-between gap-4">
-					<span class="text-gray-500 dark:text-gray-400">Type</span>
-					<span class="text-gray-950 dark:text-white">{plugin.type}</span>
+					<span class="text-fg-muted dark:text-dark-fg-muted">Type</span>
+					<span class="text-fg-ink dark:text-dark-fg-ink">{plugin.type}</span>
 				</div>
 				<div class="flex items-center justify-between gap-4">
-					<span class="text-gray-500 dark:text-gray-400">Disk</span>
-					<span class="font-mono text-gray-950 dark:text-white">{formatDisk(plugin.diskBytes)}</span
+					<span class="text-fg-muted dark:text-dark-fg-muted">Disk</span>
+					<span class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{formatDisk(plugin.diskBytes)}</span
 					>
 				</div>
 			</div>
@@ -218,13 +218,13 @@
 	<div class="grid gap-4 md:grid-cols-3">
 		<section
 			aria-label="Skills"
-			class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
+			class="border border-border-line bg-bg-elevated p-5 dark:border-dark-border-line dark:bg-dark-bg-elevated"
 		>
-			<h2 class="text-base font-semibold text-gray-950 dark:text-white">Skills</h2>
-			<ul class="mt-4 space-y-2 text-sm text-gray-700 dark:text-gray-300">
+			<h2 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Skills</h2>
+			<ul class="mt-4 space-y-2 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{#each sectionItems(plugin.skills) as item}
 					<li
-						class="rounded border border-gray-200 px-3 py-2 font-mono text-xs dark:border-gray-700"
+						class="border border-border-line px-3 py-2 font-mono-code text-mono-code dark:border-dark-border-line"
 					>
 						{item}
 					</li>
@@ -233,13 +233,13 @@
 		</section>
 		<section
 			aria-label="Prompts"
-			class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
+			class="border border-border-line bg-bg-elevated p-5 dark:border-dark-border-line dark:bg-dark-bg-elevated"
 		>
-			<h2 class="text-base font-semibold text-gray-950 dark:text-white">Prompts</h2>
-			<ul class="mt-4 space-y-2 text-sm text-gray-700 dark:text-gray-300">
+			<h2 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Prompts</h2>
+			<ul class="mt-4 space-y-2 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{#each sectionItems(plugin.prompts) as item}
 					<li
-						class="rounded border border-gray-200 px-3 py-2 font-mono text-xs dark:border-gray-700"
+						class="border border-border-line px-3 py-2 font-mono-code text-mono-code dark:border-dark-border-line"
 					>
 						{item}
 					</li>
@@ -248,13 +248,13 @@
 		</section>
 		<section
 			aria-label="Templates"
-			class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
+			class="border border-border-line bg-bg-elevated p-5 dark:border-dark-border-line dark:bg-dark-bg-elevated"
 		>
-			<h2 class="text-base font-semibold text-gray-950 dark:text-white">Templates</h2>
-			<ul class="mt-4 space-y-2 text-sm text-gray-700 dark:text-gray-300">
+			<h2 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Templates</h2>
+			<ul class="mt-4 space-y-2 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{#each sectionItems(plugin.templates) as item}
 					<li
-						class="rounded border border-gray-200 px-3 py-2 font-mono text-xs dark:border-gray-700"
+						class="border border-border-line px-3 py-2 font-mono-code text-mono-code dark:border-dark-border-line"
 					>
 						{item}
 					</li>

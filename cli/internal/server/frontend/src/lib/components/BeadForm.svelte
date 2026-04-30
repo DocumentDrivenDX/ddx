@@ -127,14 +127,14 @@
 	}
 
 	const inputClass =
-		'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400';
-	const labelClass = 'block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1';
+		'w-full rounded-none border border-border-line bg-bg-elevated px-3 py-2 text-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:outline-none focus:ring-1 focus:ring-accent-lever dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:placeholder-dark-fg-muted dark:focus:border-dark-accent-lever';
+	const labelClass = 'block text-xs font-medium text-fg-muted dark:text-dark-fg-muted mb-1';
 </script>
 
 <form onsubmit={handleSubmit} class="space-y-4">
 	{#if error}
 		<div
-			class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
+			class="rounded-none border border-error/30 bg-error/10 px-3 py-2 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 		>
 			{error}
 		</div>
@@ -155,7 +155,12 @@
 	<div class="grid grid-cols-2 gap-3">
 		<div>
 			<label for="bead-status" class={labelClass}>Status</label>
-			<select id="bead-status" bind:value={status} class={inputClass}>
+			<select
+				id="bead-status"
+				bind:value={status}
+				class="{inputClass} text-status-{status}"
+				style="background-color: var(--status-{status}-surface); border-color: var(--status-{status}-border);"
+			>
 				<option value="open">open</option>
 				<option value="in-progress">in-progress</option>
 				<option value="blocked">blocked</option>
@@ -246,14 +251,14 @@
 		<button
 			type="button"
 			onclick={onCancel}
-			class="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+			class="rounded-none border border-border-line px-4 py-2 text-sm text-fg-muted hover:bg-bg-canvas dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas"
 		>
 			Cancel
 		</button>
 		<button
 			type="submit"
 			disabled={submitting}
-			class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+			class="rounded-none bg-accent-lever px-4 py-2 text-sm font-medium text-white hover:bg-accent-lever/90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-dark-accent-lever dark:hover:bg-dark-accent-lever/90"
 		>
 			{submitting ? 'Saving…' : isUpdate ? 'Save changes' : 'Create bead'}
 		</button>

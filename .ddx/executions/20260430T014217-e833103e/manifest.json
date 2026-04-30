@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T014217-e833103e",
+  "bead_id": "ddx-ffe9ba63",
+  "base_rev": "91783f26c2fec2fb52285f49cb0752885c6ff9fd",
+  "created_at": "2026-04-30T01:42:18.731827569Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ffe9ba63",
+    "title": "[visual-suite] V5 author 6 principle-graphic prompts",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Author all 6 prompts at docs/helix/00-discover/visuals/principle-N-*.prompt.md mapping each thesis principle to a lever-machine component: 1=lever arm, 2=cyclic motion, 3=interchangeable handles, 4=load (probabilistic mass), 5=trail/receipts, 6=fulcrum/pivot. Reference DESIGN.md tokens for palette/typography. Sober/utilitarian register; no AI-gloss.",
+    "labels": [
+      "prompt",
+      "plan-2026-04-29-vis",
+      "principles"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:42:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:42:17.907534821Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T014217-e833103e",
+    "prompt": ".ddx/executions/20260430T014217-e833103e/prompt.md",
+    "manifest": ".ddx/executions/20260430T014217-e833103e/manifest.json",
+    "result": ".ddx/executions/20260430T014217-e833103e/result.json",
+    "checks": ".ddx/executions/20260430T014217-e833103e/checks.json",
+    "usage": ".ddx/executions/20260430T014217-e833103e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ffe9ba63-20260430T014217-e833103e"
+  }
+}

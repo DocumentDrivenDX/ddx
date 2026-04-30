@@ -71,7 +71,7 @@
 				{@render summary()}
 			</div>
 		{/if}
-		<label for={inputId} class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+		<label for={inputId} class="block text-sm font-medium text-fg-ink dark:text-dark-fg-ink">
 			Type the {expectedLabel} to confirm
 		</label>
 		<input
@@ -81,13 +81,13 @@
 			autocomplete="off"
 			autocapitalize="off"
 			spellcheck="false"
-			class="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400"
+			class="mt-2 w-full rounded-none border border-border-line bg-bg-elevated px-3 py-2 font-mono text-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink dark:placeholder-dark-fg-muted dark:focus:border-dark-accent-lever"
 			placeholder={expectedText}
 			aria-describedby="typed-confirm-dialog-expected"
 		/>
 		<p
 			id="typed-confirm-dialog-expected"
-			class="mt-2 font-mono text-xs text-gray-500 dark:text-gray-400"
+			class="mt-2 font-mono text-xs text-fg-muted dark:text-dark-fg-muted"
 		>
 			{expectedText}
 		</p>

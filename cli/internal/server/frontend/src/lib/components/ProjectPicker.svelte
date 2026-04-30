@@ -61,7 +61,7 @@
 
 <select
 	aria-label="Project"
-	class="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 disabled:text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:disabled:text-gray-300"
+	class="rounded-none border border-border-line px-3 py-1 text-sm text-fg-ink disabled:text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-ink dark:disabled:text-dark-fg-ink"
 	value={projectStore.value?.id ?? ''}
 	onchange={handleChange}
 	disabled={loading}

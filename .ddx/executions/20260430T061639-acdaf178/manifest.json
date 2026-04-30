@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T061639-acdaf178",
+  "bead_id": "ddx-e2c1eb64",
+  "base_rev": "18d7c8ee0ca0d7f13c62b20eb605204613446e2a",
+  "created_at": "2026-04-30T06:16:40.610177808Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e2c1eb64",
+    "title": "Restyle sessions view",
+    "description": "Apply tokens to sessions/+page.svelte (555 lines). Data table styling: mono-code session IDs, sharp status badges, label-caps headers, hairline dividers, bg-surface rows. Use frontend-design skill for dense table layout.",
+    "parent": "ddx-04770087",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:16:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:16:39.852086133Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T061639-acdaf178",
+    "prompt": ".ddx/executions/20260430T061639-acdaf178/prompt.md",
+    "manifest": ".ddx/executions/20260430T061639-acdaf178/manifest.json",
+    "result": ".ddx/executions/20260430T061639-acdaf178/result.json",
+    "checks": ".ddx/executions/20260430T061639-acdaf178/checks.json",
+    "usage": ".ddx/executions/20260430T061639-acdaf178/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e2c1eb64-20260430T061639-acdaf178"
+  }
+}

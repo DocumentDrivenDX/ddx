@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T051430-5fa095c5",
+  "bead_id": "ddx-3c59ea2a",
+  "base_rev": "7014d7fa503a841bafb6fa2d4d73ce18dfd8ea88",
+  "created_at": "2026-04-30T05:14:31.659449029Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3c59ea2a",
+    "title": "Restyle BeadDetail",
+    "description": "Restyle BeadDetail.svelte: token class swap, sharp badges, mono-code IDs, accent-lever links. No functional changes. Playwright: run `bun run test:e2e -- --grep 'bead'` after changes, update screenshots with --update-snapshots for visual diffs.",
+    "parent": "ddx-569272d1",
+    "metadata": {
+      "claimed-at": "2026-04-30T05:14:30Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T05:14:30.888670735Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T051430-5fa095c5",
+    "prompt": ".ddx/executions/20260430T051430-5fa095c5/prompt.md",
+    "manifest": ".ddx/executions/20260430T051430-5fa095c5/manifest.json",
+    "result": ".ddx/executions/20260430T051430-5fa095c5/result.json",
+    "checks": ".ddx/executions/20260430T051430-5fa095c5/checks.json",
+    "usage": ".ddx/executions/20260430T051430-5fa095c5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3c59ea2a-20260430T051430-5fa095c5"
+  }
+}

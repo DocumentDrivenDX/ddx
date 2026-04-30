@@ -288,21 +288,21 @@
 
 	<!-- Detail panel -->
 	<div
-		class="fixed top-0 right-0 z-50 flex h-full w-full max-w-2xl flex-col bg-white shadow-xl dark:bg-gray-900"
+		class="fixed top-0 right-0 z-50 flex h-full w-full max-w-2xl flex-col bg-bg-elevated shadow-xl dark:bg-dark-bg-elevated"
 	>
 		<!-- Header -->
 		<div
-			class="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700"
+			class="flex shrink-0 items-center justify-between border-b border-border-line px-6 py-4 dark:border-dark-border-line"
 		>
 			<div>
-				<h2 class="text-base font-semibold text-gray-900 dark:text-white">
+				<h2 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
 					{data.worker.kind}
 				</h2>
-				<p class="font-mono text-xs text-gray-500 dark:text-gray-400">{data.worker.id}</p>
+				<p class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{data.worker.id}</p>
 			</div>
 			<button
 				onclick={handleClose}
-				class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+				class="p-1.5 text-fg-muted hover:bg-bg-surface hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface dark:hover:text-dark-fg-ink"
 				aria-label="Close"
 			>
 				✕
@@ -311,104 +311,106 @@
 
 		<!-- Metadata grid -->
 		<div
-			class="grid shrink-0 grid-cols-2 gap-x-6 gap-y-2 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700"
+			class="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line"
 		>
 			<div>
-				<span class="text-gray-500 dark:text-gray-400">State: </span>
-				<span class="font-medium text-gray-900 dark:text-white">{data.worker.state}</span>
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">State</div>
+				<div class="mt-0.5 font-medium text-fg-ink dark:text-dark-fg-ink">{data.worker.state}</div>
 			</div>
 			{#if data.worker.harness}
 				<div>
-					<span class="text-gray-500 dark:text-gray-400">Harness: </span>
-					<span class="text-gray-900 dark:text-white">{data.worker.harness}</span>
+					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</div>
+					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">{data.worker.harness}</div>
 				</div>
 			{/if}
 			{#if data.worker.model}
 				<div>
-					<span class="text-gray-500 dark:text-gray-400">Model: </span>
-					<span class="text-gray-900 dark:text-white">{data.worker.model}</span>
+					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Model</div>
+					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">{data.worker.model}</div>
 				</div>
 			{/if}
 			{#if data.worker.effort}
 				<div>
-					<span class="text-gray-500 dark:text-gray-400">Effort: </span>
-					<span class="text-gray-900 dark:text-white">{data.worker.effort}</span>
+					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Effort</div>
+					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">{data.worker.effort}</div>
 				</div>
 			{/if}
 			{#if data.worker.currentBead}
 				<div class="col-span-2">
-					<span class="text-gray-500 dark:text-gray-400">Current bead: </span>
-					<span class="font-mono text-xs text-gray-900 dark:text-white"
-						>{data.worker.currentBead}</span
+					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Current bead</div>
+					<div class="mt-0.5 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink"
+						>{data.worker.currentBead}</div
 					>
 				</div>
 			{/if}
 			{#if data.worker.attempts != null}
 				<div>
-					<span class="text-gray-500 dark:text-gray-400">Attempts: </span>
-					<span class="text-gray-900 dark:text-white">
+					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Attempts</div>
+					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">
 						{data.worker.attempts}
-						<span class="text-xs text-gray-500 dark:text-gray-400">
+						<span class="text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							({data.worker.successes ?? 0}✓ / {data.worker.failures ?? 0}✗)
 						</span>
-					</span>
+					</div>
 				</div>
 			{/if}
 			{#if data.worker.currentAttempt}
 				<div>
-					<span class="text-gray-500 dark:text-gray-400">Phase: </span>
-					<span class="font-medium text-yellow-600 dark:text-yellow-400">
-						{data.worker.currentAttempt.phase}
-					</span>
-					<span class="ml-1 text-xs text-gray-600 dark:text-gray-400">
-						({formatElapsed(data.worker.currentAttempt.elapsedMs)})
-					</span>
+					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Phase</div>
+					<div class="mt-0.5">
+						<span class="font-medium text-status-in-progress">
+							{data.worker.currentAttempt.phase}
+						</span>
+						<span class="ml-1 text-mono-code text-fg-muted dark:text-dark-fg-muted">
+							({formatElapsed(data.worker.currentAttempt.elapsedMs)})
+						</span>
+					</div>
 				</div>
 			{/if}
 			{#if data.worker.lastError}
 				<div class="col-span-2">
-					<span class="text-gray-500 dark:text-gray-400">Last error: </span>
-					<span class="text-red-600 dark:text-red-400">{data.worker.lastError}</span>
+					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Last error</div>
+					<div class="mt-0.5 text-status-failed">{data.worker.lastError}</div>
 				</div>
 			{/if}
 		</div>
 
-		<section class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700">
+		<section class="shrink-0 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line">
 			<div class="mb-3 flex items-center justify-between gap-3">
-				<h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Sessions</h3>
-				<a class="text-xs text-blue-600 hover:underline dark:text-blue-400" href={sessionsHref()}>
+				<h3 class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Sessions</h3>
+				<a class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever" href={sessionsHref()}>
 					All sessions
 				</a>
 			</div>
 			{#if workerSessions.length === 0}
-				<p class="text-xs text-gray-500 dark:text-gray-400">No sessions recorded yet.</p>
+				<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">No sessions recorded yet.</p>
 			{:else}
-				<div class="overflow-hidden rounded border border-gray-200 dark:border-gray-700">
+				<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
 					<table class="w-full text-xs">
-						<thead class="bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+						<thead class="bg-bg-surface text-fg-muted dark:bg-dark-bg-surface dark:text-dark-fg-muted">
 							<tr>
-								<th class="px-3 py-2 text-left font-medium">Session</th>
-								<th class="px-3 py-2 text-left font-medium">Bead</th>
-								<th class="px-3 py-2 text-left font-medium">Status</th>
-								<th class="px-3 py-2 text-right font-medium">Cost</th>
+								<th class="px-3 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide">Session</th>
+								<th class="px-3 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide">Bead</th>
+								<th class="px-3 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide">Status</th>
+								<th class="px-3 py-2 text-right text-label-caps font-label-caps uppercase tracking-wide">Cost</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each workerSessions as session (session.id)}
-								<tr class="border-t border-gray-100 dark:border-gray-700">
+								<tr class="border-t border-border-line dark:border-dark-border-line">
 									<td class="px-3 py-2">
-										<div class="font-mono text-gray-700 dark:text-gray-200">
+										<div class="font-mono-code text-mono-code text-lever">
 											{session.id.slice(0, 12)}
 										</div>
-										<div class="text-gray-400 dark:text-gray-500">
+										<div class="text-fg-muted dark:text-dark-fg-muted">
 											{session.harness} · {fmtDuration(session.durationMs)}
 										</div>
 									</td>
-									<td class="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">
+									<td class="px-3 py-2 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 										{session.beadId ?? '—'}
 									</td>
-									<td class="px-3 py-2 text-gray-700 dark:text-gray-200">{session.status}</td>
-									<td class="px-3 py-2 text-right font-mono text-gray-600 dark:text-gray-300">
+									<td class="px-3 py-2 text-fg-ink dark:text-dark-fg-ink">{session.status}</td>
+									<td class="px-3 py-2 text-right font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 										{fmtCost(session.cost)}
 									</td>
 								</tr>
@@ -419,25 +421,25 @@
 			{/if}
 		</section>
 
-		<section class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700">
-			<div class="mb-3 text-xs font-medium text-gray-500 dark:text-gray-400">Lifecycle audit</div>
+		<section class="shrink-0 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line">
+			<div class="mb-3 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Lifecycle audit</div>
 			{#if lifecycleEvents.length === 0}
-				<p class="text-xs text-gray-500 dark:text-gray-400">No lifecycle actions recorded.</p>
+				<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">No lifecycle actions recorded.</p>
 			{:else}
 				<ul class="space-y-2">
 					{#each lifecycleEvents as event (`${event.action}-${event.timestamp}`)}
 						<li class="flex items-start justify-between gap-3 text-xs">
 							<div>
-								<span class="font-medium text-gray-800 dark:text-gray-100">{event.action}</span>
-								<span class="text-gray-500 dark:text-gray-400"> by {event.actor}</span>
+								<span class="font-medium text-fg-ink dark:text-dark-fg-ink">{event.action}</span>
+								<span class="text-fg-muted dark:text-dark-fg-muted"> by {event.actor}</span>
 								{#if event.beadId}
-									<span class="font-mono text-gray-500 dark:text-gray-400"> · {event.beadId}</span>
+									<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"> · {event.beadId}</span>
 								{/if}
 								{#if event.detail}
-									<div class="mt-0.5 text-gray-500 dark:text-gray-400">{event.detail}</div>
+									<div class="mt-0.5 text-fg-muted dark:text-dark-fg-muted">{event.detail}</div>
 								{/if}
 							</div>
-							<time class="shrink-0 text-gray-400 dark:text-gray-500" datetime={event.timestamp}>
+							<time class="shrink-0 text-fg-muted dark:text-dark-fg-muted" datetime={event.timestamp}>
 								{fmtDate(event.timestamp)}
 							</time>
 						</li>
@@ -450,49 +452,47 @@
 			role="region"
 			aria-label="Live response"
 			aria-live="polite"
-			class="shrink-0 border-b border-gray-200 px-6 py-4 text-sm dark:border-gray-700"
+			class="shrink-0 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line"
 		>
 			<div class="mb-2 flex items-center justify-between gap-3">
-				<div class="text-xs font-medium text-gray-500 dark:text-gray-400">Live response</div>
+				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Live response</div>
 				{#if reconnecting && !isTerminal}
-					<div
-						class="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
-					>
+					<div class="alert-caution border px-2 py-1 text-xs">
 						Reconnecting…
 					</div>
 				{/if}
 			</div>
-			<div aria-live="polite" class="space-y-2 text-gray-800 dark:text-gray-200">
+			<div aria-live="polite" class="space-y-2 text-fg-ink dark:text-dark-fg-ink">
 				{#if liveItems.length === 0}
-					<p class="text-xs text-gray-500 dark:text-gray-400">Waiting for response…</p>
+					<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">Waiting for response…</p>
 				{:else}
 					{#each liveItems as item (item.type === 'tool_call' ? item.key : item.text)}
 						{#if item.type === 'text'}
 							<p class="whitespace-pre-wrap">{item.text}</p>
 						{:else}
-							<details class="rounded border border-gray-200 dark:border-gray-700">
+							<details class="border border-border-line dark:border-dark-border-line">
 								<summary
 									role="button"
-									class="cursor-pointer px-3 py-2 font-mono text-xs text-gray-700 dark:text-gray-200"
+									class="cursor-pointer px-3 py-2 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink"
 								>
 									{toolLabel(item.event)}
 								</summary>
-								<div class="border-t border-gray-200 dark:border-gray-700">
+								<div class="border-t border-border-line dark:border-dark-border-line">
 									<div
-										class="px-3 pt-3 pb-1 text-[11px] font-medium text-gray-500 uppercase dark:text-gray-400"
+										class="px-3 pt-3 pb-1 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 									>
 										Inputs
 									</div>
-									<pre class="overflow-x-auto px-3 pb-3 text-xs whitespace-pre-wrap">{inputText(
+									<pre class="overflow-x-auto px-3 pb-3 font-mono-code text-mono-code whitespace-pre-wrap">{inputText(
 											item.event.inputs
 										)}</pre>
 									{#if item.event.output}
 										<div
-											class="border-t border-gray-200 px-3 pt-3 pb-1 text-[11px] font-medium text-gray-500 uppercase dark:border-gray-700 dark:text-gray-400"
+											class="border-t border-border-line px-3 pt-3 pb-1 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
 										>
 											Output
 										</div>
-										<pre class="overflow-x-auto px-3 pb-3 text-xs whitespace-pre-wrap">{item.event
+										<pre class="overflow-x-auto px-3 pb-3 font-mono-code text-mono-code whitespace-pre-wrap">{item.event
 												.output}</pre>
 									{/if}
 								</div>
@@ -501,10 +501,10 @@
 					{/each}
 				{/if}
 				{#if isTerminal}
-					<p class="text-xs text-gray-600 dark:text-gray-400">
+					<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 						Completed at {formatCompletedAt(completedAt)}.
 						<a
-							class="text-blue-600 hover:underline dark:text-blue-400"
+							class="text-accent-lever hover:underline dark:text-dark-accent-lever"
 							href={evidenceBundleHref(data.worker.id)}
 						>
 							Evidence bundle
@@ -517,18 +517,18 @@
 		<!-- Log area -->
 		<div class="flex min-h-0 flex-1 flex-col">
 			<div
-				class="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-2 dark:border-gray-700"
+				class="flex shrink-0 items-center justify-between border-b border-border-line px-4 py-2 dark:border-dark-border-line"
 			>
-				<span class="text-xs font-medium text-gray-500 dark:text-gray-400">Log output</span>
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Log output</span>
 				<div class="flex items-center gap-3">
-					<span class="text-xs text-gray-400 dark:text-gray-500">{logLines.length} lines</span>
+					<span class="text-mono-code text-fg-muted dark:text-dark-fg-muted">{logLines.length} lines</span>
 					{#if !autoScroll}
 						<button
 							onclick={() => {
 								autoScroll = true;
 								if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
 							}}
-							class="rounded px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+							class="px-2 py-0.5 text-xs text-accent-lever hover:bg-bg-surface dark:text-dark-accent-lever dark:hover:bg-dark-bg-surface"
 						>
 							↓ Follow
 						</button>

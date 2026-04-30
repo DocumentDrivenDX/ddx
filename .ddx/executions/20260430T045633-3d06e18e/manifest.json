@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T045633-3d06e18e",
+  "bead_id": "ddx-b56fdc74",
+  "base_rev": "cab96accc8c9be0cd1e6d07767e7abe9f379acb6",
+  "created_at": "2026-04-30T04:56:34.41868461Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b56fdc74",
+    "title": "Restyle BeadForm",
+    "description": "Restyle BeadForm.svelte: replace gray-* borders/backgrounds with token classes, rounded-* with rounded-none, blue/primary with accent-lever/accent-load. Status badge tint+border pattern per DESIGN.md. No functional changes. Playwright: run `bun run test:e2e -- --grep 'bead'` after changes, update screenshots with --update-snapshots for visual diffs.",
+    "parent": "ddx-569272d1",
+    "metadata": {
+      "claimed-at": "2026-04-30T04:56:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T04:56:33.563684786Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T045633-3d06e18e",
+    "prompt": ".ddx/executions/20260430T045633-3d06e18e/prompt.md",
+    "manifest": ".ddx/executions/20260430T045633-3d06e18e/manifest.json",
+    "result": ".ddx/executions/20260430T045633-3d06e18e/result.json",
+    "checks": ".ddx/executions/20260430T045633-3d06e18e/checks.json",
+    "usage": ".ddx/executions/20260430T045633-3d06e18e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b56fdc74-20260430T045633-3d06e18e"
+  }
+}
