@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Implementation cleanly removes the prior \"skip ResolveRoute when harness pinned\" branch and routes all run/work invocations through ResolveRoute with full (Profile, Harness, Model, Provider) plumbing. Upstream typed errors are returned verbatim (no `fmt.Errorf(\"...: %w\", ...)` wrapping on the routing error path), satisfying the D5 contract. Test seam via `SetAgentServiceFactoryForTest` is appropriately scoped, and the five e2e tests map 1:1 to the ACs."
+}
