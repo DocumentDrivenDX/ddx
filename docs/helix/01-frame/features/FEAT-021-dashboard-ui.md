@@ -17,10 +17,11 @@ ddx:
 ## Overview
 
 Extends the FEAT-008 web UI with a node/project-aware dashboard. The UI can
-show a combined view of beads and agent sessions across all registered projects
-on a node, or narrow to a specific project for context-dependent views
-(document browser, dependency graph, commit log). Node, project, and page are
-all embedded in the URL so every view is bookmarkable and shareable.
+show a combined view of beads and DDx run activity across all registered
+projects on a node, or narrow to a specific project for context-dependent
+views (artifact browser, dependency graph, run history, commit log). Node,
+project, and page are all embedded in the URL so every view is bookmarkable
+and shareable.
 
 The dashboard UI is implemented as a SvelteKit application with graphql-request for
 GraphQL data fetching. Every page uses `+page.ts` load functions to fetch data
@@ -30,21 +31,23 @@ from the `/graphql` endpoint defined in SD-022.
 
 **Current situation:** The FEAT-008 UI is implicitly scoped to the single
 project the server was started in. There is no node concept, no project picker,
-and no combined cross-project view for beads or agent sessions.
+and no combined cross-project view for beads or layer-aware run history.
 
 **Pain points:**
 - Operator cannot see all active work across projects in one dashboard
 - Navigating to a different project requires restarting the server in that
   project's directory
-- Deep links to a specific bead or document are not stable because the URL
+- Deep links to a specific bead, artifact, or run record are not stable because the URL
   carries no project context
+- Queue-drain evidence is flattened as agent sessions instead of preserving
+  the `work` -> `try` -> `run` hierarchy from FEAT-010
 - Node identity is invisible in the UI — there is no indication of which
   machine or server instance is being viewed
 
 **Desired outcome:** A single `ddx server` UI that surfaces everything
-happening on the node. The operator can scan the full bead queue and agent
-session log across all projects, drill into a specific project for
-document-level work, and bookmark any view with a stable URL.
+happening on the node. The operator can scan the full bead queue and run
+history across all projects, drill into a specific project for artifact-level
+work, and bookmark any view with a stable URL.
 
 ## URL Structure
 
@@ -53,20 +56,22 @@ All routes embed context so every view is directly addressable:
 ```
 /                                     → redirect to /nodes/:nodeId
 /nodes/:nodeId                        → node overview (health, project list)
-/nodes/:nodeId/sessions               → combined agent sessions (all projects)
+/nodes/:nodeId/runs                   → combined run history (all projects)
 /nodes/:nodeId/beads                  → combined bead queue (all projects)
 /nodes/:nodeId/projects/:projectId                   → project overview
 /nodes/:nodeId/projects/:projectId/beads             → project beads
+/nodes/:nodeId/projects/:projectId/artifacts         → artifact browser
 /nodes/:nodeId/projects/:projectId/documents         → document browser
 /nodes/:nodeId/projects/:projectId/graph             → doc dependency graph
 /nodes/:nodeId/projects/:projectId/commits           → commit log
-/nodes/:nodeId/projects/:projectId/sessions          → project agent sessions
+/nodes/:nodeId/projects/:projectId/runs              → project run history
+/nodes/:nodeId/projects/:projectId/runs/:runId       → project run detail
 ```
 
-**Combined views** (`/nodes/:nodeId/sessions`, `/nodes/:nodeId/beads`) operate
-across all registered projects. They call the existing `/api/agent/sessions`
-and `/api/beads` endpoints which are already node-scoped (since one server =
-one node). A future multi-node coordinator would fan these out across nodes.
+**Combined views** (`/nodes/:nodeId/runs`, `/nodes/:nodeId/beads`) operate
+across all registered projects. They call node-scoped read APIs for beads and
+the unified run substrate (since one server = one node). A future multi-node
+coordinator would fan these out across nodes.
 
 **Project-scoped views** (`/nodes/:nodeId/projects/:projectId/...`) pass the
 project ID to the existing `/api/projects/:project/...` API routes defined in
@@ -84,7 +89,7 @@ The `:nodeId` segment is the stable node ID from `GET /api/node` (e.g.
 - Node name, ID, and uptime
 - Health summary cards: library status, bead store, doc graph per project
 - Project list with last-seen timestamp and health badge
-- Quick links to combined sessions and combined beads
+- Quick links to combined runs and combined beads
 - Server version and started_at
 
 **GraphQL Query:** `node` query from FEAT-020, `projects` query for project list.
@@ -108,30 +113,34 @@ capabilities from FEAT-008 US-082, applied across projects.
 
 **File:** `src/routes/nodes/[nodeId]/beads/+page.svelte`
 
-### Combined Agent Sessions (`/nodes/:nodeId/sessions`)
+### Combined Run History (`/nodes/:nodeId/runs`)
 
-All agent sessions across all registered projects, newest first. The project
-each session belongs to is shown inline.
+All DDx run records across all registered projects, newest first. The project
+each record belongs to is shown inline, and records retain their FEAT-010 layer
+label: `work`, `try`, or `run`.
 
 - Project filter to narrow
 - Harness filter
+- Layer filter (`work`, `try`, `run`)
+- Status filter
 - Time range filter
-- Click to expand: DDx metadata, native session references, token usage
-- Same capabilities as FEAT-008 US-086
+- Click to expand: DDx metadata, native session references, token usage,
+  parent/child links, and artifact producer links
+- Same capabilities as FEAT-008 US-086 and US-086b
 
-**GraphQL Query:** `agentSessions` from FEAT-020.
+**GraphQL Query:** `runs` from FEAT-010 with optional `projectID` omitted.
 
-**File:** `src/routes/nodes/[nodeId]/sessions/+page.svelte`
+**File:** `src/routes/nodes/[nodeId]/runs/+page.svelte`
 
 ### Project Overview (`/nodes/:nodeId/projects/:projectId`)
 
 - Project name, path, git remote
 - Library configured: yes/no
 - Bead summary: counts by status
-- Recent agent activity: last 5 sessions
+- Recent run activity: last 5 run records
 - Quick links to project-scoped views
 
-**GraphQL Query:** `project` by ID, `beads` count aggregation, `agentSessions`
+**GraphQL Query:** `project` by ID, `beads` count aggregation, `runs`
 filtered by project.
 
 **File:** `src/routes/nodes/[nodeId]/projects/[projectId]/+page.svelte`
@@ -146,11 +155,21 @@ US-086, with the URL carrying the project context.
 
 **File:** `src/routes/nodes/[nodeId]/projects/[projectId]/beads/+page.svelte`
 
-### Document Browser (`/nodes/:nodeId/projects/:projectId/documents`)
+### Artifact Browser (`/nodes/:nodeId/projects/:projectId/artifacts`)
 
 FEAT-008 artifact browser scoped to the selected project.
 
-**GraphQL Query:** `documents` with project context per SD-019.
+**GraphQL Query:** `artifacts` with project context per SD-019.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte`
+
+### Document Browser (`/nodes/:nodeId/projects/:projectId/documents`)
+
+Compatibility route for markdown-focused document navigation. It redirects to
+or aliases the project artifact browser with a `media_type=text/markdown`
+filter; new navigation should use `/artifacts`.
+
+**GraphQL Query:** `artifacts` with project context per SD-019.
 
 **File:** `src/routes/nodes/[nodeId]/projects/[projectId]/documents/+page.svelte`
 
@@ -175,13 +194,26 @@ endpoint. Displays:
 
 **File:** `src/routes/nodes/[nodeId]/projects/[projectId]/commits/+page.svelte`
 
-### Project Agent Sessions (`/nodes/:nodeId/projects/:projectId/sessions`)
+### Project Run History (`/nodes/:nodeId/projects/:projectId/runs`)
 
-Agent sessions filtered to one project. Same UI as combined sessions view.
+DDx run records filtered to one project. This is the same UI as the combined
+run history view with the project context bound in the URL.
 
-**GraphQL Query:** `agentSessions` with project filter per SD-019.
+**GraphQL Query:** `runs` with project filter per FEAT-010.
 
-**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte`
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/runs/+page.svelte`
+
+### Project Run Detail (`/nodes/:nodeId/projects/:projectId/runs/:runId`)
+
+Layer-aware run detail for a single `work`, `try`, or `run` record. Work
+records show child try attempts, try records show child layer-1 runs, and
+layer-1 runs show prompt/config summary, selected harness/provider/model,
+power bounds, cost/token/duration signals, evidence links, and produced
+artifact links.
+
+**GraphQL Query:** `run` by id with project filter per FEAT-010.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/runs/[runId]/+page.svelte`
 
 ## Navigation
 
@@ -190,11 +222,13 @@ The global navigation bar shows:
 - Project picker dropdown (populated from `/api/projects`)
   - Selecting a project navigates to `/nodes/:nodeId/projects/:projectId`
   - "All projects" option navigates to combined views
-- Active page tab: Beads | Documents | Graph | Sessions | Commits
+- Active page tab: Beads | Artifacts | Graph | Runs | Commits
 
 The project picker changes the `:projectId` segment in-place while preserving
 the current page tab. So switching project while on the Graph tab navigates to
-the new project's graph directly.
+the new project's graph directly. When switching from a run detail to another
+project, the UI falls back to that project's run history unless the same run id
+exists in the target project.
 
 **GraphQL Query:** `projects` for picker options.
 
@@ -210,7 +244,8 @@ the new project's graph directly.
 3. The node overview page is populated from `GET /api/node` and
    `GET /api/projects`.
 4. Combined bead view fetches all projects' beads client-side and merges them.
-5. Combined session view fetches from `GET /api/agent/sessions` (node-wide).
+5. Combined run view fetches node-wide run records from the unified run
+   substrate and preserves `work`, `try`, and `run` layer labels.
 6. Project-scoped views bind all API calls to
    `/api/projects/:project/...` per SD-019.
 7. The project picker is present on every project-scoped page and updates the
@@ -221,6 +256,10 @@ the new project's graph directly.
    `closing_commit_sha` matches.
 10. All filter/sort/search state is stored in URL query parameters so filtered
     views are also bookmarkable.
+11. Project run detail routes support parent/child drill-down:
+    `work` -> `try` -> `run`, with breadcrumbs back up the hierarchy.
+12. Project artifact routes expose FEAT-008 media-type rendering and link to
+    producing runs when `generated_by` is present.
 
 ### Non-Functional
 
@@ -229,13 +268,13 @@ the new project's graph directly.
 - Navigation between views within the same node+project uses client-side
   routing (no full page reload).
 - The UI degrades gracefully when a project becomes unavailable: its beads and
-  sessions are shown with a stale badge rather than being silently dropped.
+  run records are shown with a stale badge rather than being silently dropped.
 
 ## User Stories
 
 ### US-090: Operator Views All Active Work in One Dashboard
 **As an** operator managing multiple projects on one machine
-**I want** to see all open beads and recent agent sessions from every project
+**I want** to see all open beads and recent run records from every project
 **So that** I can understand the full workload without switching context
 
 **Acceptance Criteria:**
@@ -243,19 +282,20 @@ the new project's graph directly.
   then I see beads from all projects with a project badge on each
 - Given I filter by project, then only beads from that project are shown and
   the URL updates to reflect the filter
-- Given I open the combined sessions view, then I see agent sessions from all
-  projects merged and sorted by time
+- Given I open the combined run history view, then I see run records from all
+  projects merged and sorted by time with visible `work`, `try`, or `run`
+  layer labels
 
 ### US-091: Operator Navigates to a Project-Scoped View
 **As an** operator investigating one project
-**I want** to select a project and see its documents, graph, and commits
+**I want** to select a project and see its artifacts, graph, runs, and commits
 **So that** I can do project-specific work without losing the node context
 
 **Acceptance Criteria:**
 - Given I am on the node overview, when I click a project, then I navigate to
   that project's overview at `/nodes/:nodeId/projects/:projectId`
-- Given I am on the document browser for project A, when I switch projects in
-  the picker, then I navigate to the document browser for project B
+- Given I am on the artifact browser for project A, when I switch projects in
+  the picker, then I navigate to the artifact browser for project B
 - Given I copy the current URL and open it in a new tab, then I see the same
   view with the same project and page selected
 
@@ -294,16 +334,37 @@ the new project's graph directly.
 - Given the URL contains `:nodeId`, then it matches the ID returned by
   `GET /api/node`
 
+### US-094b: Operator Opens Layer-Aware Run Routes
+**As an** operator reviewing DDx execution evidence
+**I want** project-scoped run routes for history and detail
+**So that** queue drains, bead attempts, and single agent invocations remain
+  distinct in the URL and UI
+
+**Acceptance Criteria:**
+- Given I open `/nodes/:nodeId/projects/:projectId/runs`, then I see only that
+  project's run records with filters for layer, status, bead, artifact,
+  harness, provider, model, and time range
+- Given I click a `work` record, then I navigate to
+  `/nodes/:nodeId/projects/:projectId/runs/:runId` and see child try attempts
+- Given I click a child `try`, then I see bead id, base/result revisions,
+  worktree path, merge/preserve result, checks, and child layer-1 runs
+- Given I click a layer-1 `run`, then I see prompt/config summary, power
+  bounds, selected harness/provider/model, tokens, cost, duration, output, and
+  evidence links
+- Given a run produced an artifact, then the detail route links to the artifact
+  browser entry and that artifact links back to the producing run
+
 ## New API Required
 
-In addition to the endpoints delivered by FEAT-020, FEAT-021 requires:
+In addition to the endpoints delivered by FEAT-020 and FEAT-010, FEAT-021
+requires:
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/projects/:project/commits` | Git log for the project; supports `?limit=&since=&author=` |
 
 All other data is served by endpoints already defined in FEAT-002, FEAT-004,
-FEAT-006, FEAT-008, and SD-019.
+FEAT-006, FEAT-008, FEAT-010, and SD-019.
 
 ## Implementation Notes
 
@@ -322,12 +383,14 @@ src/routes/
         ├── +page.svelte        → NodeOverview
         ├── beads/              → CombinedBeads
         │   └── +page.svelte
-        ├── sessions/           → CombinedSessions
+        ├── runs/               → CombinedRuns
         │   └── +page.svelte
         └── projects/
             └── [$projectId]/
                 ├── +page.svelte      → ProjectOverview
                 ├── beads/            → ProjectBeads
+                │   └── +page.svelte
+                ├── artifacts/        → ArtifactBrowser
                 │   └── +page.svelte
                 ├── documents/        → DocumentBrowser
                 │   └── +page.svelte
@@ -335,8 +398,10 @@ src/routes/
                 │   └── +page.svelte
                 ├── commits/          → CommitLog
                 │   └── +page.svelte
-                └── sessions/         → ProjectSessions
-                    └── +page.svelte
+                └── runs/             → ProjectRuns
+                    ├── +page.svelte
+                    └── [$runId]/
+                        └── +page.svelte
 ```
 
 The `[$nodeId]` and `[$projectId]` dynamic route segments capture URL parameters.
@@ -381,6 +446,43 @@ export const load = async ({ fetch, params }) => {
 
 graphql-ws subscription support enables real-time updates without polling.
 
+Example project run query:
+
+```typescript
+// src/routes/nodes/$nodeId/projects/$projectId/runs/+page.ts
+import { gql } from 'graphql-request';
+import { createClient } from '$lib/gql/client';
+
+const RUN_LIST_QUERY = gql`
+  query ProjectRuns($projectID: ID!, $layer: RunLayer) {
+    runs(projectID: $projectID, layer: $layer, first: 50) {
+      edges {
+        node {
+          id
+          layer
+          status
+          beadID
+          artifactID
+          parentRunID
+          startedAt
+          completedAt
+        }
+      }
+    }
+  }
+`;
+
+export const load = async ({ fetch, params, url }) => {
+  const client = createClient(fetch);
+  const layer = url.searchParams.get('layer');
+  const data = await client.request(RUN_LIST_QUERY, {
+    projectID: params.projectId,
+    layer
+  });
+  return { runs: data.runs };
+};
+```
+
 ### Project Context
 
 The `ProjectStore` (using Svelte 5 runes) stores the selected node ID and
@@ -407,9 +509,10 @@ specific feature area:
 |-----------------|------------------------|
 | `e2e/navigation.spec.ts` | TC-010, TC-012 |
 | `e2e/node-beads.spec.ts` | TC-023 |
-| `e2e/node-agents.spec.ts` | TC-022 |
+| `e2e/node-runs.spec.ts` | TC-022 |
 | `e2e/projects.spec.ts` | TC-010, TC-012 |
 | `e2e/workers.spec.ts` | TC-009 |
+| `e2e/runs.spec.ts` | US-094b |
 | `cli/internal/server/frontend/e2e/app.spec.ts` | TC-001 through TC-008 |
 
 Each test file documents the TC identifiers it covers in a header comment.
@@ -424,8 +527,9 @@ the cross-project beads view at `/nodes/:nodeId/beads`.
 - FEAT-020 (node identity and project registry — required for /api/node and /api/projects)
 - SD-019 (project-scoped API routing — /api/projects/:project/...)
 - FEAT-004 (beads)
-- FEAT-006 (agent sessions)
+- FEAT-006 (agent service metadata and native session references)
 - FEAT-007 (doc graph)
+- FEAT-010 (unified run substrate and run read APIs)
 - FEAT-012 (git awareness — for commit log endpoint)
 
 ## Out of Scope
