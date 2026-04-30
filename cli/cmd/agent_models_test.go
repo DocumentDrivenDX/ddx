@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -117,4 +120,26 @@ func TestAgentModelsConfigError(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "loading agent config")
+}
+
+// TestPrintModelsShowsPowerAnnotation verifies that printModels renders
+// [power: N] for models with Power > 0 (AC1: status surface renders model
+// power catalog). This is a unit test exercising the rendering directly
+// without a real provider, so synthetic ModelInfo data can include power.
+func TestPrintModelsShowsPowerAnnotation(t *testing.T) {
+	root := &cobra.Command{}
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+
+	models := []agentlib.ModelInfo{
+		{ID: "powerful-model", Power: 80},
+		{ID: "cheap-model", Power: 10},
+		{ID: "no-power-model", Power: 0},
+	}
+	printModels(root, "testprovider", "lmstudio", "powerful-model", models)
+	out := buf.String()
+
+	require.Contains(t, out, "[power: 80]", "Power=80 must show [power: 80] annotation")
+	require.Contains(t, out, "[power: 10]", "Power=10 must show [power: 10] annotation")
+	require.NotContains(t, out, "[power: 0]", "Power=0 must not show power annotation (omitted)")
 }

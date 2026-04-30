@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
@@ -22,6 +23,8 @@ type routeStatusJSON struct {
 }
 
 // routeStatusCandidateJSON is the JSON-serialisable form of one route candidate.
+// Power is sourced from the cached LastDecision.Candidates (display-only; not
+// used to alter routing). Zero means power is unavailable for this candidate.
 type routeStatusCandidateJSON struct {
 	Provider      string  `json:"provider"`
 	Model         string  `json:"model,omitempty"`
@@ -32,15 +35,38 @@ type routeStatusCandidateJSON struct {
 	Reliability   float64 `json:"reliability,omitempty"`
 	Score         float64 `json:"score,omitempty"`
 	Reason        string  `json:"reason,omitempty"`
+	Power         int     `json:"power,omitempty"`
+}
+
+// routeStatusDecisionCandidateJSON is the JSON-serialisable form of one
+// RouteDecision candidate from the cached LastDecision trace. Observability
+// only — not used to alter ExecuteRequest routing fields.
+type routeStatusDecisionCandidateJSON struct {
+	Provider string  `json:"provider"`
+	Model    string  `json:"model,omitempty"`
+	Eligible bool    `json:"eligible"`
+	Power    int     `json:"power,omitempty"`
+	Score    float64 `json:"score,omitempty"`
+	Reason   string  `json:"reason,omitempty"`
+}
+
+// routeStatusLastDecisionJSON is the JSON-serialisable form of the cached
+// RouteDecision for a route. Rendered for debug observability only.
+type routeStatusLastDecisionJSON struct {
+	Provider   string                             `json:"provider,omitempty"`
+	Model      string                             `json:"model,omitempty"`
+	Reason     string                             `json:"reason,omitempty"`
+	Candidates []routeStatusDecisionCandidateJSON `json:"candidates,omitempty"`
 }
 
 // routeStatusRouteJSON is the JSON-serialisable form of one model route.
 type routeStatusRouteJSON struct {
-	RouteKey         string                     `json:"route_key"`
-	Strategy         string                     `json:"strategy"`
-	SelectedProvider string                     `json:"selected_provider,omitempty"`
-	SelectedModel    string                     `json:"selected_model,omitempty"`
-	Candidates       []routeStatusCandidateJSON `json:"candidates"`
+	RouteKey         string                       `json:"route_key"`
+	Strategy         string                       `json:"strategy"`
+	SelectedProvider string                       `json:"selected_provider,omitempty"`
+	SelectedModel    string                       `json:"selected_model,omitempty"`
+	Candidates       []routeStatusCandidateJSON   `json:"candidates"`
+	LastDecision     *routeStatusLastDecisionJSON `json:"last_decision,omitempty"` // observability only
 }
 
 // recentRoutingDecision is a merged view of a single routing decision sourced from
@@ -180,6 +206,45 @@ func truncateRouteStr(value string, n int) string {
 	return value[:n-2] + ".."
 }
 
+// candidatePowerFromLastDecision returns the power value for a (provider, model)
+// pair from the cached LastDecision candidates, or 0 if unavailable. This is
+// observability-only; the returned value must not alter ExecuteRequest routing.
+func candidatePowerFromLastDecision(dec *agentlib.RouteDecision, provider, model string) int {
+	if dec == nil {
+		return 0
+	}
+	for _, c := range dec.Candidates {
+		if c.Provider == provider && c.Model == model {
+			return c.Components.Power
+		}
+	}
+	return 0
+}
+
+// lastDecisionToJSON converts a RouteDecision to its JSON-serialisable form.
+// Returns nil when dec is nil. Display-only; does not alter routing fields.
+func lastDecisionToJSON(dec *agentlib.RouteDecision) *routeStatusLastDecisionJSON {
+	if dec == nil {
+		return nil
+	}
+	jd := &routeStatusLastDecisionJSON{
+		Provider: dec.Provider,
+		Model:    dec.Model,
+		Reason:   dec.Reason,
+	}
+	for _, c := range dec.Candidates {
+		jd.Candidates = append(jd.Candidates, routeStatusDecisionCandidateJSON{
+			Provider: c.Provider,
+			Model:    c.Model,
+			Eligible: c.Eligible,
+			Power:    c.Components.Power,
+			Score:    c.Score,
+			Reason:   c.Reason,
+		})
+	}
+	return jd
+}
+
 func (f *CommandFactory) newAgentRouteStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "route-status",
@@ -311,8 +376,9 @@ Examples:
 				payload := routeStatusJSON{}
 				for _, entry := range report.Routes {
 					rj := routeStatusRouteJSON{
-						RouteKey: entry.Model,
-						Strategy: entry.Strategy,
+						RouteKey:     entry.Model,
+						Strategy:     entry.Strategy,
+						LastDecision: lastDecisionToJSON(entry.LastDecision),
 					}
 					for _, cand := range entry.Candidates {
 						cj := routeStatusCandidateJSON{
@@ -321,6 +387,7 @@ Examples:
 							Healthy:       cand.Healthy,
 							AvgDurationMs: cand.RecentLatencyMS,
 							Reliability:   cand.ProviderReliabilityRate,
+							Power:         candidatePowerFromLastDecision(entry.LastDecision, cand.Provider, cand.Model),
 						}
 						if cand.Cooldown != nil && !cand.Cooldown.Until.IsZero() {
 							cj.InCooldown = true
@@ -399,8 +466,8 @@ Examples:
 					fmt.Fprintf(out, "Selected: (none — all candidates down or in cooldown)\n")
 				}
 
-				fmt.Fprintf(out, "%-12s %-32s %-10s %-10s %-10s %-12s %s\n",
-					"PROVIDER", "MODEL", "HEALTH", "SCORE", "RELIABILITY", "LATENCY_MS", "REASON")
+				fmt.Fprintf(out, "%-12s %-32s %-10s %-6s %-10s %-12s %s\n",
+					"PROVIDER", "MODEL", "HEALTH", "POWER", "RELIABILITY", "LATENCY_MS", "REASON")
 				for _, cand := range entry.Candidates {
 					health := "available"
 					reason := ""
@@ -410,15 +477,46 @@ Examples:
 					} else if !cand.Healthy {
 						health = "down"
 					}
-					fmt.Fprintf(out, "%-12s %-32s %-10s %-10.3f %-10.2f %-12.0f %s\n",
+					power := candidatePowerFromLastDecision(entry.LastDecision, cand.Provider, cand.Model)
+					powerStr := "-"
+					if power > 0 {
+						powerStr = fmt.Sprintf("%d", power)
+					}
+					fmt.Fprintf(out, "%-12s %-32s %-10s %-6s %-10.2f %-12.0f %s\n",
 						cand.Provider,
 						truncateRouteStr(cand.Model, 32),
 						health,
-						0.0, // Score not provided by RouteStatusReport
+						powerStr,
 						cand.ProviderReliabilityRate,
 						cand.RecentLatencyMS,
 						reason,
 					)
+				}
+
+				// Render LastDecision candidate trace when available (observability only).
+				if entry.LastDecision != nil && len(entry.LastDecision.Candidates) > 0 {
+					fmt.Fprintf(out, "Last decision: provider=%s model=%s reason=%s\n",
+						entry.LastDecision.Provider, entry.LastDecision.Model, entry.LastDecision.Reason)
+					fmt.Fprintf(out, "  %-8s %-12s %-28s %-6s %-8s %s\n",
+						"ELIGIBLE", "PROVIDER", "MODEL", "POWER", "SCORE", "REASON")
+					for _, c := range entry.LastDecision.Candidates {
+						eligible := "no"
+						if c.Eligible {
+							eligible = "yes"
+						}
+						powerStr := "-"
+						if c.Components.Power > 0 {
+							powerStr = fmt.Sprintf("%d", c.Components.Power)
+						}
+						fmt.Fprintf(out, "  %-8s %-12s %-28s %-6s %-8.3f %s\n",
+							eligible,
+							c.Provider,
+							truncateRouteStr(c.Model, 28),
+							powerStr,
+							c.Score,
+							c.Reason,
+						)
+					}
 				}
 			}
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/stretchr/testify/require"
 )
 
@@ -231,4 +232,98 @@ func TestAgentRouteStatusNoRoutesJSON(t *testing.T) {
 	var payload routeStatusJSON
 	require.NoError(t, json.Unmarshal([]byte(out), &payload))
 	require.Empty(t, payload.Routes)
+}
+
+// TestAgentRouteStatusCandidatePowerFieldInJSON verifies that route-status
+// JSON output includes the power field on each candidate (AC1: status surface
+// renders model power catalog). Power is sourced from LastDecision candidates;
+// when no prior route decision is cached the field is absent (omitempty).
+// The test verifies the JSON structure is parseable and the candidate is rendered.
+func TestAgentRouteStatusCandidatePowerFieldInJSON(t *testing.T) {
+	srv := newOAIModelsStub(t, []string{"test-model"})
+	dir := makeProviderTestDir(t, routeAgentConfig(srv.URL+"/v1", "test-model", "smart"))
+
+	out, err := executeCommand(
+		NewCommandFactory(dir).NewRootCommand(),
+		"agent", "route-status", "--json",
+	)
+	require.NoError(t, err)
+
+	var payload routeStatusJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &payload))
+	require.Len(t, payload.Routes, 1)
+	require.NotEmpty(t, payload.Routes[0].Candidates, "route must have at least one candidate")
+
+	// Power field must be present in the JSON structure (value 0 when no
+	// LastDecision cached — omitempty means the key is absent when zero,
+	// which is correct and expected).
+	cand := payload.Routes[0].Candidates[0]
+	require.Equal(t, "testprovider", cand.Provider)
+	require.Equal(t, "test-model", cand.Model)
+	// LastDecision is nil (no ResolveRoute called), so Power is 0 / omitted.
+	require.Equal(t, 0, cand.Power)
+}
+
+// TestRouteStatusLastDecisionCandidateTrace verifies the helpers used to
+// render RouteDecision.Candidates for observability (AC2). Tests the
+// rendering functions directly with synthetic data.
+func TestRouteStatusLastDecisionCandidateTrace(t *testing.T) {
+	dec := &agentlib.RouteDecision{
+		Provider: "anthropic",
+		Model:    "claude-sonnet-4-6",
+		Reason:   "first-available",
+		Candidates: []agentlib.RouteCandidate{
+			{
+				Provider: "local",
+				Model:    "qwen3-27b",
+				Eligible: false,
+				Reason:   "power_below_min",
+				Components: agentlib.RouteCandidateComponents{
+					Power: 10,
+				},
+			},
+			{
+				Provider: "anthropic",
+				Model:    "claude-sonnet-4-6",
+				Eligible: true,
+				Reason:   "selected",
+				Score:    0.92,
+				Components: agentlib.RouteCandidateComponents{
+					Power: 65,
+				},
+			},
+		},
+	}
+
+	// Test candidatePowerFromLastDecision helper.
+	require.Equal(t, 10, candidatePowerFromLastDecision(dec, "local", "qwen3-27b"),
+		"power for local/qwen3-27b must be 10")
+	require.Equal(t, 65, candidatePowerFromLastDecision(dec, "anthropic", "claude-sonnet-4-6"),
+		"power for selected candidate must be 65")
+	require.Equal(t, 0, candidatePowerFromLastDecision(dec, "unknown", "unknown-model"),
+		"unknown candidate must return 0")
+	require.Equal(t, 0, candidatePowerFromLastDecision(nil, "any", "any"),
+		"nil LastDecision must return 0")
+
+	// Test lastDecisionToJSON helper.
+	jd := lastDecisionToJSON(dec)
+	require.NotNil(t, jd)
+	require.Equal(t, "anthropic", jd.Provider)
+	require.Equal(t, "claude-sonnet-4-6", jd.Model)
+	require.Equal(t, "first-available", jd.Reason)
+	require.Len(t, jd.Candidates, 2)
+
+	// Ineligible candidate
+	require.Equal(t, "local", jd.Candidates[0].Provider)
+	require.Equal(t, 10, jd.Candidates[0].Power)
+	require.False(t, jd.Candidates[0].Eligible)
+	require.Equal(t, "power_below_min", jd.Candidates[0].Reason)
+
+	// Selected candidate
+	require.Equal(t, "anthropic", jd.Candidates[1].Provider)
+	require.Equal(t, 65, jd.Candidates[1].Power)
+	require.True(t, jd.Candidates[1].Eligible)
+
+	// Test lastDecisionToJSON with nil input.
+	require.Nil(t, lastDecisionToJSON(nil))
 }

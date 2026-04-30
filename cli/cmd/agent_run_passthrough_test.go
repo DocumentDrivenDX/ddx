@@ -196,3 +196,40 @@ func TestWorkDoesNotCallResolveRoute(t *testing.T) {
 	// Other errors (git not initialized, etc.) are expected and acceptable —
 	// the test's only concern is that ResolveRoute was not invoked.
 }
+
+// TestExecuteBeadDoesNotCallResolveRoute (AC4 / ddx-6036e1bc): ddx agent
+// execute-bead must not call ResolveRoute in the execution path. The stub
+// installed by installExecuteCapturingStub returns an error from ResolveRoute,
+// so any call to it would surface as a command failure containing
+// "ResolveRoute called in execution path".
+//
+// Static guarantee: TestRoutinglintNonStatusFilesDoNotCallResolveRoute already
+// ensures agent_execute_bead.go has no direct .ResolveRoute() call. This
+// behavioral test adds a runtime check at the cmd layer.
+func TestExecuteBeadDoesNotCallResolveRoute(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+	_ = stub // stub.ResolveRoute returns error; any call would propagate up
+
+	dir := minimalProjectDir(t)
+
+	// Seed a bead so execute-bead has something to load before reaching git.
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "ddx-no-resolve-route-test",
+		Title: "execute-bead no ResolveRoute test",
+	}))
+
+	root := NewCommandFactory(dir).NewRootCommand()
+	_, err := executeCommand(root, "agent", "execute-bead",
+		"ddx-no-resolve-route-test",
+		"--harness", "agent",
+	)
+	// execute-bead may fail (no git repo), but must not call ResolveRoute.
+	if err != nil {
+		require.NotContains(t, err.Error(), "ResolveRoute called in execution path",
+			"execute-bead must not call ResolveRoute (CONTRACT-003 / ddx-6036e1bc)")
+	}
+}
