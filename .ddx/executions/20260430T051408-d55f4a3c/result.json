@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Token migration is clean and complete: all gray/blue Tailwind utilities are replaced with semantic tokens (`border-line`, `bg-elevated`, `fg-ink/muted`, `accent-lever`, `error`), corners are squared, and the status select gains the tint+border pattern via CSS custom properties. No behavioral changes; snapshot baselines refreshed."
+}
