@@ -285,8 +285,11 @@ exists in the target project.
 - Given I open `/nodes/:nodeId/runs`, then I see run records from all projects
   merged and sorted by time with a project badge and a layer badge (`work`,
   `try`, or `run`) on each record
-- Given I click a run record, then I see the layer-appropriate detail: queue
-  inputs for `work`, bead/worktree fields for `try`, execution summary for `run`
+- Given I click a run record, then I navigate to that run's project-scoped
+  detail at `/nodes/:nodeId/projects/:projectId/runs/:runId`; the `projectId`
+  is carried in each run record so the combined list can form this URL without
+  a separate lookup; I see layer-appropriate detail: queue inputs for `work`,
+  bead/worktree fields for `try`, execution summary for `run`
 - Given I navigate back from a run detail, then the combined run list is
   restored with the same sort and filter state
 

@@ -362,18 +362,23 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
 **E2E Test:** `artifacts.spec.ts` — full workflow: land on dashboard → navigate to personas → open persona → verify rendered content → navigate back
 
-### US-081: Developer Views Dependency Graph
+### US-081: Developer Views and Navigates Dependency Graph
 **As a** developer checking document health
-**I want** to see a visual graph of document dependencies
-**So that** I can identify which documents are stale and what depends on what
+**I want** to see a visual graph of document dependencies I can interact with
+**So that** I can identify stale documents, understand relationships, and navigate directly to any doc from the graph
 
 **Acceptance Criteria:**
-- Given documents have `ddx:` frontmatter with dependencies, when I open the graph view, then I see nodes and edges representing the dependency relationships
-- Given some documents are stale, then stale nodes are visually highlighted (red/orange)
-- Given I click a node, then I navigate to that document's detail view
-- Given I press Back, then I return to the graph with the same zoom and pan position
+- Given I open the graph view, then I see nodes and edges representing dependency relationships; the graph renders with correct dimensions on first paint (no collapsed/zero-size SVG)
+- Given documents are stale, then stale nodes are colored amber; documents with missing dependencies are colored red; fresh documents are green
+- Given I click a node, then I navigate to that document's artifact detail view without a full page reload
+- Given I press Back after clicking a node, then I return to the graph with the same zoom level and pan position restored
+- Given I pan or zoom the graph, then the viewport state persists across the Back/Forward navigation cycle
+- Given I apply a staleness filter chip (fresh / stale / missing), then only matching nodes and their connecting edges remain visible
+- Given I apply a type filter chip, then only nodes of that media type remain visible
+- Given I am on the graph page, then a `View documents` link is visible that navigates to the artifact browser filtered to markdown
+- Given I am on an artifact detail page, then a `View in Graph` link navigates to the graph with that node highlighted
 
-**E2E Test:** `graph.spec.ts` — full workflow: open graph → verify nodes and edges → identify stale node → click node → verify document detail → navigate back to graph
+**E2E Test:** `graph.spec.ts` — full workflow: open graph → verify non-zero render → pan and zoom → click stale node → verify amber color → click node → verify artifact detail → Back → verify same viewport → apply staleness filter → verify node count changes → follow `View documents` link
 
 ### US-081b: Developer Views and Regenerates Multi-Media Artifacts
 **As a** developer working with generated project artifacts
@@ -686,6 +691,41 @@ provider logs
   `work`, `try`, and `run`; no other run type labels appear
 
 **E2E Test:** `runs.spec.ts` — full workflow: navigate to project runs → filter by layer `work` → click work record → verify fields and child tries → click try → verify fields and child runs → click layer-1 run → verify all fields → follow evidence link → press Back through breadcrumbs to run list → verify filter state restored
+
+### US-081c: Developer Repairs Graph Integrity Issues from the UI
+**As a** developer maintaining a healthy document graph
+**I want** to repair known integrity issues (missing dependencies, duplicate IDs)
+  directly from the graph view
+**So that** I don't have to hand-edit YAML files to clear issues the UI already
+  understands
+
+**Acceptance Criteria:**
+- Given IntegrityPanel shows issues, when I expand an issue, then I see the
+  proposed change (diff-style: which file, which key, old value → new value)
+  alongside the existing "Copy" affordances
+- Given an issue is auto-repairable (missing dep removal, duplicate ID rename
+  for an unambiguous choice), then a `Apply fix` button is visible for that
+  issue; non-repairable issues (parse errors, cycles, ambiguous duplicates,
+  missing required roots with no content) show a `Cannot auto-repair` label
+  with a tooltip explaining why
+- Given I click `Apply fix`, then the server validates: path is within the
+  project, the issue still matches the current file hash, and the structured
+  YAML/frontmatter edit is safe to apply; on success, the file is written and
+  the graph reloads showing the resolved or changed state
+- Given validation fails (stale issue, dirty/unwritable file, invalid YAML,
+  path traversal, generated-file guard), then an inline error banner names the
+  exact failure and the file is not modified
+- Given the fix resolves the issue, then the issue disappears from
+  IntegrityPanel without a manual reload; if the fix creates a new secondary
+  issue, the new issue appears immediately in the panel
+- Given I repair duplicate IDs and the chosen file has downstream dependents,
+  then the panel warns "N files reference this ID — they will be updated" before
+  I confirm (cascade-aware, not just single-file)
+- Given concurrent repairs are in-flight, then the second apply request returns
+  a 409 Conflict; the UI surfaces "Another repair is in progress — try again"
+  without a broken state
+
+**E2E Test:** `graph.spec.ts` — full workflow: open graph → expand auto-repairable issue → verify diff preview → click Apply fix → verify file written + issue removed + graph reloads → expand non-repairable issue → verify Cannot auto-repair label + tooltip → introduce stale-issue scenario → click Apply fix → verify error banner + file unchanged
 
 ### US-081a: Developer Follows Intra-Repo Markdown Links
 **As a** developer reading one doc and referenced by another
@@ -1151,7 +1191,7 @@ outcome, including navigation back.
 |---|---|---|
 | `navigation.spec.ts` | US-094 (via FEAT-021) | Root redirect, project picker, node identity in nav bar |
 | `artifacts.spec.ts` | US-080, US-081b, US-083, US-083a, US-084, US-081a | Browse library → open artifact → render by media type → edit + save → search → follow intra-repo links |
-| `graph.spec.ts` | US-081 | Open graph → identify stale nodes → click node → navigate back |
+| `graph.spec.ts` | US-081, US-081c | Open graph → pan/zoom → identify stale nodes → click node → navigate back; graph cross-link from artifact detail; integrity issue expand → apply fix → verify graph reload; non-repairable issue tooltip; stale-issue error |
 | `beads.spec.ts` | US-082, US-082b, US-082c, US-082d, US-082e, US-082f, US-082g, US-085, US-085b, US-085c | Board view, search/filter, execution evidence, review vs spec, re-run, navigate to artifacts, sort/filter with URL state, create/manage, worker progress, delete |
 | `workers.spec.ts` | US-085b, US-086, US-086a | Worker list, live phase updates via subscription, streaming response text with tool calls |
 | `runs.spec.ts` | US-086b | Navigate to runs → filter by layer → drill work→try→run → verify fields at each level → breadcrumb back to list |
