@@ -31,6 +31,17 @@ func appendProviderTimeoutHint(errMsg string, providerTimeout time.Duration) str
 	)
 }
 
+// serviceRunFactory, when non-nil, overrides NewServiceFromWorkDir inside
+// RunWithConfigViaService. CLI-level integration tests inject a stub to
+// observe ServiceExecuteRequest fields without a real agent server.
+var serviceRunFactory func(workDir string) (agentlib.DdxAgent, error)
+
+// SetServiceRunFactory installs a service factory for RunWithConfigViaService.
+// Pass nil to restore production behavior. Exported for cmd/ integration tests.
+func SetServiceRunFactory(f func(workDir string) (agentlib.DdxAgent, error)) {
+	serviceRunFactory = f
+}
+
 // RunWithConfigViaService dispatches a single agent invocation through the
 // agent service. It takes a sealed ResolvedConfig (durable knobs) and an
 // AgentRunRuntime (per-invocation plumbing/intent), and is the SD-024
@@ -77,7 +88,11 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 		})
 	}
 
-	svc, err := NewServiceFromWorkDir(workDir)
+	factory := serviceRunFactory
+	if factory == nil {
+		factory = NewServiceFromWorkDir
+	}
+	svc, err := factory(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
@@ -155,6 +170,7 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
 		Model:           model,
+		Profile:         rcfg.Profile(),
 		Provider:        pt.Provider,
 		Harness:         harness,
 		ModelRef:        rcfg.ModelRef(),
