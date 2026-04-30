@@ -1739,7 +1739,8 @@ func TestMCPToolsList(t *testing.T) {
 		"ddx_doc_graph", "ddx_doc_stale", "ddx_doc_show", "ddx_doc_deps", "ddx_doc_dependents",
 		"ddx_agent_sessions",
 		"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history",
-		"ddx_exec_dispatch", "ddx_agent_dispatch",
+		"ddx_exec_dispatch", "ddx_exec_run", "ddx_exec_run_log",
+		"ddx_agent_dispatch",
 		"ddx_doc_changed",
 		"ddx_doc_write", "ddx_doc_history", "ddx_doc_diff",
 		"ddx_list_projects", "ddx_show_project",
@@ -3515,7 +3516,7 @@ func TestMCPToolsListIncludesExec(t *testing.T) {
 	}
 
 	respBody := w.Body.String()
-	for _, tool := range []string{"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history"} {
+	for _, tool := range []string{"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history", "ddx_exec_run", "ddx_exec_run_log"} {
 		if !strings.Contains(respBody, tool) {
 			t.Errorf("expected tools/list to include %s", tool)
 		}
