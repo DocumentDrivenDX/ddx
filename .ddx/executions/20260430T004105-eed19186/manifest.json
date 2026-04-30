@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T004105-eed19186",
+  "bead_id": "ddx-d5e71fb3",
+  "base_rev": "394edd6f3ec7cee78c993798279bf919dcb7eb64",
+  "created_at": "2026-04-30T00:41:05.885303165Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d5e71fb3",
+    "title": "[artifact-run-arch] refactor FEAT-010 (3-layer architecture + substrate unification)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. Three-layer architecture explicit; one on-disk run substrate; layer metadata. Migrate .ddx/exec-runs/ and .ddx/executions/\u003cattempt-id\u003e/ to one layout. Specify ddx work no-progress / stop conditions. Drop run-type catalog beyond three layers. Narrow read-only amendment for artifactRegenerate only. BLOCKED ON #3. Largest bead.",
+    "labels": [
+      "frame",
+      "plan-2026-04-29",
+      "executions"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:41:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T00:41:05.045292496Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T004105-eed19186",
+    "prompt": ".ddx/executions/20260430T004105-eed19186/prompt.md",
+    "manifest": ".ddx/executions/20260430T004105-eed19186/manifest.json",
+    "result": ".ddx/executions/20260430T004105-eed19186/result.json",
+    "checks": ".ddx/executions/20260430T004105-eed19186/checks.json",
+    "usage": ".ddx/executions/20260430T004105-eed19186/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d5e71fb3-20260430T004105-eed19186"
+  }
+}
