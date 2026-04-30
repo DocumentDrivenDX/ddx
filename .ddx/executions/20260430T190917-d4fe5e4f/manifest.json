@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260430T190917-d4fe5e4f",
+  "bead_id": "ddx-0bbfa9c1",
+  "base_rev": "69dec5cb6ef393ad616d6b39195845a2702f1106",
+  "created_at": "2026-04-30T19:09:18.082032545Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0bbfa9c1",
+    "title": "documents view: search/filter, staleness badges, graph cross-link",
+    "description": "Improve the documents list at /documents (which will redirect to /artifacts once that lands, but the documents list currently exists as a standalone page and needs these improvements regardless).\n\nNOTE: Once ddx-fbf57b89 (artifacts list) ships, /documents redirects to /artifacts. This bead targets the existing /documents page in the interim AND ensures the /artifacts list inherits these capabilities.\n\nAdditions to documents list:\n1. Search bar: client-side filter across title and path; URL encodes ?q=\u003cterm\u003e; restores on reload.\n2. Staleness column: shows fresh/stale/missing badge per document (read from docGraph staleness field).\n3. 'View in Graph' button in each row: navigates to /graph with that document's node highlighted (?highlight=\u003cdocId\u003e).\n4. 'Open Graph' button in page header: navigates to /graph.\n5. D3Graph page gets 'Back to documents' link in header.\n6. If a document is highlighted on graph load (?highlight=\u003cdocId\u003e), the graph scrolls to and pulses that node.\n\nThis establishes bidirectional navigation between the documents list and graph, closing the siloed navigation gap.",
+    "acceptance": "1. Documents list shows search bar; typing filters list client-side; URL updates.\n2. Staleness badge shown per row; values match docGraph staleness for each document.\n3. 'View in Graph' navigates to /graph?highlight=\u003cdocId\u003e; target node is visually highlighted.\n4. 'Open Graph' in header navigates to /graph.\n5. Graph page shows 'Back to documents' link.\n6. Reloading /documents?q=\u003cterm\u003e restores same search without interaction.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "documents"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:17.087804332Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190917-d4fe5e4f",
+    "prompt": ".ddx/executions/20260430T190917-d4fe5e4f/prompt.md",
+    "manifest": ".ddx/executions/20260430T190917-d4fe5e4f/manifest.json",
+    "result": ".ddx/executions/20260430T190917-d4fe5e4f/result.json",
+    "checks": ".ddx/executions/20260430T190917-d4fe5e4f/checks.json",
+    "usage": ".ddx/executions/20260430T190917-d4fe5e4f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0bbfa9c1-20260430T190917-d4fe5e4f"
+  }
+}
