@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260430T152108-9d60286e",
+  "bead_id": "ddx-1534c574",
+  "base_rev": "13899c74c36a10e1918893d579994f45f5a65540",
+  "created_at": "2026-04-30T15:21:09.552615Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1534c574",
+    "title": "agent-power-contract: consume upstream requested-power interface",
+    "description": "\u003ccontext-digest\u003eFEAT-006 now defines a MinPower/MaxPower DDx/agent boundary with passthrough constraints. DDx requests abstract agent power bounds and may pass harness/provider/model constraints unchanged; agent owns model/provider routing and reports actual model/power. This bead consumes the upstream agent release that exposes Execute MinPower/MaxPower, passthrough constraints, response actual model/power, and model/power catalog.\u003c/context-digest\u003e\nPull and wire the upstream ddx-agent power-bounds + passthrough interface into DDx types/config/test seams.",
+    "acceptance": "1. cli/go.mod pins an agent version exposing MinPower, MaxPower, and Harness/Provider/Model passthrough on ExecuteRequest/ServiceExecuteRequest.\n2. Execute results/events expose actual_model and actual_power.\n3. Agent status/catalog API exposes available models with power numbers.\n4. DDx compile-time adapters build against the new fields without using profile aliases or route decisions.\n5. CHANGELOG or migration note references the consumed upstream MinPower/MaxPower passthrough contract.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "helix",
+      "phase:build",
+      "area:agent",
+      "area:routing",
+      "power-only",
+      "upstream-agent"
+    ],
+    "metadata": {
+      "spec_id": "FEAT-006"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T152108-9d60286e",
+    "prompt": ".ddx/executions/20260430T152108-9d60286e/prompt.md",
+    "manifest": ".ddx/executions/20260430T152108-9d60286e/manifest.json",
+    "result": ".ddx/executions/20260430T152108-9d60286e/result.json",
+    "checks": ".ddx/executions/20260430T152108-9d60286e/checks.json",
+    "usage": ".ddx/executions/20260430T152108-9d60286e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1534c574-20260430T152108-9d60286e"
+  }
+}
