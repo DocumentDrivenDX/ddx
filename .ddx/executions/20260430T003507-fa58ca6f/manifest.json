@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T003507-fa58ca6f",
+  "bead_id": "ddx-43f6a6bc",
+  "base_rev": "0a49f3d6be211ced5c01196dbe8d7c2a8fa3744a",
+  "created_at": "2026-04-30T00:35:08.762603741Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-43f6a6bc",
+    "title": "[artifact-run-arch] update FEAT-005 (multi-media artifact identity)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. Identity broadens to non-markdown via sidecar .ddx.yaml. Add media_type and generated_by fields. Authority rule: identity present -\u003e artifact. Terminology cleanup ('identity' not 'ddx: identity').",
+    "labels": [
+      "frame",
+      "plan-2026-04-29",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:35:07Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T00:35:07.805271547Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T003507-fa58ca6f",
+    "prompt": ".ddx/executions/20260430T003507-fa58ca6f/prompt.md",
+    "manifest": ".ddx/executions/20260430T003507-fa58ca6f/manifest.json",
+    "result": ".ddx/executions/20260430T003507-fa58ca6f/result.json",
+    "checks": ".ddx/executions/20260430T003507-fa58ca6f/checks.json",
+    "usage": ".ddx/executions/20260430T003507-fa58ca6f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-43f6a6bc-20260430T003507-fa58ca6f"
+  }
+}
