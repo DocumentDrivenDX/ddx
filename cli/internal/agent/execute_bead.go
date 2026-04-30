@@ -464,7 +464,11 @@ func GenerateSessionID() string {
 // appendBeadRoutingEvidence records a kind:routing evidence entry on the bead
 // after an agent run. It is a best-effort operation — errors are silently
 // ignored so a store failure never aborts the main execute-bead flow.
-func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, provider, model, routeReason, baseURL string) {
+//
+// The body separates requested passthrough constraints (harness/provider/model
+// from the CLI envelope) and requested power bounds from the actual resolved
+// values so analytics can distinguish intent from outcome (AC5 of ddx-20047dd5).
+func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, provider, model, routeReason, baseURL string, passthrough config.AgentPassthrough, minPower, maxPower int) {
 	if appender == nil || beadID == "" {
 		return
 	}
@@ -473,18 +477,28 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 		resolvedProvider = harness
 	}
 	type routingBody struct {
-		ResolvedProvider string   `json:"resolved_provider"`
-		ResolvedModel    string   `json:"resolved_model,omitempty"`
-		RouteReason      string   `json:"route_reason,omitempty"`
-		FallbackChain    []string `json:"fallback_chain"`
-		BaseURL          string   `json:"base_url,omitempty"`
+		ResolvedProvider  string   `json:"resolved_provider"`
+		ResolvedModel     string   `json:"resolved_model,omitempty"`
+		RouteReason       string   `json:"route_reason,omitempty"`
+		FallbackChain     []string `json:"fallback_chain"`
+		BaseURL           string   `json:"base_url,omitempty"`
+		RequestedHarness  string   `json:"requested_harness,omitempty"`
+		RequestedProvider string   `json:"requested_provider,omitempty"`
+		RequestedModel    string   `json:"requested_model,omitempty"`
+		RequestedMinPower int      `json:"requested_min_power,omitempty"`
+		RequestedMaxPower int      `json:"requested_max_power,omitempty"`
 	}
 	body := routingBody{
-		ResolvedProvider: resolvedProvider,
-		ResolvedModel:    model,
-		RouteReason:      routeReason,
-		FallbackChain:    []string{},
-		BaseURL:          baseURL,
+		ResolvedProvider:  resolvedProvider,
+		ResolvedModel:     model,
+		RouteReason:       routeReason,
+		FallbackChain:     []string{},
+		BaseURL:           baseURL,
+		RequestedHarness:  passthrough.Harness,
+		RequestedProvider: passthrough.Provider,
+		RequestedModel:    passthrough.Model,
+		RequestedMinPower: minPower,
+		RequestedMaxPower: maxPower,
 	}
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -919,7 +933,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 
 	// Record routing evidence on the bead (best-effort; errors are discarded).
-	appendBeadRoutingEvidence(runtime.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL)
+	// Include requested passthrough constraints and power bounds so analytics
+	// can separate intent from resolved outcome (AC5 of ddx-20047dd5).
+	appendBeadRoutingEvidence(runtime.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL, rcfg.Passthrough(), rcfg.MinPower(), rcfg.MaxPower())
 
 	// Record per-attempt cost evidence so cost rollup never has to join
 	// against the session index. Best-effort; errors are discarded.

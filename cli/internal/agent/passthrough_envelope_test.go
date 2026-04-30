@@ -1,17 +1,20 @@
 package agent
 
-// passthrough_envelope_test.go verifies the AC3, AC6, and AC7 requirements
+// passthrough_envelope_test.go verifies the AC3, AC5, AC6, and AC7 requirements
 // from bead ddx-20047dd5: the AgentPassthrough envelope is invariant under
-// power escalation, invalid passthrough values are not pre-validated by DDx,
-// and passthrough+power conflicts surface as typed failure modes rather than
+// power escalation, routing evidence records requested constraints separately,
+// invalid passthrough values are not pre-validated by DDx, and
+// passthrough+power conflicts surface as typed failure modes rather than
 // mutating or widening the pins.
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"testing"
 
 	agentlib "github.com/DocumentDrivenDX/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
@@ -266,5 +269,73 @@ func TestClassifyFailureMode_PassthroughModesDistinctFromGenericFailure(t *testi
 		if got == forbidden {
 			t.Errorf("power unsatisfied error misclassified as %q", forbidden)
 		}
+	}
+}
+
+// stubBeadEventAppenderForPassthrough is a minimal BeadEventAppender that
+// records all events in memory for inspection.
+type stubBeadEventAppenderForPassthrough struct {
+	events []bead.BeadEvent
+}
+
+func (s *stubBeadEventAppenderForPassthrough) AppendEvent(_ string, evt bead.BeadEvent) error {
+	s.events = append(s.events, evt)
+	return nil
+}
+
+// TestAppendBeadRoutingEvidence_RecordsPassthroughConstraintsSeparately (AC5):
+// The routing evidence body must contain requested_harness/provider/model and
+// requested_min_power/max_power as distinct fields, separate from the
+// resolved/actual values.
+func TestAppendBeadRoutingEvidence_RecordsPassthroughConstraintsSeparately(t *testing.T) {
+	app := &stubBeadEventAppenderForPassthrough{}
+	pt := config.AgentPassthrough{
+		Harness:  "claude",
+		Provider: "anthropic",
+		Model:    "claude-opus-4-6",
+	}
+	appendBeadRoutingEvidence(app, "ddx-test-01",
+		"claude", "anthropic", "claude-3-5-sonnet-20241022", // actual/resolved
+		"route-reason", "https://api.anthropic.com",
+		pt, 40, 90)
+
+	if len(app.events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(app.events))
+	}
+	evt := app.events[0]
+	if evt.Kind != "routing" {
+		t.Errorf("event kind = %q, want %q", evt.Kind, "routing")
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(evt.Body), &body); err != nil {
+		t.Fatalf("unmarshal routing body: %v", err)
+	}
+
+	// Actual/resolved values
+	if body["resolved_provider"] != "anthropic" {
+		t.Errorf("resolved_provider = %v, want %q", body["resolved_provider"], "anthropic")
+	}
+	if body["resolved_model"] != "claude-3-5-sonnet-20241022" {
+		t.Errorf("resolved_model = %v, want %q", body["resolved_model"], "claude-3-5-sonnet-20241022")
+	}
+
+	// Requested passthrough constraints (separate from resolved)
+	if body["requested_harness"] != "claude" {
+		t.Errorf("requested_harness = %v, want %q", body["requested_harness"], "claude")
+	}
+	if body["requested_provider"] != "anthropic" {
+		t.Errorf("requested_provider = %v, want %q", body["requested_provider"], "anthropic")
+	}
+	if body["requested_model"] != "claude-opus-4-6" {
+		t.Errorf("requested_model = %v, want %q", body["requested_model"], "claude-opus-4-6")
+	}
+
+	// Requested power bounds (separate from passthrough constraints)
+	if body["requested_min_power"] != float64(40) {
+		t.Errorf("requested_min_power = %v, want 40", body["requested_min_power"])
+	}
+	if body["requested_max_power"] != float64(90) {
+		t.Errorf("requested_max_power = %v, want 90", body["requested_max_power"])
 	}
 }

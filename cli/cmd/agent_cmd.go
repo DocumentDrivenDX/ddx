@@ -378,22 +378,27 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				Permissions: permissions,
 			}
 			recordRouteRequestForTest(routeReq)
-			dec, routeErr := svc.ResolveRoute(cmd.Context(), routeReq)
-			if routeErr != nil {
-				// Surface upstream typed errors verbatim — D5 contract.
-				return routeErr
-			}
-			if dec != nil {
-				if dec.Harness != "" {
-					resolvedHarness = dec.Harness
+			// DDx-internal harnesses (virtual, script) are handled by the local
+			// runner inside RunWithConfigViaService; the upstream service does not
+			// model them so we skip ResolveRoute to avoid a spurious routing error.
+			if routeHarness != "virtual" && routeHarness != "script" {
+				dec, routeErr := svc.ResolveRoute(cmd.Context(), routeReq)
+				if routeErr != nil {
+					// Surface upstream typed errors verbatim — D5 contract.
+					return routeErr
 				}
-				resolvedProvider = dec.Provider
-				if model == "" && dec.Model != "" {
-					resolvedModel = dec.Model
+				if dec != nil {
+					if dec.Harness != "" {
+						resolvedHarness = dec.Harness
+					}
+					resolvedProvider = dec.Provider
+					if model == "" && dec.Model != "" {
+						resolvedModel = dec.Model
+					}
 				}
-			}
-			if resolvedHarness == "" {
-				return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
+				if resolvedHarness == "" {
+					return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
+				}
 			}
 
 			overrides := config.CLIOverrides{
