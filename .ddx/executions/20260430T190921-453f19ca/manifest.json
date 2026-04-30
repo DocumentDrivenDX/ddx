@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260430T190921-453f19ca",
+  "bead_id": "ddx-61d3a25f",
+  "base_rev": "5c97c26aa45d50f20c5639d895c799f5249c9566",
+  "created_at": "2026-04-30T19:09:22.039248268Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-61d3a25f",
+    "title": "artifact regeneration: artifactRegenerate mutation + UI action + artifacts.spec.ts e2e",
+    "description": "Add the artifactRegenerate mutation and wire up the Regenerate button in the provenance panel.\n\nBackend:\n- GraphQL mutation artifactRegenerate(artifactId: ID!): ArtifactRegenerateResult\n- ArtifactRegenerateResult: { runId: ID!, status: String! }\n- Resolver dispatches a server-side worker using the artifact's generator/prompt, returns the new run id.\n- If no generator metadata, mutation returns a typed error (not a crash).\n\nUI:\n- Regenerate button in provenance panel (only shown when generated_by is present).\n- On click: button shows spinner; calls mutation; on success shows returned run id and two links: 'View run' (/runs/:runId) and 'Refresh artifact' (reload artifact detail).\n- On error: show error message inline in provenance panel; no silent failure.\n\nE2E:\n- artifacts.spec.ts: full US-081b workflow end-to-end using seeded fixture (artifact with known generated_by). Flow: list → filter → open → verify renderer → provenance panel → click Regenerate → verify run id shown → follow run link → navigate back to artifact.\n\nDepends on ddx-43684ac1 (provenance panel), ddx-ccbf6172 (backend).",
+    "acceptance": "1. artifactRegenerate mutation present in schema; resolver dispatches worker and returns run id.\n2. Regenerate button only visible when generated_by is present.\n3. Button spinner shows during mutation; success state shows run id with links.\n4. Error case: mutation fails → inline error in panel, no page crash.\n5. No generator metadata: mutation returns typed error, button remains disabled with tooltip.\n6. artifacts.spec.ts passes: complete US-081b workflow from list to regeneration and back.",
+    "labels": [
+      "area:graphql",
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:21.053300224Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190921-453f19ca",
+    "prompt": ".ddx/executions/20260430T190921-453f19ca/prompt.md",
+    "manifest": ".ddx/executions/20260430T190921-453f19ca/manifest.json",
+    "result": ".ddx/executions/20260430T190921-453f19ca/result.json",
+    "checks": ".ddx/executions/20260430T190921-453f19ca/checks.json",
+    "usage": ".ddx/executions/20260430T190921-453f19ca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-61d3a25f-20260430T190921-453f19ca"
+  }
+}
