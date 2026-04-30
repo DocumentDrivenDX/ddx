@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "The diff supplied contains zero changes to the three target files (`cli/internal/server/frontend/src/routes/executions/+page.svelte`, `executions/[id]/+page.svelte`, `commits/+page.svelte`). Re-run review against the merge that includes `17e60317` so the actual Svelte changes are visible.\nThe bead description lists concrete styling expectations (mono-code hashes in accent-lever, terminal-bg panes for timeline/log, sharp badges) but no formal `\u003cacceptance/\u003e` items. Add explicit AC (e.g., \"hash spans use `font-mono` + accent-lever token\", \"log/timeline pane uses `--terminal-bg`\", \"badges use `rounded-none` + token colors\") so future iterations have a deterministic pass/fail."
+}
