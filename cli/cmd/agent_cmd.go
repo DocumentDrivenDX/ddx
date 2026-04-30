@@ -60,6 +60,28 @@ func ResetRecordedRouteRequestsForTest() {
 	routeRequestRecorderMu.Unlock()
 }
 
+// agentServiceFactoryForTest, when non-nil, replaces the production
+// agent.NewServiceFromWorkDir construction in ddx agent run / ddx work paths
+// so e2e tests can inject a stub service that returns a controlled
+// RouteDecision or typed error from ResolveRoute.
+var agentServiceFactoryForTest func(workDir string) (agentlib.DdxAgent, error)
+
+// SetAgentServiceFactoryForTest installs a stub service factory used by the
+// run + execute-loop CLI surfaces. Pass nil to restore production behavior.
+func SetAgentServiceFactoryForTest(f func(workDir string) (agentlib.DdxAgent, error)) {
+	agentServiceFactoryForTest = f
+}
+
+// newAgentServiceForRun returns the agent service the run/work CLI surfaces
+// should use for ResolveRoute. Tests can swap the factory via
+// SetAgentServiceFactoryForTest.
+func newAgentServiceForRun(workDir string) (agentlib.DdxAgent, error) {
+	if agentServiceFactoryForTest != nil {
+		return agentServiceFactoryForTest(workDir)
+	}
+	return agent.NewServiceFromWorkDir(workDir)
+}
+
 func (f *CommandFactory) newAgentCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
@@ -322,16 +344,16 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				return nil
 			}
 
-			// Single harness mode (ddx-755f5881 D1+D5):
-			// When neither --harness nor agent.harness in config pins a
-			// specific harness, issue exactly one ResolveRoute call with the
-			// (normalized) Profile and let upstream pick the harness/model.
-			// No DDx-side ladder iteration, no ResolveTierModelRef lookup,
-			// no preference-order fallback. The default profile is "default".
+			// Single harness mode (ddx-fdd3ea36 D5):
+			// Always plumb --harness/--model/--profile/--provider through to
+			// ResolveRoute so upstream owns the harness+model+provider
+			// decision. Upstream typed errors (ErrHarnessModelIncompatible,
+			// ErrProfilePinConflict, ErrUnknownProvider, ErrUnknownProfile,
+			// ErrNoLiveProvider, ErrNoProfileCandidate) are returned verbatim
+			// — DDx does not transform or substitute.
 			//
-			// When agent.harness is set in config, fall through to
-			// LoadAndResolve below — that path already plumbs the configured
-			// harness into rcfg.Harness() (SD-024 Stage 2 contract).
+			// When agent.harness is set in config and --harness is not
+			// provided, the configured harness is plumbed as RouteRequest.Harness.
 			configHarness := ""
 			if cfg, _ := config.LoadWithWorkingDir(f.WorkingDir); cfg != nil && cfg.Agent != nil {
 				configHarness = strings.TrimSpace(cfg.Agent.Harness)
@@ -339,31 +361,39 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 			resolvedHarness := harness
 			resolvedModel := model
 			resolvedProvider := ""
-			if harness == "" && configHarness == "" {
-				profile = agent.NormalizeRoutingProfile(profile)
-				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
-				if svcErr != nil {
-					return fmt.Errorf("agent: failed to initialize routing service: %w", svcErr)
+			routeHarness := harness
+			if routeHarness == "" {
+				routeHarness = configHarness
+			}
+			profile = agent.NormalizeRoutingProfile(profile)
+			svc, svcErr := newAgentServiceForRun(f.WorkingDir)
+			if svcErr != nil {
+				return fmt.Errorf("agent: failed to initialize routing service: %w", svcErr)
+			}
+			routeReq := agentlib.RouteRequest{
+				Profile:     profile,
+				Harness:     routeHarness,
+				Model:       model,
+				Reasoning:   agentlib.Reasoning(effort),
+				Permissions: permissions,
+			}
+			recordRouteRequestForTest(routeReq)
+			dec, routeErr := svc.ResolveRoute(cmd.Context(), routeReq)
+			if routeErr != nil {
+				// Surface upstream typed errors verbatim — D5 contract.
+				return routeErr
+			}
+			if dec != nil {
+				if dec.Harness != "" {
+					resolvedHarness = dec.Harness
 				}
-				routeReq := agentlib.RouteRequest{
-					Profile:     profile,
-					Model:       model,
-					Reasoning:   agentlib.Reasoning(effort),
-					Permissions: permissions,
-				}
-				recordRouteRequestForTest(routeReq)
-				dec, routeErr := svc.ResolveRoute(cmd.Context(), routeReq)
-				if routeErr != nil {
-					return fmt.Errorf("agent: no viable harness found for profile %q: %w", profile, routeErr)
-				}
-				resolvedHarness = dec.Harness
 				resolvedProvider = dec.Provider
 				if model == "" && dec.Model != "" {
 					resolvedModel = dec.Model
 				}
-				if resolvedHarness == "" {
-					return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
-				}
+			}
+			if resolvedHarness == "" {
+				return fmt.Errorf("agent: no viable harness found for profile %q; install a harness or use --harness to specify one", profile)
 			}
 
 			overrides := config.CLIOverrides{
@@ -1841,22 +1871,39 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			resolvedHarness := harness
 			resolvedProvider := provider
 			resolvedModel := model
-			if resolvedHarness == "" {
-				svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
-				if svcErr == nil {
-					dec, routeErr := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-						Profile:   profile,
-						Model:     model,
-						Provider:  provider,
-						ModelRef:  modelRef,
-						Reasoning: agentlib.Reasoning(effort),
-					})
-					if routeErr == nil {
+			// ddx-fdd3ea36 D5 + AC #5: always plumb --harness/--model/--profile
+			// through ResolveRoute so ddx work shares the same routing surface
+			// as ddx agent run. Upstream typed errors (ErrHarnessModelIncompatible,
+			// ErrProfilePinConflict, etc.) surface verbatim — no DDx-side
+			// substitution.
+			svc, svcErr := newAgentServiceForRun(f.WorkingDir)
+			if svcErr == nil {
+				routeReq := agentlib.RouteRequest{
+					Profile:   profile,
+					Harness:   harness,
+					Model:     model,
+					Provider:  provider,
+					ModelRef:  modelRef,
+					Reasoning: agentlib.Reasoning(effort),
+				}
+				recordRouteRequestForTest(routeReq)
+				dec, routeErr := svc.ResolveRoute(ctx, routeReq)
+				if routeErr != nil {
+					return agent.ExecuteBeadReport{
+						BeadID: beadID,
+						Status: agent.ExecuteBeadStatusExecutionFailed,
+						Detail: routeErr.Error(),
+					}, routeErr
+				}
+				if dec != nil {
+					if dec.Harness != "" {
 						resolvedHarness = dec.Harness
+					}
+					if dec.Provider != "" {
 						resolvedProvider = dec.Provider
-						if model == "" && dec.Model != "" {
-							resolvedModel = dec.Model
-						}
+					}
+					if model == "" && dec.Model != "" {
+						resolvedModel = dec.Model
 					}
 				}
 			}
