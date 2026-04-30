@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260430T173259-5c2a1e8e",
+  "bead_id": "ddx-67ed1062",
+  "base_rev": "4834bfa68a0b548ecbca769e9806d6ff6a6b21b3",
+  "created_at": "2026-04-30T17:33:00.375499017Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-67ed1062",
+    "title": "power-catalog-thresholds: compute MinPower thresholds from available models",
+    "description": "\u003ccontext-digest\u003eThe agent exposes available models and their power values. DDx may use that catalog to choose abstract MinPower thresholds, including thresholds that restrict routing to top-power models, but must not select concrete models/providers.\u003c/context-digest\u003e\nAdd DDx retry-policy helpers for model/power catalog threshold consumption. Status rendering belongs in ddx-6036e1bc; this bead returns abstract power thresholds only.",
+    "acceptance": "1. A helper computes a MinPower threshold for top-model-only retries from catalog data.\n2. Helper returns only a power number, never model/provider/harness pins.\n3. Helper has no dependency on status/UI rendering code.\n4. Tests cover empty catalog, duplicate powers, top-N threshold, threshold stability when catalog order changes, and no provider/model-name branching.\n5. ExecuteRequest routing fields are not altered by catalog threshold code.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "helix",
+      "phase:build",
+      "area:agent",
+      "area:routing",
+      "power-only",
+      "observability"
+    ],
+    "metadata": {
+      "spec_id": "FEAT-006"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T173259-5c2a1e8e",
+    "prompt": ".ddx/executions/20260430T173259-5c2a1e8e/prompt.md",
+    "manifest": ".ddx/executions/20260430T173259-5c2a1e8e/manifest.json",
+    "result": ".ddx/executions/20260430T173259-5c2a1e8e/result.json",
+    "checks": ".ddx/executions/20260430T173259-5c2a1e8e/checks.json",
+    "usage": ".ddx/executions/20260430T173259-5c2a1e8e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-67ed1062-20260430T173259-5c2a1e8e"
+  }
+}
