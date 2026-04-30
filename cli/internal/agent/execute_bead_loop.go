@@ -204,6 +204,7 @@ type ExecuteBeadLoopStore interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 	Events(id string) ([]bead.BeadEvent, error)
 	SetExecutionCooldown(id string, until time.Time, status, detail string) error
+	AppendNotes(id string, notes string) error
 	IncrNoChangesCount(id string) (int, error)
 	// Reopen sets a closed bead back to open, appending notes to the bead's
 	// Notes field and recording a reopen event. Used by the post-merge review
@@ -839,6 +840,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				return result, ctx.Err()
 			}
+			if report.Status == ExecuteBeadStatusPreservedNeedsReview {
+				if err := w.Store.AppendNotes(candidate.ID, preservedNeedsReviewNote(report)); err != nil {
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "AppendNotes", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
+				}
+			}
 			if report.Status == ExecuteBeadStatusNoChanges {
 				count, cerr := w.Store.IncrNoChangesCount(candidate.ID)
 				if cerr != nil {
@@ -1141,8 +1150,7 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time.Time) bead.BeadEvent {
 	parts := []string{}
 	if report.Status == ExecuteBeadStatusPreservedNeedsReview {
-		parts = append(parts, "preserved-needs-review")
-		parts = append(parts, "gate_summary="+oneLineGateSummary(report.Detail))
+		parts = append(parts, preservedNeedsReviewNote(report))
 	}
 	if report.Detail != "" {
 		parts = append(parts, report.Detail)
@@ -1180,6 +1188,20 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt,
 	}
+}
+
+func preservedNeedsReviewNote(report ExecuteBeadReport) string {
+	parts := []string{
+		"preserved-needs-review",
+		"gate_summary=" + oneLineGateSummary(report.Detail),
+	}
+	if report.PreserveRef != "" {
+		parts = append(parts, "preserve_ref="+report.PreserveRef)
+	}
+	if report.ResultRev != "" {
+		parts = append(parts, "result_rev="+report.ResultRev)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func oneLineGateSummary(detail string) string {

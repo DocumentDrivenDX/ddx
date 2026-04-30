@@ -6,7 +6,7 @@ the target branch advanced. It preserves the attempted result under
 `refs/ddx/iterations/<bead-id>/<attempt-id>-<target-tip>` and records the bead
 outcome as `preserved_needs_review`.
 
-Operator-visible bead events include:
+Operator-visible bead notes and events include:
 
 - `preserved-needs-review`
 - `preserve_ref=<refs/ddx/iterations/...>`

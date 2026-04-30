@@ -973,6 +973,21 @@ func appendClosureRejectNote(b *Bead, err error) {
 	b.Notes = b.Notes + "\n" + note
 }
 
+// AppendNotes appends operator-facing notes to an existing bead.
+func (s *Store) AppendNotes(id string, appendNotes string) error {
+	appendNotes = strings.TrimSpace(appendNotes)
+	if appendNotes == "" {
+		return nil
+	}
+	return s.Update(id, func(b *Bead) {
+		if b.Notes != "" {
+			b.Notes = b.Notes + "\n\n" + appendNotes
+			return
+		}
+		b.Notes = appendNotes
+	})
+}
+
 // Reopen sets a bead's status back to open, clears claim fields, optionally
 // appends notes, and records an immutable reopen event — all in one atomic
 // lock acquisition.

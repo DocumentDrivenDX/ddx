@@ -214,6 +214,9 @@ func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
+	assert.Contains(t, got.Notes, "preserved-needs-review")
+	assert.Contains(t, got.Notes, "preserve_ref="+preserveRef)
+	assert.Contains(t, got.Notes, "gate_summary=large-deletion gate: huge.txt deleted 250 lines")
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
