@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260430T163724-3dfb1c46",
+  "bead_id": "ddx-da19756a",
+  "base_rev": "9cb3f57893230521291d7fb9d57611e48de2f88f",
+  "created_at": "2026-04-30T16:37:24.901053981Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-da19756a",
+    "title": "bug: execution path reinjects informational route decisions",
+    "description": "Review finding amended by passthrough and upstream MinPower/MaxPower requirement.\nFile: cli/cmd/agent_cmd.go:373\nCategory: correctness\nSeverity: critical\nDescription: DDx calls agent.ResolveRoute in the execution path, copies the informational RouteDecision into Harness/Provider/Model overrides, and then calls Execute. This violates the boundary. Under the updated interface, DDx may request MinPower/MaxPower bounds and may pass harness/provider/model operator constraints through unchanged, but must not pre-resolve or re-inject a concrete route.\nSuggested fix: Remove ResolveRoute from run/try/work execution paths. Pass only caller intent/task facts to Execute: MinPower/MaxPower, opaque AgentPassthrough constraints, Reasoning/Effort, Permissions, EstimatedPromptTokens, RequiresTools, workdir/timeouts/metadata. Keep ResolveRoute only in status/debug surfaces.",
+    "acceptance": "go test covers ddx run/try/work execution with a stub service proving Execute is called with MinPower/MaxPower and exact passthrough constraints while ResolveRoute is not called; routinglint fails ResolveRoute references outside status/debug allowlist.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "helix",
+      "phase:build",
+      "review-finding",
+      "area:agent",
+      "area:routing"
+    ],
+    "metadata": {
+      "spec_id": "CONTRACT-003"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T163724-3dfb1c46",
+    "prompt": ".ddx/executions/20260430T163724-3dfb1c46/prompt.md",
+    "manifest": ".ddx/executions/20260430T163724-3dfb1c46/manifest.json",
+    "result": ".ddx/executions/20260430T163724-3dfb1c46/result.json",
+    "checks": ".ddx/executions/20260430T163724-3dfb1c46/checks.json",
+    "usage": ".ddx/executions/20260430T163724-3dfb1c46/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-da19756a-20260430T163724-3dfb1c46"
+  }
+}
