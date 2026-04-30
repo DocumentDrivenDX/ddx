@@ -10,7 +10,7 @@ ddx:
 # Feature: Multi-Node Dashboard UI
 
 **ID:** FEAT-021
-**Status:** Complete
+**Status:** In Progress
 **Priority:** P1
 **Owner:** DDx Team
 
@@ -278,13 +278,21 @@ exists in the target project.
 **So that** I can understand the full workload without switching context
 
 **Acceptance Criteria:**
-- Given multiple projects are registered, when I open the combined bead view,
+- Given multiple projects are registered, when I open `/nodes/:nodeId/beads`,
   then I see beads from all projects with a project badge on each
 - Given I filter by project, then only beads from that project are shown and
   the URL updates to reflect the filter
-- Given I open the combined run history view, then I see run records from all
-  projects merged and sorted by time with visible `work`, `try`, or `run`
-  layer labels
+- Given I open `/nodes/:nodeId/runs`, then I see run records from all projects
+  merged and sorted by time with a project badge and a layer badge (`work`,
+  `try`, or `run`) on each record
+- Given I click a run record, then I see the layer-appropriate detail: queue
+  inputs for `work`, bead/worktree fields for `try`, execution summary for `run`
+- Given I navigate back from a run detail, then the combined run list is
+  restored with the same sort and filter state
+
+**E2E Test:** `node-beads.spec.ts` and `node-runs.spec.ts` — full workflows:
+- node-beads: open combined beads → verify cross-project beads with project badges → filter by project → verify URL and filtered results → click bead → verify navigation to project-scoped bead detail → press Back
+- node-runs: open combined runs → verify cross-project records with layer and project badges → filter by layer → click work record → verify detail → click child try → verify fields → press Back through hierarchy
 
 ### US-091: Operator Navigates to a Project-Scoped View
 **As an** operator investigating one project
@@ -295,9 +303,14 @@ exists in the target project.
 - Given I am on the node overview, when I click a project, then I navigate to
   that project's overview at `/nodes/:nodeId/projects/:projectId`
 - Given I am on the artifact browser for project A, when I switch projects in
-  the picker, then I navigate to the artifact browser for project B
+  the picker, then I navigate to the artifact browser for project B without
+  losing the current page context (e.g. still on `/artifacts`)
 - Given I copy the current URL and open it in a new tab, then I see the same
   view with the same project and page selected
+- Given I switch projects while on a run detail, then the UI falls back to
+  that project's run history
+
+**E2E Test:** `navigation.spec.ts` — full workflow: open node overview → click project → verify project overview URL → open artifact browser → switch project in picker → verify URL and content updated to project B → copy URL → open in new tab → verify same view → navigate to run detail → switch project → verify fallback to run history
 
 ### US-092: Operator Bookmarks a Filtered View
 **As an** operator who checks the ready queue every morning
@@ -312,6 +325,8 @@ exists in the target project.
 - Given I share the URL with a colleague on the same machine, then they see
   the same view
 
+**E2E Test:** `navigation.spec.ts` — full workflow: apply status + project filters → verify URL params → copy URL → reload page → verify same filter applied without interaction
+
 ### US-093: Operator Traces a Bead to Its Closing Commit
 **As an** operator reviewing completed work
 **I want** to see the git commit that closed a bead
@@ -322,6 +337,10 @@ exists in the target project.
   that commit is highlighted and linked to the bead
 - Given I click the commit link from the bead detail, then I navigate to the
   commit log with that commit in view
+- Given I click the bead link from the commit row, then I navigate to that
+  bead's detail
+
+**E2E Test:** `commits.spec.ts` — full workflow: open bead with closing commit → click commit link → verify commit log opens with commit highlighted → click bead link from commit row → verify bead detail opens → press Back → verify commit log restored at same position
 
 ### US-094: Operator Sees Node Identity in the UI
 **As an** operator with multiple machines
@@ -334,6 +353,8 @@ exists in the target project.
 - Given the URL contains `:nodeId`, then it matches the ID returned by
   `GET /api/node`
 
+**E2E Test:** `navigation.spec.ts` — full workflow: open UI → verify node name and ID visible in nav → verify URL nodeId matches GET /api/node response
+
 ### US-094b: Operator Opens Layer-Aware Run Routes
 **As an** operator reviewing DDx execution evidence
 **I want** project-scoped run routes for history and detail
@@ -341,18 +362,23 @@ exists in the target project.
   distinct in the URL and UI
 
 **Acceptance Criteria:**
-- Given I open `/nodes/:nodeId/projects/:projectId/runs`, then I see only that
-  project's run records with filters for layer, status, bead, artifact,
-  harness, provider, model, and time range
+- Given I navigate to `/nodes/:nodeId/projects/:projectId/runs`, then I see
+  project-scoped run records with filter chips for layer, status, bead,
+  harness, and time range; active filters are encoded in the URL
 - Given I click a `work` record, then I navigate to
-  `/nodes/:nodeId/projects/:projectId/runs/:runId` and see child try attempts
+  `/nodes/:nodeId/projects/:projectId/runs/:runId` and see the work detail:
+  queue inputs, selected beads, stop condition, and child try attempts
 - Given I click a child `try`, then I see bead id, base/result revisions,
   worktree path, merge/preserve result, checks, and child layer-1 runs
 - Given I click a layer-1 `run`, then I see prompt/config summary, power
   bounds, selected harness/provider/model, tokens, cost, duration, output, and
   evidence links
+- Given I am viewing any run detail, then breadcrumbs show the full
+  `work → try → run` path and each crumb is a navigable link
 - Given a run produced an artifact, then the detail route links to the artifact
   browser entry and that artifact links back to the producing run
+
+**E2E Test:** `runs.spec.ts` — full workflow: navigate to project runs → apply layer filter → verify URL → click work record → verify work detail fields → click child try → verify try fields → click layer-1 run → verify all fields → follow evidence link → press Back through breadcrumbs to run list → verify filter state restored → follow artifact link from run → verify artifact links back to run
 
 ## New API Required
 
@@ -502,24 +528,18 @@ Components read from `projectStore` to construct API URLs and filter queries.
 
 ### Testing
 
-Playwright e2e tests verify the complete user flow. Each test file covers a
-specific feature area:
+Playwright e2e tests verify the complete end-to-end workflow for each user
+story. Each spec covers the full flow: entry point → actions → outcome →
+navigation back. Tests use real ddx-server with seeded fixture data; no
+mocking of the GraphQL or HTTP layer.
 
-| Playwright Spec | TC Identifiers Covered |
-|-----------------|------------------------|
-| `e2e/navigation.spec.ts` | TC-010, TC-012 |
-| `e2e/node-beads.spec.ts` | TC-023 |
-| `e2e/node-runs.spec.ts` | TC-022 |
-| `e2e/projects.spec.ts` | TC-010, TC-012 |
-| `e2e/workers.spec.ts` | TC-009 |
-| `e2e/runs.spec.ts` | US-094b |
-| `cli/internal/server/frontend/e2e/app.spec.ts` | TC-001 through TC-008 |
-
-Each test file documents the TC identifiers it covers in a header comment.
-Test names use the pattern `TC-NNN.N — description` to match the test plan.
-
-**Example:** `e2e/node-beads.spec.ts` covers TC-023 through TC-023.9, testing
-the cross-project beads view at `/nodes/:nodeId/beads`.
+| E2E Spec | User Stories | Workflow Covered |
+|---|---|---|
+| `navigation.spec.ts` | US-091, US-092, US-094 | Root redirect → node overview → project picker → project switch preserving page context → bookmarkable URL round-trip → node identity visible |
+| `node-beads.spec.ts` | US-090 (beads) | Combined bead view → cross-project badges → filter by project → click bead → navigate to project-scoped detail → Back |
+| `node-runs.spec.ts` | US-090 (runs) | Combined run history → cross-project layer badges → filter → drill work→try→run → breadcrumbs back to list |
+| `runs.spec.ts` | US-094b | Project runs → apply layer filter → work detail → try detail → run detail → evidence link → artifact link → Back through full hierarchy |
+| `commits.spec.ts` | US-093 | Bead with closing commit → commit log → highlighted commit → bead cross-link → Back |
 
 ## Dependencies
 
