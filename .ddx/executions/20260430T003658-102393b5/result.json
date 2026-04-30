@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "The reviewable diff does not include `docs/helix/01-frame/features/FEAT-005-*.md` (or wherever FEAT-005 lives). Re-run the review with the cumulative bead diff (base_rev `0a49f3d6` → result_rev `0237f4c2`) so the FEAT-005 content edits — sidecar `.ddx.yaml` identity, `media_type`/`generated_by` fields, authority rule, and terminology cleanup — can actually be graded.\nNo AC list was supplied on the bead itself; recommend the next pass either populate `acceptance` on the bead or have the review harness pass the full bead-scoped diff so reviewers see the artifact under change."
+}
