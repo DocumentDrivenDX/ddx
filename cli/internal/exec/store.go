@@ -170,6 +170,10 @@ func (s *Store) Validate(definitionID string) (*Definition, *docgraph.Document, 
 }
 
 func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error) {
+	return s.RunWithOptions(ctx, definitionID, RunOptions{})
+}
+
+func (s *Store) RunWithOptions(ctx context.Context, definitionID string, opts RunOptions) (RunRecord, error) {
 	def, doc, err := s.Validate(definitionID)
 	if err != nil {
 		return RunRecord{}, err
@@ -209,9 +213,10 @@ func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error)
 			Prompt:     promptText,
 			PromptFile: promptFile,
 			Correlation: map[string]string{
-				"definition_id": def.ID,
-				"artifact_ids":  strings.Join(def.ArtifactIDs, ","),
-				"session_id":    sessionID,
+				"definition_id":     def.ID,
+				"artifact_ids":      strings.Join(def.ArtifactIDs, ","),
+				"produces_artifact": opts.ProducesArtifact,
+				"session_id":        sessionID,
 			},
 			WorkDir: workDir,
 		}
@@ -243,17 +248,18 @@ func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error)
 		runID := fmt.Sprintf("%s@%s-%d", def.ID, start.Format(time.RFC3339Nano), atomic.AddUint64(&s.runCounter, 1))
 		record := RunRecord{
 			RunManifest: RunManifest{
-				RunID:          runID,
-				DefinitionID:   def.ID,
-				ArtifactIDs:    def.ArtifactIDs,
-				StartedAt:      start,
-				FinishedAt:     finished,
-				Status:         status,
-				ExitCode:       exitCode,
-				MergeBlocking:  def.Required && status != StatusSuccess,
-				AgentSessionID: sessionID,
-				Attachments:    runAttachmentRefs(s.WorkingDir, runID),
-				Provenance:     provenance(),
+				RunID:            runID,
+				DefinitionID:     def.ID,
+				ArtifactIDs:      def.ArtifactIDs,
+				ProducesArtifact: opts.ProducesArtifact,
+				StartedAt:        start,
+				FinishedAt:       finished,
+				Status:           status,
+				ExitCode:         exitCode,
+				MergeBlocking:    def.Required && status != StatusSuccess,
+				AgentSessionID:   sessionID,
+				Attachments:      runAttachmentRefs(s.WorkingDir, runID),
+				Provenance:       provenance(),
 			},
 			Result: RunResult{
 				Stdout: stdout,
@@ -338,16 +344,17 @@ func (s *Store) Run(ctx context.Context, definitionID string) (RunRecord, error)
 	runID := fmt.Sprintf("%s@%s-%d", def.ID, start.Format(time.RFC3339Nano), atomic.AddUint64(&s.runCounter, 1))
 	record := RunRecord{
 		RunManifest: RunManifest{
-			RunID:         runID,
-			DefinitionID:  def.ID,
-			ArtifactIDs:   def.ArtifactIDs,
-			StartedAt:     start,
-			FinishedAt:    finished,
-			Status:        status,
-			ExitCode:      exitCode,
-			MergeBlocking: def.Required && status != StatusSuccess,
-			Attachments:   runAttachmentRefs(s.WorkingDir, runID),
-			Provenance:    provenance(),
+			RunID:            runID,
+			DefinitionID:     def.ID,
+			ArtifactIDs:      def.ArtifactIDs,
+			ProducesArtifact: opts.ProducesArtifact,
+			StartedAt:        start,
+			FinishedAt:       finished,
+			Status:           status,
+			ExitCode:         exitCode,
+			MergeBlocking:    def.Required && status != StatusSuccess,
+			Attachments:      runAttachmentRefs(s.WorkingDir, runID),
+			Provenance:       provenance(),
 		},
 		Result: result,
 	}

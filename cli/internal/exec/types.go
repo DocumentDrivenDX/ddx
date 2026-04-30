@@ -74,17 +74,18 @@ type Thresholds struct {
 
 // RunManifest is the authoritative metadata record for one execution.
 type RunManifest struct {
-	RunID          string            `json:"run_id"`
-	DefinitionID   string            `json:"definition_id"`
-	ArtifactIDs    []string          `json:"artifact_ids"`
-	StartedAt      time.Time         `json:"started_at"`
-	FinishedAt     time.Time         `json:"finished_at"`
-	Status         string            `json:"status"`
-	ExitCode       int               `json:"exit_code"`
-	MergeBlocking  bool              `json:"merge_blocking,omitempty"`
-	AgentSessionID string            `json:"agent_session_id,omitempty"`
-	Attachments    map[string]string `json:"attachments,omitempty"`
-	Provenance     Provenance        `json:"provenance,omitempty"`
+	RunID            string            `json:"run_id"`
+	DefinitionID     string            `json:"definition_id"`
+	ArtifactIDs      []string          `json:"artifact_ids"`
+	ProducesArtifact string            `json:"produces_artifact,omitempty"`
+	StartedAt        time.Time         `json:"started_at"`
+	FinishedAt       time.Time         `json:"finished_at"`
+	Status           string            `json:"status"`
+	ExitCode         int               `json:"exit_code"`
+	MergeBlocking    bool              `json:"merge_blocking,omitempty"`
+	AgentSessionID   string            `json:"agent_session_id,omitempty"`
+	Attachments      map[string]string `json:"attachments,omitempty"`
+	Provenance       Provenance        `json:"provenance,omitempty"`
 }
 
 // Provenance captures host and version metadata for a run.
@@ -128,4 +129,11 @@ type RunResult struct {
 type RunRecord struct {
 	RunManifest
 	Result RunResult `json:"result"`
+}
+
+// RunOptions carries call-site metadata that is not part of an execution
+// definition. It lets wrappers such as `ddx artifact regenerate` annotate the
+// immutable run without changing the reusable definition.
+type RunOptions struct {
+	ProducesArtifact string
 }

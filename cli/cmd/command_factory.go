@@ -540,6 +540,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newStatusCommand())
 	rootCmd.AddCommand(f.newLogCommand())
 	rootCmd.AddCommand(f.newBeadCommand())
+	rootCmd.AddCommand(f.newArtifactCommand())
 	rootCmd.AddCommand(f.newExecCommand())
 	rootCmd.AddCommand(f.newMetricCommand())
 	rootCmd.AddCommand(f.newMetricsCommand())
