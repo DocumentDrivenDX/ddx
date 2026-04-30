@@ -236,10 +236,10 @@ ddx:
 
 ### Discovery
 
-`ddx agent execute-bead` resolves applicable execution documents from the graph
-inside the execution worktree by following dependency links from the target bead
-and its governing artifacts. DDx indexes execution documents like other graph
-artifacts; no separate registry is required.
+`ddx try` resolves applicable execution documents from the graph inside the
+attempt worktree by following dependency links from the target bead and its
+governing artifacts. DDx indexes execution documents like other graph artifacts;
+no separate registry is required.
 
 ### Relationship to FEAT-010
 

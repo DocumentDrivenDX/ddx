@@ -117,10 +117,10 @@ Claude does not reliably auto-chase reference links; the router in
 
 Subagent orchestration is harness-specific (Claude Code has
 `.claude/agents/` + `context: fork`; Codex has its own subagent
-surface; others differ). The `ddx` skill describes *actions*
-("run `ddx agent run --quorum=<policy>`") and lets each harness
-decide how to run them. Quorum review is a CLI invocation, not a
-skill-frontmatter directive.
+surface; others differ). The `ddx` skill describes *actions* such as
+"run `ddx run` with this prompt" or "use the compare-prompts skill" and lets
+each harness decide how to run them. Multi-agent comparison is a workflow skill
+composition, not a skill-frontmatter directive.
 
 ### Installation
 

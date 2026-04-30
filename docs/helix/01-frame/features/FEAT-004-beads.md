@@ -83,9 +83,9 @@ queue-drain contract as ordinary executable task/bug/chore beads.
 
 - A normal execution-ready queue is **single-ticket-first**. Ready non-epic
   beads are ordered ahead of ready epic beads at the same priority.
-- Open epics are not launched by the ordinary `ddx agent execute-loop`
-  single-ticket worker by default. They are consumed by an epic-scoped worker
-  mode that owns an epic branch and worktree.
+- Open epics are not launched by the ordinary `ddx work` single-ticket worker
+  by default. They are consumed by an epic-scoped worker mode that owns an epic
+  branch and worktree.
 - Child beads of an epic remain individually executable units and may be
   closed one-by-one as they land on the epic branch.
 - Epic queue entries remain visible in the tracker and UI, but their
