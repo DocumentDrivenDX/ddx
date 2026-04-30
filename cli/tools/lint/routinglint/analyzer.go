@@ -76,6 +76,10 @@ var forbiddenIdents = map[string]string{
 	"ResolveProfileLadderCallCount": "test seam for the retired tier-ladder resolver — also retired by ddx-3bd7396a",
 	"AdaptiveMinTier":               "adaptive-min-tier promotion logic retired by ddx-3bd7396a",
 	"workersByHarness":              "escalation worker grouping helper retired by ddx-3bd7396a",
+	"queueByHarness":                "using harness as a queue-selection criterion violates the passthrough envelope contract (ddx-20047dd5)",
+	"retryByPassthrough":            "using passthrough values in retry policy violates the passthrough envelope contract (ddx-20047dd5)",
+	"endpointByPassthrough":         "using passthrough values in endpoint selection violates the passthrough envelope contract (ddx-20047dd5)",
+	"catalogThresholdForHarness":    "using harness in catalog threshold evaluation violates the passthrough envelope contract (ddx-20047dd5)",
 }
 
 // forbiddenLiterals is the closed list of CLI flag and config-key

@@ -176,12 +176,16 @@ type executeBeadManifest struct {
 }
 
 type executeBeadRequested struct {
+	// Passthrough constraints:
 	Harness  string `json:"harness,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Provider string `json:"provider,omitempty"`
 	ModelRef string `json:"model_ref,omitempty"`
 	Effort   string `json:"effort,omitempty"`
 	Prompt   string `json:"prompt,omitempty"`
+	// Power bounds: separate from passthrough constraints.
+	MinPower int `json:"min_power,omitempty"`
+	MaxPower int `json:"max_power,omitempty"`
 }
 
 type executeBeadManifestBead struct {
@@ -1064,12 +1068,14 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		BaseRev:   baseRev,
 		CreatedAt: time.Now().UTC(),
 		Requested: executeBeadRequested{
-			Harness:  rcfg.Harness(),
-			Model:    rcfg.Model(),
-			Provider: rcfg.Provider(),
+			Harness:  rcfg.Passthrough().Harness,
+			Model:    rcfg.Passthrough().Model,
+			Provider: rcfg.Passthrough().Provider,
 			ModelRef: rcfg.ModelRef(),
 			Effort:   rcfg.Effort(),
 			Prompt:   promptSource,
+			MinPower: rcfg.MinPower(),
+			MaxPower: rcfg.MaxPower(),
 		},
 		Bead: executeBeadManifestBead{
 			ID:          b.ID,

@@ -21,18 +21,20 @@ const PushConflictReasonPrefix = "landed locally; push conflict:"
 // outcome (e.g. preserved) and one failure mode (e.g. merge_conflict) so
 // measurement surfaces can aggregate failures by cause.
 const (
-	FailureModeContextOverflow     = "context_overflow"
-	FailureModeMergeConflict       = "merge_conflict"
-	FailureModeTestFailure         = "test_failure"
-	FailureModeBuildFailure        = "build_failure"
-	FailureModeTimeout             = "timeout"
-	FailureModeAuthError           = "auth_error"
-	FailureModeNoChanges           = "no_changes"
-	FailureModeNoEvidenceProduced  = "no_evidence_produced"
-	FailureModeRatchetMiss         = "ratchet_miss"
-	FailureModeNoViableProvider    = "no_viable_provider"
-	FailureModeHarnessNotInstalled = "harness_not_installed"
-	FailureModeUnknown             = "unknown"
+	FailureModeContextOverflow                = "context_overflow"
+	FailureModeMergeConflict                  = "merge_conflict"
+	FailureModeTestFailure                    = "test_failure"
+	FailureModeBuildFailure                   = "build_failure"
+	FailureModeTimeout                        = "timeout"
+	FailureModeAuthError                      = "auth_error"
+	FailureModeNoChanges                      = "no_changes"
+	FailureModeNoEvidenceProduced             = "no_evidence_produced"
+	FailureModeRatchetMiss                    = "ratchet_miss"
+	FailureModeNoViableProvider               = "no_viable_provider"
+	FailureModeHarnessNotInstalled            = "harness_not_installed"
+	FailureModeBlockedByPassthroughConstraint = "blocked_by_passthrough_constraint"
+	FailureModeAgentPowerUnsatisfied          = "agent_power_unsatisfied"
+	FailureModeUnknown                        = "unknown"
 )
 
 // ClassifyFailureMode derives a failure_mode for a worker-level result from
@@ -61,6 +63,23 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 
 	lower := strings.ToLower(errMsg)
 	switch {
+	case containsAny(lower,
+		"passthrough constraint unsatisfiable",
+		"passthrough constraint:",
+		"max_power is less than min_power",
+		"max_power exceeds min_power",
+		"harness cannot satisfy power constraint",
+		"harness pin incompatible with power bounds",
+		"model pin incompatible with power bounds",
+		"provider pin incompatible with power bounds"):
+		return FailureModeBlockedByPassthroughConstraint
+	case containsAny(lower,
+		"agent power unsatisfied",
+		"no model meets min_power",
+		"no model with power >=",
+		"minimum power not achievable",
+		"min_power constraint cannot be satisfied"):
+		return FailureModeAgentPowerUnsatisfied
 	case containsAny(lower,
 		"executable file not found in $path",
 		"executable file not found",

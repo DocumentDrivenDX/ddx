@@ -16,6 +16,14 @@ func AdaptiveMinTier() int { return 0 } // want `routinglint: forbidden identifi
 
 func workersByHarness() map[string]int { return nil } // want `routinglint: forbidden identifier workersByHarness`
 
+func queueByHarness() []string { return nil } // want `routinglint: forbidden identifier queueByHarness`
+
+func retryByPassthrough() int { return 0 } // want `routinglint: forbidden identifier retryByPassthrough`
+
+func endpointByPassthrough() string { return "" } // want `routinglint: forbidden identifier endpointByPassthrough`
+
+func catalogThresholdForHarness() float64 { return 0 } // want `routinglint: forbidden identifier catalogThresholdForHarness`
+
 // Pattern B: forbidden string literals.
 
 const escalateFlag = "--escalate" // want `routinglint: forbidden string literal`

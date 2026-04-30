@@ -48,10 +48,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 		ctx = context.Background()
 	}
 
-	harness := rcfg.Harness()
-	if harness == "" && rcfg.Provider() != "" {
-		harness = rcfg.Provider()
-	}
+	harness := rcfg.Passthrough().Harness
 
 	if harness == "virtual" || harness == "script" {
 		sessionLogDir := runtime.SessionLogDirOverride
@@ -136,17 +133,16 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 		sessionLogDir = ResolveLogDir(workDir, "")
 	}
 
+	pt := rcfg.Passthrough()
+
 	harness := runtime.HarnessOverride
 	if harness == "" {
-		harness = rcfg.Harness()
-	}
-	if harness == "" && rcfg.Provider() != "" {
-		harness = rcfg.Provider()
+		harness = pt.Harness
 	}
 
 	model := runtime.ModelOverride
 	if model == "" {
-		model = rcfg.Model()
+		model = pt.Model
 	}
 
 	permissions := runtime.PermissionsOverride
@@ -154,12 +150,12 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 		permissions = rcfg.Permissions()
 	}
 
-	providerTimeout := ResolveProviderRequestTimeout(workDir, rcfg.Provider(), model, rcfg.ProviderRequestTimeout())
+	providerTimeout := ResolveProviderRequestTimeout(workDir, pt.Provider, model, rcfg.ProviderRequestTimeout())
 
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
 		Model:           model,
-		Provider:        rcfg.Provider(),
+		Provider:        pt.Provider,
 		Harness:         harness,
 		ModelRef:        rcfg.ModelRef(),
 		Reasoning:       agentlib.Reasoning(rcfg.Effort()),
@@ -265,7 +261,7 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
 		Harness:     harness,
 		Model:       model,
-		Provider:    rcfg.Provider(),
+		Provider:    pt.Provider,
 		Effort:      rcfg.Effort(),
 		Correlation: runtime.Correlation,
 	}, result, start, finishedAt)

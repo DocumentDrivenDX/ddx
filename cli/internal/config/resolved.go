@@ -79,6 +79,11 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.effort = overrides.Effort
 	r.minPower = overrides.MinPower
 	r.maxPower = overrides.MaxPower
+	r.passthrough = AgentPassthrough{
+		Harness:  r.harness,
+		Provider: r.provider,
+		Model:    r.model,
+	}
 
 	r.permissions = overrides.Permissions
 	if r.permissions == "" && agent != nil {
@@ -164,6 +169,7 @@ type ResolvedConfig struct {
 	effort                  string
 	minPower                int
 	maxPower                int
+	passthrough             AgentPassthrough
 	permissions             string
 	timeout                 time.Duration
 	wallClock               time.Duration
@@ -254,6 +260,11 @@ func (r ResolvedConfig) MinPower() int {
 func (r ResolvedConfig) MaxPower() int {
 	r.requireSealed()
 	return r.maxPower
+}
+
+func (r ResolvedConfig) Passthrough() AgentPassthrough {
+	r.requireSealed()
+	return r.passthrough
 }
 
 func (r ResolvedConfig) Effort() string {
