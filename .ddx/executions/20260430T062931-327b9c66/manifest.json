@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T062931-327b9c66",
+  "bead_id": "ddx-d7b87162",
+  "base_rev": "9c182240c5d163c51c1ab7419fb0aa3c74529231",
+  "created_at": "2026-04-30T06:29:31.960883276Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d7b87162",
+    "title": "Restyle executions and commits views",
+    "description": "Apply tokens to executions/+page.svelte (265 lines), executions/[id]/+page.svelte (358 lines), commits/+page.svelte (164 lines). Mono-code hashes in accent-lever, timeline/log styling with terminal-bg panes, sharp badges.",
+    "parent": "ddx-04770087",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:29:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:29:31.11408459Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T062931-327b9c66",
+    "prompt": ".ddx/executions/20260430T062931-327b9c66/prompt.md",
+    "manifest": ".ddx/executions/20260430T062931-327b9c66/manifest.json",
+    "result": ".ddx/executions/20260430T062931-327b9c66/result.json",
+    "checks": ".ddx/executions/20260430T062931-327b9c66/checks.json",
+    "usage": ".ddx/executions/20260430T062931-327b9c66/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d7b87162-20260430T062931-327b9c66"
+  }
+}
