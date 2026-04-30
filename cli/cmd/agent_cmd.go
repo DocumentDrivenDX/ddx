@@ -1612,7 +1612,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
-		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel)
+		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel, treatPassthroughAsOpaque)
 	}
 
 	// Pre-flight: validate harness availability and model compatibility
@@ -1714,13 +1714,14 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}
 
 		loopOverrides := config.CLIOverrides{
-			Harness:  resolvedHarness,
-			Model:    resolvedModel,
-			Provider: attemptProvider,
-			ModelRef: modelRef,
-			Effort:   effort,
-			MinPower: minPower,
-			MaxPower: maxPower,
+			Harness:           resolvedHarness,
+			Model:             resolvedModel,
+			Provider:          attemptProvider,
+			ModelRef:          modelRef,
+			Effort:            effort,
+			MinPower:          minPower,
+			MaxPower:          maxPower,
+			OpaquePassthrough: treatPassthroughAsOpaque,
 		}
 		if requestTimeout > 0 {
 			loopOverrides.ProviderRequestTimeout = &requestTimeout
@@ -1902,12 +1903,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.
-func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel string) error {
+func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel string, opaquePassthrough bool) error {
 	serverBase := resolveServerURL(projectRoot)
 
 	workerSpec := map[string]any{
 		"once":         once,
 		"project_root": projectRoot,
+	}
+	if opaquePassthrough {
+		workerSpec["opaque_passthrough"] = true
 	}
 	if harness != "" {
 		workerSpec["harness"] = harness

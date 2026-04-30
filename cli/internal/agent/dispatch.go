@@ -50,7 +50,11 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 		return r.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}
 	if svc == nil {
-		built, err := NewServiceFromWorkDir(projectRoot)
+		factory := serviceRunFactory
+		if factory == nil {
+			factory = NewServiceFromWorkDir
+		}
+		built, err := factory(projectRoot)
 		if err != nil {
 			return nil, fmt.Errorf("agent: build service: %w", err)
 		}

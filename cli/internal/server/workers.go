@@ -42,6 +42,10 @@ type ExecuteLoopWorkerSpec struct {
 	NoReview      bool   `json:"no_review,omitempty"`
 	ReviewHarness string `json:"review_harness,omitempty"`
 	ReviewModel   string `json:"review_model,omitempty"`
+	// OpaquePassthrough, when true, skips DDx-side route validation and config
+	// harness/model injection. Routing belongs to the agent service (CONTRACT-003
+	// / FEAT-010 / ddx-c4231775). Set by ddx work; not set by ddx agent execute-loop.
+	OpaquePassthrough bool `json:"opaque_passthrough,omitempty"`
 }
 
 type PluginActionWorkerSpec struct {
@@ -305,8 +309,12 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	// Pre-flight: validate harness availability and model compatibility
 	// before creating the worker record or claiming any beads.
-	if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
-		return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
+	// Skipped when OpaquePassthrough=true (ddx work path): routing belongs to
+	// the agent service; DDx must not pre-resolve or validate the route.
+	if !spec.OpaquePassthrough {
+		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
+			return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
+		}
 	}
 
 	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {
@@ -584,11 +592,12 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				attemptProvider = resolvedProvider
 			}
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
-				Harness:  resolvedHarness,
-				Model:    resolvedModel,
-				Provider: attemptProvider,
-				ModelRef: spec.ModelRef,
-				Effort:   spec.Effort,
+				Harness:           resolvedHarness,
+				Model:             resolvedModel,
+				Provider:          attemptProvider,
+				ModelRef:          spec.ModelRef,
+				Effort:            spec.Effort,
+				OpaquePassthrough: spec.OpaquePassthrough,
 			})
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
@@ -715,13 +724,14 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	// CLIOverrides — when set they win over the on-disk config. Each
 	// request reloads the target project's config fresh (no cache).
 	overrides := config.CLIOverrides{
-		Assignee: "ddx",
-		Harness:  spec.Harness,
-		Model:    spec.Model,
-		Provider: spec.Provider,
-		ModelRef: spec.ModelRef,
-		Profile:  agent.NormalizeRoutingProfile(spec.Profile),
-		Effort:   spec.Effort,
+		Assignee:          "ddx",
+		Harness:           spec.Harness,
+		Model:             spec.Model,
+		Provider:          spec.Provider,
+		ModelRef:          spec.ModelRef,
+		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
+		Effort:            spec.Effort,
+		OpaquePassthrough: spec.OpaquePassthrough,
 	}
 	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
@@ -734,9 +744,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	// is claimed, no executor invocation, no tier-attempt event burn.
 	// DDx does NOT duplicate the upstream allow-list; this gate only
 	// consumes the typed-incompatibility surface.
-	// Skipped when BeadWorkerFactory is set (test injection path).
+	// Skipped when BeadWorkerFactory is set (test injection path) or when
+	// OpaquePassthrough=true (ddx work path — routing belongs to the agent service).
 	var routePreflight func(ctx context.Context, harness, model string) error
-	if m.BeadWorkerFactory == nil {
+	if m.BeadWorkerFactory == nil && !spec.OpaquePassthrough {
 		var preflightSvc agentlib.DdxAgent
 		preflightSvc, preflightSvcErr := agent.NewServiceFromWorkDir(projectRoot)
 		preflightErr := preflightSvcErr
