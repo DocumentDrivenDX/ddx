@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Both integration points are wired exactly as specified. Pre-commit hook is glob-scoped to DESIGN.md and degrades gracefully when bun is absent; CI runs the same command unconditionally in the ci job after installing root deps. Implementation matches the plan with no gold-plating."
+}
