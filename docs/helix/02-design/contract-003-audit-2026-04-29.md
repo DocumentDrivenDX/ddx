@@ -1,5 +1,10 @@
 # CONTRACT-003 Audit — 2026-04-29
 
+> **Boundary update:** this audit predates the final docs-corpus cleanup for
+> the top-level `ddx run` / `ddx try` / `ddx work` stack. Its upstream CLI
+> mounting findings remain useful for diagnostic passthrough, but DDx must not
+> revive removed agent execution leaves through help text or wrapper commands.
+
 Bead: ddx-90234d47 — gates plan-2026-04-29-artifact-and-run-architecture.md bead #7
 (FEAT-006 refactor). Source contract:
 `~/Projects/agent/docs/helix/02-design/contracts/CONTRACT-003-ddx-agent-service.md`.
@@ -64,8 +69,8 @@ func MountCLI(opts ...MountOption) *cobra.Command
 
 `MountOption` should let DDx:
 
-- Override the command Use string (so `ddx-agent run …` becomes
-  `ddx agent run …` in help output).
+- Override command naming/help text without reintroducing removed execution
+  leaves under the legacy namespace.
 - Inject a logger / output streams (so DDx can capture stdout/stderr
   for evidence bundles).
 - Suppress upstream `os.Exit` calls (return errors instead) so a
