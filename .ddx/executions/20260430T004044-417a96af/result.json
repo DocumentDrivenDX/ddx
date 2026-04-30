@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "The reviewable diff is execution-evidence chore only; the audit artifact (expected under `docs/helix/02-design/`) is not in scope of this diff. Re-run review against the squashed range including `08a40b69`, or attach the audit document to this iteration.\nNo file in the diff contains any statement about ddx-agent's Cobra root export, 3-layer architecture gaps, or run-side `generate-artifact` metadata — the three substantive audit questions from the bead description are unanswered by the changes shown."
+}
