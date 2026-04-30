@@ -493,3 +493,48 @@ func TestResolvedConfigReasoningLevelsAccessor(t *testing.T) {
 		t.Fatalf("zero-after-seal ReasoningLevels should be nil")
 	}
 }
+
+// TestOpaquePassthroughBlocksConfigHarnessModel is the regression guard for
+// ddx-c4231775: when OpaquePassthrough=true, Resolve must not fall back to
+// agent.harness / agent.model from .ddx/config.yaml even if the CLI flags are
+// empty. This is the historical silent-injection bug (axon project routed to
+// openrouter/gpt-5.4-mini because config.agent.model leaked into Execute).
+func TestOpaquePassthroughBlocksConfigHarnessModel(t *testing.T) {
+	cfg := &NewConfig{
+		Agent: &AgentConfig{
+			Harness: "claude",
+			Model:   "openrouter/gpt-5.4-mini",
+		},
+	}
+
+	// Without OpaquePassthrough the config values are applied normally.
+	normalRcfg := cfg.Resolve(CLIOverrides{})
+	if got := normalRcfg.Harness(); got != "claude" {
+		t.Fatalf("baseline Harness = %q, want claude", got)
+	}
+	if got := normalRcfg.Model(); got != "openrouter/gpt-5.4-mini" {
+		t.Fatalf("baseline Model = %q, want openrouter/gpt-5.4-mini", got)
+	}
+
+	// With OpaquePassthrough the config values must be suppressed.
+	opaqueRcfg := cfg.Resolve(CLIOverrides{OpaquePassthrough: true})
+	if got := opaqueRcfg.Harness(); got != "" {
+		t.Fatalf("opaque Harness = %q, want empty (config must not inject)", got)
+	}
+	if got := opaqueRcfg.Model(); got != "" {
+		t.Fatalf("opaque Model = %q, want empty (config must not inject)", got)
+	}
+
+	// Explicit CLI values must still pass through even under OpaquePassthrough.
+	explicitRcfg := cfg.Resolve(CLIOverrides{
+		OpaquePassthrough: true,
+		Harness:           "agent",
+		Model:             "gpt-5",
+	})
+	if got := explicitRcfg.Harness(); got != "agent" {
+		t.Fatalf("explicit opaque Harness = %q, want agent", got)
+	}
+	if got := explicitRcfg.Model(); got != "gpt-5" {
+		t.Fatalf("explicit opaque Model = %q, want gpt-5", got)
+	}
+}

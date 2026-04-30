@@ -34,6 +34,12 @@ type CLIOverrides struct {
 	// --max-power on execute-bead and execute-loop.
 	MinPower int
 	MaxPower int
+	// OpaquePassthrough, when true, prevents Resolve from falling back to
+	// agent.harness / agent.model from the project config when the caller did
+	// not supply those values explicitly. Used by the ddx work path
+	// (FEAT-010 / ddx-c4231775): routing belongs to the agent service;
+	// DDx must not inject a config-sourced model or harness.
+	OpaquePassthrough bool
 }
 
 // Resolve produces a sealed ResolvedConfig by layering overrides onto
@@ -62,12 +68,12 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.heartbeatInterval = workers.ResolveHeartbeatInterval()
 
 	r.harness = overrides.Harness
-	if r.harness == "" && agent != nil {
+	if r.harness == "" && !overrides.OpaquePassthrough && agent != nil {
 		r.harness = agent.Harness
 	}
 
 	r.model = overrides.Model
-	if r.model == "" && agent != nil {
+	if r.model == "" && !overrides.OpaquePassthrough && agent != nil {
 		r.model = agent.Model
 	}
 

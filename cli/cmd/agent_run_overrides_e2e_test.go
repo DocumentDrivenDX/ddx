@@ -228,11 +228,64 @@ func TestWorkSharesSamePassthroughPlumbing(t *testing.T) {
 	)
 
 	if capturedReq.Harness == "" && capturedReq.Model == "" {
-		t.Skip("Execute not called — bead may not have reached dispatch")
+		t.Skip("Execute not called — bead may not have reached dispatch (git repo required for full execute-bead path)")
 	}
 
 	assert.Equal(t, "claude", capturedReq.Harness,
 		"ddx work must plumb --harness to Execute.Harness")
 	assert.Equal(t, "gpt-5.4", capturedReq.Model,
 		"ddx work must plumb --model to Execute.Model")
+}
+
+// AC #6 / regression guard ddx-c4231775: ddx work with a config that pins
+// agent.harness and agent.model must NOT inject those values into Execute when
+// no CLI flags are supplied — the silent mini-model bug (axon project routed
+// to openrouter/gpt-5.4-mini).
+func TestWorkCleanConfigNoModelInjected(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	var capturedReq agentlib.ServiceExecuteRequest
+	installStubService(t, &stubAgentService{
+		execute: func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+			capturedReq = req
+			ch := make(chan agentlib.ServiceEvent, 1)
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+			close(ch)
+			return ch, nil
+		},
+	})
+
+	// Build a project dir with agent.harness and agent.model pins in config.
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	cfg := `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+agent:
+  harness: claude
+  model: openrouter/gpt-5.4-mini
+`
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
+
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "ddx-opaque-regression-test",
+		Title: "opaque passthrough regression fixture",
+	}))
+
+	root := NewCommandFactory(dir).NewRootCommand()
+	_, _ = executeCommand(root, "work", "--local", "--once")
+
+	// ddx work must NOT inject config agent.harness / agent.model; both fields
+	// must be empty in the Execute request when no CLI flags are provided.
+	assert.Empty(t, capturedReq.Harness,
+		"ddx work must not inject config agent.harness into Execute (ddx-c4231775)")
+	assert.Empty(t, capturedReq.Model,
+		"ddx work must not inject config agent.model into Execute (ddx-c4231775)")
 }
