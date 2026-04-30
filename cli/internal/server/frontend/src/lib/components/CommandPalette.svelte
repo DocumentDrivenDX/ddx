@@ -502,7 +502,7 @@
 				bind:this={inputElement}
 				role="searchbox"
 				aria-label="Command palette"
-				class="min-w-0 flex-1 bg-transparent text-sm text-fg-ink outline-none placeholder:text-fg-muted dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted"
+				class="min-w-0 flex-1 rounded-none border border-border-line bg-bg-elevated px-2 py-1 text-sm text-fg-ink outline-none placeholder:text-fg-muted focus:border-accent-lever dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted dark:focus:border-dark-accent-lever"
 				placeholder="Search beads, docs, actions..."
 			/>
 			<kbd
@@ -536,7 +536,7 @@
 									value={entry.id}
 									onSelect={() => void activateEntry(entry)}
 									onclick={() => void activateEntry(entry)}
-									class="flex min-h-11 cursor-pointer items-center gap-3 rounded-none px-3 py-2 text-left text-sm outline-none select-none data-[selected]:bg-bg-surface data-[selected]:text-fg-ink dark:data-[selected]:bg-dark-bg-surface dark:data-[selected]:text-dark-fg-ink"
+									class="flex min-h-11 cursor-pointer items-center gap-3 rounded-none px-3 py-2 text-left text-sm outline-none select-none hover:bg-bg-canvas data-[selected]:bg-bg-surface data-[selected]:text-fg-ink dark:hover:bg-dark-bg-canvas dark:data-[selected]:bg-dark-bg-surface dark:data-[selected]:text-dark-fg-ink"
 								>
 									<entry.Icon class="h-4 w-4 shrink-0 text-fg-muted dark:text-dark-fg-muted" />
 									<span class="min-w-0 flex-1">
