@@ -5,18 +5,19 @@
 :root,
 :root.light,
 .light {
-	--status-open-text: oklch(44% 0.17 257);
-	--status-open-surface: oklch(97% 0.02 257);
-	--status-open-border: oklch(80% 0.08 257);
-	--status-in-progress-text: oklch(42% 0.11 82);
-	--status-in-progress-surface: oklch(97% 0.04 88);
-	--status-in-progress-border: oklch(79% 0.12 82);
+	/* status — hues derived from palette: lever≈220, load≈55, error≈25, closed≈149 */
+	--status-open-text: #3B5B7A;
+	--status-open-surface: oklch(97% 0.01 220);
+	--status-open-border: oklch(75% 0.06 220);
+	--status-in-progress-text: #A8801F;
+	--status-in-progress-surface: oklch(97% 0.03 55);
+	--status-in-progress-border: oklch(75% 0.09 55);
 	--status-closed-text: oklch(39% 0.13 149);
 	--status-closed-surface: oklch(97% 0.03 149);
 	--status-closed-border: oklch(78% 0.11 149);
-	--status-blocked-text: oklch(43% 0.17 27);
-	--status-blocked-surface: oklch(97% 0.03 27);
-	--status-blocked-border: oklch(79% 0.12 27);
+	--status-blocked-text: #BA1A1A;
+	--status-blocked-surface: oklch(97% 0.03 25);
+	--status-blocked-border: oklch(79% 0.12 25);
 	--status-failed-text: var(--status-blocked-text);
 	--status-failed-surface: var(--status-blocked-surface);
 	--status-failed-border: var(--status-blocked-border);
@@ -27,63 +28,66 @@
 	--status-completed-surface: var(--status-closed-surface);
 	--status-completed-border: var(--status-closed-border);
 
-	--priority-p0-text: oklch(39% 0.17 27);
-	--priority-p0-surface: oklch(97% 0.03 27);
-	--priority-p0-border: oklch(78% 0.13 27);
-	--priority-p1-text: oklch(41% 0.14 45);
-	--priority-p1-surface: oklch(97% 0.04 62);
-	--priority-p1-border: oklch(79% 0.13 52);
-	--priority-p2-text: oklch(40% 0.12 244);
-	--priority-p2-surface: oklch(97% 0.02 244);
-	--priority-p2-border: oklch(78% 0.09 244);
+	/* priority — P0/P1 error-red, P2 lever-steel, P3 closed-green, P4 neutral */
+	--priority-p0-text: #BA1A1A;
+	--priority-p0-surface: oklch(97% 0.03 25);
+	--priority-p0-border: oklch(78% 0.13 25);
+	--priority-p1-text: #A8801F;
+	--priority-p1-surface: oklch(97% 0.03 55);
+	--priority-p1-border: oklch(79% 0.09 55);
+	--priority-p2-text: #3B5B7A;
+	--priority-p2-surface: oklch(97% 0.01 220);
+	--priority-p2-border: oklch(78% 0.06 220);
 	--priority-p3-text: oklch(40% 0.1 163);
 	--priority-p3-surface: oklch(97% 0.03 163);
 	--priority-p3-border: oklch(79% 0.1 163);
-	--priority-p4-text: oklch(42% 0.07 285);
-	--priority-p4-surface: oklch(97% 0.02 285);
-	--priority-p4-border: oklch(80% 0.07 285);
+	--priority-p4-text: #6B6558;
+	--priority-p4-surface: #FBF8F2;
+	--priority-p4-border: #E4DDD0;
 
+	/* cost tiers */
 	--tier-cheap-text: oklch(40% 0.11 163);
 	--tier-cheap-surface: oklch(97% 0.03 163);
 	--tier-cheap-border: oklch(79% 0.1 163);
-	--tier-standard-text: oklch(40% 0.12 244);
-	--tier-standard-surface: oklch(97% 0.02 244);
-	--tier-standard-border: oklch(78% 0.09 244);
-	--tier-fast-text: oklch(42% 0.13 70);
-	--tier-fast-surface: oklch(97% 0.04 78);
-	--tier-fast-border: oklch(79% 0.12 70);
+	--tier-standard-text: #3B5B7A;
+	--tier-standard-surface: oklch(97% 0.01 220);
+	--tier-standard-border: oklch(78% 0.06 220);
+	--tier-fast-text: #A8801F;
+	--tier-fast-surface: oklch(97% 0.03 55);
+	--tier-fast-border: oklch(79% 0.09 55);
 	--tier-smart-text: oklch(41% 0.13 315);
 	--tier-smart-surface: oklch(97% 0.02 315);
 	--tier-smart-border: oklch(79% 0.09 315);
 
-	--doc-link-text: var(--color-blue-600);
-	--doc-link-text-hover: var(--color-blue-700);
-	--doc-code-surface: var(--color-gray-100);
+	/* doc prose — warm surface tones */
+	--doc-link-text: #3B5B7A;
+	--doc-link-text-hover: #224361;
+	--doc-code-surface: #EEE8DF;
 	--doc-code-text: inherit;
-	--doc-pre-surface: var(--color-gray-800);
-	--doc-pre-text: var(--color-gray-50);
-	--doc-quote-border: var(--color-gray-300);
-	--doc-muted-text: var(--color-gray-500);
-	--doc-table-heading-surface: var(--color-gray-50);
-	--doc-table-border: var(--color-gray-200);
-	--doc-row-hover-surface: var(--color-gray-50);
-	--doc-rule-border: var(--color-gray-200);
+	--doc-pre-surface: #1F2125;
+	--doc-pre-text: #D8D2C4;
+	--doc-quote-border: #E4DDD0;
+	--doc-muted-text: #6B6558;
+	--doc-table-heading-surface: #FBF8F2;
+	--doc-table-border: #E4DDD0;
+	--doc-row-hover-surface: #F4EFE6;
+	--doc-rule-border: #E4DDD0;
 }
 
 :root.dark,
 .dark {
-	--status-open-text: oklch(76% 0.11 257);
-	--status-open-surface: oklch(28% 0.08 257);
-	--status-open-border: oklch(50% 0.12 257);
-	--status-in-progress-text: oklch(80% 0.13 88);
-	--status-in-progress-surface: oklch(28% 0.06 82);
-	--status-in-progress-border: oklch(52% 0.11 82);
+	--status-open-text: #7BA3CC;
+	--status-open-surface: oklch(22% 0.04 220);
+	--status-open-border: oklch(45% 0.07 220);
+	--status-in-progress-text: #D4A53D;
+	--status-in-progress-surface: oklch(22% 0.04 55);
+	--status-in-progress-border: oklch(47% 0.09 55);
 	--status-closed-text: oklch(78% 0.12 149);
 	--status-closed-surface: oklch(27% 0.06 149);
 	--status-closed-border: oklch(51% 0.1 149);
-	--status-blocked-text: oklch(76% 0.13 27);
-	--status-blocked-surface: oklch(28% 0.07 27);
-	--status-blocked-border: oklch(50% 0.12 27);
+	--status-blocked-text: #FFB4AB;
+	--status-blocked-surface: oklch(22% 0.05 25);
+	--status-blocked-border: oklch(45% 0.1 25);
 	--status-failed-text: var(--status-blocked-text);
 	--status-failed-surface: var(--status-blocked-surface);
 	--status-failed-border: var(--status-blocked-border);
@@ -94,47 +98,47 @@
 	--status-completed-surface: var(--status-closed-surface);
 	--status-completed-border: var(--status-closed-border);
 
-	--priority-p0-text: oklch(76% 0.13 27);
-	--priority-p0-surface: oklch(28% 0.07 27);
-	--priority-p0-border: oklch(50% 0.12 27);
-	--priority-p1-text: oklch(78% 0.13 52);
-	--priority-p1-surface: oklch(28% 0.06 52);
-	--priority-p1-border: oklch(52% 0.12 52);
-	--priority-p2-text: oklch(76% 0.11 244);
-	--priority-p2-surface: oklch(28% 0.07 244);
-	--priority-p2-border: oklch(50% 0.1 244);
+	--priority-p0-text: #FFB4AB;
+	--priority-p0-surface: oklch(22% 0.05 25);
+	--priority-p0-border: oklch(45% 0.1 25);
+	--priority-p1-text: #D4A53D;
+	--priority-p1-surface: oklch(22% 0.04 55);
+	--priority-p1-border: oklch(47% 0.09 55);
+	--priority-p2-text: #7BA3CC;
+	--priority-p2-surface: oklch(22% 0.04 220);
+	--priority-p2-border: oklch(45% 0.07 220);
 	--priority-p3-text: oklch(78% 0.11 163);
 	--priority-p3-surface: oklch(27% 0.06 163);
 	--priority-p3-border: oklch(51% 0.1 163);
-	--priority-p4-text: oklch(77% 0.08 285);
-	--priority-p4-surface: oklch(28% 0.05 285);
-	--priority-p4-border: oklch(51% 0.08 285);
+	--priority-p4-text: #8E8674;
+	--priority-p4-surface: #26231F;
+	--priority-p4-border: #34302A;
 
 	--tier-cheap-text: oklch(78% 0.11 163);
 	--tier-cheap-surface: oklch(27% 0.06 163);
 	--tier-cheap-border: oklch(51% 0.1 163);
-	--tier-standard-text: oklch(76% 0.11 244);
-	--tier-standard-surface: oklch(28% 0.07 244);
-	--tier-standard-border: oklch(50% 0.1 244);
-	--tier-fast-text: oklch(80% 0.13 78);
-	--tier-fast-surface: oklch(28% 0.06 70);
-	--tier-fast-border: oklch(52% 0.12 70);
+	--tier-standard-text: #7BA3CC;
+	--tier-standard-surface: oklch(22% 0.04 220);
+	--tier-standard-border: oklch(45% 0.07 220);
+	--tier-fast-text: #D4A53D;
+	--tier-fast-surface: oklch(22% 0.04 55);
+	--tier-fast-border: oklch(47% 0.09 55);
 	--tier-smart-text: oklch(78% 0.1 315);
 	--tier-smart-surface: oklch(28% 0.06 315);
 	--tier-smart-border: oklch(51% 0.09 315);
 
-	--doc-link-text: var(--color-blue-400);
-	--doc-link-text-hover: var(--color-blue-300);
-	--doc-code-surface: var(--color-gray-700);
-	--doc-code-text: var(--color-gray-50);
-	--doc-pre-surface: var(--color-gray-800);
-	--doc-pre-text: var(--color-gray-50);
-	--doc-quote-border: var(--color-gray-600);
-	--doc-muted-text: var(--color-gray-400);
-	--doc-table-heading-surface: var(--color-gray-800);
-	--doc-table-border: var(--color-gray-700);
-	--doc-row-hover-surface: var(--color-gray-800);
-	--doc-rule-border: var(--color-gray-700);
+	--doc-link-text: #7BA3CC;
+	--doc-link-text-hover: #A9CAEE;
+	--doc-code-surface: #2E2A25;
+	--doc-code-text: #EDE6D6;
+	--doc-pre-surface: #0F0E0C;
+	--doc-pre-text: #D8D2C4;
+	--doc-quote-border: #34302A;
+	--doc-muted-text: #8E8674;
+	--doc-table-heading-surface: #26231F;
+	--doc-table-border: #34302A;
+	--doc-row-hover-surface: #26231F;
+	--doc-rule-border: #34302A;
 }
 
 @layer utilities {
@@ -167,18 +171,3 @@
 	}
 }
 
-.dark .dark\:bg-gray-950 {
-	background-color: oklch(13% 0.02 260);
-}
-
-.dark .dark\:bg-gray-900 {
-	background-color: oklch(21% 0.02 260);
-}
-
-.dark .dark\:bg-gray-800 {
-	background-color: oklch(28% 0.02 260);
-}
-
-.dark .dark\:bg-gray-700 {
-	background-color: oklch(37% 0.02 260);
-}

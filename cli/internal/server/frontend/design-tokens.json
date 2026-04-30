@@ -2,91 +2,69 @@
   "theme": {
     "extend": {
       "colors": {
-        "primary": "#4878c6",
-        "secondary": "#35a35f",
-        "tertiary": "#8e35a3",
-        "background": "#ffffff",
-        "surface": "#f9fafb",
-        "surface-dark": "#0f1117",
-        "text": "#111827",
-        "text-muted": "#6b7280",
-        "text-on-primary": "#ffffff",
-        "text-on-secondary": "#ffffff",
-        "text-on-tertiary": "#ffffff",
-        "border": "#e5e7eb",
-        "terminal-bg": "#0f1117",
-        "terminal-fg": "#e8eaf0"
+        "accent-lever":         "#3B5B7A",
+        "accent-load":          "#A8801F",
+        "accent-fulcrum":       "#3F4147",
+
+        "dark-accent-lever":    "#7BA3CC",
+        "dark-accent-load":     "#D4A53D",
+        "dark-accent-fulcrum":  "#9CA0A8",
+
+        "bg-canvas":            "#F4EFE6",
+        "bg-surface":           "#FBF8F2",
+        "bg-elevated":          "#FFFFFF",
+
+        "dark-bg-canvas":       "#1A1815",
+        "dark-bg-surface":      "#26231F",
+        "dark-bg-elevated":     "#2E2A25",
+
+        "fg-ink":               "#1F2125",
+        "fg-muted":             "#6B6558",
+
+        "dark-fg-ink":          "#EDE6D6",
+        "dark-fg-muted":        "#8E8674",
+
+        "border-line":          "#E4DDD0",
+        "dark-border-line":     "#34302A",
+
+        "terminal-bg":          "#1F2125",
+        "terminal-bg-deep":     "#0F0E0C",
+        "terminal-fg":          "#D8D2C4",
+
+        "error":                "#BA1A1A",
+        "dark-error":           "#FFB4AB"
       },
       "fontFamily": {
-        "h1": [
-          "Inter"
-        ],
-        "h2": [
-          "Inter"
-        ],
-        "body-md": [
-          "Inter"
-        ],
-        "body-sm": [
-          "Inter"
-        ],
-        "code": [
-          "JetBrains Mono"
-        ],
-        "label": [
-          "Inter"
-        ]
+        "headline-lg":  ["Inter", "sans-serif"],
+        "headline-md":  ["Inter", "sans-serif"],
+        "body-md":      ["Inter", "sans-serif"],
+        "body-sm":      ["Inter", "sans-serif"],
+        "label-caps":   ["Inter", "sans-serif"],
+        "mono-code":    ["ui-monospace", "SFMono-Regular", "JetBrains Mono", "monospace"]
       },
       "fontSize": {
-        "h1": [
-          "2.5rem",
-          {
-            "fontWeight": "700"
-          }
-        ],
-        "h2": [
-          "1.75rem",
-          {
-            "fontWeight": "600"
-          }
-        ],
-        "body-md": [
-          "1rem",
-          {
-            "fontWeight": "400"
-          }
-        ],
-        "body-sm": [
-          "0.875rem",
-          {
-            "fontWeight": "400"
-          }
-        ],
-        "code": [
-          "0.875rem",
-          {
-            "fontWeight": "400"
-          }
-        ],
-        "label": [
-          "0.75rem",
-          {
-            "letterSpacing": "0.05em",
-            "fontWeight": "500"
-          }
-        ]
+        "headline-lg": ["20px", { "fontWeight": "800", "lineHeight": "1.2",  "letterSpacing": "-0.02em" }],
+        "headline-md": ["16px", { "fontWeight": "600", "lineHeight": "1.25", "letterSpacing": "-0.01em" }],
+        "body-md":     ["14px", { "fontWeight": "400", "lineHeight": "1.5",  "letterSpacing": "-0.01em" }],
+        "body-sm":     ["13px", { "fontWeight": "400", "lineHeight": "1.4",  "letterSpacing": "-0.005em" }],
+        "label-caps":  ["11px", { "fontWeight": "700", "lineHeight": "1",    "letterSpacing": "0.05em" }],
+        "mono-code":   ["13px", { "fontWeight": "400", "lineHeight": "1.4",  "letterSpacing": "0.01em" }]
       },
       "borderRadius": {
-        "sm": "4px",
-        "md": "8px",
-        "lg": "12px"
+        "none":    "0px",
+        "sm":      "2px",
+        "DEFAULT": "4px",
+        "lg":      "8px",
+        "full":    "9999px"
       },
       "spacing": {
-        "xs": "4px",
-        "sm": "8px",
-        "md": "16px",
-        "lg": "24px",
-        "xl": "40px"
+        "base":    "4px",
+        "xs":      "4px",
+        "sm":      "8px",
+        "gutter":  "12px",
+        "md":      "16px",
+        "lg":      "24px",
+        "xl":      "32px"
       }
     }
   }

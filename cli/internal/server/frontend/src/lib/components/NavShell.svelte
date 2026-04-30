@@ -65,25 +65,25 @@
 	const nodeName = $derived(nodeStore.value?.name ?? 'localhost');
 </script>
 
-<div class="flex h-screen flex-col bg-white dark:bg-gray-950">
+<div class="flex h-screen flex-col bg-bg-canvas dark:bg-dark-bg-canvas">
 	<!-- Top nav -->
 	<header
-		class="flex shrink-0 items-center gap-4 border-b border-gray-200 px-4 py-2 dark:border-gray-800 dark:bg-gray-900"
+		class="flex h-10 shrink-0 items-center gap-4 border-b border-border-line bg-bg-surface px-3 dark:border-dark-border-line dark:bg-dark-bg-surface"
 	>
 		<a
 			href={brandHref}
-			class="text-lg font-semibold tracking-tight text-gray-950 hover:text-gray-700 dark:text-white dark:hover:text-gray-300"
+			class="font-mono-code text-base font-black tracking-tighter text-fg-ink hover:text-accent-lever dark:text-dark-fg-ink dark:hover:text-dark-accent-lever"
 		>
 			DDx
 		</a>
-		<span class="text-xs text-gray-700 dark:text-gray-300">Node: {nodeName}</span>
-		<div class="mx-2 h-4 w-px bg-gray-200 dark:bg-gray-700"></div>
+		<span class="font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted">Node: {nodeName}</span>
+		<div class="mx-1 h-4 w-px bg-border-line dark:bg-dark-border-line"></div>
 		<ProjectPicker />
 		<div class="ml-auto flex items-center gap-2">
 			<DrainIndicator />
 			<button
 				onclick={toggleMode}
-				class="rounded p-1.5 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+				class="p-1.5 text-fg-muted hover:bg-bg-canvas dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated"
 				aria-label="Toggle dark mode"
 			>
 				{#if mode.current === 'dark'}
@@ -98,7 +98,7 @@
 	{#if wsConnection.showBanner}
 		<div
 			data-testid="ws-disconnected-banner"
-			class="flex shrink-0 items-center gap-2 border-b border-yellow-300 bg-yellow-50 px-4 py-1 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+			class="flex shrink-0 items-center gap-2 border-b border-accent-load/40 bg-accent-load/10 px-4 py-1 font-label-caps text-xs text-accent-load dark:border-dark-accent-load/40 dark:bg-dark-accent-load/10 dark:text-dark-accent-load"
 		>
 			<span class="inline-block h-2 w-2 rounded-full bg-yellow-500"></span>
 			{wsConnection.state === 'connecting' ? 'reconnecting\u2026' : 'disconnected'}
@@ -108,7 +108,7 @@
 	<div class="flex min-h-0 flex-1">
 		<!-- Sidebar -->
 		<nav
-			class="flex w-48 shrink-0 flex-col gap-1 border-r border-gray-200 p-2 dark:border-gray-800 dark:bg-gray-900"
+			class="flex w-64 shrink-0 flex-col gap-px border-r border-border-line bg-bg-surface py-3 dark:border-dark-border-line dark:bg-dark-bg-surface"
 		>
 			{#each navLinks as { href, label, Icon, exact }}
 				{#if href}
@@ -118,16 +118,16 @@
 					<a
 						{href}
 						aria-current={active ? 'page' : undefined}
-						class="flex items-center gap-2 rounded px-3 py-2 text-sm {active
-							? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
-							: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}"
+						class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+							? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
+							: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 					>
 						<Icon class="h-4 w-4 shrink-0" />
 						{label}
 					</a>
 				{:else}
 					<span
-						class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
+						class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
 						title="/(no project)"
 					>
 						<Icon class="h-4 w-4 shrink-0" />
@@ -135,22 +135,22 @@
 					</span>
 				{/if}
 			{/each}
-			<div class="my-1 border-t border-gray-100 dark:border-gray-800"></div>
+			<div class="my-2 border-t border-border-line dark:border-dark-border-line"></div>
 			{#if allBeadsHref}
 				{@const active = $page.url.pathname.startsWith(allBeadsHref)}
 				<a
 					href={allBeadsHref}
 					aria-current={active ? 'page' : undefined}
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm {active
-						? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
-						: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}"
+					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+						? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
+						: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 				>
 					<Layers class="h-4 w-4 shrink-0" />
 					All Beads
 				</a>
 			{:else}
 				<span
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
+					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
 				>
 					<Layers class="h-4 w-4 shrink-0" />
 					All Beads
@@ -161,16 +161,16 @@
 				<a
 					href={providersHref}
 					aria-current={active ? 'page' : undefined}
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm {active
-						? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
-						: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}"
+					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+						? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
+						: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 				>
 					<Radio class="h-4 w-4 shrink-0" />
 					Providers
 				</a>
 			{:else}
 				<span
-					class="flex items-center gap-2 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
+					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
 				>
 					<Radio class="h-4 w-4 shrink-0" />
 					Providers
@@ -179,7 +179,7 @@
 		</nav>
 
 		<!-- Page content -->
-		<main class="min-w-0 flex-1 overflow-auto p-6">
+		<main class="min-w-0 flex-1 overflow-auto bg-bg-canvas p-gutter dark:bg-dark-bg-canvas">
 			{@render children()}
 		</main>
 	</div>
