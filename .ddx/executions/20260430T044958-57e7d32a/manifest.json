@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T044958-57e7d32a",
+  "bead_id": "ddx-e60ed726",
+  "base_rev": "890276e92a2e943469a5633089f621d73b95bfac",
+  "created_at": "2026-04-30T04:49:59.780972295Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e60ed726",
+    "title": "Style shell micro-components",
+    "description": "Apply token classes to: DrainIndicator.svelte, Tooltip.svelte, ProjectPicker.svelte, ConfirmDialog.svelte, TypedConfirmDialog.svelte. Replace gray-* with border-line/surface tokens, rounded-* with rounded-none, blue/primary with accent-lever. Use frontend-design skill for reference. All 5 files, no functional changes. Playwright: after changes run `bun run test:e2e -- --grep navigation` and `bun run test:e2e -- --grep drain`; update screenshots with --update-snapshots if diffs are intentional.",
+    "parent": "ddx-569272d1",
+    "metadata": {
+      "claimed-at": "2026-04-30T04:49:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T04:49:58.794719468Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T044958-57e7d32a",
+    "prompt": ".ddx/executions/20260430T044958-57e7d32a/prompt.md",
+    "manifest": ".ddx/executions/20260430T044958-57e7d32a/manifest.json",
+    "result": ".ddx/executions/20260430T044958-57e7d32a/result.json",
+    "checks": ".ddx/executions/20260430T044958-57e7d32a/checks.json",
+    "usage": ".ddx/executions/20260430T044958-57e7d32a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e60ed726-20260430T044958-57e7d32a"
+  }
+}
