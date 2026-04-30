@@ -15,10 +15,12 @@ ddx:
 
 ## Overview
 
-The DDx server (`ddx-server`) serves a web UI for browsing documents, beads,
-the document dependency graph, and DDx agent invocation activity. The UI is a
-SvelteKit application built with Svelte 5, embedded into the Go binary via `embed.FS`,
-and served alongside the MCP and HTTP API endpoints from a single process.
+The DDx server (`ddx-server`) serves a web UI for browsing artifacts, beads,
+the artifact dependency graph, and DDx run activity. Artifacts include markdown
+documents plus sidecar-identified media such as diagrams, wireframes, images,
+and PDFs. The UI is a SvelteKit application built with Svelte 5, embedded into
+the Go binary via `embed.FS`, and served alongside the MCP and HTTP API
+endpoints from a single process.
 
 `ddx-server` runs as a per-user host daemon (one instance per machine, see
 FEAT-002 and FEAT-020), so the same UI enumerates every project that the
@@ -32,15 +34,17 @@ Every page lists its required query or subscription by name for traceability.
 
 ## Problem Statement
 
-**Current situation:** DDx documents, beads, and the doc graph are only accessible via CLI commands or MCP tool calls. There's no visual way to browse the document library, see the dependency graph, check bead status, or review agent activity and execution evidence.
+**Current situation:** DDx artifacts, beads, and the artifact graph are only accessible via CLI commands or MCP tool calls. There's no visual way to browse the artifact library, see the dependency graph, check bead status, regenerate generated artifacts, or review layer-aware run evidence.
 
 **Pain points:**
 - CLI output for `ddx doc graph` is text-only — dependency graphs need visual rendering
 - Bead status and dependency trees are hard to grok in terminal output
-- DDx agent activity has no browsable interface
-- New team members can't quickly understand what documents exist or how they relate
+- DDx run activity has no browsable interface that preserves the `work` -> `try` -> `run` layers
+- Non-markdown artifacts have no type-aware browser preview, even when the graph knows their identity
+- Generated artifacts have no UI affordance for checking provenance or requesting regeneration
+- New team members can't quickly understand what artifacts exist or how they relate
 
-**Desired outcome:** A web dashboard served from the same `ddx-server` binary that already handles MCP and HTTP API. Developers open a browser, see their document library, dependency graph, bead board, and agent activity — all from one URL.
+**Desired outcome:** A web dashboard served from the same `ddx-server` binary that already handles MCP and HTTP API. Developers open a browser, see their artifact library, dependency graph, bead board, generated-artifact provenance, and DDx run activity — all from one URL.
 
 ## Architecture
 
@@ -101,15 +105,33 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
 ### Functional
 
-1. **Artifact browser, viewer, and editor**
-   - List documents by category (prompts, personas, patterns, templates, ADRs, SDs)
-   - Full-text search across document content and frontmatter
-   - View document content rendered as markdown with syntax highlighting
-   - Show `ddx:` frontmatter metadata (id, dependencies, staleness status)
+1. **Artifact browser, viewer, editor, and regeneration**
+   - List artifacts by category (prompts, personas, patterns, templates, ADRs,
+     SDs, diagrams, wireframes, generated images, PDFs)
+   - Full-text search across textual artifact content, sidecar metadata, and
+     markdown frontmatter
+   - View markdown artifacts rendered as markdown with syntax highlighting
+   - Render artifacts by `media_type`:
+     - `text/markdown`: markdown renderer with syntax-highlighted code blocks
+     - `image/svg+xml` with Mermaid provenance: sanitized inline SVG preview
+     - `application/vnd.excalidraw+json`: Excalidraw read-only embed
+     - `image/*`: inline image preview with metadata fallback
+     - `application/pdf`: embedded PDF preview with open-file fallback
+     - unknown or binary media: metadata panel plus open/download affordance
+   - Show `ddx:` frontmatter or sidecar `.ddx.yaml` metadata (id,
+     `media_type`, dependencies, `generated_by`, and staleness status)
    - Clickable dependency links — navigate upstream/downstream docs inline
    - **Editor**: in-browser markdown editing with save-to-disk (calls API to write file)
    - Sidebar showing document dependency tree for current doc
    - Staleness indicator per document (fresh/stale/missing-deps)
+   - Generated-artifact provenance indicator: show producing run id, prompt or
+     generator summary, and source-hash status when `generated_by` is present
+   - Generated-artifact staleness is artifact-local: a `generated_by.source_hash`
+     mismatch marks only the generated artifact stale and does not cascade like
+     `depends_on`
+   - Regenerate action for generated artifacts calls the `artifactRegenerate`
+     mutation, returns the new run id, and links directly to the produced run
+     detail and updated artifact
 
 2. **Document dependency graph**
    - Interactive visual graph (D3/Cytoscape) showing all document relationships
@@ -132,7 +154,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Click a bead to open detail panel (split pane or slide-over)
    - Detail shows: all fields, dependency tree, execution beads, agent sessions
    - Graph traversal: click a dependency → navigate to that bead's detail
-   - Drill-down into execution runs linked to the bead (shows pass/fail,
+   - Drill-down into run records linked to the bead (shows layer, pass/fail,
      logs, duration)
 
    **Kanban board view:**
@@ -163,7 +185,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      to the document viewer with that artifact's content)
    - Parent bead link navigates to the parent's detail
    - Dependency links navigate to each dep's detail
-   - Execution runs link to the execution detail view (logs, results)
+   - Run records link to the layer-aware run detail view (logs, results)
    - Agent session links navigate to the agent log viewer for that session
 
    *Review and re-evaluation:*
@@ -178,8 +200,11 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
    *Status and lifecycle:*
    - Re-open a closed bead (status → open) with a reason field
-   - Re-run: dispatch `ddx exec run` or `ddx try` against the bead's linked
-     execution definition (calls server API which delegates to CLI)
+   - Re-run bead work: dispatch `ddx try <bead>` through the server worker API,
+     then open the resulting `try` record under the layer-aware run history
+   - Run linked checks: when the bead references an execution definition,
+     dispatch that definition as project checks and show the resulting record
+     separately from bead re-run history
    - Claim / unclaim for agent coordination
    - Inline status transitions (open → in_progress → closed)
 
@@ -199,7 +224,26 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Token usage summary (provider-native or DDx-observed, depending on source)
    - Auto-refresh on configurable interval (or subscription in v2)
 
-5. **Status dashboard**
+5. **Layer-aware run history and detail**
+   - List DDx run records from the unified substrate with explicit layer labels:
+     `work`, `try`, and `run`
+   - Filter by layer, bead id, artifact id, harness, provider, model, status,
+     and time range without introducing a run-type catalog beyond the three
+     layers
+   - Work detail shows queue-drain inputs, selected beads, stop condition,
+     retry/defer decisions, and child try attempts in chronological order
+   - Try detail shows bead id, base/result revisions, isolated worktree,
+     merge/preserve outcome, checks, and child layer-1 run records
+   - Run detail shows prompt/config summary, power bounds, selected harness,
+     provider, model, token/cost/duration signals, output, and evidence links
+   - Drill-down links preserve hierarchy in both directions:
+     `work` -> `try` -> `run`, with breadcrumbs back to parent records
+   - Artifact-producing runs show `produces_artifact`; artifact pages link back
+     to the producing run and expose regeneration history
+   - Layer-aware run views consume read-only GraphQL/HTTP state except for the
+     narrow `artifactRegenerate` mutation
+
+6. **Status dashboard**
    - Summary cards: document count by type, bead counts by status, stale document count, recent agent activity
    - Quick links to ready beads, stale documents, recent agent activity
    - Project health indicators (library populated, config valid, beads active)
@@ -229,7 +273,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      each progress event without re-fetching the full worker record. When the terminal
      phase event arrives, the stream closes and the card switches to a static completed state.
 
-6. **Epic execution view**
+7. **Epic execution view**
    - Lists open epics separately from single-ticket ready work
    - Shows epic branch name, epic worktree path, active child bead, and merge
      gate status
@@ -237,7 +281,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Allows the user to inspect the final epic merge candidate and merge-gate
      results before the merge commit is created
 
-7. **Provider / Harness Dashboard**
+8. **Provider / Harness Dashboard**
 
    A dedicated page — separate from the status dashboard, agent log monitor,
    and worker progress view — that gives operators a clear picture of
@@ -291,7 +335,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      response verbatim — useful for bug reports and operator audits
    - Time-window selector (7d / 30d / custom) scopes the historical usage table
 
-8. **Persona viewer**
+9. **Persona viewer**
    - Browse personas with descriptions and tags
    - See which roles each persona is bound to in project config
    - View full persona content rendered as markdown
@@ -324,6 +368,30 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given documents have `ddx:` frontmatter with dependencies, when I open the graph view, then I see nodes and edges representing the dependency relationships
 - Given some documents are stale, then stale nodes are visually highlighted (red/orange)
 - Given I click a node, then I navigate to that document's detail view
+
+### US-081b: Developer Views and Regenerates Multi-Media Artifacts
+**As a** developer working with generated project artifacts
+**I want** the artifact viewer to render each artifact by media type and expose
+  regeneration when provenance exists
+**So that** diagrams, images, PDFs, and markdown docs are inspectable without
+  leaving the UI
+
+**Acceptance Criteria:**
+- Given an artifact has `media_type: text/markdown`, when I open it, then I see
+  rendered markdown with syntax-highlighted code blocks
+- Given an artifact has Mermaid-generated SVG metadata, Excalidraw JSON,
+  `image/*`, or `application/pdf`, when I open it, then the viewer renders the
+  corresponding preview and still exposes raw metadata
+- Given an artifact's media type is unknown or binary-only, then the viewer
+  shows an explicit metadata-only fallback with an open/download affordance
+- Given an artifact has `generated_by`, then I see the producing run id,
+  generator/prompt summary, source-hash status, and a `Regenerate` action
+- Given I click `Regenerate`, then the UI calls `artifactRegenerate`, shows the
+  returned run id, and links to both the layer-aware run detail and the updated
+  artifact
+- Given `generated_by.source_hash` no longer matches, then only the generated
+  artifact is marked stale; downstream `depends_on` staleness does not cascade
+  from provenance alone
 
 ### US-082: Developer Monitors Bead Status on Kanban Board
 **As a** developer tracking work items
@@ -381,17 +449,19 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
   provide a reason, then the bead status returns to open with the reason
   recorded
 
-### US-082e: Supervisor Re-runs Execution from Bead Detail
+### US-082e: Supervisor Re-runs Bead Work from Bead Detail
 **As a** supervisor who wants fresh evidence
-**I want** to re-run an execution or agent invocation directly from the bead
-  detail
+**I want** to re-run bead work directly from the bead detail
 **So that** I can verify the implementation still works after spec changes
 
 **Acceptance Criteria:**
-- Given a bead has a linked execution definition, when I click "Re-run", then
-  the execution is dispatched via the server API
-- Given the run completes, then the result appears in the bead's execution
-  list and the UI refreshes
+- Given I click "Re-run bead", then the UI dispatches `ddx try <bead>` through
+  the server worker API; it does not dispatch `ddx run` directly for bead work
+- Given the try completes, then the result appears in the bead's run list with
+  layer `try`, its child layer-1 `run` records, and the UI refreshes
+- Given a bead has a linked execution definition and I click "Run linked
+  checks", then that definition is dispatched as project checks and displayed
+  separately from bead re-run history
 - Given I want to run an agent review, when I click "Agent review", then
   an agent session is dispatched with the bead's context as the prompt
 
@@ -526,6 +596,29 @@ provider logs
 - Given I filter by harness, then only invocations for that harness are shown
 - Given I look at the summary, then I see total tokens consumed by harness and
   by day where a signal source exists
+
+### US-086b: Operator Drills Through Work, Try, and Run Evidence
+**As an** operator auditing queue-drain behavior
+**I want** run history to preserve the `work` -> `try` -> `run` hierarchy
+**So that** I can distinguish queue orchestration, bead attempts, and single
+  agent invocations without flattening them into one ambiguous list
+
+**Acceptance Criteria:**
+- Given `ddx work` has run, when I open the run history, then I see a layer
+  `work` record with queue inputs, selected beads, stop condition, and child
+  try attempts
+- Given I open a child `try` record, then I see bead id, base/result revisions,
+  worktree path, merge or preserve outcome, checks, and child layer-1 run
+  records
+- Given I open a layer-1 `run` record, then I see prompt/config summary,
+  power bounds, selected harness/provider/model, duration, token and cost
+  signals, output, and evidence links
+- Given a run produced an artifact, then the run detail links to the artifact
+  and the artifact links back to the producing run
+- Given I filter the run history, then available layer filters are exactly
+  `work`, `try`, and `run`; comparison, replay, benchmark, and other workflow
+  shapes are represented as skill-produced records over these layers, not as
+  new core run types
 
 ### US-081a: Developer Follows Intra-Repo Markdown Links
 **As a** developer reading one doc and referenced by another
@@ -905,13 +998,18 @@ ddx/
                 │   │   │               ├── +page.svelte # project dashboard
                 │   │   │               ├── beads/
                 │   │   │               │   └── +page.svelte      # beads list (query: beads)
+                │   │   │               ├── artifacts/
+                │   │   │               │   └── +page.svelte      # artifacts list/viewer (query: artifacts)
                 │   │   │               ├── documents/
-                │   │   │               │   └── +page.svelte      # documents list (query: documents)
+                │   │   │               │   └── +page.svelte      # legacy markdown document route
+                │   │   │               ├── runs/
+                │   │   │               │   └── +page.svelte      # layer-aware run history (query: runs)
                 │   │   │               └── graph/
                 │   │   │                   └── +page.svelte      # dependency graph (query: docGraph)
                 │   │   └── graphql/
                 │   │       ├── beads.gql
-                │   │       ├── documents.gql
+                │   │       ├── artifacts.gql
+                │   │       ├── runs.gql
                 │   │       └── workers.gql
                 │   └── components/
                 └── build/         # SvelteKit output (embedded into Go)
@@ -922,8 +1020,13 @@ ddx/
 - FEAT-002 (DDx server HTTP/MCP API) — the web UI consumes GraphQL at `/graphql`;
   REST endpoints stay frozen for CLI/MCP compatibility
 - FEAT-004 (Beads) — for bead board; queries `beads` and mutations `beadCreate`, `beadUpdate`, `beadClaim`
-- FEAT-007 (Doc graph) — for dependency graph visualization; queries `docGraph`
+- FEAT-005 (Artifacts) — for artifact identity, sidecar metadata,
+  `media_type`, and `generated_by`
+- FEAT-007 (Doc graph) — for dependency graph visualization; queries
+  `docGraph` with artifact nodes and provenance edges
 - FEAT-006 (Agent service) — for agent activity and invocation detail
+- FEAT-010 (Executions) — for unified `work` / `try` / `run` records and the
+  narrow `artifactRegenerate` write surface
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
   signal model consumed by the provider dashboard
 - FEAT-021 (Dashboard UI) — defines URL scheme and navigation patterns
@@ -943,7 +1046,7 @@ ddx/
 ### Unit Tests
 
 - Component tests for beads list, filter chips, detail panel
-- Page-level tests for documents viewer, graph page, worker detail
+- Page-level tests for artifact viewer, graph page, worker detail, run detail
 - Store tests for node context, project selection, dark mode
 
 ### E2E Tests (Playwright)
@@ -952,9 +1055,12 @@ All tests run against the built SvelteKit app served by `ddx-server`.
 
 - **navigation.spec.ts** — `/` redirect to `/nodes/:nodeId`, project picker
 - **beads.spec.ts** — list, filter, search, detail, claim/unclaim, mutations
-- **documents.spec.ts** — list, markdown render, edit-in-place, search
+- **artifacts.spec.ts** — list, media-type renderers, edit-in-place for
+  markdown, regenerate action, generated-artifact provenance
 - **graph.spec.ts** — graph visualization, drag/zoom, tooltip interaction
 - **workers.spec.ts** — worker list, live log via subscription, phase tracking
+- **runs.spec.ts** — layer-aware run list, work/try/run drill-down, artifact
+  producer links
 - **providers.spec.ts** — provider dashboard, filter, detail panel, copy JSON
 
 Each test maps to a specific user story and acceptance criteria.
