@@ -355,7 +355,7 @@ func TestTriagePromptsAccuracy(t *testing.T) {
 	for _, item := range evalSlice {
 		got, _, _, err := RuleBasedClassifier(context.Background(), item.Bead)
 		require.NoError(t, err)
-		if got == item.Label {
+		if got == item.ExpectedClass {
 			correct++
 		}
 	}
@@ -376,10 +376,10 @@ func TestTriagePromptsACCoverage(t *testing.T) {
 	evalSlice := evalHoldout(corpus)
 	var coverages []float64
 	for _, item := range evalSlice {
-		if item.Label != TriageClassificationDecomposable || len(item.GroundTruthChildren) == 0 {
+		if item.ExpectedClass != TriageClassificationDecomposable || len(item.ChildAcceptance) == 0 {
 			continue
 		}
-		rate := ACCoverageRate(item.Bead.Acceptance, item.GroundTruthChildren)
+		rate := ACCoverageRate(item.Bead.Acceptance, item.childSpecs())
 		coverages = append(coverages, rate)
 	}
 	if len(coverages) == 0 {
@@ -395,16 +395,66 @@ func TestTriagePromptsACCoverage(t *testing.T) {
 		"average AC coverage must be >= 90%% on eval slice (got %.0f%%)", avg*100)
 }
 
+// TestTriageCorpus verifies the offline corpus contract used by the harvester
+// and later prompt tests. The corpus must contain both classification classes
+// and enough context to replay each item without reading tracker history.
+func TestTriageCorpus(t *testing.T) {
+	corpus, err := loadEvalCorpus("../../../library/prompts/triage/eval-corpus.jsonl")
+	require.NoError(t, err, "eval-corpus.jsonl must load without error")
+	require.NotEmpty(t, corpus, "eval-corpus.jsonl must contain entries")
+
+	classes := map[string]bool{}
+	seenIDs := map[string]bool{}
+	for _, item := range corpus {
+		require.NotEmpty(t, item.ID, "entry id is required")
+		require.False(t, seenIDs[item.ID], "entry ids must be unique: %s", item.ID)
+		seenIDs[item.ID] = true
+		require.NotEmpty(t, item.SourceRepo, "source_repo is required for %s", item.ID)
+		require.NotEmpty(t, item.ExpectedClass, "expected_class is required for %s", item.ID)
+		require.Contains(t, []string{TriageClassificationAtomic, TriageClassificationDecomposable}, item.ExpectedClass)
+		require.NotEmpty(t, item.Rationale, "rationale is required for %s", item.ID)
+		require.NotEmpty(t, item.Bead.ID, "bead.id is required for %s", item.ID)
+		require.NotEmpty(t, item.Bead.Title, "bead.title is required for %s", item.ID)
+		require.Equal(t, item.Title, item.Bead.Title, "top-level title should mirror bead.title")
+		if item.ExpectedClass == TriageClassificationDecomposable && len(item.ChildTitles) > 0 {
+			require.Len(t, item.ChildAcceptance, len(item.ChildTitles),
+				"child_acceptance must align with child_titles for %s", item.ID)
+		}
+		classes[item.ExpectedClass] = true
+	}
+	assert.True(t, classes[TriageClassificationAtomic], "corpus must include expected_class=atomic")
+	assert.True(t, classes[TriageClassificationDecomposable], "corpus must include expected_class=decomposable")
+}
+
 // ---------------------------------------------------------------------------
 // Helpers.
 // ---------------------------------------------------------------------------
 
 // corpusEntry is one row of the eval-corpus.jsonl file.
 type corpusEntry struct {
-	ID                  string          `json:"id"`
-	Label               string          `json:"label"`
-	Bead                bead.Bead       `json:"bead"`
-	GroundTruthChildren []ChildBeadSpec `json:"ground_truth_children"`
+	ID              string    `json:"id"`
+	SourceRepo      string    `json:"source_repo"`
+	ExpectedClass   string    `json:"expected_class"`
+	Rationale       string    `json:"rationale"`
+	Title           string    `json:"title"`
+	Description     string    `json:"description"`
+	Acceptance      string    `json:"acceptance"`
+	Labels          []string  `json:"labels"`
+	Bead            bead.Bead `json:"bead"`
+	ChildTitles     []string  `json:"child_titles"`
+	ChildAcceptance []string  `json:"child_acceptance"`
+}
+
+func (e corpusEntry) childSpecs() []ChildBeadSpec {
+	specs := make([]ChildBeadSpec, 0, len(e.ChildAcceptance))
+	for i, acceptance := range e.ChildAcceptance {
+		title := ""
+		if i < len(e.ChildTitles) {
+			title = e.ChildTitles[i]
+		}
+		specs = append(specs, ChildBeadSpec{Title: title, Acceptance: acceptance})
+	}
+	return specs
 }
 
 // loadEvalCorpus reads and parses the JSONL eval corpus file.
@@ -417,6 +467,7 @@ func loadEvalCorpus(path string) ([]corpusEntry, error) {
 
 	var entries []corpusEntry
 	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(line) == 0 {
@@ -431,28 +482,21 @@ func loadEvalCorpus(path string) ([]corpusEntry, error) {
 	return entries, sc.Err()
 }
 
-// evalHoldout returns the held-out eval slice from a corpus: entries are
-// sorted by ID and every 5th entry (1-indexed) is selected. This produces a
-// deterministic, reproducible 20% holdout.
+// evalHoldout returns the held-out eval slice. The harvester writes the
+// holdout directly to eval-corpus.jsonl, so tests use every row after sorting
+// for deterministic diagnostics.
 func evalHoldout(corpus []corpusEntry) []corpusEntry {
 	sorted := make([]corpusEntry, len(corpus))
 	copy(sorted, corpus)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
-
-	var eval []corpusEntry
-	for i, e := range sorted {
-		if (i+1)%5 == 0 {
-			eval = append(eval, e)
-		}
-	}
-	return eval
+	return sorted
 }
 
 // evalSliceLabels returns a list of "id:label" strings for diagnostics.
 func evalSliceLabels(slice []corpusEntry) []string {
 	out := make([]string, len(slice))
 	for i, e := range slice {
-		out[i] = e.ID + ":" + e.Label
+		out[i] = e.ID + ":" + e.ExpectedClass
 	}
 	return out
 }

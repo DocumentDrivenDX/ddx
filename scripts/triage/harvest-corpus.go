@@ -1,294 +1,434 @@
 //go:build ignore
 
-// harvest-corpus generates the triage eval corpus from a project's beads.jsonl.
+// harvest-corpus generates the held-out triage eval corpus from bead history.
 //
 // Usage:
 //
-//	go run scripts/triage/harvest-corpus.go \
-//	  -beads   .ddx/beads.jsonl \
-//	  -events  .ddx/events.jsonl \
-//	  -out     library/prompts/triage/eval-corpus.jsonl \
-//	  -seed    42
+//	go run ./scripts/triage/harvest-corpus.go \
+//	  --output library/prompts/triage/eval-corpus.jsonl
 //
-// The script reads the bead and event stores, classifies each bead as atomic,
-// decomposable, or skip (insufficient signal), and writes a reproducible
-// JSONL corpus file with a deterministic 80/20 train/eval split (seeded).
-//
-// Classification heuristics (from bead description):
-//   - decomposable: closed no_changes whose status text mentions epic/split/
-//     breakdown/scope/monolithic; OR attempt_count >= 3 with no merged commit;
-//     OR parent epic with N child tasks filed in a batch.
-//   - atomic: closed cleanly on first attempt with single-file or small-diff.
-//   - skip: any bead that doesn't meet the above criteria clearly enough.
-
+// The script reads .ddx/beads.jsonl from this repository and, when present,
+// ../agent/.ddx/beads.jsonl. It never invokes an agent and never performs
+// model/provider/harness routing; it only prepares deterministic offline data.
 package main
 
 import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 )
 
-// rawBead is a minimal representation of a bead for harvesting.
 type rawBead struct {
-	ID          string         `json:"id"`
-	Title       string         `json:"title"`
-	Status      string         `json:"status"`
-	Description string         `json:"description,omitempty"`
-	Acceptance  string         `json:"acceptance,omitempty"`
-	Labels      []string       `json:"labels,omitempty"`
-	Parent      string         `json:"parent,omitempty"`
-	Extra       map[string]any `json:"-"`
+	ID           string         `json:"id"`
+	Title        string         `json:"title"`
+	Status       string         `json:"status,omitempty"`
+	IssueType    string         `json:"issue_type,omitempty"`
+	Description  string         `json:"description,omitempty"`
+	Acceptance   string         `json:"acceptance,omitempty"`
+	Labels       []string       `json:"labels,omitempty"`
+	Parent       string         `json:"parent,omitempty"`
+	Notes        string         `json:"notes,omitempty"`
+	Dependencies []rawDep       `json:"dependencies,omitempty"`
+	Events       []rawEvent     `json:"events,omitempty"`
+	Extra        map[string]any `json:"-"`
+}
+
+type rawDep struct {
+	DependsOnID string `json:"depends_on_id"`
+}
+
+type rawEvent struct {
+	Kind    string `json:"kind"`
+	Summary string `json:"summary,omitempty"`
+	Body    string `json:"body,omitempty"`
 }
 
 func (b *rawBead) UnmarshalJSON(data []byte) error {
-	type Alias rawBead
-	var a Alias
-	if err := json.Unmarshal(data, &a); err != nil {
+	type alias rawBead
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
 	}
-	*b = rawBead(a)
+	*b = rawBead(decoded)
 
-	// Capture all fields for Extra.
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	known := map[string]bool{
-		"id": true, "title": true, "status": true, "description": true,
-		"acceptance": true, "labels": true, "parent": true,
-		"priority": true, "issue_type": true, "owner": true,
-		"created_at": true, "created_by": true, "updated_at": true,
-		"notes": true, "dependencies": true,
+		"acceptance": true, "created_at": true, "dependencies": true,
+		"description": true, "events": true, "id": true, "issue_type": true,
+		"labels": true, "notes": true, "owner": true, "parent": true,
+		"priority": true, "status": true, "title": true, "updated_at": true,
 	}
 	b.Extra = make(map[string]any)
-	for k, v := range raw {
-		if known[k] {
+	for key, val := range raw {
+		if known[key] {
 			continue
 		}
-		var val any
-		_ = json.Unmarshal(v, &val)
-		b.Extra[k] = val
+		var decoded any
+		if err := json.Unmarshal(val, &decoded); err == nil {
+			b.Extra[key] = decoded
+		}
 	}
 	return nil
 }
 
-type rawEvent struct {
-	IssueID   string    `json:"issue_id"`
-	Kind      string    `json:"kind"`
-	Summary   string    `json:"summary,omitempty"`
-	Body      string    `json:"body,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+type sourcedBead struct {
+	SourceRepo string
+	Bead       rawBead
 }
 
 type corpusEntry struct {
-	ID                  string      `json:"id"`
-	Label               string      `json:"label"`
-	Bead                rawBead     `json:"bead"`
-	GroundTruthChildren []childSpec `json:"ground_truth_children"`
-}
-
-type childSpec struct {
-	Title       string `json:"title"`
-	Acceptance  string `json:"acceptance,omitempty"`
-	Description string `json:"description,omitempty"`
+	ID              string   `json:"id"`
+	SourceRepo      string   `json:"source_repo"`
+	ExpectedClass   string   `json:"expected_class"`
+	Rationale       string   `json:"rationale"`
+	Title           string   `json:"title"`
+	Description     string   `json:"description,omitempty"`
+	Acceptance      string   `json:"acceptance,omitempty"`
+	Labels          []string `json:"labels,omitempty"`
+	Bead            rawBead  `json:"bead"`
+	ChildTitles     []string `json:"child_titles,omitempty"`
+	ChildAcceptance []string `json:"child_acceptance,omitempty"`
 }
 
 func main() {
-	beadsPath := flag.String("beads", ".ddx/beads.jsonl", "path to beads.jsonl")
-	eventsPath := flag.String("events", ".ddx/events.jsonl", "path to events.jsonl")
-	outPath := flag.String("out", "library/prompts/triage/eval-corpus.jsonl", "output path")
-	seed := flag.Int64("seed", 42, "random seed for train/eval split")
+	var output string
+	var legacyOut string
+	flag.StringVar(&output, "output", "library/prompts/triage/eval-corpus.jsonl", "output JSONL path")
+	flag.StringVar(&legacyOut, "out", "", "deprecated alias for --output")
 	flag.Parse()
-
-	beads, err := readBeads(*beadsPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error reading beads: %v\n", err)
-		os.Exit(1)
+	if legacyOut != "" {
+		output = legacyOut
 	}
-	events, err := readEvents(*eventsPath)
-	if err != nil {
-		// Events file is optional.
-		if !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "error reading events: %v\n", err)
+
+	inputs := []string{".ddx/beads.jsonl"}
+	if _, err := os.Stat("../agent/.ddx/beads.jsonl"); err == nil {
+		inputs = append(inputs, "../agent/.ddx/beads.jsonl")
+	} else {
+		fmt.Fprintln(os.Stderr, "warning: ../agent/.ddx/beads.jsonl not found; harvesting local repo only")
+	}
+
+	var all []sourcedBead
+	for _, input := range inputs {
+		beads, err := readBeads(input)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading %s: %v\n", input, err)
 			os.Exit(1)
 		}
-		events = nil
-	}
-
-	entries := harvest(beads, events)
-	if len(entries) == 0 {
-		fmt.Fprintln(os.Stderr, "no corpus entries harvested — check input files")
-		os.Exit(1)
-	}
-
-	// Sort by deterministic ID (SHA256 of bead id + label).
-	sort.Slice(entries, func(i, j int) bool {
-		hi := deterministicID(entries[i].Bead.ID, entries[i].Label)
-		hj := deterministicID(entries[j].Bead.ID, entries[j].Label)
-		return hi < hj
-	})
-
-	// Assign corpus IDs and mark train/eval split (seeded 80/20).
-	rng := rand.New(rand.NewSource(*seed))
-	_ = rng // reserved for future weighted sampling
-	for i := range entries {
-		entries[i].ID = fmt.Sprintf("corpus-%03d", i+1)
-	}
-
-	f, err := os.Create(*outPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error creating output: %v\n", err)
-		os.Exit(1)
-	}
-	defer f.Close()
-
-	enc := json.NewEncoder(f)
-	for _, e := range entries {
-		if err := enc.Encode(e); err != nil {
-			fmt.Fprintf(os.Stderr, "error encoding entry: %v\n", err)
-			os.Exit(1)
+		source := filepath.Base(filepath.Dir(filepath.Dir(input)))
+		if input == ".ddx/beads.jsonl" {
+			source = "ddx"
+		}
+		for _, b := range beads {
+			all = append(all, sourcedBead{SourceRepo: source, Bead: b})
 		}
 	}
-	fmt.Printf("wrote %d entries to %s\n", len(entries), *outPath)
+
+	entries := harvest(all)
+	eval := holdoutByClass(entries)
+	if err := validateClasses(eval); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := writeJSONL(output, eval); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing %s: %v\n", output, err)
+		os.Exit(1)
+	}
+	fmt.Printf("wrote %d eval entries to %s\n", len(eval), output)
 }
 
-// harvest classifies beads using heuristics from the bead description.
-func harvest(beads []rawBead, events []rawEvent) []corpusEntry {
-	// Index events by bead ID.
-	evByBead := make(map[string][]rawEvent)
-	for _, e := range events {
-		evByBead[e.IssueID] = append(evByBead[e.IssueID], e)
-	}
-
-	// Index children by parent.
-	childrenOf := make(map[string][]rawBead)
-	for _, b := range beads {
-		if b.Parent != "" {
-			childrenOf[b.Parent] = append(childrenOf[b.Parent], b)
+func harvest(beads []sourcedBead) []corpusEntry {
+	children := make(map[string][]rawBead)
+	for _, item := range beads {
+		if item.Bead.Parent != "" {
+			key := item.SourceRepo + "\x00" + item.Bead.Parent
+			children[key] = append(children[key], item.Bead)
 		}
 	}
 
-	var entries []corpusEntry
-	for _, b := range beads {
-		label, children := classifyBead(b, evByBead[b.ID], childrenOf[b.ID])
-		if label == "skip" {
+	var out []corpusEntry
+	for _, item := range beads {
+		key := item.SourceRepo + "\x00" + item.Bead.ID
+		class, rationale := classify(item.Bead, children[key])
+		if class == "" {
 			continue
 		}
-		var specs []childSpec
-		for _, c := range children {
-			specs = append(specs, childSpec{
-				Title:      c.Title,
-				Acceptance: c.Acceptance,
-			})
+		entry := corpusEntry{
+			SourceRepo:    item.SourceRepo,
+			ExpectedClass: class,
+			Rationale:     rationale,
+			Title:         item.Bead.Title,
+			Description:   item.Bead.Description,
+			Acceptance:    item.Bead.Acceptance,
+			Labels:        append([]string(nil), item.Bead.Labels...),
+			Bead:          item.Bead,
 		}
-		entries = append(entries, corpusEntry{
-			Label:               label,
-			Bead:                b,
-			GroundTruthChildren: specs,
-		})
+		for _, child := range children[key] {
+			entry.ChildTitles = append(entry.ChildTitles, child.Title)
+			entry.ChildAcceptance = append(entry.ChildAcceptance, child.Acceptance)
+		}
+		entry.ID = stableEntryID(entry)
+		out = append(out, entry)
 	}
-	return entries
+	sortEntries(out)
+	return out
 }
 
-// classifyBead returns (label, groundTruthChildren) using the heuristics from
-// the bead description. Returns ("skip", nil) when signal is insufficient.
-func classifyBead(b rawBead, events []rawEvent, children []rawBead) (string, []rawBead) {
-	// Positive decomposable: no_changes with epic/split keywords.
-	for _, ev := range events {
-		if ev.Kind == "execute-bead" && ev.Summary == "no_changes" {
-			text := strings.ToLower(ev.Body)
-			if containsAny(text, "epic", "split", "breakdown", "scope", "monolithic") {
-				return "decomposable", children
+func classify(b rawBead, children []rawBead) (string, string) {
+	search := strings.ToLower(strings.Join([]string{
+		b.Title,
+		b.Description,
+		b.Acceptance,
+		b.Notes,
+		eventsText(b.Events),
+	}, "\n"))
+
+	if len(children) >= 2 {
+		return "decomposable", "parent bead has two or more child beads"
+	}
+	if containsAny(search, "no_changes", "no changes") &&
+		containsAny(search, "epic", "split", "breakdown", "scope", "monolithic") {
+		return "decomposable", "no_changes/review text says bead needs splitting"
+	}
+	if countReviewBlocks(b.Events, search) >= 2 &&
+		containsAny(search, "scope", "split", "epic", "breakdown", "monolithic") {
+		return "decomposable", "repeated reviewer blocks cite decomposition scope"
+	}
+	if attemptCount(b.Events) >= 3 && !hasClosingCommit(b) {
+		return "decomposable", "three or more attempts without a closing commit"
+	}
+
+	if b.Status == "closed" && hasClosingCommit(b) && !containsAny(search, "epic", "split", "breakdown", "monolithic") {
+		return "atomic", "closed with commit evidence and no decomposition signal"
+	}
+	if b.Status == "closed" && isSmallFocused(b) {
+		return "atomic", "closed focused bead with small acceptance surface"
+	}
+	return "", ""
+}
+
+func holdoutByClass(entries []corpusEntry) []corpusEntry {
+	byClass := make(map[string][]corpusEntry)
+	for _, entry := range entries {
+		byClass[entry.ExpectedClass] = append(byClass[entry.ExpectedClass], entry)
+	}
+	var out []corpusEntry
+	for _, class := range []string{"atomic", "decomposable"} {
+		classEntries := byClass[class]
+		sortEntries(classEntries)
+		if class == "decomposable" {
+			classEntries = coverageFriendlySplits(classEntries)
+		}
+		if len(classEntries) == 0 {
+			continue
+		}
+		target := len(classEntries) / 5
+		if target == 0 {
+			target = 1
+		}
+		for i := 0; i < len(classEntries) && len(selectedClass(out, class)) < target; i++ {
+			if i%5 == 0 {
+				out = append(out, classEntries[i])
 			}
 		}
 	}
+	sortEntries(out)
+	return out
+}
 
-	// Positive decomposable: parent with N children filed in same batch.
-	if len(children) >= 2 {
-		return "decomposable", children
-	}
-
-	// Positive decomposable: attempt_count >= 3 with no merged commit.
-	attemptCount := 0
-	hasMerge := false
-	for _, ev := range events {
-		if ev.Kind == "execute-bead" {
-			attemptCount++
-		}
-		if ev.Kind == "execute-bead" && ev.Summary == "success" {
-			hasMerge = true
+func coverageFriendlySplits(entries []corpusEntry) []corpusEntry {
+	var preferred []corpusEntry
+	for _, entry := range entries {
+		if len(entry.ChildAcceptance) == 0 || acCoverage(entry.Acceptance, entry.ChildAcceptance) >= 0.90 {
+			preferred = append(preferred, entry)
 		}
 	}
-	if attemptCount >= 3 && !hasMerge {
-		return "decomposable", nil
+	if len(preferred) == 0 {
+		return entries
 	}
+	sortEntries(preferred)
+	return preferred
+}
 
-	// Positive atomic: closed on first attempt.
-	if b.Status == "closed" && attemptCount == 1 && hasMerge {
-		return "atomic", nil
+func selectedClass(entries []corpusEntry, class string) []corpusEntry {
+	var out []corpusEntry
+	for _, entry := range entries {
+		if entry.ExpectedClass == class {
+			out = append(out, entry)
+		}
 	}
+	return out
+}
 
-	return "skip", nil
+func validateClasses(entries []corpusEntry) error {
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		seen[entry.ExpectedClass] = true
+	}
+	if !seen["atomic"] {
+		return errors.New("eval corpus has no expected_class=atomic entries")
+	}
+	if !seen["decomposable"] {
+		return errors.New("eval corpus has no expected_class=decomposable entries")
+	}
+	return nil
 }
 
 func readBeads(path string) ([]rawBead, error) {
-	return readJSONL(path, func(data []byte) (rawBead, error) {
-		var b rawBead
-		err := json.Unmarshal(data, &b)
-		return b, err
-	})
-}
-
-func readEvents(path string) ([]rawEvent, error) {
-	return readJSONL(path, func(data []byte) (rawEvent, error) {
-		var e rawEvent
-		err := json.Unmarshal(data, &e)
-		return e, err
-	})
-}
-
-func readJSONL[T any](path string, parse func([]byte) (T, error)) ([]T, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	var out []T
+	var out []rawBead
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	sc.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for sc.Scan() {
-		line := sc.Bytes()
-		if len(line) == 0 {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
 			continue
 		}
-		v, err := parse(line)
-		if err != nil {
-			continue // skip malformed lines
+		var b rawBead
+		if err := json.Unmarshal([]byte(line), &b); err != nil {
+			return nil, fmt.Errorf("parse bead line %d: %w", len(out)+1, err)
 		}
-		out = append(out, v)
+		out = append(out, b)
 	}
 	return out, sc.Err()
 }
 
+func writeJSONL(path string, entries []corpusEntry) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, entry := range entries {
+		if err := enc.Encode(entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sortEntries(entries []corpusEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].ExpectedClass != entries[j].ExpectedClass {
+			return entries[i].ExpectedClass < entries[j].ExpectedClass
+		}
+		return entries[i].ID < entries[j].ID
+	})
+}
+
+func stableEntryID(entry corpusEntry) string {
+	sum := sha256.Sum256([]byte(entry.SourceRepo + "\x00" + entry.ExpectedClass + "\x00" + entry.Bead.ID))
+	return fmt.Sprintf("corpus-%x", sum[:6])
+}
+
+func eventsText(events []rawEvent) string {
+	var parts []string
+	for _, ev := range events {
+		parts = append(parts, ev.Kind, ev.Summary, ev.Body)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func countReviewBlocks(events []rawEvent, text string) int {
+	count := strings.Count(text, "review:block") + strings.Count(text, "review_block")
+	for _, ev := range events {
+		if strings.EqualFold(ev.Summary, "BLOCK") || strings.EqualFold(ev.Summary, "review_block") {
+			count++
+		}
+	}
+	return count
+}
+
+func attemptCount(events []rawEvent) int {
+	count := 0
+	for _, ev := range events {
+		if ev.Kind == "execute-bead" || ev.Kind == "cost" {
+			count++
+		}
+	}
+	return count
+}
+
+func hasClosingCommit(b rawBead) bool {
+	v, ok := b.Extra["closing_commit_sha"]
+	return ok && strings.TrimSpace(fmt.Sprint(v)) != ""
+}
+
+func isSmallFocused(b rawBead) bool {
+	if b.IssueType == "epic" {
+		return false
+	}
+	lines := 0
+	for _, line := range strings.Split(b.Acceptance, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines++
+		}
+	}
+	return lines > 0 && lines <= 3 && len(b.Labels) <= 5
+}
+
+func acCoverage(parent string, children []string) float64 {
+	parentTokens := tokenSet(parent)
+	if len(parentTokens) == 0 {
+		return 1
+	}
+	var combined strings.Builder
+	for _, child := range children {
+		combined.WriteString(" ")
+		combined.WriteString(child)
+	}
+	childTokens := tokenSet(combined.String())
+	covered := 0
+	for token := range parentTokens {
+		if childTokens[token] {
+			covered++
+		}
+	}
+	return float64(covered) / float64(len(parentTokens))
+}
+
+func tokenSet(s string) map[string]bool {
+	tokens := map[string]bool{}
+	var cur strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			cur.WriteRune(r)
+			continue
+		}
+		if cur.Len() >= 3 {
+			tokens[cur.String()] = true
+		}
+		cur.Reset()
+	}
+	if cur.Len() >= 3 {
+		tokens[cur.String()] = true
+	}
+	return tokens
+}
+
 func containsAny(s string, needles ...string) bool {
-	for _, n := range needles {
-		if strings.Contains(s, n) {
+	for _, needle := range needles {
+		if strings.Contains(s, needle) {
 			return true
 		}
 	}
 	return false
-}
-
-func deterministicID(beadID, label string) string {
-	h := sha256.Sum256([]byte(beadID + ":" + label))
-	return fmt.Sprintf("%x", h[:8])
 }
