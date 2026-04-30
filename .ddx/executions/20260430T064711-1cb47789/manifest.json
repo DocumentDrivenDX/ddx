@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T064711-1cb47789",
+  "bead_id": "ddx-fefbc65e",
+  "base_rev": "502ed87fa63b5085dd6e053701a600826da206cf",
+  "created_at": "2026-04-30T06:47:11.854800915Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fefbc65e",
+    "title": "[visual-suite] V4 lefthook + CI lint integration for DESIGN.md",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Add 'bunx @google/design.md lint DESIGN.md' to lefthook pre-commit when DESIGN.md is modified. Add equivalent step to ci.yml or security.yml. Note: DESIGN.md is alpha 0.1.0; budget for breaks on bumps.",
+    "labels": [
+      "design",
+      "plan-2026-04-29-vis",
+      "ci"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T06:47:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:47:11.00754606Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T064711-1cb47789",
+    "prompt": ".ddx/executions/20260430T064711-1cb47789/prompt.md",
+    "manifest": ".ddx/executions/20260430T064711-1cb47789/manifest.json",
+    "result": ".ddx/executions/20260430T064711-1cb47789/result.json",
+    "checks": ".ddx/executions/20260430T064711-1cb47789/checks.json",
+    "usage": ".ddx/executions/20260430T064711-1cb47789/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fefbc65e-20260430T064711-1cb47789"
+  }
+}
