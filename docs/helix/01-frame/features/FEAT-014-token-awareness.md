@@ -21,6 +21,9 @@ well enough to attribute cost, show availability, and preserve audit evidence
 without taking ownership of model/provider routing. `ddx run`, `ddx try`,
 `ddx work`, and `ddx artifact regenerate` consume token budgets via this same
 FEAT-014 normalized signal model.
+`generate-artifact` runs therefore draw from the same FEAT-014 token budget
+accounting as agent work runs, with cost attribution recorded through the run
+evidence model rather than a separate artifact-only ledger.
 
 ## Problem Statement
 
