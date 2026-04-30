@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T064825-4fa26d32",
+  "bead_id": "ddx-8a17491b",
+  "base_rev": "595816d7d917f583b4dab642e5797b86b9a2db10",
+  "created_at": "2026-04-30T06:48:25.910533665Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8a17491b",
+    "title": "Restyle personas and efficacy views",
+    "description": "Apply tokens to PersonasView.svelte (809 lines) and efficacy/+page.svelte (574 lines). These are the largest files — use frontend-design skill to rewrite visual chrome only (tables, cards, badges, headers). No changes to data logic or chart rendering.",
+    "parent": "ddx-04770087",
+    "metadata": {
+      "claimed-at": "2026-04-30T06:48:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T06:48:25.058844188Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T064825-4fa26d32",
+    "prompt": ".ddx/executions/20260430T064825-4fa26d32/prompt.md",
+    "manifest": ".ddx/executions/20260430T064825-4fa26d32/manifest.json",
+    "result": ".ddx/executions/20260430T064825-4fa26d32/result.json",
+    "checks": ".ddx/executions/20260430T064825-4fa26d32/checks.json",
+    "usage": ".ddx/executions/20260430T064825-4fa26d32/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8a17491b-20260430T064825-4fa26d32"
+  }
+}
