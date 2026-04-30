@@ -22,7 +22,7 @@ and prior attempt history to classify it as:
 Add the label `triage:skip` to a bead to bypass the complexity gate entirely:
 
 ```
-ddx bead update <id> --label triage:skip
+ddx bead update <id> --labels triage:skip
 ```
 
 The bead will proceed directly to Claim on the next dispatch cycle. Use this
@@ -45,7 +45,8 @@ itself decomposable, the gate will split it further — up to the depth cap.
 
 ## Recursion depth cap
 
-Default depth cap: **3** levels. Configurable in `.ddx/config.yaml`:
+Default depth cap: **3** levels. Configurable in `.ddx/config.yaml` at
+`agent.triage.max_decomposition_depth`:
 
 ```yaml
 agent:
@@ -75,15 +76,22 @@ The frozen eval slice lives in `library/prompts/triage/eval-corpus.jsonl`. To
 regenerate from live bead history:
 
 ```bash
-go run scripts/triage/harvest-corpus.go \
-  -beads   .ddx/beads.jsonl \
-  -events  .ddx/events.jsonl \
-  -out     library/prompts/triage/eval-corpus.jsonl \
-  -seed    42
+go run ./scripts/triage/harvest-corpus.go \
+  --output library/prompts/triage/eval-corpus.jsonl
 ```
 
-The harvest script produces a deterministic, seeded 80/20 train/eval split.
-Running it with the same inputs and seed always produces the same corpus file.
+The harvest script reads `.ddx/beads.jsonl` from this repository and includes
+`../agent/.ddx/beads.jsonl` when that checkout is present. It produces a
+deterministic held-out eval slice. Running it with the same inputs always
+produces the same corpus file.
+
+## Ownership boundary
+
+DDx owns orchestration, tracking, work sizing, child bead creation, parent
+dependencies, and retry decisions. The agent owns provider/model/harness
+routing and execution. The triage gate must not choose or rank concrete
+providers, models, or harnesses; if an operator supplied those values, DDx
+passes them through as opaque constraints to the agent runtime.
 
 ## Disabling the gate
 
