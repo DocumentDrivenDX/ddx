@@ -18,11 +18,25 @@ import (
 //
 // Regression test for: bead-id resolver uses cwd inside worktree
 // (ddx-7eab13a6).
+//
+// To exercise the bug, this test chdirs into a worktree-shaped non-git
+// directory before calling NewStore. Pre-fix, detectPrefix() ran git from
+// cwd and (on git failure) fell back to filepath.Base(cwd), producing a
+// ".execute-bead-wt-…" prefix. Post-fix, detectPrefix runs git from the
+// supplied workingDir and falls back to filepath.Base(workingDir).
 func TestGenID_WorktreePrefix(t *testing.T) {
-	// Build a project directory named "ddx" — the canonical project name.
+	// Real project dir (the path NewStore is told about).
 	tmpRoot := t.TempDir()
 	projectDir := filepath.Join(tmpRoot, "ddx")
 	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	// Worktree-shaped cwd, distinct from projectDir, NOT inside any git repo.
+	// This mirrors the real failure: the agent's cwd is the linked worktree
+	// directory while it invokes `ddx bead create`.
+	cwdRoot := t.TempDir()
+	worktreeCwd := filepath.Join(cwdRoot, ".execute-bead-wt-ddx-7eab13a6-20260430T005604-c425377f")
+	require.NoError(t, os.MkdirAll(worktreeCwd, 0o755))
+	t.Chdir(worktreeCwd)
 
 	// NewStore receives an absolute path rooted at the real project, not the
 	// worktree.  workingDir inside NewStore will be projectDir.
@@ -45,6 +59,14 @@ func TestDetectPrefix_WorktreeDir(t *testing.T) {
 	tmpRoot := t.TempDir()
 	projectDir := filepath.Join(tmpRoot, "ddx")
 	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	// Chdir into a worktree-shaped non-git directory so that — pre-fix —
+	// detectPrefix would have fallen back to filepath.Base(cwd) and produced
+	// the worktree path component.
+	cwdRoot := t.TempDir()
+	worktreeCwd := filepath.Join(cwdRoot, ".execute-bead-wt-ddx-7eab13a6-20260430T005604-c425377f")
+	require.NoError(t, os.MkdirAll(worktreeCwd, 0o755))
+	t.Chdir(worktreeCwd)
 
 	prefix := detectPrefix(projectDir)
 	assert.Equal(t, "ddx", prefix,
