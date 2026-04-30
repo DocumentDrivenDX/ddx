@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "The reviewable diff is the evidence-only commit `e13a850d`. The implementation commit `686a589a` (\"feat(website): replace --ddx-color-* vars with lever/load/fulcrum token system\") is referenced as `result_rev` but its contents are not in the diff.\nNo changes to `website/assets/css/custom.css` are visible — cannot verify token replacement, HSL re-derivation, Google Fonts @import, or new CSS variable exposure.\nRe-run the review against the merged result_rev `686a589a` (or the diff `9af6b048..686a589a`) to evaluate ACs against actual CSS changes."
+}
