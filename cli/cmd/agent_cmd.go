@@ -1579,6 +1579,16 @@ is registered with the server (run "ddx server" from that directory, or use
 }
 
 func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) error {
+	return f.runAgentExecuteLoopImpl(cmd, false)
+}
+
+// runAgentExecuteLoopImpl is the shared implementation for runAgentExecuteLoop
+// and runWork. When treatPassthroughAsOpaque is true (ddx work path),
+// harness/provider/model are passed to Execute unchanged and
+// ValidateForExecuteLoopViaService is not called; DDx does not inspect or
+// branch on their values. When false (ddx agent execute-loop path), the
+// pre-flight validation gate runs first.
+func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool) error {
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	fromRev, _ := cmd.Flags().GetString("from")
@@ -1609,8 +1619,12 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	// before claiming any beads. This surfaces errors like "claude binary
 	// not found" or "vidar is an agent preset, not a claude model" before
 	// any bead status changes hands.
-	if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider, modelRef); err != nil {
-		return fmt.Errorf("execute-loop: %w", err)
+	// Skipped for ddx work (treatPassthroughAsOpaque=true): harness/provider/model
+	// are opaque passthrough constraints there; DDx does not validate them.
+	if !treatPassthroughAsOpaque {
+		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider, modelRef); err != nil {
+			return fmt.Errorf("execute-loop: %w", err)
+		}
 	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
