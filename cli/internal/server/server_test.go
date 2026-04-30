@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 )
@@ -602,6 +603,240 @@ func TestMCPMetricTrend(t *testing.T) {
 	}
 	if trend.MetricID != "MET-001" || trend.Count != 2 || trend.Latest != 10 {
 		t.Fatalf("unexpected trend payload: %+v", trend)
+	}
+}
+
+// seedBeadEvidence appends an evidence event and a routing event to bx-001
+// and stamps cooldown fields on it so the per-bead evidence/cooldown/routing
+// endpoints have data to read.
+func seedBeadEvidence(t *testing.T, dir string) {
+	t.Helper()
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	t0, _ := time.Parse(time.RFC3339, "2026-04-04T15:00:00Z")
+	if err := store.AppendEvent("bx-001", bead.BeadEvent{
+		Kind:      "execute-loop",
+		Summary:   "attempt completed",
+		Body:      "iteration 1",
+		Actor:     "test",
+		CreatedAt: t0,
+		Source:    "test",
+	}); err != nil {
+		t.Fatalf("AppendEvent execute-loop: %v", err)
+	}
+	routingBody := `{"resolved_provider":"anthropic","resolved_model":"claude-sonnet-4-6","route_reason":"primary","fallback_chain":["openai/gpt-5"],"base_url":"https://api.anthropic.com"}`
+	if err := store.AppendEvent("bx-001", bead.BeadEvent{
+		Kind:      "routing",
+		Summary:   "routed to anthropic",
+		Body:      routingBody,
+		CreatedAt: t0.Add(time.Minute),
+		Source:    "test",
+	}); err != nil {
+		t.Fatalf("AppendEvent routing: %v", err)
+	}
+	if err := store.Update("bx-001", func(b *bead.Bead) {
+		if b.Extra == nil {
+			b.Extra = map[string]any{}
+		}
+		b.Extra["execute-loop-retry-after"] = "2026-04-04T16:00:00Z"
+		b.Extra["execute-loop-last-status"] = "no-viable-provider"
+		b.Extra["execute-loop-last-detail"] = "all providers exhausted"
+	}); err != nil {
+		t.Fatalf("Update cooldown: %v", err)
+	}
+}
+
+func TestBeadEvidenceEndpoint(t *testing.T) {
+	dir := setupTestDir(t)
+	seedBeadEvidence(t, dir)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/beads/bx-001/evidence", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var events []bead.BeadEvent
+	if err := json.Unmarshal(w.Body.Bytes(), &events); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d: %+v", len(events), events)
+	}
+	if events[0].Kind != "execute-loop" || events[1].Kind != "routing" {
+		t.Errorf("unexpected event kinds: %q %q", events[0].Kind, events[1].Kind)
+	}
+}
+
+func TestBeadEvidenceEndpointMissing(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/beads/bx-missing/evidence", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatalf("expected non-200 for missing bead, got 200: %s", w.Body.String())
+	}
+}
+
+func TestBeadCooldownEndpoint(t *testing.T) {
+	dir := setupTestDir(t)
+	seedBeadEvidence(t, dir)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/beads/bx-001/cooldown", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var cd struct {
+		BeadID     string `json:"bead_id"`
+		RetryAfter string `json:"retry_after"`
+		LastStatus string `json:"last_status"`
+		LastDetail string `json:"last_detail"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &cd); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if cd.BeadID != "bx-001" || cd.RetryAfter != "2026-04-04T16:00:00Z" || cd.LastStatus != "no-viable-provider" || cd.LastDetail != "all providers exhausted" {
+		t.Fatalf("unexpected cooldown payload: %+v", cd)
+	}
+}
+
+func TestBeadRoutingEndpoint(t *testing.T) {
+	dir := setupTestDir(t)
+	seedBeadEvidence(t, dir)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/beads/bx-001/routing", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var routes []beadRoutingEvent
+	if err := json.Unmarshal(w.Body.Bytes(), &routes); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 routing event, got %d: %+v", len(routes), routes)
+	}
+	if routes[0].ResolvedProvider != "anthropic" || routes[0].ResolvedModel != "claude-sonnet-4-6" {
+		t.Fatalf("unexpected routing payload: %+v", routes[0])
+	}
+	if len(routes[0].FallbackChain) != 1 || routes[0].FallbackChain[0] != "openai/gpt-5" {
+		t.Fatalf("unexpected fallback chain: %+v", routes[0].FallbackChain)
+	}
+}
+
+func TestMCPBeadEvidence(t *testing.T) {
+	dir := setupTestDir(t)
+	seedBeadEvidence(t, dir)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_evidence","arguments":{"id":"bx-001"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	var events []bead.BeadEvent
+	if err := json.Unmarshal([]byte(text), &events); err != nil {
+		t.Fatalf("MCP bead_evidence not valid JSON: %v", err)
+	}
+	if len(events) != 2 || events[0].Kind != "execute-loop" {
+		t.Fatalf("unexpected events payload: %+v", events)
+	}
+}
+
+func TestMCPBeadEvidenceMissingID(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_evidence","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	if isErr, _ := result["isError"].(bool); !isErr {
+		t.Fatalf("expected isError=true for missing id, got %+v", result)
+	}
+}
+
+func TestMCPBeadCooldown(t *testing.T) {
+	dir := setupTestDir(t)
+	seedBeadEvidence(t, dir)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_cooldown","arguments":{"id":"bx-001"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	var cd struct {
+		BeadID     string `json:"bead_id"`
+		RetryAfter string `json:"retry_after"`
+		LastStatus string `json:"last_status"`
+		LastDetail string `json:"last_detail"`
+	}
+	if err := json.Unmarshal([]byte(text), &cd); err != nil {
+		t.Fatalf("MCP bead_cooldown not valid JSON: %v", err)
+	}
+	if cd.BeadID != "bx-001" || cd.LastStatus != "no-viable-provider" {
+		t.Fatalf("unexpected cooldown payload: %+v", cd)
+	}
+}
+
+func TestMCPBeadRouting(t *testing.T) {
+	dir := setupTestDir(t)
+	seedBeadEvidence(t, dir)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_routing","arguments":{"id":"bx-001"}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	var routes []beadRoutingEvent
+	if err := json.Unmarshal([]byte(text), &routes); err != nil {
+		t.Fatalf("MCP bead_routing not valid JSON: %v", err)
+	}
+	if len(routes) != 1 || routes[0].ResolvedProvider != "anthropic" || routes[0].ResolvedModel != "claude-sonnet-4-6" {
+		t.Fatalf("unexpected routing payload: %+v", routes)
 	}
 }
 
