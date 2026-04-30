@@ -201,41 +201,43 @@
 </svelte:head>
 
 <div class="space-y-6">
-	<header class="flex flex-wrap items-start justify-between gap-4">
-		<div class="min-w-0">
-			<p class="text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400">
-				Project overview
-			</p>
-			<h1 class="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
-				{projectName}
-			</h1>
-			{#if projectPath}
-				<p class="mt-1 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-					{projectPath}
+	<header class="border-b border-gray-200 pb-6 dark:border-gray-700">
+		<div class="flex flex-wrap items-start justify-between gap-4">
+			<div class="min-w-0">
+				<p class="text-xs font-semibold tracking-widest text-lever uppercase">
+					Project overview
 				</p>
-			{/if}
-		</div>
-		<div
-			class="grid min-w-60 grid-cols-3 overflow-hidden rounded-md border border-gray-200 text-center dark:border-gray-800"
-			aria-label="Queue summary"
-		>
-			<div class="px-4 py-3">
-				<div class="text-xl font-semibold text-gray-950 dark:text-white">
-					{queueSummary?.ready ?? '...'}
-				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400">Ready</div>
+				<h1 class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+					{projectName}
+				</h1>
+				{#if projectPath}
+					<p class="mt-1 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+						{projectPath}
+					</p>
+				{/if}
 			</div>
-			<div class="border-x border-gray-200 px-4 py-3 dark:border-gray-800">
-				<div class="text-xl font-semibold text-gray-950 dark:text-white">
-					{queueSummary?.blocked ?? '...'}
+			<div
+				class="grid min-w-60 grid-cols-3 overflow-hidden rounded-md border border-gray-200 text-center dark:border-gray-700"
+				aria-label="Queue summary"
+			>
+				<div class="px-4 py-3">
+					<div class="text-xl font-semibold text-gray-950 dark:text-white">
+						{queueSummary?.ready ?? '...'}
+					</div>
+					<div class="text-xs text-gray-500 dark:text-gray-400">Ready</div>
 				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div>
-			</div>
-			<div class="px-4 py-3">
-				<div class="text-xl font-semibold text-gray-950 dark:text-white">
-					{queueSummary?.inProgress ?? '...'}
+				<div class="border-x border-gray-200 px-4 py-3 dark:border-gray-700">
+					<div class="text-xl font-semibold text-gray-950 dark:text-white">
+						{queueSummary?.blocked ?? '...'}
+					</div>
+					<div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div>
 				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400">In progress</div>
+				<div class="px-4 py-3">
+					<div class="text-xl font-semibold text-gray-950 dark:text-white">
+						{queueSummary?.inProgress ?? '...'}
+					</div>
+					<div class="text-xs text-gray-500 dark:text-gray-400">In progress</div>
+				</div>
 			</div>
 		</div>
 	</header>
@@ -250,9 +252,9 @@
 	{/if}
 
 	<section role="region" aria-label="Actions" class="space-y-4">
-		<div class="flex flex-wrap items-center justify-between gap-3">
+		<div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-4 dark:border-gray-700">
 			<div>
-				<h2 class="text-base font-semibold text-gray-950 dark:text-white">Actions</h2>
+				<h2 class="text-lg font-semibold text-gray-950 dark:text-white">Actions</h2>
 				<p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{queueContext()}</p>
 			</div>
 			<button
