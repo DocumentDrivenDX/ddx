@@ -17,10 +17,12 @@ DDx invokes LLMs through the `ddx-agent` module, defined by
 **CONTRACT-003-ddx-agent-service** in the `~/Projects/agent` repo
 (`docs/helix/02-design/contracts/CONTRACT-003-ddx-agent-service.md`).
 
-That contract is the entire boundary. DDx's CLI commands (`ddx agent run`,
-`ddx agent execute-bead`, `ddx work`, `ddx agent providers`, `ddx agent models`,
-`ddx agent route-status`, `ddx agent check`) are thin wrappers that call into
-the `agentlib.DdxAgent` interface and render its results.
+That contract is the entire execution boundary. DDx exposes the public
+`ddx run` / `ddx try` / `ddx work` layers and calls the upstream
+`agentlib.DdxAgent` interface for the actual agent invocation. Upstream
+diagnostic/status commands may remain mounted under `ddx agent`, but
+`ddx agent run`, `ddx agent execute-bead`, and `ddx agent execute-loop` are not
+public workflow commands.
 
 ## DDx-side responsibilities
 
@@ -36,10 +38,10 @@ Those all live inside ddx-agent per CONTRACT-003.
 
 DDx owns:
 
-- **Bead-driven invocation.** `ddx agent execute-bead`, `ddx work`, and the
-  server's queue-drain worker translate bead state into `ExecuteRequest`
-  values and surface results back into the bead tracker.
-- **Execute-bead orchestration.** Worktree creation, base-revision pinning,
+- **Bead-driven invocation.** `ddx try`, `ddx work`, and the server's
+  queue-drain worker translate bead state into `ExecuteRequest` values and
+  surface results back into the bead tracker.
+- **Bead-attempt orchestration.** Worktree creation, base-revision pinning,
   result landing (merge / preserve / no-changes), gate evaluation, evidence
   bundle capture. The agent provides the LLM execution; DDx provides the
   git-aware orchestration.
@@ -47,40 +49,106 @@ DDx owns:
   bundles with prompts, manifests, and result artifacts. The agent's session
   log path (returned in `ExecuteResponse.SessionLogPath`) is captured into
   the bundle.
-- **Profile policy at the request level.** DDx selects `Profile`, `Effort`,
-  `Permissions` per bead (or per CLI invocation) based on bead metadata
-  and user input. The agent receives those as `ExecuteRequest` fields and
-  performs the routing.
+- **Power policy at the request level.** DDx selects requested agent power
+  bounds, effort, and permissions per bead attempt based on bead metadata, user
+  input, and prior attempt outcomes. The agent receives `MinPower` and
+  optionally `MaxPower` on `ExecuteRequest` and performs the routing.
+- **Agent passthrough constraints.** DDx may accept explicit `--harness`,
+  `--provider`, and `--model` values from the operator and pass them unchanged
+  to the agent. DDx does not validate, rank, fallback, rewrite, or reason about
+  these fields; they are opaque constraints for the agent to interpret.
+- **Retry policy.** DDx owns the bead retry loop because DDx owns the evidence
+  needed to decide whether an attempt succeeded: commits, merge/preserve
+  result, no-changes rationale, post-run gates, review verdicts, cooldowns,
+  and prior run metadata. On retry, DDx may raise `MinPower`. The agent owns
+  how those power bounds map to a concrete model/provider.
 
-## Profile Routing
+## Power Intent
 
-`ddx work --profile default` is the primary queue-drain invocation. DDx maps
-the user-facing profile to an ordered tier ladder and resolves each tier through
-the agent service with the configured provider affinity and capability gating.
+DDx does not route. DDx chooses request-level power bounds and sends them to
+`agentlib.DdxAgent.Execute` as `MinPower` and optional `MaxPower`; the agent
+resolves harness, provider, endpoint, model, health, quota, fallback, and route
+errors.
 
-| Profile | Ladder | Intent |
-| --- | --- | --- |
-| `default` | `[cheap, standard, smart]` | Local first, then subscription cloud, then high-quality cloud when earlier tiers fail. This is the common throughput-per-dollar path. |
-| `cheap` | `[cheap]` | Local only. Never escalates; if local cannot serve the bead, the bead is unclaimed and waits. |
-| `fast` | `[fast, smart]` | Cloud-fast first, skipping local warmup; escalates to smart on failure. |
-| `smart` | `[smart]` | High-quality cloud from the start. No escalation. |
+Power is an abstract integer scale owned by the agent contract. DDx treats
+`MinPower`/`MaxPower` as bounds on that scale, not as model identities. For
+example, the agent may report:
 
-The `.ddx/config.yaml` field `agent.routing.profile_ladders` can override the
-ordered tier list per profile. The legacy flat `agent.routing.profile_priority`
-is still read as the `default` profile fallback and emits a deprecation warning;
-new configs should use `profile_ladders.default`. `agent.routing.model_overrides`
-can map a ladder tier such as `cheap`, `standard`, `fast`, or `smart` to a
-concrete model reference before DDx asks the agent service to resolve the route.
+```text
+running with qwen 3.6-27b (power 10)
+```
 
-Escalation advances to the next tier for `execution_failed`,
-`land_conflict`, `post_run_check_failed`, and
-`structural_validation_failed`. `no_changes` keeps the existing cooldown and
-satisfaction-adjudication path rather than consuming a higher tier.
+DDx records requested `MinPower`/`MaxPower` and the actual model/power returned
+by the agent. DDx can use that evidence on a later retry to raise `MinPower`,
+but it still does not choose the next model.
+
+The agent also exposes its available model/power catalog. DDx may read that
+catalog to choose a `MinPower` threshold for "top model only" retries, for
+example by requesting a lower bound at or above the lowest power among the
+current top models. DDx must not use the catalog to pin a concrete
+model/provider on the normal execution path.
+
+DDx may also pass request facts such as estimated prompt size, whether tools are
+required, permissions, timeout values, and effort/reasoning intent. These facts
+describe the work; they do not select a model.
+
+## Agent Passthrough Constraints
+
+`--harness`, `--provider`, and `--model` are permitted on `ddx run`, `ddx try`,
+and `ddx work` only as passthrough fields. DDx carries them in one narrow
+request envelope and sends them to `agentlib.DdxAgent.Execute` unchanged.
+
+These fields must not leak into DDx routing policy:
+
+- no DDx-side validation against harness/provider/model catalogs
+- no preflight `ResolveRoute`
+- no provider/model fallback or substitution
+- no retry-policy branches that inspect the string values
+- no config-driven default harness/provider/model selection
+- no worker columns or queue selection logic that treat these as DDx concepts
+
+If an operator supplies passthrough constraints and DDx later retries with a
+higher `MinPower`, DDx keeps the passthrough values unchanged. The agent
+decides whether the power bounds and passthrough constraints are compatible and
+reports the actual model/power or a typed error. DDx records the requested
+passthrough values for audit, but it does not use them to select a route.
+
+When hard passthrough pins make the requested power bounds unsatisfiable, DDx
+must stop with a typed terminal classification such as
+`blocked_by_passthrough_constraint` or `agent_power_unsatisfied`. DDx records
+the requested `MinPower`/`MaxPower`, passthrough envelope, and agent-supplied
+evidence, then reports operator action required. DDx must not remove pins,
+choose alternatives, call `ResolveRoute` to work around the conflict, or loop on
+higher `MinPower` values.
+
+The only DDx code allowed to touch raw passthrough fields is the CLI parser, the
+single passthrough/intent value, Execute request construction, execution-record
+persistence, and human-facing evidence rendering. Retry, queue selection, work
+scheduling, catalog threshold helpers, and config defaulting must carry the
+opaque value without reading `Harness`, `Provider`, or `Model`.
+
+`ResolveRoute` is not part of normal execution. It is allowed only for
+operator-facing status/debug surfaces such as route-status and provider
+diagnostics. A `RouteDecision` returned by `ResolveRoute` must never be
+re-injected into `Execute`.
+
+`agent.routing.profile_ladders`, `agent.routing.model_overrides`,
+`agent.routing.profile_priority`, and the `cheap`/`standard`/`smart` profile
+taxonomy are not DDx execution policy. Configs or tests that rely on DDx-managed
+ladders, profiles, or model overrides are migration debt.
+
+## Catalog and Status Boundary
+
+Model/power catalog rendering is observability. Catalog status surfaces may show
+model names, providers, powers, and route candidates returned by the agent for
+debugging. Retry threshold policy may consume only abstract power numbers from
+the catalog to compute `MinPower` thresholds. Neither status nor retry code may
+return or mutate concrete harness/provider/model pins for execution.
 
 ### Conflict-recovery structured outcomes (bead ddx-0097af14)
 
 Before parking a bead on `land_conflict` (or on `execution_failed` when the
-agent produced a commit before failing), the execute-loop now attempts to reuse
+agent produced a commit before failing), the `ddx work` drain now attempts to reuse
 the preserved iteration ref rather than discarding the agent's work:
 
 1. **3-way ort auto-merge** (`git merge --no-ff -s ort -X ours`). If clean,
@@ -99,11 +167,12 @@ Both statuses use `LandConflictCooldown` (15 min) rather than the 24h cap used
 for `push_failed`, because land conflicts typically unblock quickly as sibling
 beads advance the base branch.
 
-## Execute-Bead Worker Sub-task Discovery Policy
+## Bead-Attempt Worker Sub-task Discovery Policy
 
 **Design position: option (b) — surface via result.**
 
-Workers executing inside `ddx agent execute-bead` MUST NOT call `ddx bead create`
+Workers executing inside `ddx try` / `ddx work` bead attempts MUST NOT call
+`ddx bead create`
 in-band during their execution run. Creating beads in-band (option c) allows a
 single worker to flood the queue with unreviewed children — in one observed case
 (ddx-44236615), one worker spawned 11 P0 children without operator review. This
@@ -113,7 +182,7 @@ not orchestration. Orchestration policy stays in HELIX and other workflow tools.
 Workers MAY surface discovered sub-tasks as structured data in `result.json`
 under a `discovered_subtasks` array. Each entry is a lightweight object with at
 minimum a `title` and optional `description`, `labels`, and `priority` fields.
-The execute-loop or supervisor reads this array from the result bundle and passes
+The `ddx work` drain or supervisor reads this array from the result bundle and passes
 it to the workflow tool (HELIX or operator) for decomposition decisions. The
 supervisor decides whether, when, and at what priority to file new beads — DDx
 does not do this automatically.
@@ -132,7 +201,7 @@ with the FEAT-013 boundary.
 
 ### Result schema extension
 
-`result.json` gains an optional `discovered_subtasks` array. The execute-bead
+`result.json` gains an optional `discovered_subtasks` array. The bead-attempt
 orchestrator writes it from the agent's structured output when present. The
 supervisor MUST NOT act on this field automatically; it is surfaced as an
 observation for the workflow tool.
@@ -153,12 +222,12 @@ observation for the workflow tool.
 ```
 
 If the agent does not emit `discovered_subtasks`, the field is absent. The
-execute-loop treats an absent or empty array identically — no automatic bead
+`ddx work` drain treats an absent or empty array identically — no automatic bead
 creation occurs in either case.
 
 ### Enforcement
 
-The execute-bead prompt delivered to the agent (via the prompt rationalizer)
+The bead-attempt prompt delivered to the agent (via the prompt rationalizer)
 MUST include an explicit instruction that workers must not call `ddx bead create`
 and must instead emit `discovered_subtasks` in their result if sub-tasks are
 identified. This constraint is part of the prompt contract; it is not enforced

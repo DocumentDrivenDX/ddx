@@ -35,10 +35,9 @@ not a fourth layer — it is a labeled invocation at an existing layer.
 
 **Current situation:** DDx has accreted two independent run-storage shapes
 — `.ddx/exec-runs/` for generic execution evidence and
-`.ddx/executions/<attempt-id>/` for tracked execute-bead bundles. Loop
-behavior, worktree lifecycle, and bead resolution are spread across
-`ddx agent execute-bead` and `ddx agent execute-loop` without a clean
-layering story. There is no single place to introspect "what runs
+`.ddx/executions/<attempt-id>/` for tracked bead-attempt bundles. Loop behavior,
+worktree lifecycle, and bead resolution are spread across legacy command
+surfaces without a clean layering story. There is no single place to introspect "what runs
 happened, at what layer, with what evidence."
 
 **Pain points:**
@@ -59,14 +58,16 @@ narrow read-only HTTP/MCP write surface limited to artifact regeneration.
 
 ### Layer 1 — `ddx run` (invocation atom)
 
-A layer-1 run is one agent invocation. Inputs are a prompt and agent
-config; outputs are the structured response (text or bytes), any
-side-effects the agent performed via tools, and run metadata (tokens,
-model, duration, exit status, session pointer).
+A layer-1 run is one agent invocation. Inputs are a prompt, requested
+`MinPower` and optional `MaxPower`, optional agent passthrough constraints, and
+non-routing execution config;
+outputs are the structured response (text or bytes), any side-effects the agent
+performed via tools, and run metadata (tokens, model, actual power, duration,
+exit status, session pointer).
 
-Layer 1 consumes the upstream `ddx-agent` Cobra root mounted under
-`ddx agent` per CONTRACT-003. DDx does not reimplement the invocation
-loop; it wraps it with provenance capture.
+Layer 1 calls the upstream `ddx-agent` service contract directly. DDx does not
+reimplement agent routing or the invocation loop; it wraps one `Execute` call
+with provenance capture.
 
 `ddx artifact regenerate <id>` is layer 1 when the generator returns
 bytes/text and DDx writes the file; it is layer 2 when the generator
@@ -84,6 +85,12 @@ A layer-2 run is one bead attempt in an isolated worktree. It owns:
 
 A layer-2 record references its child layer-1 records by run id.
 
+Layer 2 owns bead-attempt success classification. DDx determines success from
+the artifacts it owns: commit presence, merge/preserve result, no-changes
+rationale, post-run checks, review verdicts, and cooldown policy. The agent's
+exit status and actual model/power are inputs to that decision, not the whole
+decision.
+
 ### Layer 3 — `ddx work` (queue drain)
 
 A layer-3 run is one drain of the bead queue. It iterates `ddx try`
@@ -98,6 +105,65 @@ across ready beads until a stop condition is met. It owns:
 Content-aware supervisory decisions (e.g., "comparison failed → enqueue
 reconciliation beads") are not layer-3 concerns. Those are skill or
 plugin compositions on top of the three layers.
+
+## Agent Power and Retry
+
+DDx owns retry policy between bead attempts. If an attempt produces classified
+evidence that more capable reasoning could plausibly change the result, DDx may
+retry the bead with a higher `MinPower`.
+
+The agent owns routing within the requested power bounds. A retry request says
+"use at least this much power" by raising `MinPower`; an explicit `MaxPower`, if
+supplied, remains a hard upper bound. Operator-supplied `--harness`,
+`--provider`, and `--model` values may be sent to the agent as passthrough
+constraints, but DDx does not interpret them. Each layer-1 record stores:
+
+- requested `MinPower` and optional `MaxPower`
+- requested passthrough constraints, if any
+- actual model and actual power reported by the agent
+- run outcome and DDx attempt outcome
+
+DDx may query the agent's available model/power catalog to choose escalation
+targets such as "retry using only top-power models." DDx uses the returned power
+numbers only to compute `MinPower` thresholds; the agent still chooses the
+concrete model.
+
+Passthrough constraints stay sticky across retries. DDx may increase `MinPower`
+between attempts, but it must not alter or drop operator-supplied
+harness/provider/model passthrough values to make escalation work. If the
+combination is invalid or constraining, the agent owns that typed error or
+actual route. DDx stops with `blocked_by_passthrough_constraint` or
+`agent_power_unsatisfied`, records the evidence, and reports operator action
+required; it does not remove pins, widen pins, call `ResolveRoute`, or retry in a
+loop.
+
+### Retry eligibility
+
+Power retry is eligible only when DDx-owned evidence shows that a stronger model
+could plausibly help after a valid attempt started. Eligible classes include:
+
+- `capability_insufficient` — the agent attempted the bead, but reasoning
+  quality or implementation quality was insufficient.
+- `post_run_check_failed` — tests or gates failed after a valid checkout and
+  attempted change.
+- `review_blocked_capability` — review blocked the result for issues plausibly
+  addressable by stronger reasoning.
+- `no_changes_after_attempt` — the agent had a valid checkout and task context
+  but produced no usable change, subject to the no-progress budget.
+
+Power retry is not eligible for deterministic setup or operator-action
+failures:
+
+- dirty worktree, merge/land conflict, missing checkout, invalid bead metadata,
+  unresolved dependencies, config parse errors, missing harness binaries,
+  authentication failures, command-not-found/toolchain setup failures
+- `blocked_by_passthrough_constraint` / `agent_power_unsatisfied`
+- any status where retry would require DDx to inspect, remove, rewrite, or
+  substitute `--harness`, `--provider`, or `--model`
+
+Every retry/stop decision records the classification and evidence used. The
+policy may inspect DDx attempt outcomes and the agent's typed status; it must
+not branch on concrete provider/model identity.
 
 ## Substrate Unification
 
@@ -177,6 +243,11 @@ which condition fired.
 Stop-condition evaluation runs **between** `ddx try` invocations; an
 in-flight attempt is never aborted to satisfy a stop condition (`signal`
 excepted, and only after the in-flight attempt finalizes).
+
+Power escalation is evaluated between attempts as part of retry policy. A
+higher-power retry raises `MinPower` and resets neither the evidence history nor
+the no-progress counter; it is recorded as the next `ddx try` with its own
+requested bounds and actual power metadata.
 
 The evaluation log is persisted on the layer-3 record so a human or
 tool can audit which condition fired and on which iteration.
@@ -316,7 +387,9 @@ this read-coverage expansion.
   `.ddx/runs/<run-id>/` with `layer: 1` and the layer-1 extension
   populated.
 - Given the run completes, when I run `ddx runs show <run-id>`, then I
-  see common fields, the layer-1 extension, and attachment references.
+  see common fields, the layer-1 extension, requested `MinPower`/`MaxPower`,
+  actual model/power, requested passthrough constraints if supplied, and attachment
+  references.
 
 ### US-091: Developer Inspects a Layer-2 Bead Attempt
 
@@ -358,6 +431,16 @@ spinning, or interrupted
   merged side-effect (default `N = 3`, configurable), then the next
   stop-condition evaluation triggers `no_progress` and the layer-3
   record terminates with that disposition.
+- Given retry policy permits escalation before `no_progress` fires, when
+  a retry is scheduled, then the next layer-1 run raises `MinPower`
+  and records the actual model/power returned by the agent.
+- Given the original invocation supplied `--harness`, `--provider`, or
+  `--model`, then retries pass the same values through unchanged and DDx does
+  not inspect those values when choosing the next requested `MinPower`.
+- Given retry escalation would exceed the power available under hard
+  passthrough pins, then DDx stops with `blocked_by_passthrough_constraint` or
+  `agent_power_unsatisfied`, records the agent-supplied evidence, and does not
+  mutate the pins or call `ResolveRoute`.
 
 ### US-094: Cross-Layer Run History
 
