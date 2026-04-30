@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260430T163928-478c63b3",
+  "bead_id": "ddx-d4100b7e",
+  "base_rev": "acb03113a7fcac25aa4c1242ec2f4d26f88f6e58",
+  "created_at": "2026-04-30T16:39:29.434643476Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d4100b7e",
+    "title": "bug: service Execute request drops requested power and actual-power evidence",
+    "description": "Review/evolution finding amended by passthrough and upstream MinPower/MaxPower requirement.\nFile: cli/internal/agent/service_run.go:159\nCategory: correctness\nSeverity: critical\nDescription: executeOnService currently does not carry DDx-owned execution intent correctly. With the updated agent interface, DDx must pass MinPower/MaxPower and opaque passthrough constraints to Execute, then record the agent's actual model/power response. Without that, DDx cannot own bead retry escalation or audit operator constraints.\nSuggested fix: Populate ServiceExecuteRequest.MinPower/MaxPower and Harness/Provider/Model from the narrow passthrough envelope, capture actual model/power from Execute response/events, and persist requested_min_power/requested_max_power, actual model/power, plus requested passthrough in run and attempt evidence.",
+    "acceptance": "1. Unit/contract tests prove Execute receives MinPower/MaxPower and passthrough constraints for ddx run, ddx try, and ddx work.\n2. Normal execution tests assert Harness, Provider, and Model come only from the passthrough envelope.\n3. Run evidence records requested_min_power, requested_max_power, requested_passthrough, actual_model, and actual_power.\n4. Retry policy can read prior actual_power from evidence without inspecting passthrough strings.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "helix",
+      "phase:build",
+      "review-finding",
+      "area:agent",
+      "area:routing"
+    ],
+    "metadata": {
+      "spec_id": "FEAT-006"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T163928-478c63b3",
+    "prompt": ".ddx/executions/20260430T163928-478c63b3/prompt.md",
+    "manifest": ".ddx/executions/20260430T163928-478c63b3/manifest.json",
+    "result": ".ddx/executions/20260430T163928-478c63b3/result.json",
+    "checks": ".ddx/executions/20260430T163928-478c63b3/checks.json",
+    "usage": ".ddx/executions/20260430T163928-478c63b3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d4100b7e-20260430T163928-478c63b3"
+  }
+}
