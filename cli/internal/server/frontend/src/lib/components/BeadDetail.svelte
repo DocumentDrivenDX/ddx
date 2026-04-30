@@ -255,6 +255,7 @@
 <!-- Right-side detail panel -->
 <div
 	class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-bg-elevated shadow-xl dark:bg-dark-bg-canvas"
+	style="max-width: 36rem;"
 >
 	<!-- Header -->
 	<div

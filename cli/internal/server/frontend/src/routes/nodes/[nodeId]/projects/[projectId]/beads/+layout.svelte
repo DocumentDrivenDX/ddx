@@ -283,14 +283,14 @@
 			case 'failed':
 				return 'badge-status-failed';
 			default:
-				return 'badge-status-open';
+				return 'badge-status-neutral';
 		}
 	}
 
 	function chipClass(active: boolean): string {
 		return active
 			? 'rounded-sm border px-3 py-1 text-xs font-medium border-accent-lever bg-accent-lever/10 text-accent-lever dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever'
-			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line text-fg-muted hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface';
+			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line bg-bg-elevated text-fg-ink hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface';
 	}
 
 	function priorityLabel(priority: number): string {
@@ -302,7 +302,7 @@
 	}
 </script>
 
-<div class="space-y-4">
+<div class="min-h-full space-y-4 bg-bg-canvas dark:bg-dark-bg-canvas">
 	<div class="flex items-center justify-between">
 		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">Beads</h1>
 		<div class="flex items-center gap-3">
@@ -344,7 +344,7 @@
 		{#if data.activeStatus}
 			<button
 				type="button"
-				class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 				onclick={() => setFilter('status', null)}
 			>
 				clear
@@ -368,7 +368,7 @@
 		{#if data.activePriority}
 			<button
 				type="button"
-				class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 				onclick={() => setFilter('priority', null)}
 			>
 				clear
@@ -393,7 +393,7 @@
 			{#if data.activeLabel}
 				<button
 					type="button"
-					class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+					class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 					onclick={() => setFilter('labels', null)}
 				>
 					clear
@@ -402,7 +402,7 @@
 		</div>
 	{/if}
 
-	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
+	<div class="overflow-hidden border border-border-line bg-bg-elevated dark:border-dark-border-line dark:bg-dark-bg-elevated">
 		<table class="w-full border-collapse text-sm">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
@@ -487,7 +487,7 @@
 									<p>No beads match the current filters.</p>
 									<button
 										type="button"
-										class="rounded-sm border border-border-line px-3 py-1.5 text-sm text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+										class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1.5 text-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 										onclick={clearFilters}
 									>
 										Clear filters
@@ -508,7 +508,7 @@
 			<button
 				onclick={loadMore}
 				disabled={loadingMore}
-				class="rounded-sm border border-border-line px-4 py-2 text-sm text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+				class="rounded-sm border border-border-line bg-bg-elevated px-4 py-2 text-sm text-fg-ink hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 			>
 				{loadingMore ? 'Loading…' : 'Load more'}
 			</button>
@@ -532,6 +532,7 @@
 	<!-- Create form panel -->
 	<div
 		class="fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col bg-bg-elevated shadow-xl dark:bg-dark-bg-elevated"
+		style="max-width: 36rem;"
 	>
 		<div
 			class="flex shrink-0 items-center justify-between border-b border-border-line px-6 py-4 dark:border-dark-border-line"

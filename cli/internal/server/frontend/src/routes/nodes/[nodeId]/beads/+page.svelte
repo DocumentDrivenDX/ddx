@@ -126,15 +126,31 @@
 		}
 	}
 
-	function statusClass(status: string): string {
-		const known = ['open', 'in-progress', 'closed', 'blocked', 'running', 'completed', 'failed'];
-		return known.includes(status) ? `text-status-${status}` : 'text-fg-muted dark:text-dark-fg-muted';
+	function statusBadgeClass(status: string): string {
+		switch (status) {
+			case 'open':
+				return 'badge-status-open';
+			case 'in-progress':
+				return 'badge-status-in-progress';
+			case 'closed':
+				return 'badge-status-closed';
+			case 'blocked':
+				return 'badge-status-blocked';
+			case 'running':
+				return 'badge-status-running';
+			case 'completed':
+				return 'badge-status-completed';
+			case 'failed':
+				return 'badge-status-failed';
+			default:
+				return 'badge-status-neutral';
+		}
 	}
 
 	function chipClass(active: boolean): string {
 		return active
 			? 'rounded-sm border px-3 py-1 text-xs font-medium border-accent-lever bg-accent-lever/10 text-accent-lever dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever'
-			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line text-fg-muted hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface';
+			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line bg-bg-elevated text-fg-ink hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface';
 	}
 
 	function projectName(projectID: string | null): string {
@@ -143,7 +159,7 @@
 	}
 </script>
 
-<div class="space-y-4">
+<div class="min-h-full space-y-4 bg-bg-canvas dark:bg-dark-bg-canvas">
 	<div class="flex items-center justify-between">
 		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">All Beads</h1>
 		<span class="text-sm text-fg-muted dark:text-dark-fg-muted">
@@ -161,7 +177,7 @@
 		{/each}
 		{#if data.activeStatus}
 			<button
-				class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 				onclick={() => setFilter('status', null)}
 			>
 				clear
@@ -183,7 +199,7 @@
 			{/each}
 			{#if data.activeProject}
 				<button
-					class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+					class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 					onclick={() => setFilter('project', null)}
 				>
 					clear
@@ -203,7 +219,7 @@
 			{/each}
 			{#if data.activeLabel}
 				<button
-					class="rounded-sm border border-border-line px-3 py-1 text-xs text-fg-muted hover:text-fg-ink dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+					class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 					onclick={() => setFilter('label', null)}
 				>
 					clear
@@ -212,8 +228,8 @@
 		</div>
 	{/if}
 
-	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
-		<table class="w-full text-sm">
+	<div class="overflow-hidden border border-border-line bg-bg-elevated dark:border-dark-border-line dark:bg-dark-bg-elevated">
+		<table class="w-full border-collapse text-sm">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
 					<th class="px-4 py-3 text-left font-medium text-fg-muted dark:text-dark-fg-muted">ID</th>
@@ -240,7 +256,7 @@
 							</span>
 						</td>
 						<td class="px-4 py-3">
-							<span class="inline-block border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {`badge-status-${edge.node.status}`}">
+							<span class="inline-block border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {statusBadgeClass(edge.node.status)}">
 								{edge.node.status}
 							</span>
 						</td>
@@ -265,7 +281,7 @@
 			<button
 				onclick={loadMore}
 				disabled={loadingMore}
-				class="rounded-sm border border-border-line px-4 py-2 text-sm text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+				class="rounded-sm border border-border-line bg-bg-elevated px-4 py-2 text-sm text-fg-ink hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 			>
 				{loadingMore ? 'Loading…' : 'Load more'}
 			</button>
