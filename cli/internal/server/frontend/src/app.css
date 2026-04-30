@@ -110,7 +110,7 @@
 	--priority-p3-text: oklch(78% 0.11 163);
 	--priority-p3-surface: oklch(27% 0.06 163);
 	--priority-p3-border: oklch(51% 0.1 163);
-	--priority-p4-text: #8E8674;
+	--priority-p4-text: #A39A86;
 	--priority-p4-surface: #26231F;
 	--priority-p4-border: #34302A;
 
@@ -134,7 +134,7 @@
 	--doc-pre-surface: #0F0E0C;
 	--doc-pre-text: #D8D2C4;
 	--doc-quote-border: #34302A;
-	--doc-muted-text: #A39A86;
+	--doc-muted-text: #B8AF9C;
 	--doc-table-heading-surface: #26231F;
 	--doc-table-border: #34302A;
 	--doc-row-hover-surface: #26231F;
@@ -142,6 +142,22 @@
 }
 
 @layer utilities {
+	.text-gray-500 {
+		color: #4B5563;
+	}
+
+	.dark .dark\:text-gray-400 {
+		color: #9CA3AF;
+	}
+
+	.dark .dark\:text-\[\#8E8674\] {
+		color: #A39A86;
+	}
+
+	.bg-emerald-600 {
+		background-color: #047857;
+	}
+
 	.text-status-open {
 		color: var(--status-open-text);
 	}

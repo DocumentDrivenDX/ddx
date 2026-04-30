@@ -10,27 +10,57 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+async function getFixtureIds(
+	request: import('@playwright/test').APIRequestContext
+): Promise<{ nodeId: string; projectId: string }> {
+	const nodeResp = await request.post('/graphql', {
+		data: { query: '{ nodeInfo { id name } }' }
+	});
+	const nodeBody = (await nodeResp.json()) as {
+		data: { nodeInfo: { id: string; name: string } };
+	};
+	const projectsResp = await request.get('/api/projects');
+	const projects = (await projectsResp.json()) as Array<{ id: string; name: string; path: string }>;
+	const fixture = projects.find((p) => /(^|\/)ddx-e2e-/.test(p.path) || /^ddx-e2e-/.test(p.name));
+	if (!fixture) {
+		throw new Error('fixture server has no ddx-e2e-* project registered');
+	}
+	return { nodeId: nodeBody.data.nodeInfo.id, projectId: fixture.id };
+}
+
+type PageSpec = {
+	name: string;
+	path: (ids: { nodeId: string; projectId: string }) => string;
+};
+
 const PAGES = [
-	{ path: '/', name: 'dashboard' },
-	{ path: '/beads', name: 'beads' },
-	{ path: '/documents', name: 'documents' },
-	{ path: '/graph', name: 'graph' },
-	{ path: '/agent', name: 'agent' },
-	{ path: '/personas', name: 'personas' }
-];
+	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}`, name: 'dashboard' },
+	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/beads`, name: 'beads' },
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/documents`,
+		name: 'documents'
+	},
+	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/graph`, name: 'graph' },
+	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/sessions`, name: 'agent' },
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/personas`,
+		name: 'personas'
+	}
+] satisfies PageSpec[];
 
 const MODES = ['light', 'dark'] as const;
 
 for (const mode of MODES) {
 	for (const p of PAGES) {
-		test(`a11y (${mode}): ${p.name} has no WCAG AA axe violations`, async ({ page }) => {
+		test(`a11y (${mode}): ${p.name} has no WCAG AA axe violations`, async ({ page, request }) => {
+			const ids = await getFixtureIds(request);
 			// Set the theme BEFORE the first paint via localStorage — the
 			// mode-watcher library reads this key on boot.
 			await page.addInitScript((m) => {
 				window.localStorage.setItem('mode-watcher-mode', m);
 			}, mode);
 
-			await page.goto(p.path);
+			await page.goto(p.path(ids));
 			await page.waitForLoadState('networkidle');
 
 			const results = await new AxeBuilder({ page })

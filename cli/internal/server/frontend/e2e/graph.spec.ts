@@ -251,16 +251,20 @@ async function stopRealDdxServer(server: RealServer) {
 
 async function proxyGraphQLToRealServer(page: Page, api: APIRequestContext) {
 	await page.route('/graphql', async (route) => {
-		const response = await api.post('/graphql', {
-			data: route.request().postDataJSON()
-		});
-		await route.fulfill({
-			status: response.status(),
-			headers: {
-				'content-type': response.headers()['content-type'] ?? 'application/json'
-			},
-			body: await response.text()
-		});
+		try {
+			const response = await api.post('/graphql', {
+				data: route.request().postDataJSON()
+			});
+			await route.fulfill({
+				status: response.status(),
+				headers: {
+					'content-type': response.headers()['content-type'] ?? 'application/json'
+				},
+				body: await response.text()
+			});
+		} catch {
+			await route.abort('failed').catch(() => {});
+		}
 	});
 }
 
@@ -383,6 +387,7 @@ test('TC-037: integrity panel groups real fixture issues by kind with counts and
 		await pathLink.click();
 		await expect(page).toHaveURL(href!);
 	} finally {
+		await page.unroute('/graphql');
 		await stopRealDdxServer(server);
 	}
 });
@@ -398,6 +403,7 @@ test('TC-038: clean graph hides the integrity badge and panel', async ({ page })
 		await expect(page.getByTestId('integrity-panel')).toHaveCount(0);
 		await expect(page.getByTestId('integrity-badge')).toHaveCount(0);
 	} finally {
+		await page.unroute('/graphql');
 		await stopRealDdxServer(server);
 	}
 });

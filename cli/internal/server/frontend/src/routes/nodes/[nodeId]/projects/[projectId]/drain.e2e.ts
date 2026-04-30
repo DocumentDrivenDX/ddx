@@ -354,7 +354,7 @@ test('drain-queue golden: real-config endpoint shape, click Drain, worker row, n
 	await page.goto(WORKERS_URL);
 	await expect(page.getByRole('heading', { name: 'Workers' })).toBeVisible();
 	await expect(page.getByText('worker-d')).toBeVisible();
-	await expect(page.getByText('success')).toBeVisible();
+	await expect(page.getByText('done')).toBeVisible();
 
 	const finalWorker = state.workers[0];
 	// Status is success OR a typed error string with a recorded reason.

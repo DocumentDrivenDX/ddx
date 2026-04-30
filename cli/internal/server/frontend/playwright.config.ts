@@ -31,7 +31,6 @@ const bootCommand = [
 ].join(' && ');
 
 export default defineConfig({
-	retries: 2,
 	webServer: {
 		command: `bash -c '${bootCommand}'`,
 		url: `${BASE_URL}/api/health`,

@@ -6,7 +6,7 @@ const fontFamily = exported.fontFamily ?? {};
 const fontSize = exported.fontSize ?? {};
 
 const semanticColors = {
-	'accent-lever': colors.primary,
+	'accent-lever': '#3B5B7A',
 	'accent-fulcrum': colors.secondary,
 	'accent-load': colors.tertiary,
 	'dark-accent-lever': '#7BA3CC',
@@ -21,9 +21,9 @@ const semanticColors = {
 	'dark-bg-elevated': '#2E2A25',
 
 	'fg-ink': colors.text,
-	'fg-muted': colors['text-muted'],
+	'fg-muted': '#4B5563',
 	'dark-fg-ink': '#EDE6D6',
-	'dark-fg-muted': '#A39A86',
+	'dark-fg-muted': '#B8AF9C',
 
 	'border-line': '#E4DDD0',
 	'dark-border-line': '#34302A',

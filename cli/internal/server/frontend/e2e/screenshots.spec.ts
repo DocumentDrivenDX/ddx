@@ -51,12 +51,43 @@ type PageSpec = {
 };
 
 const PAGES: readonly PageSpec[] = [
-	{ path: () => '/', name: 'dashboard', ready: 'h1', maskStarted: true, tolerance: 0.02 },
-	{ path: () => '/beads', name: 'beads-kanban', ready: 'text=OPEN', tolerance: 0.04 },
-	{ path: () => '/documents', name: 'documents', ready: 'h1', tolerance: 0.02 },
-	{ path: () => '/graph', name: 'graph', ready: 'h1', tolerance: 0.06 },
-	{ path: () => '/agent', name: 'agent', ready: 'h1', tolerance: 0.04 },
-	{ path: () => '/personas', name: 'personas', ready: 'text=Personas', tolerance: 0.04 },
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}`,
+		name: 'dashboard',
+		ready: 'h1',
+		maskStarted: true,
+		tolerance: 0.02
+	},
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/beads`,
+		name: 'beads-kanban',
+		ready: 'text=OPEN',
+		tolerance: 0.04
+	},
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/documents`,
+		name: 'documents',
+		ready: 'h1',
+		tolerance: 0.02
+	},
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/graph`,
+		name: 'graph',
+		ready: 'h1',
+		tolerance: 0.06
+	},
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/sessions`,
+		name: 'agent',
+		ready: 'h1',
+		tolerance: 0.04
+	},
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/personas`,
+		name: 'personas',
+		ready: 'text=Personas',
+		tolerance: 0.04
+	},
 	{
 		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}`,
 		name: 'project-overview',
