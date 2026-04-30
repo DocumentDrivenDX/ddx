@@ -162,6 +162,20 @@ All tests must pass before committing. Tests are release-critical.
 - Follow existing patterns in the codebase
 - Keep the CLI core minimal — new features go in the document library, not as CLI commands
 
+### Structural lints (CI-enforced)
+
+In addition to `golangci-lint`, the lefthook `ci` block runs three
+project-specific structural analyzers under `cli/tools/lint/`:
+
+| Lint            | Purpose                                                                                          | Docs                          |
+| --------------- | ------------------------------------------------------------------------------------------------ | ----------------------------- |
+| `evidencelint`  | FEAT-022 no-unbounded-prompts: blocks unbounded data flowing into agent prompts and egress.      | source comments               |
+| `runtimelint`   | SD-024 §Stage 4: forbids durable-knob fields on `*Runtime` structs and reintroduction of legacy `*Options` types. | source comments |
+| `routinglint`   | FEAT-006 routing cleanup: forbids reintroduction of the compensating DDx-side routing helpers and flags retired by ddx-3bd7396a. | [docs/dev/routing-lint.md](docs/dev/routing-lint.md) |
+
+All three run on every push/PR via `lefthook run ci`. Run any of them
+locally with `go run ./tools/lint/<name>/cmd/<name> ./...` from `cli/`.
+
 ## IDE Setup
 
 ### VS Code

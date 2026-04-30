@@ -40,6 +40,7 @@ func checkRoutingMigration(path string, data []byte) error {
 	if routing == nil {
 		return nil
 	}
+	// routinglint:legacy-rejection reason="hard-error rejection of retired routing keys per ddx-3bd7396a"
 	for _, field := range []string{"default_harness", "profile_ladders", "model_overrides"} {
 		if _, ok := routing[field]; ok {
 			return &RoutingMigrationError{

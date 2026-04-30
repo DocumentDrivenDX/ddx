@@ -33,6 +33,7 @@ agent:
 	root := factory.NewRootCommand()
 	_, err := executeCommand(root, "agent", "execute-loop", "--local", "--json", "--once")
 	require.Error(t, err, "execute-loop must fail when config has profile_ladders")
+	// routinglint:legacy-rejection reason="asserts the rejection error names the retired field"
 	assert.Contains(t, err.Error(), "profile_ladders")
 }
 
@@ -59,5 +60,6 @@ agent:
 	root := factory.NewRootCommand()
 	_, err := executeCommand(root, "agent", "execute-loop", "--local", "--json", "--once")
 	require.Error(t, err, "execute-loop must fail when config has model_overrides")
+	// routinglint:legacy-rejection reason="asserts the rejection error names the retired field"
 	assert.True(t, strings.Contains(err.Error(), "model_overrides"), "error must name the field: %v", err)
 }
