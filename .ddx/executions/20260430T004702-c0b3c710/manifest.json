@@ -1,0 +1,103 @@
+{
+  "attempt_id": "20260430T004702-c0b3c710",
+  "bead_id": "ddx-0097af14",
+  "base_rev": "ee729c4aed85c64e3f19a5f76d2addabd815918b",
+  "created_at": "2026-04-30T00:47:03.180105607Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0097af14",
+    "title": "execute-loop: land_conflict should attempt resolution before discarding preserved iteration",
+    "description": "When ddx agent execute-bead lands a commit locally but merging into the base branch produces conflicts, the loop today preserves the result at refs/ddx/iterations/\u003cbead\u003e/\u003cts\u003e-\u003cbase\u003e and unclaims the bead with status: land_conflict. The bead reopens; subsequent attempts re-execute from scratch — burning more agent time and dollars even though the original work is intact in the preserved ref.\n\nOBSERVED 2026-04-29 on ddx-52469547 (FEAT-015 bead 3, 'runtime fallback removal + audit-side migration'):\n- Sonnet ran for ~3h, produced commit 12fbf6dd1b98 covering all 7 AC items.\n- The base branch advanced significantly during the run (V1, V2, V3 vision beads + dogfood + concurrent work).\n- The run hit the agent's 3h hard timeout right at the test phase.\n- execute-loop preserved at refs/ddx/iterations/ddx-52469547/20260429T175646Z-aa7b31785a44 with status execution_failed (timeout, but functionally identical to land_conflict for the merge story).\n- Operator attempted git merge --no-ff 12fbf6dd, hit 7 file-level conflicts (mechanical drift from parallel beads), aborted, and only avoided wasting the work because a parallel attempt (263b5eff) had landed the exact same scope cleanly. That parallel landing is a coincidence, not a guarantee.\n\nThe general case: a preserved iteration represents real money spent and real work done. land_conflict / execution_failed-with-result that bails to 'reopen and re-run' throws that work away. The loop should at least attempt to reuse the preserved result.\n\nREQUESTED BEHAVIOR\n\n1. On land_conflict (merge produces conflicts when applying the iteration onto current tip), execute-loop should:\n   a. Try a 3-way merge of the preserved iteration ref onto current main using merge.conflictStyle=diff3 and ort strategy with -X ours/-X theirs heuristics. Only if the merge resolves cleanly under those heuristics, commit it as a non-fast-forward merge with a message like 'Merge preserved iteration ddx-\u003cid\u003e after base drift'.\n   b. If 3-way auto-resolution fails, dispatch a SMALL focused agent run (cheap tier) with the conflict files, the preserved iteration's commit message, and the bead AC. Its sole job: resolve the conflicts, verify build/tests, commit. Do NOT re-do the bead from scratch.\n   c. Only if (a) and (b) both fail, fall back to today's behavior (preserve, unclaim, set short cooldown, mark for human review with a structured outcome distinct from generic execution_failed — perhaps kind:land-conflict-unresolvable).\n\n2. Cooldown for land_conflict-unresolvable should be short (5-30 min), not the 24h cap, since the conflict will resolve faster as soon as a human or another bead lands a clarifying change.\n\n3. Same logic should apply to execution_failed-with-preserved-result (timeouts mid-merge): if a commit was produced before the failure, attempt to merge it before discarding the run.\n\n4. Reuse the auto-recover plumbing landed for push race in ddx-a458af7c (landPushAutoRecover, capLoopCooldown). Specifically the conflict-vs-clean-recovery branching should mirror landPushAutoRecover's structure.\n\n5. Regression tests:\n   - Fake git that produces a mechanical conflict resolvable via -X ours: assert auto-resolution succeeds and bead lands.\n   - Fake git that produces an irreconcilable structural conflict: assert escalation to focused-resolve agent (or, at minimum, that today's behavior is taken with the new structured outcome).\n   - Preserved-iteration-on-timeout case: assert the preserved commit IS attempted as a merge before falling back.\n\nACCEPTANCE OF FAILURE: if the focused-resolve agent itself fails or escalates to BLOCKING, that's a structured outcome (kind:land-conflict-needs-human) — the bead is parked with the conflict context and preserved ref clearly recorded.\n\nRelated: ddx-a458af7c (push race auto-recover, this session's predecessor work).",
+    "acceptance": "1. execute-loop attempts 3-way auto-resolution of preserved iteration onto current tip before discarding (ort strategy + sane heuristics). 2. On 3-way failure, execute-loop dispatches a focused conflict-resolve agent run (cheap tier) with the conflict files + AC + iteration commit message; on success, commits the merge. 3. Only after (1) and (2) fail does the loop park the bead. Park outcome is kind:land-conflict-unresolvable (or kind:land-conflict-needs-human if the focused-resolve agent escalated to BLOCKING). 4. Cooldown for land-conflict-unresolvable is 5-30 min, capped under the 24h cap from ddx-a458af7c. 5. Same code path applies to execution_failed when the agent produced a commit before failing (timeout-with-preserved-commit case). 6. Regression tests: (a) mechanical conflict auto-resolves, (b) structural conflict escalates to focused-resolve, (c) timeout-with-preserved-commit attempts the merge. 7. CHANGELOG entry. 8. Update FEAT-006 (or wherever the execute-loop outcome contract is documented) to list the new structured outcomes.",
+    "labels": [
+      "execute-loop",
+      "beads",
+      "quality-of-life",
+      "area:agent"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:47:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T18:47:14.013496692Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff at rev 1550c5382a is a bare merge commit with no code changes; none of the 8 AC items (3-way auto-resolve, focused-resolve agent dispatch, structured outcomes, cooldown cap, timeout-with-preserved-commit path, regression tests, CHANGELOG, FEAT-006 update) can be evaluated as implemented.\nharness=claude\nmodel=opus\ninput_bytes=7055\noutput_bytes=1595\nelapsed_ms=13501",
+          "created_at": "2026-04-29T18:47:29.694646426Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T18:47:29.788988125Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff at rev 1550c5382a is a bare merge commit with no code changes; none of the 8 AC items (3-way auto-resolve, focused-resolve agent dispatch, structured outcomes, cooldown cap, timeout-with-preserved-commit path, regression tests, CHANGELOG, FEAT-006 update) can be evaluated as implemented.\nresult_rev=1550c5382a41b9af89ae6bc296c204608559095a\nbase_rev=51601064b70bad7639353c75678083e781c010f8",
+          "created_at": "2026-04-29T18:47:29.889364152Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:09.89398317Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:09.995217396Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:29:10.081459597Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:29:10.252161125Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-30T00:47:02.294054532Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T004702-c0b3c710",
+    "prompt": ".ddx/executions/20260430T004702-c0b3c710/prompt.md",
+    "manifest": ".ddx/executions/20260430T004702-c0b3c710/manifest.json",
+    "result": ".ddx/executions/20260430T004702-c0b3c710/result.json",
+    "checks": ".ddx/executions/20260430T004702-c0b3c710/checks.json",
+    "usage": ".ddx/executions/20260430T004702-c0b3c710/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0097af14-20260430T004702-c0b3c710"
+  }
+}
