@@ -61,15 +61,15 @@
 	function verdictClass(v: string | null): string {
 		const lc = (v ?? '').toLowerCase();
 		if (lc === 'pass' || lc === 'success' || lc === 'task_succeeded') {
-			return 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200';
+			return 'badge-status-closed';
 		}
 		if (lc === 'block' || lc === 'failure' || lc === 'task_failed') {
-			return 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200';
+			return 'badge-status-failed';
 		}
 		if (lc === 'no_changes' || lc === 'task_no_changes') {
-			return 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200';
+			return 'badge-status-in-progress';
 		}
-		return 'border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200';
+		return 'badge-status-open';
 	}
 
 	function goNext() {
@@ -100,39 +100,39 @@
 <div class="space-y-4">
 	<div class="flex items-start justify-between">
 		<div>
-			<h1 class="text-xl font-semibold dark:text-white">Executions</h1>
-			<p class="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-300">
-				Each row is one <code>ddx agent execute-bead</code> attempt bundle from
-				<code>.ddx/executions/</code>: the prompt that was sent, the verdict that came back, and
+			<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Executions</h1>
+			<p class="mt-1 max-w-2xl text-body-sm text-fg-muted dark:text-dark-fg-muted">
+				Each row is one <code class="font-mono-code text-mono-code">ddx agent execute-bead</code> attempt bundle from
+				<code class="font-mono-code text-mono-code">.ddx/executions/</code>: the prompt that was sent, the verdict that came back, and
 				the linked bead and session.
 			</p>
 		</div>
-		<span class="text-sm text-gray-700 dark:text-gray-300">
+		<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 			{data.executions.totalCount} executions
 		</span>
 	</div>
 
 	<form
-		class="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+		class="flex flex-wrap items-end gap-3 border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface"
 		onsubmit={(e) => {
 			e.preventDefault();
 			applyFilters();
 		}}
 	>
-		<label class="flex flex-col text-xs text-gray-600 dark:text-gray-300">
+		<label class="flex flex-col text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 			<span class="mb-1">Bead</span>
 			<input
 				type="text"
 				bind:value={bead}
 				placeholder="ddx-…"
-				class="w-40 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+				class="w-40 border border-border-line bg-bg-elevated px-2 py-1 font-mono-code text-mono-code text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 			/>
 		</label>
-		<label class="flex flex-col text-xs text-gray-600 dark:text-gray-300">
+		<label class="flex flex-col text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 			<span class="mb-1">Verdict</span>
 			<select
 				bind:value={verdict}
-				class="w-32 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+				class="w-32 border border-border-line bg-bg-elevated px-2 py-1 text-body-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 			>
 				<option value="">Any</option>
 				<option value="PASS">PASS</option>
@@ -142,99 +142,99 @@
 				<option value="no_changes">no_changes</option>
 			</select>
 		</label>
-		<label class="flex flex-col text-xs text-gray-600 dark:text-gray-300">
+		<label class="flex flex-col text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 			<span class="mb-1">Harness</span>
 			<input
 				type="text"
 				bind:value={harness}
 				placeholder="claude / codex / agent"
-				class="w-44 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+				class="w-44 border border-border-line bg-bg-elevated px-2 py-1 font-mono-code text-mono-code text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 			/>
 		</label>
-		<label class="flex flex-1 flex-col text-xs text-gray-600 dark:text-gray-300">
+		<label class="flex flex-1 flex-col text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 			<span class="mb-1">Search</span>
 			<input
 				type="text"
 				bind:value={search}
 				placeholder="bead title / id"
-				class="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+				class="border border-border-line bg-bg-elevated px-2 py-1 text-body-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 			/>
 		</label>
 		<button
 			type="submit"
-			class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+			class="bg-accent-lever px-3 py-1.5 text-body-sm font-medium text-bg-elevated hover:opacity-90 dark:bg-dark-accent-lever dark:text-dark-bg-canvas"
 		>
 			Apply
 		</button>
 		<button
 			type="button"
 			onclick={clearFilters}
-			class="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+			class="border border-border-line px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 		>
 			Clear
 		</button>
 	</form>
 
-	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
 		<table class="w-full text-sm">
 			<thead>
-				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Created</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Bead</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Harness</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Verdict</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Duration</th>
-					<th class="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Cost</th>
+				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Created</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Bead</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Verdict</th>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Duration</th>
+					<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cost</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each rows as exec (exec.id)}
-					<tr class="border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
-						<td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-							<a class="font-mono text-blue-600 hover:underline dark:text-blue-400" href={detailHref(exec.id)}>
+					<tr class="border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface">
+						<td class="px-4 py-3">
+							<a class="font-mono-code text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever" href={detailHref(exec.id)}>
 								{fmtDate(exec.createdAt)}
 							</a>
 						</td>
 						<td class="px-4 py-3">
 							{#if exec.beadId}
-								<a class="font-mono text-xs text-blue-600 hover:underline dark:text-blue-400" href={beadHref(exec.beadId)}>
+								<a class="font-mono-code text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever" href={beadHref(exec.beadId)}>
 									{exec.beadId}
 								</a>
 								{#if exec.beadTitle}
-									<div class="truncate text-xs text-gray-500 dark:text-gray-400">{exec.beadTitle}</div>
+									<div class="truncate text-body-sm text-fg-muted dark:text-dark-fg-muted">{exec.beadTitle}</div>
 								{/if}
 							{:else}
-								<span class="text-gray-400 dark:text-gray-500">—</span>
+								<span class="text-fg-muted dark:text-dark-fg-muted">—</span>
 							{/if}
 						</td>
-						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
 							<span>{exec.harness ?? '—'}</span>
 							{#if exec.model}
-								<span class="ml-1 text-xs text-gray-600 dark:text-gray-400">{exec.model}</span>
+								<span class="ml-1 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{exec.model}</span>
 							{/if}
 						</td>
 						<td class="px-4 py-3">
 							{#if exec.verdict}
 								<span
-									class="inline-flex rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase {verdictClass(exec.verdict)}"
+									class="inline-flex border px-1.5 py-0.5 font-mono-code text-mono-code uppercase {verdictClass(exec.verdict)}"
 								>
 									{exec.verdict}
 								</span>
 							{:else}
-								<span class="text-gray-400 dark:text-gray-500">—</span>
+								<span class="text-fg-muted dark:text-dark-fg-muted">—</span>
 							{/if}
 						</td>
-						<td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-right font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							{fmtDuration(exec.durationMs)}
 						</td>
-						<td class="px-4 py-3 text-right font-mono text-xs text-gray-600 dark:text-gray-300">
+						<td class="px-4 py-3 text-right font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							{fmtCost(exec.costUsd)}
 						</td>
 					</tr>
 				{/each}
 				{#if rows.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-gray-700 dark:text-gray-300">
+						<td colspan="6" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							No executions found.
 						</td>
 					</tr>
@@ -247,17 +247,17 @@
 		<button
 			onclick={goPrev}
 			disabled={!data.filters.after}
-			class="rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+			class="border border-border-line px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-40 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 		>
 			← Previous
 		</button>
-		<span class="text-xs text-gray-400 dark:text-gray-500">
+		<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 			{rows.length} shown
 		</span>
 		<button
 			onclick={goNext}
 			disabled={!data.executions.pageInfo.hasNextPage}
-			class="rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+			class="border border-border-line px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-40 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 		>
 			Next →
 		</button>

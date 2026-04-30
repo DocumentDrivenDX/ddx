@@ -63,38 +63,38 @@
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold dark:text-white">Commits</h1>
-		<span class="text-sm text-gray-500 dark:text-gray-400">
+		<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Commits</h1>
+		<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 			{data.commits.totalCount} total
 		</span>
 	</div>
 
-	<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
 		<table class="w-full text-sm">
 			<thead>
-				<tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">SHA</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Subject</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Author</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Date</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Beads</th>
-					<th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Execution</th>
+				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">SHA</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Subject</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Author</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Date</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Beads</th>
+					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Execution</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each data.commits.edges as edge (edge.cursor)}
 					{@const c = edge.node}
-					<tr class="border-b border-gray-100 last:border-0 dark:border-gray-700">
-						<td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
+					<tr class="border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface">
+						<td class="px-4 py-3 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
 							{c.shortSha}
 						</td>
-						<td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+						<td class="px-4 py-3 text-body-sm text-fg-ink dark:text-dark-fg-ink">
 							<span title={c.body ?? undefined}>{c.subject}</span>
 						</td>
-						<td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							{c.author}
 						</td>
-						<td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							{fmtDate(c.date)}
 						</td>
 						<td class="px-4 py-3">
@@ -106,33 +106,33 @@
 												e.stopPropagation();
 												openBead(beadId);
 											}}
-											class="rounded bg-blue-100 px-1.5 py-0.5 font-mono text-xs text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+											class="badge-status-open inline-flex border px-1.5 py-0.5 font-mono-code text-mono-code uppercase hover:opacity-80"
 										>
 											{beadId.slice(0, 8)}
 										</button>
 									{/each}
 								</div>
 							{:else}
-								<span class="text-gray-300 dark:text-gray-600">—</span>
+								<span class="text-fg-muted dark:text-dark-fg-muted">—</span>
 							{/if}
 						</td>
-						<td class="px-4 py-3 text-xs">
+						<td class="px-4 py-3">
 							{#if executionBySha[c.sha]}
 								<a
 									href={executionHref(executionBySha[c.sha] as string)}
-									class="font-mono text-blue-600 hover:underline dark:text-blue-400"
+									class="font-mono-code text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever"
 								>
 									{(executionBySha[c.sha] as string).slice(0, 18)}
 								</a>
 							{:else}
-								<span class="text-gray-300 dark:text-gray-600">—</span>
+								<span class="text-fg-muted dark:text-dark-fg-muted">—</span>
 							{/if}
 						</td>
 					</tr>
 				{/each}
 				{#if data.commits.edges.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-gray-400 dark:text-gray-600">
+						<td colspan="6" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							No commits found.
 						</td>
 					</tr>
@@ -146,17 +146,17 @@
 		<button
 			onclick={goPrev}
 			disabled={!data.after}
-			class="rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+			class="border border-border-line px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-40 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 		>
 			← Previous
 		</button>
-		<span class="text-xs text-gray-400 dark:text-gray-500">
+		<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 			{data.commits.edges.length} commits shown
 		</span>
 		<button
 			onclick={goNext}
 			disabled={!data.commits.pageInfo.hasNextPage}
-			class="rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+			class="border border-border-line px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-40 dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 		>
 			Next →
 		</button>
