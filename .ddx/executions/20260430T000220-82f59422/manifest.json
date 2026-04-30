@@ -1,0 +1,118 @@
+{
+  "attempt_id": "20260430T000220-82f59422",
+  "bead_id": "ddx-37cdb43a",
+  "base_rev": "1495ba706ffdc0e7bfb4833487ed068ffe732aeb",
+  "created_at": "2026-04-30T00:02:21.47342543Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-37cdb43a",
+    "title": "execute-loop: ddx work exits after one bead instead of draining the queue",
+    "description": "## Symptom\n\n`ddx work` (no `--once` flag, no `--poll-interval`, default mode) exits after processing exactly one bead instead of draining the queue. Reproduced four times today on `/home/erik/Projects/agent` with `--harness lmstudio` pinned (which sidesteps the unrelated `ddx-c7081f89` server-worker tier-walk issue):\n\n| Run | Outcome on first bead | Worker terminal state | Queue still non-empty? |\n|---|---|---|---|\n| 2 | `already_satisfied` (`agent-4aa3584e` adjudicated satisfied) | `already_satisfied` / `exited` | yes — 2 ready beads remained |\n| 3 | pre-claim hook rejected (diverged branch) | `exited`, attempts=0 | yes |\n| 4 | pre-claim hook rejected (diverged branch) | `exited`, attempts=0 | yes |\n| 5 | `no_changes` from agent (`agent-6c7a4c11` declined as epic; bead left **claimed**) | `exited`, attempts=1 | yes — 5 ready beads remained |\n\nIn all four runs the loop should have continued to the next ready bead. Per `agent/.claude/skills/ddx/reference/work.md`, only `success`/`already_satisfied` close the bead and `no_changes`/`land_conflict`/`*_failed` unclaim and continue. None of these outcomes is documented or expected to be loop-terminal.\n\n## Root cause #1 (verified)\n\n`cli/internal/agent/execute_bead_loop.go:382`:\n\n```go\nattempted[candidate.ID] = struct{}{}\n\n// Pre-claim hook: fetch origin + verify ancestry before claiming.\n// On error the bead is skipped for this iteration; the loop\n// continues (ctx is not cancelled).\nif runtime.PreClaimHook != nil {\n    if hookErr := runtime.PreClaimHook(ctx); hookErr != nil {\n        // ... log + emit ...\n        continue\n    }\n}\n```\n\nThe bead is added to `attempted` **before** the pre-claim hook runs. On hook failure (e.g. diverged branch), the loop `continue`s but the bead stays in `attempted`. Next iteration, `nextCandidate()` (line 924) skips the still-ready bead because it's in `attempted`, returns `ok=false`, and the loop exits at line 374 because `PollInterval \u003c= 0`. Single-shot exit with `attempts=0`.\n\n**Reproduces:** runs 3 and 4 above.\n\n## Root cause #2 (suspected — needs targeted instrumentation)\n\nRuns 2 and 5 reached `Execute()` and got a real report back. Worker log shows the entry line `▶ \u003cbead\u003e: \u003ctitle\u003e` but no closing `✓ \u003cbead\u003e → \u003cresult\u003e` line (which is written at line 909). That means the loop exited somewhere between line 488 (`Executor.Execute`) and line 909 (the final summary log).\n\nBetween those bounds, **at least 16 distinct `return result, err` points** trigger if any `Store.*` operation returns an error: `Unclaim` (711, 700), `IncrNoChangesCount` (717), `adjudicateNoChanges` (721), `CloseWithEvidence` (520, 615, 694, 739), `Reopen` (635, 669), `SetExecutionCooldown` (749, 791, 803, 835, 844), late `AppendEvent` (862). Any single transient store error during outcome handling kills the worker.\n\nFor run 5 specifically, `agent-6c7a4c11` is now `Status: in_progress` with `Owner: ddx, Machine: sindri`. The bead was **never unclaimed** despite the agent returning `no_changes` — meaning the loop exited on or before line 711 (`w.Store.Unclaim`) failing. Investigation should look at what error `Unclaim` would return when called against a bead the same worker claimed seconds earlier; possible candidates: tracker-write race with concurrent worker, bead.jsonl re-write during a fetch by the pre-claim hook on a later iteration that already happened (no — pre-claim is pre-claim, not post-execute), or a malformed bead row that fails store-side validation.\n\nIndependent of the specific store error: the structural pattern of \"any Store.* error → exit the entire loop\" is the wrong default. A store error on outcome handling should at most park the bead and continue to the next, never terminate the worker.\n\n## Why this is loadbearing\n\nThe loop is the queue-drain primitive. Every observed failure-to-drain in the last 24 hours of operator complaints traces back to this — beads that should have been the worker's second/third/fourth attempt never got picked up because the worker exited after one attempt, and the operator manually restarts the drain (sometimes after a long delay). The visible queue depth is misleading: half the \"ready\" beads are sitting behind a worker that quietly died.\n\n## In-scope files\n\n- `cli/internal/agent/execute_bead_loop.go` — fixes for both root causes\n- `cli/internal/agent/execute_bead_loop_test.go` — regression tests for each path\n\n## Out of scope\n\n- Anything in the `agent` SDK (`/home/erik/Projects/agent`). The loop and all its store interactions are owned by ddx.\n- The pre-claim hook's divergence-detection logic itself — that's correct behavior; the bug is how the loop reacts to the hook's signal.\n- Adaptive min-tier / tier-walk machinery (`ddx-c7081f89`, `ddx-aec9d68c`) — independent.\n\n## Anti-goals\n\n- Do **not** swallow store errors silently. They must be surfaced (event + log) but should not kill the worker on transient/per-bead failures.\n- Do **not** convert the loop's Once/PollInterval semantics — they're correct.\n- Do **not** change worker terminal-state semantics (`exited`/`failed`/`stopped`/`reaped`).",
+    "acceptance": "1. **Root cause #1 fixed:** `attempted[candidate.ID] = struct{}{}` is moved to AFTER the pre-claim hook succeeds. Regression test in `execute_bead_loop_test.go` asserts: with a fake `PreClaimHook` that fails on the first call and succeeds thereafter, the loop processes the same bead on the second iteration (not skipped because of stale `attempted` state).\n\n2. **Root cause #2 fixed:** the post-`Execute` outcome-handling block (lines ~510-862) does not exit the loop on transient `Store.*` errors. Each `return result, err` in that block is converted to: log the error, emit a `kind:loop-error` bead event when possible, set the bead to a short cooldown, and `continue` to the next iteration. The only exception is context cancellation (`ctx.Err()`), which still terminates immediately.\n\n3. **Regression tests for AC-2:** for each `Store.*` call in the outcome block (Unclaim, IncrNoChangesCount, adjudicateNoChanges, CloseWithEvidence on each path, Reopen on each path, SetExecutionCooldown on each path, late AppendEvent), a test injects a transient error from a fake store and asserts: (a) the loop continues, (b) a `kind:loop-error` event is recorded with the failing operation name, (c) `result.Failures++` advances.\n\n4. **End-to-end reproduction guard:** an integration test seeds a bead.jsonl with 3 ready beads. The first returns `no_changes` (executor fake), the second returns `success`, the third returns `already_satisfied`. The loop runs to completion (all three processed) without exiting prematurely. With the pre-fix loop, this test fails on the first bead.\n\n5. **Worker-state semantics preserved:** existing tests that assert worker.State transitions (`running` → `exited` / `failed` / `stopped` / `reaped`) still pass. The fix changes loop *advancement*, not terminal-state classification.\n\n6. **Documented behavior:** `docs/agents/execute-loop.md` (or the closest existing doc) gains a \"loop termination\" section listing the only conditions that terminate the loop: context cancellation, `Once == true`, `PollInterval \u003c= 0` AND `nextCandidate` returns no candidate, `RoutePreflight` rejected. Explicitly states that Store errors during outcome handling do NOT terminate the loop.\n\n7. **Operator workaround retired:** the README's \"if `ddx work` exits early, restart it\" guidance (or equivalent) is removed; that workaround was masking this bug.",
+    "labels": [
+      "area:execute-loop",
+      "kind:bug",
+      "phase:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:02:20Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T20:58:01.9171561Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T203909-e46a1ac0\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":92,\"output_tokens\":47611,\"total_tokens\":47703,\"cost_usd\":3.409703350000001,\"duration_ms\":1131913,\"exit_code\":0}",
+          "created_at": "2026-04-29T20:58:02.023531375Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=47703 cost_usd=3.4097 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T20:58:06.183307339Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff only contains execution evidence (manifest.json + result.json) under .ddx/executions/. No changes to execute_bead_loop.go, tests, or docs are visible, so none of the 7 acceptance criteria can be evaluated as implemented.\nharness=claude\nmodel=opus\ninput_bytes=19979\noutput_bytes=1774\nelapsed_ms=11832",
+          "created_at": "2026-04-29T20:58:18.219761478Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T20:58:18.312818641Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff only contains execution evidence (manifest.json + result.json) under .ddx/executions/. No changes to execute_bead_loop.go, tests, or docs are visible, so none of the 7 acceptance criteria can be evaluated as implemented.\nresult_rev=abc40efbaec5d2ec81d6c4922dac3bbcf330c609\nbase_rev=d0e25307be28163376692f319372a635cb883718",
+          "created_at": "2026-04-29T20:58:18.403278264Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:01.670765572Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:01.795841773Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:29:01.881235349Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:29:02.059267453Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-30T00:02:20.578379076Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T000220-82f59422",
+    "prompt": ".ddx/executions/20260430T000220-82f59422/prompt.md",
+    "manifest": ".ddx/executions/20260430T000220-82f59422/manifest.json",
+    "result": ".ddx/executions/20260430T000220-82f59422/result.json",
+    "checks": ".ddx/executions/20260430T000220-82f59422/checks.json",
+    "usage": ".ddx/executions/20260430T000220-82f59422/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-37cdb43a-20260430T000220-82f59422"
+  }
+}
