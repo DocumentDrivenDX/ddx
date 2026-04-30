@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T003727-17535d44",
+  "bead_id": "ddx-90234d47",
+  "base_rev": "e008409ce1d2b0f39add8bdec81eea37e0102710",
+  "created_at": "2026-04-30T00:37:28.480591688Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-90234d47",
+    "title": "[artifact-run-arch] CONTRACT-003 audit (mountable Cobra root + 3-layer needs)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. Confirm ddx-agent exports a mountable Cobra root for ddx agent passthrough. Audit other gaps for 3-layer architecture and generate-artifact run-side metadata. Output: list of CONTRACT-003 amendments needed (or none). Gates #7 (FEAT-006).",
+    "labels": [
+      "audit",
+      "plan-2026-04-29",
+      "contract-003"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:37:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T00:37:27.398824584Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T003727-17535d44",
+    "prompt": ".ddx/executions/20260430T003727-17535d44/prompt.md",
+    "manifest": ".ddx/executions/20260430T003727-17535d44/manifest.json",
+    "result": ".ddx/executions/20260430T003727-17535d44/result.json",
+    "checks": ".ddx/executions/20260430T003727-17535d44/checks.json",
+    "usage": ".ddx/executions/20260430T003727-17535d44/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-90234d47-20260430T003727-17535d44"
+  }
+}
