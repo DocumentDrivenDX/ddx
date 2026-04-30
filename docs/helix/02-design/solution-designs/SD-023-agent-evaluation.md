@@ -47,13 +47,13 @@ Out of scope:
 
 ## Existing Command Surface
 
-The implementation already contains several FEAT-019-adjacent primitives:
+The design uses several FEAT-019-adjacent primitives:
 
-- `ddx agent run --compare`: immediate comparison dispatch. It runs N arms
-  against the same prompt and emits a `ComparisonRecord`.
+- `compare-prompts`: immediate comparison dispatch. It runs N arms against the
+  same prompt and emits a `ComparisonRecord`.
 - `ddx agent benchmark`: suite runner. It expands suite arms/prompts into
   repeated comparison dispatches and aggregates statistics.
-- `ddx agent run --quorum`: consensus gate. It reuses multi-harness dispatch
+- comparison skill consensus mode: consensus gate. It reuses multi-arm dispatch
   ideas but returns pass/fail consensus, not graded comparison evidence.
 - `ddx agent replay`: bead replay entry point. This design tightens its
   evidence lookup and diff-comparison contract.
@@ -280,9 +280,9 @@ Persistence is required for:
 - benchmark output history
 - CI gates that consume prior comparison IDs
 
-`ddx agent run --compare --json` may still emit an ephemeral record without
-storing it when explicitly requested by tests or scripts, but the default
-operator workflow should persist records so grading and inspection can follow.
+`compare-prompts --json` may still emit an ephemeral record without storing it
+when explicitly requested by tests or scripts, but the default operator workflow
+should persist records so grading and inspection can follow.
 
 ## Grading Pipeline
 
@@ -460,15 +460,14 @@ the original result as a synthetic arm labeled `baseline`.
 
 ## Relationship to Execute-Bead Iterations
 
-`ddx agent execute-bead` remains the canonical bead execution workflow. FEAT-019
-evaluation consumes preserved attempts; it does not create a separate
-evaluation-specific execution path.
+`ddx try` remains the canonical bead-attempt workflow. FEAT-019 evaluation
+consumes preserved attempts; it does not create a separate evaluation-specific
+execution path.
 
 When an operator wants to try multiple approaches for one bead, the workflow
 tool should:
 
-1. Run `ddx agent execute-bead <id> --no-merge` multiple times from the same
-   base revision.
+1. Run `ddx try <id> --no-merge` multiple times from the same base revision.
 2. Preserve each attempt under its execution bundle and hidden iteration ref.
 3. Build a comparison record whose arms point at those preserved attempts.
 4. Grade the resulting comparison.
@@ -484,8 +483,8 @@ iteration ref.
 ### Compare
 
 ```bash
-ddx agent run --compare --harnesses agent,claude --prompt task.md
-ddx agent run --compare \
+compare-prompts --arm agent --arm claude --prompt task.md
+compare-prompts \
   --arm agent:gpt-5.4:agent-smart \
   --arm claude:opus:claude-smart \
   --prompt task.md
@@ -517,7 +516,7 @@ Benchmark output includes full comparison records, not only summary rows.
 ### Quorum
 
 ```bash
-ddx agent run --quorum majority --harnesses codex,claude --prompt review.md
+compare-prompts --policy majority --arm codex --arm claude --prompt review.md
 ```
 
 Quorum does not persist comparison records by default because it is a gate, not

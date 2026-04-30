@@ -14,10 +14,10 @@ ddx:
 
 ## Purpose
 
-This contract defines the first shipped supervision loop for
-`ddx agent execute-bead` style work. It is intentionally single-project scoped
-and consumes DDx's generic execution readiness and execution-result surfaces
-rather than any HELIX-specific hidden policy.
+This contract defines the first shipped supervision loop for `ddx try` style
+bead-attempt work. It is intentionally single-project scoped and consumes DDx's
+generic execution readiness and execution-result surfaces rather than any
+HELIX-specific hidden policy.
 
 The supervisor contract covers:
 
@@ -49,11 +49,11 @@ The first shipped supervisor is intentionally **not** the epic worker. Epic
 execution uses a separate worker mode because it needs a persistent branch,
 worktree, and merge-commit landing contract.
 
-`ddx agent execute-bead` remains the single owner of required execution
-document resolution, required post-run checks, merge-eligibility evaluation,
-and land/preserve mechanics, including creation and cleanup of its isolated
-worktree. The supervisor only orchestrates queue selection, invokes that
-command from the project root, and records the result states emitted by that
+`ddx try` remains the single owner of required execution document resolution,
+required post-run checks, merge-eligibility evaluation, and land/preserve
+mechanics, including creation and cleanup of its isolated worktree. The
+supervisor only orchestrates queue selection, invokes that command from the
+project root, and records the result states emitted by that
 command.
 
 The command requires a reproducible git base revision, not a pristine root
@@ -109,7 +109,7 @@ drained, the operator stops it, or a fatal project error occurs.
 4. Run the generic execution-ready validator against the ordered candidate set
    to filter structural ineligible beads against the resolved base snapshot.
 5. Claim the first validated bead atomically.
-6. Run `ddx agent execute-bead` against the bead from the project root and
+6. Run `ddx try` against the bead from the project root and
    capture its documented result schema.
 7. Classify the outcome reported by `execute-bead` from the documented
    supervisor-visible `status` field:
@@ -172,7 +172,7 @@ epic execution is introduced elsewhere in the system.
 ## Execute-Bead Result Schema
 
 The supervisor consumes only the documented result envelope emitted by
-`ddx agent execute-bead`:
+`ddx try`:
 
 - `status`: one of `structural_validation_failed`, `execution_failed`,
   `post_run_check_failed`, `land_conflict`, or `success`
@@ -233,7 +233,7 @@ preserves the iteration under `refs/ddx/iterations/` and unclaims the bead
 without force-pushing. The multi-machine coordinator topology and the full
 conflict and divergence recovery contract are specified in SD-020.
 
-These mechanics are owned by `ddx agent execute-bead`; the supervisor observes
+These mechanics are owned by `ddx try`; the supervisor observes
 the resulting landed or preserved state rather than performing them itself.
 
 The preserved ref is the durable evidence for any non-landed attempt. It keeps

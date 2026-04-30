@@ -1,5 +1,14 @@
 # Plan: `agentlib.Service` interface — narrow public surface
 
+> **Historical / superseded.** Retained as a design record for the
+> 2026-04-18 service-boundary investigation. Do not use this file as current
+> routing-contract guidance. The current boundary is the top-level
+> `ddx run` / `ddx try` / `ddx work` stack: DDx owns bead orchestration,
+> success classification, evidence, and retry escalation; the agent owns
+> concrete model/provider routing behind `Execute` and operator/debug status
+> surfaces. Pre-resolved route injection and DDx-side route decisions described
+> below are obsolete.
+
 ## Problem
 
 DDx imports **150+ symbols across 11 packages** of `github.com/DocumentDrivenDX/agent`:

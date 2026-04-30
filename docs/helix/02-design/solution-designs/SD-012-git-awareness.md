@@ -145,11 +145,10 @@ These invariants are enforced by the limited surface of `internal/git`: only
 `git add`, `git commit`, `git log`, `git diff`, `git tag`, and `git checkout`
 (for restore) are invoked outside the execute-bead managed flow.
 
-## Managed Exception: ddx agent execute-bead
+## Managed Exception: ddx try
 
-`ddx agent execute-bead` is the one controlled exception to the conservative
-safety posture. The following git operations are explicitly permitted within
-this workflow only:
+`ddx try` is the one controlled exception to the conservative safety posture.
+The following git operations are explicitly permitted within this workflow only:
 
 | Operation | Purpose |
 |-----------|---------|

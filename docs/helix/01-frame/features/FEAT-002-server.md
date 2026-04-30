@@ -84,16 +84,15 @@ Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility ali
 
 ### Worker Boundaries
 
-`ddx-server` hosts an in-process `WorkerManager` that supervises
-execute-loop workers as goroutines. Each execute-loop worker runs a
-`ddx agent execute-loop` against exactly one registered project context; it
-never crosses project boundaries. Worker lifecycle (start, live logs, stop,
-record on disk) is owned by the server, so the host+user daemon is the single
-point of coordination for all long-running agent activity on the machine. The
-supervisor exposes worker state through the same project-scoped API surface
-used for beads and executions, and worker records persist under the project's
-own `.ddx/workers/` directory so preservation and cleanup stay scoped per
-project.
+`ddx-server` hosts an in-process `WorkerManager` that supervises `ddx work`
+workers as goroutines. Each worker drains exactly one registered project
+context; it never crosses project boundaries. Worker lifecycle (start, live
+logs, stop, record on disk) is owned by the server, so the host+user daemon is
+the single point of coordination for all long-running agent activity on the
+machine. The supervisor exposes worker state through the same project-scoped API
+surface used for beads and executions, and worker records persist under the
+project's own `.ddx/workers/` directory so preservation and cleanup stay scoped
+per project.
 
 When multiple machines each run `ddx-server` against the same project, each
 machine runs its own land coordinator against its local clone. The shared git
@@ -223,7 +222,12 @@ capped at the last 20 entries. This is the shared read model for both the CLI
 
 **Provider Availability and Utilization (FEAT-014)**
 
-The provider dashboard endpoints expose the same normalized routing signal model that `ddx agent run` uses for harness selection. They are read-only; all signal data is derived from provider-native sources and DDx-observed metrics, never fabricated. Unknown values are surfaced as `unknown`, not omitted.
+The provider dashboard endpoints expose the upstream agent's normalized
+status/debug signal model. They are read-only; all signal data is derived from
+provider-native sources, agent-reported catalog/status data, and DDx-observed
+metrics, never fabricated. Unknown values are surfaced as `unknown`, not
+omitted. These endpoints do not participate in `ddx run` / `ddx try` /
+`ddx work` route selection.
 
 26. `GET /api/providers` — list all configured harnesses with current routing availability, auth/health state, quota/headroom, and signal freshness; not scoped to a project (provider config is host+user global, shared across projects). Response is an array of provider summary objects.
 27. `GET /api/providers/:harness` — detail for one harness: full routing signal snapshot, per-model quota/headroom when available, historical usage summary (last 7d / 30d), recent latency/success rates, burn estimate, and freshness timestamps with source attribution.

@@ -57,7 +57,7 @@ with agent credentials.
 
 ### TC-030: Frame a project with HELIX
 **Given** DDx initialized, HELIX installed, claude harness available
-**When** `ddx agent run --harness claude --prompt <frame-prompt>` runs
+**When** `ddx run --harness claude --prompt <frame-prompt>` runs
 **Then** agent creates spec documents in `docs/`, beads exist for
 design/implementation work
 
@@ -72,7 +72,7 @@ Keep it minimal — this is a demo.
 
 ### TC-031: Build the project with HELIX
 **Given** TC-030 complete (specs and beads exist)
-**When** `ddx agent run --harness claude --prompt <build-prompt>` runs
+**When** `ddx run --harness claude --prompt <build-prompt>` runs
 **Then** agent implements the task tracker, tests pass, beads are closed
 
 **Build prompt:**
@@ -83,7 +83,7 @@ per the specs. Write tests first (TDD). Close each bead when done.
 
 ### TC-032: Evolve the project
 **Given** TC-031 complete (working task tracker)
-**When** `ddx agent run --harness claude --prompt <evolve-prompt>` runs
+**When** `ddx run --harness claude --prompt <evolve-prompt>` runs
 **Then** agent updates specs, creates new beads, implements the feature
 
 **Evolve prompt:**
@@ -117,11 +117,11 @@ ddx install helix
 ddx doctor
 
 # Phase 2: Frame (~60s, requires agent)
-ddx agent run --harness claude --effort high \
+ddx run --harness claude --effort high \
   --prompt "$(cat scripts/demos/prompts/frame-tracker.md)"
 
 # Phase 3: Build (~120s, requires agent)
-ddx agent run --harness claude --effort high \
+ddx run --harness claude --effort high \
   --prompt "$(cat scripts/demos/prompts/build-tracker.md)"
 
 # Phase 4: Verify
@@ -129,7 +129,7 @@ ddx bead list
 ddx bead status
 
 # Phase 5: Evolve (~90s, requires agent)
-ddx agent run --harness claude --effort high \
+ddx run --harness claude --effort high \
   --prompt "$(cat scripts/demos/prompts/evolve-priorities.md)"
 
 # Phase 6: Inspect

@@ -833,7 +833,7 @@ Bead 8 does the same for the server worker (which is what
 
 17. `agent: AgentRunRuntime struct + RunWithConfig (alongside Run) +
     NewTestConfigForRun constructor`.
-18. `cmd/agent_run: migrate ddx agent run dispatch + behavioral
+18. `cmd/run: migrate ddx run dispatch + behavioral
     test`.
 19. `cmd/agent_compare: migrate ddx agent compare + behavioral
     test`.
@@ -847,7 +847,7 @@ Bead 8 does the same for the server worker (which is what
     Run) + NewTestConfigForBead constructor`.
 24. `config: add ContextBudget to EvidenceCapsConfig + resolver +
     unit test`.
-25. `cmd/agent_execute_bead: migrate ddx agent execute-bead
+25. `cmd/try: migrate ddx try
     dispatch + behavioral test`.
 26. `agent: wire ExecutionsConfig.Mirror into ExecuteBeadRuntime
     via ResolvedConfig.MirrorConfig() + behavioral test`.

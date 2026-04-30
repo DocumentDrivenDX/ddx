@@ -16,11 +16,10 @@ ddx:
 
 ## Overview
 
-DDx's agent wrapper should understand provider-native usage and routing signals
-across harnesses so that every `ddx agent run` can make an informed decision
-about which harness to use based on request fit, availability, cost,
-performance, and current quota/headroom when known. `ddx artifact regenerate`
-runs are layer-1 agent invocations and consume token budgets via this same
+DDx should understand provider-native usage and agent-reported status signals
+well enough to attribute cost, show availability, and preserve audit evidence
+without taking ownership of model/provider routing. `ddx run`, `ddx try`,
+`ddx work`, and `ddx artifact regenerate` consume token budgets via this same
 FEAT-014 normalized signal model.
 
 ## Problem Statement
@@ -40,13 +39,13 @@ FEAT-014 normalized signal model.
 - The embedded `ddx-agent` runtime is gaining its own session logging and OTEL
   telemetry. DDx should consume that telemetry minimally rather than re-owning
   the runtime's logs.
-- DDx does not yet have a normalized routing-signal model that combines
+- DDx does not yet have a normalized status/cost signal model that combines
   capability, availability, quota/headroom, cost, and DDx-observed performance
-  into one preflight harness decision.
+  for operator visibility and retry evidence.
 
-**Desired outcome:** Every `ddx agent run` evaluates candidate harnesses using
-normalized routing signals:
-- request fit (profile/model/effort/permissions)
+**Desired outcome:** Every `ddx run` / `ddx try` / `ddx work` records normalized
+agent status and cost signals without selecting a concrete route:
+- request facts (MinPower/MaxPower, passthrough constraints, effort/permissions)
 - provider availability and authentication
 - current quota/headroom where known
 - cost estimate or cost class
@@ -125,8 +124,8 @@ Interpretation:
     fallback of last resort, not the MVP path, and must feed an asynchronous
     snapshot/sampling path rather than synchronous routing-time scraping.
 11. **Signal freshness/cache policy** — cache provider-native signal reads with
-    explicit freshness semantics so `ddx agent run` can distinguish fresh from
-    stale state.
+    explicit freshness semantics so status/debug surfaces can distinguish fresh
+    from stale state.
 
 **Normalized routing signals**
 12. **Routing signal model** — DDx normalizes every candidate's:
@@ -162,12 +161,12 @@ Interpretation:
     policy remain follow-on work after the signal-source spikes establish the
     right acquisition model.
 
-**Always-on execute-bead runtime metrics**
-19. `ddx agent execute-bead` must capture built-in runtime metrics for every
-    iteration, independent of any graph-authored execution documents. These are
-    DDx runtime facts, not substitutes for project-authored metric docs. The
-    fields below are persisted into the project's
-    `.ddx/executions/<attempt-id>/` attempt bundle (FEAT-006) so the host+user
+**Always-on bead-attempt runtime metrics**
+19. `ddx try` must capture built-in runtime metrics for every attempt,
+    independent of any graph-authored execution documents. These are DDx runtime
+    facts, not substitutes for project-authored metric docs. The fields below
+    are persisted into the project's `.ddx/runs/<run-id>/` run substrate
+    (FEAT-010) so the host+user
     `ddx-server` and its dashboards can replay runtime metrics from the same
     replay-backed artifacts that back execution history — DDx does not keep a
     separate runtime-metrics store. When execute-bead runs inside the server's
@@ -409,12 +408,12 @@ how fresh it is
 
 ### US-145: Execute-bead Runtime Metrics Are Captured Automatically
 **As** a developer reviewing bead execution history
-**I want** runtime metrics recorded for every execute-bead iteration without
+**I want** runtime metrics recorded for every bead-attempt iteration without
 manual instrumentation
 **So that** iterations are comparable and cost is always visible
 
 **Acceptance Criteria:**
-- Given `ddx agent execute-bead` runs with a harness that exposes token and cost
+- Given `ddx try` runs with an agent response that exposes token and cost
   data, when the iteration completes, then the run record contains `harness`,
   `model`, `session_id`, `elapsed_ms`, `input_tokens`, `output_tokens`,
   `total_tokens`, and `cost_usd`

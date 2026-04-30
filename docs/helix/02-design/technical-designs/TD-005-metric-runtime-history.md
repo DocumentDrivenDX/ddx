@@ -187,7 +187,7 @@ directory, but it must not publish a partial row.
 
 ## Ratchet Evaluation and execute-bead Landing
 
-Metric ratchets feed into `ddx agent execute-bead` merge/preserve decisions.
+Metric ratchets feed into `ddx try` merge/preserve decisions.
 The evaluation model is narrow: results → metrics → ratchet/blocker outcome.
 
 **Outcome rules:**

@@ -76,8 +76,8 @@ reference file before responding to a DDx-related request.
 Reference files cover:
 
 - `reference/beads.md` — bead CRUD, dependencies, claims, evidence
-- `reference/agents.md` — harness dispatch, profiles, `ddx agent run`,
-  execute-bead / execute-loop (alias `ddx work`)
+- `reference/agents.md` — power-bound dispatch, passthrough constraints,
+  `ddx run`, `ddx try`, and `ddx work`
 - `reference/executions.md` — execution definitions and immutable run
   history (`ddx metric` / `ddx exec`)
 - `reference/personas.md` — persona listing, show, binding

@@ -160,8 +160,8 @@ Store metrics with explicit prompt identifier and revision context (path + git s
 DDx should support running the same scenario with different prompt artifacts/revisions:
 
 ```bash
-ddx agent run --prompt "library/prompts/helix/frame-v1.md" --text "..."
-ddx agent run --prompt "library/prompts/helix/frame-v2.md" --text "..."
+ddx run --prompt "library/prompts/helix/frame-v1.md" --text "..."
+ddx run --prompt "library/prompts/helix/frame-v2.md" --text "..."
 # Compare metrics/outputs externally by run metadata (prompt path + revision)
 ```
 

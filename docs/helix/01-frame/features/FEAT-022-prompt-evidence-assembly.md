@@ -333,7 +333,7 @@ re-executing primary after a small number of attempts
   failure class
 
 ### US-223: Oversize `--prompt` files fail fast with a clear error
-**As** a developer running `ddx agent run --prompt ./huge.md`
+**As** a developer running `ddx run --prompt ./huge.md`
 **I want** DDx to reject the oversize file with an actionable error
 **So that** I don't silently send a multi-megabyte prompt to a provider
 
@@ -341,8 +341,8 @@ re-executing primary after a small number of attempts
 - Given `--prompt path` points at a file exceeding `MaxPromptBytes`,
   when the command runs, then it exits non-zero with an error naming
   the file, observed size, and cap
-- Given the same file is supplied to `ddx agent run` server-side via
-  `/api/agent/run`, then the API returns a 4xx error with the same
+- Given the same file is supplied to `ddx run` server-side via the
+  run invocation API, then the API returns a 4xx error with the same
   information in the response body
 - Given `DDX_AGENT_PROMPT` in an exec definition exceeds
   `MaxPromptBytes`, then the exec fails at startup with the same error

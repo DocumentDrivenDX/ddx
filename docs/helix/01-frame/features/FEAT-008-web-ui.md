@@ -178,8 +178,8 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
    *Status and lifecycle:*
    - Re-open a closed bead (status → open) with a reason field
-   - Re-run: dispatch `ddx exec run` or `ddx agent run` against the bead's
-     linked execution definition (calls server API which delegates to CLI)
+   - Re-run: dispatch `ddx exec run` or `ddx try` against the bead's linked
+     execution definition (calls server API which delegates to CLI)
    - Claim / unclaim for agent coordination
    - Inline status transitions (open → in_progress → closed)
 
