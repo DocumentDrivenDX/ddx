@@ -193,6 +193,61 @@ type AggregateSummarySessions struct {
 	CostUsd float64 `json:"costUsd"`
 }
 
+// Artifact represents a DDx-tracked file with optional sidecar metadata.
+type Artifact struct {
+	// Globally unique artifact identifier
+	ID string `json:"id"`
+	// File path relative to the project root
+	Path string `json:"path"`
+	// Human-readable title
+	Title string `json:"title"`
+	// MIME type (e.g. text/markdown, image/png)
+	MediaType string `json:"mediaType"`
+	// Provenance information when the artifact was produced by a DDx run
+	GeneratedBy *ArtifactGeneratedBy `json:"generatedBy,omitempty"`
+	// Staleness: fresh, stale, or missing
+	Staleness string `json:"staleness"`
+	// Raw ddx: frontmatter or sidecar content as JSON
+	DdxFrontmatter *string `json:"ddxFrontmatter,omitempty"`
+	// Human-readable description
+	Description *string `json:"description,omitempty"`
+	// Last modified timestamp
+	UpdatedAt *string `json:"updatedAt,omitempty"`
+}
+
+func (Artifact) IsNode() {}
+
+// Globally unique identifier
+func (this Artifact) GetID() string { return this.ID }
+
+// ArtifactConnection is a Relay cursor connection for Artifact.
+type ArtifactConnection struct {
+	// List of artifact edges
+	Edges []*ArtifactEdge `json:"edges"`
+	// Pagination metadata
+	PageInfo *PageInfo `json:"pageInfo"`
+	// Total number of matching artifacts
+	TotalCount int `json:"totalCount"`
+}
+
+// ArtifactEdge wraps an Artifact for Relay cursor connections.
+type ArtifactEdge struct {
+	// The artifact
+	Node *Artifact `json:"node"`
+	// Relay opaque cursor
+	Cursor string `json:"cursor"`
+}
+
+// ArtifactGeneratedBy holds provenance for a generated artifact.
+type ArtifactGeneratedBy struct {
+	// Run ID that produced this artifact
+	RunID string `json:"runId"`
+	// Summary of the prompt or generator
+	PromptSummary string `json:"promptSummary"`
+	// Whether the source hash currently matches
+	SourceHashMatch bool `json:"sourceHashMatch"`
+}
+
 // Bead is a portable work item with lifecycle metadata
 type Bead struct {
 	// Unique bead identifier (e.g. "ddx-a1b2c3d4")
@@ -1485,8 +1540,8 @@ type ProviderStatus struct {
 	// Profile names where this row is the default candidate (may be empty).
 	DefaultForProfile []string `json:"defaultForProfile"`
 	// Hourly token totals for the last 24 hours, oldest-first. Empty when fewer
-	// than 6 non-zero hourly buckets are available; the UI uses that floor to
-	// decide whether to render the inline sparkline (FEAT-014 AC 2).
+	//   than 6 non-zero hourly buckets are available; the UI uses that floor to
+	//   decide whether to render the inline sparkline (FEAT-014 AC 2).
 	Sparkline []int `json:"sparkline"`
 }
 
