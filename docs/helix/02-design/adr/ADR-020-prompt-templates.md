@@ -116,11 +116,11 @@ quality_gates:
     pass_threshold: 90
 ```
 
-### 2. Quality Gates (`ddx agent run --gate`)
+### 2. Quality Gates (`ddx run --gate`)
 
 ```bash
 # Run agent with quality gates
-ddx agent run --harness claude --prompt "Build a temperature converter" \
+ddx run --harness claude --prompt "Build a temperature converter" \
   --prompt-template helix-frame-v2 \
   --gate "ddx prompts validate helix-frame-v2" \
   --gate-threshold 90
@@ -167,10 +167,10 @@ ddx metric compare artifact-completeness \
 - [ ] Add `ddx prompts create` command
 - [ ] Add `ddx prompts validate` command
 - [ ] Create HELIX-specific prompt templates
-- [ ] Add `--prompt-template` flag to `ddx agent run`
+- [ ] Add `--prompt-template` flag to `ddx run`
 
 ### Phase 2: Quality Gates
-- [ ] Add `--gate` flag to `ddx agent run`
+- [ ] Add `--gate` flag to `ddx run`
 - [ ] Implement gate scoring system
 - [ ] Add gate results to session logs
 - [ ] Create standard HELIX quality gates
@@ -197,8 +197,8 @@ ddx prompts versions <name>
 ddx prompts validate <name> [--output <dir>]
 
 # Agent
-ddx agent run [flags] --prompt-template <name>
-ddx agent compare [flags] --prompt-versions <v1>,<v2>
+ddx run [flags] --prompt-template <name>
+compare-prompts [flags] --prompt-versions <v1>,<v2>
 
 # Metrics
 ddx metric run <id> [--prompt-version <version>]

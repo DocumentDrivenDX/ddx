@@ -47,15 +47,15 @@ Out of scope:
   and ddx pre-resolves at `cli/internal/agent/agent_runner_service.go:104`
   and `cli/internal/agent/serviceconfig.go:80`. No agent-repo changes
   are required and no contract document needs revision. Agent
-  v0.9.9 (ADR-005 smart routing) further simplifies the boundary by
-  removing `ServiceExecuteRequest.PreResolved` — `ResolveRoute` is
-  now informational and `Execute` re-resolves on its own inputs.
+  v0.9.9 (ADR-005 smart routing) further simplifies the boundary by removing
+  the pre-resolved route request field — `ResolveRoute` is now informational
+  and `Execute` re-resolves on its own inputs.
   The ddx side just populates `EstimatedPromptTokens` and
   `RequiresTools` (new per-invocation hints) on `ServiceExecuteRequest`;
   routing decisions are owned upstream.
-- Routing-layer cleanup driven by agent v0.9.9 (rendering composed
-  inventory in `ddx agent route-status`, retiring `agent.routing.model_overrides`,
-  dropping the "No model routes configured" fatal error path).
+- Routing-layer cleanup driven by agent v0.9.9 (rendering composed inventory in
+  `ddx agent route-status`, retiring model override config, dropping the
+  "No model routes configured" fatal error path).
   Tracked separately as a small follow-up batch on top of FEAT-006;
   does not block this refactor and is not delivered by it.
 - The wire shape of `agentlib.ExecuteRequest` /
@@ -225,7 +225,7 @@ Two non-negotiable principles govern every bead:
 
 **Green tree.** Every bead leaves the tree fully functional. No bead
 breaks user-visible behavior — `ddx work` keeps draining the queue,
-`ddx agent run` keeps dispatching, the server keeps accepting GraphQL
+`ddx run` keeps dispatching, the server keeps accepting GraphQL
 mutations. The migration adds new types and call paths *alongside*
 the existing ones, then retires the old ones in dedicated cleanup
 beads only after every caller has moved.

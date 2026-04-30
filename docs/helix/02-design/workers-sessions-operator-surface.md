@@ -26,7 +26,7 @@ and server runtime:
 
 - Start worker: calls a GraphQL `startWorker` mutation that dispatches an
   `execute-loop` worker through the same WorkerManager path used by `ddx work`
-  / `ddx agent execute-loop`.
+  / server-managed queue drains.
 - Stop: visible only for workers in `running` state. The mutation calls the
   same `WorkerManager.Stop` path reached by `ddx agent workers stop`, so claim
   release, graceful cancellation, process-group termination, and stopped-state
