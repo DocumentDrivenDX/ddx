@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260430T190919-dc9accc3",
+  "bead_id": "ddx-43684ac1",
+  "base_rev": "c021436d3dac7657d47b74f3fbc1f2a0c2272fc8",
+  "created_at": "2026-04-30T19:09:20.066897012Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-43684ac1",
+    "title": "artifact provenance: generated_by panel, source-hash staleness, run link + backlink",
+    "description": "Add provenance panel to artifact detail for artifacts with generated_by metadata.\n\nPanel shows: producing run id, generator/prompt summary (truncated), source-hash status (fresh = source inputs unchanged, stale = source_hash mismatch).\n\nLink to the producing run: navigates to /nodes/:nodeId/projects/:projectId/runs/:runId (requires runs UI to exist, but the link can be a disabled placeholder until then).\n\nOn the run detail side: run that produced an artifact shows 'Produced artifact: \u003ctitle\u003e' link back to /artifacts/:artifactId. (Coordinate with runs detail bead.)\n\nStaleness is artifact-local: source_hash mismatch marks only this artifact stale. It does NOT cascade through depends_on like doc-graph staleness does.\n\nDepends on ddx-d7d1119d (artifact detail route exists).",
+    "acceptance": "1. Artifact with generated_by shows provenance panel with run id, prompt summary, and source-hash status.\n2. Source-hash mismatch shows 'stale' badge on provenance panel; dependent artifacts are unaffected.\n3. 'View producing run' link navigates to runs detail (or shows disabled state with tooltip if run id not found).\n4. Run detail shows 'Produced artifact' link to artifact detail.\n5. Staleness badge in artifacts list reflects source-hash status, not depends_on cascade.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:19.085358635Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190919-dc9accc3",
+    "prompt": ".ddx/executions/20260430T190919-dc9accc3/prompt.md",
+    "manifest": ".ddx/executions/20260430T190919-dc9accc3/manifest.json",
+    "result": ".ddx/executions/20260430T190919-dc9accc3/result.json",
+    "checks": ".ddx/executions/20260430T190919-dc9accc3/checks.json",
+    "usage": ".ddx/executions/20260430T190919-dc9accc3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-43684ac1-20260430T190919-dc9accc3"
+  }
+}
