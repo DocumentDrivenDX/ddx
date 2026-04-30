@@ -228,5 +228,29 @@
 	.text-priority-p4 {
 		color: var(--priority-p4-text);
 	}
+
+	/* billing mode badges — tier-fast=amber (real cost), tier-standard=blue (subscription), p4=neutral (local) */
+	.badge-billing-paid {
+		color: var(--tier-fast-text);
+		background-color: var(--tier-fast-surface);
+		border-color: var(--tier-fast-border);
+	}
+	.badge-billing-subscription {
+		color: var(--tier-standard-text);
+		background-color: var(--tier-standard-surface);
+		border-color: var(--tier-standard-border);
+	}
+	.badge-billing-local {
+		color: var(--priority-p4-text);
+		background-color: var(--priority-p4-surface);
+		border-color: var(--priority-p4-border);
+	}
+
+	/* caution banner (amber/gold, via tier-fast CSS vars) */
+	.alert-caution {
+		border-color: var(--tier-fast-border);
+		background-color: var(--tier-fast-surface);
+		color: var(--tier-fast-text);
+	}
 }
 
