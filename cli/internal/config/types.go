@@ -194,6 +194,9 @@ type GitConfig struct {
 	CommitPrefix     string   `yaml:"commit_prefix,omitempty" json:"commit_prefix,omitempty"`
 	CheckpointPrefix string   `yaml:"checkpoint_prefix,omitempty" json:"checkpoint_prefix,omitempty"`
 	PostLandCommand  []string `yaml:"post_land_command,omitempty" json:"post_land_command,omitempty"`
+	// LargeDeletionLineThreshold controls Land()'s per-file deletion safety
+	// gate. Zero or unset uses the binary default.
+	LargeDeletionLineThreshold int `yaml:"large_deletion_line_threshold,omitempty" json:"large_deletion_line_threshold,omitempty"`
 }
 
 // AgentConfig represents agent service configuration in .ddx/config.yaml

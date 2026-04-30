@@ -22,8 +22,9 @@ git diff main...<preserve_ref>
 
 ## Gates
 
-- Large deletion gate: preserves a result when one file deletes more than 200
-  lines without an explicit acknowledgement in the commit message.
+- Large deletion gate: preserves a result when one file deletes more than the
+  configured threshold without an explicit acknowledgement in the commit
+  message. The default threshold is 200 deleted lines.
 - Syntax sanity gate: preserves obviously broken `.json`, `.go`, and truncated
   `.svelte` results before they touch the target branch.
 - Post-land gate: if `git.post_land_command` is configured, DDx runs it after
@@ -35,6 +36,7 @@ Configure a post-land command as argv, not a shell string:
 
 ```yaml
 git:
+  large_deletion_line_threshold: 200
   post_land_command:
     - sh
     - -c

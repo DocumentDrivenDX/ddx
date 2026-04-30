@@ -149,13 +149,16 @@ library:
     url: "https://github.com/test/repo"
     branch: "main"
 git:
+  large_deletion_line_threshold: 123
   post_land_command:
     - sh
     - -c
     - make test
 `), 0o644))
 
-	assert.Equal(t, []string{"sh", "-c", "make test"}, postLandCommandFromConfig(root))
+	cfg := landSafetyConfigFromConfig(root)
+	assert.Equal(t, []string{"sh", "-c", "make test"}, cfg.postLandCommand)
+	assert.Equal(t, 123, cfg.largeDeletionLineThreshold)
 }
 
 // TestWorker_RequiredGatePass_LandsViaCoordinator: gate exits 0 → main
@@ -185,7 +188,7 @@ func TestWorker_RequiredGatePass_LandsViaCoordinator(t *testing.T) {
 	rec := &recordingSubmitter{inner: m.LandCoordinators.Get(root)}
 
 	var logBuf bytes.Buffer
-	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, nil, &logBuf))
+	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, landSafetyConfig{}, &logBuf))
 
 	// Coordinator MUST have been called (gates passed).
 	assert.Len(t, rec.calls, 1, "coordinator must be called when required gates pass")
@@ -234,7 +237,7 @@ func TestWorker_RequiredGateFail_PreservesWithoutCoordinator(t *testing.T) {
 	rec := &recordingSubmitter{inner: m.LandCoordinators.Get(root)}
 
 	var logBuf bytes.Buffer
-	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, nil, &logBuf))
+	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, landSafetyConfig{}, &logBuf))
 
 	// Coordinator MUST NOT have been called (gate failed → preserve directly).
 	assert.Empty(t, rec.calls, "coordinator must NOT be called when required gate fails")
@@ -300,7 +303,7 @@ func TestWorker_NoGoverningIDs_LandsViaCoordinator(t *testing.T) {
 	rec := &recordingSubmitter{inner: m.LandCoordinators.Get(root)}
 
 	var logBuf bytes.Buffer
-	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, nil, &logBuf))
+	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, landSafetyConfig{}, &logBuf))
 
 	// Coordinator MUST have been called (no gates → submit path).
 	assert.Len(t, rec.calls, 1, "coordinator must be called when no governing IDs")

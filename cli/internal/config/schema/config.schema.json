@@ -180,6 +180,12 @@
               "go test ./..."
             ]
           ]
+        },
+        "large_deletion_line_threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 200,
+          "description": "Per-file deleted-line threshold for preserving unacknowledged large-deletion land results"
         }
       },
       "additionalProperties": false

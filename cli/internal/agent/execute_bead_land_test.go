@@ -473,6 +473,41 @@ func TestLand_LargeDeletionAcknowledgementAllowsLand(t *testing.T) {
 	}
 }
 
+func TestLand_LargeDeletionThresholdOverride(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	r.writeFile("small-large.txt", largeFileLines(25))
+	r.runGit("add", "-A")
+	r.runGit("commit", "-m", "test: add threshold fixture")
+	r.baseSHA = r.resolveRef("refs/heads/main")
+
+	workerSHA := r.commitDeleteOn(r.baseSHA, "small-large.txt", "feat: remove fixture")
+	req := LandRequest{
+		WorktreeDir:                r.dir,
+		BaseRev:                    r.baseSHA,
+		ResultRev:                  workerSHA,
+		BeadID:                     "ddx-land-large-delete-threshold",
+		AttemptID:                  "20260430T120002-large-delete-threshold",
+		TargetBranch:               "main",
+		LargeDeletionLineThreshold: 10,
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "preserved" {
+		t.Fatalf("expected status=preserved, got %q", land.Status)
+	}
+	if !strings.Contains(land.Reason, "threshold 10") {
+		t.Fatalf("expected custom threshold in reason, got %q", land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main tip = %s, want unchanged base %s", got, r.baseSHA)
+	}
+}
+
 func TestLand_InvalidJSONSyntaxPreservedBeforeFastForward(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}

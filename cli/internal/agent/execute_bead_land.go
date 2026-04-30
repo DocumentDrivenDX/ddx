@@ -99,6 +99,10 @@ type LandRequest struct {
 	// evidence commit creation or push. A failure restores the target ref to
 	// its pre-land SHA and preserves ResultRev under refs/ddx/iterations.
 	PostLandCommand []string
+
+	// LargeDeletionLineThreshold overrides the default per-file deletion gate
+	// threshold. Zero or negative uses defaultLargeDeletionLineThreshold.
+	LargeDeletionLineThreshold int
 }
 
 // LandResult describes the outcome of a single Land() call.
@@ -810,7 +814,8 @@ type largeDeletionFinding struct {
 }
 
 func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, currentTip string, contribCount int) (*LandResult, error) {
-	finding, found, err := largestDeletionFinding(wd, req.BaseRev, req.ResultRev, defaultLargeDeletionLineThreshold)
+	threshold := largeDeletionLineThreshold(req)
+	finding, found, err := largestDeletionFinding(wd, req.BaseRev, req.ResultRev, threshold)
 	if err != nil {
 		return nil, err
 	}
@@ -829,9 +834,16 @@ func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, c
 	return &LandResult{
 		Status:            "preserved",
 		PreserveRef:       preserveRef,
-		Reason:            fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, defaultLargeDeletionLineThreshold),
+		Reason:            fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold),
 		MergedCommitCount: contribCount,
 	}, nil
+}
+
+func largeDeletionLineThreshold(req LandRequest) int {
+	if req.LargeDeletionLineThreshold > 0 {
+		return req.LargeDeletionLineThreshold
+	}
+	return defaultLargeDeletionLineThreshold
 }
 
 func largestDeletionFinding(wd, baseRev, resultRev string, threshold int) (largeDeletionFinding, bool, error) {

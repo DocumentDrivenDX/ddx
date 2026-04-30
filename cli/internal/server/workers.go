@@ -597,7 +597,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				return agent.ExecuteBeadReport{}, err
 			}
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, postLandCommandFromConfig(projectRoot), log); landErr != nil && err == nil {
+				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, landSafetyConfigFromConfig(projectRoot), log); landErr != nil && err == nil {
 					err = landErr
 				}
 			} else if res != nil && res.ResultRev == res.BaseRev {
@@ -1546,6 +1546,11 @@ type gateLandSubmitter interface {
 	Submit(req agent.LandRequest) (*agent.LandResult, error)
 }
 
+type landSafetyConfig struct {
+	postLandCommand            []string
+	largeDeletionLineThreshold int
+}
+
 // evaluateGatesAndSubmit runs the required-gate evaluation BEFORE submitting
 // res to the coordinator. When a required gate fails (or a ratchet misses),
 // it preserves the result directly via update-ref and skips coordinator
@@ -1567,7 +1572,7 @@ func evaluateGatesAndSubmit(
 	res *agent.ExecuteBeadResult,
 	gitOps agent.GitOps,
 	coordinator gateLandSubmitter,
-	postLandCommand []string,
+	safety landSafetyConfig,
 	log io.Writer,
 ) error {
 	wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps)
@@ -1609,7 +1614,8 @@ func evaluateGatesAndSubmit(
 
 	// Gates passed (or no governing IDs / soft-failure): submit to coordinator.
 	landReq := agent.BuildLandRequestFromResult(projectRoot, res)
-	landReq.PostLandCommand = append([]string(nil), postLandCommand...)
+	landReq.PostLandCommand = append([]string(nil), safety.postLandCommand...)
+	landReq.LargeDeletionLineThreshold = safety.largeDeletionLineThreshold
 	landRes, landErr := coordinator.Submit(landReq)
 	if landErr != nil {
 		return landErr
@@ -1618,12 +1624,15 @@ func evaluateGatesAndSubmit(
 	return nil
 }
 
-func postLandCommandFromConfig(projectRoot string) []string {
+func landSafetyConfigFromConfig(projectRoot string) landSafetyConfig {
 	cfg, err := config.LoadWithWorkingDir(projectRoot)
-	if err != nil || cfg == nil || cfg.Git == nil || len(cfg.Git.PostLandCommand) == 0 {
-		return nil
+	if err != nil || cfg == nil || cfg.Git == nil {
+		return landSafetyConfig{}
 	}
-	return append([]string(nil), cfg.Git.PostLandCommand...)
+	return landSafetyConfig{
+		postLandCommand:            append([]string(nil), cfg.Git.PostLandCommand...),
+		largeDeletionLineThreshold: cfg.Git.LargeDeletionLineThreshold,
+	}
 }
 
 func relToProject(projectRoot, path string) string {
