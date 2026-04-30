@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260430T010123-325e083a",
+  "bead_id": "ddx-653f6ac9",
+  "base_rev": "3806d295d6ca5f2e1982d01ef479b8e35f04dd2f",
+  "created_at": "2026-04-30T01:01:24.615362553Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-653f6ac9",
+    "title": "routing-cleanup: dead-code detector + remove compensating DDx-side routing logic",
+    "description": "Cover AC #7 from ddx-fdd3ea36. Search DDx for code that re-implements upstream routing concerns: allow-list checks, exact-pin filtering, profile-to-preference mapping, provider cost scoring. Must be absent on the default path. ResolveProfileLadder, ResolveTierModelRef, workersByHarness escalation helpers remain reachable via --escalate only. Add a CI check that catches orphaned compensating helpers in future PRs.",
+    "acceptance": "1. Audit: zero matches in DDx for DDx-local allow-list checks, exact-pin filtering, profile-to-preference mapping, provider cost scoring on the default path. 2. ResolveProfileLadder / ResolveTierModelRef / workersByHarness helpers: still present, only reachable via --escalate. 3. Dead-code detector (e.g. a small tools/lint or unused-symbol scan in CI) runs in CI and fails when any of the listed helpers becomes unreachable from any code path including --escalate. 4. CI step is documented in CONTRIBUTING or docs/dev/.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing",
+      "cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:01:23Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:01:23.807206466Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T010123-325e083a",
+    "prompt": ".ddx/executions/20260430T010123-325e083a/prompt.md",
+    "manifest": ".ddx/executions/20260430T010123-325e083a/manifest.json",
+    "result": ".ddx/executions/20260430T010123-325e083a/result.json",
+    "checks": ".ddx/executions/20260430T010123-325e083a/checks.json",
+    "usage": ".ddx/executions/20260430T010123-325e083a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-653f6ac9-20260430T010123-325e083a"
+  }
+}
