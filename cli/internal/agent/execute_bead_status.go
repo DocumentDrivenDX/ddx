@@ -28,6 +28,7 @@ const (
 	FailureModeTimeout             = "timeout"
 	FailureModeAuthError           = "auth_error"
 	FailureModeNoChanges           = "no_changes"
+	FailureModeNoEvidenceProduced  = "no_evidence_produced"
 	FailureModeRatchetMiss         = "ratchet_miss"
 	FailureModeNoViableProvider    = "no_viable_provider"
 	FailureModeHarnessNotInstalled = "harness_not_installed"
@@ -54,6 +55,8 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		// failure rather than success so the aggregate flags the anomaly.
 	case ExecuteBeadOutcomeTaskNoChanges:
 		return FailureModeNoChanges
+	case ExecuteBeadOutcomeTaskNoEvidence:
+		return FailureModeNoEvidenceProduced
 	}
 
 	lower := strings.ToLower(errMsg)
@@ -160,6 +163,8 @@ func classifyLandingFailureMode(landingOutcome, landingReason string, gateResult
 		return ""
 	case "no-changes", ExecuteBeadOutcomeTaskNoChanges:
 		return FailureModeNoChanges
+	case "no-evidence", ExecuteBeadOutcomeTaskNoEvidence:
+		return FailureModeNoEvidenceProduced
 	case "error":
 		if workerMode != "" {
 			return workerMode
@@ -218,9 +223,10 @@ func classifyGateFailure(gateResults []GateCheckResult) string {
 // The parent orchestrator (LandBeadResult + ApplyLandingToResult) then
 // overwrites Outcome and Status with the landing decision.
 const (
-	ExecuteBeadOutcomeTaskSucceeded = "task_succeeded"
-	ExecuteBeadOutcomeTaskFailed    = "task_failed"
-	ExecuteBeadOutcomeTaskNoChanges = "task_no_changes"
+	ExecuteBeadOutcomeTaskSucceeded  = "task_succeeded"
+	ExecuteBeadOutcomeTaskFailed     = "task_failed"
+	ExecuteBeadOutcomeTaskNoChanges  = "task_no_changes"
+	ExecuteBeadOutcomeTaskNoEvidence = "task_no_evidence"
 )
 
 // Status constants — used by the loop and other consumers of ExecuteBeadReport.
@@ -234,6 +240,7 @@ const (
 	ExecuteBeadStatusPushFailed                 = "push_failed"
 	ExecuteBeadStatusPushConflict               = "push_conflict"
 	ExecuteBeadStatusPreservedNeedsReview       = "preserved_needs_review"
+	ExecuteBeadStatusNoEvidenceProduced         = "no_evidence_produced"
 	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
@@ -295,6 +302,8 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 		return ExecuteBeadStatusSuccess
 	case "no-changes", ExecuteBeadOutcomeTaskNoChanges:
 		return ExecuteBeadStatusNoChanges
+	case "no-evidence", ExecuteBeadOutcomeTaskNoEvidence:
+		return ExecuteBeadStatusNoEvidenceProduced
 	case "error":
 		return ExecuteBeadStatusExecutionFailed
 	case "preserved":

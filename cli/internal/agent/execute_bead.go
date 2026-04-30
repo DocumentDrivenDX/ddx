@@ -59,6 +59,11 @@ type ExecuteBeadResult struct {
 	// worktree. It carries the agent's explanation of why no commits were made.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 
+	// NoEvidencePaths names worktree paths that remained dirty when the agent
+	// exited without creating a commit or no_changes_rationale.txt. It helps
+	// operators diagnose silent commit failures before the worktree is cleaned up.
+	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
+
 	Harness    string  `json:"harness,omitempty"`
 	Provider   string  `json:"provider,omitempty"`
 	Model      string  `json:"model,omitempty"`
@@ -303,6 +308,31 @@ func (r *RealGitOps) IsDirty(dir string) (bool, error) {
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
+func dirtyWorktreePaths(dir string) []string {
+	out, err := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--untracked-files=all").Output()
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || len(line) < 4 {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if idx := strings.Index(path, " -> "); idx >= 0 {
+			path = strings.TrimSpace(path[idx+4:])
+		}
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		paths = append(paths, path)
+	}
+	return paths
+}
+
 // EvidenceLandExcludePathspecs returns git pathspec-exclusion fragments
 // applied when landEvidence / VerifyCleanWorktree stage the evidence
 // directory. Only excludes the multi-thousand-line embedded session log
@@ -534,7 +564,8 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 //
 //   - task_succeeded: agent exited 0 and produced one or more commits
 //   - task_failed:    agent exited non-zero
-//   - task_no_changes: agent exited 0 but made no commits
+//   - task_no_changes: agent exited 0, made no commits, and wrote a rationale
+//   - task_no_evidence: agent exited 0 but made no commits and wrote no rationale
 //
 // Merge, UpdateRef, gate evaluation, preserve-ref management, and orphan
 // recovery are the parent's responsibility (see LandBeadResult, RecoverOrphans).
@@ -842,7 +873,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		FinishedAt:   finishedAt,
 	}
 
-	// Classify worker outcome: task_succeeded / task_failed / task_no_changes.
+	// Classify worker outcome: task_succeeded / task_failed / task_no_changes /
+	// task_no_evidence. A clean agent exit with no commit is only a legitimate
+	// no_changes signal when the agent also wrote the explicit rationale file.
 	// The parent orchestrator (LandBeadResult + ApplyLandingToResult) will
 	// overwrite Outcome and Status with the landing decision before output.
 	switch {
@@ -854,11 +887,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		res.Outcome = ExecuteBeadOutcomeTaskSucceeded
 	}
 
-	// Classify failure mode from worker-level signals. ApplyLandingToResult
-	// may refine this with landing-level signals (merge conflict, gate
-	// failure) before the final result is output.
-	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
-
 	// When the outcome is no_changes, attempt to read the agent's rationale file.
 	// The agent is instructed to write this file (relative to the worktree) when it
 	// determines the bead's work is already present. We read it before the deferred
@@ -868,7 +896,23 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		if data, readErr := os.ReadFile(rationaleFile); readErr == nil {
 			res.NoChangesRationale = strings.TrimSpace(string(data))
 		}
+		if res.NoChangesRationale == "" {
+			res.Outcome = ExecuteBeadOutcomeTaskNoEvidence
+			res.Reason = "agent exited without a commit or no_changes_rationale.txt"
+			paths := dirtyWorktreePaths(wtPath)
+			res.NoEvidencePaths = paths
+			if len(paths) > 0 {
+				res.Error = fmt.Sprintf("%s; dirty paths: %s", res.Reason, strings.Join(paths, ", "))
+			} else {
+				res.Error = res.Reason
+			}
+		}
 	}
+
+	// Classify failure mode from worker-level signals. ApplyLandingToResult
+	// may refine this with landing-level signals (merge conflict, gate
+	// failure) before the final result is output.
+	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 
 	// Record routing evidence on the bead (best-effort; errors are discarded).
 	appendBeadRoutingEvidence(runtime.BeadEvents, beadID, resultHarness, resultProvider, resultModel, routeReason, routeBaseURL)
@@ -927,6 +971,8 @@ func populateWorkerStatus(res *ExecuteBeadResult) {
 		res.Status = ExecuteBeadStatusSuccess
 	case ExecuteBeadOutcomeTaskNoChanges:
 		res.Status = ExecuteBeadStatusNoChanges
+	case ExecuteBeadOutcomeTaskNoEvidence:
+		res.Status = ExecuteBeadStatusNoEvidenceProduced
 	default:
 		res.Status = ExecuteBeadStatusExecutionFailed
 	}
@@ -1143,7 +1189,7 @@ const executeBeadInstructionsClaudeText = `You are executing one bead inside an 
 
 4. Commit once, when everything is green. Stage only the files you intentionally changed with ` + "`git add <specific-paths>`" + ` — never ` + "`git add -A`" + `, because there may be unrelated WIP in this worktree. Use a conventional-commit-style subject ending with ` + "`[<bead-id>]`" + `. DDx will merge your commits back to the base branch.
 
-5. If you cannot complete the bead in this pass, write your reasoning to ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` with: (a) what is done, (b) what is blocking, (c) what a follow-up attempt would need. Do NOT commit partial, exploratory, or red code hoping the reviewer will accept it — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt, potentially with a stronger model.
+5. If you cannot complete the bead in this pass, writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up attempt would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial, exploratory, or red code hoping the reviewer will accept it — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt, potentially with a stronger model.
 
 ## The bead contract overrides project defaults
 
@@ -1193,7 +1239,7 @@ The bead's <description> and <acceptance> sections above are the completion cont
 
 ## If you cannot finish
 
-Write your reasoning to ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` with: (a) what is done, (b) what is blocking, (c) what a follow-up would need. Do NOT commit partial or red code — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt.
+Writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit without a commit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial or red code — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt.
 
 ## Quality bar and the review step
 

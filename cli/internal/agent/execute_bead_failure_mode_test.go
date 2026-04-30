@@ -18,6 +18,7 @@ func TestFailureModeClassifyWorker(t *testing.T) {
 	}{
 		{"success_clean", ExecuteBeadOutcomeTaskSucceeded, 0, "", ""},
 		{"no_changes", ExecuteBeadOutcomeTaskNoChanges, 0, "", FailureModeNoChanges},
+		{"no_evidence", ExecuteBeadOutcomeTaskNoEvidence, 0, "", FailureModeNoEvidenceProduced},
 		{"no_changes_ignores_error_text", ExecuteBeadOutcomeTaskNoChanges, 0, "build failed", FailureModeNoChanges},
 
 		// Context / long-context hangs.
@@ -115,6 +116,7 @@ func TestFailureModeLandingRefines(t *testing.T) {
 	}{
 		{"merged_clears_worker_mode", "merged", "", nil, FailureModeUnknown, ""},
 		{"no_changes_outcome", "no-changes", "agent made no commits", nil, "", FailureModeNoChanges},
+		{"no_evidence_outcome", "no-evidence", "agent exited without a commit or no_changes_rationale.txt", nil, "", FailureModeNoEvidenceProduced},
 
 		{"preserved_merge_conflict", "preserved", "merge conflict", nil, "", FailureModeMergeConflict},
 		{"preserved_ff_not_possible", "preserved", "ff-merge not possible", nil, "", FailureModeMergeConflict},
@@ -213,5 +215,18 @@ func TestFailureModeApplyLandingToResult(t *testing.T) {
 	ApplyLandingToResult(res, &BeadLandingResult{Outcome: "no-changes", Reason: "agent made no commits"})
 	if res.FailureMode != FailureModeNoChanges {
 		t.Fatalf("no-changes landing should set no_changes, got %q", res.FailureMode)
+	}
+
+	res = &ExecuteBeadResult{
+		BeadID:      "ddx-test",
+		BaseRev:     "a",
+		ResultRev:   "a",
+		ExitCode:    0,
+		Outcome:     ExecuteBeadOutcomeTaskNoEvidence,
+		FailureMode: FailureModeNoEvidenceProduced,
+	}
+	ApplyLandingToResult(res, &BeadLandingResult{Outcome: "no-evidence", Reason: "agent exited without a commit or no_changes_rationale.txt"})
+	if res.FailureMode != FailureModeNoEvidenceProduced {
+		t.Fatalf("no-evidence landing should set no_evidence_produced, got %q", res.FailureMode)
 	}
 }

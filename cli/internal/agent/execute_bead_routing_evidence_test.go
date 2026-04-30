@@ -19,7 +19,9 @@ func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	const beadID = "ddx-int-0001"
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
-	writeDirectiveFile(t, dirFile, []string{"no-op"})
+	writeDirectiveFile(t, dirFile, []string{
+		"run mkdir -p .ddx/executions/$DDX_ATTEMPT_ID && printf 'already satisfied in base' > .ddx/executions/$DDX_ATTEMPT_ID/no_changes_rationale.txt",
+	})
 
 	beadStore := bead.NewStore(ddxDir)
 	runner := NewRunner(Config{})
@@ -70,7 +72,9 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 	const beadID = "ddx-int-0001"
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
-	writeDirectiveFile(t, dirFile, []string{"no-op"})
+	writeDirectiveFile(t, dirFile, []string{
+		"run mkdir -p .ddx/executions/$DDX_ATTEMPT_ID && printf 'already satisfied in base' > .ddx/executions/$DDX_ATTEMPT_ID/no_changes_rationale.txt",
+	})
 
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}

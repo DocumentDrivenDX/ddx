@@ -194,6 +194,17 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 
 	// No changes from the worker: nothing to land.
 	if res.ResultRev == res.BaseRev {
+		if res.Outcome == ExecuteBeadOutcomeTaskNoEvidence || res.FailureMode == FailureModeNoEvidenceProduced {
+			landing.Outcome = "no-evidence"
+			if res.Reason != "" {
+				landing.Reason = res.Reason
+			} else if res.Error != "" {
+				landing.Reason = res.Error
+			} else {
+				landing.Reason = "agent exited without a commit or no_changes_rationale.txt"
+			}
+			return landing, nil
+		}
 		landing.Outcome = "no-changes"
 		if res.NoChangesRationale != "" {
 			landing.Reason = res.NoChangesRationale

@@ -117,6 +117,37 @@ func TestLandBeadResult_NoChanges(t *testing.T) {
 	}
 }
 
+func TestLandBeadResult_NoEvidenceProduced(t *testing.T) {
+	projectRoot := t.TempDir()
+	res := makeWorkerResult("ddx-orch-noev", "aaa0010", "aaa0010", 0)
+	res.Outcome = ExecuteBeadOutcomeTaskNoEvidence
+	res.FailureMode = FailureModeNoEvidenceProduced
+	res.Reason = "agent exited without a commit or no_changes_rationale.txt"
+	orch := &orchTestGitOps{}
+
+	advancer := &fakeLandingAdvancer{}
+	landing, err := LandBeadResult(projectRoot, res, orch, BeadLandingOptions{
+		LandingAdvancer: advancer.advance,
+	})
+	if err != nil {
+		t.Fatalf("LandBeadResult: %v", err)
+	}
+	ApplyLandingToResult(res, landing)
+
+	if res.Outcome != "no-evidence" {
+		t.Errorf("expected outcome=no-evidence, got %q", res.Outcome)
+	}
+	if advancer.calls != 0 {
+		t.Errorf("expected 0 advancer calls, got %d", advancer.calls)
+	}
+	if res.Status != ExecuteBeadStatusNoEvidenceProduced {
+		t.Errorf("expected status=no_evidence_produced, got %q", res.Status)
+	}
+	if res.FailureMode != FailureModeNoEvidenceProduced {
+		t.Errorf("expected failure_mode=no_evidence_produced, got %q", res.FailureMode)
+	}
+}
+
 // TestLandBeadResult_AgentFailedNoCommits verifies that when exitCode != 0 and
 // resultRev == baseRev (no commits), the outcome is "error".
 func TestLandBeadResult_AgentFailedNoCommits(t *testing.T) {

@@ -81,12 +81,13 @@ func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 2: no-op directive → classified as no_changes, bead stays open
+// Test 2: no-op directive with rationale → classified as no_changes, bead stays open
 // ---------------------------------------------------------------------------
 
 // TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges verifies that a
-// directive that makes no filesystem or git changes results in outcome=no_changes
-// and the bead remains open below the adjudication threshold.
+// directive that makes no filesystem or git changes but writes the required
+// rationale results in outcome=no_changes and the bead remains open below the
+// adjudication threshold.
 func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ".ddx")
@@ -96,7 +97,7 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{
-		"no-op",
+		"run mkdir -p .ddx/executions/$DDX_ATTEMPT_ID && printf 'already satisfied in base' > .ddx/executions/$DDX_ATTEMPT_ID/no_changes_rationale.txt",
 	})
 
 	store := makeLoopStore(t, ddxDir)

@@ -728,10 +728,9 @@ func TestExecuteBeadHiddenRefUniqueness(t *testing.T) {
 	assert.Equal(t, res2.ResultRev, runGit("rev-parse", res2.PreserveRef))
 }
 
-// TestExecuteBeadNoChanges verifies that when the agent makes no commits the
-// outcome is "no-changes". Exercises real git + the script harness: the
-// directive file tells the harness to no-op, so execute-bead observes an
-// unchanged worktree HEAD and classifies the run accordingly.
+// TestExecuteBeadNoChanges verifies that when the agent makes no commits but
+// writes the required rationale, the outcome is "no-changes". Exercises real
+// git + the script harness.
 func TestExecuteBeadNoChanges(t *testing.T) {
 	workDir := t.TempDir()
 
@@ -773,9 +772,9 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 	runGit("commit", "-m", "chore: seed bead")
 	baseSHA := runGit("rev-parse", "HEAD")
 
-	// Script harness does nothing — no file creation, no commit.
+	// Script harness makes no commit but writes the mandatory rationale.
 	directivePath := filepath.Join(t.TempDir(), "directives.txt")
-	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+	require.NoError(t, os.WriteFile(directivePath, []byte("run mkdir -p .ddx/executions/$DDX_ATTEMPT_ID && printf 'already satisfied in base' > .ddx/executions/$DDX_ATTEMPT_ID/no_changes_rationale.txt\n"), 0o644))
 
 	f := NewCommandFactory(workDir)
 	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
@@ -788,6 +787,66 @@ func TestExecuteBeadNoChanges(t *testing.T) {
 
 	assert.Equal(t, "no-changes", res.Outcome)
 	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
+	assert.Equal(t, baseSHA, res.BaseRev)
+	assert.Empty(t, res.PreserveRef)
+}
+
+func TestExecuteBeadNoEvidenceProducedWithoutCommitOrRationale(t *testing.T) {
+	workDir := t.TempDir()
+
+	scrubEnv := func() []string {
+		parent := os.Environ()
+		env := make([]string, 0, len(parent))
+		for _, kv := range parent {
+			if strings.HasPrefix(kv, "GIT_") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		return env
+	}
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = workDir
+		cmd.Env = scrubEnv()
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@ddx.test")
+	runGit("config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGit("add", ".")
+	runGit("commit", "-m", "chore: initial seed")
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "my-bead",
+		Title:     "Test execute-bead no-evidence outcome",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	})
+	runGit("add", ".ddx/beads.jsonl")
+	runGit("commit", "-m", "chore: seed bead")
+	baseSHA := runGit("rev-parse", "HEAD")
+
+	directivePath := filepath.Join(t.TempDir(), "directives.txt")
+	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+
+	f := NewCommandFactory(workDir)
+	f.AgentRunnerOverride = agent.NewRunner(agent.Config{})
+	root := f.NewRootCommand()
+	out, err := executeCommand(root, "agent", "execute-bead", "my-bead", "--json",
+		"--from", baseSHA,
+		"--harness", "script", "--model", directivePath)
+	require.NoError(t, err, "execute-bead should not return an error; output: %s", out)
+	res := parseExecuteBeadJSON(t, out)
+
+	assert.Equal(t, "no-evidence", res.Outcome)
+	assert.Equal(t, agent.ExecuteBeadStatusNoEvidenceProduced, res.Status)
+	assert.Equal(t, agent.FailureModeNoEvidenceProduced, res.FailureMode)
 	assert.Equal(t, baseSHA, res.BaseRev)
 	assert.Empty(t, res.PreserveRef)
 }
@@ -1416,7 +1475,8 @@ func TestExecuteBeadOrphanRecovery(t *testing.T) {
 // TestExecuteBeadHarnessNoiseNotSynthesized verifies that when the agent makes no
 // real commits but the worktree is dirty with only harness bookkeeping files
 // (e.g. .ddx/executions/<attempt>/embedded/*), SynthesizeCommit returns
-// (false, nil) and the outcome is "no-changes", not "merged" or "success".
+// (false, nil) and the outcome is "no_evidence_produced", not "merged" or
+// "success", because no rationale was written.
 // ResultRev must equal BaseRev. Exercises real git + script harness: the
 // directive writes a noise file under the embedded/ pathspec that
 // RealGitOps.SynthesizeCommit excludes, so IsDirty=true but nothing stages
@@ -1480,17 +1540,18 @@ func TestExecuteBeadHarnessNoiseNotSynthesized(t *testing.T) {
 	res := runExecuteBead(t, f, nil, "my-bead",
 		"--harness", "script", "--model", directivePath)
 
-	assert.Equal(t, "no-changes", res.Outcome, "harness-noise-only dirty worktree must not produce a synthesis commit")
-	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
+	assert.Equal(t, "no-evidence", res.Outcome, "harness-noise-only dirty worktree must not produce a synthesis commit")
+	assert.Equal(t, agent.ExecuteBeadStatusNoEvidenceProduced, res.Status)
+	assert.Contains(t, res.NoEvidencePaths, ".claude/skills/noise.md")
 	assert.NotEmpty(t, res.BaseRev, "BaseRev must be set to real HEAD SHA")
 	assert.Equal(t, res.BaseRev, res.ResultRev, "ResultRev must equal BaseRev when no real commit was made")
 
-	// merge must not be called when outcome is no-changes: main HEAD must
+	// merge must not be called when outcome has no evidence: main HEAD must
 	// not advance and no merge commit must land.
 	mainAfter := runGit("rev-parse", "HEAD")
-	assert.Equal(t, mainBefore, mainAfter, "main HEAD must not advance when outcome is no-changes")
+	assert.Equal(t, mainBefore, mainAfter, "main HEAD must not advance when outcome has no evidence")
 	mergeLog := runGit("log", "--merges", "--format=%H", mainBefore+"..HEAD")
-	assert.Empty(t, mergeLog, "no merge commit must land when outcome is no-changes")
+	assert.Empty(t, mergeLog, "no merge commit must land when outcome has no evidence")
 }
 
 // TestExecuteBeadAgentErrorNoCommits verifies that when the agent runner returns
@@ -2429,8 +2490,8 @@ func TestExecuteBeadStatusMapping(t *testing.T) {
 
 	t.Run("no changes stays non-success", func(t *testing.T) {
 		workDir, baseSHA, _ := setupRepo(t)
-		// Harness does nothing → worktree HEAD == BaseRev → outcome "no-changes".
-		res := runWithDirective(t, workDir, baseSHA, "no-op\n")
+		// Harness makes no commit but writes the mandatory rationale → no_changes.
+		res := runWithDirective(t, workDir, baseSHA, "run mkdir -p .ddx/executions/$DDX_ATTEMPT_ID && printf 'already satisfied in base' > .ddx/executions/$DDX_ATTEMPT_ID/no_changes_rationale.txt\n")
 		assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
 		assert.NotEmpty(t, res.Detail)
 	})
@@ -2696,11 +2757,10 @@ func TestExecuteBeadNoGatesWhenNoChanges(t *testing.T) {
 	runGit("commit", "-m", "chore: seed bead and gate docs")
 	baseSHA := runGit("rev-parse", "HEAD")
 
-	// Directive file drives the script harness to emit no commits — the real
-	// signal that the agent produced no changes. Replaces fakeAgentRunner's
-	// canned Result struct + mainHeadRev==wtHeadRev.
+	// Directive file drives the script harness to emit no commits but write
+	// the mandatory rationale — the real no-changes signal.
 	directivePath := filepath.Join(t.TempDir(), "directives.txt")
-	require.NoError(t, os.WriteFile(directivePath, []byte("no-op\n"), 0o644))
+	require.NoError(t, os.WriteFile(directivePath, []byte("run mkdir -p .ddx/executions/$DDX_ATTEMPT_ID && printf 'already satisfied in base' > .ddx/executions/$DDX_ATTEMPT_ID/no_changes_rationale.txt\n"), 0o644))
 
 	// Real runner + real git ops: no overrides that fake the thing under test.
 	f := NewCommandFactory(workDir)

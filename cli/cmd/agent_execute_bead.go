@@ -60,6 +60,7 @@ specific bead.
 Result status is reported on the "status:" line and is one of:
   success                          — merged (or preserved with --no-merge)
   no_changes                       — agent ran but produced no diff
+  no_evidence_produced             — agent exited with no commit and no rationale
   already_satisfied                — closed by the loop after repeated no_changes
   land_conflict                    — merge failed; result preserved
   post_run_check_failed            — checks failed; result preserved

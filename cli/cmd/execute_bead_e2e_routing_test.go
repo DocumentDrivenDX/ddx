@@ -112,9 +112,9 @@ func TestExecuteBeadRoutingEvidenceProviderFallsBackToHarness(t *testing.T) {
 	assert.Equal(t, "first-available", body.RouteReason)
 }
 
-// TestExecuteBeadRoutingEvidenceNoChanges verifies that routing evidence is
-// persisted even when the agent makes no commits (task_no_changes outcome).
-func TestExecuteBeadRoutingEvidenceNoChanges(t *testing.T) {
+// TestExecuteBeadRoutingEvidenceNoEvidence verifies that routing evidence is
+// persisted even when the agent exits without commits or rationale.
+func TestExecuteBeadRoutingEvidenceNoEvidence(t *testing.T) {
 	git := &fakeExecuteBeadGit{
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "aaaa1111", // same rev — no commits made
@@ -130,12 +130,12 @@ func TestExecuteBeadRoutingEvidenceNoChanges(t *testing.T) {
 	f := newExecuteBeadFactory(t, git, runner)
 
 	res := runExecuteBead(t, f, git, "my-bead")
-	require.Equal(t, "no-changes", res.Outcome)
+	require.Equal(t, "no-evidence", res.Outcome)
 
 	store := bead.NewStore(filepath.Join(f.WorkingDir, ".ddx"))
 	routingEvents, err := store.EventsByKind("my-bead", "routing")
 	require.NoError(t, err)
-	require.Len(t, routingEvents, 1, "routing event should be persisted even on no-changes outcome")
+	require.Len(t, routingEvents, 1, "routing event should be persisted even on no-evidence outcome")
 
 	var body struct {
 		ResolvedProvider string `json:"resolved_provider"`

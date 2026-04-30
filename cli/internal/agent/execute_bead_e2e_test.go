@@ -367,10 +367,10 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 	}
 }
 
-// TestExecuteBead_NoChangesRationaleAbsentWhenNotWritten verifies that
-// ExecuteBeadResult.NoChangesRationale is empty when the agent does not write
-// the rationale file (the common case for real execution failures).
-func TestExecuteBead_NoChangesRationaleAbsentWhenNotWritten(t *testing.T) {
+// TestExecuteBead_NoEvidenceProducedWhenRationaleAbsent verifies that a clean
+// agent exit with no commits and no rationale is classified separately from
+// legitimate no_changes.
+func TestExecuteBead_NoEvidenceProducedWhenRationaleAbsent(t *testing.T) {
 	const beadID = "ddx-rationale-02"
 
 	projectRoot := setupGateTestProjectRoot(t)
@@ -404,8 +404,14 @@ func TestExecuteBead_NoChangesRationaleAbsentWhenNotWritten(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteBead returned error: %v", err)
 	}
-	if res.Outcome != ExecuteBeadOutcomeTaskNoChanges {
-		t.Errorf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskNoChanges, res.Outcome)
+	if res.Outcome != ExecuteBeadOutcomeTaskNoEvidence {
+		t.Errorf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskNoEvidence, res.Outcome)
+	}
+	if res.Status != ExecuteBeadStatusNoEvidenceProduced {
+		t.Errorf("expected status=%s, got %q", ExecuteBeadStatusNoEvidenceProduced, res.Status)
+	}
+	if res.FailureMode != FailureModeNoEvidenceProduced {
+		t.Errorf("expected failure_mode=%s, got %q", FailureModeNoEvidenceProduced, res.FailureMode)
 	}
 	if res.NoChangesRationale != "" {
 		t.Errorf("expected empty NoChangesRationale when file absent, got %q", res.NoChangesRationale)

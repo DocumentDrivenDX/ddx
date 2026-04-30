@@ -71,7 +71,8 @@ maps to a concrete follow-up action:
 |---|---|---|
 | `success` | Tests pass, AC met, commit landed | `ddx bead close <id>` |
 | `already_satisfied` | No changes needed (AC was already green) | `ddx bead close <id>` |
-| `no_changes` | Agent returned without producing commits | Leave open, **unclaim** |
+| `no_changes` | Agent returned without producing commits and wrote `no_changes_rationale.txt` | Leave open, **unclaim** |
+| `no_evidence_produced` | Agent exited without a commit or rationale | Leave open, **unclaim**, investigate harness/commit failure |
 | `land_conflict` | Merge conflict on landing the result | Leave open, **unclaim** |
 | `post_run_check_failed` | Tests or gate failed after landing | Leave open, **unclaim**, investigate |
 | `execution_failed` | Agent subprocess errored (timeout, crash, provider error) | Leave open, **unclaim** |
@@ -111,9 +112,9 @@ that exercise the new code:
 
 - **Trusting the agent's "done"**: always re-run the AC command
   yourself before closing.
-- **Closing on no_changes**: only `success` and `already_satisfied`
-  close a bead. `no_changes` means the agent returned without doing
-  anything — unclaim and investigate.
+- **Closing on no_changes/no_evidence**: only `success` and `already_satisfied`
+  close a bead. `no_changes` requires an explicit rationale. `no_evidence_produced`
+  means the agent returned without a commit or rationale — unclaim and investigate.
 - **Squashing bead-attempt commits**: the per-attempt history is
   an audit trail (evidence commits, heartbeats). Use only
   `git merge --ff-only` or `--no-ff`; never squash/rebase/filter.

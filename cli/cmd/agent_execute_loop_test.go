@@ -71,5 +71,5 @@ func TestInvokeExecuteBeadFromLoopParsesJSONAmidWarnings(t *testing.T) {
 	res, err := agent.ExecuteBeadWithConfig(context.Background(), workDir, "my-bead", rcfg, agent.ExecuteBeadRuntime{AgentRunner: runner}, git)
 	require.NoError(t, err)
 	assert.Equal(t, "my-bead", res.BeadID)
-	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, res.Status)
+	assert.Equal(t, agent.ExecuteBeadStatusNoEvidenceProduced, res.Status)
 }
