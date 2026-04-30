@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260430T011125-970a9b6f",
+  "bead_id": "ddx-950321ef",
+  "base_rev": "f7c624e2aef51c2c5badf228ba7cf344d558f0f2",
+  "created_at": "2026-04-30T01:11:26.747940914Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-950321ef",
+    "title": "routing-frontend-goldens: Playwright drain-queue fixtures matching real config",
+    "description": "Cover AC #6 from ddx-fdd3ea36. Playwright e2e fixture matches user's real config (endpoints: lmstudio + omlx + lmstudio + lmstudio, with and without gemini in allow-list). Click Drain on project home → within 5s a worker row appears with harness backed by a live endpoint. Never gemini + non-gemini model. Never 19 failures. After drain completes: worker status success (or typed error exit with reason recorded on the bead). Attempts count matches actual work done. Lives under cli/internal/server/frontend/src/routes/**/*.e2e.ts.",
+    "acceptance": "1. New Playwright e2e file under cli/internal/server/frontend/src/routes/.../*.e2e.ts. 2. Fixture replicates real-config endpoint shape (lmstudio + omlx + lmstudio + lmstudio). 3. Test scenario: click Drain → worker row appears within 5s with a live-endpoint-backed harness. 4. Assertion: never gemini + non-gemini model; never 19-failure pattern. 5. Assertion: drain completion status is success OR typed error with reason on the bead; attempts count matches work done. 6. Test runs under bun run test:e2e in CI.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing",
+      "frontend",
+      "playwright"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:11:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:11:25.939043283Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T011125-970a9b6f",
+    "prompt": ".ddx/executions/20260430T011125-970a9b6f/prompt.md",
+    "manifest": ".ddx/executions/20260430T011125-970a9b6f/manifest.json",
+    "result": ".ddx/executions/20260430T011125-970a9b6f/result.json",
+    "checks": ".ddx/executions/20260430T011125-970a9b6f/checks.json",
+    "usage": ".ddx/executions/20260430T011125-970a9b6f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-950321ef-20260430T011125-970a9b6f"
+  }
+}
