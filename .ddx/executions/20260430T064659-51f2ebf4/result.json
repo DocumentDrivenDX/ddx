@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "The diff at rev `a82accb8` shows no file changes. The expected edit is a one-sentence addition to the FEAT-014 spec (likely under `docs/helix/01-frame/features/` or wherever FEAT-014 is defined) noting that `generate-artifact` runs consume token budgets via the FEAT-014 model. Locate the FEAT-014 spec file and add the sentence per the plan at `docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md`."
+}
