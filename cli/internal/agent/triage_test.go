@@ -231,6 +231,18 @@ func TestComplexityGateDepthCapBlocksParent(t *testing.T) {
 	assert.Equal(t, "needs-human-decomposition", updated.Extra["triage_block_reason"])
 }
 
+// TestComplexityGateImplementationHasNoRoutingVocabulary protects the bright
+// line that triage estimates work shape only. The gate must not grow
+// provider/model/harness selection logic.
+func TestComplexityGateImplementationHasNoRoutingVocabulary(t *testing.T) {
+	data, err := os.ReadFile("triage.go")
+	require.NoError(t, err)
+	text := string(data)
+	assert.NotContains(t, text, "provider")
+	assert.NotContains(t, text, "model")
+	assert.NotContains(t, text, "harness")
+}
+
 // ---------------------------------------------------------------------------
 // triage:skip label bypasses the gate entirely.
 // ---------------------------------------------------------------------------
