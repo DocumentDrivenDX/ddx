@@ -1,5 +1,6 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @import 'tailwindcss';
+@config '../tailwind.config.js';
 
 :root,
 :root.light,

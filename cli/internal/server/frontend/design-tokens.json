@@ -1,0 +1,93 @@
+{
+  "theme": {
+    "extend": {
+      "colors": {
+        "primary": "#4878c6",
+        "secondary": "#35a35f",
+        "tertiary": "#8e35a3",
+        "background": "#ffffff",
+        "surface": "#f9fafb",
+        "surface-dark": "#0f1117",
+        "text": "#111827",
+        "text-muted": "#6b7280",
+        "text-on-primary": "#ffffff",
+        "text-on-secondary": "#ffffff",
+        "text-on-tertiary": "#ffffff",
+        "border": "#e5e7eb",
+        "terminal-bg": "#0f1117",
+        "terminal-fg": "#e8eaf0"
+      },
+      "fontFamily": {
+        "h1": [
+          "Inter"
+        ],
+        "h2": [
+          "Inter"
+        ],
+        "body-md": [
+          "Inter"
+        ],
+        "body-sm": [
+          "Inter"
+        ],
+        "code": [
+          "JetBrains Mono"
+        ],
+        "label": [
+          "Inter"
+        ]
+      },
+      "fontSize": {
+        "h1": [
+          "2.5rem",
+          {
+            "fontWeight": "700"
+          }
+        ],
+        "h2": [
+          "1.75rem",
+          {
+            "fontWeight": "600"
+          }
+        ],
+        "body-md": [
+          "1rem",
+          {
+            "fontWeight": "400"
+          }
+        ],
+        "body-sm": [
+          "0.875rem",
+          {
+            "fontWeight": "400"
+          }
+        ],
+        "code": [
+          "0.875rem",
+          {
+            "fontWeight": "400"
+          }
+        ],
+        "label": [
+          "0.75rem",
+          {
+            "letterSpacing": "0.05em",
+            "fontWeight": "500"
+          }
+        ]
+      },
+      "borderRadius": {
+        "sm": "4px",
+        "md": "8px",
+        "lg": "12px"
+      },
+      "spacing": {
+        "xs": "4px",
+        "sm": "8px",
+        "md": "16px",
+        "lg": "24px",
+        "xl": "40px"
+      }
+    }
+  }
+}
