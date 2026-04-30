@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T012659-473f5013",
+  "bead_id": "ddx-f890c796",
+  "base_rev": "002bbb8917be3bc0573ffe8e4634be157e48fd08",
+  "created_at": "2026-04-30T01:27:00.346554882Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f890c796",
+    "title": "[artifact-run-arch] ship benchmark-suite skill",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. New skill at skills/ddx/benchmark-suite/. Iterate compare across a prompt matrix.",
+    "labels": [
+      "skill",
+      "plan-2026-04-29",
+      "library"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:26:59Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:26:59.426032053Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T012659-473f5013",
+    "prompt": ".ddx/executions/20260430T012659-473f5013/prompt.md",
+    "manifest": ".ddx/executions/20260430T012659-473f5013/manifest.json",
+    "result": ".ddx/executions/20260430T012659-473f5013/result.json",
+    "checks": ".ddx/executions/20260430T012659-473f5013/checks.json",
+    "usage": ".ddx/executions/20260430T012659-473f5013/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f890c796-20260430T012659-473f5013"
+  }
+}
