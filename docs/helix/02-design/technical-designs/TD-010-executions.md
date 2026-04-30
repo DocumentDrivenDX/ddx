@@ -30,7 +30,7 @@ Execution definitions have two authoritative sources:
 
 1. **Graph-authored execution documents** — git-tracked markdown files with
    `ddx:` frontmatter (see FEAT-007). These are the preferred source when using
-   `ddx agent execute-bead`. DDx discovers them by traversing the document graph
+   `ddx try`. DDx discovers them by traversing the document graph
    from the target bead and its governing artifacts. They participate in ordinary
    document indexing and staleness tracking.
 
@@ -405,7 +405,7 @@ retention — operators manage retention on the mirror backend.
 
 1. Configure `.ddx/config.yaml` with an `executions.mirror` block pointing at
    a writable directory or bucket.
-2. Run a normal `ddx work` / `ddx agent execute-bead` cycle. Confirm one new
+2. Run a normal `ddx work` / `ddx try` cycle. Confirm one new
    row in `.ddx/executions/mirror-index.jsonl` per finalized attempt.
 3. To inspect an old bundle locally:
    `ddx agent executions fetch <attempt-id>`
