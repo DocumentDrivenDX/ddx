@@ -108,7 +108,11 @@
 		nodeGroup
 			.append('circle')
 			.attr('r', 14)
-			.attr('class', 'fill-accent-lever stroke-accent-fulcrum dark:fill-dark-accent-lever dark:stroke-dark-accent-fulcrum')
+			.attr('class', (d: SimNode) => {
+				if (d.dependsOn.length === 0)
+					return 'fill-accent-load stroke-accent-fulcrum dark:fill-dark-accent-load dark:stroke-dark-accent-fulcrum'
+				return 'fill-accent-lever stroke-accent-fulcrum dark:fill-dark-accent-lever dark:stroke-dark-accent-fulcrum'
+			})
 			.attr('stroke-width', 1.5)
 
 		nodeGroup
@@ -116,7 +120,7 @@
 			.attr('x', 18)
 			.attr('dy', '0.35em')
 			.attr('font-size', '11px')
-			.attr('fill', 'currentColor')
+			.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted')
 			.attr('pointer-events', 'none')
 			.text((d) => (d.title.length > 28 ? d.title.slice(0, 28) + '\u2026' : d.title))
 
@@ -175,7 +179,7 @@
 	})
 </script>
 
-<div class="relative h-full w-full">
+<div class="relative h-full w-full bg-bg-canvas dark:bg-dark-bg-canvas">
 	<svg
 		bind:this={svgEl}
 		data-testid="doc-graph-svg"

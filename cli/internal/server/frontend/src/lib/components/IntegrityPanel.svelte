@@ -116,19 +116,19 @@
 
 <section
 	data-testid="integrity-panel"
-	class="shrink-0 rounded-none border border-accent-load/30 bg-accent-load/10 text-sm text-fg-ink dark:border-dark-accent-load/30 dark:bg-dark-accent-load/10 dark:text-dark-fg-ink"
+	class="shrink-0 rounded-none border border-border-line bg-bg-surface text-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
 >
-	<header class="border-b border-accent-load/30 px-4 py-2 font-semibold dark:border-dark-accent-load/30">
+	<header class="border-b border-border-line px-4 py-2 font-semibold dark:border-dark-border-line">
 		Integrity: {issues.length}
 		{issues.length === 1 ? 'issue' : 'issues'}
 	</header>
-	<ul class="divide-y divide-accent-load/30 dark:divide-dark-accent-load/30">
+	<ul class="divide-y divide-border-line dark:divide-dark-border-line">
 		{#each groups as group (group.kind)}
 			{@const isOpen = expanded[group.kind] ?? false}
 			<li data-kind={group.kind}>
 				<button
 					type="button"
-					class="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-accent-load/10 dark:hover:bg-dark-accent-load/10"
+					class="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-bg-canvas dark:hover:bg-dark-bg-canvas"
 					aria-expanded={isOpen}
 					data-testid={`integrity-group-${group.kind}`}
 					onclick={() => toggle(group.kind)}
@@ -142,9 +142,9 @@
 					<span class="text-fg-muted dark:text-dark-fg-muted">({group.issues.length})</span>
 				</button>
 				{#if isOpen}
-					<ul class="bg-accent-load/5 px-4 pb-3 pt-1 dark:bg-dark-accent-load/10">
+					<ul class="bg-bg-canvas px-4 pb-3 pt-1 dark:bg-dark-bg-canvas">
 						{#each group.issues as issue, idx (`${group.kind}-${idx}`)}
-							<li class="mt-2 flex flex-col gap-1 rounded-none bg-bg-elevated/60 p-2 dark:bg-dark-bg-elevated/60">
+							<li class="mt-2 flex flex-col gap-1 rounded-none bg-bg-elevated p-2 dark:bg-dark-bg-elevated">
 								<div class="flex flex-wrap items-center gap-2 font-mono text-xs">
 									{#if issue.path}
 										{@const href = docLink(issue.path)}
@@ -175,7 +175,7 @@
 									{/if}
 									{#if issue.id}
 										<span
-											class="rounded-none bg-accent-load/20 px-1.5 py-0.5 text-[10px] uppercase dark:bg-dark-accent-load/20"
+											class="rounded-none border px-1.5 py-0.5 text-[10px] uppercase badge-status-blocked"
 											>{issue.id}</span
 										>
 									{/if}
@@ -196,7 +196,7 @@
 									<button
 										type="button"
 										data-testid="integrity-copy-suggestion"
-										class="self-start rounded-none bg-accent-load px-2 py-1 text-xs font-medium text-white hover:bg-accent-load/90 dark:bg-dark-accent-load dark:text-fg-ink dark:hover:bg-dark-accent-load/90"
+										class="self-start rounded-none border px-2 py-1 text-xs font-medium badge-status-blocked hover:opacity-90"
 										onclick={(e) => copySuggestion(issue, e)}
 									>
 										Copy suggested unique ID
@@ -211,7 +211,7 @@
 											</span>
 											<code
 												data-testid="integrity-missing-dep-snippet"
-												class="rounded-none bg-accent-load/20 px-2 py-1 font-mono-code dark:bg-dark-accent-load/20"
+												class="rounded-none border px-2 py-1 font-mono-code badge-status-blocked"
 												>{snippet}</code
 											>
 											<button
