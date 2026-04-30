@@ -1,0 +1,98 @@
+{{- $css := resources.Get "css/custom.css" | minify | fingerprint -}}
+<!doctype html>
+<html lang="{{ site.Language.LanguageCode | default "en" }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ site.Title }}</title>
+    <meta name="description" content="{{ site.Params.description }}">
+    <link rel="stylesheet" href="{{ $css.RelPermalink }}">
+  </head>
+  <body class="ddx-editorial-home">
+    <nav class="ddx-home-nav" aria-label="Primary">
+      <div class="ddx-home-nav__inner">
+        <a class="ddx-home-logo" href="{{ "/" | relURL }}">DDX</a>
+        <div class="ddx-home-nav__links">
+          <a href="{{ "/docs/" | relURL }}">Docs</a>
+          <a href="{{ "/docs/concepts/" | relURL }}">Concepts</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="ddx-home-main">
+      <section class="ddx-home-hero" aria-labelledby="ddx-home-title">
+        <div>
+          <p class="ddx-home-kicker">Document-driven development</p>
+          <h1 id="ddx-home-title" class="ddx-home-title">Documents drive the agents. DDx drives the documents.</h1>
+          <p class="ddx-home-prose">
+            DDx is the local-first platform for AI-assisted development: beads track
+            work, specs carry intent, plugins package workflows, and every agent run
+            leaves evidence behind.
+          </p>
+          <div class="ddx-home-actions" aria-label="Start">
+            <a class="ddx-home-action-primary" href="{{ "/docs/getting-started/" | relURL }}">Get Started</a>
+            <a href="{{ "/docs/concepts/" | relURL }}">Read Concepts</a>
+          </div>
+        </div>
+
+        <blockquote class="ddx-home-quote">
+          Work moves when the load, lever, and fulcrum are visible.
+          <cite>DDx operating principle</cite>
+        </blockquote>
+      </section>
+
+      <section class="ddx-home-principles" aria-labelledby="ddx-principles-title">
+        <p id="ddx-principles-title" class="ddx-home-section-label">Principles</p>
+        <div class="ddx-home-grid">
+          <article class="ddx-home-card">
+            <span class="ddx-home-card__number">01 / lever</span>
+            <div>
+              <h2>Platform, Not Methodology</h2>
+              <p>DDx provides primitives. Workflow opinions belong in plugins.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card">
+            <span class="ddx-home-card__number">02 / load</span>
+            <div>
+              <h2>Project-Local by Default</h2>
+              <p>Init and install write under the project, keeping machine state out of the product.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card">
+            <span class="ddx-home-card__number">03 / fulcrum</span>
+            <div>
+              <h2>Beads Are Work</h2>
+              <p>Every task is a bead with acceptance criteria, dependencies, and audit history.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card">
+            <span class="ddx-home-card__number">04 / lever</span>
+            <div>
+              <h2>Cost-Tiered Throughput</h2>
+              <p>Optimize closed work per dollar, with stronger models reserved for harder calls.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card">
+            <span class="ddx-home-card__number">05 / load</span>
+            <div>
+              <h2>Design for Simplicity</h2>
+              <p>Start small, name the moving parts, and remove complexity that earns no keep.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card">
+            <span class="ddx-home-card__number">06 / fulcrum</span>
+            <div>
+              <h2>Validate Your Work</h2>
+              <p>Good decisions expose the evidence needed to tell whether they are working.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="ddx-home-footer">
+        <span class="ddx-home-footer__mark">DDX</span>
+        <span>local-first document orchestration for agentic software work</span>
+      </footer>
+    </main>
+  </body>
+</html>

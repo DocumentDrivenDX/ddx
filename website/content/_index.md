@@ -1,6 +1,5 @@
 ---
 title: DDx
-layout: hextra-home
 ---
 
 {{< hextra/hero-badge link="https://github.com/DocumentDrivenDX/ddx" >}}
