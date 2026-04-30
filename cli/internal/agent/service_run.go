@@ -339,19 +339,6 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 		caps.Models = []string{harness.DefaultModel}
 	}
 
-	// Profile mappings come from the local model catalog because the service
-	// does not surface a per-tier resolution endpoint today.
-	if harness.Surface != "" {
-		cat := BuiltinCatalog
-		for _, profile := range []string{"cheap", "fast", "smart"} {
-			if m, ok := cat.Resolve(profile, harness.Surface); ok {
-				if caps.ProfileMappings == nil {
-					caps.ProfileMappings = make(map[string]string)
-				}
-				caps.ProfileMappings[profile] = m
-			}
-		}
-	}
 	return caps, nil
 }
 

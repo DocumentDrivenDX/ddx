@@ -1,20 +1,24 @@
 package agent
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewServiceFromWorkDirUsesDDxEndpointConfigAndSkipsDeadEndpoint(t *testing.T) {
+// TestNewServiceFromWorkDirPassesUnreachableEndpointsToService asserts that
+// NewServiceFromWorkDir no longer filters configured endpoints by /models
+// reachability. Both reachable and unreachable endpoints must be present in
+// the service config so the agent service can surface them with appropriate
+// status rather than DDx silently removing them.
+func TestNewServiceFromWorkDirPassesUnreachableEndpointsToService(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -22,7 +26,6 @@ func TestNewServiceFromWorkDirUsesDDxEndpointConfigAndSkipsDeadEndpoint(t *testi
 	}))
 	t.Cleanup(dead.Close)
 	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/models", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":[{"id":"Qwen3.6-35B-A3B-4bit"}]}`))
 	}))
@@ -44,21 +47,22 @@ agent:
       base_url: %s/v1
 `, dead.URL, live.URL)), 0o644))
 
-	svc, err := NewServiceFromWorkDir(workDir)
+	sc, err := serviceConfigFromDDxEndpoints(workDir)
 	require.NoError(t, err)
+	require.NotNil(t, sc)
 
-	providers, err := svc.ListProviders(context.Background())
-	require.NoError(t, err)
-	require.Len(t, providers, 1)
-	assert.Contains(t, providers[0].Name, "omlx")
-	assert.NotContains(t, providers[0].Name, "lmstudio")
-
-	dec, err := svc.ResolveRoute(context.Background(), agentlib.RouteRequest{
-		Harness: "agent",
-		Profile: "cheap",
-		Model:   "qwen/qwen3.6",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, providers[0].Name, dec.Provider)
-	assert.Equal(t, "Qwen3.6-35B-A3B-4bit", dec.Model)
+	// Both endpoints must be present: DDx does not filter by reachability.
+	names := sc.ProviderNames()
+	require.Len(t, names, 2)
+	var hasLmstudio, hasOmlx bool
+	for _, n := range names {
+		if strings.Contains(n, "lmstudio") {
+			hasLmstudio = true
+		}
+		if strings.Contains(n, "omlx") {
+			hasOmlx = true
+		}
+	}
+	assert.True(t, hasLmstudio, "unreachable lmstudio endpoint must be passed to service, not removed by DDx")
+	assert.True(t, hasOmlx, "live omlx endpoint must be present")
 }
