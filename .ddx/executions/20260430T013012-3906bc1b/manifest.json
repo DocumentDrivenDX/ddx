@@ -1,0 +1,117 @@
+{
+  "attempt_id": "20260430T013012-3906bc1b",
+  "bead_id": "ddx-d57d98d7",
+  "base_rev": "9ddbc1cf1886d21f31e4815955d4a54112286cb2",
+  "created_at": "2026-04-30T01:30:13.555379227Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d57d98d7",
+    "title": "[artifact-run-arch] ship effort-estimate skill",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. New skill at skills/ddx/effort-estimate/. Workflow skill for effort estimation composing ddx run primitives.",
+    "labels": [
+      "skill",
+      "plan-2026-04-29",
+      "library"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:30:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-29T23:00:44.623706528Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260429T225932-4ece6a0a\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":7,\"output_tokens\":3482,\"total_tokens\":3489,\"cost_usd\":0.19747865000000003,\"duration_ms\":71663,\"exit_code\":0}",
+          "created_at": "2026-04-29T23:00:44.716250717Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=3489 cost_usd=0.1975 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-29T23:00:47.67358047Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only execution manifest/result metadata. No skill files at skills/ddx/effort-estimate/ are present in the changed-files list, so the bead's deliverable cannot be evaluated.\nharness=claude\nmodel=opus\ninput_bytes=5138\noutput_bytes=513\nelapsed_ms=5238",
+          "created_at": "2026-04-29T23:00:55.106895304Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-29T23:00:55.199409784Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution manifest/result metadata. No skill files at skills/ddx/effort-estimate/ are present in the changed-files list, so the bead's deliverable cannot be evaluated.\nresult_rev=b938d7167a54a85e9ca9d2ba26d4b4fec90ec8fa\nbase_rev=f4755fe4b930c0b22c822a436b95eeb0c90db882",
+          "created_at": "2026-04-29T23:00:55.285943269Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:26.327870713Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-29T23:29:26.463728111Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-29T23:29:26.552091184Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-29T23:29:26.726261875Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-30T01:30:12.735104769Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T013012-3906bc1b",
+    "prompt": ".ddx/executions/20260430T013012-3906bc1b/prompt.md",
+    "manifest": ".ddx/executions/20260430T013012-3906bc1b/manifest.json",
+    "result": ".ddx/executions/20260430T013012-3906bc1b/result.json",
+    "checks": ".ddx/executions/20260430T013012-3906bc1b/checks.json",
+    "usage": ".ddx/executions/20260430T013012-3906bc1b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d57d98d7-20260430T013012-3906bc1b"
+  }
+}
