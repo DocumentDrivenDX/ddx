@@ -1815,6 +1815,60 @@ type PaletteSearchResults {
 }
 
 # ============================================
+# Artifact Types
+# ============================================
+
+"""ArtifactGeneratedBy holds provenance for a generated artifact."""
+type ArtifactGeneratedBy {
+  """Run ID that produced this artifact"""
+  runId: String!
+  """Summary of the prompt or generator"""
+  promptSummary: String!
+  """Whether the source hash currently matches"""
+  sourceHashMatch: Boolean!
+}
+
+"""Artifact represents a DDx-tracked file with optional sidecar metadata."""
+type Artifact implements Node {
+  """Globally unique artifact identifier"""
+  id: ID!
+  """File path relative to the project root"""
+  path: String!
+  """Human-readable title"""
+  title: String!
+  """MIME type (e.g. text/markdown, image/png)"""
+  mediaType: String!
+  """Provenance information when the artifact was produced by a DDx run"""
+  generatedBy: ArtifactGeneratedBy
+  """Staleness: fresh, stale, or missing"""
+  staleness: String!
+  """Raw ddx: frontmatter or sidecar content as JSON"""
+  ddxFrontmatter: JSON
+  """Human-readable description"""
+  description: String
+  """Last modified timestamp"""
+  updatedAt: DateTime
+}
+
+"""ArtifactEdge wraps an Artifact for Relay cursor connections."""
+type ArtifactEdge {
+  """The artifact"""
+  node: Artifact!
+  """Relay opaque cursor"""
+  cursor: String!
+}
+
+"""ArtifactConnection is a Relay cursor connection for Artifact."""
+type ArtifactConnection {
+  """List of artifact edges"""
+  edges: [ArtifactEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of matching artifacts"""
+  totalCount: Int!
+}
+
+# ============================================
 # Query Root
 # ============================================
 
@@ -2011,6 +2065,24 @@ type Query {
     """Cursor to end before"""
     before: String
   ): SearchResultConnection!
+
+  """List artifacts for a project with optional filters."""
+  artifacts(
+    """Project identifier"""
+    projectID: ID!,
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Filter by media type (e.g. text/markdown, image/png)"""
+    mediaType: String,
+    """Search across title and path"""
+    search: String
+  ): ArtifactConnection!
 
   # ==========================================
   # Commit Queries
