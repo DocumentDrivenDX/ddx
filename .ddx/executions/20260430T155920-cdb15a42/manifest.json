@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260430T155920-cdb15a42",
+  "bead_id": "ddx-20047dd5",
+  "base_rev": "d775741a04233c2a0f97de93f8c5feca286ffea1",
+  "created_at": "2026-04-30T15:59:21.415916795Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-20047dd5",
+    "title": "agent-passthrough-envelope: carry harness provider model without DDx interpretation",
+    "description": "\u003ccontext-digest\u003eFEAT-006 allows --harness, --provider, and --model only as passthrough constraints. DDx must carry them in one narrow envelope to agent Execute without validation, routing, fallback, retry branching, app-wide conceptual leakage, or widening during power escalation.\u003c/context-digest\u003e\nImplement the passthrough envelope for harness/provider/model across ddx run, try, and work, including typed stop behavior when hard pins make MinPower/MaxPower unsatisfiable.",
+    "acceptance": "1. A single AgentPassthrough/AgentConstraints value carries harness/provider/model from CLI to Execute.\n2. DDx copies the envelope between run/try/work layers but does not inspect string values outside parsing, evidence rendering, and Execute request construction.\n3. Retry MinPower escalation keeps the envelope unchanged and preserves MaxPower.\n4. ServiceExecuteRequest receives Harness/Provider/Model only from the envelope.\n5. Run evidence records requested passthrough constraints separately from requested_min_power/requested_max_power and actual model/power.\n6. Tests prove invalid passthrough values are not prevalidated by DDx and are surfaced from the agent response/error.\n7. Tests prove passthrough-plus-power conflicts stop as blocked_by_passthrough_constraint or agent_power_unsatisfied rather than mutating pins, widening pins, or looping.\n8. routinglint or package boundaries prevent harness/provider/model fields from spreading into queue selection, retry policy, endpoint policy, catalog threshold code, or config defaulting.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "helix",
+      "phase:build",
+      "area:agent",
+      "area:routing",
+      "power-only",
+      "passthrough"
+    ],
+    "metadata": {
+      "spec_id": "FEAT-006,FEAT-010"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T155920-cdb15a42",
+    "prompt": ".ddx/executions/20260430T155920-cdb15a42/prompt.md",
+    "manifest": ".ddx/executions/20260430T155920-cdb15a42/manifest.json",
+    "result": ".ddx/executions/20260430T155920-cdb15a42/result.json",
+    "checks": ".ddx/executions/20260430T155920-cdb15a42/checks.json",
+    "usage": ".ddx/executions/20260430T155920-cdb15a42/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-20047dd5-20260430T155920-cdb15a42"
+  }
+}
