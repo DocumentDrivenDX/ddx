@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "The diff under review contains zero changes to `docs/helix/01-frame/features/FEAT-010*` or any frame artifact. It is purely execution telemetry (`manifest.json`, `result.json`).\nNo evidence of: three-layer architecture documentation, substrate unification of `.ddx/exec-runs/` and `.ddx/executions/\u003cattempt-id\u003e/`, `ddx work` no-progress/stop conditions, run-type catalog reduction, or read-only amendment narrowing for `artifactRegenerate`.\nThe substantive refactor is in commit `f6949364` (referenced as `result_rev` in `result.json:5`), which must be re-reviewed against the plan at `docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md`. Re-run review pointing at that revision, not the chore commit.\nNo acceptance criteria were provided in the bead — re-reviewing against the plan document is the only way to evaluate substantive completeness."
+}
