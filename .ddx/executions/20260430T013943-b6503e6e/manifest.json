@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T013943-b6503e6e",
+  "bead_id": "ddx-d8a6a621",
+  "base_rev": "908d2b325c92f1a89420a95b42e630a492fb57c3",
+  "created_at": "2026-04-30T01:39:44.650575091Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d8a6a621",
+    "title": "[visual-suite] V3.6 wire DESIGN.md to frontend (SvelteKit + Tailwind v4)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Easier path than Hextra. Use 'bunx @google/design.md export --format tailwind' from repo root to produce theme JSON. Wire into cli/internal/server/frontend/tailwind.config.js. Goal per user direction: align on a new visual language across the entire product — frontend, website, image prompts.",
+    "labels": [
+      "design",
+      "plan-2026-04-29-vis",
+      "frontend"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:39:43Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:39:43.844725792Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T013943-b6503e6e",
+    "prompt": ".ddx/executions/20260430T013943-b6503e6e/prompt.md",
+    "manifest": ".ddx/executions/20260430T013943-b6503e6e/manifest.json",
+    "result": ".ddx/executions/20260430T013943-b6503e6e/result.json",
+    "checks": ".ddx/executions/20260430T013943-b6503e6e/checks.json",
+    "usage": ".ddx/executions/20260430T013943-b6503e6e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d8a6a621-20260430T013943-b6503e6e"
+  }
+}
