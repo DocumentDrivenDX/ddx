@@ -11,9 +11,9 @@ Show running agent workers and their current bead
 
 Show all running agent workers and the bead each is currently executing.
 
-Server-submitted workers (started via 'ddx agent execute-loop') are fetched from
+Server-submitted workers (started via `ddx work`) are fetched from
 the running ddx server. Local workers (started with --local) are detected by
-scanning active execute-bead worktrees in the project.
+scanning active attempt worktrees in the project.
 
 Examples:
   ddx agent workers
