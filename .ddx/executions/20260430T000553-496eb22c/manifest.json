@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260430T000553-496eb22c",
+  "bead_id": "ddx-2589e256",
+  "base_rev": "2b6064563f3e25836185c7a789851a60eb4e3f91",
+  "created_at": "2026-04-30T00:05:54.583059033Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2589e256",
+    "title": "routing-overrides-e2e: --harness/--model/--profile flag plumbing + override e2e tests",
+    "description": "Cover D5 + AC #5 from ddx-fdd3ea36. CLI surface plumbing: ddx agent run --harness X / --model Y / --profile Z must route through unchanged to ResolveRoute(Profile, Harness, Model) and surface upstream typed errors verbatim. ddx work shares the same plumbing. Touched files (expected): cli/cmd/agent_run.go, cli/cmd/work.go, cli/cmd/agent_execute_bead.go, plus any flag-spec helpers.",
+    "acceptance": "1. ddx agent run --harness claude → ResolveRoute(Profile: \"default\", Harness: \"claude\"). E2E test mocks gate failures (binary missing, quota exhausted) and asserts typed error surfaces; no silent substitution. 2. ddx agent run --model opus-4.7 → ResolveRoute(Profile: \"default\", Model: \"opus-4.7\"). E2E test seeds 3 providers at different cost with shared model; asserts lowest-cost pick. 3. ddx agent run --harness claude --model opus-4.7 → typed ErrHarnessModelIncompatible when invalid; clean dispatch otherwise. E2E coverage of both branches. 4. ddx agent run --profile local --harness claude → upstream typed error (\"claude is non-local, profile=local is local-only\"); DDx surfaces it unmodified. E2E test. 5. ddx work shares the same plumbing — at least one e2e test exercises it.",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:05:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T00:05:53.748311576Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T000553-496eb22c",
+    "prompt": ".ddx/executions/20260430T000553-496eb22c/prompt.md",
+    "manifest": ".ddx/executions/20260430T000553-496eb22c/manifest.json",
+    "result": ".ddx/executions/20260430T000553-496eb22c/result.json",
+    "checks": ".ddx/executions/20260430T000553-496eb22c/checks.json",
+    "usage": ".ddx/executions/20260430T000553-496eb22c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2589e256-20260430T000553-496eb22c"
+  }
+}
