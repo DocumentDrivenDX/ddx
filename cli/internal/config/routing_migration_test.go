@@ -65,9 +65,11 @@ agent:
 
 	migErr, ok := err.(*RoutingMigrationError)
 	require.True(t, ok, "expected RoutingMigrationError, got %T: %v", err, err)
+	// routinglint:legacy-rejection reason="asserts the migration error names the retired routing key"
 	assert.Equal(t, "agent.routing.profile_ladders", migErr.Field)
 
 	msg := err.Error()
+	// routinglint:legacy-rejection reason="asserts the migration error message names the retired routing key"
 	assert.Contains(t, msg, "agent.routing.profile_ladders")
 	assert.Contains(t, msg, "removed")
 	assert.Contains(t, msg, "docs/migrations/routing-config.md")
@@ -96,9 +98,11 @@ agent:
 
 	migErr, ok := err.(*RoutingMigrationError)
 	require.True(t, ok, "expected RoutingMigrationError, got %T: %v", err, err)
+	// routinglint:legacy-rejection reason="asserts the migration error names the retired routing key"
 	assert.Equal(t, "agent.routing.model_overrides", migErr.Field)
 
 	msg := err.Error()
+	// routinglint:legacy-rejection reason="asserts the migration error message names the retired routing key"
 	assert.Contains(t, msg, "agent.routing.model_overrides")
 	assert.Contains(t, msg, "removed")
 	assert.Contains(t, msg, "docs/migrations/routing-config.md")

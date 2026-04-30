@@ -440,6 +440,20 @@ ci:
       root: "cli/"
       run: 'go run ./tools/lint/runtimelint/cmd/runtimelint ./...'
 
+    # FEAT-006 routing-lint: dead-code / anti-reintroduction gate for
+    # the compensating DDx-side routing helpers retired by ddx-3bd7396a
+    # (parent epic ddx-fdd3ea36 §AC#7, cleanup bead ddx-653f6ac9). Fails
+    # CI if any of ResolveProfileLadder, ResolveTierModelRef,
+    # AdaptiveMinTier, workersByHarness, or the retired --escalate /
+    # --override-model / agent.routing.profile_ladders /
+    # agent.routing.model_overrides flag/config tokens reappear in
+    # cli/ Go source.
+    routing-lint-all:
+      <<: *go_checks
+      name: "Routing Lint (FEAT-006 compensating-routing helpers retired) — full tree"
+      root: "cli/"
+      run: 'go run ./tools/lint/routinglint/cmd/routinglint ./...'
+
     # YAML validation
     yaml-validate:
       name: "Validate YAML files"
