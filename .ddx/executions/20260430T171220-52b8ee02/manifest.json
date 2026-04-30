@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260430T171220-52b8ee02",
+  "bead_id": "ddx-1997b22d",
+  "base_rev": "d85722727845a94c9d7ee8b87d83b1d241cf1cc5",
+  "created_at": "2026-04-30T17:12:20.943339327Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1997b22d",
+    "title": "bug: work command preserves legacy execute-loop routing surface",
+    "description": "Review/evolution finding amended by passthrough requirement.\nFile: cli/cmd/work.go:8\nCategory: integration\nSeverity: high\nDescription: ddx work is currently an alias for ddx agent execute-loop and clones legacy routing behavior. This contradicts FEAT-010's layered model where ddx run is the invocation atom, ddx try wraps one bead attempt, and ddx work drains the queue and owns retry policy. However --harness/--provider/--model must remain available as passthrough-only operator constraints.\nSuggested fix: Implement the FEAT-010 layers directly: ddx run -\u003e Execute with requested power and optional passthrough envelope, ddx try \u003cbead\u003e -\u003e run plus bead/worktree/evidence handling, ddx work -\u003e queue iteration and retry-power policy. Remove DDx-owned routing semantics while preserving passthrough flags.",
+    "acceptance": "ddx work no longer clones execute-loop behavior; tests show work invokes try-layer behavior, owns retry-power policy between attempts, accepts harness/provider/model only as an opaque passthrough envelope, and does not validate or branch on passthrough string values.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "helix",
+      "phase:build",
+      "review-finding",
+      "area:agent",
+      "area:cli"
+    ],
+    "metadata": {
+      "spec_id": "FEAT-010"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T171220-52b8ee02",
+    "prompt": ".ddx/executions/20260430T171220-52b8ee02/prompt.md",
+    "manifest": ".ddx/executions/20260430T171220-52b8ee02/manifest.json",
+    "result": ".ddx/executions/20260430T171220-52b8ee02/result.json",
+    "checks": ".ddx/executions/20260430T171220-52b8ee02/checks.json",
+    "usage": ".ddx/executions/20260430T171220-52b8ee02/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1997b22d-20260430T171220-52b8ee02"
+  }
+}
