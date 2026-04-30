@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, mechanical token migration across all 5 specified shell micro-components with consistent dark-mode parity (`dark:dark-*` variants). No functional changes; only class strings and one `$derived` computed class in ConfirmDialog were touched. Token usage is consistent with the requested vocabulary (border-line, bg-surface/canvas/elevated, fg-ink/muted, accent-lever, error, rounded-none)."
+}
