@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All six AC items are present and structurally correct. Two scenarios cover the success path and the typed-error path, with explicit regression guards for the gemini cross-pollination bug and the 19-failure pattern. Note: regression assertions are evaluated against the test's own mock state rather than independently observed server behavior — acceptable for a fixture/golden test as the bead title implies, but worth tightening in a follow-up if the goal shifts to validating server-side routing."
+}
