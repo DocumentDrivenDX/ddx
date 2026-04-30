@@ -99,8 +99,8 @@ DDx-owned duplicate session ledger
 **When** cost is estimated
 **Then** DDx returns the expected estimated cost
 
-### TC-014: Execute-bead runtime metrics remain captured automatically
-**Given** `ddx agent execute-bead` completes with a harness exposing token data
+### TC-014: Bead-attempt runtime metrics remain captured automatically
+**Given** `ddx try` completes with an agent response exposing token data
 **When** the run record is inspected
 **Then** built-in runtime metrics are present independent of provider-native
 transcript ownership
