@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T012131-cf4ff06b",
+  "bead_id": "ddx-6e0d3e80",
+  "base_rev": "4896baa3908394270d80420b02cf1601968d6d7f",
+  "created_at": "2026-04-30T01:21:32.689644445Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6e0d3e80",
+    "title": "[artifact-run-arch] ship compare-prompts skill",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. New skill at skills/ddx/compare-prompts/. Composes ddx run for N-arm dispatch + result aggregation. Replaces --quorum flag and agent benchmark CLI.",
+    "labels": [
+      "skill",
+      "plan-2026-04-29",
+      "library"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:21:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:21:31.84963312Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T012131-cf4ff06b",
+    "prompt": ".ddx/executions/20260430T012131-cf4ff06b/prompt.md",
+    "manifest": ".ddx/executions/20260430T012131-cf4ff06b/manifest.json",
+    "result": ".ddx/executions/20260430T012131-cf4ff06b/result.json",
+    "checks": ".ddx/executions/20260430T012131-cf4ff06b/checks.json",
+    "usage": ".ddx/executions/20260430T012131-cf4ff06b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6e0d3e80-20260430T012131-cf4ff06b"
+  }
+}
