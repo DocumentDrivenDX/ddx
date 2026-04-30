@@ -92,6 +92,27 @@ DDx may also pass request facts such as estimated prompt size, whether tools are
 required, permissions, timeout values, and effort/reasoning intent. These facts
 describe the work; they do not select a model.
 
+## Non-Bead Invocation Intent
+
+Not every layer-1 invocation comes from a bead. Artifact generation,
+artifact regeneration, prompt comparison skills, and diagnostics can call
+`ddx run` directly. For those calls DDx may choose work intent from the
+artifact or operation being performed:
+
+- `MinPower` / optional `MaxPower` derived from the artifact's generator,
+  media type, size, risk, or explicit operator flags
+- permissions needed for the operation, such as read-only, workspace-write, or
+  network access
+- timeout and effort/reasoning intent
+- metadata such as `produces_artifact`, artifact id, execution definition id,
+  and governing document ids
+
+These are DDx-owned work facts, not routing decisions. DDx must not translate an
+artifact key, media type, generator name, or execution definition into a concrete
+harness/provider/model. The only concrete route-like fields DDx may send are
+operator-supplied passthrough constraints, carried unchanged in the passthrough
+envelope described below.
+
 ## Agent Passthrough Constraints
 
 `--harness`, `--provider`, and `--model` are permitted on `ddx run`, `ddx try`,
@@ -144,6 +165,40 @@ model names, providers, powers, and route candidates returned by the agent for
 debugging. Retry threshold policy may consume only abstract power numbers from
 the catalog to compute `MinPower` thresholds. Neither status nor retry code may
 return or mutate concrete harness/provider/model pins for execution.
+
+## Session Log Envelope Boundary
+
+The upstream agent owns the native session-log schema and any harness-specific
+details inside it. DDx owns only the envelope around that log:
+
+- request id, layer, parent run id, bead id or produced artifact id
+- requested `MinPower` / `MaxPower` and opaque passthrough constraints
+- actual model and actual power returned by the agent
+- pointer or copied attachment for `ExecuteResponse.SessionLogPath`
+- DDx-owned attempt outcome, merge/preserve outcome, gates, and evidence refs
+
+DDx may render or link the session log for humans, but normal execution policy
+must not parse the inner session log to infer routing, provider health, model
+fallbacks, or retry destinations. Typed agent response fields and DDx-owned
+attempt evidence are the policy inputs.
+
+## Layer Ownership Migration Table
+
+FEAT-006 is deliberately narrow after the three-layer refactor. It describes
+how DDx consumes the upstream agent contract and how layer-1 requests are
+formed; it does not own worktree, queue, or CLI namespace design.
+
+| Area | Owner after migration |
+| --- | --- |
+| CONTRACT-003 `agentlib.DdxAgent` boundary, `ExecuteRequest` / `ExecuteResponse` consumption, `MinPower` / `MaxPower`, actual model/power recording | Stays in FEAT-006 |
+| Opaque passthrough envelope for `--harness`, `--provider`, `--model` and the rule that DDx must not route on those fields | Stays in FEAT-006 |
+| Non-bead layer-1 invocation intent: artifact-keyed power bounds, permissions, timeout, effort, and metadata | Stays in FEAT-006 |
+| Session-log envelope and pointer/copy capture around the agent-owned inner log | Stays in FEAT-006 |
+| Worktree creation, base revision pinning, bead prompt resolution, result landing, preserve refs, post-run gates, evidence bundles | Moves to FEAT-010 layer 2 (`ddx try`) |
+| Unified `.ddx/runs/<run-id>/` substrate, layer metadata, child/parent run links, migration from `.ddx/exec-runs/` and `.ddx/executions/` | Moves to FEAT-010 |
+| Queue iteration, no-progress detection, retry scheduling, cooldowns, stop conditions, loop records | Moves to FEAT-010 layer 3 (`ddx work`) |
+| Public top-level command shape: `ddx run`, `ddx try`, `ddx work`, `ddx runs`, `ddx tries`, `ddx work workers` | Moves to FEAT-001 |
+| Structural mounting of the upstream agent Cobra root under `ddx agent` and hard-deprecation redirects for legacy DDx workflow commands | Moves to FEAT-001, with the contract boundary referenced here |
 
 ### Conflict-recovery structured outcomes (bead ddx-0097af14)
 
