@@ -27,6 +27,13 @@ type CLIOverrides struct {
 	// cap applied to a single Chat/ChatStream call. Corresponds to --request-timeout
 	// on execute-bead and execute-loop. Zero pointer means "use config or model default".
 	ProviderRequestTimeout *time.Duration
+	// MinPower and MaxPower are passthrough power-bounds for the upstream agent
+	// routing contract (CONTRACT-003 / FEAT-006). DDx passes these to
+	// ServiceExecuteRequest unchanged; the agent owns model selection within the
+	// bounds. Zero means no bound (unconstrained). Corresponds to --min-power and
+	// --max-power on execute-bead and execute-loop.
+	MinPower int
+	MaxPower int
 }
 
 // Resolve produces a sealed ResolvedConfig by layering overrides onto
@@ -70,6 +77,8 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.minTier = overrides.MinTier
 	r.maxTier = overrides.MaxTier
 	r.effort = overrides.Effort
+	r.minPower = overrides.MinPower
+	r.maxPower = overrides.MaxPower
 
 	r.permissions = overrides.Permissions
 	if r.permissions == "" && agent != nil {
@@ -153,6 +162,8 @@ type ResolvedConfig struct {
 	minTier                 string
 	maxTier                 string
 	effort                  string
+	minPower                int
+	maxPower                int
 	permissions             string
 	timeout                 time.Duration
 	wallClock               time.Duration
@@ -233,6 +244,16 @@ func (r ResolvedConfig) MinTier() string {
 func (r ResolvedConfig) MaxTier() string {
 	r.requireSealed()
 	return r.maxTier
+}
+
+func (r ResolvedConfig) MinPower() int {
+	r.requireSealed()
+	return r.minPower
+}
+
+func (r ResolvedConfig) MaxPower() int {
+	r.requireSealed()
+	return r.maxPower
 }
 
 func (r ResolvedConfig) Effort() string {

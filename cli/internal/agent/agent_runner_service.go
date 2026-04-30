@@ -133,7 +133,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, toolCalls, routing := drainServiceEvents(events)
+	final, toolCalls, routing, actualPower := drainServiceEvents(events)
 	elapsed := time.Since(start)
 
 	result := &Result{
@@ -147,6 +147,9 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		if routing.Model != "" {
 			result.Model = routing.Model
 		}
+	}
+	if actualPower > 0 {
+		result.ActualPower = actualPower
 	}
 	if final != nil {
 		// Normalized final text from the upstream harness (agent-32e8ff5e).
@@ -222,13 +225,16 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 }
 
 // drainServiceEvents reads service events and returns the final-event payload,
-// the accumulated tool-call log, and the routing decision (when present in the
-// routing_decision start event). A sustained run of no-op compaction telemetry
-// is converted into a synthetic stalled final so execute-bead result details
-// identify the time-based breaker instead of waiting for the outer wall clock.
-func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, []ToolCallEntry, *serviceRoutingActual) {
+// the accumulated tool-call log, the routing decision (when present in the
+// routing_decision start event), and the power of the selected model (0 when
+// the routing_decision event does not include candidate power components).
+// A sustained run of no-op compaction telemetry is converted into a synthetic
+// stalled final so execute-bead result details identify the time-based
+// breaker instead of waiting for the outer wall clock.
+func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, []ToolCallEntry, *serviceRoutingActual, int) {
 	var final *serviceFinalData
 	var routing *serviceRoutingActual
+	var routingPower int
 	var toolCalls []ToolCallEntry
 	pending := make(map[string]*ToolCallEntry) // call_id -> entry awaiting result
 	var noopCompactions serviceNoopCompactionStreak
@@ -243,11 +249,11 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 			return &serviceFinalData{
 				Status: "stalled",
 				Error:  detail,
-			}, toolCallsWithPending(toolCalls, pending), routing
+			}, toolCallsWithPending(toolCalls, pending), routing, routingPower
 		case ev, ok := <-events:
 			if !ok {
 				// Any tool_call without a matching tool_result still gets recorded.
-				return final, toolCallsWithPending(toolCalls, pending), routing
+				return final, toolCallsWithPending(toolCalls, pending), routing, routingPower
 			}
 			if isNoopCompactionEvent(ev) {
 				detail, started := noopCompactions.record(eventTimestamp(ev), serviceNoopCompactionWallClockLimit)
@@ -258,7 +264,7 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 					return &serviceFinalData{
 						Status: "stalled",
 						Error:  detail,
-					}, toolCallsWithPending(toolCalls, pending), routing
+					}, toolCallsWithPending(toolCalls, pending), routing, routingPower
 				}
 				continue
 			}
@@ -271,15 +277,28 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 			switch string(ev.Type) {
 			case serviceEventRoutingDecision:
 				var payload struct {
-					Harness  string `json:"harness"`
-					Provider string `json:"provider"`
-					Model    string `json:"model"`
+					Harness    string `json:"harness"`
+					Provider   string `json:"provider"`
+					Model      string `json:"model"`
+					Candidates []struct {
+						Model      string `json:"model"`
+						Eligible   bool   `json:"eligible"`
+						Components struct {
+							Power int `json:"power"`
+						} `json:"components"`
+					} `json:"candidates"`
 				}
 				if err := json.Unmarshal(ev.Data, &payload); err == nil {
 					routing = &serviceRoutingActual{
 						Harness:  payload.Harness,
 						Provider: payload.Provider,
 						Model:    payload.Model,
+					}
+					for _, c := range payload.Candidates {
+						if c.Eligible && c.Model == payload.Model {
+							routingPower = c.Components.Power
+							break
+						}
 					}
 				}
 			case serviceEventToolCall:

@@ -1675,6 +1675,8 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout (e.g. 60m, 2h); overrides project config and model-class defaults. Use when a thinking model needs more than the default 15 min.")
+	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained); passed to agent routing unchanged")
+	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained); passed to agent routing unchanged")
 	return cmd
 }
 
@@ -1697,6 +1699,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	reviewModel, _ := cmd.Flags().GetString("review-model")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
+	minPower, _ := cmd.Flags().GetInt("min-power")
+	maxPower, _ := cmd.Flags().GetInt("max-power")
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
@@ -1803,6 +1807,8 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 			Provider: attemptProvider,
 			ModelRef: modelRef,
 			Effort:   effort,
+			MinPower: minPower,
+			MaxPower: maxPower,
 		}
 		if requestTimeout > 0 {
 			loopOverrides.ProviderRequestTimeout = &requestTimeout

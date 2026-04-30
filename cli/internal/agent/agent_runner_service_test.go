@@ -24,7 +24,7 @@ func TestDrainServiceEventsNoopCompactionWallClockBreaker(t *testing.T) {
 	}
 	close(events)
 
-	final, _, _ := drainServiceEvents(events)
+	final, _, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final)
 	assert.Equal(t, "stalled", final.Status)
 	assert.Contains(t, final.Error, serviceNoopCompactionWallClockReason)
@@ -53,7 +53,7 @@ func TestDrainServiceEventsProgressResetsNoopCompactionWallClockBreaker(t *testi
 	}
 	close(events)
 
-	final, _, _ := drainServiceEvents(events)
+	final, _, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final)
 	assert.Equal(t, "success", final.Status)
 	assert.Empty(t, final.Error)
@@ -95,6 +95,55 @@ func TestExecuteBeadResultDetailReportsNoopCompactionWallClockBreaker(t *testing
 	require.NoError(t, json.Unmarshal(raw, &artifact))
 	assert.Contains(t, artifact.Detail, serviceNoopCompactionWallClockReason)
 	assert.Contains(t, artifact.Detail, "time-based breaker")
+}
+
+// TestDrainServiceEvents_ExtractsPowerFromRoutingDecisionCandidates covers
+// AC#2/AC#4 of ddx-1534c574: the routing_decision event's winning candidate
+// (eligible=true, model matches payload.model) carries Components.Power; DDx
+// must surface this as ActualPower without touching the final event.
+func TestDrainServiceEvents_ExtractsPowerFromRoutingDecisionCandidates(t *testing.T) {
+	events := make(chan agentlib.ServiceEvent, 4)
+
+	routingPayload, err := json.Marshal(map[string]any{
+		"harness":  "agent",
+		"provider": "anthropic",
+		"model":    "claude-3-5-sonnet",
+		"candidates": []map[string]any{
+			{
+				"model":      "claude-3-haiku",
+				"eligible":   false,
+				"components": map[string]any{"power": 20},
+			},
+			{
+				"model":      "claude-3-5-sonnet",
+				"eligible":   true,
+				"components": map[string]any{"power": 65},
+			},
+		},
+	})
+	require.NoError(t, err)
+	events <- agentlib.ServiceEvent{
+		Type: "routing_decision",
+		Time: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+		Data: routingPayload,
+	}
+
+	finalPayload, err := json.Marshal(map[string]any{
+		"status":     "success",
+		"exit_code":  0,
+		"final_text": "done",
+	})
+	require.NoError(t, err)
+	events <- agentlib.ServiceEvent{
+		Type: "final",
+		Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
+		Data: finalPayload,
+	}
+	close(events)
+
+	_, _, _, actualPower := drainServiceEvents(events)
+	assert.Equal(t, 65, actualPower,
+		"power must come from the eligible winning candidate in routing_decision.candidates")
 }
 
 func noopCompactionServiceEvent(ts time.Time) agentlib.ServiceEvent {

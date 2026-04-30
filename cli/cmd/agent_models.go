@@ -130,8 +130,11 @@ func printModels(cmd *cobra.Command, providerName, providerTyp, configuredModel 
 			marker = "> "
 		}
 		annotation := ""
+		if m.Power > 0 {
+			annotation = fmt.Sprintf("  [power: %d]", m.Power)
+		}
 		if m.CatalogRef != "" {
-			annotation = "  [catalog: " + m.CatalogRef + "]"
+			annotation += "  [catalog: " + m.CatalogRef + "]"
 		}
 		fmt.Fprintf(out, "%s%s%s\n", marker, m.ID, annotation)
 	}

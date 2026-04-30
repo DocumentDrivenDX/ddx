@@ -4,6 +4,29 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Added: MinPower/MaxPower passthrough contract (agent v0.9.25)
+
+DDx now consumes the upstream `github.com/DocumentDrivenDX/agent` power-bounds
+interface introduced in FEAT-006 / CONTRACT-003.
+
+**What changed:**
+
+- `cli/go.mod` pins `agent v0.9.25`, which exposes `MinPower`/`MaxPower` on
+  `ServiceExecuteRequest`, `Power int` on `ModelInfo`, and per-candidate
+  `Components.Power` in `routing_decision` events.
+- `--min-power` / `--max-power` flags added to `ddx agent execute-bead` and
+  `ddx agent execute-loop` (alias `ddx work`). Values are passed to
+  `ServiceExecuteRequest.MinPower/MaxPower` unchanged; DDx does not interpret
+  them — the agent owns model selection within the bounds.
+- `result.ActualPower` is now populated from the `routing_decision` event's
+  winning candidate `Components.Power` and appears in `result.json` artifacts.
+- `ddx agent models` now prints each model's power number when non-zero.
+- `GET /api/agent/models` already returns `ModelInfo` which includes `Power`;
+  no server-side change was required.
+
+**No profile aliases or DDx-side route decisions are added.** The power bounds
+are an opaque passthrough envelope between DDx and the agent's routing layer.
+
 ### Breaking changes
 
 #### Removed: `agent.routing.default_harness`

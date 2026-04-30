@@ -38,7 +38,7 @@ func TestDrainServiceEvents_CapturesFinalText(t *testing.T) {
 	}
 	close(events)
 
-	final, _, _ := drainServiceEvents(events)
+	final, _, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final, "final event must drain even when only FinalText is populated")
 	assert.Equal(t, "### Verdict: APPROVE\n\nClean run.", final.FinalText,
 		"FinalText must round-trip verbatim — the reviewer verdict extractor depends on this being the harness's normalized output, not a raw stream frame")
@@ -64,7 +64,7 @@ func TestDrainServiceEvents_MissingFinalTextIsNotAnError(t *testing.T) {
 	}
 	close(events)
 
-	final, _, _ := drainServiceEvents(events)
+	final, _, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final)
 	assert.Empty(t, final.FinalText,
 		"missing FinalText must remain empty rather than synthesize placeholder — the reviewer-error path is the right response, not a fabricated string")

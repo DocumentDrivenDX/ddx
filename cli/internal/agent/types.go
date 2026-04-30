@@ -90,6 +90,7 @@ type Result struct {
 	Harness         string `json:"harness"`
 	Provider        string `json:"provider,omitempty"`
 	Model           string `json:"model,omitempty"`
+	ActualPower     int    `json:"actual_power,omitempty"`
 	ExitCode        int    `json:"exit_code"`
 	Output          string `json:"output"`
 	CondensedOutput string `json:"condensed_output,omitempty"`

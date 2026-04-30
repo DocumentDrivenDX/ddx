@@ -170,6 +170,8 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 		ProviderTimeout: providerTimeout,
 		SessionLogDir:   sessionLogDir,
 		Metadata:        runtime.Correlation,
+		MinPower:        rcfg.MinPower(),
+		MaxPower:        rcfg.MaxPower(),
 	}
 
 	cancelCtx, cancel := context.WithCancel(ctx)
@@ -181,7 +183,7 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, toolCalls, routing := drainServiceEvents(events)
+	final, toolCalls, routing, actualPower := drainServiceEvents(events)
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 
@@ -199,6 +201,9 @@ func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string
 		if routing.Harness != "" {
 			result.Harness = routing.Harness
 		}
+	}
+	if actualPower > 0 {
+		result.ActualPower = actualPower
 	}
 	if final != nil {
 		// Normalized final text from the upstream harness (agent-32e8ff5e);
