@@ -186,6 +186,44 @@ func TestExecuteBeadWorkerLandConflictStaysOpenAndContinues(t *testing.T) {
 	assert.Contains(t, events[0].Body, "preserve_ref=")
 }
 
+func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	preserveRef := "refs/ddx/iterations/" + first.ID + "/attempt-1"
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				Status:      ExecuteBeadStatusPreservedNeedsReview,
+				Detail:      "large-deletion gate: huge.txt deleted 250 lines (threshold 200)",
+				PreserveRef: preserveRef,
+				ResultRev:   "feedbead",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, result.LastFailureStatus)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, events[0].Summary)
+	assert.Contains(t, events[0].Body, "preserved-needs-review")
+	assert.Contains(t, events[0].Body, "preserve_ref="+preserveRef)
+	assert.Contains(t, events[0].Body, "gate_summary=large-deletion gate: huge.txt deleted 250 lines")
+}
+
 func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	executed := []string{}

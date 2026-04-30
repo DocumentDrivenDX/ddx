@@ -1140,6 +1140,10 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 
 func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time.Time) bead.BeadEvent {
 	parts := []string{}
+	if report.Status == ExecuteBeadStatusPreservedNeedsReview {
+		parts = append(parts, "preserved-needs-review")
+		parts = append(parts, "gate_summary="+oneLineGateSummary(report.Detail))
+	}
 	if report.Detail != "" {
 		parts = append(parts, report.Detail)
 	}
@@ -1176,6 +1180,17 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt,
 	}
+}
+
+func oneLineGateSummary(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return "safety gate preserved result"
+	}
+	if idx := strings.IndexByte(detail, '\n'); idx >= 0 {
+		detail = strings.TrimSpace(detail[:idx])
+	}
+	return detail
 }
 
 // writeLoopEvent emits one structured JSONL line to sink describing a

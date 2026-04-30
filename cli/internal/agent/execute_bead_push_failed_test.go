@@ -25,6 +25,17 @@ func TestClassifyExecuteBeadStatusPushFailed(t *testing.T) {
 		"merged outcome without push-failed reason must still classify as success")
 }
 
+func TestClassifyExecuteBeadStatusPreservedNeedsReview(t *testing.T) {
+	for _, reason := range []string{
+		"large-deletion gate: huge.txt deleted 250 lines (threshold 200)",
+		"syntax sanity gate: config.json: invalid JSON",
+		"post-land gate failed: make test: exit status 2",
+	} {
+		got := ClassifyExecuteBeadStatus("preserved", 0, reason)
+		assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, got, reason)
+	}
+}
+
 // TestExecuteBeadWorkerPushFailedStaysOpenAndParks asserts the AC for
 // ddx-af54ebf3:
 //   - bead is NOT closed (status remains open)

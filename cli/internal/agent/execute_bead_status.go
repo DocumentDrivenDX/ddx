@@ -233,6 +233,7 @@ const (
 	ExecuteBeadStatusLandConflict               = "land_conflict"
 	ExecuteBeadStatusPushFailed                 = "push_failed"
 	ExecuteBeadStatusPushConflict               = "push_conflict"
+	ExecuteBeadStatusPreservedNeedsReview       = "preserved_needs_review"
 	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
@@ -305,6 +306,9 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 		case RatchetPreserveReason:
 			return ExecuteBeadStatusRatchetFailed
 		default:
+			if isPreservedNeedsReviewReason(reason) {
+				return ExecuteBeadStatusPreservedNeedsReview
+			}
 			// Preserved iterations may still be success when the caller
 			// explicitly requested no merge.
 			return ExecuteBeadStatusSuccess
@@ -316,6 +320,19 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 	default:
 		return ExecuteBeadStatusExecutionFailed
 	}
+}
+
+func isPreservedNeedsReviewReason(reason string) bool {
+	for _, prefix := range []string{
+		"large-deletion gate:",
+		"syntax sanity gate:",
+		"post-land gate failed:",
+	} {
+		if strings.HasPrefix(reason, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func ExecuteBeadStatusDetail(status, reason, errMsg string) string {
