@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260430T011611-71dffee8",
+  "bead_id": "ddx-a0cf398b",
+  "base_rev": "0fecb48639e83df64e388e4a4891dc1f6a2cf2c1",
+  "created_at": "2026-04-30T01:16:11.870684031Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a0cf398b",
+    "title": "routing-followups: file route-status / providers-UI decision-trace consumer bead",
+    "description": "Cover AC #8 from ddx-fdd3ea36. File a new bead post-release for the route-status / providers-UI decision-trace consumer work, pointing at upstream A4 (RouteDecision.Candidates + typed no-viable-candidate error) as satisfied. Hooks into ddx-23978824 (providers UI). Acknowledge ddx-05b4cc9d (workersByProject filter) stays independent and is not blocked by this epic. Mechanical bead-create + a commit that mutates .ddx/beads.jsonl.",
+    "acceptance": "1. New bead created under ddx-23978824 (or as its own bead, depending on existing structure) titled along the lines of \"ddx agent route-status: consume upstream RouteDecision.Candidates + typed no-viable-candidate error\". 2. New bead's description references upstream agent-53f38d95 as satisfied. 3. Commit on .ddx/beads.jsonl mutating to include the new bead. 4. ddx-05b4cc9d is referenced as independent / non-blocking in this bead's notes (no mutation to that bead required).",
+    "parent": "ddx-fdd3ea36",
+    "labels": [
+      "feat-006",
+      "routing",
+      "follow-up"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:16:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:16:10.9939116Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T011611-71dffee8",
+    "prompt": ".ddx/executions/20260430T011611-71dffee8/prompt.md",
+    "manifest": ".ddx/executions/20260430T011611-71dffee8/manifest.json",
+    "result": ".ddx/executions/20260430T011611-71dffee8/result.json",
+    "checks": ".ddx/executions/20260430T011611-71dffee8/checks.json",
+    "usage": ".ddx/executions/20260430T011611-71dffee8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a0cf398b-20260430T011611-71dffee8"
+  }
+}
