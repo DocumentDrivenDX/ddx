@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260430T181254-ac5738cc",
+  "bead_id": "ddx-6036e1bc",
+  "base_rev": "cee0e432d10a2a5becff28cf51ef5cafacf358cc",
+  "created_at": "2026-04-30T18:12:55.217188939Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6036e1bc",
+    "title": "ddx agent status: expose model power catalog for observability",
+    "description": "## Context\n\nFollow-up observability/catalog work after the MinPower/MaxPower execution boundary in ddx-c4231775.\n\nUpstream agent exposes available models with power numbers and may expose route candidate traces for debug. DDx status surfaces may consume model/power data for operator visibility. DDx may consume ResolveRoute/Candidates only on operator status/debug surfaces. Normal run/try/work execution must not call ResolveRoute and must not record preflight candidate traces as execution evidence.\n\n## Scope\n\n1. Status CLI/UI: render available agent models and their power numbers.\n2. Optional route-status debug: render RouteDecision.Candidates for display only.\n3. Tests: model/power catalog rendering and no-viable-candidate trace rendering where route-status remains.\n\n## Out of scope\n\n- No retry threshold helper; ddx-67ed1062 owns MinPower threshold math.\n- No run/try/work preflight gate.\n- No execution-path ResolveRoute calls.\n- No bead kind:routing evidence populated from RouteDecision.Candidates.\n- No use of candidate traces or catalog rows to select or override harness/provider/model.\n\nExecution evidence should record requested MinPower/MaxPower, actual model/power, effort/task facts, and cost/session metadata returned by Execute.",
+    "acceptance": "1. Status surface renders available model/power catalog.\n2. Providers UI consumes route candidates only as observability data, if route-status remains.\n3. No normal run/try/work execution path calls ResolveRoute for this feature.\n4. Execute/run evidence tests prove candidate traces are not generated from ResolveRoute during normal execution.\n5. Status/catalog code does not alter ExecuteRequest routing fields.\n6. ddx-0f42c934 is satisfied or closed as incorporated when this rescope is implemented.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "feat-006",
+      "feat-008",
+      "area:agent",
+      "area:routing",
+      "follow-up",
+      "observability",
+      "power-only"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T04:49:58.028588202Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260430T014954-6970132d\",\"harness\":\"claude\",\"input_tokens\":134,\"output_tokens\":51317,\"total_tokens\":51451,\"cost_usd\":10.161176249999997,\"duration_ms\":10802097,\"exit_code\":1}",
+          "created_at": "2026-04-30T04:49:58.120304763Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=51451 cost_usd=10.1612"
+        },
+        {
+          "actor": "erik",
+          "body": "timeout after 3h0m0s\nresult_rev=94166bd75d8de9922ad6fe53fd4337cb09d166ad\nbase_rev=5433e5d965841d6989b03855e01078e640b5f97f",
+          "created_at": "2026-04-30T04:49:58.320527732Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T181254-ac5738cc",
+    "prompt": ".ddx/executions/20260430T181254-ac5738cc/prompt.md",
+    "manifest": ".ddx/executions/20260430T181254-ac5738cc/manifest.json",
+    "result": ".ddx/executions/20260430T181254-ac5738cc/result.json",
+    "checks": ".ddx/executions/20260430T181254-ac5738cc/checks.json",
+    "usage": ".ddx/executions/20260430T181254-ac5738cc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6036e1bc-20260430T181254-ac5738cc"
+  }
+}
