@@ -41,10 +41,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
+
+const defaultLargeDeletionLineThreshold = 200
 
 // LandRequest is one submission to the land coordinator: "here is the worker's
 // result from base B to result R for bead X; land it on the project's target
@@ -626,6 +629,12 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 
 	contribCount := gitOps.CountCommits(wd, req.BaseRev, req.ResultRev)
 
+	if preserved, err := preserveIfLargeDeletion(wd, req, gitOps, currentTip, contribCount); err != nil {
+		return nil, err
+	} else if preserved != nil {
+		return preserved, nil
+	}
+
 	// Fast path: no sibling advanced the target branch → straight ff via
 	// update-ref. The worker's commit becomes the new tip unchanged; its
 	// parent is still BaseRev, so replay sees the same inputs the worker
@@ -713,6 +722,79 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	}
 	landPush(wd, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 	return result, nil
+}
+
+type largeDeletionFinding struct {
+	Path    string
+	Deleted int
+}
+
+func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, currentTip string, contribCount int) (*LandResult, error) {
+	finding, found, err := largestDeletionFinding(wd, req.BaseRev, req.ResultRev, defaultLargeDeletionLineThreshold)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	ack, err := landHasLargeDeletionAcknowledgement(wd, req.BaseRev, req.ResultRev)
+	if err == nil && ack {
+		return nil, nil
+	}
+
+	preserveRef := landIterationRef(req.BeadID, req.AttemptID, currentTip)
+	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
+		return nil, fmt.Errorf("preserving %s after large-deletion gate: %w", preserveRef, upErr)
+	}
+	return &LandResult{
+		Status:            "preserved",
+		PreserveRef:       preserveRef,
+		Reason:            fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, defaultLargeDeletionLineThreshold),
+		MergedCommitCount: contribCount,
+	}, nil
+}
+
+func largestDeletionFinding(wd, baseRev, resultRev string, threshold int) (largeDeletionFinding, bool, error) {
+	out, err := internalgit.Command(context.Background(), wd, "diff", "--numstat", baseRev, resultRev, "--").CombinedOutput()
+	if err != nil {
+		return largeDeletionFinding{}, false, fmt.Errorf("checking large deletions: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	var largest largeDeletionFinding
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) != 3 || parts[1] == "-" {
+			continue
+		}
+		deleted, parseErr := strconv.Atoi(parts[1])
+		if parseErr != nil {
+			continue
+		}
+		if deleted > threshold && deleted > largest.Deleted {
+			largest = largeDeletionFinding{Path: parts[2], Deleted: deleted}
+		}
+	}
+	return largest, largest.Path != "", nil
+}
+
+func landHasLargeDeletionAcknowledgement(wd, baseRev, resultRev string) (bool, error) {
+	out, err := internalgit.Command(context.Background(), wd, "log", "--format=%B", baseRev+".."+resultRev).CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("checking large-deletion acknowledgement: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	msg := strings.ToLower(string(out))
+	for _, marker := range []string{
+		"intentional large deletion",
+		"intentional file removal",
+		"intentional file deletion",
+	} {
+		if strings.Contains(msg, marker) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // landPush pushes the new target tip to origin when a remote exists. Push

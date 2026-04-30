@@ -131,6 +131,49 @@ func (r *landTestRepo) commitOn(baseSHA, path, content, msg string) string {
 	return sha
 }
 
+func (r *landTestRepo) commitDeleteOn(baseSHA, path, msg string) string {
+	r.t.Helper()
+	wt, err := os.MkdirTemp("", "land-test-wt-*")
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	_ = os.RemoveAll(wt)
+	r.runGit("worktree", "add", "--detach", wt, baseSHA)
+	defer func() {
+		r.runGit("worktree", "remove", "--force", wt)
+		_ = os.RemoveAll(wt)
+	}()
+
+	if err := os.Remove(filepath.Join(wt, path)); err != nil {
+		r.t.Fatal(err)
+	}
+	cmd := exec.Command("git", "-C", wt, "add", "-A")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		r.t.Fatalf("git add: %s: %v", string(out), err)
+	}
+	cmd = exec.Command("git", "-C", wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		r.t.Fatalf("git commit: %s: %v", string(out), err)
+	}
+	cmd = exec.Command("git", "-C", wt, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		r.t.Fatalf("git rev-parse HEAD: %v", err)
+	}
+	sha := strings.TrimSpace(string(out))
+	ref := fmt.Sprintf("refs/ddx/test-pins/%s", sha[:12])
+	r.runGit("update-ref", ref, sha)
+	return sha
+}
+
+func largeFileLines(n int) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "line-%03d\n", i)
+	}
+	return b.String()
+}
+
 // mergeCommitCount returns the number of merge commits (commits with >1
 // parent) reachable from ref. Used to assert merge-commit semantics on the
 // merge path.
@@ -353,6 +396,80 @@ func TestLand_MergeConflict(t *testing.T) {
 		if strings.HasPrefix(line, "worktree ") && strings.Contains(line, "ddx-land-wt-") {
 			t.Errorf("stale land worktree left behind: %q", line)
 		}
+	}
+}
+
+func TestLand_LargeDeletionPreservedBeforeFastForward(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	r.writeFile("large.txt", largeFileLines(defaultLargeDeletionLineThreshold+25))
+	r.runGit("add", "-A")
+	r.runGit("commit", "-m", "test: add large file")
+	r.baseSHA = r.resolveRef("refs/heads/main")
+
+	workerSHA := r.commitDeleteOn(r.baseSHA, "large.txt", "feat: remove generated content")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-large-delete",
+		AttemptID:    "20260430T120000-large-delete",
+		TargetBranch: "main",
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "preserved" {
+		t.Fatalf("expected status=preserved, got %q", land.Status)
+	}
+	if !strings.Contains(land.Reason, "large-deletion gate") || !strings.Contains(land.Reason, "large.txt") {
+		t.Fatalf("expected large-deletion reason naming file, got %q", land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main tip = %s, want unchanged base %s", got, r.baseSHA)
+	}
+	if got := r.resolveRef(land.PreserveRef); got != workerSHA {
+		t.Fatalf("preserve ref resolves to %s, want %s", got, workerSHA)
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, "large.txt")); err != nil {
+		t.Fatalf("large.txt should remain in main worktree after preserved land: %v", err)
+	}
+}
+
+func TestLand_LargeDeletionAcknowledgementAllowsLand(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	r.writeFile("large.txt", largeFileLines(defaultLargeDeletionLineThreshold+25))
+	r.runGit("add", "-A")
+	r.runGit("commit", "-m", "test: add large file")
+	r.baseSHA = r.resolveRef("refs/heads/main")
+
+	workerSHA := r.commitDeleteOn(r.baseSHA, "large.txt", "feat: remove obsolete fixture\n\nintentional large deletion: fixture is generated elsewhere")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-large-delete-ack",
+		AttemptID:    "20260430T120001-large-delete-ack",
+		TargetBranch: "main",
+	}
+
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != workerSHA {
+		t.Fatalf("main tip = %s, want worker %s", got, workerSHA)
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, "large.txt")); !os.IsNotExist(err) {
+		t.Fatalf("large.txt should be removed from main worktree after acknowledged land, stat err=%v", err)
 	}
 }
 
