@@ -111,12 +111,12 @@
 <div class="space-y-6" data-testid="provider-trend">
 	<div class="flex items-center justify-between">
 		<div>
-			<a href="/nodes/{$page.params.nodeId}/providers" class="text-sm text-blue-600 hover:underline dark:text-blue-400">
+			<a href="/nodes/{$page.params.nodeId}/providers" class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever">
 				← Agent endpoints
 			</a>
-			<h1 class="mt-1 text-xl font-semibold dark:text-white">{name}</h1>
+			<h1 class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">{name}</h1>
 			{#if trend7}
-				<p class="text-sm text-gray-500 dark:text-gray-400">
+				<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 					{trend7.kind === 'HARNESS' ? 'Subprocess harness' : 'API endpoint'}
 				</p>
 			{/if}
@@ -124,23 +124,23 @@
 	</div>
 
 	{#if loading}
-		<div class="py-8 text-center text-sm text-gray-400 dark:text-gray-600">Loading trend…</div>
+		<div class="py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">Loading trend…</div>
 	{:else if error}
-		<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div class="border border-border-line bg-bg-surface p-4 text-body-sm text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error">
 			Error: {error}
 		</div>
 	{:else if trend7 && trend7.projectedRunOutHours != null}
-		<div class="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-300" data-testid="projection-callout">
+		<div class="alert-caution border p-4 text-body-sm" data-testid="projection-callout">
 			Projected to hit quota in ~{formatHours(trend7.projectedRunOutHours)} at current rate.
 		</div>
 	{/if}
 
 	{#if trend7}
 		{@const max7 = maxTokens(trend7.series, trend7.ceilingTokens)}
-		<section class="rounded-lg border border-gray-200 p-4 dark:border-gray-700" data-testid="series-7d">
+		<section class="border border-border-line p-4 dark:border-dark-border-line" data-testid="series-7d">
 			<div class="mb-2 flex items-center justify-between">
-				<h2 class="text-sm font-semibold dark:text-white">Last 7 days · hourly buckets</h2>
-				<span class="text-xs text-gray-500 dark:text-gray-400">
+				<h2 class="text-body-sm font-semibold text-fg-ink dark:text-dark-fg-ink">Last 7 days · hourly buckets</h2>
+				<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">
 					{formatN(totalTokens(trend7.series))} tokens · {formatN(totalRequests(trend7.series))} requests
 				</span>
 			</div>
@@ -148,7 +148,7 @@
 				<div class="flex h-full items-end gap-[1px]">
 					{#each trend7.series as point (point.bucketStart)}
 						<div
-							class="w-full bg-blue-500"
+							class="w-full bg-accent-lever dark:bg-dark-accent-lever"
 							style="height: {barHeight(point.tokens, max7)}"
 							title="{point.bucketStart}: {point.tokens} tokens, {point.requests} requests"></div>
 					{/each}
@@ -161,7 +161,7 @@
 						title="Quota ceiling: {formatN(trend7.ceilingTokens)} tokens"
 					>
 						<span
-							class="absolute -top-4 right-0 rounded bg-red-500/80 px-1 text-[10px] font-medium text-white"
+							class="absolute -top-4 right-0 bg-red-500/80 px-1 text-[10px] font-medium text-white"
 						>
 							ceiling {formatN(trend7.ceilingTokens)}
 						</span>
@@ -173,10 +173,10 @@
 
 	{#if trend30}
 		{@const max30 = maxTokens(trend30.series, trend30.ceilingTokens)}
-		<section class="rounded-lg border border-gray-200 p-4 dark:border-gray-700" data-testid="series-30d">
+		<section class="border border-border-line p-4 dark:border-dark-border-line" data-testid="series-30d">
 			<div class="mb-2 flex items-center justify-between">
-				<h2 class="text-sm font-semibold dark:text-white">Last 30 days · 4-hour buckets</h2>
-				<span class="text-xs text-gray-500 dark:text-gray-400">
+				<h2 class="text-body-sm font-semibold text-fg-ink dark:text-dark-fg-ink">Last 30 days · 4-hour buckets</h2>
+				<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">
 					{formatN(totalTokens(trend30.series))} tokens · {formatN(totalRequests(trend30.series))} requests
 				</span>
 			</div>
@@ -184,7 +184,7 @@
 				<div class="flex h-full items-end gap-[1px]">
 					{#each trend30.series as point (point.bucketStart)}
 						<div
-							class="w-full bg-indigo-500"
+							class="w-full bg-accent-fulcrum dark:bg-dark-accent-fulcrum"
 							style="height: {barHeight(point.tokens, max30)}"
 							title="{point.bucketStart}: {point.tokens} tokens, {point.requests} requests"></div>
 					{/each}

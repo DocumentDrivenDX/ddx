@@ -62,7 +62,7 @@
 
 	function normalizeMarkdownBody(body: string) {
 		return body
-			.replace(/\u00a0/g, ' ')
+			.replace(/ /g, ' ')
 			.replace(/\n{3,}/g, '\n\n')
 			.trim();
 	}
@@ -71,7 +71,7 @@
 		const blocks: string[] = [];
 
 		function textOf(node: Node) {
-			return (node.textContent ?? '').replace(/\u00a0/g, ' ').trim();
+			return (node.textContent ?? '').replace(/ /g, ' ').trim();
 		}
 
 		function addBlock(value: string) {
@@ -278,16 +278,16 @@
 	<div class="flex items-center gap-3">
 		<button
 			onclick={handleBack}
-			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+			class="flex items-center gap-1.5 px-2 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 		>
 			<ArrowLeft class="h-4 w-4" />
 			Documents
 		</button>
-		<span class="font-mono text-xs text-gray-400 dark:text-gray-600">{data.path}</span>
+		<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{data.path}</span>
 		{#if !editing && content}
 			<button
 				onclick={startEdit}
-				class="ml-auto flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+				class="ml-auto flex items-center gap-1.5 px-2 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 			>
 				<Pencil class="h-4 w-4" />
 				Edit
@@ -299,17 +299,17 @@
 		<div class="space-y-2">
 			{#if saveError}
 				<div
-					class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
+					class="border border-border-line bg-bg-surface px-3 py-2 text-body-sm text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error"
 				>
 					{saveError}
 				</div>
 			{/if}
 			<fieldset
-				class="flex w-fit gap-1 rounded-md border border-gray-200 bg-white p-1 text-sm dark:border-gray-700 dark:bg-gray-900"
+				class="flex w-fit gap-1 border border-border-line bg-bg-elevated p-1 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-elevated"
 			>
 				<legend class="sr-only">Editor mode</legend>
 				<label
-					class="flex cursor-pointer items-center gap-2 rounded px-3 py-1.5 has-[:checked]:bg-gray-900 has-[:checked]:text-white dark:has-[:checked]:bg-gray-100 dark:has-[:checked]:text-gray-950"
+					class="flex cursor-pointer items-center gap-2 px-3 py-1.5 has-[:checked]:bg-fg-ink has-[:checked]:text-bg-elevated dark:has-[:checked]:bg-dark-fg-ink dark:has-[:checked]:text-dark-bg-elevated"
 				>
 					<input
 						type="radio"
@@ -322,7 +322,7 @@
 					WYSIWYG
 				</label>
 				<label
-					class="flex cursor-pointer items-center gap-2 rounded px-3 py-1.5 has-[:checked]:bg-gray-900 has-[:checked]:text-white dark:has-[:checked]:bg-gray-100 dark:has-[:checked]:text-gray-950"
+					class="flex cursor-pointer items-center gap-2 px-3 py-1.5 has-[:checked]:bg-fg-ink has-[:checked]:text-bg-elevated dark:has-[:checked]:bg-dark-fg-ink dark:has-[:checked]:text-dark-bg-elevated"
 				>
 					<input
 						type="radio"
@@ -340,13 +340,13 @@
 				<div class="space-y-3">
 					{#if editParts.frontmatter}
 						<details
-							class="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/60"
+							class="border border-border-line bg-bg-surface px-4 py-3 dark:border-dark-border-line dark:bg-dark-bg-surface"
 						>
-							<summary class="cursor-pointer text-sm font-medium text-gray-800 dark:text-gray-100">
+							<summary class="cursor-pointer text-body-sm font-medium text-fg-ink dark:text-dark-fg-ink">
 								Frontmatter
 							</summary>
 							<pre
-								class="mt-3 overflow-x-auto font-mono text-xs whitespace-pre-wrap text-gray-700 dark:text-gray-300">{editParts.frontmatterText}</pre>
+								class="mt-3 overflow-x-auto font-mono-code text-mono-code whitespace-pre-wrap text-fg-muted dark:text-dark-fg-muted">{editParts.frontmatterText}</pre>
 						</details>
 					{/if}
 					<div
@@ -356,7 +356,7 @@
 						tabindex="0"
 						data-testid="wysiwyg-editor"
 						oninput={handleWysiwygInput}
-						class="doc-content min-h-[32rem] w-full rounded-lg border border-gray-300 bg-white p-6 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-blue-400"
+						class="doc-content min-h-[32rem] w-full border border-border-line bg-bg-elevated p-6 text-fg-ink focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:focus:border-dark-accent-lever"
 					>
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 						{@html renderedEditBody}
@@ -369,20 +369,20 @@
 					aria-label="Plain markdown editor"
 					bind:value={editContent}
 					rows={24}
-					class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 font-mono text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-blue-400"
+					class="w-full border border-border-line bg-bg-elevated px-4 py-3 font-mono-code text-mono-code text-fg-ink focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:focus:border-dark-accent-lever"
 				></textarea>
 			{/if}
 			<div class="flex justify-end gap-2">
 				<button
 					onclick={cancelEdit}
-					class="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+					class="border border-border-line px-4 py-2 text-body-sm text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={handleSave}
 					disabled={saving}
-					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+					class="bg-accent-lever px-4 py-2 text-body-sm font-medium text-bg-elevated hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-dark-accent-lever dark:text-dark-bg-canvas"
 				>
 					{saving ? 'Saving…' : 'Save'}
 				</button>
@@ -391,14 +391,14 @@
 	{:else if content}
 		<div
 			bind:this={renderedElement}
-			class="doc-content rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900"
+			class="doc-content border border-border-line bg-bg-elevated p-6 dark:border-dark-border-line dark:bg-dark-bg-elevated"
 		>
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 			{@html rendered}
 		</div>
 	{:else}
 		<div
-			class="rounded-lg border border-gray-200 bg-white p-6 text-center text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-600"
+			class="border border-border-line bg-bg-elevated p-6 text-center text-body-sm text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted"
 		>
 			Document not found.
 		</div>
@@ -475,7 +475,6 @@
 		background-color: var(--doc-pre-surface);
 		color: var(--doc-pre-text);
 		padding: 1rem;
-		border-radius: 0.5rem;
 		overflow-x: auto;
 		margin-bottom: 1rem;
 	}
@@ -520,7 +519,5 @@
 	.doc-content :global(img) {
 		max-width: 100%;
 		height: auto;
-		border-radius: 0.375rem;
 	}
-
 </style>
