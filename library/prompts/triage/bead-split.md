@@ -3,6 +3,14 @@
 You are decomposing a coarse bead (epic) into focused child beads that can
 each be dispatched to an agent worker as a single unit of work.
 
+## Boundary
+
+DDx only decomposes and tracks work here. Do not choose, rank, fallback, or
+recommend a provider, model, or harness. If the parent bead mentions those
+terms, preserve them only as opaque passthrough constraints in the child scope
+when they are already part of the operator request. The agent owns concrete
+routing and execution.
+
 ## Input
 
 You will receive the parent bead:
@@ -37,7 +45,8 @@ Return a JSON object with two fields:
       "acceptance": "...",
       "labels": [],
       "spec_id": "",
-      "in_scope_files": []
+      "in_scope_files": [],
+      "out_of_scope": []
     }
   ]
 }
@@ -51,6 +60,7 @@ Return a JSON object with two fields:
 - `spec_id`: inherit parent spec_id unless a more specific spec applies.
 - `in_scope_files`: file paths or glob patterns the agent should focus on.
   Leave empty when scope is not file-bounded.
+- `out_of_scope`: adjacent work the child must not touch.
 
 ## Constraints
 

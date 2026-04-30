@@ -339,6 +339,44 @@ func TestTriagePromptsExist(t *testing.T) {
 	}
 }
 
+func TestTriagePromptsDeclareContractsAndBoundary(t *testing.T) {
+	complexity, err := os.ReadFile("../../../library/prompts/triage/complexity-eval.md")
+	require.NoError(t, err)
+	split, err := os.ReadFile("../../../library/prompts/triage/bead-split.md")
+	require.NoError(t, err)
+
+	complexityText := string(complexity)
+	for _, required := range []string{
+		"atomic|decomposable|ambiguous",
+		"confidence",
+		"reasoning",
+		"DDx only estimates work shape",
+		"opaque passthrough constraints",
+		"The agent owns concrete",
+		"routing and execution",
+	} {
+		assert.Contains(t, complexityText, required)
+	}
+
+	splitText := string(split)
+	for _, required := range []string{
+		"children",
+		"title",
+		"description",
+		"acceptance",
+		"labels",
+		"spec_id",
+		"in_scope_files",
+		"out_of_scope",
+		"DDx only decomposes and tracks work",
+		"opaque passthrough constraints",
+		"The agent owns concrete",
+		"routing and execution",
+	} {
+		assert.Contains(t, splitText, required)
+	}
+}
+
 // TestTriagePromptsAccuracy loads the held-out eval slice from
 // eval-corpus.jsonl and runs RuleBasedClassifier (which encodes the
 // complexity-eval prompt criteria) against each entry. Asserts >= 80%

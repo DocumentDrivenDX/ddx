@@ -4,6 +4,13 @@ You are evaluating a bead (work item) to decide whether it is safe to dispatch
 to an agent worker as a single unit of work, or whether it must be decomposed
 into smaller child beads first.
 
+## Boundary
+
+DDx only estimates work shape here: atomic, decomposable, or ambiguous. Do not
+choose, rank, fallback, or recommend a provider, model, or harness. If those
+terms appear in the bead text, treat them as opaque passthrough constraints for
+the agent runtime. The agent owns concrete routing and execution.
+
 ## Input
 
 You will receive:
@@ -57,7 +64,7 @@ classification over marking ambiguous when evidence favours one side.
 
 ## Examples
 
-**atomic** — "Fix nil pointer dereference in Execute when model string is empty"
+**atomic** — "Fix nil pointer dereference in Execute when route target string is empty"
 Reasoning: single bug fix in one function.
 
 **decomposable** — "Harness × Model Matrix Benchmark — initial tranche"

@@ -95,9 +95,20 @@ type corpusEntry struct {
 	Description     string   `json:"description,omitempty"`
 	Acceptance      string   `json:"acceptance,omitempty"`
 	Labels          []string `json:"labels,omitempty"`
-	Bead            rawBead  `json:"bead"`
+	Bead            evalBead `json:"bead"`
 	ChildTitles     []string `json:"child_titles,omitempty"`
 	ChildAcceptance []string `json:"child_acceptance,omitempty"`
+}
+
+type evalBead struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Status      string   `json:"status,omitempty"`
+	IssueType   string   `json:"issue_type,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Acceptance  string   `json:"acceptance,omitempty"`
+	Labels      []string `json:"labels,omitempty"`
+	Parent      string   `json:"parent,omitempty"`
 }
 
 func main() {
@@ -166,21 +177,34 @@ func harvest(beads []sourcedBead) []corpusEntry {
 			SourceRepo:    item.SourceRepo,
 			ExpectedClass: class,
 			Rationale:     rationale,
-			Title:         item.Bead.Title,
-			Description:   item.Bead.Description,
-			Acceptance:    item.Bead.Acceptance,
-			Labels:        append([]string(nil), item.Bead.Labels...),
-			Bead:          item.Bead,
+			Title:         scrubRouteWords(item.Bead.Title),
+			Description:   scrubRouteWords(item.Bead.Description),
+			Acceptance:    scrubRouteWords(item.Bead.Acceptance),
+			Labels:        scrubLabels(item.Bead.Labels),
+			Bead:          toEvalBead(item.Bead),
 		}
 		for _, child := range children[key] {
-			entry.ChildTitles = append(entry.ChildTitles, child.Title)
-			entry.ChildAcceptance = append(entry.ChildAcceptance, child.Acceptance)
+			entry.ChildTitles = append(entry.ChildTitles, scrubRouteWords(child.Title))
+			entry.ChildAcceptance = append(entry.ChildAcceptance, scrubRouteWords(child.Acceptance))
 		}
 		entry.ID = stableEntryID(entry)
 		out = append(out, entry)
 	}
 	sortEntries(out)
 	return out
+}
+
+func toEvalBead(b rawBead) evalBead {
+	return evalBead{
+		ID:          scrubRouteWords(b.ID),
+		Title:       scrubRouteWords(b.Title),
+		Status:      b.Status,
+		IssueType:   b.IssueType,
+		Description: scrubRouteWords(b.Description),
+		Acceptance:  scrubRouteWords(b.Acceptance),
+		Labels:      scrubLabels(b.Labels),
+		Parent:      scrubRouteWords(b.Parent),
+	}
 }
 
 func classify(b rawBead, children []rawBead) (string, string) {
@@ -422,6 +446,35 @@ func tokenSet(s string) map[string]bool {
 		tokens[cur.String()] = true
 	}
 	return tokens
+}
+
+func scrubLabels(labels []string) []string {
+	out := make([]string, len(labels))
+	for i, label := range labels {
+		out[i] = scrubRouteWords(label)
+	}
+	return out
+}
+
+func scrubRouteWords(s string) string {
+	replacements := []struct {
+		old string
+		new string
+	}{
+		{"provider", "upstream-service"},
+		{"Provider", "Upstream-service"},
+		{"PROVIDER", "UPSTREAM-SERVICE"},
+		{"model", "route-target"},
+		{"Model", "Route-target"},
+		{"MODEL", "ROUTE-TARGET"},
+		{"harness", "runner"},
+		{"Harness", "Runner"},
+		{"HARNESS", "RUNNER"},
+	}
+	for _, replacement := range replacements {
+		s = strings.ReplaceAll(s, replacement.old, replacement.new)
+	}
+	return s
 }
 
 func containsAny(s string, needles ...string) bool {
