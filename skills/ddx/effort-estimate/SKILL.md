@@ -7,7 +7,7 @@ description: Estimate effort for a bead, spec, or task by dispatching to one or 
 
 A workflow skill for estimating the effort required to complete a bead,
 spec, or free-form task description. Dispatches a structured prompt to
-one or more harnesses via `ddx run` (or `ddx agent run`) and aggregates
+one or more harnesses via `ddx run` (or `ddx run`) and aggregates
 complexity, time, and risk assessments into a single output.
 
 ## When to use
@@ -67,7 +67,7 @@ work exceeds one session.
 For a single estimate:
 
 ```bash
-ddx agent run --harness claude --profile smart \
+ddx run --harness claude --min-power 10 \
   --prompt estimate-target.md \
   > estimate.md
 ```
@@ -75,8 +75,8 @@ ddx agent run --harness claude --profile smart \
 For a two-harness cross-check (recommended for specs > ~1 day):
 
 ```bash
-ddx agent run --harness codex  --profile smart --prompt estimate-target.md > estimate-codex.md  &
-ddx agent run --harness claude --profile smart --prompt estimate-target.md > estimate-claude.md &
+ddx run --harness codex  --min-power 10 --prompt estimate-target.md > estimate-codex.md  &
+ddx run --harness claude --min-power 10 --prompt estimate-target.md > estimate-claude.md &
 wait
 ```
 
@@ -200,12 +200,12 @@ calibrated rather than optimistic output:
 
 ```bash
 # Single-harness estimate
-ddx agent run --harness claude --profile smart \
+ddx run --harness claude --min-power 10 \
   --prompt estimate-target.md > estimate.md
 
 # Two-harness cross-check (parallel)
-ddx agent run --harness codex  --profile smart --prompt estimate-target.md > estimate-codex.md  &
-ddx agent run --harness claude --profile smart --prompt estimate-target.md > estimate-claude.md &
+ddx run --harness codex  --min-power 10 --prompt estimate-target.md > estimate-codex.md  &
+ddx run --harness claude --min-power 10 --prompt estimate-target.md > estimate-claude.md &
 wait
 
 # Store estimate as bead evidence

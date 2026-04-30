@@ -7,7 +7,7 @@ description: Run an adversarial review of a plan, spec, bead, or PR by dispatchi
 
 A workflow skill for pressure-testing a target (plan, spec, bead, code change,
 or PR) by dispatching adversarial review prompts to multiple harnesses and
-aggregating the findings. Replaces ad-hoc `--quorum` invocations with a
+aggregating the findings. Replaces ad-hoc inline quorum invocations with a
 structured, repeatable workflow.
 
 ## When to use
@@ -57,17 +57,17 @@ rework. Be adversarial — your job is to find problems, not validate.
 
 ### 2. Dispatch to multiple harnesses
 
-Run each harness in parallel using `ddx agent run --harness <name>`.
-Use `--profile smart` (or `--harness` for explicit control). Route to
+Run each harness in parallel using `ddx run --harness <name>`.
+Use `--min-power 10` (or `--harness` for explicit control). Route to
 harnesses from different model families for maximum coverage.
 
 ```bash
 # Two-harness adversarial dispatch (parallel)
-ddx agent run --harness codex --profile smart \
+ddx run --harness codex --min-power 10 \
   --prompt review-target.md \
   > findings-codex.md &
 
-ddx agent run --harness claude --profile smart \
+ddx run --harness claude --min-power 10 \
   --prompt review-target.md \
   > findings-claude.md &
 
@@ -77,9 +77,9 @@ wait
 For three harnesses:
 
 ```bash
-ddx agent run --harness codex  --profile smart --prompt review-target.md > findings-codex.md  &
-ddx agent run --harness claude --profile smart --prompt review-target.md > findings-claude.md &
-ddx agent run --harness gemini --profile smart --prompt review-target.md > findings-gemini.md &
+ddx run --harness codex  --min-power 10 --prompt review-target.md > findings-codex.md  &
+ddx run --harness claude --min-power 10 --prompt review-target.md > findings-claude.md &
+ddx run --harness gemini --min-power 10 --prompt review-target.md > findings-gemini.md &
 wait
 ```
 
@@ -161,7 +161,7 @@ The adversarial framing instruction to include in every review prompt:
 Bind a `specification-enforcer` persona for the strictest checks:
 
 ```bash
-ddx agent run --harness codex \
+ddx run --harness codex \
   --persona specification-enforcer \
   --prompt review-target.md
 ```
@@ -186,12 +186,12 @@ and surfaces spec gaps others miss.
 
 ```bash
 # Parallel adversarial dispatch
-ddx agent run --harness codex  --profile smart --prompt review-target.md > findings-codex.md  &
-ddx agent run --harness claude --profile smart --prompt review-target.md > findings-claude.md &
+ddx run --harness codex  --min-power 10 --prompt review-target.md > findings-codex.md  &
+ddx run --harness claude --min-power 10 --prompt review-target.md > findings-claude.md &
 wait
 
 # With persona
-ddx agent run --harness codex --persona specification-enforcer \
+ddx run --harness codex --persona specification-enforcer \
   --prompt review-target.md > findings-codex.md
 
 # Store findings as evidence

@@ -1,17 +1,17 @@
 ---
 name: compare-prompts
-description: Dispatch the same prompt across N agent invocations (different harnesses, models, personas, or prompt variants) and aggregate the results into a single comparison report. Use when you need to benchmark prompt variants, run a quorum-style consensus check, compare model outputs side-by-side, or replay a prompt under altered conditions. Replaces the deprecated `--quorum` flag and `ddx agent benchmark` CLI.
+description: Dispatch the same prompt across N agent invocations (different harnesses, models, personas, or prompt variants) and aggregate the results into a single comparison report. Use when you need to benchmark prompt variants, run a quorum-style consensus check, compare model outputs side-by-side, or replay a prompt under altered conditions. Replaces the removed core quorum flag and benchmark CLI.
 ---
 
 # Compare Prompts
 
 A workflow skill for N-arm dispatch and result aggregation. Composes
-`ddx agent run` (the layer-1 invocation primitive) into a comparison
+`ddx run` (the layer-1 invocation primitive) into a comparison
 matrix: same prompt, varied conditions, structured aggregation.
 
 This skill replaces two retired surfaces:
 
-- `ddx agent run --quorum=<policy>` — the inline quorum flag.
+- the removed inline quorum flag.
 - `ddx agent benchmark` — the per-prompt benchmark CLI.
 
 Both collapse into the same workflow shape: dispatch N invocations,
@@ -29,7 +29,7 @@ aggregate their outputs, render a verdict.
 - **Persona comparison** — same prompt under different personas to
   see how role framing changes the answer.
 - **Replay under altered conditions** — re-run a prior prompt with a
-  changed model, profile, or context to A/B a hypothesis.
+  changed model, power bound, or context to A/B a hypothesis.
 
 For pressure-testing a plan or spec with adversarial framing, prefer
 the `adversarial-review` skill — it layers a critic-only prompt
@@ -44,11 +44,11 @@ uninterpretable.
 
 | Axis | Vary | Hold constant |
 |---|---|---|
-| harness | `--harness claude`, `--harness codex`, `--harness gemini` | prompt, profile, persona |
+| harness | `--harness claude`, `--harness codex`, `--harness gemini` | prompt, power bounds, persona |
 | model | `--model <a>`, `--model <b>` | harness, prompt, persona |
 | prompt | prompt-v1.md, prompt-v2.md | harness, model, persona |
 | persona | `--persona reviewer`, `--persona architect` | harness, prompt, model |
-| profile | `--profile cheap`, `--profile smart` | harness, prompt, persona |
+| power | `--min-power 1`, `--min-power 10` | harness, prompt, persona |
 
 If you must vary two axes (e.g., harness × model), enumerate the full
 matrix explicitly and label each arm.
@@ -83,7 +83,7 @@ mechanically aggregateable.
 
 ### 3. Dispatch the arms in parallel
 
-Run each arm as a backgrounded `ddx agent run`, capturing stdout
+Run each arm as a backgrounded `ddx run`, capturing stdout
 to a per-arm file. Wait for all arms before aggregating.
 
 ```bash
@@ -92,9 +92,9 @@ OUT=compare-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$OUT"
 
 # Three-arm harness comparison
-ddx agent run --harness claude --profile smart --prompt "$PROMPT" > "$OUT/claude.md" 2> "$OUT/claude.err" &
-ddx agent run --harness codex  --profile smart --prompt "$PROMPT" > "$OUT/codex.md"  2> "$OUT/codex.err"  &
-ddx agent run --harness gemini --profile smart --prompt "$PROMPT" > "$OUT/gemini.md" 2> "$OUT/gemini.err" &
+ddx run --harness claude --min-power 10 --prompt "$PROMPT" > "$OUT/claude.md" 2> "$OUT/claude.err" &
+ddx run --harness codex  --min-power 10 --prompt "$PROMPT" > "$OUT/codex.md"  2> "$OUT/codex.err"  &
+ddx run --harness gemini --min-power 10 --prompt "$PROMPT" > "$OUT/gemini.md" 2> "$OUT/gemini.err" &
 wait
 ```
 
@@ -162,7 +162,7 @@ cat > "$OUT/report.md" <<EOF
 
 - Axis: harness
 - Prompt: $PROMPT
-- Profile: smart
+- MinPower: 10
 - Arms: claude, codex, gemini
 
 ## Per-arm output
@@ -189,22 +189,20 @@ of the bead's diff), attach the report as evidence:
 ddx bead evidence add <id> --type review --body "$OUT/report.md"
 ```
 
-## Replacing `--quorum`
+## Replacing Removed Quorum Flags
 
-The retired `ddx agent run --quorum=<policy> --harnesses=<list>` flag
-maps to this workflow:
+The retired inline quorum flags map to this workflow:
 
 | Old | New |
 |---|---|
-| `--harnesses=claude,codex,gemini` | three parallel `ddx agent run --harness <name>` calls |
-| `--quorum=majority` | aggregation step 5, "majority" policy |
-| `--quorum=unanimous` | aggregation step 5, "unanimous" policy |
+| old harness list | three parallel `ddx run --harness <name>` calls |
+| old majority policy | aggregation step 5, "majority" policy |
+| old unanimous policy | aggregation step 5, "unanimous" policy |
 | inline aggregated stdout | `report.md` rendered by step 6 |
 
-The skill formalizes what `--quorum` did inline. Behavioral parity
-requires choosing the same harness set, the same policy, and routing
-each arm through `--profile smart` (or whatever profile the original
-quorum invocation pinned).
+The skill formalizes what core used to do inline. Behavioral parity
+requires choosing the same harness set, the same policy, and routing each arm
+through the same `MinPower`/`MaxPower` bounds.
 
 ## Replacing `agent benchmark`
 
@@ -232,7 +230,7 @@ matrix.
 - **Picking a winner mechanically.** Quorum aggregation is
   mechanical (policy → verdict). Benchmark aggregation requires
   human judgment on quality, not a counting rule.
-- **One-arm "comparison".** A single dispatch is `ddx agent run`,
+- **One-arm "comparison".** A single dispatch is `ddx run`,
   not a comparison. This skill requires N ≥ 2.
 - **Reusing `arm1.md` / `arm2.md` filenames.** Name files for the
   varied axis value so the report is self-describing.
@@ -241,19 +239,19 @@ matrix.
 
 ```bash
 # Three-harness quorum (majority policy)
-ddx agent run --harness claude --profile smart --prompt prompt.md > out/claude.md &
-ddx agent run --harness codex  --profile smart --prompt prompt.md > out/codex.md  &
-ddx agent run --harness gemini --profile smart --prompt prompt.md > out/gemini.md &
+ddx run --harness claude --min-power 10 --prompt prompt.md > out/claude.md &
+ddx run --harness codex  --min-power 10 --prompt prompt.md > out/codex.md  &
+ddx run --harness gemini --min-power 10 --prompt prompt.md > out/gemini.md &
 wait
 
 # Two-prompt benchmark (one harness, varying prompt)
-ddx agent run --harness claude --profile smart --prompt prompt-v1.md > out/v1.md &
-ddx agent run --harness claude --profile smart --prompt prompt-v2.md > out/v2.md &
+ddx run --harness claude --min-power 10 --prompt prompt-v1.md > out/v1.md &
+ddx run --harness claude --min-power 10 --prompt prompt-v2.md > out/v2.md &
 wait
 
 # Two-persona comparison
-ddx agent run --harness claude --persona reviewer  --prompt prompt.md > out/reviewer.md  &
-ddx agent run --harness claude --persona architect --prompt prompt.md > out/architect.md &
+ddx run --harness claude --persona reviewer  --prompt prompt.md > out/reviewer.md  &
+ddx run --harness claude --persona architect --prompt prompt.md > out/architect.md &
 wait
 
 # Attach the comparison report as bead evidence

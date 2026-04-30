@@ -52,15 +52,15 @@ file child beads that depend on it. The epic provides a stable `spec-id` anchor
 for its children.
 
 ```
-Epic: "Wire multi-harness quorum into ddx bead review"
-├── Task: Add --quorum flag to ddx bead review command
-├── Task: Dispatch the review prompt to N harnesses concurrently
-├── Task: Aggregate per-harness verdicts into a structured report
-└── Task: Add integration test using script harness for 2-arm quorum
+Epic: "Add structured bead review evidence"
+├── Task: Render per-criterion verdict rows
+├── Task: Attach review evidence to a bead
+├── Task: Reject malformed verdicts without evidence
+└── Task: Add integration test using script reviewer output
 ```
 
 Name each unit with an imperative title that states the outcome, not the
-activity. "Add `--quorum` flag to `ddx bead review`" beats "Quorum work".
+activity. "Render per-criterion verdict rows" beats "Review work".
 
 ### 3. Draft each bead
 
@@ -81,11 +81,10 @@ no prior context. Include:
 **Acceptance criteria** — every criterion is a command that passes:
 
 ```
-1. `cd cli && go test ./internal/bead/... -run TestQuorum` passes.
-2. `ddx bead review <id> --quorum=majority --harnesses=claude,codex` exits 0
-   and prints a structured findings table.
-3. `ddx bead review <id> --quorum=majority --harnesses=claude` exits non-zero
-   with "quorum requires at least 2 harnesses".
+1. `cd cli && go test ./internal/bead/... -run TestReviewEvidence` passes.
+2. `ddx bead review <id>` exits 0 and prints a structured findings table.
+3. `ddx bead evidence add <id> --type review --body review.md` stores the
+   review evidence.
 ```
 
 "Works correctly" is not an AC. "Looks good" is not an AC. Each line must be
@@ -183,7 +182,7 @@ Output the breakdown as a numbered list. Then output the `ddx bead create`
 commands I should run to file them, in dependency order.
 EOF
 
-ddx agent run --harness claude --profile smart \
+ddx run --harness claude --min-power 10 \
   --prompt breakdown-target.md \
   > breakdown.md
 ```
@@ -240,6 +239,6 @@ git add .ddx/beads.jsonl
 git commit -m "chore: file beads for <plan title>"
 
 # Dispatch breakdown to an agent
-ddx agent run --harness claude --profile smart \
+ddx run --harness claude --min-power 10 \
   --prompt breakdown-target.md > breakdown.md
 ```

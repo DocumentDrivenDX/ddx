@@ -66,12 +66,12 @@ difference.
 
 | Axis | Vary | Hold constant |
 |---|---|---|
-| harness | `--harness <other>` | model-class, profile, persona, base rev |
-| model | `--model <other>` | harness, profile, persona, base rev |
-| profile | `--profile <other>` | harness, model, persona, base rev |
-| persona | `--persona <other>` | harness, model, profile, base rev |
-| base rev | `--from <rev>` (or `--at-head`) | harness, model, profile, persona |
-| prompt | regenerated bead description / spec | harness, model, profile, persona, base rev |
+| harness | `--harness <other>` | model, power bounds, persona, base rev |
+| model | `--model <other>` | harness, power bounds, persona, base rev |
+| power | `--min-power <n>` / `--max-power <n>` | harness, model, persona, base rev |
+| persona | `--persona <other>` | harness, model, power bounds, base rev |
+| base rev | `--from <rev>` (or `--at-head`) | harness, model, power bounds, persona |
+| prompt | regenerated bead description / spec | harness, model, power bounds, persona, base rev |
 
 If the comparison genuinely requires varying two axes, run two
 replays sequentially against the same baseline rather than one replay
@@ -91,7 +91,7 @@ mkdir -p "$REPLAY_OUT"
 ddx try "$BEAD" \
   --from "$BASELINE_BASE_REV" \
   --harness codex \
-  --profile smart \
+  --min-power 10 \
   --no-merge \
   > "$REPLAY_OUT/replay.log" 2> "$REPLAY_OUT/replay.err"
 ```
@@ -156,7 +156,7 @@ cat > "$REPLAY_OUT/report.md" <<EOF
 - Baseline attempt: $BASELINE_ATTEMPT
 - Replay attempt:   $REPLAY_ATTEMPT
 - Axis varied:      harness (claude → codex)
-- Held constant:    profile=smart, persona=<same>, base-rev=<same>
+- Held constant:    min-power=10, persona=<same>, base-rev=<same>
 
 ## Outcome diff
 
