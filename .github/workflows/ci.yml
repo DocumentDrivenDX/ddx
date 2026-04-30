@@ -62,6 +62,12 @@ jobs:
       with:
         bun-version: latest
 
+    - name: Install root dependencies
+      run: bun install --frozen-lockfile
+
+    - name: Lint DESIGN.md
+      run: bunx @google/design.md lint DESIGN.md
+
     - name: Build CLI binary
       run: |
         cd cli

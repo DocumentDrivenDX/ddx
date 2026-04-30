@@ -324,6 +324,18 @@ pre-commit:
         - rebase
       fail_text: "Failed to sync cli/internal/skills/ddx from skills/ddx. Run 'cd cli && make copy-skills' manually and stage the result."
 
+    design-md-lint:
+      name: "DESIGN.md lint"
+      glob: "DESIGN.md"
+      run: |
+        if ! command -v bun >/dev/null 2>&1; then
+          echo "bun not found; skipping DESIGN.md lint"
+          exit 0
+        fi
+        bun install --frozen-lockfile 2>/dev/null || bun install
+        bunx @google/design.md lint DESIGN.md
+      fail_text: "DESIGN.md lint failed. Run: bunx @google/design.md lint DESIGN.md"
+
     test-engineer-persona-drift:
       name: "Guard test-engineer persona (ddx-482fad2f)"
       glob: "library/personas/test-engineer.md"
