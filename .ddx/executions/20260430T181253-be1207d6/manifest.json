@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260430T181253-be1207d6",
+  "bead_id": "ddx-d06ae28c",
+  "base_rev": "fda13bff6eab2d76797fc103abc757262a0324e4",
+  "created_at": "2026-04-30T18:12:54.433327768Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d06ae28c",
+    "title": "default work path must use power-only Execute, not DDx-side model routing",
+    "description": "Live symptom bead for the routing-boundary cleanup, amended by passthrough and upstream MinPower/MaxPower requirements. Current default work/legacy behavior can silently land on openrouter/gpt-5.4-mini or another unsuitable model because DDx still participates in route selection and pre-resolved model/provider plumbing. This bead is governed by ddx-c4231775: DDx must request abstract power bounds, carry any operator harness/provider/model constraints as opaque passthrough, and own retry escalation; the agent must own harness/provider/model routing and report actual model/power used. The original axon reproduction remains evidence for the regression test, but the fix is not to add another DDx routing rule.",
+    "acceptance": "1. The axon-style clean-config reproduction no longer routes because of DDx-side ResolveRoute/reinjection or DDx endpoint/model policy.\n2. Normal work path calls Execute with MinPower/MaxPower plus effort/permissions/task facts and no DDx-selected Harness/Provider/Model.\n3. Operator-supplied harness/provider/model values are passed through unchanged when present and are absent otherwise.\n4. If the agent chooses a lower-power model, evidence identifies requested_min_power/requested_max_power and actual returned model/power from Execute; DDx does not explain it as its own fallback.\n5. A retry after DDx-owned eligible failure can raise MinPower without selecting or mutating a concrete model.\n6. Regression test covers the historical silent mini-model failure and is tied to epic ddx-c4231775.",
+    "parent": "ddx-c4231775",
+    "labels": [
+      "feat-006",
+      "feat-010",
+      "area:agent",
+      "area:routing",
+      "kind:routing-bug",
+      "power-only"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T181253-be1207d6",
+    "prompt": ".ddx/executions/20260430T181253-be1207d6/prompt.md",
+    "manifest": ".ddx/executions/20260430T181253-be1207d6/manifest.json",
+    "result": ".ddx/executions/20260430T181253-be1207d6/result.json",
+    "checks": ".ddx/executions/20260430T181253-be1207d6/checks.json",
+    "usage": ".ddx/executions/20260430T181253-be1207d6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d06ae28c-20260430T181253-be1207d6"
+  }
+}
