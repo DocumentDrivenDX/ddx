@@ -11,14 +11,21 @@ ddx:
 
 This design specifies the sidecar file format that extends DDx artifact identity
 to non-markdown files (images, diagrams, PDFs, binary exports, plain-text
-prompts, etc.). It covers three decisions the scanner and validator must agree
+prompts, etc.). It covers the decisions the scanner and validator must agree
 on:
 
 1. **Pairing rule** — how a sidecar file maps to its paired asset.
-2. **Conflict rule** — what happens when a file could claim identity via both
+2. **Identity source rule** — when embedded frontmatter is used versus when a
+   sidecar is used.
+3. **Conflict rule** — what happens when a file could claim identity via both
    embedded frontmatter and a sidecar.
-3. **Orphan-check participation** — how sidecar-identified artifacts are counted
+4. **Compatibility rule** — how existing markdown artifacts and sidecars with
+   missing optional fields remain readable.
+5. **Orphan-check participation** — how sidecar-identified artifacts are counted
    in `ddx doc validate`.
+
+This document is the implementation sketch for the artifact identity schema
+introduced by FEAT-005 and indexed by FEAT-007.
 
 ## Pairing Rule
 
@@ -81,7 +88,10 @@ ddx:
   depends_on:
     - FEAT-005
     - FEAT-007
-  generated_by: SD-011
+  generated_by:
+    run: run-20260429T221533Z-a1b2c3d4
+    prompt: PROMPT-visual-suite-principles
+    source_hash: sha256:8b0f4a74f0b7e7d4f6c6f9f8e5c7a2d9b2a8d3e9c1a7f4b0d6e8a9f2b3c4d5e6
   inputs:
     - node:FEAT-005
   parking_lot: false
@@ -92,24 +102,69 @@ ddx:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | **yes** | Artifact ID. Same prefix conventions as markdown artifacts (e.g., `DIAG-001`, `HERO-003`). Must be unique across the project graph. |
-| `media_type` | string | no | IANA media type of the paired asset (e.g., `image/png`, `image/svg+xml`, `application/pdf`). When absent, DDx infers from the file extension. Explicit value overrides inference. |
+| `media_type` | string | **yes for sidecars** | IANA media type of the paired asset (e.g., `image/png`, `image/svg+xml`, `application/pdf`). New sidecars must set it explicitly. When absent in existing sidecars, DDx infers from the file extension as a compatibility fallback and reports a validation warning. |
 | `depends_on` | []string | no | IDs of artifacts this one depends on. Creates `depends_on` edges in the document graph. Staleness cascades from these edges as with any artifact. |
-| `generated_by` | string | no | ID of the artifact (typically a spec or design) that describes how this asset is produced. Creates a `generated_by` edge, which is **provenance-only** — it does not trigger staleness cascade (see Staleness below). |
+| `generated_by` | object | no | Provenance for generated artifacts: `{ run, prompt, source_hash }`. Creates a `generated_by` edge to the producing run, which is **provenance-only** — it does not trigger staleness cascade (see Staleness below). |
 | `inputs` | []string | no | Input selectors for prompt context resolution. Same selector syntax as markdown frontmatter. |
 | `review` | object | no | Staleness tracking metadata (managed by `ddx doc stamp`). Same sub-fields as markdown: `self_hash`, `deps`, `reviewed_at`. The hash covers the paired asset bytes, not the sidecar YAML. |
 | `parking_lot` | bool | no | When `true`, skip in staleness checks. Same semantics as markdown. |
 
 Unknown fields within `ddx:` are preserved on round-trip.
 
+### Frontmatter vs Sidecar Discovery
+
+DDx has exactly two identity sources:
+
+| Artifact file | Identity source | Notes |
+|---------------|-----------------|-------|
+| Markdown (`*.md`, `*.mdx`) | Embedded `ddx:` YAML frontmatter | Existing document artifacts remain valid. Missing `media_type` defaults to `text/markdown`. |
+| Non-markdown media (`*.png`, `*.svg`, `*.pdf`, `*.excalidraw`, etc.) | Sibling sidecar named `<full-filename>.ddx.yaml` | Sidecars carry the same `ddx:` identity schema and hash the paired file bytes for review metadata. |
+
+The scanner first collects sidecar candidates, resolves their paired assets,
+and records hard errors for dangling or markdown-paired sidecars. It then scans
+markdown frontmatter. The final graph is the union of valid identities from
+both sources, with duplicate IDs detected across the union.
+
 ### `generated_by` vs `depends_on` staleness semantics
 
 | Edge type | Triggers staleness cascade? | Meaning |
 |-----------|----------------------------|---------|
 | `depends_on` | **Yes** | This artifact is governed by the upstream. If the upstream changes, this artifact may need updating. |
-| `generated_by` | **No** | Provenance only. Records which spec or design describes the generator. Changing the generator spec does not automatically make the asset stale — regeneration is triggered explicitly via `ddx artifact regenerate`. |
+| `generated_by` | **No** | Provenance only. Records the run and source hash that produced the artifact. A source-hash mismatch makes only this generated artifact stale and offers explicit regeneration. |
 
 This distinction mirrors the plan decision: "`generated_by` edge with separate
 staleness rule (provenance, not authority — does not cascade like `depends_on`)."
+
+`generated_by` fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `run` | string | **yes** | Run id from the unified FEAT-010 substrate. Layer-1 runs are typical; layer-2 runs are allowed when the generator edits the repo. |
+| `prompt` | string | no | Prompt artifact id or generator prompt reference used to produce the asset. |
+| `source_hash` | string | no | Hash of source inputs used when the artifact was produced. If the current source hash differs, only the generated artifact is stale. |
+
+DDx does not infer a `generated_by` value. Absence means "not generated or
+provenance unknown."
+
+## Compatibility Rule
+
+Existing markdown artifacts continue to work without edits:
+
+- Embedded markdown frontmatter remains authoritative for markdown artifacts.
+- Missing `media_type` on markdown defaults to `text/markdown`.
+- Missing `generated_by` simply means there is no provenance edge.
+
+Existing sidecars with only `ddx.id` remain readable so adoption can be
+incremental:
+
+- Missing `media_type` is inferred from extension for read/display and reported
+  by `ddx doc validate` as a warning so authors can make the identity explicit.
+- Missing `generated_by` does not create a provenance edge.
+- Unknown fields are preserved on round-trip and ignored by graph construction
+  unless a later feature defines them.
+
+This compatibility is read-time only. New sidecar examples, templates, and
+writers must emit explicit `media_type`.
 
 ## Conflict Rule
 
@@ -147,11 +202,11 @@ not orphaned.
 ```
 FEAT-005 ──depends_on──▶ DIAG-001   (FEAT-005 depends on the diagram)
 DIAG-001 ──depends_on──▶ FEAT-007   (diagram depends on the doc-graph spec)
-DIAG-001 ──generated_by─▶ SD-011    (provenance only — not an authority edge)
+DIAG-001 ──generated_by─▶ run-...    (provenance only — not an authority edge)
 ```
 
 A `generated_by` edge **does count** toward orphan suppression: if DIAG-001
-has only a `generated_by` link to SD-011, it is not considered orphaned, because
+has only a `generated_by` link to a producing run, it is not considered orphaned, because
 the provenance edge establishes that the asset is intentional and traceable.
 
 ### Dangling sidecar rule (distinct from orphan)
@@ -176,7 +231,7 @@ The FEAT-007 scanner refactor must handle sidecars in the following order:
 3. Check: does a file exist at that path in the same directory?
    - No → record dangling sidecar error; skip adding to graph.
    - Yes, and the paired asset is a `.md` file → record markdown+sidecar conflict error; skip.
-   - Yes, and paired asset is non-markdown → parse YAML, extract `ddx:` block, add artifact to graph.
+   - Yes, and paired asset is non-markdown → parse YAML, extract `ddx:` block, infer `media_type` only if missing, add artifact to graph.
 4. Continue normal markdown frontmatter scan for all `*.md` files.
 5. Build unified graph from both sources. Apply duplicate-ID detection across both.
 
@@ -202,6 +257,7 @@ When `ddx doc stamp` processes a sidecar artifact:
 | Sidecar alongside a markdown file | error | `<sidecar>: sidecar alongside markdown file '<md>' — use frontmatter instead` |
 | Duplicate ID (sidecar vs. any artifact) | error | `duplicate id '<id>': found in '<path-1>' and '<path-2>'` |
 | Sidecar with no `ddx.id` field | error | `<sidecar>: missing required field ddx.id` |
+| Sidecar with no `ddx.media_type` field | warning | `<sidecar>: missing ddx.media_type; inferred '<type>' from paired asset extension` |
 | Sidecar artifact with no graph edges (orphan) | warning | `<id>: artifact has no edges — add depends_on or ensure another artifact depends on it` |
 | `depends_on` references unknown ID | warning | `<id>: unknown dependency '<ref-id>'` |
-| `generated_by` references unknown ID | warning | `<id>: unknown generated_by target '<ref-id>'` |
+| `generated_by.run` references unknown run ID | warning | `<id>: unknown generated_by.run '<run-id>'` |
