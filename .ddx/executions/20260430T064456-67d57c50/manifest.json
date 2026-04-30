@@ -1,0 +1,7 @@
+{
+  "harness": "claude",
+  "model": "sonnet",
+  "base_rev": "50a4d32f3ce2b1fa3e073fdd3ca8f25aa03904f0",
+  "bead_id": "ddx-1986ee33",
+  "execution_dir": ".ddx/executions/20260430T064456-67d57c50"
+}

@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "FEAT-014 Overview already contains the required one-sentence touch: '`ddx artifact regenerate` runs are layer-1 agent invocations and consume token budgets via this same FEAT-014 normalized signal model.' — added in commit c9280ec4 [ddx-1986ee33] which is an ancestor of base-rev 50a4d32f. Acceptance criterion is met; no additional change needed."
+}
