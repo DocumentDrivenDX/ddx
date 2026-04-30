@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260430T054756-4aa96572",
+  "bead_id": "ddx-0e5e9ca0",
+  "base_rev": "0b45b7e22f8d802b4dfbd66cc5ad1eae1e8d44d5",
+  "created_at": "2026-04-30T05:47:57.056038065Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0e5e9ca0",
+    "title": "Restyle overview and node pages",
+    "description": "Restyle Overview page and node-level pages: token class swap, section hairlines, headline typography scale. No functional changes. Playwright: run `bun run test:e2e -- --grep 'overview'` after changes, update screenshots with --update-snapshots.",
+    "parent": "ddx-04770087",
+    "metadata": {
+      "claimed-at": "2026-04-30T05:47:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T05:47:56.196677912Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T054756-4aa96572",
+    "prompt": ".ddx/executions/20260430T054756-4aa96572/prompt.md",
+    "manifest": ".ddx/executions/20260430T054756-4aa96572/manifest.json",
+    "result": ".ddx/executions/20260430T054756-4aa96572/result.json",
+    "checks": ".ddx/executions/20260430T054756-4aa96572/checks.json",
+    "usage": ".ddx/executions/20260430T054756-4aa96572/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0e5e9ca0-20260430T054756-4aa96572"
+  }
+}
