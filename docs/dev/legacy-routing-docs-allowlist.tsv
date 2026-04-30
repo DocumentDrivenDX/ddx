@@ -1,0 +1,58 @@
+# path<TAB>matching text substring<TAB>reason
+# Keep this file narrow. Each row must describe why the remaining legacy
+# routing/command vocabulary is allowed to survive the docs-corpus check.
+docs/agent-execute.md	`ResolveRoute` and route candidate traces are status/debug-only	explicit boundary: ResolveRoute is status/debug only, not execution routing
+docs/dev/routing-lint.md	flags entirely, and made `agent.routing.profile_ladders` /	lint documentation for hard-rejected retired config keys
+docs/dev/routing-lint.md	`agent.routing.model_overrides` config keys hard-error at load	lint documentation for hard-rejected retired config keys
+docs/dev/routing-lint.md	`profile_ladders`, `model_overrides`,	lint forbidden-token list
+docs/dev/routing-lint.md	`agent.routing.profile_ladders`, `agent.routing.model_overrides`	lint forbidden-token list
+docs/dev/routing-lint.md	`profile_ladders` and `model_overrides` keys out of an incoming config	lint rejection-path documentation
+docs/dev/routing-lint.md	for _, field := range []string{"default_harness", "profile_ladders", "model_overrides"}	lint annotation example for hard-error rejection path
+docs/migrations/routing-config.md	`profile_ladders`, `model_overrides`, and `default_harness` are retired DDx	migration note for hard-rejected retired config keys
+docs/helix/01-frame/features/FEAT-001-cli.md	~~`--quorum=majority --harnesses=a,b`~~ — **removed**	explicit removal requirement; compare-prompts replaces quorum flags
+docs/helix/01-frame/features/FEAT-001-cli.md	**Hard-deprecation handlers** for `ddx agent run`, `ddx agent execute-bead`, `ddx agent execute-loop`	explicit hard-deprecation requirement for removed command leaves
+docs/helix/01-frame/features/FEAT-006-agent-service.md	`ddx agent run`, `ddx agent execute-bead`, and `ddx agent execute-loop` are not	explicit hard-deprecation boundary
+docs/helix/01-frame/features/FEAT-006-agent-service.md	no preflight `ResolveRoute`	explicit prohibition on execution-path ResolveRoute
+docs/helix/01-frame/features/FEAT-006-agent-service.md	call `ResolveRoute` to work around the conflict, or loop on	explicit prohibition on DDx-side conflict routing
+docs/helix/01-frame/features/FEAT-006-agent-service.md	`ResolveRoute` is not part of normal execution	explicit status/debug-only boundary
+docs/helix/01-frame/features/FEAT-006-agent-service.md	diagnostics. A `RouteDecision` returned by `ResolveRoute` must never be	explicit status/debug-only boundary
+docs/helix/01-frame/features/FEAT-006-agent-service.md	`agent.routing.profile_ladders`, `agent.routing.model_overrides`,	explicit hard-rejection requirement for retired config keys
+docs/helix/01-frame/features/FEAT-010-executions.md	required; it does not remove pins, widen pins, call `ResolveRoute`, or retry in a	explicit prohibition on DDx-side route mutation during try
+docs/helix/01-frame/features/FEAT-010-executions.md	mutate the pins or call `ResolveRoute`	explicit prohibition on DDx-side route mutation during try
+docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	Hard-deprecate `ddx agent run`, `ddx agent execute-bead`, `ddx agent execute-loop`	approved plan explicitly removing legacy command leaves
+docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	`--quorum` flag goes away	approved plan explicitly removing quorum flag
+docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	Remove FEAT-001:92 backward-compatibility clause for `ddx agent execute-loop`	approved plan explicitly removing backward compatibility
+docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	replaces `--quorum` flag and `agent benchmark`	approved plan moving comparison to skill composition
+docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	codex via `ddx agent run --harness codex`	historical review-process note in approved plan
+docs/helix/02-design/plan-2026-04-04.md	Worktree-aware agent dispatch: `ddx agent run --worktree <name>`	historical plan already marked historical
+docs/helix/02-design/plan-persona-rewrite-audit.md	Emit stderr when `ddx agent run --persona <dropped-name>`	historical completed persona audit
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	RouteRequest, RouteDecision	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	ResolveRoute returns the routing decision	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	ResolveRoute(ctx, req RouteRequest)	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	ExplainRoute` → `ResolveRoute`	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	ResolveRoute resolves a single under-specified request	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	Provider, Model). The returned RouteDecision	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	ResolveRoute(ctx context.Context, req RouteRequest)	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	that's ResolveRoute	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	distinct from per-request `ResolveRoute`	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	Distinct from per-request `ResolveRoute`	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	resolved via ResolveRoute if empty	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	PreResolved bypasses ResolveRoute	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	from a prior ResolveRoute call	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	PreResolved *RouteDecision	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	type RouteDecision struct	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	LastDecision     *RouteDecision	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	**`ResolveRoute`** — single routing engine	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	3.9 (ResolveRoute)	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	optionally `service.ResolveRoute`	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	Implement `DdxAgent.ResolveRoute`	historical/superseded service-interface plan
+docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md	`service.ResolveRoute` + agent's RouteStatus surface	historical/superseded service-interface plan
+docs/helix/02-design/solution-designs/SD-024-config-driven-runtime-options.md	`ResolveRoute` is now informational	active design text stating ResolveRoute is informational only
+docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md	`github.com/DocumentDrivenDX/agent` v0.8.0 shipped `DdxAgent.ResolveRoute`	legacy context in historical note for route-status tests
+docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md	thin consumer via `svc.ResolveRoute` with coverage at the call-site level	legacy context in historical note for route-status tests
+website/content/docs/cli/commands/ddx_agent.md	Removed; use ddx try	removed website command cross-link
+website/content/docs/cli/commands/ddx_agent.md	Removed; use ddx work	removed website command cross-link
+website/content/docs/cli/commands/ddx_agent.md	Removed; use ddx run	removed website command cross-link
+website/content/docs/cli/commands/ddx_agent_execute-bead.md	## ddx agent execute-bead	removed website command page title
+website/content/docs/cli/commands/ddx_agent_execute-loop.md	## ddx agent execute-loop	removed website command page title
+website/content/docs/cli/commands/ddx_agent_run.md	## ddx agent run	removed website command page title

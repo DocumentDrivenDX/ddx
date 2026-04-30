@@ -454,6 +454,10 @@ ci:
       root: "cli/"
       run: 'go run ./tools/lint/routinglint/cmd/routinglint ./...'
 
+    docs-routing-lint:
+      name: "Docs Routing Lint (legacy DDx routing surfaces allowlisted)"
+      run: 'bash scripts/check-legacy-routing-docs.sh'
+
     # YAML validation
     yaml-validate:
       name: "Validate YAML files"

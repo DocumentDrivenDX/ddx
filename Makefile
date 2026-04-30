@@ -6,7 +6,7 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 CLI_DIR = cli
 ROOT_BINARY = ddx
 
-.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-skill-schema bead-schema skill-schema
+.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-skill-schema bead-schema skill-schema docs-routing-lint
 
 # Default target - build CLI and copy to root
 all: build
@@ -33,6 +33,11 @@ skill-schema: cli-skill-schema
 
 # Run linter
 lint: cli-lint
+
+# Check docs for unallowlisted legacy routing vocabulary
+docs-routing-lint:
+	@echo "Checking docs for legacy routing references..."
+	bash scripts/check-legacy-routing-docs.sh
 
 # Install locally
 install: build
