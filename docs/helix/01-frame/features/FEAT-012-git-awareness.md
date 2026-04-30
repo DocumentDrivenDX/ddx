@@ -214,12 +214,12 @@ metaprompt injection) or generated as a standalone AGENTS.md.
 20. `git.commit_prefix` for customizing commit message format
 21. `git.checkpoint_prefix` for tag naming (default: `ddx/`)
 
-**Execute-Bead Git Operations**
+**Bead-Attempt Git Operations**
 
 The general DDx git safety posture is conservative (see SD-012). One managed
-exception exists: `ddx agent execute-bead` requires a controlled set of git
-operations beyond the read-plus-commit baseline. These are explicitly permitted
-only within the execute-bead workflow:
+exception exists: `ddx try` requires a controlled set of git operations beyond
+the read-plus-commit baseline. These are explicitly permitted only within the
+bead-attempt workflow:
 
 22. Checkpoint a dirty caller worktree before execution (creates a commit, does
     not discard changes)
@@ -402,18 +402,18 @@ agents and developers
 - Given an agent reads the generated guidance, then it knows to `git add`
   and commit `.ddx/beads.jsonl` after bead operations
 
-### US-126: Execute-bead Git Lifecycle Is Safe and Contained
-**As** a developer running execute-bead
+### US-126: Bead-Attempt Git Lifecycle Is Safe and Contained
+**As** a developer running `ddx try`
 **I want** the git operations to be controlled and leave my repo in a predictable state
-**So that** my working tree is never lost or corrupted by an execute-bead run
+**So that** my working tree is never lost or corrupted by a bead-attempt run
 
 **Acceptance Criteria:**
-- Given the caller's working tree has uncommitted changes when `ddx agent execute-bead` starts, when the workflow begins, then DDx creates a checkpoint commit from those changes and uses it as the effective base revision — the caller's staged and unstaged changes are not discarded or reset.
-- Given `ddx agent execute-bead` runs, when it begins, then DDx creates a managed isolated worktree; when execution completes (success, failure, or crash recovery), then no worktree created by that execute-bead invocation remains in the filesystem.
+- Given the caller's working tree has uncommitted changes when `ddx try` starts, when the workflow begins, then DDx creates a checkpoint commit from those changes and uses it as the effective base revision — the caller's staged and unstaged changes are not discarded or reset.
+- Given `ddx try` runs, when it begins, then DDx creates a managed isolated worktree; when execution completes (success, failure, or crash recovery), then no worktree created by that attempt remains in the filesystem.
 - Given an iteration is merge-eligible, when DDx prepares a fast-forward landing, then the only rebase performed is a rebase of the execution branch onto the latest target branch tip — `git log --merges` shows no merge commit; history remains linear.
 - Given an iteration is not merged (required execution failed, ratchet regression, or `--no-merge` set), when DDx preserves the iteration, then a ref matching `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` is created and the target branch is not updated.
-- Given execute-bead left an orphan worktree due to a crash, when the next execute-bead invocation starts, then DDx detects and removes orphaned worktrees matching the execute-bead path pattern before proceeding.
-- Given two execute-bead invocations on the same bead run concurrently or in rapid succession from the same base, then each produces a distinct hidden ref because the `YYYYMMDDTHHMMSSZ-<12charsha>` combination is unique per invocation; DDx does not serialize or lock across concurrent invocations.
+- Given `ddx try` left an orphan worktree due to a crash, when the next `ddx try` invocation starts, then DDx detects and removes orphaned worktrees matching the attempt path pattern before proceeding.
+- Given two `ddx try` invocations on the same bead run concurrently or in rapid succession from the same base, then each produces a distinct hidden ref because the `YYYYMMDDTHHMMSSZ-<12charsha>` combination is unique per invocation; DDx does not serialize or lock across concurrent invocations.
 
 ## Dependencies
 

@@ -36,9 +36,9 @@ a competing foundational execution model or dispatch mechanism.
 
 ### Ownership split
 
-- **FEAT-006** owns `execute-bead` (the canonical bead execution workflow),
-  comparison dispatch (`ddx agent run --compare`), `ComparisonRecord`
-  persistence, and arm execution mechanics.
+- **FEAT-006/FEAT-010** own `ddx run`, `ddx try`, and `ddx work`, including
+  the canonical bead execution workflow, `ComparisonRecord` persistence, and
+  arm execution mechanics used by comparison skills.
 - **FEAT-019** (this spec) owns **grading**, **replay**, and
   **benchmark suite execution** — the evaluation and reporting layer built
   on top of execute-bead preserved iterations and comparison dispatch.
@@ -73,8 +73,8 @@ exploration loops.
 ## Problem Statement
 
 **Current situation:**
-- `ddx agent run` can dispatch to any harness and capture output/tokens/cost.
-- Quorum mode runs multiple harnesses and checks consensus (pass/fail).
+- `ddx run` can dispatch one agent invocation and capture output/tokens/cost.
+- Comparison skills can run multiple arms and check consensus (pass/fail).
 - DDx Agent gives DDx full control of the agent loop with tool call logging.
 - Beads define work. Commits capture verified results. But there is no
   structured way to compare harness outputs for the same prompt, replay a
@@ -295,8 +295,8 @@ agent:
 **So that** prompt changes that degrade quality are caught before merge
 
 **Acceptance Criteria:**
-- Given a comparison with `--harnesses=agent` and the virtual provider
-  baseline, when the DDx Agent output diverges significantly, then the
+- Given a comparison with an `agent` arm and the virtual provider baseline,
+  when the DDx Agent output diverges significantly, then the
   comparison record reflects the difference
 - Given `--format json` output, then CI can parse the comparison and
   fail the pipeline on grade regression

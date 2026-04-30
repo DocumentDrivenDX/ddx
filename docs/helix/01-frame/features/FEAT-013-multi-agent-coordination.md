@@ -100,7 +100,7 @@ failed).
   on what)
 - Bead state tracks which worktree/branch a bead is being worked in
 - `ddx checkpoint` (FEAT-012) marks known-good states before/after merges
-- `ddx agent run` can target a specific worktree via `--workdir`
+- `ddx run` can target a specific worktree via non-routing workdir intent
 
 **What DDx does NOT provide:**
 - Machine provisioning or remote execution
@@ -189,7 +189,7 @@ to handle conflicts. That's workflow-level policy (HELIX). DDx provides:
 7. Optional authentication for non-localhost MCP access
 
 **Worktree-aware dispatch**
-8. `ddx agent run --worktree <name>` creates/reuses a worktree for the run
+8. `ddx run --workdir <path>` executes inside the selected worktree
 9. Bead claim records the worktree branch
 10. `ddx bead show` displays the active worktree/branch for claimed beads
 
