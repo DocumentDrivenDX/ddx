@@ -268,6 +268,16 @@ type LandingGitOps interface {
 	// as the commit message. Returns (sha, nil) when a commit was made,
 	// ("", nil) when nothing was staged, and ("", err) on failure.
 	CommitStaged(dir, msg string) (string, error)
+
+	// DiffNumstat returns the output of `git diff --numstat base tip --` in
+	// dir. Used by the large-deletion gate. Returning ("", nil) indicates no
+	// diffable output (e.g. in a test stub with no real repo).
+	DiffNumstat(dir, base, tip string) (string, error)
+
+	// DiffNameOnly returns the list of changed file paths between base and tip
+	// in dir (`git diff --name-only base tip --`). Used by the syntax-sanity
+	// gate. Returning (nil, nil) indicates no changes.
+	DiffNameOnly(dir, base, tip string) ([]string, error)
 }
 
 // RealLandingGitOps implements LandingGitOps via os/exec git commands.
@@ -493,6 +503,30 @@ func (RealLandingGitOps) CommitStaged(dir, msg string) (string, error) {
 		return "", fmt.Errorf("rev-parse HEAD after evidence commit: %w", err)
 	}
 	return strings.TrimSpace(string(shaOut)), nil
+}
+
+// DiffNumstat implements LandingGitOps.DiffNumstat.
+func (RealLandingGitOps) DiffNumstat(dir, base, tip string) (string, error) {
+	out, err := internalgit.Command(context.Background(), dir, "diff", "--numstat", base, tip, "--").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return string(out), nil
+}
+
+// DiffNameOnly implements LandingGitOps.DiffNameOnly.
+func (RealLandingGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
+	out, err := internalgit.Command(context.Background(), dir, "diff", "--name-only", base, tip, "--").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("listing changed files: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	var paths []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if p := strings.TrimSpace(line); p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
 }
 
 // FetchOriginAncestryCheck implements LandingGitOps.FetchOriginAncestryCheck.
@@ -815,7 +849,7 @@ type largeDeletionFinding struct {
 
 func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, currentTip string, contribCount int) (*LandResult, error) {
 	threshold := largeDeletionLineThreshold(req)
-	finding, found, err := largestDeletionFinding(wd, req.BaseRev, req.ResultRev, threshold)
+	finding, found, err := largestDeletionFinding(gitOps, wd, req.BaseRev, req.ResultRev, threshold)
 	if err != nil {
 		return nil, err
 	}
@@ -846,13 +880,13 @@ func largeDeletionLineThreshold(req LandRequest) int {
 	return defaultLargeDeletionLineThreshold
 }
 
-func largestDeletionFinding(wd, baseRev, resultRev string, threshold int) (largeDeletionFinding, bool, error) {
-	out, err := internalgit.Command(context.Background(), wd, "diff", "--numstat", baseRev, resultRev, "--").CombinedOutput()
+func largestDeletionFinding(gitOps LandingGitOps, wd, baseRev, resultRev string, threshold int) (largeDeletionFinding, bool, error) {
+	raw, err := gitOps.DiffNumstat(wd, baseRev, resultRev)
 	if err != nil {
-		return largeDeletionFinding{}, false, fmt.Errorf("checking large deletions: %s: %w", strings.TrimSpace(string(out)), err)
+		return largeDeletionFinding{}, false, fmt.Errorf("checking large deletions: %w", err)
 	}
 	var largest largeDeletionFinding
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
@@ -895,7 +929,7 @@ type syntaxSanityFinding struct {
 }
 
 func preserveIfSyntaxSanityFails(wd string, req LandRequest, gitOps LandingGitOps, currentTip string, contribCount int) (*LandResult, error) {
-	finding, found, err := syntaxSanityFindingForResult(wd, req.BaseRev, req.ResultRev)
+	finding, found, err := syntaxSanityFindingForResult(gitOps, wd, req.BaseRev, req.ResultRev)
 	if err != nil {
 		return nil, err
 	}
@@ -915,8 +949,8 @@ func preserveIfSyntaxSanityFails(wd string, req LandRequest, gitOps LandingGitOp
 	}, nil
 }
 
-func syntaxSanityFindingForResult(wd, baseRev, resultRev string) (syntaxSanityFinding, bool, error) {
-	paths, err := changedPaths(wd, baseRev, resultRev)
+func syntaxSanityFindingForResult(gitOps LandingGitOps, wd, baseRev, resultRev string) (syntaxSanityFinding, bool, error) {
+	paths, err := gitOps.DiffNameOnly(wd, baseRev, resultRev)
 	if err != nil {
 		return syntaxSanityFinding{}, false, err
 	}
@@ -937,20 +971,6 @@ func syntaxSanityFindingForResult(wd, baseRev, resultRev string) (syntaxSanityFi
 		}
 	}
 	return syntaxSanityFinding{}, false, nil
-}
-
-func changedPaths(wd, baseRev, resultRev string) ([]string, error) {
-	out, err := internalgit.Command(context.Background(), wd, "diff", "--name-only", baseRev, resultRev, "--").CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("listing changed files for syntax sanity: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	var paths []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if path := strings.TrimSpace(line); path != "" {
-			paths = append(paths, path)
-		}
-	}
-	return paths, nil
 }
 
 func gitFileAt(wd, rev, path string) ([]byte, bool, error) {

@@ -68,6 +68,8 @@ func (f *fakeLandingGitOps) MergeInto(_, _, _ string) error {
 func (f *fakeLandingGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return agent.PreClaimResult{Action: "no-origin"}, nil
 }
+func (f *fakeLandingGitOps) DiffNumstat(_, _, _ string) (string, error)    { return "", nil }
+func (f *fakeLandingGitOps) DiffNameOnly(_, _, _ string) ([]string, error) { return nil, nil }
 
 // outcomeGitOps drives Land() outcomes deterministically from a test script.
 //
@@ -90,9 +92,11 @@ func (o *outcomeGitOps) HeadRevAt(_ string) (string, error)     { return "merged
 func (o *outcomeGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return agent.PreClaimResult{Action: "no-origin"}, nil
 }
-func (o *outcomeGitOps) PushFFOnly(_, _, _, _ string) error       { return nil }
-func (o *outcomeGitOps) StageDir(_, _ string) error               { return nil }
-func (o *outcomeGitOps) CommitStaged(_, _ string) (string, error) { return "", nil }
+func (o *outcomeGitOps) DiffNumstat(_, _, _ string) (string, error)    { return "", nil }
+func (o *outcomeGitOps) DiffNameOnly(_, _, _ string) ([]string, error) { return nil, nil }
+func (o *outcomeGitOps) PushFFOnly(_, _, _, _ string) error            { return nil }
+func (o *outcomeGitOps) StageDir(_, _ string) error                    { return nil }
+func (o *outcomeGitOps) CommitStaged(_, _ string) (string, error)      { return "", nil }
 
 func (o *outcomeGitOps) ResolveRef(_, ref string) (string, error) {
 	// For "preserved" and merge-path "landed" we return a tip that differs
