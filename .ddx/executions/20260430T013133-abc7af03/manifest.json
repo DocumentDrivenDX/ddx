@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T013133-abc7af03",
+  "bead_id": "ddx-ae77dfac",
+  "base_rev": "2e831d804bfeb016188561dd22fc4379da35ae78",
+  "created_at": "2026-04-30T01:31:34.45144191Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ae77dfac",
+    "title": "[visual-suite] V3.5 wire DESIGN.md to website (Hugo + Hextra)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Try Hextra params.theme / CSS-variable override path first (assets/css/custom.css). Hextra ships precompiled CSS via Hugo Pipes; project-level Tailwind config consumption unverified. Fall back to accept-divergence (DESIGN.md drives image prompts only) if Hextra reach insufficient. Document outcome in bead resolution.",
+    "labels": [
+      "design",
+      "plan-2026-04-29-vis",
+      "website"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T01:31:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T01:31:33.564204107Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T013133-abc7af03",
+    "prompt": ".ddx/executions/20260430T013133-abc7af03/prompt.md",
+    "manifest": ".ddx/executions/20260430T013133-abc7af03/manifest.json",
+    "result": ".ddx/executions/20260430T013133-abc7af03/result.json",
+    "checks": ".ddx/executions/20260430T013133-abc7af03/checks.json",
+    "usage": ".ddx/executions/20260430T013133-abc7af03/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ae77dfac-20260430T013133-abc7af03"
+  }
+}
