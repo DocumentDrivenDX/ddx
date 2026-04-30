@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260430T003334-e395f513",
+  "bead_id": "ddx-751c661a",
+  "base_rev": "e321dd2a1d3707f33c0e31a008469a669e3b5901",
+  "created_at": "2026-04-30T00:33:35.310370688Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-751c661a",
+    "title": "[artifact-run-arch] update FEAT-001 (CLI surface refactor: run/try/work + agent passthrough + deprecations)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md. Promote run/try/work to top-level. ddx agent mounts upstream Cobra root structurally. Hard-deprecation handlers for agent run/execute-bead/execute-loop. New ddx runs / ddx tries / ddx work workers namespaces. Remove FEAT-001:92 backcompat clause. HARD PREDECESSOR for #6/#7 (FEAT-006/FEAT-010 reference old CLI forms). Atomic merge with #15.",
+    "labels": [
+      "frame",
+      "plan-2026-04-29",
+      "cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T00:33:34Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2278885",
+      "execute-loop-heartbeat-at": "2026-04-30T00:33:34.193051468Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260430T003334-e395f513",
+    "prompt": ".ddx/executions/20260430T003334-e395f513/prompt.md",
+    "manifest": ".ddx/executions/20260430T003334-e395f513/manifest.json",
+    "result": ".ddx/executions/20260430T003334-e395f513/result.json",
+    "checks": ".ddx/executions/20260430T003334-e395f513/checks.json",
+    "usage": ".ddx/executions/20260430T003334-e395f513/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-751c661a-20260430T003334-e395f513"
+  }
+}
