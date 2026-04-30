@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260430T190907-f9c3f1ca",
+  "bead_id": "ddx-d7d1119d",
+  "base_rev": "7aeb58c237ce03c063f5d109ca09a2623aa76803",
+  "created_at": "2026-04-30T19:09:08.275319025Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d7d1119d",
+    "title": "artifact renderers: media-type detail view at /artifacts/:artifactId",
+    "description": "Build the artifact detail route at /nodes/:nodeId/projects/:projectId/artifacts/:artifactId.\n\nRenderers by mediaType:\n- text/markdown: rendered markdown with syntax-highlighted code blocks; intra-repo relative links navigate within UI (same tab, no reload); external links open in new tab.\n- image/svg+xml with Mermaid provenance: sanitized inline SVG (DOMPurify); raw download affordance alongside.\n- application/vnd.excalidraw+json: read-only Excalidraw embed via hosted iframe (https://excalidraw.com/embed); raw JSON download affordance. Offline fallback: show 'Excalidraw preview requires network' with download only.\n- image/*: inline \u003cimg\u003e preview; metadata panel; open/download affordance.\n- application/pdf: \u003cembed type=application/pdf\u003e with open-file fallback link; file size shown.\n- unknown/binary: metadata-only panel with open/download affordance; no attempt to render.\n\nAll renderers show: path, mediaType badge, updatedAt, sidecar metadata panel (DDx frontmatter key/value).\n\nDepends on ddx-fbf57b89 (artifacts list, for navigation context).",
+    "acceptance": "1. Each mediaType renders with the correct renderer (verified with one fixture artifact per type).\n2. Markdown renderer: relative intra-repo links navigate within UI; external links open new tab.\n3. SVG renderer: DOMPurify sanitizes content before inserting into DOM.\n4. Excalidraw renderer: hosted iframe loads; offline fallback shows download-only message.\n5. Unknown/binary: no render attempt; open/download affordance present.\n6. All renderers show sidecar metadata panel with DDx frontmatter fields.\n7. Back button from detail returns to artifacts list with filter/search state preserved.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:07Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:07.287794688Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190907-f9c3f1ca",
+    "prompt": ".ddx/executions/20260430T190907-f9c3f1ca/prompt.md",
+    "manifest": ".ddx/executions/20260430T190907-f9c3f1ca/manifest.json",
+    "result": ".ddx/executions/20260430T190907-f9c3f1ca/result.json",
+    "checks": ".ddx/executions/20260430T190907-f9c3f1ca/checks.json",
+    "usage": ".ddx/executions/20260430T190907-f9c3f1ca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d7d1119d-20260430T190907-f9c3f1ca"
+  }
+}
