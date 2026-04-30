@@ -485,7 +485,7 @@
 <dialog
 	bind:this={dialogElement}
 	aria-label="Command palette"
-	class="m-auto w-[min(680px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-gray-200 bg-white p-0 shadow-2xl backdrop:bg-gray-950/45 dark:border-gray-700 dark:bg-gray-900"
+	class="m-auto w-[min(680px,calc(100vw-2rem))] overflow-hidden rounded-none border border-border-line bg-bg-elevated p-0 shadow-2xl shadow-fg-ink/20 backdrop:bg-fg-ink/45 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:shadow-black/50"
 	onclose={handleDialogClose}
 	oncancel={handleDialogCancel}
 >
@@ -495,18 +495,18 @@
 		label="Command palette"
 		class="flex max-h-[min(720px,calc(100vh-4rem))] flex-col"
 	>
-		<div class="flex items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-			<Search class="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+		<div class="flex items-center gap-3 border-b border-border-line px-4 py-3 dark:border-dark-border-line">
+			<Search class="h-4 w-4 shrink-0 text-fg-muted dark:text-dark-fg-muted" />
 			<input
 				bind:value={query}
 				bind:this={inputElement}
 				role="searchbox"
 				aria-label="Command palette"
-				class="min-w-0 flex-1 bg-transparent text-sm text-gray-950 outline-none placeholder:text-gray-500 dark:text-gray-50 dark:placeholder:text-gray-400"
+				class="min-w-0 flex-1 bg-transparent text-sm text-fg-ink outline-none placeholder:text-fg-muted dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted"
 				placeholder="Search beads, docs, actions..."
 			/>
 			<kbd
-				class="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400"
+				class="rounded-none border border-border-line px-1.5 py-0.5 text-[11px] font-medium text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
 				>Esc</kbd
 			>
 		</div>
@@ -518,14 +518,14 @@
 		>
 			<Command.Viewport>
 				{#if errorMessage}
-					<div class="flex items-center gap-2 px-3 py-4 text-sm text-red-700 dark:text-red-300">
+					<div class="flex items-center gap-2 px-3 py-4 text-sm text-error dark:text-dark-error">
 						<XCircle class="h-4 w-4 shrink-0" />
 						{errorMessage}
 					</div>
 				{:else if loading && allEntries.length === 0}
-					<div class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">Searching...</div>
+					<div class="px-3 py-4 text-sm text-fg-muted dark:text-dark-fg-muted">Searching...</div>
 				{:else if allEntries.length === 0}
-					<div class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">No commands found.</div>
+					<div class="px-3 py-4 text-sm text-fg-muted dark:text-dark-fg-muted">No commands found.</div>
 				{:else}
 					<Command.Group>
 						<Command.GroupItems class="py-2">
@@ -536,14 +536,14 @@
 									value={entry.id}
 									onSelect={() => void activateEntry(entry)}
 									onclick={() => void activateEntry(entry)}
-									class="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-sm outline-none select-none data-[selected]:bg-gray-100 data-[selected]:text-gray-950 dark:data-[selected]:bg-gray-800 dark:data-[selected]:text-white"
+									class="flex min-h-11 cursor-pointer items-center gap-3 rounded-none px-3 py-2 text-left text-sm outline-none select-none data-[selected]:bg-bg-surface data-[selected]:text-fg-ink dark:data-[selected]:bg-dark-bg-surface dark:data-[selected]:text-dark-fg-ink"
 								>
-									<entry.Icon class="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+									<entry.Icon class="h-4 w-4 shrink-0 text-fg-muted dark:text-dark-fg-muted" />
 									<span class="min-w-0 flex-1">
-										<span class="block truncate font-medium text-gray-900 dark:text-gray-100"
+										<span class="block truncate font-medium text-fg-ink dark:text-dark-fg-ink"
 											>{entry.label}</span
 										>
-										<span class="block truncate text-xs text-gray-500 dark:text-gray-400"
+										<span class="block truncate text-xs text-fg-muted dark:text-dark-fg-muted"
 											>{entry.detail}</span
 										>
 									</span>

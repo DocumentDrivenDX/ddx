@@ -49,7 +49,7 @@
 			.attr('orient', 'auto')
 			.append('path')
 			.attr('d', 'M0,-5L10,0L0,5')
-			.attr('class', 'fill-slate-400 dark:fill-slate-500')
+			.attr('class', 'fill-border-line dark:fill-dark-border-line')
 
 		// Container for pan/zoom
 		const g = svg.append('g')
@@ -92,7 +92,7 @@
 			.selectAll<SVGLineElement, (typeof simLinks)[0]>('line')
 			.data(simLinks)
 			.join('line')
-			.attr('class', 'stroke-slate-400 dark:stroke-slate-500')
+			.attr('class', 'stroke-border-line dark:stroke-dark-border-line')
 			.attr('stroke-width', 1.5)
 			.attr('stroke-opacity', 0.7)
 			.attr('marker-end', 'url(#ddx-arrow)')
@@ -108,7 +108,7 @@
 		nodeGroup
 			.append('circle')
 			.attr('r', 14)
-			.attr('class', 'fill-blue-500 stroke-blue-800 dark:fill-blue-400 dark:stroke-blue-700')
+			.attr('class', 'fill-accent-lever stroke-accent-fulcrum dark:fill-dark-accent-lever dark:stroke-dark-accent-fulcrum')
 			.attr('stroke-width', 1.5)
 
 		nodeGroup
@@ -179,19 +179,19 @@
 	<svg
 		bind:this={svgEl}
 		data-testid="doc-graph-svg"
-		class="h-full w-full text-gray-700 dark:text-gray-300"
+		class="h-full w-full text-fg-ink dark:text-dark-fg-ink"
 	/>
 
 	{#if tooltipNode}
 		<div
-			class="pointer-events-none absolute z-10 max-w-xs rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-lg dark:border-gray-700 dark:bg-gray-800"
+			class="pointer-events-none absolute z-10 max-w-xs rounded-none border border-border-line bg-bg-elevated p-3 text-sm shadow-lg shadow-fg-ink/15 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:shadow-black/30"
 			style="left: {tooltipX}px; top: {tooltipY}px;"
 		>
-			<div class="font-semibold text-gray-900 dark:text-white">{tooltipNode.title}</div>
-			<div class="mt-1 break-all font-mono text-xs text-gray-500 dark:text-gray-400">
+			<div class="font-semibold text-fg-ink dark:text-dark-fg-ink">{tooltipNode.title}</div>
+			<div class="mt-1 break-all font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 				{tooltipNode.path}
 			</div>
-			<div class="mt-2 flex gap-3 text-xs text-gray-500 dark:text-gray-400">
+			<div class="mt-2 flex gap-3 text-xs text-fg-muted dark:text-dark-fg-muted">
 				<span>{tooltipNode.dependsOn.length} deps out</span>
 				<span>{tooltipNode.dependents.length} deps in</span>
 			</div>
