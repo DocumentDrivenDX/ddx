@@ -58,6 +58,7 @@ Examples:
 	cmd.AddCommand(f.newBeadRoutingCommand())
 	cmd.AddCommand(f.newBeadImportCommand())
 	cmd.AddCommand(f.newBeadExportCommand())
+	cmd.AddCommand(f.newBeadMergeCommand())
 	cmd.AddCommand(f.newBeadReviewCommand())
 	cmd.AddCommand(f.newBeadMetricsCommand())
 	cmd.AddCommand(f.newBeadDoctorCommand())
@@ -1067,6 +1068,82 @@ func (f *CommandFactory) newBeadExportCommand() *cobra.Command {
 	}
 	cmd.Flags().Bool("stdout", false, "Write to stdout")
 	return cmd
+}
+
+func (f *CommandFactory) newBeadMergeCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "merge [path]",
+		Short: "Resolve a Git conflict in .ddx/beads.jsonl",
+		Long: `Resolve a Git conflict in .ddx/beads.jsonl using DDx tracker rules.
+
+This is the supported escape hatch when Git leaves the bead tracker in an
+unmerged state. It reads the base, ours, and theirs versions from the Git
+index stages (:1:, :2:, :3:), merges records by bead id, preserves append-only
+events and dependency edges, writes the resolved JSONL file, and reports any
+scalar fields that required deterministic conflict resolution.
+
+This command is not a general hand-edit workflow for bead tracker data.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := filepath.Join(".ddx", "beads.jsonl")
+			if len(args) > 0 {
+				path = args[0]
+			}
+			workspaceRoot := f.beadWorkspaceRoot()
+			if workspaceRoot == "" {
+				workspaceRoot = f.WorkingDir
+			}
+			repoRoot := gitpkg.FindProjectRoot(workspaceRoot)
+			relPath, err := filepath.Rel(repoRoot, filepath.Join(workspaceRoot, path))
+			if err != nil || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
+				relPath = filepath.ToSlash(path)
+			}
+			relPath = filepath.ToSlash(filepath.Clean(relPath))
+
+			base, err := gitStageBlob(cmd.Context(), repoRoot, 1, relPath)
+			if err != nil {
+				return err
+			}
+			ours, err := gitStageBlob(cmd.Context(), repoRoot, 2, relPath)
+			if err != nil {
+				return err
+			}
+			theirs, err := gitStageBlob(cmd.Context(), repoRoot, 3, relPath)
+			if err != nil {
+				return err
+			}
+
+			merged, report, err := bead.MergeTrackerConflictJSONL(base, ours, theirs)
+			if err != nil {
+				return err
+			}
+			outPath := filepath.Join(repoRoot, relPath)
+			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+				return fmt.Errorf("bead merge: mkdir: %w", err)
+			}
+			if err := os.WriteFile(outPath, merged, 0o644); err != nil {
+				return fmt.Errorf("bead merge: write %s: %w", relPath, err)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Merged %s: %d records (%d ours-only, %d theirs-only, %d same-id merged)\n",
+				relPath, report.TotalRecords, report.PreservedOurs, report.PreservedTheirs, report.MergedRecords)
+			for _, conflict := range report.ScalarConflicts {
+				fmt.Fprintf(cmd.OutOrStdout(), "Resolved scalar conflict: %s.%s chose %s (%s)\n",
+					conflict.ID, conflict.Field, conflict.Choice, conflict.Reason)
+			}
+			return nil
+		},
+	}
+	return cmd
+}
+
+func gitStageBlob(ctx context.Context, repoRoot string, stage int, path string) ([]byte, error) {
+	spec := fmt.Sprintf(":%d:%s", stage, path)
+	out, err := gitpkg.Command(ctx, repoRoot, "show", spec).Output()
+	if err != nil {
+		return nil, fmt.Errorf("bead merge: read Git stage %d for %s: %w", stage, path, err)
+	}
+	return out, nil
 }
 
 // newBeadCooldownCommand wires `ddx bead cooldown show|clear <id>`.
