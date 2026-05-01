@@ -285,3 +285,131 @@ test('sessions cost cards use zero-state and configured local estimates', async 
 	await page.reload();
 	await expect(page.getByText('$0.42 est.')).toBeVisible();
 });
+
+test('expanded session links to per-run evidence artifact detail view', async ({ page }) => {
+	const EXECUTION_ID = 'exec-evidence-1';
+	const BUNDLE_PATH = '.ddx/executions/20260422T120000-evidence';
+	const MANIFEST_BODY = JSON.stringify({
+		executionId: EXECUTION_ID,
+		bundlePath: BUNDLE_PATH,
+		baseRev: 'abc123',
+		resultRev: 'def456'
+	});
+	const PROMPT_BODY = '# Prompt\n\nrun the bead';
+	const RESULT_BODY = JSON.stringify({ verdict: 'ok' });
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+		} else if (body.query.includes('AgentSessions') || body.query.includes('agentSessions')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: sessionsPayload([latestBundleSession]) })
+			});
+		} else if (body.query.includes('AgentSessionDetail')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentSession: {
+							id: latestBundleSession.id,
+							prompt: PROMPT_BODY,
+							response: 'response body',
+							stderr: ''
+						}
+					}
+				})
+			});
+		} else if (body.query.includes('SessionExecution') || body.query.includes('executionBySessionId')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { executionBySessionId: { id: EXECUTION_ID } }
+				})
+			});
+		} else if (body.query.includes('ExecutionDetail')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						execution: {
+							id: EXECUTION_ID,
+							projectId: PROJECT_ID,
+							beadId: latestBundleSession.beadId,
+							beadTitle: 'Test bead',
+							sessionId: latestBundleSession.id,
+							workerId: latestBundleSession.workerId,
+							harness: latestBundleSession.harness,
+							model: latestBundleSession.model,
+							verdict: 'ok',
+							status: 'completed',
+							rationale: null,
+							createdAt: latestBundleSession.startedAt,
+							startedAt: latestBundleSession.startedAt,
+							finishedAt: latestBundleSession.endedAt,
+							durationMs: latestBundleSession.durationMs,
+							costUsd: latestBundleSession.cost,
+							tokens: latestBundleSession.tokens.total,
+							exitCode: 0,
+							baseRev: 'abc123',
+							resultRev: 'def456',
+							bundlePath: BUNDLE_PATH,
+							promptPath: `${BUNDLE_PATH}/prompt.md`,
+							manifestPath: `${BUNDLE_PATH}/manifest.json`,
+							resultPath: `${BUNDLE_PATH}/result.json`,
+							agentLogPath: `${BUNDLE_PATH}/agent.log`,
+							prompt: PROMPT_BODY,
+							manifest: MANIFEST_BODY,
+							result: RESULT_BODY
+						}
+					}
+				})
+			});
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(BASE_URL);
+
+	const row = page.getByRole('row', { name: /codex.*gpt-5\.4/i });
+	await expect(row).toBeVisible();
+	await row.click();
+
+	const executionLink = page.getByRole('link', { name: new RegExp(EXECUTION_ID.slice(0, 18)) });
+	await expect(executionLink).toBeVisible();
+	await expect(executionLink).toHaveAttribute(
+		'href',
+		new RegExp(`/executions/${EXECUTION_ID}$`)
+	);
+
+	await executionLink.click();
+	await expect(page).toHaveURL(new RegExp(`/executions/${EXECUTION_ID}$`));
+
+	await expect(page.getByRole('heading', { name: EXECUTION_ID })).toBeVisible();
+	await expect(page.getByText(`${BUNDLE_PATH}/manifest.json`)).toBeVisible();
+	await expect(page.getByTestId('manifest-body')).toContainText(EXECUTION_ID);
+
+	await page.getByRole('button', { name: 'Prompt' }).click();
+	await expect(page.getByText(`${BUNDLE_PATH}/prompt.md`)).toBeVisible();
+	await expect(page.getByTestId('prompt-body')).toContainText('run the bead');
+
+	await page.getByRole('button', { name: 'Result' }).click();
+	await expect(page.getByText(`${BUNDLE_PATH}/result.json`)).toBeVisible();
+	await expect(page.getByTestId('result-body')).toContainText('verdict');
+});
