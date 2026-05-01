@@ -123,7 +123,7 @@
 				href={`/nodes/${$page.params['nodeId']}/projects/${$page.params['projectId']}/artifacts?mediaType=text%2Fmarkdown`}
 				class="text-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
 			>
-				View document list
+				Back to documents
 			</a>
 			<span class="text-sm text-gray-700 dark:text-gray-300">
 				{visibleNodes.length} nodes &middot; {visibleLinks.length} edges
@@ -177,6 +177,7 @@
 				onNodeClick={handleNodeClick}
 				initialTransform={data.initialTransform}
 				onTransformChange={handleTransformChange}
+				highlightNodeId={data.highlightNodeId}
 			/>
 		</div>
 	{/if}
