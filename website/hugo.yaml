@@ -18,21 +18,18 @@ markup:
 
 menu:
   main:
-    - name: Docs
-      pageRef: /docs
+    - name: Why DDx
+      pageRef: /why
       weight: 1
-    - name: Concepts
-      pageRef: /docs/concepts
+    - name: Features
+      pageRef: /features
       weight: 2
-    - name: CLI Reference
+    - name: Reference
       pageRef: /docs/cli
       weight: 3
-    - name: Skills
-      pageRef: /docs/skills
+    - name: Ecosystem
+      pageRef: /docs/ecosystem
       weight: 4
-    - name: Plugins
-      pageRef: /docs/plugins
-      weight: 5
     - name: GitHub
       url: https://github.com/DocumentDrivenDX/ddx
       weight: 10

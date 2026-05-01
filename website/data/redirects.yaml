@@ -1,0 +1,25 @@
+# URL redirect map for the website-reorg nav change (bead ddx-8c166626).
+#
+# Format: each entry maps an old path (removed/renamed) to its new
+# destination. Consumed by Hugo aliases (see layouts/_default/redirect.html
+# or per-page `aliases:` front matter) and by any deploy-time redirect
+# generator. Keep this file in sync when nav or content paths move.
+redirects:
+  - from: /docs/
+    to: /why/
+  - from: /docs/concepts/
+    to: /why/
+  - from: /docs/concepts/principles/
+    to: /why/
+  - from: /docs/concepts/architecture/
+    to: /why/
+  - from: /docs/concepts/glossary/
+    to: /why/
+  - from: /docs/skills/
+    to: /features/
+  - from: /docs/plugins/
+    to: /features/
+  - from: /docs/cli/
+    to: /docs/cli/
+  - from: /docs/ecosystem/
+    to: /docs/ecosystem/
