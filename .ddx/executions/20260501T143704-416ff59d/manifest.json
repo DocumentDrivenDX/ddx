@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260501T143704-416ff59d",
+  "bead_id": "ddx-e658e2ae",
+  "base_rev": "beb5b8f6d77d3867a6066de038b844e6c8269185",
+  "created_at": "2026-05-01T14:37:05.496343792Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e658e2ae",
+    "title": "BeadForm: input text uses text-sm; select status uses inline style with CSS vars that don't exist",
+    "description": "src/lib/components/BeadForm.svelte has two issues:\n\n1. Line 130: inputClass uses text-sm — should be text-body-sm (13px/400). Similarly line 131: labelClass uses text-xs — should be text-label-caps (11px/700) since these are uppercase field labels.\n\n2. Lines 162-163: The status \u003cselect\u003e applies an inline style:\n   style=\"background-color: var(--status-{status}-surface); border-color: var(--status-{status}-border);\"\n   These CSS variables (--status-open-surface, --status-open-border, etc.) may not be defined for all status values consistently, and using raw CSS variable injection via a template string is fragile. This sidesteps the Tailwind token system entirely. The dynamic color should be achieved through Tailwind class composition (as done everywhere else in the codebase) rather than inline styles.\n\n3. Cancel/Submit button text uses text-sm — should be text-body-sm.",
+    "acceptance": "inputClass uses text-body-sm, labelClass uses text-label-caps. Status select color is expressed through Tailwind classes, not inline style CSS variable injection. Button text uses text-body-sm.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:37:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T14:36:19.499735762Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T143448-88423c71\",\"harness\":\"claude\",\"input_tokens\":1397,\"output_tokens\":5592,\"total_tokens\":6989,\"cost_usd\":0.7515947500000001,\"duration_ms\":89645,\"exit_code\":0}",
+          "created_at": "2026-05-01T14:36:19.609969352Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6989 cost_usd=0.7516"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T14:36:24.189424957Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff only contains a result.json execution artifact; no changes to BeadForm.svelte are visible. Cannot verify any of the three AC items (inputClass/labelClass tokens, status select Tailwind classes, button text token).\nharness=claude\nmodel=opus\ninput_bytes=4293\noutput_bytes=923\nelapsed_ms=11824",
+          "created_at": "2026-05-01T14:36:36.207894967Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T14:36:36.321436763Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff only contains a result.json execution artifact; no changes to BeadForm.svelte are visible. Cannot verify any of the three AC items (inputClass/labelClass tokens, status select Tailwind classes, button text token).\nresult_rev=14b7587479c1b111fa60142f8fc4a517dcd5b27f\nbase_rev=c6b168485ed21082da1594664823ddc6f2550c39",
+          "created_at": "2026-05-01T14:36:36.432102103Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T14:37:04.289049466Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143704-416ff59d",
+    "prompt": ".ddx/executions/20260501T143704-416ff59d/prompt.md",
+    "manifest": ".ddx/executions/20260501T143704-416ff59d/manifest.json",
+    "result": ".ddx/executions/20260501T143704-416ff59d/result.json",
+    "checks": ".ddx/executions/20260501T143704-416ff59d/checks.json",
+    "usage": ".ddx/executions/20260501T143704-416ff59d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e658e2ae-20260501T143704-416ff59d"
+  }
+}
