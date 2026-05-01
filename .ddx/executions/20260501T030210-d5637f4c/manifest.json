@@ -1,0 +1,96 @@
+{
+  "attempt_id": "20260501T030210-d5637f4c",
+  "bead_id": "ddx-a9c6ad1c",
+  "base_rev": "5f5248b67853179b4dc5fbb54711a5d128417956",
+  "created_at": "2026-05-01T03:02:11.235953385Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a9c6ad1c",
+    "title": "runs detail: /runs/:runId with work/try/run rendering and breadcrumbs",
+    "description": "Build the run detail page at /nodes/:nodeId/projects/:projectId/runs/:runId.\n\nRendering by layer:\n- work: shows queueInputs, stopCondition, list of child try records with status and beadId\n- try: shows beadId (linked to bead detail), baseRevision, resultRevision, worktreePath, mergeOutcome, checkResults summary, list of child run records\n- run: shows promptSummary, power bounds (min/max), harness/provider/model, tokensIn/Out, costUsd, durationMs, outputExcerpt, evidence links\n\nBreadcrumbs:\n- work detail: Runs \u003e [work id]\n- try detail: Runs \u003e [work id] \u003e [try id]  (work id is a link back)\n- run detail: Runs \u003e [work id] \u003e [try id] \u003e [run id]  (both links back)\n- Back button always works correctly (history.back() not pushState)\n\nReturns to run list with filter state preserved when navigating Back from any detail level.\n\nDepends on ddx-a1d0b136 (runs list).",
+    "acceptance": "1. Work detail renders queueInputs, stopCondition, child try list.\n2. Try detail renders beadId link, revisions, worktreePath, mergeOutcome, child run list.\n3. Run detail renders all execution signals (power, harness, provider, model, tokens, cost, duration, output excerpt, evidence links).\n4. Breadcrumbs render at every level with correct parent links.\n5. Each breadcrumb link navigates to the parent record without full page reload.\n6. Back from detail restores runs list with same filter state (URL params intact).",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "feat-021",
+      "runs"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:02:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:14.323191864Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=702c83fe75c740d390ce5371940dce13d1c3e0cb\nbase_rev=702c83fe75c740d390ce5371940dce13d1c3e0cb\nretry_after=2026-05-01T01:09:14Z",
+          "created_at": "2026-04-30T19:09:14.649923892Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:09.61280769Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:09.746012656Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-30T19:31:09.8470594Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-30T19:31:10.063518667Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T03:02:10.147594873Z",
+      "spec-id": "FEAT-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-021",
+      "path": "docs/helix/01-frame/features/FEAT-021-dashboard-ui.md",
+      "title": "Feature: Multi-Node Dashboard UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260501T030210-d5637f4c",
+    "prompt": ".ddx/executions/20260501T030210-d5637f4c/prompt.md",
+    "manifest": ".ddx/executions/20260501T030210-d5637f4c/manifest.json",
+    "result": ".ddx/executions/20260501T030210-d5637f4c/result.json",
+    "checks": ".ddx/executions/20260501T030210-d5637f4c/checks.json",
+    "usage": ".ddx/executions/20260501T030210-d5637f4c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a9c6ad1c-20260501T030210-d5637f4c"
+  }
+}
