@@ -1,0 +1,42 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All AC items satisfied: text-xs/font-semibold/tracking-widest replaced with font-label-caps/text-label-caps on both label lines; font-mono→font-mono-code, text-xs→text-mono-code, gray-500/400→fg-muted/dark-fg-muted on the ID line. text-lever already on accent-lever variant retained.",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1022,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T143757-adc0c624/manifest.json",
+          ".ddx/executions/20260501T143757-adc0c624/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3499,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6327,
+    "output_bytes": 368,
+    "elapsed_ms": 14617,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
