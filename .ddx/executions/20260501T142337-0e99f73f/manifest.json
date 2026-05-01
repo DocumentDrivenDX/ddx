@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T142337-0e99f73f",
+  "bead_id": "ddx-2b713d44",
+  "base_rev": "cc212b9c307b5b7880ebe04f788bb0098ec15eb2",
+  "created_at": "2026-05-01T14:23:38.515063076Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2b713d44",
+    "title": "worker detail: log area uses raw gray-950/green-400 instead of terminal-bg/terminal-fg tokens",
+    "description": "src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/+page.svelte line 542:\n\nThe log output \u003cpre\u003e element uses:\n  bg-gray-950 text-green-400 dark:text-green-300\nand the placeholder empty-state span uses:\n  text-gray-600 dark:text-gray-500\n\nThe project already has semantic terminal tokens: terminal-bg (#0f1117) and terminal-fg (#e8eaf0) defined in tailwind.config.js and used correctly in the executions detail page (bg-terminal-bg text-terminal-fg). The worker log panel must match.\n\nAdditionally the metadata grid (line 314) uses raw text-sm instead of text-body-sm, and 'text-xs' appears in the sessions sub-table (line 389).",
+    "acceptance": "The log \u003cpre\u003e uses bg-terminal-bg text-terminal-fg. Empty-state placeholder uses text-fg-muted dark:text-dark-fg-muted (no raw gray-*). Metadata grid and sessions table use text-body-sm where text-sm currently appears.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:23:37Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:23:37.470530026Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T142337-0e99f73f",
+    "prompt": ".ddx/executions/20260501T142337-0e99f73f/prompt.md",
+    "manifest": ".ddx/executions/20260501T142337-0e99f73f/manifest.json",
+    "result": ".ddx/executions/20260501T142337-0e99f73f/result.json",
+    "checks": ".ddx/executions/20260501T142337-0e99f73f/checks.json",
+    "usage": ".ddx/executions/20260501T142337-0e99f73f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2b713d44-20260501T142337-0e99f73f"
+  }
+}
