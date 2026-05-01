@@ -280,7 +280,7 @@
 			<span
 				title={bead.id}
 				data-testid="bead-detail-id"
-				class="min-w-0 truncate font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted"
+				class="min-w-0 truncate font-mono-code text-body-sm text-fg-muted dark:text-dark-fg-muted"
 				>{bead.id}</span
 			>
 			<button
@@ -298,7 +298,7 @@
 			</button>
 			<span class="shrink-0 font-medium {statusClass(bead.status)}">{bead.status}</span>
 			{#if bead.owner}
-				<span class="shrink-0 truncate text-xs text-fg-muted dark:text-dark-fg-muted">@ {bead.owner}</span>
+				<span class="shrink-0 truncate text-body-sm text-fg-muted dark:text-dark-fg-muted">@ {bead.owner}</span>
 			{/if}
 		</div>
 		<div class="ml-3 flex shrink-0 items-center gap-2">
@@ -307,7 +307,7 @@
 					<button
 						onclick={handleClaim}
 						disabled={busy}
-						class="flex items-center gap-1.5 rounded-none bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-lever/90 disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex items-center gap-1.5 rounded-none bg-accent-lever px-3 py-1.5 text-body-sm font-medium text-white hover:bg-accent-lever/90 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						<UserPlus class="h-3.5 w-3.5" />
 						Claim
@@ -316,7 +316,7 @@
 					<button
 						onclick={handleUnclaim}
 						disabled={busy}
-						class="flex items-center gap-1.5 rounded-none border border-border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
+						class="flex items-center gap-1.5 rounded-none border border-border-line px-3 py-1.5 text-body-sm font-medium text-fg-muted hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
 					>
 						<UserMinus class="h-3.5 w-3.5" />
 						Unclaim
@@ -325,7 +325,7 @@
 				<button
 					onclick={() => (editing = true)}
 					disabled={busy}
-					class="flex items-center gap-1.5 rounded-none border border-border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
+					class="flex items-center gap-1.5 rounded-none border border-border-line px-3 py-1.5 text-body-sm font-medium text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-elevated"
 				>
 					<Pencil class="h-3.5 w-3.5" />
 					Edit
@@ -334,7 +334,7 @@
 					bind:this={deleteButton}
 					onclick={openDeleteDialog}
 					disabled={busy}
-					class="flex items-center gap-1.5 rounded-none border border-error/30 px-3 py-1.5 text-sm font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-error/30 dark:text-dark-error dark:hover:bg-dark-error/10"
+					class="flex items-center gap-1.5 rounded-none border border-error/30 px-3 py-1.5 text-body-sm font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-error/30 dark:text-dark-error dark:hover:bg-dark-error/10"
 				>
 					<Trash2 class="h-3.5 w-3.5" />
 					Delete
@@ -353,7 +353,7 @@
 	<!-- Action error banner -->
 	{#if actionError}
 		<div
-			class="shrink-0 border-b border-error/30 bg-error/10 px-6 py-2 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
+			class="shrink-0 border-b border-error/30 bg-error/10 px-6 py-2 text-body-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 		>
 			{actionError}
 		</div>
@@ -374,13 +374,13 @@
 			{/key}
 		{:else}
 			<!-- Read mode -->
-			<h2 class="mb-5 text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">{bead.title}</h2>
+			<h2 class="mb-5 text-headline-lg font-headline-lg text-fg-ink dark:text-dark-fg-ink">{bead.title}</h2>
 
-			<dl class="space-y-4 text-sm">
+			<dl class="space-y-4 text-body-sm">
 				<div class="grid grid-cols-2 gap-4">
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+							class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Priority
 						</dt>
@@ -388,7 +388,7 @@
 					</div>
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+							class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Type
 						</dt>
@@ -397,11 +397,11 @@
 					{#if bead.parent}
 						<div class="col-span-2">
 							<dt
-								class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+								class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 							>
 								Parent
 							</dt>
-							<dd class="mt-1 font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted">{bead.parent}</dd>
+							<dd class="mt-1 font-mono-code text-body-sm text-fg-muted dark:text-dark-fg-muted">{bead.parent}</dd>
 						</div>
 					{/if}
 				</div>
@@ -409,14 +409,14 @@
 				{#if bead.labels && bead.labels.length > 0}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+							class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Labels
 						</dt>
 						<dd class="mt-1 flex flex-wrap gap-1">
 							{#each bead.labels as label}
 								<span
-									class="rounded-none bg-bg-canvas px-2 py-0.5 text-xs text-fg-muted dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
+									class="rounded-none bg-bg-canvas px-2 py-0.5 text-body-sm text-fg-muted dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 									>{label}</span
 								>
 							{/each}
@@ -427,7 +427,7 @@
 				{#if bead.description}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+							class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Description
 						</dt>
@@ -440,7 +440,7 @@
 				{#if bead.acceptance}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+							class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Acceptance
 						</dt>
@@ -453,7 +453,7 @@
 				{#if bead.notes}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+							class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Notes
 						</dt>
@@ -463,7 +463,7 @@
 
 				{#if runs.length > 0}
 					<div data-testid="bead-linked-runs">
-						<dt class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted">
+						<dt class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted">
 							Linked Runs ({runs.length})
 						</dt>
 						<dd class="mt-1 space-y-1">
@@ -471,14 +471,14 @@
 								<a
 									href={runHref(run.id)}
 									data-testid="bead-linked-run"
-									class="flex items-center justify-between rounded-none border border-border-line px-2 py-1 text-xs hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-elevated"
+									class="flex items-center justify-between rounded-none border border-border-line px-2 py-1 text-body-sm hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-elevated"
 								>
 									<span class="flex items-center gap-2">
 										<span class="font-mono-code text-accent-lever dark:text-dark-accent-lever">{run.id}</span>
-										<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
+										<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
 											{run.layer}
 										</span>
-										<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
+										<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
 											{run.status}
 										</span>
 										{#if run.harness}
@@ -496,19 +496,19 @@
 
 				{#if executions.length > 0}
 					<div data-testid="bead-executions">
-						<dt class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted">
+						<dt class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted">
 							Executions ({executions.length})
 						</dt>
 						<dd class="mt-1 space-y-1">
 							{#each executions as exec (exec.id)}
 								<a
 									href={executionHref(exec.id)}
-									class="flex items-center justify-between rounded-none border border-border-line px-2 py-1 text-xs hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-elevated"
+									class="flex items-center justify-between rounded-none border border-border-line px-2 py-1 text-body-sm hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-elevated"
 								>
 									<span class="flex items-center gap-2">
 										<span class="font-mono-code text-accent-lever dark:text-dark-accent-lever">{exec.id}</span>
 										{#if exec.verdict}
-											<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
+											<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
 												{exec.verdict}
 											</span>
 										{/if}
@@ -523,13 +523,13 @@
 				{#if bead.dependencies && bead.dependencies.length > 0}
 					<div>
 						<dt
-							class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted"
+							class="text-label-caps font-label-caps text-fg-muted uppercase dark:text-dark-fg-muted"
 						>
 							Dependencies
 						</dt>
 						<dd class="mt-1 space-y-1">
 							{#each bead.dependencies as dep}
-								<div class="font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted">
+								<div class="font-mono-code text-body-sm text-fg-muted dark:text-dark-fg-muted">
 									{dep.dependsOnId}
 									<span class="text-fg-muted dark:text-dark-fg-muted">({dep.type})</span>
 								</div>
@@ -539,7 +539,7 @@
 				{/if}
 
 				<div
-					class="border-t border-border-line pt-4 text-xs text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
+					class="border-t border-border-line pt-4 text-body-sm text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
 				>
 					<div>
 						Created: {new Date(bead.createdAt).toLocaleString()}{bead.createdBy
@@ -571,7 +571,7 @@
 
 		{#if hasChildBeads}
 			<label
-				class="mt-4 flex items-start gap-3 rounded-none border border-error/30 bg-error/10 p-3 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
+				class="mt-4 flex items-start gap-3 rounded-none border border-error/30 bg-error/10 p-3 text-body-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 			>
 				<input
 					type="checkbox"
@@ -580,7 +580,7 @@
 				/>
 				<span>
 					<span class="block font-medium">Cascade to child beads</span>
-					<span class="block text-xs text-error dark:text-dark-error">
+					<span class="block text-body-sm text-error dark:text-dark-error">
 						Apply the delete intent to {bead.childCount} child {bead.childCount === 1
 							? 'bead'
 							: 'beads'}.
