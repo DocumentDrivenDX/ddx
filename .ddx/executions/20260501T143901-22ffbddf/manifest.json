@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T143901-22ffbddf",
+  "bead_id": "ddx-e1723c99",
+  "base_rev": "70c37323c16a991ffb358d82a0acff0b4822b2e9",
+  "created_at": "2026-05-01T14:39:02.755642775Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e1723c99",
+    "title": "CommandPalette: search input border uses border-border-line; kbd element missing dark bg-bg-surface",
+    "description": "src/lib/components/CommandPalette.svelte has minor token gaps:\n\n1. Line 505: The search input inside the palette header has a double-border: the outer wrapper already has border-b border-border-line, and the inner input also has border border-border-line. The input should use border-0 (no border) or change to focus-ring-only styling (focus:ring-1 focus:ring-accent-lever) to avoid the visual double-border. This is an inconsistency compared to other filter inputs in the UI.\n\n2. Line 509: The \u003ckbd\u003e escape key indicator uses border-border-line and text-fg-muted correctly, but has no background color token — it should get bg-bg-surface / dark:bg-dark-bg-surface to visually distinguish it as a key hint (consistent with typical kbd styling).\n\n3. Line 539: Command.Item hover uses hover:bg-bg-canvas and data-[selected]:bg-bg-surface. The active/hover state pattern is inverted from the sidebar nav pattern (nav uses hover:bg-bg-canvas for a slightly deeper tint on surface). This is an inconsistency in hover state depth across components — should be audited against the intent: canvas=lighter, surface=neutral, elevated=slightly raised.",
+    "acceptance": "Search input border adjusted to avoid double-border. kbd gets bg-bg-surface token. Hover/selected state depth pattern documented and made consistent with sidebar nav (both should use canvas for hover).",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:39:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:39:01.825782798Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143901-22ffbddf",
+    "prompt": ".ddx/executions/20260501T143901-22ffbddf/prompt.md",
+    "manifest": ".ddx/executions/20260501T143901-22ffbddf/manifest.json",
+    "result": ".ddx/executions/20260501T143901-22ffbddf/result.json",
+    "checks": ".ddx/executions/20260501T143901-22ffbddf/checks.json",
+    "usage": ".ddx/executions/20260501T143901-22ffbddf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e1723c99-20260501T143901-22ffbddf"
+  }
+}

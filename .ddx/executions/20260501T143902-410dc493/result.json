@@ -1,0 +1,53 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no changes to workers/+layout.svelte. Cannot verify any AC item (text-lever removal, accent-lever ID column, headline token, text-body-sm, text-error).",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No source changes to src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte present in diff",
+      "location": "src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte"
+    },
+    {
+      "severity": "block",
+      "summary": "Diff only adds an execution metadata file; insufficient to evaluate acceptance criteria",
+      "location": ".ddx/executions/20260501T143640-a371c3f3/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1559,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T143640-a371c3f3/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1183,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4476,
+    "output_bytes": 735,
+    "elapsed_ms": 10056,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
