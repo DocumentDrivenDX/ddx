@@ -43,13 +43,13 @@
 	function layerBadgeClass(layer: string): string {
 		switch (layer) {
 			case 'work':
-				return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+				return 'badge-layer-work'
 			case 'try':
-				return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+				return 'badge-layer-try'
 			case 'run':
-				return 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300'
+				return 'badge-layer-run'
 			default:
-				return 'bg-bg-surface text-fg-muted dark:bg-dark-bg-surface dark:text-dark-fg-muted'
+				return 'badge-status-neutral'
 		}
 	}
 

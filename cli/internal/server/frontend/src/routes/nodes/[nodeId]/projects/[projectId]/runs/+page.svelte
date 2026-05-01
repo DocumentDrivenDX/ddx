@@ -97,13 +97,13 @@
 	function layerBadgeClass(layer: string): string {
 		switch (layer) {
 			case 'work':
-				return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+				return 'badge-layer-work'
 			case 'try':
-				return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+				return 'badge-layer-try'
 			case 'run':
-				return 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300'
+				return 'badge-layer-run'
 			default:
-				return 'bg-bg-surface text-fg-muted dark:bg-dark-bg-surface dark:text-dark-fg-muted'
+				return 'badge-status-neutral'
 		}
 	}
 
@@ -131,8 +131,8 @@
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">Runs</h1>
-		<span class="text-sm text-fg-muted dark:text-dark-fg-muted">
+		<h1 class="text-headline-lg font-headline-lg text-fg-ink dark:text-dark-fg-ink">Runs</h1>
+		<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 			{edges.length} of {data.runs.totalCount}
 		</span>
 	</div>
