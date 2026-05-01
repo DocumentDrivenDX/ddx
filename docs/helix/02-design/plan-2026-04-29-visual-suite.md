@@ -3,6 +3,10 @@
 Date: 2026-04-29
 Status: Draft v6 (locked; reviewers' Q1–Q6 resolved)
 
+> **Note (2026-05-01):** the original plan placed DESIGN.md at the repo root.
+> The canonical location is now `.stitch/DESIGN.md`. References below to
+> `DESIGN.md` / `/DESIGN.md` / "repo root" should be read as `.stitch/DESIGN.md`.
+
 ## Summary
 
 DDx ships a coordinated graphical suite covering three lenses on the product:

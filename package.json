@@ -9,7 +9,7 @@
   },
   "license": "ISC",
   "scripts": {
-    "design:export": "bunx @google/design.md export --format tailwind DESIGN.md > cli/internal/server/frontend/design-tokens.json"
+    "design:export": "bunx @google/design.md export --format tailwind .stitch/DESIGN.md > cli/internal/server/frontend/design-tokens.json"
   },
   "homepage": "https://github.com/easel/ddx#readme",
   "bugs": {
