@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T142616-d0e1681f",
+  "bead_id": "ddx-c4e3f1c8",
+  "base_rev": "906880c762bf4e101c5cf9f555b37ec79a4a02e7",
+  "created_at": "2026-05-01T14:26:17.548707441Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c4e3f1c8",
+    "title": "global: text-lever legacy CSS utility used in 5+ files — should be fully replaced by text-accent-lever",
+    "description": "The CSS utility class .text-lever is defined in src/app.css line 190 as a legacy alias for --status-open-text (the open bead status color). It is used in at least 6 files as a shorthand for ID column coloring:\n\n- src/routes/nodes/[nodeId]/+page.svelte (lines 7, 13)\n- src/routes/nodes/[nodeId]/projects/[projectId]/+page.svelte (line 207)\n- src/routes/nodes/[nodeId]/projects/[projectId]/sessions/+page.svelte (line 367)\n- src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.svelte (line 438)\n- src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte (line 382)\n- src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/+page.svelte (line 402)\n- src/routes/nodes/[nodeId]/beads/+page.svelte (line 247)\n\nThe intent is to style IDs with the accent-lever color. Using .text-lever instead of text-accent-lever dark:text-dark-accent-lever means the ID color does not adapt to dark mode (it's always the light-mode status-open-text color), and it obscures the semantic intent.\n\nThe .text-lever utility in app.css should be deprecated. All usages should be replaced with text-accent-lever dark:text-dark-accent-lever.",
+    "acceptance": "All text-lever usages removed from .svelte files. Replaced with text-accent-lever dark:text-dark-accent-lever. The .text-lever definition in app.css removed or marked deprecated. Dark mode ID columns now correctly use dark-accent-lever.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:26:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:26:16.496459036Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T142616-d0e1681f",
+    "prompt": ".ddx/executions/20260501T142616-d0e1681f/prompt.md",
+    "manifest": ".ddx/executions/20260501T142616-d0e1681f/manifest.json",
+    "result": ".ddx/executions/20260501T142616-d0e1681f/result.json",
+    "checks": ".ddx/executions/20260501T142616-d0e1681f/checks.json",
+    "usage": ".ddx/executions/20260501T142616-d0e1681f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c4e3f1c8-20260501T142616-d0e1681f"
+  }
+}
