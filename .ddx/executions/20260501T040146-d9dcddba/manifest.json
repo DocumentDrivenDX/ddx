@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T040146-d9dcddba",
+  "bead_id": "ddx-bd37afc7",
+  "base_rev": "c015d68433d939b3e4379a464c91cc2ea014e648",
+  "created_at": "2026-05-01T04:01:47.146398Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bd37afc7",
+    "title": "Remove live harness execution tests from DDx",
+    "description": "DDx should not execute real third-party harness binaries now that harness ownership lives in Fizeau. Remove or quarantine live harness execution tests such as opencode/claude/codex echo tests from DDx packages, and replace any needed DDx coverage with Fizeau service stubs, fake executors, or contract-level assertions. The normal DDx suite should not start opencode, claude, codex, gemini, pi, or other real harness processes.",
+    "acceptance": "1. DDx go test ./... does not invoke real harness binaries (opencode, claude, codex, gemini, pi) as part of the default or short test suites.\\n2. Existing DDx behavior coverage is preserved with stubs/fakes at the DDx-Fizeau boundary where needed.\\n3. Any remaining live harness smoke tests are moved to Fizeau or gated behind an explicit opt-in env var/build tag with a clear comment.\\n4. go test ./internal/agent ./cmd passes without requiring installed harness CLIs.\\n5. A grep/static check documents the remaining allowed harness binary invocations in tests.",
+    "labels": [
+      "area:agent",
+      "area:test",
+      "kind:cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T04:01:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T04:01:46.08425506Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T040146-d9dcddba",
+    "prompt": ".ddx/executions/20260501T040146-d9dcddba/prompt.md",
+    "manifest": ".ddx/executions/20260501T040146-d9dcddba/manifest.json",
+    "result": ".ddx/executions/20260501T040146-d9dcddba/result.json",
+    "checks": ".ddx/executions/20260501T040146-d9dcddba/checks.json",
+    "usage": ".ddx/executions/20260501T040146-d9dcddba/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bd37afc7-20260501T040146-d9dcddba"
+  }
+}
