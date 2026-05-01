@@ -89,6 +89,18 @@ func TestInstall_RejectsPathTraversal(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("sveltekit spread syntax allowed", func(t *testing.T) {
+		// [...param] in SvelteKit catch-all routes contains "..." which includes ".."
+		// as a substring — must NOT be treated as path traversal.
+		src := fstest.MapFS{
+			"myskill/SKILL.md": &fstest.MapFile{Data: []byte("# myskill")},
+			"myskill/routes/nodes/[nodeId]/documents/[...path]/+page.svelte": &fstest.MapFile{Data: []byte("content")},
+		}
+		projectRoot := t.TempDir()
+		err := Install(src, projectRoot, Options{})
+		require.NoError(t, err, "[...path] spread syntax must not trigger path-traversal rejection")
+	})
+
 	t.Run("symlink escape via .agents/skills", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("symlinks not reliable on windows")

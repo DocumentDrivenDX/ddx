@@ -250,8 +250,12 @@ func copyFromFS(src fs.FS, destDir string) error {
 		if p == "." {
 			return nil
 		}
-		if strings.Contains(p, "..") {
-			return fmt.Errorf("invalid path in source: %s", p)
+		// Reject actual path-traversal components ("..") but not substrings
+		// like SvelteKit's [...param] catch-all route syntax.
+		for _, component := range strings.Split(p, "/") {
+			if component == ".." {
+				return fmt.Errorf("invalid path in source: %s", p)
+			}
 		}
 		target := filepath.Join(destDir, p)
 		if d.IsDir() {
