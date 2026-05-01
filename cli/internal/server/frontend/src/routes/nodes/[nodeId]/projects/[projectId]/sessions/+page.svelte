@@ -364,7 +364,7 @@
 						<td class="px-4 py-3 text-fg-muted dark:text-dark-fg-muted">
 							{isExpanded ? '▾' : '▸'}
 						</td>
-						<td class="px-4 py-3 font-mono-code text-mono-code text-lever">
+						<td class="px-4 py-3 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
 							{s.id.slice(0, 8)}
 						</td>
 						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">

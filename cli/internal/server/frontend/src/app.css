@@ -207,11 +207,6 @@
 		color: var(--status-failed-text);
 	}
 
-	/* lever-steel accent for ID column */
-	.text-lever {
-		color: var(--status-open-text);
-	}
-
 	/* status badges: tint surface + hairline border, sharp corners, label-caps */
 	.badge-status-open {
 		color: var(--status-open-text);

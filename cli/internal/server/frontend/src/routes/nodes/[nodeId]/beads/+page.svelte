@@ -244,7 +244,7 @@
 					<tr
 						class="border-b border-border-line last:border-0 dark:border-dark-border-line"
 					>
-						<td class="px-4 py-3 font-mono-code text-xs text-lever">
+						<td class="px-4 py-3 font-mono-code text-xs text-accent-lever dark:text-dark-accent-lever">
 							{edge.node.id}
 						</td>
 						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">

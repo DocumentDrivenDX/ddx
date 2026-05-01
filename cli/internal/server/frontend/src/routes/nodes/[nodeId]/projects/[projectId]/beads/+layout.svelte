@@ -435,7 +435,7 @@
 							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 					>
-						<td class="px-4 py-3 font-mono text-xs text-lever">
+						<td class="px-4 py-3 font-mono text-xs text-accent-lever dark:text-dark-accent-lever">
 							{edge.node.id}
 						</td>
 						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">

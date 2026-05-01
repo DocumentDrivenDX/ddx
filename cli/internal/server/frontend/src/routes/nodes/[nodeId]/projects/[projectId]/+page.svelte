@@ -204,7 +204,7 @@
 	<header class="border-b border-gray-200 pb-6 dark:border-gray-700">
 		<div class="flex flex-wrap items-start justify-between gap-4">
 			<div class="min-w-0">
-				<p class="text-xs font-semibold tracking-widest text-lever uppercase">
+				<p class="text-xs font-semibold tracking-widest text-accent-lever dark:text-dark-accent-lever uppercase">
 					Project overview
 				</p>
 				<h1 class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
