@@ -212,7 +212,7 @@
 	data-testid="integrity-panel"
 	class="shrink-0 rounded-none border border-border-line bg-bg-surface text-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
 >
-	<header class="border-b border-border-line px-4 py-2 font-semibold dark:border-dark-border-line">
+	<header class="border-b border-border-line px-4 py-2 text-headline-md font-headline-md dark:border-dark-border-line">
 		Integrity: {issues.length}
 		{issues.length === 1 ? 'issue' : 'issues'}
 	</header>
@@ -271,7 +271,7 @@
 									{/if}
 									{#if issue.id}
 										<span
-											class="rounded-none border px-1.5 py-0.5 text-[10px] uppercase badge-status-blocked"
+											class="rounded-none border border-border-line bg-bg-canvas px-1.5 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-muted"
 											>{issue.id}</span
 										>
 									{/if}
@@ -292,7 +292,7 @@
 									<button
 										type="button"
 										data-testid="integrity-copy-suggestion"
-										class="self-start rounded-none border px-2 py-1 text-xs font-medium badge-status-blocked hover:opacity-90"
+										class="self-start rounded-none border border-accent-lever bg-accent-lever/10 px-2 py-1 text-xs font-medium text-accent-lever hover:bg-accent-lever/20 dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever dark:hover:bg-dark-accent-lever/30"
 										onclick={(e) => copySuggestion(issue, e)}
 									>
 										Copy suggested unique ID
@@ -312,7 +312,7 @@
 											type="button"
 											data-testid="integrity-apply-fix"
 											disabled={pending[issueKey]}
-											class="rounded-none border px-2 py-1 font-medium badge-status-blocked hover:opacity-90 disabled:opacity-50"
+											class="rounded-none border border-accent-lever bg-accent-lever/10 px-2 py-1 font-medium text-accent-lever hover:bg-accent-lever/20 disabled:opacity-50 dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever dark:hover:bg-dark-accent-lever/30"
 											onclick={() => applyFix(issue)}
 										>
 											{pending[issueKey] ? 'Applying…' : 'Apply fix'}
@@ -330,13 +330,13 @@
 											<div class="text-fg-muted dark:text-dark-fg-muted">Before</div>
 											<pre class="overflow-x-auto whitespace-pre-wrap text-status-blocked">{diff.before}</pre>
 											<div class="text-fg-muted dark:text-dark-fg-muted">After</div>
-											<pre class="overflow-x-auto whitespace-pre-wrap text-status-merged">{diff.after}</pre>
+											<pre class="overflow-x-auto whitespace-pre-wrap text-status-closed">{diff.after}</pre>
 										</div>
 									{/if}
 									{#if inlineErrors[issueKey]}
 										<p
 											data-testid="integrity-repair-error"
-											class="text-xs text-status-blocked"
+											class="text-xs text-error dark:text-dark-error"
 										>
 											{inlineErrors[issueKey]}
 										</p>
@@ -351,7 +351,7 @@
 											</span>
 											<code
 												data-testid="integrity-missing-dep-snippet"
-												class="rounded-none border px-2 py-1 font-mono-code badge-status-blocked"
+												class="rounded-none border border-border-line bg-bg-canvas px-2 py-1 font-mono-code text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-muted"
 												>{snippet}</code
 											>
 											<button
