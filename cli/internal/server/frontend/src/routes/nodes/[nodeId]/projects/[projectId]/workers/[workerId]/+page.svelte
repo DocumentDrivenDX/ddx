@@ -399,7 +399,7 @@
 							{#each workerSessions as session (session.id)}
 								<tr class="border-t border-border-line dark:border-dark-border-line">
 									<td class="px-3 py-2">
-										<div class="font-mono-code text-mono-code text-lever">
+										<div class="font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
 											{session.id.slice(0, 12)}
 										</div>
 										<div class="text-fg-muted dark:text-dark-fg-muted">

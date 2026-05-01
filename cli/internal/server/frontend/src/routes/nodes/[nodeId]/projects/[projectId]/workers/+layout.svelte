@@ -379,7 +379,7 @@
 							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 					>
-						<td class="px-4 py-3 font-mono-code text-mono-code text-lever">
+						<td class="px-4 py-3 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
 							{edge.node.id.slice(0, 8)}
 						</td>
 						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
