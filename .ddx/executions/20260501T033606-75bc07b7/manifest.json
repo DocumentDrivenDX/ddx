@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260501T033606-75bc07b7",
+  "bead_id": "ddx-4b202bbb",
+  "base_rev": "564d9414ef19621443fdc2ed85e89d2f96165d32",
+  "created_at": "2026-05-01T03:36:07.515339592Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4b202bbb",
+    "title": "website-reorg epic: narrative restructure, features section, design tokens, Playwright coverage",
+    "acceptance": "All 7 homepage sections live; /features/ section with maturity badges; DESIGN.md tokens wired to Hugo; Playwright e2e gaps closed; UI screenshots committed to website/static/ui/",
+    "labels": [
+      "area:website",
+      "epic"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:36:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T03:36:06.493649736Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T033606-75bc07b7",
+    "prompt": ".ddx/executions/20260501T033606-75bc07b7/prompt.md",
+    "manifest": ".ddx/executions/20260501T033606-75bc07b7/manifest.json",
+    "result": ".ddx/executions/20260501T033606-75bc07b7/result.json",
+    "checks": ".ddx/executions/20260501T033606-75bc07b7/checks.json",
+    "usage": ".ddx/executions/20260501T033606-75bc07b7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4b202bbb-20260501T033606-75bc07b7"
+  }
+}
