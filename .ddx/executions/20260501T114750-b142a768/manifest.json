@@ -1,0 +1,180 @@
+{
+  "attempt_id": "20260501T114750-b142a768",
+  "bead_id": "ddx-4b202bbb",
+  "base_rev": "aff3240b5ca08bc2314dfdacb6bc0e6af72590aa",
+  "created_at": "2026-05-01T11:47:51.354288324Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4b202bbb",
+    "title": "website-reorg epic: narrative restructure, features section, design tokens, Playwright coverage",
+    "acceptance": "All 7 homepage sections live; /features/ section with maturity badges; DESIGN.md tokens wired to Hugo; Playwright e2e gaps closed; UI screenshots committed to website/static/ui/",
+    "labels": [
+      "area:website",
+      "epic"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T11:47:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T03:51:44.512162605Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T033606-75bc07b7\",\"harness\":\"claude\",\"input_tokens\":56,\"output_tokens\":31519,\"total_tokens\":31575,\"cost_usd\":1.8021916999999998,\"duration_ms\":936990,\"exit_code\":0}",
+          "created_at": "2026-05-01T03:51:44.621252395Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=31575 cost_usd=1.8022"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T03:51:49.695386799Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json metadata file. None of the acceptance criteria (homepage sections, /features/ section, DESIGN.md tokens, Playwright coverage, UI screenshots) are evidenced in the changed files.\nharness=claude\nmodel=opus\ninput_bytes=3350\noutput_bytes=1012\nelapsed_ms=8748",
+          "created_at": "2026-05-01T03:51:58.617996609Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T03:51:58.725139859Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json metadata file. None of the acceptance criteria (homepage sections, /features/ section, DESIGN.md tokens, Playwright coverage, UI screenshots) are evidenced in the changed files.\nresult_rev=031d8ae50c2e284f809f65519d22527c0838ba64\nbase_rev=564d9414ef19621443fdc2ed85e89d2f96165d32",
+          "created_at": "2026-05-01T03:51:58.824110365Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T03:54:51.405180146Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T035243-15df167e\",\"harness\":\"claude\",\"input_tokens\":21,\"output_tokens\":7502,\"total_tokens\":7523,\"cost_usd\":0.7832574999999999,\"duration_ms\":125620,\"exit_code\":0}",
+          "created_at": "2026-05-01T03:54:51.507648895Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=7523 cost_usd=0.7833"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T03:54:55.362508995Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only execution metadata (result.json). No homepage sections, /features/ page, DESIGN.md tokens, Playwright coverage, or UI screenshots are present in the changed files. None of the acceptance criteria are evidenced.\nharness=claude\nmodel=opus\ninput_bytes=3610\noutput_bytes=1060\nelapsed_ms=8120",
+          "created_at": "2026-05-01T03:55:03.653674636Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T03:55:03.766455044Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution metadata (result.json). No homepage sections, /features/ page, DESIGN.md tokens, Playwright coverage, or UI screenshots are present in the changed files. None of the acceptance criteria are evidenced.\nresult_rev=62f779d507648e187d0332133f1838e553fe9239\nbase_rev=cdcabbf7e2511eee5cfcff0de2f78032c5b9cb25",
+          "created_at": "2026-05-01T03:55:03.869640251Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T07:19:02.504493595Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T071716-96e22312\",\"harness\":\"claude\",\"input_tokens\":20,\"output_tokens\":6393,\"total_tokens\":6413,\"cost_usd\":0.72340275,\"duration_ms\":104670,\"exit_code\":0}",
+          "created_at": "2026-05-01T07:19:02.612468231Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6413 cost_usd=0.7234"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T07:19:06.646691293Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only execution manifest/result metadata. No homepage sections, /features/ page, DESIGN.md tokens, Playwright coverage, or UI screenshots are present. None of the acceptance criteria are evidenced.\nharness=claude\nmodel=opus\ninput_bytes=10937\noutput_bytes=846\nelapsed_ms=7460",
+          "created_at": "2026-05-01T07:19:14.29158034Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T07:19:14.396922944Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution manifest/result metadata. No homepage sections, /features/ page, DESIGN.md tokens, Playwright coverage, or UI screenshots are present. None of the acceptance criteria are evidenced.\nresult_rev=c3658188756d4c15f1bb6d1dd4a10d67b422d92e\nbase_rev=762077a511c87a5726f5f531c0a6cb7435cd19cb",
+          "created_at": "2026-05-01T07:19:14.500188848Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T11:47:50.14038665Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T114750-b142a768",
+    "prompt": ".ddx/executions/20260501T114750-b142a768/prompt.md",
+    "manifest": ".ddx/executions/20260501T114750-b142a768/manifest.json",
+    "result": ".ddx/executions/20260501T114750-b142a768/result.json",
+    "checks": ".ddx/executions/20260501T114750-b142a768/checks.json",
+    "usage": ".ddx/executions/20260501T114750-b142a768/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4b202bbb-20260501T114750-b142a768"
+  }
+}
