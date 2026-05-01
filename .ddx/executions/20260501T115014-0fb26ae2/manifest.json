@@ -1,0 +1,87 @@
+{
+  "attempt_id": "20260501T115014-0fb26ae2",
+  "bead_id": "ddx-fcb4d1ca",
+  "base_rev": "c1c34e741bc9c1485bd11035041aaa21ceb02f3f",
+  "created_at": "2026-05-01T11:50:15.502689204Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fcb4d1ca",
+    "title": "website: create /features/ section with one page per core capability and maturity badges",
+    "description": "Create /features/ as a single landing page with named anchors for each capability. Audit and remove any Persona System listing from the existing features page. Sections: Artifact Graph (lead), Beads \u0026 DAG, Execute-Loop (ddx work), Evidence Capture, Multi-Model Review, Skills, Agent-Agnostic Dispatch. Artifact graph framing: documents and non-markdown files (graphics, diagrams) tracked via .ddx.yaml sidecar — impact analysis and drift visibility, not just navigation. No HELIX methodology concepts. Each section: maturity badge + screenshot placeholder + prose. Split to individual pages only if later depth justifies it.",
+    "acceptance": "/features/ is a single page with anchors; existing Persona System listing removed; artifact graph section leads with drift detection and impact analysis framing; all sections have maturity badges; screenshots linked from website/static/ui/ once generated",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:website",
+      "content",
+      "features"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T11:50:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T07:36:21.391260802Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T073451-dcf6dd7d\",\"harness\":\"claude\",\"input_tokens\":16,\"output_tokens\":5035,\"total_tokens\":5051,\"cost_usd\":0.5118450000000001,\"duration_ms\":88612,\"exit_code\":0}",
+          "created_at": "2026-05-01T07:36:21.505122839Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=5051 cost_usd=0.5118"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T07:36:24.803067668Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only execution evidence files (manifest.json, result.json). No website/features/ content changes are present to evaluate against the acceptance criteria.\nharness=claude\nmodel=opus\ninput_bytes=6640\noutput_bytes=513\nelapsed_ms=10662",
+          "created_at": "2026-05-01T07:36:35.65550498Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T07:36:35.764424814Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution evidence files (manifest.json, result.json). No website/features/ content changes are present to evaluate against the acceptance criteria.\nresult_rev=c5df8c920a5226c02c797dee130cda2bbae64472\nbase_rev=583e154db824c1ad41d910427638c2786fbc6f8e",
+          "created_at": "2026-05-01T07:36:35.872075567Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T11:50:14.404788222Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T115014-0fb26ae2",
+    "prompt": ".ddx/executions/20260501T115014-0fb26ae2/prompt.md",
+    "manifest": ".ddx/executions/20260501T115014-0fb26ae2/manifest.json",
+    "result": ".ddx/executions/20260501T115014-0fb26ae2/result.json",
+    "checks": ".ddx/executions/20260501T115014-0fb26ae2/checks.json",
+    "usage": ".ddx/executions/20260501T115014-0fb26ae2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fcb4d1ca-20260501T115014-0fb26ae2"
+  }
+}
