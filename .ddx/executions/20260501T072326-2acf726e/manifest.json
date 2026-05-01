@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T072326-2acf726e",
+  "bead_id": "ddx-7880c7ae",
+  "base_rev": "2c5f5d607b873310306e50b8c0e6ee039c5a1b1d",
+  "created_at": "2026-05-01T07:23:26.946280927Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7880c7ae",
+    "title": "website: audit features page — remove Persona System, fix artifact graph framing",
+    "acceptance": "website/content/features/_index.md has no Persona System section; artifact graph section describes documents and non-markdown files via .ddx.yaml sidecar; no references to ddx try or ddx run as user-facing commands; no HELIX methodology concepts",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:website",
+      "content",
+      "audit"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:23:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T07:23:25.99558825Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T072326-2acf726e",
+    "prompt": ".ddx/executions/20260501T072326-2acf726e/prompt.md",
+    "manifest": ".ddx/executions/20260501T072326-2acf726e/manifest.json",
+    "result": ".ddx/executions/20260501T072326-2acf726e/result.json",
+    "checks": ".ddx/executions/20260501T072326-2acf726e/checks.json",
+    "usage": ".ddx/executions/20260501T072326-2acf726e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7880c7ae-20260501T072326-2acf726e"
+  }
+}
