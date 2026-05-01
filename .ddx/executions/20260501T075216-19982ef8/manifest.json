@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T075216-19982ef8",
+  "bead_id": "ddx-9a6a85c1",
+  "base_rev": "11ef41ae279f9dba9b1e1d6b3a9594983b4a15b9",
+  "created_at": "2026-05-01T07:52:17.813847138Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9a6a85c1",
+    "title": "docs: create docs/helix/02-design/concepts/bounded-context-execution.md",
+    "acceptance": "File exists at docs/helix/02-design/concepts/bounded-context-execution.md. Sections: (1) Context rot — definition, what causes it, why it degrades output quality; (2) The ralph loop — the unbounded session failure pattern; (3) DDx's answer — each bead = one bounded execution unit = one fresh agent invocation in an isolated worktree; ddx work is a bounded context execution loop, not a persistent session; (4) External references — links to 'Lost in the Middle' paper and other published research on in-context degradation. Cross-links to FEAT-010 and execute-loop docs.",
+    "parent": "ddx-dcee9b0c",
+    "labels": [
+      "area:docs",
+      "bounded-context",
+      "concepts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:52:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T07:52:16.884940154Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T075216-19982ef8",
+    "prompt": ".ddx/executions/20260501T075216-19982ef8/prompt.md",
+    "manifest": ".ddx/executions/20260501T075216-19982ef8/manifest.json",
+    "result": ".ddx/executions/20260501T075216-19982ef8/result.json",
+    "checks": ".ddx/executions/20260501T075216-19982ef8/checks.json",
+    "usage": ".ddx/executions/20260501T075216-19982ef8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9a6a85c1-20260501T075216-19982ef8"
+  }
+}
