@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T142332-57f145f7",
+  "bead_id": "ddx-d0e8888b",
+  "base_rev": "c9de4479dde79d216e7d582c853a9e006fc45fc3",
+  "created_at": "2026-05-01T14:23:33.778742646Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d0e8888b",
+    "title": "runs pages: replace hardcoded purple-/blue-/teal- layer badge colors with semantic tokens",
+    "description": "Two files use raw Tailwind palette colors for layer badges (work/try/run) that are not semantic tokens:\n\n1. src/routes/nodes/[nodeId]/projects/[projectId]/runs/+page.svelte layerBadgeClass() function (lines 97-108):\n   - 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' (work)\n   - 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' (try)\n   - 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300' (run)\n\n2. src/routes/nodes/[nodeId]/projects/[projectId]/runs/[runId]/+page.svelte layerBadgeClass() function (lines 43-54): same three color sets.\n\nThese layer values (work/try/run) are semantic concepts in the DDx run hierarchy and should have named tokens or at minimum use existing semantic accent/status tokens consistently. The layer badge also uses rounded-full pill shape while status badges are sharp-cornered, which is inconsistent.\n\nAdditionally runs/+page.svelte lines 134-135 use raw text-xl and text-sm instead of text-headline-lg and text-body-sm.",
+    "acceptance": "layerBadgeClass() in both runs pages no longer references purple-*, blue-*, or teal-* Tailwind palette classes. Layer colors are expressed via semantic tokens or a defined CSS utility class (e.g. badge-layer-work/try/run) added to app.css using existing CSS variable patterns. Raw text-xl/text-sm replaced with text-headline-lg/text-body-sm.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:23:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:23:32.896894733Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T142332-57f145f7",
+    "prompt": ".ddx/executions/20260501T142332-57f145f7/prompt.md",
+    "manifest": ".ddx/executions/20260501T142332-57f145f7/manifest.json",
+    "result": ".ddx/executions/20260501T142332-57f145f7/result.json",
+    "checks": ".ddx/executions/20260501T142332-57f145f7/checks.json",
+    "usage": ".ddx/executions/20260501T142332-57f145f7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d0e8888b-20260501T142332-57f145f7"
+  }
+}
