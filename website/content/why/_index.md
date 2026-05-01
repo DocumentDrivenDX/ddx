@@ -46,17 +46,19 @@ Every project has a slightly different shape. Without a discoverable, consistent
 
 ## 3. The Root Cause
 
-Step back from the symptoms and the underlying issue is one sentence:
+Step back from the symptoms and there are two underlying failure modes, not one:
 
 > **Agents execute in isolation with no shared memory.**
+>
+> **Within a single run, agents suffer context rot — quality decays as the context window fills.**
 
-Every pain above is downstream of this. Context re-explanation is the absence of shared memory across sessions. Spec/code drift is the absence of shared memory across artifacts. Work-tracking reinvention is the absence of shared memory across tools. Evidence loss is the absence of shared memory across runs. Cost overspend is the absence of shared memory about what worked at what tier. Project re-learning is the absence of shared memory about the project's own surface.
+The first explains the cross-session pain. Context re-explanation is the absence of shared memory across sessions. Spec/code drift is the absence of shared memory across artifacts. Work-tracking reinvention is the absence of shared memory across tools. Evidence loss is the absence of shared memory across runs. Cost overspend is the absence of shared memory about what worked at what tier. Project re-learning is the absence of shared memory about the project's own surface.
 
-This isolation is not optional, and trying to fight it with longer sessions makes things worse. LLM output quality decays as a single context window fills — a phenomenon we call **context rot**. Transcript, tool output, failed attempts, and partial reasoning accumulate and compete with the original instructions. The agent at hour one is sharper than the agent at hour three, even at the same model and the same prompt. Long-running agent sessions trade reliability for the illusion of continuity.
+The second explains why the obvious workaround — "just run a longer session" — fails. **Context rot** is the quality decay LLMs exhibit as a single context window fills with transcript, tool output, failed attempts, and partial reasoning. Even within one run, unbounded execution degrades the agent: original instructions get crowded out, retrieved facts blur, and earlier mistakes pollute later reasoning. The agent at hour one is sharper than the agent at hour three, at the same model and the same prompt. Long-running agent sessions trade reliability for the illusion of continuity. So even a perfectly remembered session would still rot from the inside.
 
-The structural fix is **bounded context execution** — also known as the **Ralph loop**: every unit of agent work runs in a fresh, narrowly-scoped context against an explicit contract, and durable state lives on disk as evidence rather than as transcript carried forward. The next attempt re-enters cold, reads what it needs from the substrate, and executes against the same kind of contract. Iteration becomes reliable because no single iteration has to remember anything.
+These two failure modes need a shared structural fix: **bounded context execution** — also known as the **Ralph loop**. Every unit of agent work runs in a fresh, narrowly-scoped context against an explicit contract, and durable state lives on disk as evidence rather than as transcript carried forward. The next attempt re-enters cold, reads what it needs from the substrate, and executes against the same kind of contract. Iteration becomes reliable because no single iteration has to remember anything, and no single iteration runs long enough to rot. **This is exactly why `ddx work` is designed the way it is**: each bead drains in its own short-lived worktree with a fresh context, evidence is written to disk, and the loop moves on rather than stretching one session past its useful window.
 
-Patching symptom-by-symptom doesn't fix it. What's needed is a substrate that gives agent work a place to stand — durable, file-based, agent-discoverable, and shared across every invocation — plus a loop shape that respects context rot instead of fighting it.
+Patching symptom-by-symptom doesn't fix either failure mode. What's needed is a substrate that gives agent work a place to stand — durable, file-based, agent-discoverable, and shared across every invocation — plus a loop shape that respects context rot instead of fighting it.
 
 DDx answers with four primitives:
 
