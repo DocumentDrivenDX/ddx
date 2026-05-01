@@ -1,0 +1,42 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "website/content/why/_index.md exists with all five narrative beats; four primitives (artifacts, beads, tracked execution via `ddx work`, skills) named in DDx-only language; only `ddx work` referenced for execution; six-principle physics exposition present; no HELIX methodology concepts.",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 986,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T073200-53c02893/manifest.json",
+          ".ddx/executions/20260501T073200-53c02893/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3483,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6275,
+    "output_bytes": 383,
+    "elapsed_ms": 17894,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
