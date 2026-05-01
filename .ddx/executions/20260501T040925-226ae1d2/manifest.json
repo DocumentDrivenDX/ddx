@@ -1,0 +1,96 @@
+{
+  "attempt_id": "20260501T040925-226ae1d2",
+  "bead_id": "ddx-669e1c2f",
+  "base_rev": "f1af17d522b619662f4e0edcc741c75038d3c13c",
+  "created_at": "2026-05-01T04:09:26.598031418Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-669e1c2f",
+    "title": "runs cross-links + e2e: bead↔run, run↔artifact, runs.spec.ts",
+    "description": "Wire up cross-navigation links and write the runs.spec.ts e2e test.\n\nCross-links:\n- Bead detail: linked run records (layer=try or run) with status, click → runs detail\n- Run detail (work/try): beadId links to bead detail (/beads/:beadId)\n- Run detail (run layer): if artifactId present, shows 'Produced artifact: \u003ctitle\u003e' link to /artifacts/:artifactId\n- Artifact detail: if producing run exists, 'View producing run' link is live (navigates to run detail)\n- Combined /nodes/:nodeId/runs: row links navigate to correct project-scoped /runs/:runId (carrying projectId from row data)\n\nE2E (runs.spec.ts):\nFull US-086b + US-094b workflow:\n1. Navigate to project runs\n2. Apply layer=work filter → verify URL + filtered list\n3. Click work record → verify work detail fields\n4. Click child try → verify try fields (bead link, revisions, worktreePath, mergeOutcome)\n5. Click child run → verify run fields (power, harness, tokens, cost, evidence)\n6. Follow evidence link → verify artifact link present\n7. Navigate breadcrumbs back up: run → try → work → list\n8. Verify filter state restored after navigating back\n\nDepends on ddx-a9c6ad1c (runs detail), ddx-43684ac1 (artifact provenance for backlink).",
+    "acceptance": "1. Bead detail shows linked run records; clicking navigates to run detail.\n2. Run try/work detail: beadId links navigate to bead detail; Back returns to run detail.\n3. Run-layer detail: artifact link present when artifactId set; link is live.\n4. Artifact detail: 'View producing run' link is live and navigates to run detail.\n5. Combined runs list: row click carries correct projectId in URL.\n6. runs.spec.ts passes: complete work→try→run drill-down, breadcrumb back-navigation, artifact link.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "feat-021",
+      "runs"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T04:09:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:24.317309215Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=97249a57c91e42b45ccf99f7411e3a5393c167ac\nbase_rev=97249a57c91e42b45ccf99f7411e3a5393c167ac\nretry_after=2026-05-01T01:09:24Z",
+          "created_at": "2026-04-30T19:09:24.639496909Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:23.958499534Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:24.092325249Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-30T19:31:24.191796161Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-30T19:31:24.394223774Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T04:09:25.563951039Z",
+      "spec-id": "FEAT-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-021",
+      "path": "docs/helix/01-frame/features/FEAT-021-dashboard-ui.md",
+      "title": "Feature: Multi-Node Dashboard UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260501T040925-226ae1d2",
+    "prompt": ".ddx/executions/20260501T040925-226ae1d2/prompt.md",
+    "manifest": ".ddx/executions/20260501T040925-226ae1d2/manifest.json",
+    "result": ".ddx/executions/20260501T040925-226ae1d2/result.json",
+    "checks": ".ddx/executions/20260501T040925-226ae1d2/checks.json",
+    "usage": ".ddx/executions/20260501T040925-226ae1d2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-669e1c2f-20260501T040925-226ae1d2"
+  }
+}
