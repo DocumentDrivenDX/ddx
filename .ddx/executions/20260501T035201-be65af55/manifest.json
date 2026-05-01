@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T035201-be65af55",
+  "bead_id": "ddx-de872ada",
+  "base_rev": "9c3eef33f80a9b5d4283f666c91372df37374673",
+  "created_at": "2026-05-01T03:52:02.170825996Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-de872ada",
+    "title": "e2e: graph.spec.ts — add click node → document detail navigation test",
+    "acceptance": "graph.spec.ts has test that: opens graph page, clicks a graph node, verifies navigation to /documents/\u003cpath\u003e; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "graph"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:52:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T03:52:01.198243216Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T035201-be65af55",
+    "prompt": ".ddx/executions/20260501T035201-be65af55/prompt.md",
+    "manifest": ".ddx/executions/20260501T035201-be65af55/manifest.json",
+    "result": ".ddx/executions/20260501T035201-be65af55/result.json",
+    "checks": ".ddx/executions/20260501T035201-be65af55/checks.json",
+    "usage": ".ddx/executions/20260501T035201-be65af55/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-de872ada-20260501T035201-be65af55"
+  }
+}
