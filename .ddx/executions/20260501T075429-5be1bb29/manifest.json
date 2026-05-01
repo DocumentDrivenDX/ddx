@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260501T075429-5be1bb29",
+  "bead_id": "ddx-79115cc9",
+  "base_rev": "cc0066719ef9a0ad1616f6e556b804cb9471e011",
+  "created_at": "2026-05-01T07:54:30.076103326Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-79115cc9",
+    "title": "website: add context rot to /why/ root cause section",
+    "acceptance": "/why/ root cause section names context rot as an explicit failure mode alongside 'agents execute in isolation with no shared memory'; explains that even within a single run, unbounded execution causes quality decay; bounded context execution named as reason ddx work is designed the way it is. Depends on /why/ page existing (ddx-f53b8c4b).",
+    "parent": "ddx-dcee9b0c",
+    "labels": [
+      "area:website",
+      "bounded-context"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:54:29Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T07:54:29.039852797Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T075429-5be1bb29",
+    "prompt": ".ddx/executions/20260501T075429-5be1bb29/prompt.md",
+    "manifest": ".ddx/executions/20260501T075429-5be1bb29/manifest.json",
+    "result": ".ddx/executions/20260501T075429-5be1bb29/result.json",
+    "checks": ".ddx/executions/20260501T075429-5be1bb29/checks.json",
+    "usage": ".ddx/executions/20260501T075429-5be1bb29/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-79115cc9-20260501T075429-5be1bb29"
+  }
+}
