@@ -19,13 +19,13 @@ test.describe('DDx Microsite', () => {
     await expect(page.getByRole('heading', { name: /Documents drive the agents/ })).toBeVisible()
     // Section 2: Problem
     await expect(page.locator('.ddx-home-problem')).toBeVisible()
-    await expect(page.getByText('The gap')).toBeVisible()
+    await expect(page.getByText('The problem')).toBeVisible()
     // Section 3: How it works
     await expect(page.locator('.ddx-home-how')).toBeVisible()
     await expect(page.getByText('How it works')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Track work as beads' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Define the work' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Execute in isolation' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Review and close' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Review against criteria' })).toBeVisible()
     // Section 4: Features preview
     await expect(page.locator('.ddx-home-features')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Work Queue' })).toBeVisible()
