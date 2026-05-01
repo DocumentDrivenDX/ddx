@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T074023-2221fd9f",
+  "bead_id": "ddx-2e0beb6c",
+  "base_rev": "e3118ae05fc875cee4594a08e1489d7da03edeee",
+  "created_at": "2026-05-01T07:40:24.717120225Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2e0beb6c",
+    "title": "e2e: new multi-model-review.spec.ts for quorum review end-to-end",
+    "acceptance": "New spec file multi-model-review.spec.ts exists; tests quorum review UI flow end-to-end; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "quorum"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:40:23Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T07:40:23.708292539Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T074023-2221fd9f",
+    "prompt": ".ddx/executions/20260501T074023-2221fd9f/prompt.md",
+    "manifest": ".ddx/executions/20260501T074023-2221fd9f/manifest.json",
+    "result": ".ddx/executions/20260501T074023-2221fd9f/result.json",
+    "checks": ".ddx/executions/20260501T074023-2221fd9f/checks.json",
+    "usage": ".ddx/executions/20260501T074023-2221fd9f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2e0beb6c-20260501T074023-2221fd9f"
+  }
+}
