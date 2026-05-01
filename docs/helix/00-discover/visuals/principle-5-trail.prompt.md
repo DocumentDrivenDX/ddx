@@ -7,7 +7,7 @@ model: gemini-3-pro-image-preview
 aspect_ratio: "16:9"
 size: "2K"
 depends_on:
-  - DESIGN.md
+  - .stitch/DESIGN.md
   - docs/helix/00-discover/product-vision.md
 ---
 
