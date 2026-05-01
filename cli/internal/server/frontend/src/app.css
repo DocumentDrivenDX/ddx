@@ -311,4 +311,20 @@
 		background-color: var(--tier-fast-surface);
 		color: var(--tier-fast-text);
 	}
+
+	/* graph node staleness — semantic mapping:
+	   stale = warning (tier-fast amber/gold), missing = error (status-blocked red),
+	   fresh = success (status-closed green). Light/dark resolved via existing CSS vars. */
+	.node-stale {
+		fill: var(--tier-fast-border);
+		stroke: var(--tier-fast-text);
+	}
+	.node-missing {
+		fill: var(--status-blocked-border);
+		stroke: var(--status-blocked-text);
+	}
+	.node-fresh {
+		fill: var(--status-closed-border);
+		stroke: var(--status-closed-text);
+	}
 }

@@ -63,12 +63,10 @@
 	}
 
 	function nodeColorClass(staleness?: string): string {
-		if (staleness === 'stale')
-			return 'fill-amber-400 stroke-amber-600 dark:fill-amber-500 dark:stroke-amber-400'
-		if (staleness === 'missing')
-			return 'fill-red-400 stroke-red-600 dark:fill-red-500 dark:stroke-red-400'
+		if (staleness === 'stale') return 'node-stale'
+		if (staleness === 'missing') return 'node-missing'
 		// fresh (default)
-		return 'fill-green-400 stroke-green-600 dark:fill-green-500 dark:stroke-green-400'
+		return 'node-fresh'
 	}
 
 	$effect(() => {
@@ -186,8 +184,7 @@
 				.append('text')
 				.attr('x', 24)
 				.attr('dy', '0.35em')
-				.attr('font-size', '12px')
-				.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted select-none')
+				.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted select-none text-body-sm')
 				.attr('pointer-events', 'none')
 				.text((d) => (d.title.length > 32 ? d.title.slice(0, 32) + '…' : d.title))
 
