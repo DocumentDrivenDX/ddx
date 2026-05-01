@@ -1,1 +1,0 @@
-import{Dt as e,Ot as t,ot as n}from"../chunks/D5KUolLB.js";import{t as r}from"../chunks/k-mresXx.js";import"../chunks/Q94VlVm2.js";import"../chunks/D93nnCPt.js";import{t as i}from"../chunks/DSqzhCK4.js";function a(a,o){t(o,!0),n(()=>{i.value?.id&&r(`/nodes/${i.value.id}`,{replaceState:!0})}),e()}export{a as component};

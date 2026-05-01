@@ -1,7 +1,14 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
-	import { ArrowLeft, Download, ExternalLink, Network, FileClock } from 'lucide-svelte';
+	import { goto, invalidateAll } from '$app/navigation';
+	import {
+		ArrowLeft,
+		Download,
+		ExternalLink,
+		Network,
+		FileClock,
+		RefreshCw
+	} from 'lucide-svelte';
 	import { marked } from 'marked';
 	import DOMPurify from 'isomorphic-dompurify';
 	import { onMount } from 'svelte';
@@ -9,6 +16,44 @@
 	import { gql } from 'graphql-request';
 
 	let { data }: { data: PageData } = $props();
+
+	const ARTIFACT_REGENERATE_MUTATION = gql`
+		mutation ArtifactRegenerate($artifactId: ID!) {
+			artifactRegenerate(artifactId: $artifactId) {
+				runId
+				status
+			}
+		}
+	`;
+
+	let regenLoading = $state(false);
+	let regenRunId = $state<string | null>(null);
+	let regenError = $state<string | null>(null);
+
+	async function handleRegenerate() {
+		if (!data.artifact?.id || regenLoading) return;
+		regenLoading = true;
+		regenError = null;
+		regenRunId = null;
+		try {
+			const client = createClient();
+			const result = await client.request<{
+				artifactRegenerate: { runId: string; status: string };
+			}>(ARTIFACT_REGENERATE_MUTATION, { artifactId: data.artifact.id });
+			regenRunId = result.artifactRegenerate.runId;
+		} catch (err) {
+			const e = err as { response?: { errors?: Array<{ message: string }> }; message?: string };
+			const gqlMsg = e?.response?.errors?.[0]?.message;
+			regenError = gqlMsg ?? e?.message ?? 'Regenerate failed';
+		} finally {
+			regenLoading = false;
+		}
+	}
+
+	async function handleRefreshArtifact() {
+		await invalidateAll();
+		regenRunId = null;
+	}
 
 	const ARTIFACT_BY_PATH_QUERY = gql`
 		query ArtifactsByPath($projectID: ID!, $search: String) {
@@ -464,6 +509,53 @@
 						</dd>
 					</div>
 				</dl>
+				<div
+					class="border-border-line dark:border-dark-border-line flex flex-col gap-2 border-t px-4 py-3"
+				>
+					<div class="flex items-center gap-3">
+						<button
+							type="button"
+							data-testid="regenerate-button"
+							onclick={handleRegenerate}
+							disabled={regenLoading}
+							class="bg-accent-lever text-fg-on-accent dark:bg-dark-accent-lever inline-flex items-center gap-2 rounded px-3 py-1.5 text-body-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<RefreshCw
+								class="h-4 w-4 {regenLoading ? 'animate-spin' : ''}"
+								data-testid={regenLoading ? 'regenerate-spinner' : undefined}
+							/>
+							{regenLoading ? 'Regenerating…' : 'Regenerate'}
+						</button>
+						{#if regenRunId}
+							<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
+								Dispatched run
+								<a
+									href={`/nodes/${data.nodeId}/projects/${data.projectId}/runs/${encodeURIComponent(regenRunId)}`}
+									data-testid="regenerate-run-link"
+									class="font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever hover:underline"
+								>
+									{regenRunId}
+								</a>
+							</span>
+							<button
+								type="button"
+								data-testid="regenerate-refresh"
+								onclick={handleRefreshArtifact}
+								class="text-body-sm text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink hover:underline"
+							>
+								Refresh artifact
+							</button>
+						{/if}
+					</div>
+					{#if regenError}
+						<p
+							data-testid="regenerate-error"
+							class="text-body-sm text-red-700 dark:text-red-400"
+						>
+							{regenError}
+						</p>
+					{/if}
+				</div>
 			</div>
 		{/if}
 
