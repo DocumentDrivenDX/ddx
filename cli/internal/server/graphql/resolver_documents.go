@@ -2,6 +2,8 @@ package graphql
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -230,6 +232,7 @@ func issuesToGQL(issues []docgraph.GraphIssue) []*GraphIssue {
 	out := make([]*GraphIssue, 0, len(issues))
 	for _, issue := range issues {
 		gql := &GraphIssue{
+			IssueID: graphIssueStableID(issue),
 			Kind:    string(issue.Kind),
 			Message: issue.Message,
 		}
@@ -248,6 +251,21 @@ func issuesToGQL(issues []docgraph.GraphIssue) []*GraphIssue {
 		out = append(out, gql)
 	}
 	return out
+}
+
+// graphIssueStableID returns a deterministic identifier for a docgraph issue,
+// computed from its kind/path/id/relatedPath tuple. The same issue produced by
+// two graph builds yields the same ID, which lets the UI pass it back to
+// graphRepairIssue without needing the server to remember per-build state.
+func graphIssueStableID(issue docgraph.GraphIssue) string {
+	payload := strings.Join([]string{
+		string(issue.Kind),
+		issue.Path,
+		issue.ID,
+		issue.RelatedPath,
+	}, "\x00")
+	sum := sha1.Sum([]byte(payload))
+	return hex.EncodeToString(sum[:])
 }
 
 // docToGQL converts a docgraph.Document to the GraphQL Document model.

@@ -44,6 +44,7 @@ const GRAPH_DOCS = [
 ];
 
 interface GraphIssueFixture {
+	issueId?: string;
 	kind: string;
 	path: string | null;
 	id: string | null;

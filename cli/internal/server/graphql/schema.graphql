@@ -328,6 +328,8 @@ type DocGraph {
 
 """GraphIssue describes one integrity problem discovered while building the document graph."""
 type GraphIssue {
+  """Stable identifier for this issue, used as input to graphRepairIssue. Derived deterministically from (kind, path, id, relatedPath)."""
+  issueId: ID!
   """Machine-readable category (e.g. duplicate_id, missing_dep)."""
   kind: String!
   """Path of the offending document, when known."""
@@ -338,6 +340,26 @@ type GraphIssue {
   message: String!
   """Related document path (e.g. the pre-existing path a duplicate ID collides with)."""
   relatedPath: String
+}
+
+"""RepairStrategy selects the structured edit applied by graphRepairIssue."""
+enum RepairStrategy {
+  """Remove a missing dependency entry from a document's depends_on list."""
+  REMOVE_MISSING_DEP
+  """Rename a duplicate document ID to the deterministic SHA-1 suffix suggestion."""
+  APPLY_SUGGESTED_ID
+  """Remove a stale id_to_path entry from the graph config."""
+  CLEAN_PATH_MAP
+}
+
+"""GraphRepairResult describes the outcome of a graphRepairIssue mutation."""
+type GraphRepairResult {
+  """True when the structured edit was applied and the graph was re-validated."""
+  success: Boolean!
+  """The freshly-validated issue list after the repair (or before, on failure)."""
+  newIssues: [GraphIssue!]!
+  """Human-readable error message when success is false."""
+  error: String
 }
 
 """StaleReason explains why a specific document is stale"""

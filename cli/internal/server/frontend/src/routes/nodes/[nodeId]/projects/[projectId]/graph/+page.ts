@@ -16,6 +16,7 @@ const DOC_GRAPH_QUERY = gql`
 			pathToId
 			warnings
 			issues {
+				issueId
 				kind
 				path
 				id
@@ -45,6 +46,7 @@ export interface GraphDocument {
 }
 
 export interface GraphIssue {
+	issueId: string
 	kind: string
 	path: string | null
 	id: string | null

@@ -555,6 +555,23 @@ func ParseDocument(path string) (*Document, error) {
 	return doc, nil
 }
 
+// ContentHash returns the deterministic content hash captured for this
+// document at graph-build time. Callers comparing to a freshly-rebuilt graph
+// can use this to detect whether the on-disk file has changed since the graph
+// was last computed.
+func (d *Document) ContentHash() string { return d.contentHash }
+
+// HashDocumentFile parses the markdown file at path and returns the
+// deterministic document content hash, or an error if the file is not a doc
+// graph document. The hash matches Document.ContentHash() for the same file.
+func HashDocumentFile(path string) (string, error) {
+	doc, err := ParseDocument(path)
+	if err != nil {
+		return "", err
+	}
+	return doc.contentHash, nil
+}
+
 func (g *Graph) buildDependents() {
 	g.Dependents = make(map[string][]string)
 	for id := range g.Documents {
