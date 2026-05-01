@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T143917-ab820a7e",
+  "bead_id": "ddx-293c2a4a",
+  "base_rev": "9557e936e62ee9f9c80fd74d446d6afefa755b02",
+  "created_at": "2026-05-01T14:39:18.651841287Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-293c2a4a",
+    "title": "worker detail: metadata grid and sections use raw text-sm/text-xs not text-body-sm/text-label-caps",
+    "description": "src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/+page.svelte has pervasive raw font size usage outside the log area:\n\nLines 314, 378, 424, 455: section wrappers use text-sm on the container rather than applying semantic tokens to each element. This causes all child text to inherit text-sm (14px Tailwind) rather than the semantic 14px/400 (text-body-md) pairing.\n\nLines 351, 365: 'text-mono-code text-fg-muted' correct but missing the explicit font-mono-code pairing — uses text-mono-code size without font-mono-code family.\n\nLines 431: lifecycle event list uses text-xs (raw) for list items. Should be text-body-sm or text-label-caps depending on context.\n\nLine 460: alert-caution banner uses text-xs — should be text-body-sm.\n\nLines 486, 495: pre elements inside tool call details have no explicit text token — they rely on inherited font size.\n\nThe entire file pattern is: container sets text-sm, individual elements get bare color tokens without paired size tokens. This creates drift from semantic expectations when the base text-sm is later changed.",
+    "acceptance": "Sections drop container text-sm. Individual elements carry explicit text-body-sm/text-label-caps/text-mono-code tokens as appropriate. font-mono-code is always paired with text-mono-code. alert-caution text uses text-body-sm.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:39:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:39:17.641478408Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143917-ab820a7e",
+    "prompt": ".ddx/executions/20260501T143917-ab820a7e/prompt.md",
+    "manifest": ".ddx/executions/20260501T143917-ab820a7e/manifest.json",
+    "result": ".ddx/executions/20260501T143917-ab820a7e/result.json",
+    "checks": ".ddx/executions/20260501T143917-ab820a7e/checks.json",
+    "usage": ".ddx/executions/20260501T143917-ab820a7e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-293c2a4a-20260501T143917-ab820a7e"
+  }
+}
