@@ -1,0 +1,95 @@
+{
+  "attempt_id": "20260501T040332-b8df9380",
+  "bead_id": "ddx-43684ac1",
+  "base_rev": "2f868a5aaef82bb3cf0df9d7652a6c0ae7db05a6",
+  "created_at": "2026-05-01T04:03:33.790359703Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-43684ac1",
+    "title": "artifact provenance: generated_by panel, source-hash staleness, run link + backlink",
+    "description": "Add provenance panel to artifact detail for artifacts with generated_by metadata.\n\nPanel shows: producing run id, generator/prompt summary (truncated), source-hash status (fresh = source inputs unchanged, stale = source_hash mismatch).\n\nLink to the producing run: navigates to /nodes/:nodeId/projects/:projectId/runs/:runId (requires runs UI to exist, but the link can be a disabled placeholder until then).\n\nOn the run detail side: run that produced an artifact shows 'Produced artifact: \u003ctitle\u003e' link back to /artifacts/:artifactId. (Coordinate with runs detail bead.)\n\nStaleness is artifact-local: source_hash mismatch marks only this artifact stale. It does NOT cascade through depends_on like doc-graph staleness does.\n\nDepends on ddx-d7d1119d (artifact detail route exists).",
+    "acceptance": "1. Artifact with generated_by shows provenance panel with run id, prompt summary, and source-hash status.\n2. Source-hash mismatch shows 'stale' badge on provenance panel; dependent artifacts are unaffected.\n3. 'View producing run' link navigates to runs detail (or shows disabled state with tooltip if run id not found).\n4. Run detail shows 'Produced artifact' link to artifact detail.\n5. Staleness badge in artifacts list reflects source-hash status, not depends_on cascade.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T04:03:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:20.36798991Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=c021436d3dac7657d47b74f3fbc1f2a0c2272fc8\nbase_rev=c021436d3dac7657d47b74f3fbc1f2a0c2272fc8\nretry_after=2026-05-01T01:09:20Z",
+          "created_at": "2026-04-30T19:09:20.696154855Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:18.220474971Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:18.363146803Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-30T19:31:18.466307379Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-30T19:31:18.664369621Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T04:03:32.76305865Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260501T040332-b8df9380",
+    "prompt": ".ddx/executions/20260501T040332-b8df9380/prompt.md",
+    "manifest": ".ddx/executions/20260501T040332-b8df9380/manifest.json",
+    "result": ".ddx/executions/20260501T040332-b8df9380/result.json",
+    "checks": ".ddx/executions/20260501T040332-b8df9380/checks.json",
+    "usage": ".ddx/executions/20260501T040332-b8df9380/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-43684ac1-20260501T040332-b8df9380"
+  }
+}
