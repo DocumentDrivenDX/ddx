@@ -1134,6 +1134,8 @@ type FeatureCostRow struct {
 
 // GraphIssue describes one integrity problem discovered while building the document graph.
 type GraphIssue struct {
+	// Stable identifier for this issue, used as input to graphRepairIssue. Derived deterministically from (kind, path, id, relatedPath).
+	IssueID string `json:"issueId"`
 	// Machine-readable category (e.g. duplicate_id, missing_dep).
 	Kind string `json:"kind"`
 	// Path of the offending document, when known.
@@ -1144,6 +1146,16 @@ type GraphIssue struct {
 	Message string `json:"message"`
 	// Related document path (e.g. the pre-existing path a duplicate ID collides with).
 	RelatedPath *string `json:"relatedPath,omitempty"`
+}
+
+// GraphRepairResult describes the outcome of a graphRepairIssue mutation.
+type GraphRepairResult struct {
+	// True when the structured edit was applied and the graph was re-validated.
+	Success bool `json:"success"`
+	// The freshly-validated issue list after the repair (or before, on failure).
+	NewIssues []*GraphIssue `json:"newIssues"`
+	// Human-readable error message when success is false.
+	Error *string `json:"error,omitempty"`
 }
 
 // HealthStatus represents the server health response
@@ -2126,6 +2138,67 @@ func (e *ProviderKind) UnmarshalJSON(b []byte) error {
 }
 
 func (e ProviderKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// RepairStrategy selects the structured edit applied by graphRepairIssue.
+type RepairStrategy string
+
+const (
+	// Remove a missing dependency entry from a document's depends_on list.
+	RepairStrategyRemoveMissingDep RepairStrategy = "REMOVE_MISSING_DEP"
+	// Rename a duplicate document ID to the deterministic SHA-1 suffix suggestion.
+	RepairStrategyApplySuggestedID RepairStrategy = "APPLY_SUGGESTED_ID"
+	// Remove a stale id_to_path entry from the graph config.
+	RepairStrategyCleanPathMap RepairStrategy = "CLEAN_PATH_MAP"
+)
+
+var AllRepairStrategy = []RepairStrategy{
+	RepairStrategyRemoveMissingDep,
+	RepairStrategyApplySuggestedID,
+	RepairStrategyCleanPathMap,
+}
+
+func (e RepairStrategy) IsValid() bool {
+	switch e {
+	case RepairStrategyRemoveMissingDep, RepairStrategyApplySuggestedID, RepairStrategyCleanPathMap:
+		return true
+	}
+	return false
+}
+
+func (e RepairStrategy) String() string {
+	return string(e)
+}
+
+func (e *RepairStrategy) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RepairStrategy(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RepairStrategy", str)
+	}
+	return nil
+}
+
+func (e RepairStrategy) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RepairStrategy) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RepairStrategy) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

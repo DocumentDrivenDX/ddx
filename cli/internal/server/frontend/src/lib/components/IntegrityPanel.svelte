@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { invalidateAll } from '$app/navigation';
 	import { ChevronDown, ChevronRight, Copy } from 'lucide-svelte';
+	import { createClient } from '$lib/gql/client';
+	import { gql } from 'graphql-request';
 
 	export interface GraphIssue {
+		issueId?: string;
 		kind: string;
 		path: string | null;
 		id: string | null;
@@ -10,8 +14,39 @@
 		relatedPath: string | null;
 	}
 
-	let { issues, pathToDocId = {} }: { issues: GraphIssue[]; pathToDocId?: Record<string, string> } =
-		$props();
+	let {
+		issues,
+		pathToDocId = {}
+	}: { issues: GraphIssue[]; pathToDocId?: Record<string, string> } = $props();
+
+	type RepairStrategy = 'REMOVE_MISSING_DEP' | 'APPLY_SUGGESTED_ID' | 'CLEAN_PATH_MAP';
+
+	const REPAIR_MUTATION = gql`
+		mutation GraphRepairIssue($issueId: ID!, $strategy: RepairStrategy!) {
+			graphRepairIssue(issueId: $issueId, strategy: $strategy) {
+				success
+				error
+			}
+		}
+	`;
+
+	// Auto-repairable kinds. duplicate_id is auto-repairable only when no other
+	// document already declares a depends_on edge to the duplicate ID — the
+	// server enforces that constraint and returns an inline error otherwise.
+	const REPAIRABLE: Record<string, RepairStrategy> = {
+		missing_dep: 'REMOVE_MISSING_DEP',
+		duplicate_id: 'APPLY_SUGGESTED_ID'
+	};
+
+	function strategyFor(issue: GraphIssue): RepairStrategy | null {
+		if (!issue.issueId) return null;
+		return REPAIRABLE[issue.kind] ?? null;
+	}
+
+	let previewing = $state<Record<string, boolean>>({});
+	let pending = $state<Record<string, boolean>>({});
+	let inlineErrors = $state<Record<string, string>>({});
+	let previewedSuggestions = $state<Record<string, string>>({});
 
 	const KIND_LABELS: Record<string, string> = {
 		duplicate_id: 'Duplicate ID',
@@ -119,6 +154,58 @@
 			window.prompt('Copy frontmatter line to remove:', snippet);
 		}
 	}
+
+	async function togglePreview(issue: GraphIssue) {
+		const key = issue.issueId ?? '';
+		if (!key) return;
+		const next = !previewing[key];
+		previewing[key] = next;
+		inlineErrors[key] = '';
+		if (next && issue.kind === 'duplicate_id' && !previewedSuggestions[key]) {
+			previewedSuggestions[key] = await suggestUniqueID(issue.id, issue.path);
+		}
+	}
+
+	async function applyFix(issue: GraphIssue) {
+		const key = issue.issueId ?? '';
+		const strategy = strategyFor(issue);
+		if (!key || !strategy) return;
+		pending[key] = true;
+		inlineErrors[key] = '';
+		try {
+			const client = createClient();
+			const res = await client.request<{
+				graphRepairIssue: { success: boolean; error: string | null };
+			}>(REPAIR_MUTATION, { issueId: key, strategy });
+			if (!res.graphRepairIssue.success) {
+				inlineErrors[key] =
+					res.graphRepairIssue.error ?? 'Repair failed; use the copy-snippet fallback.';
+				return;
+			}
+			// Refresh page data so the panel and graph reflect the new state.
+			await invalidateAll();
+		} catch (err) {
+			inlineErrors[key] = err instanceof Error ? err.message : String(err);
+		} finally {
+			pending[key] = false;
+		}
+	}
+
+	function diffRemoveDep(issue: GraphIssue): { before: string; after: string } {
+		const id = (issue.id ?? '').trim();
+		return {
+			before: `depends_on:\n  - ${id}`,
+			after: `depends_on:\n  # (entry removed)`
+		};
+	}
+
+	function diffApplySuggestedID(issue: GraphIssue, suggested: string): { before: string; after: string } {
+		const id = (issue.id ?? '').trim();
+		return {
+			before: `id: ${id}`,
+			after: `id: ${suggested}`
+		};
+	}
 </script>
 
 <section
@@ -151,6 +238,8 @@
 				{#if isOpen}
 					<ul class="bg-bg-canvas px-4 pb-3 pt-1 dark:bg-dark-bg-canvas">
 						{#each group.issues as issue, idx (`${group.kind}-${idx}`)}
+							{@const repairStrategy = strategyFor(issue)}
+							{@const issueKey = issue.issueId ?? ''}
 							<li class="mt-2 flex flex-col gap-1 rounded-none bg-bg-elevated p-2 dark:bg-dark-bg-elevated">
 								<div class="flex flex-wrap items-center gap-2 font-mono text-xs">
 									{#if issue.path}
@@ -208,6 +297,50 @@
 									>
 										Copy suggested unique ID
 									</button>
+								{/if}
+								{#if repairStrategy}
+									<div class="flex flex-wrap items-center gap-2 text-xs">
+										<button
+											type="button"
+											data-testid="integrity-preview-fix"
+											class="rounded-none border border-border-line bg-bg-elevated px-2 py-1 hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface dark:hover:bg-dark-bg-canvas"
+											onclick={() => togglePreview(issue)}
+										>
+											{previewing[issueKey] ? 'Hide preview' : 'Preview fix'}
+										</button>
+										<button
+											type="button"
+											data-testid="integrity-apply-fix"
+											disabled={pending[issueKey]}
+											class="rounded-none border px-2 py-1 font-medium badge-status-blocked hover:opacity-90 disabled:opacity-50"
+											onclick={() => applyFix(issue)}
+										>
+											{pending[issueKey] ? 'Applying…' : 'Apply fix'}
+										</button>
+									</div>
+									{#if previewing[issueKey]}
+										{@const diff =
+											repairStrategy === 'REMOVE_MISSING_DEP'
+												? diffRemoveDep(issue)
+												: diffApplySuggestedID(issue, previewedSuggestions[issueKey] ?? '')}
+										<div
+											data-testid="integrity-preview-diff"
+											class="mt-1 grid gap-1 rounded-none border border-border-line bg-bg-canvas p-2 font-mono text-xs dark:border-dark-border-line dark:bg-dark-bg-canvas"
+										>
+											<div class="text-fg-muted dark:text-dark-fg-muted">Before</div>
+											<pre class="overflow-x-auto whitespace-pre-wrap text-status-blocked">{diff.before}</pre>
+											<div class="text-fg-muted dark:text-dark-fg-muted">After</div>
+											<pre class="overflow-x-auto whitespace-pre-wrap text-status-merged">{diff.after}</pre>
+										</div>
+									{/if}
+									{#if inlineErrors[issueKey]}
+										<p
+											data-testid="integrity-repair-error"
+											class="text-xs text-status-blocked"
+										>
+											{inlineErrors[issueKey]}
+										</p>
+									{/if}
 								{/if}
 								{#if group.kind === 'missing_dep' && issue.id}
 									{@const snippet = dependencyRemovalSnippet(issue)}
