@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T142826-d7c8439d",
+  "bead_id": "ddx-83bcd4a4",
+  "base_rev": "456f43af2207bdc811461c6ab3418c4d71afd85a",
+  "created_at": "2026-05-01T14:28:27.768927044Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-83bcd4a4",
+    "title": "BeadDetail: h2 title and dt labels use raw text-xl/text-xs instead of semantic tokens",
+    "description": "src/lib/components/BeadDetail.svelte uses raw Tailwind size classes:\n\nLine 377: h2 uses text-xl — should be text-headline-lg (20px/800) since this is the primary heading of the detail panel\nLines 383, 392, 399, 413, 429, 443, 452, 465, 499: dt elements use text-xs — these are uppercase label/field labels and should use text-label-caps (11px/700/uppercase) since they also carry uppercase and tracking-wide already\nLines 382-383: outer dl uses text-sm — should be text-body-sm (13px)\nLines 479, 481: run/execution row sub-badges use text-[10px] — this is below label-caps (11px) and below the token floor; should be text-label-caps if used as status chips\nLine 301: owner span uses text-xs — should be text-body-sm\n\nClaim/Unclaim/Edit/Delete buttons use text-sm — should be text-body-sm.",
+    "acceptance": "h2 uses text-headline-lg. dt uppercase labels use text-label-caps. Body text uses text-body-sm. Sub-badges in runs/executions rows use text-label-caps. No raw text-xs, text-sm, or text-xl remains in BeadDetail.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:28:26Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:28:26.095398834Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T142826-d7c8439d",
+    "prompt": ".ddx/executions/20260501T142826-d7c8439d/prompt.md",
+    "manifest": ".ddx/executions/20260501T142826-d7c8439d/manifest.json",
+    "result": ".ddx/executions/20260501T142826-d7c8439d/result.json",
+    "checks": ".ddx/executions/20260501T142826-d7c8439d/checks.json",
+    "usage": ".ddx/executions/20260501T142826-d7c8439d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-83bcd4a4-20260501T142826-d7c8439d"
+  }
+}
