@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260501T115431-eb97c58e",
+  "bead_id": "ddx-c2111c5d",
+  "base_rev": "4f7de3b628e81db7c0c4c7e04ed29948ad54a896",
+  "created_at": "2026-05-01T11:54:31.86591355Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c2111c5d",
+    "title": "website: add bounded context execution paragraph to execute-loop features section",
+    "acceptance": "Execute-loop section on /features/ has one paragraph explaining bounded context execution as an explicit benefit: each bead runs in a fresh context window, preventing context rot and the ralph loop. Links to concept doc.",
+    "parent": "ddx-dcee9b0c",
+    "labels": [
+      "area:website",
+      "bounded-context"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T11:54:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T11:54:31.146617912Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T115431-eb97c58e",
+    "prompt": ".ddx/executions/20260501T115431-eb97c58e/prompt.md",
+    "manifest": ".ddx/executions/20260501T115431-eb97c58e/manifest.json",
+    "result": ".ddx/executions/20260501T115431-eb97c58e/result.json",
+    "checks": ".ddx/executions/20260501T115431-eb97c58e/checks.json",
+    "usage": ".ddx/executions/20260501T115431-eb97c58e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c2111c5d-20260501T115431-eb97c58e"
+  }
+}
