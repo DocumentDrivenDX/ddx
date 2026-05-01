@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260501T040106-8afb1cd2",
+  "bead_id": "ddx-917b4556",
+  "base_rev": "5792370dc4aeb157abf2daeac745ce16b729dd8a",
+  "created_at": "2026-05-01T04:01:07.622323961Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-917b4556",
+    "title": "chore: remove root-level DESIGN.md duplicate — canonical source is .stitch/DESIGN.md",
+    "acceptance": "Root-level DESIGN.md deleted or confirmed non-existent; .stitch/DESIGN.md is the only design language file; all references to DESIGN.md in other files point to .stitch/DESIGN.md",
+    "labels": [
+      "area:docs",
+      "cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T04:01:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T04:01:06.883176391Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T040106-8afb1cd2",
+    "prompt": ".ddx/executions/20260501T040106-8afb1cd2/prompt.md",
+    "manifest": ".ddx/executions/20260501T040106-8afb1cd2/manifest.json",
+    "result": ".ddx/executions/20260501T040106-8afb1cd2/result.json",
+    "checks": ".ddx/executions/20260501T040106-8afb1cd2/checks.json",
+    "usage": ".ddx/executions/20260501T040106-8afb1cd2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-917b4556-20260501T040106-8afb1cd2"
+  }
+}
