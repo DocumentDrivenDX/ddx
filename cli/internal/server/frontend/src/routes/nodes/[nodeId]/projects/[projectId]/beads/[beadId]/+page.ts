@@ -48,6 +48,19 @@ const BEAD_QUERY = gql`
 			}
 			totalCount
 		}
+		beadRuns: runs(projectID: $projectID, beadID: $id, first: 50) {
+			edges {
+				node {
+					id
+					layer
+					status
+					harness
+					startedAt
+					durationMs
+				}
+			}
+			totalCount
+		}
 	}
 `;
 
@@ -89,6 +102,15 @@ export interface BeadExecution {
 	costUsd: number | null;
 }
 
+export interface BeadRun {
+	id: string;
+	layer: string;
+	status: string;
+	harness: string | null;
+	startedAt: string | null;
+	durationMs: number | null;
+}
+
 interface BeadResult {
 	bead: BeadQueryDetail | null;
 	projectBeads?: {
@@ -103,6 +125,10 @@ interface BeadResult {
 		edges: Array<{ node: BeadExecution }>;
 		totalCount: number;
 	};
+	beadRuns?: {
+		edges: Array<{ node: BeadRun }>;
+		totalCount: number;
+	};
 }
 
 export const load: PageLoad = async ({ params, fetch }) => {
@@ -114,10 +140,12 @@ export const load: PageLoad = async ({ params, fetch }) => {
 	const childCount =
 		data.projectBeads?.edges.filter((edge) => edge.node.parent === data.bead?.id).length ?? 0;
 	const executions = data.beadExecutions?.edges.map((e) => e.node) ?? [];
+	const runs = data.beadRuns?.edges.map((e) => e.node) ?? [];
 	return {
 		bead: data.bead ? { ...data.bead, childCount } : null,
 		nodeId: params.nodeId,
 		projectId: params.projectId,
-		executions
+		executions,
+		runs
 	};
 };
