@@ -14,6 +14,19 @@ ddx:
 >
 > Generative AI brings its own physics. DDx exists at the seam where these two meet — the fulcrum that lets software's lever do work. Without it, shipping software with agents quietly degrades into prompt-and-pray. The six principles below are the load-bearing claims on both sides.
 
+## The Productivity Shift
+
+Agentic AI compresses what used to be person-weeks of engineering into hours. The bottleneck moves: writing code is no longer the binding constraint — keeping intent, artifacts, and evidence coherent across many parallel agent invocations is. Teams that hit this new ceiling keep hitting the same six pain points, and every team independently rebuilds the same infrastructure to climb past them. DDx ships that infrastructure once.
+
+Each pain point below maps to a specific DDx capability — the list is bounded by what the platform actually addresses, not an open-ended catalog.
+
+1. **Context assembly is manual.** Composing the right persona + pattern + spec + prior evidence into agent context is ad hoc and slow. *(DDx: artifact library + composition.)*
+2. **Documents drift silently.** When an upstream document changes, dependent artifacts go stale with no detection or reconciliation. *(DDx: artifact graph + staleness + reconciliation beads.)*
+3. **Work tracking is reinvented.** Every workflow tool reimplements issue storage, dependency DAGs, and ready/blocked queues. *(DDx: bead tracker + JSONL interchange.)*
+4. **Agent runs leave no shared trace.** Each tool grows its own dispatch, logging, and evidence shape; nothing carries between invocations. *(DDx: three-layer run architecture on a unified on-disk substrate.)*
+5. **Cost of agentic work is invisible.** Token spend is a first-order constraint with no shared signal on the cheapest model that reliably closes beads. *(DDx: cost-tier routing + token awareness.)*
+6. **Skills and plugins don't compose.** Each project reinvents its agent instructions, skills, and supporting mechanics from scratch. *(DDx: single `ddx` skill + project-local plugin install.)*
+
 ### Physics of Software
 
 1. **Abstraction is the lever.** Multi-level artifact stacks (vision → spec → test → code) with maintained relationships are how intent propagates without being lost. True for human teams; load-bearing for agents because they don't carry tacit knowledge between invocations.

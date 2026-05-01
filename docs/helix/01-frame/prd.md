@@ -107,7 +107,11 @@ AI-assisted development needs more than prompt files. Teams need a shared way
 to manage declarative artifacts, reusable runtime evidence, and local
 automation infrastructure without hardcoding workflow semantics into each tool.
 
-The problems cluster by the physics they violate (see product-vision.md):
+The six recurring pain points teams hit at the new productivity ceiling are
+named in `product-vision.md` ("The Productivity Shift"). The PRD groups them
+into named problem clusters by the physics principle they violate (see
+`product-vision.md`). Every pain point listed below maps to a DDx capability;
+problems outside that mapping belong in workflow tools, not the platform.
 
 **Abstraction** (Principle 1 — abstraction is the lever)
 - **No structure**: Artifacts, prompts, personas, and patterns accumulate as
