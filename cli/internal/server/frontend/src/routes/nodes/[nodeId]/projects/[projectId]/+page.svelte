@@ -51,7 +51,8 @@
 			shortLabel: 'Drain',
 			description: 'Attempt ready beads with the project execute-loop worker.',
 			Icon: Play,
-			accentClass: 'bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500'
+			accentClass:
+				'bg-accent-lever text-white hover:opacity-90 focus-visible:ring-accent-lever dark:bg-dark-accent-lever'
 		},
 		{
 			id: 'align',
@@ -60,7 +61,8 @@
 			shortLabel: 'Align',
 			description: 'Run the HELIX alignment action against the project spec tree.',
 			Icon: RefreshCcw,
-			accentClass: 'bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500'
+			accentClass:
+				'bg-accent-fulcrum text-white hover:opacity-90 focus-visible:ring-accent-fulcrum dark:bg-dark-accent-fulcrum'
 		},
 		{
 			id: 'checks',
@@ -70,7 +72,7 @@
 			description: 'Run the project execution definitions and report their result.',
 			Icon: ShieldCheck,
 			accentClass:
-				'bg-gray-950 text-white hover:bg-gray-800 focus-visible:ring-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200'
+				'bg-fg-ink text-bg-elevated hover:opacity-90 focus-visible:ring-fg-ink dark:bg-dark-fg-ink dark:text-dark-bg-canvas'
 		}
 	];
 
@@ -201,42 +203,42 @@
 </svelte:head>
 
 <div class="space-y-6">
-	<header class="border-b border-gray-200 pb-6 dark:border-gray-700">
+	<header class="border-b border-border-line pb-6 dark:border-dark-border-line">
 		<div class="flex flex-wrap items-start justify-between gap-4">
 			<div class="min-w-0">
 				<p class="text-xs font-semibold tracking-widest text-accent-lever dark:text-dark-accent-lever uppercase">
 					Project overview
 				</p>
-				<h1 class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+				<h1 class="mt-1 text-headline-lg font-bold tracking-tight text-fg-ink dark:text-dark-fg-ink">
 					{projectName}
 				</h1>
 				{#if projectPath}
-					<p class="mt-1 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+					<p class="mt-1 truncate font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 						{projectPath}
 					</p>
 				{/if}
 			</div>
 			<div
-				class="grid min-w-60 grid-cols-3 overflow-hidden rounded-md border border-gray-200 text-center dark:border-gray-700"
+				class="grid min-w-60 grid-cols-3 overflow-hidden rounded-md border border-border-line text-center dark:border-dark-border-line"
 				aria-label="Queue summary"
 			>
 				<div class="px-4 py-3">
-					<div class="text-xl font-semibold text-gray-950 dark:text-white">
+					<div class="text-headline-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 						{queueSummary?.ready ?? '...'}
 					</div>
-					<div class="text-xs text-gray-500 dark:text-gray-400">Ready</div>
+					<div class="text-xs text-fg-muted dark:text-dark-fg-muted">Ready</div>
 				</div>
-				<div class="border-x border-gray-200 px-4 py-3 dark:border-gray-700">
-					<div class="text-xl font-semibold text-gray-950 dark:text-white">
+				<div class="border-x border-border-line px-4 py-3 dark:border-dark-border-line">
+					<div class="text-headline-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 						{queueSummary?.blocked ?? '...'}
 					</div>
-					<div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div>
+					<div class="text-xs text-fg-muted dark:text-dark-fg-muted">Blocked</div>
 				</div>
 				<div class="px-4 py-3">
-					<div class="text-xl font-semibold text-gray-950 dark:text-white">
+					<div class="text-headline-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
 						{queueSummary?.inProgress ?? '...'}
 					</div>
-					<div class="text-xs text-gray-500 dark:text-gray-400">In progress</div>
+					<div class="text-xs text-fg-muted dark:text-dark-fg-muted">In progress</div>
 				</div>
 			</div>
 		</div>
@@ -245,22 +247,22 @@
 	{#if alertMessage}
 		<div
 			role="alert"
-			class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-100"
+			class="rounded-md border border-error/30 bg-error/10 px-4 py-3 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
 		>
 			{alertMessage}
 		</div>
 	{/if}
 
 	<section role="region" aria-label="Actions" class="space-y-4">
-		<div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-4 dark:border-gray-700">
+		<div class="flex flex-wrap items-center justify-between gap-3 border-b border-border-line pb-4 dark:border-dark-border-line">
 			<div>
-				<h2 class="text-lg font-semibold text-gray-950 dark:text-white">Actions</h2>
-				<p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{queueContext()}</p>
+				<h2 class="text-headline-md font-semibold text-fg-ink dark:text-dark-fg-ink">Actions</h2>
+				<p class="mt-1 text-sm text-fg-muted dark:text-dark-fg-muted">{queueContext()}</p>
 			</div>
 			<button
 				type="button"
 				onclick={loadQueueSummary}
-				class="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+				class="rounded-md border border-border-line px-3 py-2 text-sm font-medium text-fg-ink hover:bg-bg-surface focus-visible:ring-2 focus-visible:ring-accent-lever focus-visible:outline-none dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 			>
 				Refresh
 			</button>
@@ -270,16 +272,16 @@
 			{#each ACTIONS as action}
 				{@const worker = dispatchedWorkers[action.id]}
 				{@const reason = disabledReason(action)}
-				<div class="rounded-md border border-gray-200 p-3 dark:border-gray-800">
+				<div class="rounded-md border border-border-line p-3 dark:border-dark-border-line">
 					<div class="mb-3 flex items-start gap-3">
 						<div
-							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-bg-surface text-fg-muted dark:bg-dark-bg-surface dark:text-dark-fg-muted"
 						>
 							<action.Icon class="h-4 w-4" aria-hidden="true" />
 						</div>
 						<div class="min-w-0">
-							<h3 class="font-medium text-gray-950 dark:text-white">{action.label}</h3>
-							<p class="mt-1 text-sm leading-5 text-gray-600 dark:text-gray-300">
+							<h3 class="font-medium text-fg-ink dark:text-dark-fg-ink">{action.label}</h3>
+							<p class="mt-1 text-sm leading-5 text-fg-muted dark:text-dark-fg-muted">
 								{action.description}
 							</p>
 						</div>
@@ -288,9 +290,9 @@
 					{#if worker}
 						<a
 							href={workerHref(worker.id)}
-							class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800"
+							class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-border-line px-3 py-2 text-sm font-medium text-fg-ink hover:bg-bg-surface focus-visible:ring-2 focus-visible:ring-accent-lever focus-visible:outline-none dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 						>
-							<CheckCircle2 class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+							<CheckCircle2 class="h-4 w-4 text-accent-fulcrum dark:text-dark-accent-fulcrum" />
 							<span>{worker.id}</span>
 						</a>
 					{:else if reason}
@@ -298,7 +300,7 @@
 							<button
 								type="button"
 								aria-disabled="true"
-								class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-gray-200 px-3 py-2 text-sm font-medium text-gray-500 aria-disabled:cursor-not-allowed dark:bg-gray-800 dark:text-gray-500"
+								class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-bg-surface px-3 py-2 text-sm font-medium text-fg-muted aria-disabled:cursor-not-allowed dark:bg-dark-bg-surface dark:text-dark-fg-muted"
 							>
 								{action.label}
 							</button>
@@ -308,7 +310,7 @@
 							type="button"
 							onclick={(event) => openDialog(action, event)}
 							disabled={dispatchingActionId === action.id}
-							class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none disabled:cursor-wait disabled:opacity-80 dark:focus-visible:ring-offset-gray-900 {action.accentClass}"
+							class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas focus-visible:outline-none disabled:cursor-wait disabled:opacity-80 dark:focus-visible:ring-offset-dark-bg-canvas {action.accentClass}"
 						>
 							{#if dispatchingActionId === action.id}
 								<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -341,21 +343,21 @@
 			{activeAction.description}
 		</p>
 		<dl class="grid grid-cols-3 gap-2 text-center">
-			<div class="rounded-md bg-gray-100 px-3 py-2 dark:bg-gray-800">
-				<dt class="text-xs text-gray-500 dark:text-gray-400">Ready</dt>
-				<dd class="text-lg font-semibold text-gray-950 dark:text-white">
+			<div class="rounded-md bg-bg-surface px-3 py-2 dark:bg-dark-bg-surface">
+				<dt class="text-xs text-fg-muted dark:text-dark-fg-muted">Ready</dt>
+				<dd class="text-headline-md font-semibold text-fg-ink dark:text-dark-fg-ink">
 					{queueSummary?.ready ?? 0}
 				</dd>
 			</div>
-			<div class="rounded-md bg-gray-100 px-3 py-2 dark:bg-gray-800">
-				<dt class="text-xs text-gray-500 dark:text-gray-400">Blocked</dt>
-				<dd class="text-lg font-semibold text-gray-950 dark:text-white">
+			<div class="rounded-md bg-bg-surface px-3 py-2 dark:bg-dark-bg-surface">
+				<dt class="text-xs text-fg-muted dark:text-dark-fg-muted">Blocked</dt>
+				<dd class="text-headline-md font-semibold text-fg-ink dark:text-dark-fg-ink">
 					{queueSummary?.blocked ?? 0}
 				</dd>
 			</div>
-			<div class="rounded-md bg-gray-100 px-3 py-2 dark:bg-gray-800">
-				<dt class="text-xs text-gray-500 dark:text-gray-400">In progress</dt>
-				<dd class="text-lg font-semibold text-gray-950 dark:text-white">
+			<div class="rounded-md bg-bg-surface px-3 py-2 dark:bg-dark-bg-surface">
+				<dt class="text-xs text-fg-muted dark:text-dark-fg-muted">In progress</dt>
+				<dd class="text-headline-md font-semibold text-fg-ink dark:text-dark-fg-ink">
 					{queueSummary?.inProgress ?? 0}
 				</dd>
 			</div>
