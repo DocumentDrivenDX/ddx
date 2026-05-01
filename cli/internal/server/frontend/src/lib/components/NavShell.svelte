@@ -76,11 +76,11 @@
 	>
 		<a
 			href={brandHref}
-			class="font-mono-code text-base font-black tracking-tighter text-fg-ink hover:text-accent-lever dark:text-dark-fg-ink dark:hover:text-dark-accent-lever"
+			class="font-mono-code text-headline-md font-black tracking-tighter text-fg-ink hover:text-accent-lever dark:text-dark-fg-ink dark:hover:text-dark-accent-lever"
 		>
 			DDx
 		</a>
-		<span class="font-mono-code text-xs text-fg-muted dark:text-dark-fg-muted">Node: {nodeName}</span>
+		<span class="font-mono-code text-body-sm text-fg-muted dark:text-dark-fg-muted">Node: {nodeName}</span>
 		<div class="mx-1 h-4 w-px bg-border-line dark:bg-dark-border-line"></div>
 		<ProjectPicker />
 		<div class="ml-auto flex items-center gap-2">
@@ -102,7 +102,7 @@
 	{#if wsConnection.showBanner}
 		<div
 			data-testid="ws-disconnected-banner"
-			class="flex shrink-0 items-center gap-2 border-b border-accent-load/40 bg-accent-load/10 px-4 py-1 font-label-caps text-xs text-accent-load dark:border-dark-accent-load/40 dark:bg-dark-accent-load/10 dark:text-dark-accent-load"
+			class="flex shrink-0 items-center gap-2 border-b border-accent-load/40 bg-accent-load/10 px-4 py-1 font-label-caps text-label-caps text-accent-load dark:border-dark-accent-load/40 dark:bg-dark-accent-load/10 dark:text-dark-accent-load"
 		>
 			<span class="inline-block h-2 w-2 rounded-full bg-yellow-500"></span>
 			{wsConnection.state === 'connecting' ? 'reconnecting\u2026' : 'disconnected'}
