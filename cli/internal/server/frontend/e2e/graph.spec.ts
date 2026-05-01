@@ -430,11 +430,13 @@ test('TC-039: clicking a graph node navigates to document detail page', async ({
 	// Wait for force simulation and auto-fit to settle
 	await page.waitForTimeout(800);
 
-	// Click the first circle node in the SVG
+	// Click the first circle node in the SVG (DOM order matches data binding =
+	// GRAPH_DOCS[0] = doc-001 with path "docs/vision.md")
 	await page.locator('[data-testid="doc-graph-svg"] circle').first().click();
 
-	// Navigation should go to the document page (SPA navigation, no full reload)
-	await expect(page).toHaveURL(/\/documents\//);
+	// Navigation should go to the document page at the node's specific path
+	// (SPA navigation, no full reload)
+	await expect(page).toHaveURL(`${BASE_URL.replace('/graph', '')}/documents/docs/vision.md`);
 });
 
 // TC-040: Back navigation restores graph viewport
