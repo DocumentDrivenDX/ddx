@@ -55,6 +55,15 @@
 		goto(url.pathname + url.search)
 	}
 
+	function openGraph() {
+		goto(`/nodes/${data.nodeId}/projects/${data.projectId}/graph`)
+	}
+
+	function viewInGraph(artifactId: string) {
+		const docId = artifactId.replace(/^doc:/, '')
+		goto(`/nodes/${data.nodeId}/projects/${data.projectId}/graph?highlight=${encodeURIComponent(docId)}`)
+	}
+
 	function openArtifact(id: string) {
 		// Pass current filter/search state as a "back" param so the detail page
 		// can return to the same filtered list state.
@@ -112,9 +121,17 @@
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
 		<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Artifacts</h1>
-		<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
-			{data.artifacts.totalCount} total
-		</span>
+		<div class="flex items-center gap-3">
+			<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
+				{data.artifacts.totalCount} total
+			</span>
+			<button
+				onclick={openGraph}
+				class="rounded border border-border-line bg-bg-surface px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink"
+			>
+				Open Graph
+			</button>
+		</div>
 	</div>
 
 	<!-- Filter chips -->
@@ -169,6 +186,7 @@
 						class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 						>Staleness</th
 					>
+					<th class="px-4 py-3"></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -196,12 +214,20 @@
 								{badge.label}
 							</span>
 						</td>
+						<td class="px-4 py-3">
+							<button
+								onclick={(e) => { e.stopPropagation(); viewInGraph(edge.node.id) }}
+								class="rounded border border-border-line bg-bg-surface px-2 py-0.5 font-label-caps text-label-caps uppercase text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink"
+							>
+								View in Graph
+							</button>
+						</td>
 					</tr>
 				{/each}
 				{#if filtered.length === 0}
 					<tr>
 						<td
-							colspan="4"
+							colspan="5"
 							class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted"
 						>
 							No artifacts found.

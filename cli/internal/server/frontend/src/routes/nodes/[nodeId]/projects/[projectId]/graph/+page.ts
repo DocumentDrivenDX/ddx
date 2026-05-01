@@ -119,6 +119,8 @@ export const load: PageLoad = async ({ fetch, url }) => {
 			? { x: panParts[0], y: panParts[1], k: zoomParam }
 			: null
 
+	const highlightNodeId = url.searchParams.get('highlight') ?? undefined
+
 	return {
 		graph: {
 			...graph,
@@ -126,6 +128,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
 			pathToDocId,
 			issues: graph.issues ?? []
 		},
-		initialTransform
+		initialTransform,
+		highlightNodeId
 	}
 }
