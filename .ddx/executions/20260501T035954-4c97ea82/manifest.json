@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260501T035954-4c97ea82",
+  "bead_id": "ddx-dc2249e9",
+  "base_rev": "d01bc4453e9913335945ea1461485b5c0516a5bb",
+  "created_at": "2026-05-01T03:59:55.393539607Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dc2249e9",
+    "title": "e2e: executions.spec.ts — add cost tier / power bounds display test",
+    "acceptance": "executions.spec.ts has test that verifies MinPower/MaxPower or cost tier information is rendered in execution detail view; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "executions"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:59:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T03:58:42.851743378Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T035608-0b537092\",\"harness\":\"claude\",\"input_tokens\":30,\"output_tokens\":8223,\"total_tokens\":8253,\"cost_usd\":1.2117430000000002,\"duration_ms\":153188,\"exit_code\":0}",
+          "created_at": "2026-05-01T03:58:42.961148653Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=8253 cost_usd=1.2117"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T03:58:48.335549678Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json artifact; no test file changes are present to evaluate against the acceptance criteria requiring a new executions.spec.ts test for cost tier/power bounds.\nharness=claude\nmodel=opus\ninput_bytes=3300\noutput_bytes=475\nelapsed_ms=7496",
+          "created_at": "2026-05-01T03:58:56.009200718Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T03:58:56.108477502Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no test file changes are present to evaluate against the acceptance criteria requiring a new executions.spec.ts test for cost tier/power bounds.\nresult_rev=cbae168d56ae28293735c7bd0f740c40072a1927\nbase_rev=35cf79ad1dd8ff37f246730572a6a8cc4394a1cf",
+          "created_at": "2026-05-01T03:58:56.208484702Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T03:59:54.366720427Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T035954-4c97ea82",
+    "prompt": ".ddx/executions/20260501T035954-4c97ea82/prompt.md",
+    "manifest": ".ddx/executions/20260501T035954-4c97ea82/manifest.json",
+    "result": ".ddx/executions/20260501T035954-4c97ea82/result.json",
+    "checks": ".ddx/executions/20260501T035954-4c97ea82/checks.json",
+    "usage": ".ddx/executions/20260501T035954-4c97ea82/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dc2249e9-20260501T035954-4c97ea82"
+  }
+}
