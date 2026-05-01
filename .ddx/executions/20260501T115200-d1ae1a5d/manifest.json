@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260501T115200-d1ae1a5d",
+  "bead_id": "ddx-98e49546",
+  "base_rev": "01f5d3b227d93e902406d3020176a68fa9970919",
+  "created_at": "2026-05-01T11:52:01.745965732Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-98e49546",
+    "title": "e2e: extend screenshots.spec.ts + demo-recording.spec.ts for all 7 feature areas",
+    "acceptance": "screenshots.spec.ts captures static screenshots for all 7 feature areas; demo-recording.spec.ts captures Playwright videos for all 7 features; all assets written to website/static/ui/; spec passes after Playwright gap beads are closed",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "screenshots",
+      "website"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T11:52:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T11:52:00.761044278Z",
+      "spec-id": "ddx-de872ada,ddx-c5f9c009,ddx-dc2249e9,ddx-d1c4e27a,ddx-2e0beb6c"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T115200-d1ae1a5d",
+    "prompt": ".ddx/executions/20260501T115200-d1ae1a5d/prompt.md",
+    "manifest": ".ddx/executions/20260501T115200-d1ae1a5d/manifest.json",
+    "result": ".ddx/executions/20260501T115200-d1ae1a5d/result.json",
+    "checks": ".ddx/executions/20260501T115200-d1ae1a5d/checks.json",
+    "usage": ".ddx/executions/20260501T115200-d1ae1a5d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-98e49546-20260501T115200-d1ae1a5d"
+  }
+}
