@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-40a722c3",
+  "attempt_id": "20260412T224350-56cc2477",
+  "base_rev": "db1f1c62485a3f53a6ef27f44977ed1fda08ea3e",
+  "result_rev": "db1f1c62485a3f53a6ef27f44977ed1fda08ea3e",
+  "outcome": "no-changes",
+  "status": "no_changes",
+  "detail": "agent made no commits",
+  "reason": "agent made no commits",
+  "harness": "claude",
+  "session_id": "eb-8b82a3d0",
+  "duration_ms": 606479,
+  "cost_usd": 1.6200816,
+  "exit_code": 0,
+  "execution_dir": ".ddx/executions/20260412T224350-56cc2477",
+  "prompt_file": ".ddx/executions/20260412T224350-56cc2477/prompt.md",
+  "manifest_file": ".ddx/executions/20260412T224350-56cc2477/manifest.json",
+  "result_file": ".ddx/executions/20260412T224350-56cc2477/result.json",
+  "started_at": "2026-04-12T22:43:50.641140965Z",
+  "finished_at": "2026-04-12T22:53:57.120746293Z"
+}

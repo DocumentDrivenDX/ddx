@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260414T073103-1cebdc41",
+  "bead_id": "ddx-9060c8b2",
+  "base_rev": "93d4b5651cc11827025d29f1c6c099b63cb163c4",
+  "created_at": "2026-04-14T07:31:03.910273217Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9060c8b2",
+    "title": "Add ddx agent workers command — native live worker status with current bead",
+    "description": "There is no CLI command to see which workers are running and which bead each is executing. The WorkerManager in cli/internal/server/workers.go already tracks this (WorkerRecord.CurrentBead at line 51, WorkerRecord.State, WorkerRecord.Harness, WorkerRecord.Model, WorkerRecord.Attempts/Successes/Failures) but it is only accessible through the server API. Local --local workers are not tracked by the server at all.\n\nThis bead adds ddx agent workers as a top-level CLI subcommand. It must not depend on worktrunk (wt) or any external tool.\n\n## Required changes\n\n### 1. New command: ddx agent workers (cli/cmd/agent_cmd.go)\nRegister alongside the existing ddx agent log command. Flags:\n  --json         emit raw JSON array\n  --watch        re-render every 2s (like watch -n2) until Ctrl-C\n  --project      filter to a specific project root (default: CWD project)\n\n### 2. Data sources (two paths)\nA. Server-submitted workers: GET http://127.0.0.1:8080/api/agent/workers — deserialize []WorkerRecord from the server. Already implemented in cli/internal/server/workers.go List() / HTTP handler.\nB. Local --local workers: the server does not track these. Detect them by:\n   1. Reading .ddx/workers/*/status.json files in the project root (server writes these even for local workers when they self-register — confirm in workers.go; if not, fall back to scanning active execute-bead worktrees)\n   2. Scanning .ddx/.execute-bead-wt-* directories (from ExecuteBeadWtPrefix constant in cli/internal/agent/execute_bead.go line 403) and reading the manifest.json inside each to extract bead_id, attempt_id, harness, model, started_at\n\n### 3. Local worker detection via manifest scan\nFor each directory matching .ddx/.execute-bead-wt-*:\n  - Read .ddx/executions/{attemptID}/manifest.json (path encoded in worktree name suffix)\n  - Check if worktree is still active (git worktree list --porcelain)\n  - Read execute-loop-heartbeat-at from bead.Extra (requires ddx-7651506a) if available\n  - Derive synthetic WorkerRecord from manifest fields\n\n### 4. Table output (default)\nColumns: STATE | BEAD | TITLE (truncated 40 chars) | HARNESS | MODEL | ELAPSED | ATTEMPTS\n- STATE: running (green), exited (dim), failed (red)\n- ELAPSED: human-readable (e.g., 4m32s)\n- If current bead title unavailable (local worker pre-manifest), show bead ID\n\n### 5. Merge and deduplicate\nWhen both server and manifest sources are available, deduplicate by worker_id or attempt_id. Server record takes precedence over manifest-derived record for the same worker.\n\n## Key files\n- cli/cmd/agent_cmd.go — add newAgentWorkersCommand(), register in newAgentCommand()\n- cli/internal/server/workers.go — WorkerRecord struct (lines 31-54), List API\n- cli/internal/agent/execute_bead.go — ExecuteBeadWtPrefix constant (line 403), manifest shape (lines 726-771)\n- cli/internal/agent/types.go — SessionEntry Correlation map (bead_id field)",
+    "acceptance": "ddx agent workers prints a table with STATE, BEAD ID, TITLE, HARNESS, MODEL, ELAPSED, ATTEMPTS columns. Server-submitted workers show state from WorkerManager. Local --local workers are detected via manifest scan of .ddx/.execute-bead-wt-* directories. --json flag emits raw JSON. --watch re-renders every 2s. A worker executing bead axon-abc123 shows that bead ID and its title (truncated). An idle system (no active workers) prints 'no active workers' rather than an empty table. No dependency on worktrunk or any external binary beyond git.",
+    "labels": [
+      "ux",
+      "execute-loop",
+      "observability",
+      "cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T07:31:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "execute-loop-heartbeat-at": "2026-04-14T07:31:03.709897079Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T073103-1cebdc41",
+    "prompt": ".ddx/executions/20260414T073103-1cebdc41/prompt.md",
+    "manifest": ".ddx/executions/20260414T073103-1cebdc41/manifest.json",
+    "result": ".ddx/executions/20260414T073103-1cebdc41/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9060c8b2-20260414T073103-1cebdc41"
+  }
+}

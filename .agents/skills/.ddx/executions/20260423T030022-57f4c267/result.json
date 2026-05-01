@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "`cli/internal/server/frontend/e2e/graph.spec.ts:177` — AC 8 asks for a Playwright e2e on a fixture repo with one seeded duplicate-id pair and one missing-dep target. The test directly injects `duplicate_id` and `missing_dep` objects through a mocked `/graphql` response, so it does not exercise docgraph detection, GraphQL resolver plumbing, or project fixture routing end-to-end."
+}

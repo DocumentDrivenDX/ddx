@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-fe5c64aa",
+  "attempt_id": "20260414T192339-18ff581e",
+  "base_rev": "bac38cb665e074ad3cc4a8aa5cb92cf1bcd11978",
+  "result_rev": "bac38cb665e074ad3cc4a8aa5cb92cf1bcd11978",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 500 Internal Server Error ",
+  "harness": "agent",
+  "model": "qwen/qwen3-coder-next",
+  "session_id": "eb-219a95be",
+  "duration_ms": 149548,
+  "tokens": 394200,
+  "exit_code": 1,
+  "error": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 500 Internal Server Error ",
+  "execution_dir": ".ddx/executions/20260414T192339-18ff581e",
+  "prompt_file": ".ddx/executions/20260414T192339-18ff581e/prompt.md",
+  "manifest_file": ".ddx/executions/20260414T192339-18ff581e/manifest.json",
+  "result_file": ".ddx/executions/20260414T192339-18ff581e/result.json",
+  "usage_file": ".ddx/executions/20260414T192339-18ff581e/usage.json",
+  "started_at": "2026-04-14T19:23:40.351819251Z",
+  "finished_at": "2026-04-14T19:26:09.900043847Z"
+}

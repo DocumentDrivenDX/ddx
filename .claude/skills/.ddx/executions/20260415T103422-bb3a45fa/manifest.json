@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260415T103422-bb3a45fa",
+  "bead_id": "ddx-2a43a4dc",
+  "base_rev": "716b91ba61d657a69d392d1e6a89f9925fed8095",
+  "created_at": "2026-04-15T10:34:22.602470192Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2a43a4dc",
+    "title": "Stage 4.19: dashboard /nodes/:nodeId/providers page (agent-routing visibility)",
+    "description": "Add a new Svelte page at src/routes/nodes/[nodeId]/providers/+page.svelte under the SvelteKit dashboard. Shows live provider state for the running ddx-server: for each configured provider, display name, type, URL, configured or auto-selected model, live status (connected / unreachable / HTTP error), and model count. Mirror the output of `ddx agent providers` from the CLI.\n\nData source: a GraphQL query `providers: [ProviderStatus!]!` (or similar) that the Go server resolver implements via the new Visibility 3 `ddx agent providers` code path (import the same Go helpers used by the CLI command, do not duplicate logic). Subscription for live status updates is out of scope for this bead — add it later when we have a reason to burn the websocket budget on it.\n\nAlso add a \"current route for --model-ref\" widget showing which provider/model the default profile currently resolves to, so the operator can see \"if I run ddx agent run --model-ref code-medium right now, it goes here.\" Pulls from the Visibility 6 route-status data.\n\nDependencies: blocked on Svelte migration Stage 3 (scaffold) and on Visibility 3, 5, 6 from the agent-routing epic.",
+    "acceptance": "(1) New route /nodes/:nodeId/providers renders under the Svelte dashboard. (2) Table shows each configured provider with name/type/URL/model/status/model-count matching `ddx agent providers`. (3) \"Current route for default profile\" widget shows which provider would be selected for a default execute-bead call. (4) Manual: start `ddx server`, open `/nodes/:nodeId/providers`, verify the live data matches `ddx agent providers` in a terminal. (5) Playwright test: page loads, provider rows render, table has expected columns.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "area:agent",
+      "kind:migration"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T103422-bb3a45fa",
+    "prompt": ".ddx/executions/20260415T103422-bb3a45fa/prompt.md",
+    "manifest": ".ddx/executions/20260415T103422-bb3a45fa/manifest.json",
+    "result": ".ddx/executions/20260415T103422-bb3a45fa/result.json",
+    "checks": ".ddx/executions/20260415T103422-bb3a45fa/checks.json",
+    "usage": ".ddx/executions/20260415T103422-bb3a45fa/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2a43a4dc-20260415T103422-bb3a45fa"
+  }
+}

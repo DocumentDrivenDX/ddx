@@ -1,0 +1,54 @@
+Worktree destroyed mid-execution by own test run.
+
+What was done:
+- Diagnosed the root cause: kind:routing events were emitted only by agent.ExecuteBead
+  (via opts.BeadEvents). The loop's AppendEvent for kind:review therefore had no
+  preceding routing event when the executor bypassed ExecuteBead (test mocks) or
+  when the review emitter ran inside a worker whose executor chain did not pass
+  BeadEvents. Also found: the loop only emitted a kind:review event for VerdictApprove
+  — REQUEST_CHANGES and BLOCK returned no review event at all, so those verdicts
+  were invisible to computeReviewOutcomes.
+
+- Applied fix (both implemented + tests passed locally before worktree loss):
+  1. cli/internal/agent/execute_bead.go — factored the routing-event emitter into
+     an internal appendRoutingEvent helper and added a public-within-package
+     appendLoopRoutingEvidence that tags source="ddx agent execute-loop" and takes
+     an explicit CreatedAt.
+  2. cli/internal/agent/execute_bead_loop.go — immediately after CloseWithEvidence
+     and before the reviewer runs, call appendLoopRoutingEvidence(w.Store,
+     candidate.ID, report.Harness, report.Provider, report.Model, now()). This
+     guarantees every kind:review on the bead is preceded by a kind:routing.
+  3. cli/internal/agent/execute_bead_loop.go — always AppendEvent a kind:review
+     event with Summary=string(reviewRes.Verdict) (APPROVE/REQUEST_CHANGES/BLOCK),
+     not only in the approve branch. Reopen for REQUEST_CHANGES/BLOCK preserves
+     events through its read-modify-write.
+  4. cli/cmd/agent_review_evidence_test.go (new) — two integration tests
+     (TestReviewEvidenceApproveWiresRoutingAndReview and
+     TestReviewEvidenceRequestChangesCountsAsRejection) that assemble a real
+     ExecuteBeadWorker with mock executor + mock reviewer, run it against a
+     real bead.Store, then invoke computeReviewOutcomes to assert
+     approvals=1 / rejections=1 on the correct tier.
+  Both tests passed: `go test -run TestReviewEvidence ./cmd/` → PASS.
+  `go build ./...` → no errors.
+
+What blocked committing:
+- Ran `go test ./cmd ./internal/agent` to check for regressions. Integration
+  tests under cli/internal/agent (likely tier_escalation_integration_test.go
+  or similar) invoke agent.RecoverOrphans on /tmp/ddx-exec-wt/. That swept
+  the currently-executing worktree because nothing in RecoverOrphans guards
+  against removing the *active* worktree the caller is running inside. All
+  uncommitted work evaporated; the git worktree metadata at
+  .git/worktrees/-execute-bead-wt-ddx-76e329dd-20260417T022759-068f2ba5 was
+  removed too, so git no longer knows about this tree.
+
+- Parallel execute-bead attempt is already running in
+  /tmp/ddx-exec-wt/.execute-bead-wt-ddx-76e329dd-20260417T023814-a6807535
+  (PID 1509595 started 10 minutes after mine). Reapplying my changes to the
+  live parallel worktree would race with that claude session's edits.
+
+What a follow-up attempt needs:
+- Just re-apply the four-point change above; the design is settled and the
+  tests are self-contained. Also worth filing a separate bead to make
+  RecoverOrphans skip any worktree whose path matches $PWD / the current
+  execution's attempt-id, so running `go test` inside an execute-bead worker
+  doesn't nuke the worker's own checkout.

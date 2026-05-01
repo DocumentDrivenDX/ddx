@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260419T231835-0d23e8f6",
+  "bead_id": "ddx-4e3e149f",
+  "base_rev": "6d06b2c4b5c7a75537cd0ce672e101b8f6049352",
+  "created_at": "2026-04-19T23:18:36.113388142Z",
+  "requested": {
+    "harness": "agent",
+    "model": "minimax/minimax-m2.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4e3e149f",
+    "title": "Phase 5h: migrate Runner-method-bound files in agent package (claude_stream, virtual, script, grade, agent_runner)",
+    "description": "Surfaced by ddx-c0f6b19c v2 STOP report. Several files in cli/internal/agent/ define Runner methods (or method-bound logic) that prevent Runner deletion:\n- claude_stream.go: runClaudeStreaming, runClaudeWithFallback, finalizeClaudeResult — Runner methods. The new agentHarness path (commit 2d766818) routes claude through service.Execute internally; these may be dead code already. Audit + delete or migrate.\n- virtual.go: RunVirtual — Runner method. Service has the virtual harness internally. Delete or migrate.\n- script.go: RunScript — Runner method. Service has the script harness internally. Delete or migrate.\n- grade.go: Grade — Runner method. Audit usage; migrate to free function.\n- agent_runner.go: RunAgent — main entry. Already dispatches to runAgentViaService when feature flag default-on (post ddx-d224671d). May still have legacy fallback paths. Audit.\n- agent_runner_service.go: runAgentViaService, useNewAgentPath — these ARE the new path; methods on Runner. Convert to free functions taking DdxAgent.\n\nAfter this lands, the only remaining Runner-method definitions should be the ones in routing.go, state.go, routing_signals.go, routing_metrics.go — which delete with their files.",
+    "acceptance": "- [ ] None of the listed files define (*Runner). methods\n- [ ] Tests pass\n- [ ] Functionality preserved (new agentHarness path remains the live dispatch)",
+    "parent": "ddx-62b04ccd",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-19T23:18:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "721226",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"lmstudio\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-19T23:18:27.78774914Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=lmstudio model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=lmstudio model=qwen3.5-27b probe=ok\nagent: native config provider \"lmstudio\": config: unknown provider \"lmstudio\"",
+          "created_at": "2026-04-19T23:18:27.993453099Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-19T23:18:19.294582556Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260419T231835-0d23e8f6",
+    "prompt": ".ddx/executions/20260419T231835-0d23e8f6/prompt.md",
+    "manifest": ".ddx/executions/20260419T231835-0d23e8f6/manifest.json",
+    "result": ".ddx/executions/20260419T231835-0d23e8f6/result.json",
+    "checks": ".ddx/executions/20260419T231835-0d23e8f6/checks.json",
+    "usage": ".ddx/executions/20260419T231835-0d23e8f6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4e3e149f-20260419T231835-0d23e8f6"
+  }
+}

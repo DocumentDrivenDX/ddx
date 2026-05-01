@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260416T230316-efbf91c5",
+  "bead_id": "ddx-a860a42a",
+  "base_rev": "edd8f7d04f42b15b0a3350eb10872d6b5c8316d7",
+  "created_at": "2026-04-16T23:03:16.483896472Z",
+  "requested": {
+    "provider": "agent",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a860a42a",
+    "title": "Review-rejection telemetry: aggregate opus review outcomes per tier",
+    "description": "## Scope\nAdd review-rejection telemetry command that aggregates opus-review outcomes per originating execution tier.\n\n## Context\nThe post-merge review agent records outcomes in bead events (kind:review). This command aggregates those by the harness/model that produced the original work, showing where the shape gaps are between tiers.\n\n## Files to touch\n- cli/cmd/agent_metrics.go — add review-outcomes subcommand\n- cli/cmd/agent_metrics_test.go — test with fixture bead events",
+    "acceptance": "(1) ddx agent metrics review-outcomes aggregates review results (approve, approve_with_edits, reject) from bead events by originating harness/model tier. (2) Output includes: tier, reviews, approvals, rejections, approval_rate. (3) cd cli \u0026\u0026 go test ./cmd -run TestAgentMetricsReviewOutcomes -count=1 passes. (4) No regressions.",
+    "parent": "ddx-4b59b816",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:cli",
+      "kind:measurement"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260416T230316-efbf91c5",
+    "prompt": ".ddx/executions/20260416T230316-efbf91c5/prompt.md",
+    "manifest": ".ddx/executions/20260416T230316-efbf91c5/manifest.json",
+    "result": ".ddx/executions/20260416T230316-efbf91c5/result.json",
+    "checks": ".ddx/executions/20260416T230316-efbf91c5/checks.json",
+    "usage": ".ddx/executions/20260416T230316-efbf91c5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a860a42a-20260416T230316-efbf91c5"
+  }
+}

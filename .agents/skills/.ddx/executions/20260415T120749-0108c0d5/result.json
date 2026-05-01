@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-3df36f27",
+  "attempt_id": "20260415T120749-0108c0d5",
+  "base_rev": "533829d52a97299382123c0afdc596d63fcae989",
+  "result_rev": "533829d52a97299382123c0afdc596d63fcae989",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "model \"minimax/minimax-m2.7\" did not match any provider, catalog ref, or model-route; specify --provider or --model-ref explicitly",
+  "harness": "agent",
+  "model": "minimax/minimax-m2.7",
+  "session_id": "eb-e11f8d28",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "model \"minimax/minimax-m2.7\" did not match any provider, catalog ref, or model-route; specify --provider or --model-ref explicitly",
+  "execution_dir": ".ddx/executions/20260415T120749-0108c0d5",
+  "prompt_file": ".ddx/executions/20260415T120749-0108c0d5/prompt.md",
+  "manifest_file": ".ddx/executions/20260415T120749-0108c0d5/manifest.json",
+  "result_file": ".ddx/executions/20260415T120749-0108c0d5/result.json",
+  "started_at": "2026-04-15T12:07:49.686876543Z",
+  "finished_at": "2026-04-15T12:07:49.686879877Z"
+}

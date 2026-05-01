@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260416T203015-a3c3572d",
+  "bead_id": "ddx-ad5724c0",
+  "base_rev": "4467befb8d5cc07be82dcba41a7878fa30690f21",
+  "created_at": "2026-04-16T20:30:15.716848941Z",
+  "requested": {
+    "provider": "agent",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ad5724c0",
+    "title": "Per-bead cost aggregation in evidence schema and ddx bead metrics command",
+    "description": "## Scope\nAdd per-bead cost aggregation to the bead show command and a new ddx bead metrics command.\n\n## Context\nExecution evidence (result.json) already records tokens, cost_usd, duration_ms per attempt. This bead makes those accessible through the CLI:\n1. ddx bead show \u003cid\u003e --json should include aggregated metrics (total tokens, total cost, attempt count) by scanning .ddx/executions/*/ for matching bead_id in result.json files.\n2. ddx bead metrics should list all beads that have execution evidence with per-bead summaries (bead_id, title, attempts, total_tokens, total_cost_usd, avg_duration).\n\n## Files to touch\n- cli/cmd/bead_show.go — add metrics aggregation to JSON output\n- cli/cmd/bead_metrics.go — new command\n- cli/cmd/bead.go — register metrics subcommand\n- cli/cmd/bead_metrics_test.go — test with fixture execution dirs\n\n## Implementation notes\n- Scan .ddx/executions/*/result.json files, parse bead_id field, group by bead\n- For ddx bead show, only aggregate for the requested bead\n- Keep it simple: read from filesystem, no database",
+    "acceptance": "(1) Bead evidence result.json already records tokens and cost_usd per attempt. ddx bead show \u003cid\u003e --json includes a metrics object with total_tokens, total_cost_usd, and attempt_count aggregated from all execution evidence dirs for that bead. (2) A new ddx bead metrics command exists that outputs per-bead cost/token/attempt summaries for all beads with execution evidence. (3) cd cli \u0026\u0026 go test ./cmd -run TestBeadMetrics -count=1 passes. (4) cd cli \u0026\u0026 go test ./internal/agent -count=1 passes (no regressions).",
+    "parent": "ddx-4b59b816",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:cli",
+      "kind:measurement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-16T20:28:42.206067014Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260416T203015-a3c3572d",
+    "prompt": ".ddx/executions/20260416T203015-a3c3572d/prompt.md",
+    "manifest": ".ddx/executions/20260416T203015-a3c3572d/manifest.json",
+    "result": ".ddx/executions/20260416T203015-a3c3572d/result.json",
+    "checks": ".ddx/executions/20260416T203015-a3c3572d/checks.json",
+    "usage": ".ddx/executions/20260416T203015-a3c3572d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ad5724c0-20260416T203015-a3c3572d"
+  }
+}

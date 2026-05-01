@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T210624-dbe2537e",
+  "bead_id": "ddx-5cf6c6b6",
+  "base_rev": "172ca4e2e737cffe66690a42cc57e37e77fe2ebc",
+  "created_at": "2026-04-14T21:06:24.604321986Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5cf6c6b6",
+    "title": "Stage 2.1: add gqlgen + scaffold + /graphql endpoint + GraphiQL",
+    "description": "Add gqlgen to go.mod. Create cli/internal/server/graphql/gqlgen.yml, resolver.go, generated/ (auto-gen'd). Wire POST /graphql and GET /graphiql in cli/internal/server/server.go. See docs/plan-svelte-migration.md Stage 2 bead #14.",
+    "acceptance": "(1) `go run github.com/99designs/gqlgen generate` runs clean. (2) `go build ./...` passes. (3) `go test ./...` passes. (4) MANUAL: start `ddx server`, open `http://127.0.0.1:7743/graphiql`, run `{ __typename }`, see `{\"data\":{\"__typename\":\"Query\"}}`. Record the manual step in the bead's completion note.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:2",
+      "area:graphql",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T21:06:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "execute-loop-heartbeat-at": "2026-04-14T21:06:24.3649398Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T210624-dbe2537e",
+    "prompt": ".ddx/executions/20260414T210624-dbe2537e/prompt.md",
+    "manifest": ".ddx/executions/20260414T210624-dbe2537e/manifest.json",
+    "result": ".ddx/executions/20260414T210624-dbe2537e/result.json",
+    "checks": ".ddx/executions/20260414T210624-dbe2537e/checks.json",
+    "usage": ".ddx/executions/20260414T210624-dbe2537e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5cf6c6b6-20260414T210624-dbe2537e"
+  }
+}

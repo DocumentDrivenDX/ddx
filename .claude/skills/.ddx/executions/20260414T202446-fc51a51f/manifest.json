@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T202446-fc51a51f",
+  "bead_id": "ddx-78a8dd15",
+  "base_rev": "f2fc9f61a86e12dc698e15e0249419c6ccb69bd6",
+  "created_at": "2026-04-14T20:24:46.997586714Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-78a8dd15",
+    "title": "Stage 1.2: draft schema.graphql mutations + subscriptions",
+    "description": "Extend cli/internal/server/graphql/schema.graphql with mutations and subscriptions. Mutations: beadCreate, beadUpdate, beadClaim, beadUnclaim, beadReopen, documentWrite. Subscriptions: workerProgress(workerID), beadLifecycle(projectID), executionEvidence(runID), coordinatorMetrics(projectRoot). Each must map to an existing event source. See docs/plan-svelte-migration.md Stage 1 bead #2.",
+    "acceptance": "(1) Schema parses. (2) Manual: for each mutation, name the existing POST /api/* handler it replaces. For each subscription, name the real event source (worker progress SSE, bead store event bus, exec run log tail, coordinator event hook). (3) No duplicate/overlapping subscriptions.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T20:24:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "execute-loop-heartbeat-at": "2026-04-14T20:24:46.745234475Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T202446-fc51a51f",
+    "prompt": ".ddx/executions/20260414T202446-fc51a51f/prompt.md",
+    "manifest": ".ddx/executions/20260414T202446-fc51a51f/manifest.json",
+    "result": ".ddx/executions/20260414T202446-fc51a51f/result.json",
+    "checks": ".ddx/executions/20260414T202446-fc51a51f/checks.json",
+    "usage": ".ddx/executions/20260414T202446-fc51a51f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-78a8dd15-20260414T202446-fc51a51f"
+  }
+}

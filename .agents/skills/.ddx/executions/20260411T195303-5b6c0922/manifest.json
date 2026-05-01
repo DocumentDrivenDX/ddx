@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260411T195303-5b6c0922",
+  "bead_id": "ddx-57388aff",
+  "base_rev": "07bed7688290498ac491d0501a18a207400c9c1d",
+  "created_at": "2026-04-11T19:53:03.831017712Z",
+  "requested": {
+    "harness": "agent",
+    "model": "z-ai/glm-5.1",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-57388aff",
+    "title": "execute-loop provider failures on helix machine: OpenRouter guardrail 404 + Alibaba 502",
+    "description": "ddx agent execute-loop fails on eitri: agent harness routes to z-ai/glm-5.1 ignoring local vidar config\n\nddx agent execute-loop consistently fails on the helix machine (eitri) with provider-level errors.\nThe execute-loop correctly selects and claims beads, but the agent harness never runs the work.\nCRITICAL: ddx agent run --harness agent works perfectly on the same machine, pointing to a\nmodel-resolution bug specifically in execute-bead/execute-loop.\n\nPROOF: direct agent run works, execute-loop fails:\n  ddx agent run --text \"Hello\" --harness agent --timeout 60s → succeeds with qwen3.5-27b on vidar\n  ddx agent execute-loop --once --json --harness agent → fails with z-ai/glm-5.1 via OpenRouter 404\n\nROOT CAUSE: Model resolution in execute-bead injects --model z-ai/glm-5.1, overriding the\nnative ~/.config/agent/config.yaml provider config (default_provider: vidar, model: qwen3.5-27b).\nThe z-ai/glm-5.1 model is not defined in models.yaml or the native config — it appears to come\nfrom stale execute-bead routing metadata. Even explicit --model flags on execute-loop don't\npropagate correctly to the spawned execute-bead subprocess.\n\nPROVIDER STATUS on eitri:\n- vidar (http://vidar:1234/v1, qwen3.5-27b): WORKS — confirmed with ddx agent run\n- bragi (http://bragi:1234/v1, qwen3.5-27b): DOWN — connection refused\n- grendel (http://grendel:1234/v1, qwen3.5-27b): DOWN — connection refused\n- openrouter (https://openrouter.ai/api/v1): FAILS — 404 guardrail restriction on claude-haiku\n\nMACHINE CONTEXT (eitri, Linux):\n- Hostname: eitri, paths use /home/erik/ and linuxbrew\n- ~/.config/agent/config.yaml defines providers with default_provider: vidar\n- models.yaml defines code-high profile → agent.openai: gpt-5.4 (OpenRouter surface)\n- No ~/.ddx.yml config file\n- No project-level .agent/config.yaml\n- Codex and claude harnesses nearly out of quota — reserved for review, not bulk execution\n- execute-loop was working previously (existing ddx beads show successful runs)\n- z-ai/glm-5.1 string appears nowhere in source — comes from runtime routing metadata\n\nENVIRONMENT VARIABLES: No AGENT_PROVIDER, AGENT_BASE_URL, AGENT_API_KEY, or AGENT_MODEL set.\nAll routing comes from native ~/.config/agent/config.yaml.\n\nIMPACT: ddx agent execute-loop is the primary execution surface for HELIX beads. If the only\nworking provider (vidar → qwen3.5-27b) cannot be used from execute-loop, entire queues drain\nas failures. The loop records each with retry_after (6 hours) and retries indefinitely.\n\nSUGGESTED FIXES:\n1. Fix execute-bead model resolution: respect native .agent/config.yaml provider config or\n   properly propagate the --model flag from execute-loop → execute-bead\n2. Add provider health checks: ddx agent doctor should test the actual provider with a\n   minimal API call, not just check binary existence\n3. Fail open on provider errors: when the default provider fails, fall back to the next\n   available provider in config rather than hard-failing\n4. Guardrail error clarity: surface OpenRouter 404 as \"provider unavailable due to\n   account restrictions\" rather than generic API error\n5. Execute-loop resilience: when all providers fail, mark bead truly blocked instead of\n   infinite retry_after cycles\n\nFILES INVOLVED:\n- cli/internal/agent/agent_runner.go (resolveNativeAgentProvider, resolveAgentConfig, resolveModel)\n- cli/cmd/agent_execute_loop.go (execute-loop model flag propagation)\n- cli/cmd/agent_execute_bead.go (execute-bead model override logic)\n- ~/.config/agent/config.yaml (machine config with vidar provider)",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:correctness",
+      "area:agent",
+      "area:routing"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260411T195303-5b6c0922",
+    "prompt": ".ddx/executions/20260411T195303-5b6c0922/prompt.md",
+    "manifest": ".ddx/executions/20260411T195303-5b6c0922/manifest.json",
+    "result": ".ddx/executions/20260411T195303-5b6c0922/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-57388aff-20260411T195303-5b6c0922"
+  }
+}

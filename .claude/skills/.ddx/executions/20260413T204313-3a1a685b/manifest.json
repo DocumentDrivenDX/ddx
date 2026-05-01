@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260413T204313-3a1a685b",
+  "bead_id": "ddx-8b6cd40e",
+  "base_rev": "94272bd63c5e377fb41614e0e09880bc3db46148",
+  "created_at": "2026-04-13T20:43:13.673081975Z",
+  "requested": {
+    "harness": "claude",
+    "model": "haiku-4.5",
+    "effort": "low",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8b6cd40e",
+    "title": "Evolve ddx server into a multi-project execution host",
+    "description": "\u003ccontext-digest\u003e\nReview area: ddx server topology beyond the initial execute-bead release lane. Evidence covers FEAT-002, FEAT-013, SD-013, the single-project server architecture, and the requirement to defer multi-project and multi-host topology work until the single-project executable-bead flow is tested and released.\n\u003c/context-digest\u003e\nEvolve `ddx server` beyond the initial single-project execute-bead release lane in staged steps.\n\n## Scope\n- Stage 2: one-machine, multi-project `ddx server` with project-scoped APIs, UI, and worker control after the single-project execute-bead loop is tested and released\n- Stage 3: service-backed storage/control plane with a central web UI and multiple headless node gateways, each serving multiple projects and workers\n\n## Boundaries\n- Preserve local-first, git-authoritative project state for code/docs/beads\n- Do not compete with the immediate FEAT-006 lane to ship a trustworthy single-project executable-bead loop\n- Keep DDx primitives explicit so HELIX and other workflow tools can compose scheduling policy on top",
+    "acceptance": "Child design beads define the one-machine multi-project server module, the server-managed execute-bead supervisor contract, and the future service-backed multi-node topology with clear stage boundaries",
+    "labels": [
+      "helix",
+      "kind:architecture",
+      "area:api",
+      "area:agent",
+      "area:docs"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-13T20:43:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4185618",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:19:59.603057374Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "agent made no commits\nresult_rev=7bd43ca917bcb55008735a6849e18ec5ab96aa6f\nbase_rev=7bd43ca917bcb55008735a6849e18ec5ab96aa6f\nretry_after=2026-04-13T06:11:34Z",
+          "created_at": "2026-04-13T00:11:34.54307376Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-last-detail": "agent made no commits",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-retry-after": "2026-04-13T06:11:34Z",
+      "execution-eligible": true,
+      "spec-id": "FEAT-002"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-002",
+      "path": "docs/helix/01-frame/features/FEAT-002-server.md",
+      "title": "Feature: DDx Server"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T204313-3a1a685b",
+    "prompt": ".ddx/executions/20260413T204313-3a1a685b/prompt.md",
+    "manifest": ".ddx/executions/20260413T204313-3a1a685b/manifest.json",
+    "result": ".ddx/executions/20260413T204313-3a1a685b/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-8b6cd40e-20260413T204313-3a1a685b"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-2513f08c",
+  "attempt_id": "20260422T210213-e3644906",
+  "base_rev": "e77302300ec4b67fa093c4480308f27bf0a1906f",
+  "result_rev": "e77302300ec4b67fa093c4480308f27bf0a1906f",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+  "harness": "gemini",
+  "model": "minimax/minimax-m2.7",
+  "session_id": "eb-4e6d3b8c",
+  "duration_ms": 2338,
+  "exit_code": 1,
+  "error": "unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260422T210213-e3644906",
+  "prompt_file": ".ddx/executions/20260422T210213-e3644906/prompt.md",
+  "manifest_file": ".ddx/executions/20260422T210213-e3644906/manifest.json",
+  "result_file": ".ddx/executions/20260422T210213-e3644906/result.json",
+  "started_at": "2026-04-22T21:02:13.506853687Z",
+  "finished_at": "2026-04-22T21:02:15.845515102Z"
+}

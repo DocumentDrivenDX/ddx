@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T092314-b3e9a7a0",
+  "bead_id": "ddx-88d7a076",
+  "base_rev": "355a18f7e38afec7a7dad0303f90b36782337d21",
+  "created_at": "2026-04-15T09:23:15.023861305Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-88d7a076",
+    "title": "Stage 4.8: Beads cross-project combined view at /nodes/:nodeId/beads",
+    "description": "New files: src/routes/nodes/[nodeId]/beads/+page.svelte, +page.ts. Same list pattern as project-scoped, but merges beads across all projects. Project-name badge column. Project filter chips. See docs/plan-svelte-migration.md Stage 4 bead #42.",
+    "acceptance": "(1) MANUAL: load /nodes/:nodeId/beads. (2) See beads from every registered project. (3) Project-name badge shows for each row. (4) Project filter chips work. Record project count in completion note.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T09:23:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T09:23:14.794768914Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T092314-b3e9a7a0",
+    "prompt": ".ddx/executions/20260415T092314-b3e9a7a0/prompt.md",
+    "manifest": ".ddx/executions/20260415T092314-b3e9a7a0/manifest.json",
+    "result": ".ddx/executions/20260415T092314-b3e9a7a0/result.json",
+    "checks": ".ddx/executions/20260415T092314-b3e9a7a0/checks.json",
+    "usage": ".ddx/executions/20260415T092314-b3e9a7a0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-88d7a076-20260415T092314-b3e9a7a0"
+  }
+}

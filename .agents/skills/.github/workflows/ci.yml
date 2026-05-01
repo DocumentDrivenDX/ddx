@@ -1,0 +1,235 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+# Minimal permissions by default
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  # Main CI job using lefthook
+  ci:
+    name: CI Validation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for some checks
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v8
+      with:
+        version: v2.11.4
+        working-directory: cli
+        skip-cache: false
+
+    - name: Install lefthook
+      run: |
+        # Install using Go for better reliability in CI
+        go install github.com/evilmartians/lefthook@latest
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+    - name: Verify git-subtree availability
+      run: |
+        # git-subtree should be included with git, verify it's available
+        if ! git subtree --help >/dev/null 2>&1; then
+          echo "git-subtree not found, attempting to install..."
+          # On some distros it's a separate package
+          sudo apt-get update
+          sudo apt-get install -y git-subtree || true
+          # Verify again
+          if ! git subtree --help >/dev/null 2>&1; then
+            echo "ERROR: git-subtree is not available"
+            exit 1
+          fi
+        fi
+        echo "✓ git-subtree is available"
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Build CLI binary
+      run: |
+        cd cli
+        make build
+
+    - name: Validate bead schema
+      run: make bead-schema
+
+    - name: Validate skill metadata
+      run: make skill-schema
+
+    - name: Validate ddx skill (agentskills.io conformance)
+      run: scripts/eval-skill.sh --validate
+
+    - name: Run CI validation
+      run: lefthook run ci
+      env:
+        LEFTHOOK_QUIET: meta,execution
+
+    - name: Guard server state against test pollution
+      run: |
+        set -euo pipefail
+
+        export XDG_DATA_HOME="$(mktemp -d)"
+
+        cd cli
+        go test ./... -count=1
+
+        ./build/ddx server --addr 127.0.0.1 --port 17743 --tsnet=false > ../ddx-state-guard-server.log 2>&1 &
+        server_pid=$!
+        cleanup() {
+          kill "$server_pid" 2>/dev/null || true
+          wait "$server_pid" 2>/dev/null || true
+        }
+        trap cleanup EXIT
+
+        state_file="$XDG_DATA_HOME/ddx/server-state.json"
+        for _ in $(seq 1 20); do
+          if [ -f "$state_file" ]; then
+            break
+          fi
+          sleep 0.25
+        done
+
+        if [ ! -f "$state_file" ]; then
+          cat ../ddx-state-guard-server.log
+          echo "server-state.json was not created"
+          exit 1
+        fi
+
+        project_count="$(jq '.projects | length' "$state_file")"
+        if [ "$project_count" -gt 20 ]; then
+          jq '.projects[] | {name, path}' "$state_file"
+          echo "server-state.json contains $project_count projects; expected <= 20"
+          exit 1
+        fi
+
+        if jq -e '.projects[]? | select(.path | test("(^/tmp/|^/private/tmp/|^/var/folders/|/Test[A-Z][A-Za-z0-9_]*[0-9]+/)"))' "$state_file" >/dev/null; then
+          jq '.projects[] | select(.path | test("(^/tmp/|^/private/tmp/|^/var/folders/|/Test[A-Z][A-Za-z0-9_]*[0-9]+/)")) | {name, path}' "$state_file"
+          echo "server-state.json contains Go test temp-dir project entries"
+          exit 1
+        fi
+
+  # Separate build job for matrix builds
+  build:
+    name: Build
+    needs: ci
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+    
+    - name: Build binary
+      run: |
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
+          go build -v -o ../bin/ddx-${{ matrix.os }}-${{ matrix.arch }} .
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ddx-${{ matrix.os }}-${{ matrix.arch }}
+        path: bin/ddx-${{ matrix.os }}-${{ matrix.arch }}
+        retention-days: 7
+
+  # Integration tests
+  integration:
+    name: Integration Tests
+    needs: ci
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Build binary
+      run: go build -o ../bin/ddx .
+
+    - name: Run E2E smoke tests
+      run: go test -v ./cmd -run TestE2ESmokeJourney -count=1 2>&1 | tee ../e2e-test-output.txt
+
+    - name: Upload E2E test output
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-output
+        path: e2e-test-output.txt
+        retention-days: 7
+
+  frontend-e2e:
+    name: Frontend Playwright E2E
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Install frontend dependencies
+      working-directory: cli/internal/server/frontend
+      run: bun install
+
+    - name: Build frontend bundle
+      working-directory: cli/internal/server/frontend
+      run: bun run build
+
+    - name: Build CLI binary
+      working-directory: cli
+      run: make build
+
+    - name: Install Playwright browsers
+      working-directory: cli/internal/server/frontend
+      run: bunx playwright install --with-deps chromium
+
+    - name: Run frontend unit tests
+      working-directory: cli/internal/server/frontend
+      run: bun run test
+
+    - name: Run frontend Playwright E2E tests
+      working-directory: cli/internal/server/frontend
+      run: bun run test:e2e

@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-44344d0a",
+  "attempt_id": "20260417T200552-505a00b9",
+  "base_rev": "385881dd870bb156911380bcde7145fb3395d688",
+  "result_rev": "385881dd870bb156911380bcde7145fb3395d688",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider error: POST \"https://openrouter.ai/api/v1/chat/completions\": 400 Bad Request {\"message\":\"mlx-community/qwen3.6-35b-a3b is not a valid model ID\",\"code\":400}",
+  "harness": "agent",
+  "model": "mlx-community/qwen3.6-35b-a3b",
+  "session_id": "eb-97a1ac7c",
+  "duration_ms": 41,
+  "exit_code": 1,
+  "error": "agent: provider error: POST \"https://openrouter.ai/api/v1/chat/completions\": 400 Bad Request {\"message\":\"mlx-community/qwen3.6-35b-a3b is not a valid model ID\",\"code\":400}",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260417T200552-505a00b9",
+  "prompt_file": ".ddx/executions/20260417T200552-505a00b9/prompt.md",
+  "manifest_file": ".ddx/executions/20260417T200552-505a00b9/manifest.json",
+  "result_file": ".ddx/executions/20260417T200552-505a00b9/result.json",
+  "started_at": "2026-04-17T20:05:53.120238139Z",
+  "finished_at": "2026-04-17T20:05:53.161615372Z"
+}

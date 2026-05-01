@@ -1,0 +1,70 @@
+{
+  "attempt_id": "20260412T233935-7a0c3b10",
+  "bead_id": "ddx-32b3008e",
+  "base_rev": "545217c0dd0eda95bb9e8ccd02b22b2da0433e41",
+  "created_at": "2026-04-12T23:39:36.182190305Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-32b3008e",
+    "title": "Evolve execute-bead into a tracked execution-evidence workflow",
+    "description": "\u003ccontext-digest\u003e\nReview area: execute-bead prompt rationalization, tracked execution evidence, and commit provenance. Evidence covers FEAT-006 execute-bead workflow, FEAT-012 git/landing behavior, FEAT-014 runtime metrics capture, the live prompt-construction bug ddx-e07fb546, the need for tracked execution artifacts to support autoresearch, and the requirement that any programmatic commit-message metadata be rendered from machine-readable files rather than ad hoc process state.\n\u003c/context-digest\u003e\nEvolve execute-bead from a transient worktree runner into a tracked execution-evidence workflow.\n\n## Scope\n- Define an explicit execute-bead prompt template / rationalizer contract\n- Define tracked execution artifacts for each attempt, separate from ignored local runtime scratch\n- Define which execution evidence is committed on landed and preserved attempts\n- Define how commit messages are rendered from tracked execution artifact files\n- Keep provider-native transcripts external by default while tracking normalized pointers, usage, and summaries in DDx-owned artifacts",
+    "acceptance": "The queue contains a coherent spec-and-build lane for execute-bead prompt rationalization, tracked execution artifacts, commit-message provenance rendered from files, and the split between tracked execution evidence and ignored local runtime scratch",
+    "labels": [
+      "helix",
+      "kind:architecture",
+      "area:agent",
+      "area:exec",
+      "area:git",
+      "area:docs"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "parse execute-bead result: invalid character 'w' after top-level value",
+          "created_at": "2026-04-10T21:32:07.369507076Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "agent made no commits\nresult_rev=0b95b7c29134325187ed8146e81d6cc803482199\nbase_rev=0b95b7c29134325187ed8146e81d6cc803482199",
+          "created_at": "2026-04-10T22:14:57.354311577Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "agent made no commits\nresult_rev=e7ee2a1a5450428907732039e8a4dac68f469422\nbase_rev=e7ee2a1a5450428907732039e8a4dac68f469422\nretry_after=2026-04-13T05:03:00Z",
+          "created_at": "2026-04-12T23:03:00.544941841Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-last-detail": "agent made no commits",
+      "execute-loop-last-status": "no_changes",
+      "execution-eligible": true,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260412T233935-7a0c3b10",
+    "prompt": ".ddx/executions/20260412T233935-7a0c3b10/prompt.md",
+    "manifest": ".ddx/executions/20260412T233935-7a0c3b10/manifest.json",
+    "result": ".ddx/executions/20260412T233935-7a0c3b10/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-32b3008e-20260412T233935-7a0c3b10"
+  }
+}

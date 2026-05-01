@@ -1,0 +1,9 @@
+{
+  "harness": "codex",
+  "model": "gpt-5.4",
+  "base_rev": "5a05c1780b8ef2fa231e121c17c5bd94469bc238",
+  "result_rev": "120e0ded9a6ba73dee88b5141f034de9c53435c0",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-ad0db8fd",
+  "execution_dir": ".ddx/executions/20260422T235215-fa6df3f8"
+}

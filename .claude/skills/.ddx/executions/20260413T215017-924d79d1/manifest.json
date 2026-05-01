@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260413T215017-924d79d1",
+  "bead_id": "ddx-a6d2da0e",
+  "base_rev": "ac7c0db9b9646b7c796c760d60c326b4d472e14b",
+  "created_at": "2026-04-13T21:50:18.093153602Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a6d2da0e",
+    "title": "align: repo after server-plan evolution",
+    "description": "\u003ccontext-digest\u003e\nTop-down repository alignment review after the host+user ddx-server plan evolved to add a single-instance-per-user daemon model, embedded-agent progress output, provider availability/utilization dashboard, SQLite-backed host runtime/index state, replay-backed fixture strategy, and explicit Playwright coverage requirements for new UI surfaces.\n\u003c/context-digest\u003e\nRun a HELIX alignment pass for the repository so the durable alignment report and live queue reflect the updated server planning stack and any new implementation gaps it creates.\n\nScope areas: server-and-planning-contracts, agent-execution-and-routing, web-ui-and-playwright-coverage, host-runtime-state-and-storage, tracker-governance.\n\nKnown evidence: FEAT-002, FEAT-008, FEAT-013, FEAT-014, SD-019, TP-002, and the newly queued server observability / tracker-context beads.",
+    "acceptance": "Alignment review complete; all server-plan gaps classified; execution issues created or reused for real uncovered gaps; durable report reconciled to current tracker and planning state",
+    "labels": [
+      "helix",
+      "kind:planning",
+      "action:align",
+      "area:docs",
+      "area:api",
+      "area:agent",
+      "area:ui"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:19:58.060580853Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "spec-id": "product-vision"
+    }
+  },
+  "governing": [
+    {
+      "id": "product-vision",
+      "path": "docs/helix/00-discover/product-vision.md",
+      "title": "Product Vision: DDx"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T215017-924d79d1",
+    "prompt": ".ddx/executions/20260413T215017-924d79d1/prompt.md",
+    "manifest": ".ddx/executions/20260413T215017-924d79d1/manifest.json",
+    "result": ".ddx/executions/20260413T215017-924d79d1/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-a6d2da0e-20260413T215017-924d79d1"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260422T083933-f1906040",
+  "bead_id": "ddx-778fcfd1",
+  "base_rev": "057a7ee6398387fc48cdfad588760ebd19d17463",
+  "created_at": "2026-04-22T08:39:34.140504778Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-778fcfd1",
+    "title": "FEAT-008 P7: US-086a worker live stream + tool cards + reconnect",
+    "description": "Subscribe to workerProgress via graphql-ws. Live region is a NAMED \u003csection role=region aria-label='Live response'\u003e containing an aria-live=polite inner log — bare role=log does NOT satisfy the test. Contiguous text_delta frames MUST concatenate into readable text in the DOM (two adjacent frames render as joined text, not separate nodes). tool_call frames → collapsible \u003cdetails\u003e cards interleaved with text. On reconnect: fetch worker(id).recentEvents to catch up; show reconnect banner while bridging. Terminal state: stop appending, render completed timestamp + 'Evidence bundle' link (link must be present even if mocked evidenceBundleUrl is missing — use worker id to synthesize the path).",
+    "acceptance": "US-086a.a-c green in e2e/workers.spec.ts.",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "phase-7",
+      "us-086a"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T08:39:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "execute-loop-heartbeat-at": "2026-04-22T08:39:33.675324401Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T083933-f1906040",
+    "prompt": ".ddx/executions/20260422T083933-f1906040/prompt.md",
+    "manifest": ".ddx/executions/20260422T083933-f1906040/manifest.json",
+    "result": ".ddx/executions/20260422T083933-f1906040/result.json",
+    "checks": ".ddx/executions/20260422T083933-f1906040/checks.json",
+    "usage": ".ddx/executions/20260422T083933-f1906040/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-778fcfd1-20260422T083933-f1906040"
+  }
+}

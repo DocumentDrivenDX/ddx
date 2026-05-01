@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260414T063427-58ba3504",
+  "bead_id": "ddx-7869b685",
+  "base_rev": "701241846df43b520f9e9a9bba2c1c340ec82a5e",
+  "created_at": "2026-04-14T06:34:27.438306288Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7869b685",
+    "title": "implement: worker progress SSE endpoint and WorkerRecord schema update",
+    "description": "FEAT-002 req 24 requires GET /api/projects/:project/workers/:id/progress as a Server-Sent Events stream delivering FEAT-006 progress events (phase transitions + heartbeats). Current server only has /api/agent/workers/{id}/log (unscoped log buffer, no SSE). Additionally, the current WorkerRecord struct lacks the FEAT-002 specified current_attempt (with attempt_id, bead_id, bead_title, harness, model, profile, phase, phase_seq, started_at, elapsed_ms, tokens, cost_usd), recent_phases (capped at 20 phase-transition events), and last_attempt fields. The polling alternative (GET /api/projects/:project/workers/:id with recent_phases) must also be served.",
+    "acceptance": "GET /api/projects/:project/workers/:id/progress streams SSE events matching FEAT-006 progress event schema; WorkerRecord includes current_attempt and recent_phases; GET /api/projects/:project/workers/:id returns updated shape; Go unit tests cover event streaming and WorkerRecord shape; ddx-60c52ef3 (counter fix) can be closed as part of this work",
+    "parent": "ddx-8b6cd40e",
+    "labels": [
+      "helix",
+      "phase:build",
+      "area:api",
+      "area:server",
+      "area:agent"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T06:34:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "execute-loop-heartbeat-at": "2026-04-14T06:34:27.238102169Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T063427-58ba3504",
+    "prompt": ".ddx/executions/20260414T063427-58ba3504/prompt.md",
+    "manifest": ".ddx/executions/20260414T063427-58ba3504/manifest.json",
+    "result": ".ddx/executions/20260414T063427-58ba3504/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7869b685-20260414T063427-58ba3504"
+  }
+}

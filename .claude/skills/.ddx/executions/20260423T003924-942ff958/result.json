@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Missing session index writer: no changes to `service.Execute`, shared execution wrappers, or agent execution paths to append `.ddx/agent-logs/sessions.index.jsonl`.\nMissing GraphQL changes: no update to `cli/internal/server/state_graphql.go` for index-backed `sessions` or lazy `session(id:)` body loading.\nMissing migration command: no `ddx agent log reindex` or equivalent CLI implementation and no fixture-based migration test.\nMissing CLI usage/status updates: no changes to `cli/cmd/agent_usage.go` or `cli/cmd/status.go` to stop reading legacy `sessions.jsonl`.\nMissing performance validation: no benchmark or fixture proving 10,000 index entries resolve within the required threshold.\nMissing UI gap/banner behavior and Playwright coverage for `/sessions`, lazy loading, migration, and live feed updates."
+}

@@ -1,0 +1,10 @@
+{
+  "harness": "agent",
+  "model": "minimax/minimax-m2.7-20260318",
+  "session_id": "s-1776641166730049516",
+  "base_rev": "970e50929c98dc30f5adaa6b1afca1ddd0bc4392",
+  "result_rev": "d8b4c9799ad9d7aa226ffa74eeb04a6fa0c25047",
+  "verdict": "REQUEST_CHANGES",
+  "bead_id": "ddx-4e3e149f",
+  "execution_dir": ".ddx/executions/20260419T232606-e13957a3"
+}

@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-726bc5f2",
+  "attempt_id": "20260422T210123-13afbc6d",
+  "base_rev": "e92562a276f9df2b75bf047e7f72b99f1d719cf4",
+  "result_rev": "e92562a276f9df2b75bf047e7f72b99f1d719cf4",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "unsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+  "harness": "claude",
+  "model": "codex/gpt-5.4",
+  "session_id": "eb-dd926eda",
+  "duration_ms": 2434,
+  "exit_code": 1,
+  "error": "unsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260422T210123-13afbc6d",
+  "prompt_file": ".ddx/executions/20260422T210123-13afbc6d/prompt.md",
+  "manifest_file": ".ddx/executions/20260422T210123-13afbc6d/manifest.json",
+  "result_file": ".ddx/executions/20260422T210123-13afbc6d/result.json",
+  "started_at": "2026-04-22T21:01:23.723303389Z",
+  "finished_at": "2026-04-22T21:01:26.158022458Z"
+}

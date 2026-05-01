@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-a860a42a",
+  "attempt_id": "20260416T221106-ba9ce13d",
+  "base_rev": "0b34a86efa0f808e9821ba8c511391c23e053576",
+  "result_rev": "0b34a86efa0f808e9821ba8c511391c23e053576",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "execution_failed",
+  "reason": "git rev-parse HEAD: exit status 128",
+  "harness": "claude",
+  "session_id": "eb-2f13fd59",
+  "duration_ms": 300954,
+  "tokens": 18468,
+  "cost_usd": 2.920308999999999,
+  "exit_code": 1,
+  "execution_dir": ".ddx/executions/20260416T221106-ba9ce13d",
+  "prompt_file": ".ddx/executions/20260416T221106-ba9ce13d/prompt.md",
+  "manifest_file": ".ddx/executions/20260416T221106-ba9ce13d/manifest.json",
+  "result_file": ".ddx/executions/20260416T221106-ba9ce13d/result.json",
+  "started_at": "2026-04-16T22:11:06.706021076Z",
+  "finished_at": "2026-04-16T22:16:07.66018658Z"
+}

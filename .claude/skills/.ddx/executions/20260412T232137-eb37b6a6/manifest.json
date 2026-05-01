@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260412T232137-eb37b6a6",
+  "bead_id": "ddx-91fd7e27",
+  "base_rev": "9e4d0c11159abc062d7b3a36939271608b3dd25d",
+  "created_at": "2026-04-12T23:21:37.518520555Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-91fd7e27",
+    "title": "Close execute-bead merge-gate gap",
+    "description": "\u003ccontext-digest\u003e\nReview area: execute-bead merge gating. Evidence covers FEAT-006 merge-by-default landing semantics, FEAT-007 graph-authored execution documents with ddx.execution.required=true, FEAT-010 execute-bead compatibility rules, and the current implementation gap where execute-bead lands successful runs without enforcing documented required execution gates.\n\u003c/context-digest\u003e\nClose the gap between the documented execute-bead merge-gate model and the shipped implementation.\n\n## Scope\n- Make the merge-default contract explicit: successful execute-bead runs land unless an explicit gate blocks landing or --no-merge is set\n- Keep merge gates in the existing executable-bead shape: graph-authored execution documents linked through governing artifacts, not new bead fields\n- Separate structural execution-readiness validation from post-run merge-gate evaluation\n- Dry-run the intended model by authoring real execution-gate metadata for the current execute-loop/docs lane",
+    "acceptance": "The queue contains a coherent lane covering contract alignment, required execution-gate enforcement in execute-bead, and authored execution-gate metadata that dry-runs the model against current FEAT-006 work",
+    "labels": [
+      "helix",
+      "kind:architecture",
+      "area:agent",
+      "area:exec",
+      "area:docs"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:19:58.610177677Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "agent made no commits\nresult_rev=6747d3aacb57bbb35f9137c51b74d55c7b9422cb\nbase_rev=6747d3aacb57bbb35f9137c51b74d55c7b9422cb\nretry_after=2026-04-13T04:29:41Z",
+          "created_at": "2026-04-12T22:29:41.515453001Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-last-detail": "agent made no commits",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-retry-after": "2026-04-13T04:29:41Z",
+      "execution-eligible": true,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260412T232137-eb37b6a6",
+    "prompt": ".ddx/executions/20260412T232137-eb37b6a6/prompt.md",
+    "manifest": ".ddx/executions/20260412T232137-eb37b6a6/manifest.json",
+    "result": ".ddx/executions/20260412T232137-eb37b6a6/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-91fd7e27-20260412T232137-eb37b6a6"
+  }
+}

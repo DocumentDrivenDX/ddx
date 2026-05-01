@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-35f7441a",
+  "attempt_id": "20260415T040703-8adb81a0",
+  "base_rev": "fda54978c9cd2f986d51988fc50c30da12f57ca4",
+  "result_rev": "fda54978c9cd2f986d51988fc50c30da12f57ca4",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 400 Bad Request {\n        \"message\": \"No models loaded. Please load a model in the developer page or use the 'lms load' command.\",\n        \"type\": \"invalid_request_error\",\n        \"param\": \"model\",\n        \"code\": null\n    }",
+  "harness": "agent",
+  "model": "vidar-coder",
+  "session_id": "eb-38122c3c",
+  "duration_ms": 10,
+  "exit_code": 1,
+  "error": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 400 Bad Request {\n        \"message\": \"No models loaded. Please load a model in the developer page or use the 'lms load' command.\",\n        \"type\": \"invalid_request_error\",\n        \"param\": \"model\",\n        \"code\": null\n    }",
+  "execution_dir": ".ddx/executions/20260415T040703-8adb81a0",
+  "prompt_file": ".ddx/executions/20260415T040703-8adb81a0/prompt.md",
+  "manifest_file": ".ddx/executions/20260415T040703-8adb81a0/manifest.json",
+  "result_file": ".ddx/executions/20260415T040703-8adb81a0/result.json",
+  "started_at": "2026-04-15T04:07:03.513504143Z",
+  "finished_at": "2026-04-15T04:07:03.52415493Z"
+}

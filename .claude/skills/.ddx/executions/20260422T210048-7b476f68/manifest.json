@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260422T210048-7b476f68",
+  "bead_id": "ddx-7de0ce80",
+  "base_rev": "fd2aaac73e3ec5bda1beace99f6aa591933ca7de",
+  "created_at": "2026-04-22T21:00:48.49553325Z",
+  "requested": {
+    "harness": "claude",
+    "model": "codex/gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7de0ce80",
+    "title": "Plugins page doesn't refresh after update/install: worker completes, card still shows outdated",
+    "description": "## Observed\n\nOn `/nodes/.../projects/.../plugins`, clicking Update on the outdated `helix` card:\n\n1. Fires the mutation — works.\n2. Shows a link to the dispatched worker — helpful.\n3. Worker completes and the plugin is actually updated on disk — verified.\n4. **Card still shows `update-available`.** The UI never closes the loop.\n\nThe user has no in-UI signal that the update succeeded. They must reload the page (or navigate away and back) to see the new state. Worse, nothing prevents them from clicking the button again during the gap — firing a second update.\n\n## Root cause\n\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte:74-89` —\n\n```js\nasync function dispatchPlugin(name, action, scope = 'project') {\n  const result = await client.request(PLUGIN_DISPATCH_MUTATION, { name, action, scope });\n  workerId = result.pluginDispatch.id;\n}\n```\n\nThat is the entire post-dispatch behavior. `data.plugins` is the snapshot from `+page.ts` at load time. There is no:\n\n- subscription to the dispatched worker's progress,\n- polling of the plugin list,\n- refetch on worker terminal event,\n- optimistic card state while the worker runs,\n- per-card in-flight tracking (only a single `workerId: string | null` at module scope, which means dispatching a second plugin overwrites the first worker link).\n\nThe workers layout already has `subscribeWorkerProgress(workerID, cb)` (`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:22-30`) — the plugins page just doesn't use it.\n\n## Proposed direction\n\nTwo changes, smallest first:\n\n### Fix A — Close the loop on the dispatched worker.\n\n- Per-card in-flight tracking: replace the singleton `workerId` with a `Map\u003cpluginName, workerId\u003e`. Each card shows its own worker link + in-flight state; clicking Install/Update is disabled while that plugin is in flight.\n- Subscribe to `subscribeWorkerProgress` for each in-flight plugin. On a terminal phase event (`completed`, `failed`, etc. — whatever the existing worker event vocabulary uses), refetch the plugins list and clear that plugin's in-flight entry.\n- If the existing worker-progress stream doesn't emit a terminal event with enough detail, fall back to polling `plugins { name status installedVersion }` every 2s while any card is in flight, stopping when none are.\n\n### Fix B — Optimistic card state (optional polish).\n\n- While a card is in-flight, show \"Updating…\" / \"Installing…\" with a spinner in place of the status badge, and disable the action button. This is orthogonal to Fix A and can ship with it.\n\n### Fix C — Persistent failure surfacing.\n\n- Currently `dispatchError` is a single string. If the worker terminates with a failure phase, surface that per-card (error badge + tooltip with detail link to the worker page) rather than relying on `dispatchError` which only covers the synchronous mutation error.\n\n## Out of scope\n\n- Designing new worker terminal events. Use whatever the workers layout already consumes.\n- Cancelling an in-flight plugin update — follow-up if needed.\n- Bulk update (\"update all outdated\"). Follow-up.",
+    "acceptance": "**User story:** As a developer on the plugins page, I want clicking Update or Install to give me continuous feedback until the operation completes, and I want the card to reflect the new installed state automatically — without a page reload.\n\n**Acceptance criteria:**\n\n1. **Per-card in-flight tracking.** Clicking Update/Install records the workerId under the plugin's name in a `Map\u003cstring, string\u003e`. The same plugin cannot be dispatched again while it is in flight (button disabled; tooltip shows the worker link). A different plugin can be dispatched concurrently and tracks its own worker.\n\n2. **Worker-driven refresh.** For each in-flight plugin, the page subscribes to that worker's progress via the existing `subscribeWorkerProgress` channel. On a terminal event, the page refetches the plugins list and clears that plugin's entry from the in-flight map. Within 2s of worker terminal event, the card reflects the new status (e.g., `update-available` → `installed`, new `installedVersion`).\n\n3. **Fallback polling.** If no terminal event arrives within 30s of dispatch, the page begins polling `plugins { name status installedVersion }` every 2s until the card's status or installedVersion changes, then stops. Integration test simulates a stream dropout and asserts the card eventually refreshes via the poll path.\n\n4. **In-flight visual state.** While a card is in flight, its status badge is replaced by a spinner + \"Updating…\" or \"Installing…\" text. The action button is disabled with a tooltip pointing to the worker.\n\n5. **Failure surfacing.** If the worker terminates in a failure phase, the card shows an error badge + tooltip \"Update failed — view worker\" linking to the worker page. The card's status/version remains whatever it was before dispatch (no false success). The global `dispatchError` stays for synchronous mutation errors only.\n\n6. **Concurrent dispatch.** Dispatching Update on two different cards at once shows two active worker links (a row or small stack in the header instead of the single slot), and each card tracks its own state. Playwright asserts.\n\n7. **No extra refetch overhead.** Refetch is scoped to the plugins list, not the full page data. Manual verification is enough; no specific perf test required.\n\n8. **Playwright e2e.**\n   - Seeds a fixture with one outdated plugin.\n   - Clicks Update.\n   - Asserts the card enters the in-flight visual state and the action button is disabled.\n   - Simulates the worker completing successfully.\n   - Asserts within 2s the card shows `installed` and a newer `installedVersion`.\n   - Runs a second scenario where the simulated worker fails; asserts the failure badge and that status stays `update-available`.\n\n9. **No regressions.** Install-from-registry flow (the ConfirmDialog path) adopts the same in-flight tracking; existing Playwright install flow still passes.",
+    "labels": [
+      "feat-008",
+      "plugins",
+      "ui"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T21:00:42Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2792459",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:00:47.754032895Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T21:00:47.949919182Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T21:00:42.835503422Z",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T210048-7b476f68",
+    "prompt": ".ddx/executions/20260422T210048-7b476f68/prompt.md",
+    "manifest": ".ddx/executions/20260422T210048-7b476f68/manifest.json",
+    "result": ".ddx/executions/20260422T210048-7b476f68/result.json",
+    "checks": ".ddx/executions/20260422T210048-7b476f68/checks.json",
+    "usage": ".ddx/executions/20260422T210048-7b476f68/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7de0ce80-20260422T210048-7b476f68"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "bead_id": "ddx-94dcd3ed",
+  "attempt_id": "20260413T214025-f68a328b",
+  "base_rev": "ac7c0db9b9646b7c796c760d60c326b4d472e14b",
+  "outcome": "error",
+  "status": "execution_failed",
+  "detail": "failed to read worktree HEAD: git rev-parse HEAD: exit status 128",
+  "reason": "failed to read worktree HEAD: git rev-parse HEAD: exit status 128",
+  "harness": "claude",
+  "session_id": "eb-dd66bd16",
+  "duration_ms": 1122644,
+  "cost_usd": 9.961703500000004,
+  "exit_code": 1,
+  "execution_dir": ".ddx/executions/20260413T214025-f68a328b",
+  "prompt_file": ".ddx/executions/20260413T214025-f68a328b/prompt.md",
+  "manifest_file": ".ddx/executions/20260413T214025-f68a328b/manifest.json",
+  "result_file": ".ddx/executions/20260413T214025-f68a328b/result.json",
+  "started_at": "2026-04-13T21:40:25.791155629Z",
+  "finished_at": "2026-04-13T21:59:08.435880652Z"
+}

@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-cadb3677",
+  "attempt_id": "20260411T190456-1ec9de41",
+  "base_rev": "9cb1e29033d3afefecc98852dcac741c3c33e2cc",
+  "result_rev": "9cb1e29033d3afefecc98852dcac741c3c33e2cc",
+  "outcome": "no-changes",
+  "status": "no_changes",
+  "detail": "agent made no commits",
+  "reason": "agent made no commits",
+  "harness": "agent",
+  "model": "qwen/qwen3.5-27b-20260224",
+  "session_id": "eb-9f83902c",
+  "duration_ms": 100632,
+  "tokens": 474883,
+  "exit_code": 0,
+  "execution_dir": ".ddx/executions/20260411T190456-1ec9de41",
+  "prompt_file": ".ddx/executions/20260411T190456-1ec9de41/prompt.md",
+  "manifest_file": ".ddx/executions/20260411T190456-1ec9de41/manifest.json",
+  "result_file": ".ddx/executions/20260411T190456-1ec9de41/result.json",
+  "started_at": "2026-04-11T19:04:56.630053232Z",
+  "finished_at": "2026-04-11T19:06:37.262201501Z"
+}

@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260417T200552-505a00b9",
+  "bead_id": "ddx-44344d0a",
+  "base_rev": "385881dd870bb156911380bcde7145fb3395d688",
+  "created_at": "2026-04-17T20:05:53.119905973Z",
+  "requested": {
+    "harness": "agent",
+    "model": "mlx-community/qwen3.6-35b-a3b",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-44344d0a",
+    "title": "Routing mode cleanup: provider targeting, modifier semantics, collision fix",
+    "description": "Implement the remaining routing mode changes from SD-015: mode 5 (--provider\nalone), provider-as-modifier semantics, and harness name collision fix.\n\nDepends on ddx-71fe194f (discovery integration) being landed first — mode 5\nneeds discovery to enumerate models on a provider.\n\nImplementation:\n- Mode 5: --provider P alone (no --model, no --profile) discovers P's models\n  and selects the best cataloged one. Error on unknown/empty provider.\n- Provider as modifier with --model: soft preference via scoring bonus.\n  If preferred provider lacks the model, route to one that has it.\n- Provider as modifier with --profile: same soft preference.\n- Harness name collision: --provider claude with --model set → soft\n  preference (not harness override). Without --model → harness override.\n  Warn on collision.\n- Remove ValidateOrphanModel entirely (replaced by discovery error path).",
+    "acceptance": "1. ddx work --provider vidar (no --model) selects best cataloged model from vidar.\n2. ddx work --provider nonexistent errors: \"unknown provider P\".\n3. ddx work --provider vidar when vidar unreachable errors: \"provider P has no available models\".\n4. ddx work --model qwen3.6 --provider vidar prefers vidar; ignores vidar and routes to bragi if vidar lacks it.\n5. ddx work --model qwen3.6 --provider claude treats claude as soft preference (not harness override) because --model is set.\n6. ddx work --provider claude (no --model) treats claude as harness override.\n7. Collision warning printed when --provider shadows a harness name.\n\nUnit tests:\nT1. Provider alone: selects best cataloged model from provider's discovered list.\nT2. Unknown provider: clear error.\nT3. Provider affinity soft: preferred provider ignored when it lacks the model.\nT4. Harness collision with --model: soft preference, not override.\nT5. Harness collision without --model: becomes harness override.\n\ncd cli \u0026\u0026 go test ./... \u0026\u0026 go build .",
+    "metadata": {
+      "claimed-at": "2026-04-17T20:05:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1399013",
+      "execute-loop-heartbeat-at": "2026-04-17T20:05:45.068523764Z",
+      "spec-id": "SD-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-015",
+      "path": "docs/helix/02-design/solution-designs/SD-015-agent-routing-and-catalog-resolution.md",
+      "title": "Solution Design: Agent Routing and Catalog Resolution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260417T200552-505a00b9",
+    "prompt": ".ddx/executions/20260417T200552-505a00b9/prompt.md",
+    "manifest": ".ddx/executions/20260417T200552-505a00b9/manifest.json",
+    "result": ".ddx/executions/20260417T200552-505a00b9/result.json",
+    "checks": ".ddx/executions/20260417T200552-505a00b9/checks.json",
+    "usage": ".ddx/executions/20260417T200552-505a00b9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-44344d0a-20260417T200552-505a00b9"
+  }
+}

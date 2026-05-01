@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Missing implementation change in `cli/internal/server/graphql/resolver.go`: `Bead(id:)` is not shown using a scoped lookup, cache, or index instead of scanning all bead snapshots.\nMissing benchmark or scripted GraphQL latency harness for a fixture repo with at least 5 projects and 500 beads.\nMissing bead-note update recording the baseline p50/p95 measured on the current `main` binary.\nMissing post-fix performance evidence showing p95 within the required in-process or HTTP budget.\nMissing write-then-read regression test covering `ddx bead update` followed by GraphQL `bead(id:)`.\nMissing concurrent integration test interleaving `bead(id:)` queries with bead updates.\nMissing Playwright e2e test for opening `/nodes/.../beads`, clicking a bead row, and rendering the sidepane title within 1s."
+}

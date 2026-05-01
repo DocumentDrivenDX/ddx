@@ -1,8 +1,8 @@
 # Agents — Power, Persona Dispatch
 
-> **Debugging routing?** Routing lives entirely in ddx-agent. See `CONTRACT-003-ddx-agent-service` (in the agent repo, `docs/helix/02-design/contracts/`) for the public surface; routing internals are inside that module.
+> **Debugging routing?** Routing lives entirely in Fizeau. See `CONTRACT-003-fizeau-service` (in the agent repo, `docs/helix/02-design/contracts/`) for the public surface; routing internals are inside that module.
 
-DDx invokes AI coding agents through the upstream `ddx-agent` service. DDx
+DDx invokes AI coding agents through the upstream Fizeau service. DDx
 does not choose harnesses, providers, endpoints, or models on the normal work
 path. It describes the work, requests an abstract power level, and lets the
 agent route.

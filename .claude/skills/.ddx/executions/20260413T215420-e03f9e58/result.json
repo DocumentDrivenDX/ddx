@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-640c1ece",
+  "attempt_id": "20260413T215420-e03f9e58",
+  "base_rev": "ac7c0db9b9646b7c796c760d60c326b4d472e14b",
+  "outcome": "error",
+  "status": "execution_failed",
+  "detail": "failed to read worktree HEAD: git rev-parse HEAD: exit status 128",
+  "reason": "failed to read worktree HEAD: git rev-parse HEAD: exit status 128",
+  "harness": "agent",
+  "model": "qwen/qwen3-coder-next",
+  "session_id": "eb-28a6a5c6",
+  "duration_ms": 96714,
+  "tokens": 16416,
+  "exit_code": 1,
+  "execution_dir": ".ddx/executions/20260413T215420-e03f9e58",
+  "prompt_file": ".ddx/executions/20260413T215420-e03f9e58/prompt.md",
+  "manifest_file": ".ddx/executions/20260413T215420-e03f9e58/manifest.json",
+  "result_file": ".ddx/executions/20260413T215420-e03f9e58/result.json",
+  "started_at": "2026-04-13T21:54:20.652790216Z",
+  "finished_at": "2026-04-13T21:55:57.366805414Z"
+}

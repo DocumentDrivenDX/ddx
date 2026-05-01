@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-4802a7b3",
+  "attempt_id": "20260418T005052-3aad2cfa",
+  "base_rev": "ca9470b633731c66bfce2483087d6d7ce7682e7b",
+  "result_rev": "ca9470b633731c66bfce2483087d6d7ce7682e7b",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider error: unexpected end of JSON input",
+  "harness": "agent",
+  "model": "Qwen3.6-35B-A3B-4bit",
+  "session_id": "eb-827c335c",
+  "duration_ms": 14653,
+  "exit_code": 1,
+  "error": "agent: provider error: unexpected end of JSON input",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260418T005052-3aad2cfa",
+  "prompt_file": ".ddx/executions/20260418T005052-3aad2cfa/prompt.md",
+  "manifest_file": ".ddx/executions/20260418T005052-3aad2cfa/manifest.json",
+  "result_file": ".ddx/executions/20260418T005052-3aad2cfa/result.json",
+  "started_at": "2026-04-18T00:50:52.776728635Z",
+  "finished_at": "2026-04-18T00:51:07.430641967Z"
+}

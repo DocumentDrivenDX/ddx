@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-006d80a7",
+  "attempt_id": "20260418T212752-748114bf",
+  "base_rev": "5979fc715fa908f9d929acbaa16a1be38e87d2bd",
+  "result_rev": "5979fc715fa908f9d929acbaa16a1be38e87d2bd",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider error: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway ",
+  "harness": "agent",
+  "model": "qwen/qwen3.6-35b-a3b",
+  "session_id": "eb-e0ca1e9b",
+  "duration_ms": 15049,
+  "exit_code": 1,
+  "error": "agent: provider error: POST \"http://bragi:1234/v1/chat/completions\": 502 Bad Gateway ",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260418T212752-748114bf",
+  "prompt_file": ".ddx/executions/20260418T212752-748114bf/prompt.md",
+  "manifest_file": ".ddx/executions/20260418T212752-748114bf/manifest.json",
+  "result_file": ".ddx/executions/20260418T212752-748114bf/result.json",
+  "started_at": "2026-04-18T21:27:52.645517189Z",
+  "finished_at": "2026-04-18T21:28:07.695485453Z"
+}

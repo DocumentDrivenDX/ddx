@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260416T193602-1a4b45bf",
+  "bead_id": "ddx-36d2775f",
+  "base_rev": "173e8aa5a5b90aadc9e4fc12519d28772e0991a9",
+  "created_at": "2026-04-16T19:36:02.844234138Z",
+  "requested": {
+    "provider": "agent",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-36d2775f",
+    "title": "Add project-scoped route middleware and migrate document/bead/graph routes",
+    "description": "## Scope\nAdd project-scoping middleware to the DDx server and migrate all document, bead, and doc-graph HTTP routes to canonical project-scoped paths.\n\n## Context\nThe server currently registers ~50 routes under /api/... without project scoping. FEAT-002 requires /api/projects/{project}/... as canonical. Three worker routes already use this pattern (handleProjectWorkerList, handleProjectWorkerShow, handleProjectWorkerProgress) — follow that pattern.\n\n## Implementation approach\n1. Create a projectMiddleware (or helper function) that:\n   - Extracts {project} from the URL path\n   - Resolves it via GetProjectByID() or GetProjectByPath()\n   - Injects the resolved ProjectEntry into request context\n   - Returns 404 if project not found\n2. Register all document, bead, and doc-graph routes under /api/projects/{project}/...\n3. Keep legacy /api/... routes as singleton compatibility aliases that auto-resolve to the single registered project (error if \u003e1 project registered without scoping)\n4. Add test(s) that register two projects, verify scoped routes resolve correctly, and verify legacy routes work with one project\n\n## Files to touch\n- cli/internal/server/server.go — route registration, middleware\n- cli/internal/server/handlers.go (or individual handler files) — extract project from context instead of hardcoding\n- cli/internal/server/server_test.go — new project-scoped routing tests\n\n## Files NOT to touch\n- MCP tools (separate bead)\n- GraphQL schema (already has beadsByProject, workersByProject)\n- Frontend routes",
+    "acceptance": "(1) A projectMiddleware or projectResolver extracts {project} from /api/projects/{project}/... routes and injects resolved ProjectEntry into request context. (2) Document routes (list, read, write, search), bead routes (list, show, create, update, claim, unclaim, reopen, ready, blocked, status, deps), and doc graph routes (graph, stale, deps, dependents, history, diff, show, write) are all registered under /api/projects/{project}/... in addition to existing legacy routes. (3) Legacy unscoped routes continue to work when exactly one project is registered (singleton compatibility). (4) cd cli \u0026\u0026 go test ./internal/server -run 'TestProject' -count=1 passes with at least one test covering scoped route resolution.",
+    "parent": "hx-bed139d3",
+    "labels": [
+      "phase:build",
+      "area:api",
+      "kind:implementation"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260416T193602-1a4b45bf",
+    "prompt": ".ddx/executions/20260416T193602-1a4b45bf/prompt.md",
+    "manifest": ".ddx/executions/20260416T193602-1a4b45bf/manifest.json",
+    "result": ".ddx/executions/20260416T193602-1a4b45bf/result.json",
+    "checks": ".ddx/executions/20260416T193602-1a4b45bf/checks.json",
+    "usage": ".ddx/executions/20260416T193602-1a4b45bf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-36d2775f-20260416T193602-1a4b45bf"
+  }
+}

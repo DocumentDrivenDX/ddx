@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260419T230850-214355da",
+  "bead_id": "ddx-bfff4bc7",
+  "base_rev": "94c9de00e2f3f61c90b2ed0a5eaa6c1d668af50b",
+  "created_at": "2026-04-19T23:08:50.983883424Z",
+  "requested": {
+    "harness": "agent",
+    "model": "minimax/minimax-m2.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bfff4bc7",
+    "title": "Phase 5h: migrate compare_adapter.go Runner methods to free functions taking DdxAgent",
+    "description": "Surfaced by ddx-c0f6b19c v2 STOP report. compare_adapter.go has Runner.RunCompare / RunQuorum / RunBenchmark methods (kept after ddx-1d2c2e7f as a thin shim wrapping the upstream comparison package). Migrate to free functions taking agentlib.DdxAgent.\n\nLikely small — these are already shims over comparison.RunCompare/etc. via a RunFunc closure.",
+    "acceptance": "- [ ] No (*Runner). methods in compare_adapter.go\n- [ ] Free functions or service-method wrappers replace them\n- [ ] Tests pass",
+    "parent": "ddx-62b04ccd",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-19T23:08:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "721226",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"lmstudio\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-19T23:08:42.563771844Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=lmstudio model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=lmstudio model=qwen3.5-27b probe=ok\nagent: native config provider \"lmstudio\": config: unknown provider \"lmstudio\"",
+          "created_at": "2026-04-19T23:08:42.748044033Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-19T23:08:33.592616858Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260419T230850-214355da",
+    "prompt": ".ddx/executions/20260419T230850-214355da/prompt.md",
+    "manifest": ".ddx/executions/20260419T230850-214355da/manifest.json",
+    "result": ".ddx/executions/20260419T230850-214355da/result.json",
+    "checks": ".ddx/executions/20260419T230850-214355da/checks.json",
+    "usage": ".ddx/executions/20260419T230850-214355da/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bfff4bc7-20260419T230850-214355da"
+  }
+}

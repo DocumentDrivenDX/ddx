@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "`.ddx/executions/20260422T095941-f4b97729/checks.json` is referenced by `manifest.json` but is not included in the diff, so the required 6 routes x 2 modes axe result evidence is missing.\n`src/` is not changed or accompanied by an audit artifact, so the “no hard-coded hex” criterion cannot be verified.\nNo screenshot baseline files or baseline inventory are included, so the “all screenshot baselines committed” criterion cannot be verified."
+}

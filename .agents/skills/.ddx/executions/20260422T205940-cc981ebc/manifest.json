@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260422T205940-cc981ebc",
+  "bead_id": "ddx-15f7ee0b",
+  "base_rev": "ca89ae5558fa773eef769bf840802ea8b2797b29",
+  "created_at": "2026-04-22T20:59:40.597507566Z",
+  "requested": {
+    "harness": "claude",
+    "model": "codex/gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-15f7ee0b",
+    "title": "Test runs pollute ~/.local/share/ddx/server-state.json with thousands of /tmp/Test.../001 projects",
+    "description": "## Observed\n\n`~/.local/share/ddx/server-state.json` on a developer machine contains **7,343 registered projects**. Composition:\n\n- **6,936 named \"001\"** — all are Go test temp dirs like `/tmp/TestAgentCapabilitiesCommandJSON1451829170/001`, `/tmp/TestAgentCheckSuccess3666443068/001`.\n- **344 named \"002\"** — same pattern in tests that use `002/`.\n- **~60 real projects** (ddx, helix, axon, plus per-branch worktrees).\n- Only 135 of the 6,936 are marked unreachable; the rest are \"alive\" because their `/tmp` dir still exists or because `LastSeen` is recent.\n- State file size: 1.8 MB.\n\n## Root cause\n\n1. Go tests that exercise the server (or anything that wires up a `ServerState`) call `RegisterProject` with a temp-dir path. The state file they write to is **not isolated** — it defaults to the shared XDG location (`serverAddrDir()` at `cli/internal/server/server.go:67`) unless the test explicitly overrides `XDG_DATA_HOME` or constructs state via the `tc.StateDir` injection path.\n2. There is no test-side deregistration on teardown. Temp dirs get cleaned up by `t.TempDir()`'s own finalizer, but the project entry in the production state file stays.\n3. The reachability sweep (`ServerState.migrate` at `cli/internal/server/state.go:85-148`) tombstones missing-path entries and drops them 24h later. With thousands of entries being added per test run, the rate of addition outpaces the 24h GC.\n\n## Perf amplifier (cross-cutting)\n\nBoth `GetBeadSnapshots` (`state_graphql.go:49-105`) and `GetAgentSessionsGraphQL` (`state_graphql.go:476-489`) iterate every registered project per request. With N=7343 that's ~7k `os.Stat` + `store.ReadAll` attempts per bead-list or sessions query, mostly against dead paths. This is part of why `ddx-9ce6842a` (beads perf) and `ddx-2ceb02fa` (sessions feed) feel slow in practice even before their own N·M bugs are considered.\n\n## Proposed direction\n\nThree independently-landable fixes:\n\n### Fix A — Test isolation (highest leverage)\n\n- Audit every test that calls `ServerState` / `RegisterProject` / boots a server. Each one must point at an isolated state dir (`t.TempDir()` + `XDG_DATA_HOME` override, or direct `tc.StateDir` injection).\n- Add a linting test: parse `cli/internal/server/**/*_test.go` for constructions of `ServerState` or HTTP server test helpers and assert each uses an isolated state dir. Fail CI otherwise.\n- This is the real fix. The rest is damage mitigation.\n\n### Fix B — Smarter sweep (defense in depth)\n\n- Sweep: any path under `/tmp`, `/private/tmp`, `/var/folders/*/T/` (macOS test temp root), or matching `/tmp/Test*` should be treated as a **candidate test-dir project** and dropped immediately on first sweep that finds it missing — no 24h tombstone.\n- Sweep should also drop entries where `Path` contains any `Test[A-Z]\\w+\\d+` segment (the Go testing convention), regardless of whether the dir currently exists. These are never real projects.\n- Unit test: seed a state with mixed real + fake-test-dir entries, run sweep, assert only the real ones remain.\n\n### Fix C — Manual cleanup CLI\n\n- `ddx server state prune` — read state file, apply Fix B's rules, write backup to `~/.local/share/ddx/server-state.json.bak-\u003ctimestamp\u003e`, write cleaned state, print summary (X dropped, Y kept).\n- Useful for recovery on machines that have already accumulated pollution — like the reporter's. Keep even after Fix A lands.\n- Dry-run flag prints the summary without writing.\n\n## Out of scope\n\n- Moving state to SQLite.\n- Per-user project management UI. (Follow-up if the projects list becomes a real operator surface.)\n- Renaming \"001\" away from a confusing default. The name field is just `filepath.Base(path)`; fixing Fix A makes this question moot.",
+    "acceptance": "**User story:** As a developer running `go test`, my test runs do not leave behind registered projects in my real `~/.local/share/ddx/server-state.json`. When a machine has already been polluted, I can prune it with one command. The server sweep is aggressive enough that obvious test-dir pollution does not survive a restart.\n\n**Acceptance criteria:**\n\n1. **Fix A — test isolation enforced by CI.**\n   - Every existing test that instantiates `ServerState` or boots a server helper is migrated to an isolated state dir. No test writes to `~/.local/share/ddx/server-state.json`.\n   - A lint test (Go or shell) parses `cli/internal/server/**/*_test.go` (and any other directories that wire up `ServerState`) and fails if it finds a construction that does not pass an explicit isolated state path or override `XDG_DATA_HOME` first. Test cases added for both the allowed-pattern and the disallowed-pattern.\n\n2. **Fix B — sweep recognizes test-dir pollution.**\n   - `ServerState.migrate` drops entries whose `Path` matches any of:\n     - prefix `/tmp/`, `/private/tmp/`, `/var/folders/`\n     - regex `/Test[A-Z][A-Za-z0-9_]*\\d+/` anywhere in the path\n   - Missing paths matching these patterns are dropped on first sweep (no 24h tombstone).\n   - Reachable paths matching these patterns are still dropped (they are never real projects — the test dir may exist transiently but is never the user's registered project).\n   - Unit test seeds a fixture state with one real project, one `/tmp/TestFoo123/001` missing, one `/tmp/TestBar456/002` still on disk, and one `/private/tmp/TestMac789/001`; asserts only the real project survives.\n\n3. **Fix C — pruning CLI.**\n   - `ddx server state prune [--dry-run] [--state \u003cpath\u003e]` applies the Fix B rules to an on-disk state file.\n   - Writes `server-state.json.bak-\u003cYYYYMMDDTHHMMSS\u003e` before overwriting.\n   - Prints summary: `Pruned X of Y entries (Z kept)`. Dry-run prints the summary without writing.\n   - Integration test uses a fixture state containing 10 real + 100 fake entries, runs the command, asserts 10 remain and a backup file with exactly 110 entries was written.\n\n4. **Perf amplifier — regression test.**\n   - A test asserts `GetBeadSnapshots` does **not** call `os.Stat` on any project already tombstoned or pattern-filtered. (Implementation detail: sweep on startup + skip tombstoned in the hot loop.)\n   - If Fix A+B are in place, a fresh `go test ./...` run followed by a server restart produces a state file with ≤ 20 projects on a typical dev machine. Asserted via a CI job that runs the tests, starts the server briefly, inspects the state file, and fails if test-dir patterns are present.\n\n5. **Backward compatibility.**\n   - The prune CLI is safe to run on an existing polluted state file. The sweep upgrade is safe on restart — no data loss for real projects.\n   - On upgrade, a note is logged: \"Pruned X phantom test-dir projects from state file.\"\n\n6. **Cross-reference.**\n   - Bead notes link to `ddx-9ce6842a` (beads perf) and `ddx-2ceb02fa` (sessions feed) as the two surfaces whose perf problems are amplified by this bug. Those beads' fixture sizing assumptions were correct for a clean state file; the operator experience will still feel slow on a polluted machine until Fix C is run.",
+    "labels": [
+      "feat-020",
+      "feat-008",
+      "testing",
+      "hygiene",
+      "perf-amplifier"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T20:59:34Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2792459",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T20:59:39.952429066Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T20:59:40.157147961Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T20:59:34.952219293Z",
+      "feature": "FEAT-020"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T205940-cc981ebc",
+    "prompt": ".ddx/executions/20260422T205940-cc981ebc/prompt.md",
+    "manifest": ".ddx/executions/20260422T205940-cc981ebc/manifest.json",
+    "result": ".ddx/executions/20260422T205940-cc981ebc/result.json",
+    "checks": ".ddx/executions/20260422T205940-cc981ebc/checks.json",
+    "usage": ".ddx/executions/20260422T205940-cc981ebc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-15f7ee0b-20260422T205940-cc981ebc"
+  }
+}

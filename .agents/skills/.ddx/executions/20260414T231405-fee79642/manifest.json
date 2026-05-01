@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260414T231405-fee79642",
+  "bead_id": "ddx-1205ca40",
+  "base_rev": "fe64c186c5f0cab596d7d9f75d65c0a2ce329c05",
+  "created_at": "2026-04-14T23:14:05.803875527Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1205ca40",
+    "title": "Stage 2.5: Query resolver — commits with Relay cursor connection",
+    "description": "Implement Query resolver for `commits` with cursor pagination. New file cli/internal/server/graphql/resolver_commits.go. Wire to existing project commits handler. See docs/plan-svelte-migration.md Stage 2 bead #18.",
+    "acceptance": "(1) Integration test verifies cursor pagination. (2) MANUAL: GraphiQL query returns real git log output for the current project, paginates via cursor correctly.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:2",
+      "area:graphql",
+      "kind:migration"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T231405-fee79642",
+    "prompt": ".ddx/executions/20260414T231405-fee79642/prompt.md",
+    "manifest": ".ddx/executions/20260414T231405-fee79642/manifest.json",
+    "result": ".ddx/executions/20260414T231405-fee79642/result.json",
+    "checks": ".ddx/executions/20260414T231405-fee79642/checks.json",
+    "usage": ".ddx/executions/20260414T231405-fee79642/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1205ca40-20260414T231405-fee79642"
+  }
+}

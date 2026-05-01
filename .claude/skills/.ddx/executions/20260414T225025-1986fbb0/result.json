@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-c10c39da",
+  "attempt_id": "20260414T225025-1986fbb0",
+  "base_rev": "ee9b397f84dfab2865c21b213e540746c6393236",
+  "result_rev": "ee9b397f84dfab2865c21b213e540746c6393236",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "stalled: no write activity after 30 consecutive read-only tool calls",
+  "harness": "agent",
+  "model": "qwen/qwen3-coder-next",
+  "session_id": "eb-80191b80",
+  "duration_ms": 334288,
+  "tokens": 1610775,
+  "exit_code": 1,
+  "error": "stalled: no write activity after 30 consecutive read-only tool calls",
+  "execution_dir": ".ddx/executions/20260414T225025-1986fbb0",
+  "prompt_file": ".ddx/executions/20260414T225025-1986fbb0/prompt.md",
+  "manifest_file": ".ddx/executions/20260414T225025-1986fbb0/manifest.json",
+  "result_file": ".ddx/executions/20260414T225025-1986fbb0/result.json",
+  "usage_file": ".ddx/executions/20260414T225025-1986fbb0/usage.json",
+  "started_at": "2026-04-14T22:50:25.258349765Z",
+  "finished_at": "2026-04-14T22:55:59.546824121Z"
+}

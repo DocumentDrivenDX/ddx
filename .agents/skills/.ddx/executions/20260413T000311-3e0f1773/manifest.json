@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260413T000311-3e0f1773",
+  "bead_id": "ddx-cf340665",
+  "base_rev": "0703b65177c2527b0d70f0cdd5f132f9f07ec72d",
+  "created_at": "2026-04-13T00:03:11.97805372Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cf340665",
+    "title": "Design epic-scoped execution and merge workflow",
+    "description": "\u003ccontext-digest\u003e\nReview area: epic execution semantics after the execute-loop dogfood pass. Evidence covers the need to prioritize single tickets ahead of epics, keep open epics out of the ordinary execute-loop launch set, execute one epic sequentially in one persistent worktree, preserve child-ticket history on the epic branch, and land completed epics with a regular merge commit after epic-level merge gates pass.\n\u003c/context-digest\u003e\nDefine epic-scoped execution and merge behavior across DDx queueing, git, server, and UI surfaces.\n\n## Goals\n- Define single-ticket-first queue ordering with open epics excluded from the ordinary execute-loop worker\n- Define one persistent branch/worktree per active epic and sequential child execution inside that worktree\n- Define how child tickets close individually while their commits accumulate on the epic branch\n- Define epic-level merge gates and regular merge-commit landing semantics\n- Define the server/UI worker and queue surfaces needed to supervise epic workers alongside ordinary workers",
+    "acceptance": "The governing docs and queue contain a coherent lane for single-ticket-first queue policy, epic-scoped workers, epic branch/worktree naming, child-bead sequencing, and regular merge-commit landing with epic merge gates",
+    "labels": [
+      "ddx",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:bead",
+      "area:git",
+      "area:server",
+      "area:ui",
+      "area:docs"
+    ],
+    "metadata": {
+      "execution-eligible": true,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T000311-3e0f1773",
+    "prompt": ".ddx/executions/20260413T000311-3e0f1773/prompt.md",
+    "manifest": ".ddx/executions/20260413T000311-3e0f1773/manifest.json",
+    "result": ".ddx/executions/20260413T000311-3e0f1773/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-cf340665-20260413T000311-3e0f1773"
+  }
+}

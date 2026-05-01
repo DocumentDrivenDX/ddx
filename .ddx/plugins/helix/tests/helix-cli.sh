@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export DDX_DISABLE_UPDATE_CHECK=1
+
+# Wrap ddx to filter out the update-available notice that ddx prints to stdout
+# (ddx bug: notice goes to stdout instead of stderr, corrupts JSON/arithmetic).
+ddx() {
+  local _ddx_out _ddx_rc=0
+  _ddx_out="$(command ddx "$@")" || _ddx_rc=$?
+  printf '%s\n' "$_ddx_out" | grep -v '^💡\|^⬆️' || true
+  return "$_ddx_rc"
+}
+export -f ddx
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 test_count=0
 
@@ -395,6 +407,7 @@ run_helix() {
     HELIX_DIRECT_AGENT=1 \
     HELIX_AUTO_ALIGN="${HELIX_AUTO_ALIGN:-0}" \
     DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
     bash "$repo_root/scripts/helix" "$cmd" --quiet "$@"
   )
 }
@@ -410,6 +423,7 @@ run_bead() {
     HELIX_LIBRARY_ROOT="$repo_root/workflows" \
     HELIX_FORCE_EPHEMERAL=1 \
     DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
     ddx bead "$@"
   )
 }
@@ -429,6 +443,7 @@ run_helix_with_env() {
       MOCK_STATE_ROOT="$root/state" \
       HELIX_LIBRARY_ROOT="$repo_root/workflows" \
       "DDX_BEAD_DIR=$root/work/.ddx" \
+      "DDX_DISABLE_UPDATE_CHECK=1" \
       "HELIX_DIRECT_AGENT=1" \
       "$env_name=$env_value" \
       bash "$repo_root/scripts/helix" "$cmd" --quiet "$@"
@@ -457,6 +472,7 @@ run_helix_with_envs() {
       MOCK_STATE_ROOT="$root/state" \
       HELIX_LIBRARY_ROOT="$repo_root/workflows" \
       "DDX_BEAD_DIR=$root/work/.ddx" \
+      "DDX_DISABLE_UPDATE_CHECK=1" \
       "HELIX_DIRECT_AGENT=1" \
       "${env_args[@]}" \
       bash "$repo_root/scripts/helix" "$cmd" --quiet "$@"
@@ -1610,12 +1626,12 @@ MOCK
   chmod +x "$root/bin/codex"
 
   local output
-  output="$(run_helix "$root" run 2>&1)"
+  output="$(run_helix "$root" run --review-threshold 0 2>&1)"
 
   local calls
   calls="$(cat "$root/state/calls.log")"
-  # After implement, review runs (CLEAN). Then check returns STOP, and
-  # auto_align runs alignment before stopping.
+  # After implement, review runs (CLEAN). Then check returns STOP.
+  # review-threshold=0 forces review even when mock makes no file changes.
   assert_eq $'implement\nreview\ncheck' "$calls" "run should review after each successful implementation"
   assert_contains "$output" "post-implementation review" "run should report review step"
   rm -rf "$root"

@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T225025-1986fbb0",
+  "bead_id": "ddx-c10c39da",
+  "base_rev": "ee9b397f84dfab2865c21b213e540746c6393236",
+  "created_at": "2026-04-14T22:50:25.258098057Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c10c39da",
+    "title": "Stage 2.4: Query resolver — documents + docGraph",
+    "description": "Implement Query resolvers for `documents` and `docGraph`. New file cli/internal/server/graphql/resolver_documents.go. Wire to existing docgraph package. See docs/plan-svelte-migration.md Stage 2 bead #17.",
+    "acceptance": "(1) Integration test passes. (2) MANUAL: GraphiQL returns real documents from project's library path; docGraph returns nodes+edges matching GET /api/docs/graph output.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:2",
+      "area:graphql",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T22:50:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-14T22:50:25.017950186Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T225025-1986fbb0",
+    "prompt": ".ddx/executions/20260414T225025-1986fbb0/prompt.md",
+    "manifest": ".ddx/executions/20260414T225025-1986fbb0/manifest.json",
+    "result": ".ddx/executions/20260414T225025-1986fbb0/result.json",
+    "checks": ".ddx/executions/20260414T225025-1986fbb0/checks.json",
+    "usage": ".ddx/executions/20260414T225025-1986fbb0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c10c39da-20260414T225025-1986fbb0"
+  }
+}

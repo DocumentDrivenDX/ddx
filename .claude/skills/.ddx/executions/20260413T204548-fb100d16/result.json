@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-91cc281d",
+  "attempt_id": "20260413T204548-fb100d16",
+  "base_rev": "52042e64d9ebed960305a5ec67b6c8f69da5fd5b",
+  "result_rev": "52042e64d9ebed960305a5ec67b6c8f69da5fd5b",
+  "outcome": "error",
+  "status": "execution_failed",
+  "detail": "agent execution failed",
+  "reason": "agent execution failed",
+  "harness": "claude",
+  "model": "haiku-4.5",
+  "session_id": "eb-b577510c",
+  "duration_ms": 959,
+  "exit_code": 1,
+  "execution_dir": ".ddx/executions/20260413T204548-fb100d16",
+  "prompt_file": ".ddx/executions/20260413T204548-fb100d16/prompt.md",
+  "manifest_file": ".ddx/executions/20260413T204548-fb100d16/manifest.json",
+  "result_file": ".ddx/executions/20260413T204548-fb100d16/result.json",
+  "started_at": "2026-04-13T20:45:48.275231267Z",
+  "finished_at": "2026-04-13T20:45:49.23519438Z",
+  "required_exec_summary": "skipped"
+}

@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260413T204552-924b067d",
+  "bead_id": "ddx-7651506a",
+  "base_rev": "cbf4b38db2194aa169b1169ae5f01cbecad1a8b2",
+  "created_at": "2026-04-13T20:45:53.028898379Z",
+  "requested": {
+    "harness": "claude",
+    "model": "haiku-4.5",
+    "effort": "low",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7651506a",
+    "title": "Worker heartbeat and stalled-bead TTL reclaim for execute-loop",
+    "description": "When an execute-loop worker crashes mid-execution, the bead it was working on is left in status=in_progress indefinitely. The only recovery today is manual: ddx bead unclaim \u003cid\u003e. This blocks the queue from making progress on that bead.\n\nRoot cause: cli/internal/bead/store.go Claim() writes claimed-at (RFC3339) and claimed-pid once at claim time and never updates them. There is no heartbeat, no TTL check, and ReadyExecution() in execute_bead_loop.go skips in_progress beads unconditionally.\n\n## Required changes\n\n### 1. Heartbeat writes (cli/internal/agent/execute_bead_loop.go)\nWhile a bead is in_progress, the owning worker goroutine must periodically update a heartbeat field in bead.Extra. Recommended field name: execute-loop-heartbeat-at (RFC3339). Write interval: every 30s (configurable via HeartbeatInterval on the loop config struct). The heartbeat goroutine runs alongside the agent executor and is cancelled when the bead completes or errors.\n\n### 2. Stale claim detection (cli/internal/bead/store.go or ReadyExecution)\nReadyExecution() currently skips all in_progress beads. Change it to also yield beads where:\n  - status == in_progress\n  - execute-loop-heartbeat-at is set AND is older than HeartbeatTTL (default: 3 * HeartbeatInterval = 90s)\n  - OR claimed-at is older than ClaimTTL (default: 10 minutes) AND execute-loop-heartbeat-at is absent (supports beads claimed before heartbeat was introduced)\n\nWhen a stale bead is yielded, the claiming worker should first reset status to open via a conditional write (matching the stale heartbeat timestamp to guard against a TOCTOU race) before claiming it as its own. If the conditional write fails, skip and continue scanning.\n\n### 3. Stale-claim log entry\nWhen a worker reclaims a stale bead, write a structured log entry to the worker log: { event: 'stale-claim-reclaimed', bead_id, previous_claimed_machine, previous_claimed_pid, previous_heartbeat_at, stale_for_seconds }.\n\n### 4. Config surface\nExpose HeartbeatInterval and ClaimTTL on the loop config. For --local workers, read from .ddx/execute-loop.toml if present. CLI flags: --heartbeat-interval (default 30s) and --claim-ttl (default 10m).\n\n## Key files\n- cli/internal/agent/execute_bead_loop.go — main loop, claim call at line 124, add heartbeat goroutine\n- cli/internal/bead/store.go — Claim() at line 439, ReadyExecution() stale check\n- cli/internal/bead/types.go — StatusInProgress constant, Extra field conventions",
+    "acceptance": "A worker claiming a bead updates execute-loop-heartbeat-at every HeartbeatInterval while the bead is in_progress. A second worker scanning the queue reclaims a bead whose heartbeat is older than HeartbeatTTL and resets it to open before claiming. A bead with no heartbeat and claimed-at older than ClaimTTL is also reclaimable. Conditional write prevents TOCTOU race between two workers both detecting the same stale bead. A structured log entry is written when a stale bead is reclaimed. Existing in_progress beads written before heartbeat was introduced are reclaimable via the ClaimTTL fallback. Tests: (1) worker goroutine killed mid-execution leaves heartbeat timestamp in the past; second worker reclaims it; (2) two workers simultaneously detect a stale bead; only one successfully reclaims it; (3) active worker heartbeat prevents reclaim by another worker.",
+    "labels": [
+      "bug",
+      "execute-loop",
+      "concurrency",
+      "reliability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-13T20:45:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1780"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260413T204552-924b067d",
+    "prompt": ".ddx/executions/20260413T204552-924b067d/prompt.md",
+    "manifest": ".ddx/executions/20260413T204552-924b067d/manifest.json",
+    "result": ".ddx/executions/20260413T204552-924b067d/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-7651506a-20260413T204552-924b067d"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "bead_id": "ddx-4cdb9600",
+  "attempt_id": "20260416T202842-3d9d211b",
+  "base_rev": "01a232f2a34774ce7fb61bec9152e8b91dd81709",
+  "result_rev": "01a232f2a34774ce7fb61bec9152e8b91dd81709",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: native config provider \"agent\": config: unknown provider \"agent\"",
+  "session_id": "eb-8f40806a",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "agent: native config provider \"agent\": config: unknown provider \"agent\"",
+  "execution_dir": ".ddx/executions/20260416T202842-3d9d211b",
+  "prompt_file": ".ddx/executions/20260416T202842-3d9d211b/prompt.md",
+  "manifest_file": ".ddx/executions/20260416T202842-3d9d211b/manifest.json",
+  "result_file": ".ddx/executions/20260416T202842-3d9d211b/result.json",
+  "started_at": "2026-04-16T20:28:42.605979094Z",
+  "finished_at": "2026-04-16T20:28:42.606192891Z"
+}

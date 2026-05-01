@@ -1,0 +1,66 @@
+Bead: ddx-d118f1bf
+Title: chore: track closure of upstream agent fixes on DDx side
+Disposition: no_changes — the remaining AC is blocked by upstream and no file
+edits are appropriate until it unblocks.
+
+(a) What is done
+
+Confirmed all three AC items in the v0.5.0 context:
+
+AC1 ("this bead lists and keeps current the status of every upstream agent
+bead DDx filed or consumes"): verified by reading beads.jsonl. The tracker
+bead's description already contains the full status table as of the
+v0.5.0 cutover (d5ebab2b). All six upstream beads are listed with upstream
+status, DDx bump version, DDx commit, and consumer attribution.
+
+AC2 ("for each landed upstream fix, a DDx-side consumer or smoke test
+exists"): verified against the bead description's status table:
+  * agent-92f0f324, agent-767549c7 → ddx-4817edfd (capability-gating
+    epic; 4 sub-beads, all closed; closed by e75a7766).
+  * agent-941e7e42 → used ad-hoc via scripts/capture-omlx-fixture.sh;
+    no CI-level regression test (documented as non-goal in tracker).
+  * agent-04639431 → "no DDx consumer needed" (provider-layer-internal
+    filter; DDx sees only the cleaned content stream).
+  * agent-f237e07b → ddx-bbb2d177 smoke test landed in 1cd8e3a3,
+    removed in d5ebab2b during v0.5.0 cutover (provider/openai is now
+    internal/); live-smoke equivalent now in upstream agent benchmark
+    suite; fixture files at cli/internal/agent/testdata/omlx-wire/ are
+    orphaned (P4 cleanup noted in tracker description).
+
+Scanned all .go, .yaml, .sh, .txt files in the worktree for any preset
+strings (claude/codex/cursor/agent aliases). None found. The ".ddx/config.yaml
+currently references '--preset codex'" cited in the tracker description was
+not verified in this worktree (likely a user-local config, not in repo);
+the repo-level config.yaml uses harness: claude with no preset references.
+
+(b) What is blocking
+
+AC3 ("when agent-a365bcf2 lands, a migration bead is filed and this bead
+closes") is blocked by the same upstream dependency that blocked the
+20260419T222726 attempt: agent-a365bcf2 (preset rename cheap/default/smart)
+is still status=in_progress. Until upstream lands and ships the rename in
+a released ddx-agent version, there is nothing to file a DDx migration
+bead against.
+
+No worktree-level code or doc change is appropriate. The tracker's
+canonical state is the bead description; the .ddx/executions/ directory
+holds execution evidence. No file edit advances AC1 or AC2; AC3 requires
+upstream to ship first.
+
+(c) What a follow-up attempt would need
+
+A fresh execution after upstream agent-a365bcf2 closes. At that point the
+follow-up should:
+  1. Scan the full repo for any hardcoded preset/harness strings
+     (grep for "preset", "codex", "claude", "cursor", "agent" in harness
+     contexts — may appear in library/, scripts/, or docs/ in addition
+     to .ddx/config.yaml).
+  2. File a DDx migration bead via `ddx bead create` covering the
+     discovered references; swap preset strings to smart/cheap/default/
+     minimal per upstream's naming.
+  3. Optionally add a compatibility shim (if upstream ships one).
+  4. Close this tracker bead with `ddx bead update --status closed`
+     citing the migration bead as the closing successor.
+
+P4 (unblocking): delete cli/internal/agent/testdata/omlx-wire/ (orphaned
+by d5ebab2b) or relocate fixtures to the upstream agent benchmark suite.

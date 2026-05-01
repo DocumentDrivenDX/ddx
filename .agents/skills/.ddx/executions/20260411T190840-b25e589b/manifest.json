@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260411T190840-b25e589b",
+  "bead_id": "ddx-ffda4fb5",
+  "base_rev": "e0056f1f33d531d3539a2dcce9518ec8f88e6fad",
+  "created_at": "2026-04-11T19:08:40.756908364Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ffda4fb5",
+    "title": "Align host+user ddx-server planning stack and test strategy",
+    "description": "\u003ccontext-digest\u003e\nReview area: host+user ddx-server planning stack after the server model evolved beyond the earlier multi-project topology draft. Evidence covers FEAT-002, FEAT-008, FEAT-013, FEAT-014, SD-019, TP-002, the fresh-eyes server review, and the updated requirements for a per-user host daemon, localhost HTTP UI, SQLite-backed runtime/index state, embedded-agent progress visibility, provider dashboarding, replay-backed fixtures, and Playwright coverage for every new UI surface.\n\u003c/context-digest\u003e\nUpdate the governing server planning docs so they describe the current intended host+user ddx-server model before follow-on server design and implementation beads continue.\n\n## Goals\n- Reconcile FEAT-002, FEAT-008, FEAT-013, FEAT-014, SD-019, and TP-002 around a single host+user ddx-server instance with explicit project registry, worker management boundaries, and queue semantics\n- Define the split between git-backed project truth, tracked execution evidence, and host-local runtime/index state backed by an embedded database\n- Define the current transport/security model: localhost unauthenticated HTTP for UI/API now, explicit future transport/auth evolution later\n- Add the embedded-agent progress, provider dashboard, replay-backed fixture, and Playwright coverage requirements to the governed server plan\n- Make the scheduling boundary explicit: server may allocate workers across projects, but bead ordering remains owned by each project queue\n\n## Boundaries\n- Keep Axon and multi-host service-backed topology as later-stage work\n- Do not reopen the already-shipped single-project execute-bead loop contract except where the new server plan must reference it",
+    "acceptance": "FEAT-002, FEAT-008, FEAT-013, FEAT-014, SD-019, and TP-002 all describe the same host+user ddx-server model, including runtime/index storage, worker boundaries, provider dashboarding, replay-backed fixtures, and mandatory Playwright coverage for new UI surfaces",
+    "parent": "ddx-8b6cd40e",
+    "labels": [
+      "helix",
+      "phase:planning",
+      "kind:architecture",
+      "area:api",
+      "area:agent",
+      "area:ui",
+      "area:docs"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:20:29.735504702Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "timeout after 5m0s\nresult_rev=95c327abb0ada2a2debd00615b0b37876a9dfc07\nbase_rev=95c327abb0ada2a2debd00615b0b37876a9dfc07\nretry_after=2026-04-11T08:12:10Z",
+          "created_at": "2026-04-11T02:12:10.915144131Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "rebase failed\npreserve_ref=refs/ddx/iterations/ddx-ffda4fb5/20260411T171014Z-18eeed034328\nresult_rev=16a1d6564f0f1d4b56c8a47c1ac5bb005387467b\nbase_rev=18eeed03432889a6f78b700aaa4fbe878baecd7b",
+          "created_at": "2026-04-11T17:10:14.357435977Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "land_conflict"
+        }
+      ],
+      "execution-eligible": true,
+      "spec-id": "FEAT-002"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-002",
+      "path": "docs/helix/01-frame/features/FEAT-002-server.md",
+      "title": "Feature: DDx Server"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260411T190840-b25e589b",
+    "prompt": ".ddx/executions/20260411T190840-b25e589b/prompt.md",
+    "manifest": ".ddx/executions/20260411T190840-b25e589b/manifest.json",
+    "result": ".ddx/executions/20260411T190840-b25e589b/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-ffda4fb5-20260411T190840-b25e589b"
+  }
+}

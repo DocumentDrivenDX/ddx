@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260421T163240-eb3cb31f",
+  "evaluated_at": "2026-04-21T16:59:27.972677045Z",
+  "summary": "pass",
+  "results": [
+    {
+      "definition_id": "exec.FEAT-006.go-build",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass"
+    },
+    {
+      "definition_id": "exec.FEAT-006.execute-bead-cli-regressions",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass",
+      "stdout": "ok  \tgithub.com/DocumentDrivenDX/ddx/cmd\t0.056s"
+    },
+    {
+      "definition_id": "EXEC-GO-TEST-AGENT",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass",
+      "stdout": "ok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent\t42.049s"
+    },
+    {
+      "definition_id": "exec.FEAT-011.skills-validation",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass",
+      "stdout": "validated 2 skill files"
+    }
+  ]
+}

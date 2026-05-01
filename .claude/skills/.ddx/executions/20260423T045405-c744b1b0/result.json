@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, `handleWorkerTerminal`: on failure phases, the function calls `refreshPlugins()` before `clearInFlight()` and `workerFailures.set(...)`. Preserve the stored `dispatchSnapshots` state for that plugin on failure, or skip/apply refresh only for success phases, so a failed worker cannot make the card appear successfully updated."
+}

@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "`cli/internal/server/state_graphql.go` / `GetWorkersGraphQL` is not changed in the diff, so AC1’s id-to-path root-cause fix is not implemented or evidenced.\n`cli/internal/server/*test.go` has no diff adding the required two-project `workersByProject` regression coverage, global `workers` assertion, or unknown-project assertion for AC2.\nNo worker-record compatibility test is added for AC3, and the diff does not show whether Option 1 or Option 2 was chosen.\n`cli/internal/server/frontend/e2e/*` has no diff adding the required Drain queue to Workers tab Playwright flow or second-project isolation check for AC4.\nNo evidence is added for AC5 that global workers, worker detail loading, or live-progress row patching still work.\nNo note or tracker/documentation update cross-references `ddx-69789664` as depending on this bead for AC6."
+}

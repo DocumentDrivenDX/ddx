@@ -1,0 +1,28 @@
+{
+  "attempt_id": "20260411T172131-58e51afe",
+  "bead_id": "ddx-dae12e46",
+  "base_rev": "892567606f4ed55b0ae4f343271c416d703cbf7f",
+  "created_at": "2026-04-11T17:21:31.744014545Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dae12e46",
+    "title": "Materialize local skill links correctly inside execute-bead worktrees",
+    "description": "Managed execute-bead worktrees still emit repeated skill-loader errors for missing helix skill symlink targets under .agents/skills, which pollutes stderr and can change harness behavior. The execution worktree should preserve valid local skill resolution or suppress broken project-local links deterministically.",
+    "acceptance": "execute-bead worktrees no longer emit repeated failed-to-stat errors for project-local skill symlinks, and local skills resolve consistently inside managed worktrees",
+    "labels": [
+      "helix",
+      "area:exec",
+      "area:skills",
+      "kind:correctness"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260411T172131-58e51afe",
+    "prompt": ".ddx/executions/20260411T172131-58e51afe/prompt.md",
+    "manifest": ".ddx/executions/20260411T172131-58e51afe/manifest.json",
+    "result": ".ddx/executions/20260411T172131-58e51afe/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-dae12e46-20260411T172131-58e51afe"
+  }
+}

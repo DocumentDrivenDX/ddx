@@ -1,0 +1,9 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1776827651, "env": {"SHELL": null, "TERM": null}}
+[0.003161, "o", "\r\n$ ddx search workflow\r\n"]
+[0.525059, "o", "NAME"]
+[0.525239, "o", "   VERSION  TYPE      DESCRIPTION\r\nhelix  0.3.2    workflow  Supervisory autopilot for AI-assisted software delivery\r\n"]
+[1.527606, "o", "\r\n$ ddx install helix\r\n"]
+[2.210713, "o", "Installing helix 0.3.3 from https://github.com/DocumentDrivenDX/helix...\r\n"]
+[2.947367, "o", "Installed helix 0.3.3 (522 file(s))\r\n"]
+[3.98883, "o", "\r\n$ ddx installed\r\n"]
+[4.513962, "o", "NAME   VERSION  TYPE      STATUS  INSTALLED\r\nddx    0.4.6    plugin    ok      2026-04-22\r\nhelix  0.3.3    workflow  ok      2026-04-22\r\n"]

@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260411T222147-ba70466e",
+  "bead_id": "ddx-cb621399",
+  "base_rev": "a0e953dfdaeb581d532e84c934ad923d5f9513b8",
+  "created_at": "2026-04-11T22:21:47.787708481Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cb621399",
+    "title": "Specify ddx server launchd install contract for macOS",
+    "description": "Specify the macOS launchd lifecycle for ddx server so the service-manager contract is portable even though only the Linux implementation ships now.",
+    "acceptance": "The server specs define the launchd plist path, working directory, logs/state locations, environment overrides, and lifecycle expectations for future macOS implementation",
+    "parent": "ddx-8b6cd40e",
+    "labels": [
+      "helix",
+      "area:server",
+      "area:ops",
+      "area:macos",
+      "kind:architecture"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260411T222147-ba70466e",
+    "prompt": ".ddx/executions/20260411T222147-ba70466e/prompt.md",
+    "manifest": ".ddx/executions/20260411T222147-ba70466e/manifest.json",
+    "result": ".ddx/executions/20260411T222147-ba70466e/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-cb621399-20260411T222147-ba70466e"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "attempt_id": "20260413T214026-c2bc0e97",
+  "bead_id": "ddx-f5337613",
+  "base_rev": "ac7c0db9b9646b7c796c760d60c326b4d472e14b",
+  "created_at": "2026-04-13T21:40:26.855805377Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f5337613",
+    "title": "Add structured embedded-agent progress output for workers and UI",
+    "description": "\u003ccontext-digest\u003e\nReview area: embedded ddx-agent runtime observability and live worker progress. Evidence covers FEAT-006 execution/evidence ownership, FEAT-002 server activity surfaces, FEAT-008 web UI expectations, execute-loop worker supervision, and the need for DDx-owned progress telemetry beyond coarse session logs when DDx runs the embedded harness.\n\u003c/context-digest\u003e\nDefine the progress-event contract for managed embedded-agent runs so DDx can surface meaningful live execution status in the CLI and server/UI.\n\n## Goals\n- Define structured phase/heartbeat output for embedded-agent runs (queueing, launch, running, post-checks, landing, preserved, done)\n- Define the minimal per-event fields needed for operator visibility and later reporting: worker/project/bead/run identity, phase, elapsed/heartbeat timing, harness/provider/model/profile, and token/cost deltas when available\n- Clarify which live progress artifacts remain runtime-only and which summaries/indexes are exposed through DDx-owned APIs and UI surfaces\n- Keep provider-native transcript ownership external; DDx progress output should be normalized runtime telemetry, not transcript duplication\n\n## Required spec work\n- Update FEAT-006, FEAT-002, and FEAT-008 so embedded-agent progress visibility is an explicit contract rather than an implementation detail\n- Clarify how progress events relate to tracked execution artifacts, session logs, and server-managed worker state\n\n## Required implementation planning\n- Define the server/API/UI read model for live worker progress and recent phase history\n- Define how CLI and UI consume the same structured progress feed without introducing hidden workflow policy",
+    "acceptance": "FEAT-006, FEAT-002, and FEAT-008 define a structured embedded-agent progress contract for managed runs; the contract names the required phases and fields, distinguishes runtime-only progress from tracked execution evidence, and defines one shared read model for CLI and server/UI consumers",
+    "parent": "ddx-8b6cd40e",
+    "labels": [
+      "helix",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:api",
+      "area:ui",
+      "area:docs"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:19:58.396354609Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T214026-c2bc0e97",
+    "prompt": ".ddx/executions/20260413T214026-c2bc0e97/prompt.md",
+    "manifest": ".ddx/executions/20260413T214026-c2bc0e97/manifest.json",
+    "result": ".ddx/executions/20260413T214026-c2bc0e97/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-f5337613-20260413T214026-c2bc0e97"
+  }
+}

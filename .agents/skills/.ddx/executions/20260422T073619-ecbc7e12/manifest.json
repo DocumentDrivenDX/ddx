@@ -1,0 +1,111 @@
+{
+  "attempt_id": "20260422T073619-ecbc7e12",
+  "bead_id": "ddx-85dc2ab8",
+  "base_rev": "0034b299d9fa877821ec1b4a16818b40f676a89c",
+  "created_at": "2026-04-22T07:36:19.880584783Z",
+  "requested": {
+    "harness": "gemini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-85dc2ab8",
+    "title": "FEAT-008 test fixture fix: FILTER_BEADS needs P0 bead for default-sort test",
+    "description": "US-082g.a in beads.spec.ts expects rows.first() to have data-priority=0 (or matches /[23]/), but FILTER_BEADS fixture contains priorities 1,2,3. Fix the fixture by adding a P0 bead OR adjusting the test expectation to match the fixture range. I wrote both so this is my bug. Prefer: add a P0 bead to FILTER_BEADS so default priority-asc sort surfaces it first.",
+    "acceptance": "FILTER_BEADS includes at least one priority=0 bead; US-082g.a passes the default-sort assertion.",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "test-fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T07:36:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T04:27:25.420655957Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260422T041930-8b64e9a1\",\"harness\":\"codex\",\"input_tokens\":3531379,\"output_tokens\":17320,\"total_tokens\":3548699,\"cost_usd\":0,\"duration_ms\":474834,\"exit_code\":0}",
+          "created_at": "2026-04-22T04:27:25.489327691Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=3548699"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"fallback_chain\":[],\"resolved_model\":\"\",\"resolved_provider\":\"codex\"}",
+          "created_at": "2026-04-22T04:27:28.104052392Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "`FILTER_BEADS` fixture is not changed in the provided diff; no priority `0` bead is added.\n`beads.spec.ts` / `US-082g.a` is not changed or evidenced, so the default-sort assertion remains unevaluated.",
+          "created_at": "2026-04-22T04:27:37.268785129Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-22T04:27:37.339506694Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\n`FILTER_BEADS` fixture is not changed in the provided diff; no priority `0` bead is added.\n`beads.spec.ts` / `US-082g.a` is not changed or evidenced, so the default-sort assertion remains unevaluated.\nresult_rev=cc6136a906082fdb88c86bf8eca6c0693b7768c1\nbase_rev=d736ea1faa9c9f1e4fc4909cc15f1b65fe72fc6d",
+          "created_at": "2026-04-22T04:27:37.393376982Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"openrouter\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T07:36:19.248894787Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=openrouter model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260422T073615-7a57e336\",\"harness\":\"agent\",\"provider\":\"openrouter\",\"model\":\"qwen3.5-27b\",\"input_tokens\":1514,\"output_tokens\":228,\"total_tokens\":1742,\"cost_usd\":0.00065091,\"duration_ms\":3211,\"exit_code\":0}",
+          "created_at": "2026-04-22T07:36:19.313990868Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1742 cost_usd=0.0007 model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=agent model=qwen3.5-27b probe=ok\nno_changes",
+          "created_at": "2026-04-22T07:36:19.4970055Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T07:36:15.331115064Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T073619-ecbc7e12",
+    "prompt": ".ddx/executions/20260422T073619-ecbc7e12/prompt.md",
+    "manifest": ".ddx/executions/20260422T073619-ecbc7e12/manifest.json",
+    "result": ".ddx/executions/20260422T073619-ecbc7e12/result.json",
+    "checks": ".ddx/executions/20260422T073619-ecbc7e12/checks.json",
+    "usage": ".ddx/executions/20260422T073619-ecbc7e12/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-85dc2ab8-20260422T073619-ecbc7e12"
+  }
+}

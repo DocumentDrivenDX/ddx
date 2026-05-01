@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260415T055750-15712870",
+  "bead_id": "ddx-dc231144",
+  "base_rev": "b8c2395c8fb2885c140e4d1699a9815700fe2f17",
+  "created_at": "2026-04-15T05:57:50.787035617Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dc231144",
+    "title": "exec: tier-based auto-escalation driven by resource discovery",
+    "description": "The CLI should not require the user to enumerate harness/model pairs. The tool already knows which tiers exist (model-catalog.yaml: cheap/standard/smart) and which harnesses are configured. Given a live probe of each provider's health at attempt time, the loop can auto-escalate on its own.\n\n## Principle\n\nDiscovery over configuration. The user shouldn't write a fallback chain — the tool should figure it out.\n\n## Default policy (no flags)\n\n- Start at **cheap** tier, execute the bead\n- If merge succeeds AND post-review (gap #1) APPROVES → close\n- If anything fails (execution_failed, no_changes after N retries, post_run_check_failed, REQUEST_CHANGES from review) → escalate one tier and retry\n- Chain: cheap → standard → smart → exhausted (preserve, flag for human)\n- Review agent runs at max(impl_tier+1, smart). Never review cheap with cheap.\n\n## Resource discovery at attempt time\n\n- Before picking a concrete harness/model for a tier, probe each candidate provider (local inference host, API key validity, network reachability)\n- If provider returns 502 / 500 / timeout / auth-rejected within a short budget, mark it unhealthy with a cooldown and try the next provider in the tier\n- If every provider in a tier is unhealthy, skip the tier and escalate\n- Per-provider health state is process-local and visible via a new 'ddx agent providers' sub-command (ddx-09ea1884 Visibility 3)\n\n## Rare overrides\n\n- --min-tier standard (skip cheap — useful for hard beads known to need it)\n- --max-tier standard (never reach smart — cost control)\n- --harness \u003cname\u003e / --model \u003cname\u003e (debug override; disables escalation)\n\n## Surface\n\nDefault invocation becomes:\n\n  ddx agent execute-loop --once\n\nEverything else is implicit. Review, escalation, and resource discovery are on-by-default.\n\n## Events\n\nEach attempt appends an execute-bead event: { harness, model, tier, provider, probe_result, attempt_status, review_status }. The event stream shows exactly why a tier/provider was picked or skipped.\n\n## Context\n\nObserved during axon ADR-018 loop:\n- bragi was down (502) — I manually probed with curl and switched to vidar-coder. Tool should do this.\n- qwen3-coder-next merged but opus review rejected — I manually re-invoked with sonnet. Tool should escalate automatically.\n- Resulting CLI invocation in my notes was too complex (—-fallback-chain a/b,c/d,e/f --post-review g/h). User feedback: too many knobs. Reach for a default that just works.\n\n## Acceptance criteria replaced with discovery-driven ones (see accept field)",
+    "acceptance": "- [ ] execute-loop with zero flags escalates across cheap → standard → smart on failure\n- [ ] Review agent auto-selects a tier \u003e= impl tier, defaulting to smart\n- [ ] Provider health probe runs at attempt time; unhealthy providers skip cleanly with cooldown\n- [ ] Each attempt records tier + provider + probe_result + outcome on the bead\n- [ ] Integration test: cheap provider 502 + standard succeeds → bead closes with escalation trail visible\n- [ ] --min-tier / --max-tier overrides work and are documented\n- [ ] --harness / --model debug overrides disable escalation\n- [ ] Zero-flag 'ddx agent execute-loop' is the documented happy path",
+    "parent": "ddx-32b3008e",
+    "labels": [
+      "helix",
+      "area:agent",
+      "area:exec",
+      "kind:feature",
+      "gap:review-loop"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T05:57:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "events": [
+        {
+          "actor": "audit-reviewer",
+          "body": "This bead is one of the review-loop primitives the meta-epic depends on. See ddx-4b59b816 for the full scope.",
+          "created_at": "2026-04-15T03:47:43.087833799Z",
+          "kind": "note",
+          "source": "cost-tiered work meta-epic cross-link 2026-04-15",
+          "summary": "Part of cost-tiered execution + measurement meta-epic ddx-4b59b816 — maximize closed-bead throughput per dollar."
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-15T05:57:50.561104711Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T055750-15712870",
+    "prompt": ".ddx/executions/20260415T055750-15712870/prompt.md",
+    "manifest": ".ddx/executions/20260415T055750-15712870/manifest.json",
+    "result": ".ddx/executions/20260415T055750-15712870/result.json",
+    "checks": ".ddx/executions/20260415T055750-15712870/checks.json",
+    "usage": ".ddx/executions/20260415T055750-15712870/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dc231144-20260415T055750-15712870"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "attempt_id": "20260422T075539-b32f8777",
+  "bead_id": "ddx-84daf44b",
+  "base_rev": "42325e1dd1139de4556263c147737337c616dfbd",
+  "created_at": "2026-04-22T07:55:40.015804787Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-84daf44b",
+    "title": "FEAT-008 P1: shared primitives (ConfirmDialog, TypedConfirmDialog, Tooltip)",
+    "description": "Extract shared UI primitives used by 5+ callers: (a) \u003cConfirmDialog\u003e — action label, destructive flag, summary slot, focus return on close, Escape cancel, aria-label = action label; (b) \u003cTypedConfirmDialog extends ConfirmDialog\u003e — gates confirm until user types expectedText (bead id / plugin name); (c) \u003cTooltip\u003e — bits-ui wrapper. CRITICAL: for disabled-button tooltip, wrap the button in a \u003cspan\u003e that owns the hover handler (disabled buttons don't fire mouse events). Keep native \u003cselect\u003e for tier/role/project/model fields (Playwright .selectOption only works on native select). Use bits-ui Command for palette (Phase 4).",
+    "acceptance": "Primitives exist in src/lib/components/; unit-test smoke passes; no consumer wired yet.",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "phase-1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T07:55:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T07:55:39.409324459Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260422T075513-aa990c6e\",\"harness\":\"agent\",\"provider\":\"bragi\",\"model\":\"qwen3.5-27b\",\"input_tokens\":1497,\"output_tokens\":92,\"total_tokens\":1589,\"cost_usd\":0,\"duration_ms\":25229,\"exit_code\":0}",
+          "created_at": "2026-04-22T07:55:39.465102405Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1589 model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=agent model=qwen3.5-27b probe=ok\nno_changes",
+          "created_at": "2026-04-22T07:55:39.647763991Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T07:55:13.564198967Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T075539-b32f8777",
+    "prompt": ".ddx/executions/20260422T075539-b32f8777/prompt.md",
+    "manifest": ".ddx/executions/20260422T075539-b32f8777/manifest.json",
+    "result": ".ddx/executions/20260422T075539-b32f8777/result.json",
+    "checks": ".ddx/executions/20260422T075539-b32f8777/checks.json",
+    "usage": ".ddx/executions/20260422T075539-b32f8777/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-84daf44b-20260422T075539-b32f8777"
+  }
+}

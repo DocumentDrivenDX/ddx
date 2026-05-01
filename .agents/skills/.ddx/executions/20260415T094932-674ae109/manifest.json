@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T094932-674ae109",
+  "bead_id": "ddx-3a07cfe2",
+  "base_rev": "e544e7b8e3dc01953a34ecab1aa033f214b51627",
+  "created_at": "2026-04-15T09:49:32.616368155Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3a07cfe2",
+    "title": "Stage 4.12: Workers page — list + live log via workerProgress subscription (LARGE)",
+    "description": "New files: src/routes/nodes/[nodeId]/workers/+page.svelte, src/routes/nodes/[nodeId]/workers/[workerId]/+page.svelte, worker.gql, workerProgress.gql. List populates from workers query. Click opens detail with live log tail via subscription. See docs/plan-svelte-migration.md Stage 4 bead #46.",
+    "acceptance": "(1) MANUAL: start a worker via `ddx agent execute-loop --once`. (2) Open its detail page in the UI. (3) See log lines stream in real time as the agent runs. (4) Record at least 5 streamed log lines in the completion note.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T09:49:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T09:49:32.390937558Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T094932-674ae109",
+    "prompt": ".ddx/executions/20260415T094932-674ae109/prompt.md",
+    "manifest": ".ddx/executions/20260415T094932-674ae109/manifest.json",
+    "result": ".ddx/executions/20260415T094932-674ae109/result.json",
+    "checks": ".ddx/executions/20260415T094932-674ae109/checks.json",
+    "usage": ".ddx/executions/20260415T094932-674ae109/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3a07cfe2-20260415T094932-674ae109"
+  }
+}

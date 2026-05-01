@@ -1,0 +1,92 @@
+# Memory MCP Server Definition
+name: memory
+description: "Persistent memory and context retention using Mem0"
+category: utility
+author: mem0
+version: 1.0.0
+tags: [memory, context, persistence, ai, conversation, recall]
+
+command:
+  executable: npx
+  args: ["-y", "@mem0/mcp"]
+
+environment:
+  - name: MEM0_API_KEY
+    description: "Mem0 API key for cloud-based memory storage"
+    required: true
+    sensitive: true
+    validation: "^[a-zA-Z0-9_-]+$"
+    example: "mem0_1234567890abcdef"
+
+documentation:
+  setup: |
+    1. Sign up for a Mem0 account at https://mem0.ai
+    2. Generate an API key from your dashboard
+    3. Configure the MEM0_API_KEY environment variable
+    4. The server will store and retrieve memories across sessions
+    5. Memories are associated with user IDs for personalization
+  features:
+    - "Store and retrieve long-term memories"
+    - "User-specific context retention"
+    - "Semantic search across stored memories"
+    - "Cross-session conversation continuity"
+    - "Memory metadata and tagging"
+    - "Automatic memory organization"
+  examples:
+    - "Remember user preferences and settings"
+    - "Recall previous project discussions"
+    - "Store important facts and context"
+    - "Maintain conversation history"
+    - "Search for specific memories by content"
+  security_notes: |
+    - Memories are stored in Mem0's cloud infrastructure
+    - API key provides access to your memory data
+    - Consider data sensitivity when storing memories
+    - Review Mem0's privacy policy for data handling
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: required
+  network_access: required
+  file_access: none
+  data_handling: "Stores conversation data and memories in Mem0 cloud service"
+  warnings:
+    - "Sends conversation data to external Mem0 service"
+    - "Requires internet connection for memory operations"
+    - "API key provides access to stored memories"
+  recommendations:
+    - "Review data sensitivity before enabling"
+    - "Keep API key secure and rotate regularly"
+    - "Understand Mem0's data retention policies"
+    - "Consider local alternatives for sensitive data"
+
+verification:
+  test_command: "Store and retrieve a test memory"
+  expected_response: "Memory operations successful"
+
+configuration_example: |
+  {
+    "mcpServers": {
+      "memory": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@mem0/mcp"
+        ],
+        "env": {
+          "MEM0_API_KEY": "your_mem0_api_key_here"
+        }
+      }
+    }
+  }
+
+links:
+  homepage: https://mem0.ai
+  documentation: https://mem0.ai/docs
+  signup: https://mem0.ai/signup
+  issues: https://github.com/mem0ai/mem0/issues

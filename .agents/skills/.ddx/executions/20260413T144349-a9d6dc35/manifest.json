@@ -1,0 +1,54 @@
+{
+  "attempt_id": "20260413T144349-a9d6dc35",
+  "bead_id": "ddx-c2933aa1",
+  "base_rev": "a6e0873ffe8bde8f6198b98e801b5589d3761eec",
+  "created_at": "2026-04-13T14:43:49.568982824Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c2933aa1",
+    "title": "Harden bead tracker with fuzz, property, and chaos coverage",
+    "description": "\u003ccontext-digest\u003e\nReview area: bead tracker durability and corruption resistance. Evidence covers the existing concurrency/chaos tests in cli/internal/bead/chaos_test.go, the recent duplicate-row/latest-state bugs, and the need to aggressively validate JSONL tracker safety under randomized updates, crashes, and malformed/interleaved state.\n\u003c/context-digest\u003e\nAdd deeper destructive test coverage for the bead tracker so we can trust it under queue-worker churn.\n\n## Scope\n- Add property/state-machine style tests for bead CRUD, deps, claim/unclaim, close/reopen, and evidence append invariants\n- Add fuzz coverage for JSONL parsing, duplicate-row folding, and tracker round-trip safety\n- Expand chaos tests to mix concurrent update/claim/close/create/evidence operations against the same store\n- Verify the tracker never returns corrupt JSONL, duplicate live IDs, or impossible state transitions after randomized operation streams\n- Add any minimal repair/canonicalization assertions needed to prove the live view remains one current state per bead ID\n\n## Boundaries\n- Focus on the tracker/store and queue derivation surfaces, not broader agent execution behavior\n- Prefer deterministic seeds and reproducible shrinkable failures where possible",
+    "acceptance": "The bead tracker has fuzz/property/chaos coverage that hammers CRUD, deps, claims, closes, evidence appends, malformed JSONL, and duplicate-row repair paths; randomized runs preserve core invariants (parseable file, one live row per bead ID, valid statuses/deps, deterministic ready/blocked behavior); and the new coverage is easy to rerun locally when tracker bugs are suspected",
+    "labels": [
+      "helix",
+      "phase:build",
+      "kind:implementation",
+      "area:bead",
+      "area:cli",
+      "area:testing"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-13T14:43:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3685715",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "cancelled\nresult_rev=dfad457deaa5c7af5e306b4c34efb5594ab2210f\nbase_rev=dfad457deaa5c7af5e306b4c34efb5594ab2210f\nretry_after=2026-04-11T09:26:39Z",
+          "created_at": "2026-04-11T03:26:39.170113401Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "spec-id": "FEAT-004"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-004",
+      "path": "docs/helix/01-frame/features/FEAT-004-beads.md",
+      "title": "Feature: Beads (Work Item Tracker)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T144349-a9d6dc35",
+    "prompt": ".ddx/executions/20260413T144349-a9d6dc35/prompt.md",
+    "manifest": ".ddx/executions/20260413T144349-a9d6dc35/manifest.json",
+    "result": ".ddx/executions/20260413T144349-a9d6dc35/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-c2933aa1-20260413T144349-a9d6dc35"
+  }
+}

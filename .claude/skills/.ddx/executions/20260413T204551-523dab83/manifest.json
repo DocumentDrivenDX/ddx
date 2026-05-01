@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260413T204551-523dab83",
+  "bead_id": "ddx-3315dce2",
+  "base_rev": "0cef4c38eda685d3315238e77e85b358af9fe0b9",
+  "created_at": "2026-04-13T20:45:51.520896712Z",
+  "requested": {
+    "harness": "claude",
+    "model": "haiku-4.5",
+    "effort": "low",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3315dce2",
+    "title": "execute-loop: bead claiming is not atomic — concurrent workers race on the same bead",
+    "description": "When two execute-loop workers scan the ready queue simultaneously, both can claim the same bead before either has committed its in_progress status, resulting in duplicated work or merge conflicts.\n\nObserved: started two execute-loop --local --harness agent workers (vidar and bragi) against the same project. Both immediately began working on the same bead in separate worktrees. Their output files were in near-perfect lockstep (131 vs 127 lines), indicating they had independently claimed and started executing the same item. One was killed manually to stop the waste.\n\nRoot cause hypothesis: the claim operation in execute-loop reads the ready queue, selects the next open bead, then writes its status to in_progress as two separate steps. If two workers interleave between the read and the write, both see the bead as open and both proceed to execute it.\n\nRequired fix: bead claiming must be an atomic compare-and-swap. The worker should attempt to transition bead status from open → in_progress using a conditional write that fails if the status is no longer open at write time (optimistic locking). If the claim fails, the worker should re-scan for the next available bead rather than proceeding.\n\nFor local workers (beads.jsonl on disk), a file-level lock around the read-claim-write cycle is sufficient. For server-submitted workers, the DDx server should serialize claims.\n\nAdditional issue: when a worker is killed mid-execution, the bead may be left in_progress indefinitely. The loop should support a claim timeout or heartbeat so abandoned in_progress beads become reclaimable after a TTL.",
+    "acceptance": "Two execute-loop --local workers started simultaneously against the same project never execute the same bead; the second worker to attempt a claim on an already-claimed bead skips it and picks the next open one; a bead left in_progress by a crashed worker becomes reclaimable after a configurable TTL (default: 10 minutes)",
+    "labels": [
+      "bug",
+      "execute-loop",
+      "concurrency"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-13T20:45:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1620"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260413T204551-523dab83",
+    "prompt": ".ddx/executions/20260413T204551-523dab83/prompt.md",
+    "manifest": ".ddx/executions/20260413T204551-523dab83/manifest.json",
+    "result": ".ddx/executions/20260413T204551-523dab83/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-3315dce2-20260413T204551-523dab83"
+  }
+}

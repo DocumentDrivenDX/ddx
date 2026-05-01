@@ -1,0 +1,7 @@
+version: "2.0"
+repository:
+  url: "https://github.com/override/repo"
+  branch: "feature"
+variables:
+  all_override: "override_value"
+  partial_override: "override_value"

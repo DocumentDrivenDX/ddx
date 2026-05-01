@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260417T182640-ecc80289",
+  "bead_id": "ddx-70876d2b",
+  "base_rev": "779c9c696ee17abff5b58ad948effab484a86113",
+  "created_at": "2026-04-17T18:26:41.093894467Z",
+  "requested": {
+    "harness": "lmstudio",
+    "model": "qwen3.6-35b-a3b",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-70876d2b",
+    "title": "Route --model to live LM Studio providers via discovery",
+    "description": "When --model names a model not in the static catalog (e.g. qwen3.6-35b-a3b),\nNormalizeRouteRequest treats it as an exact ModelPin. The candidate scoring\nthen picks whichever harness wins on profile — typically claude — which\ncannot serve local models. The user must specify --harness lmstudio to\nwork around it.\n\nThe information needed to route correctly already exists: ddx agent check\ndiscovers live LM Studio providers (vidar, bragi) and their advertised\nmodel lists. But BuildCandidatePlans / evaluateCandidate never consults\nlive provider discovery when scoring candidates for a ModelPin. A candidate\nwith IsHTTPProvider=true whose discovered model list includes the pinned\nmodel should score as viable; candidates that cannot serve the pin should\nbe rejected.\n\nThis is the model→provider discovery gap referenced in ddx-1cfce460. The\nPATH fix landed but the discovery wiring did not.",
+    "acceptance": "1. ddx work --model qwen3.6-35b-a3b routes to the lmstudio harness\n   (or agent harness backed by a provider advertising the model) without\n   requiring --harness or --provider.\n2. When no discovered provider advertises the pinned model, routing falls\n   back to the current behavior (exact pin on best-scoring harness).\n3. Unit test: given a discovered provider advertising model X and a\n   RouteRequest with ModelPin=X, the lmstudio candidate is viable and\n   ranked above harnesses that cannot serve the model.\n4. cd cli \u0026\u0026 go test ./... \u0026\u0026 go build .",
+    "metadata": {
+      "claimed-at": "2026-04-17T18:26:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1351391",
+      "execute-loop-heartbeat-at": "2026-04-17T18:26:40.769294948Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260417T182640-ecc80289",
+    "prompt": ".ddx/executions/20260417T182640-ecc80289/prompt.md",
+    "manifest": ".ddx/executions/20260417T182640-ecc80289/manifest.json",
+    "result": ".ddx/executions/20260417T182640-ecc80289/result.json",
+    "checks": ".ddx/executions/20260417T182640-ecc80289/checks.json",
+    "usage": ".ddx/executions/20260417T182640-ecc80289/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-70876d2b-20260417T182640-ecc80289"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T065358-87f6ae04",
+  "bead_id": "ddx-5611bb7f",
+  "base_rev": "b7def8040b0807859343197f0cb7925402cebad7",
+  "created_at": "2026-04-15T06:53:58.237084289Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5611bb7f",
+    "title": "Stage 3.7: update Go //go:embed to serve SvelteKit build",
+    "description": "Update cli/internal/server/embed.go to `//go:embed all:frontend/build`. Update static file handler to serve frontend/build/*. Use SvelteKit adapter-static with `fallback: 'index.html'` so deep links resolve to the SPA shell (SvelteKit client handles routing). See docs/plan-svelte-migration.md Stage 3 bead #33.",
+    "acceptance": "(1) `make build` embeds the SvelteKit build/ output. (2) MANUAL: `./cli/build/ddx server` running locally serves the layout at http://127.0.0.1:7743/. (3) MANUAL: loading http://127.0.0.1:7743/nodes/abc/projects/def/beads directly returns the SvelteKit shell (browser dev tools show index.html returned, then Svelte router renders the page).",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:3",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T06:53:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T06:53:57.998196337Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T065358-87f6ae04",
+    "prompt": ".ddx/executions/20260415T065358-87f6ae04/prompt.md",
+    "manifest": ".ddx/executions/20260415T065358-87f6ae04/manifest.json",
+    "result": ".ddx/executions/20260415T065358-87f6ae04/result.json",
+    "checks": ".ddx/executions/20260415T065358-87f6ae04/checks.json",
+    "usage": ".ddx/executions/20260415T065358-87f6ae04/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5611bb7f-20260415T065358-87f6ae04"
+  }
+}

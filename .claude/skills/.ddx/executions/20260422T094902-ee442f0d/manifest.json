@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260422T094902-ee442f0d",
+  "bead_id": "ddx-250b570f",
+  "base_rev": "5955bc1e8851342d8e8334ab482fef844479971e",
+  "created_at": "2026-04-22T09:49:02.821535102Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-250b570f",
+    "title": "FEAT-008 P12: a11y + screenshot drift sweep",
+    "description": "Run 'bun run test:a11y' until 0 axe violations on all 6 pages x 2 modes. Audit for any hard-coded hex that slipped past Phase 0 tokens; replace with semantic classes. Verify all 12 light+dark screenshot baselines exist from feature phases (this phase is drift-check only).",
+    "acceptance": "0 axe violations WCAG 2.1 AA on all 6 routes x 2 modes; no hard-coded hex in src/; all screenshot baselines committed.",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "phase-12",
+      "a11y"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T09:49:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "execute-loop-heartbeat-at": "2026-04-22T09:49:02.367884528Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T094902-ee442f0d",
+    "prompt": ".ddx/executions/20260422T094902-ee442f0d/prompt.md",
+    "manifest": ".ddx/executions/20260422T094902-ee442f0d/manifest.json",
+    "result": ".ddx/executions/20260422T094902-ee442f0d/result.json",
+    "checks": ".ddx/executions/20260422T094902-ee442f0d/checks.json",
+    "usage": ".ddx/executions/20260422T094902-ee442f0d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-250b570f-20260422T094902-ee442f0d"
+  }
+}

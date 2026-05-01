@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260420T150212-6a80d8df",
+  "bead_id": "ddx-004eccbc",
+  "base_rev": "d110295943131cdc4f4213c678ee04e20d2309e0",
+  "created_at": "2026-04-20T15:02:12.594377787Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen3.5-27b",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-004eccbc",
+    "title": "exec: shared reviewer + closure failure-case fixtures under cli/internal/agent/testdata",
+    "description": "Pre-requisite for the three reviewer bugs (ddx-f7ae036f, ddx-f8a11202, ddx-738edf47) and the closure invariant (ddx-e30e60a9). Codex plan review suggested landing shared fixtures first so the three reviewer fixes are tested against real artifacts, not regex-guess-driven.\n\n## Work\n\nCapture real-world failure artifacts from the review-malfunction-report into cli/internal/agent/testdata/ (or equivalent location next to the reviewer code):\n\n1. `reviewer-stream-approve-misextracted.jsonl` — a captured stream the reviewer emitted that ended with APPROVE but the current parser records as BLOCK. Target: drive ddx-f7ae036f's regex tests.\n2. `reviewer-stream-oversized-body.jsonl` — ~2MB synthetic reviewer response. Target: drive ddx-f8a11202's truncation + artifact-reference assertions.\n3. `bead-jsonl-oversized-line.jsonl` — a beads.jsonl row with a 1.46MB event body (mirrors the real corruption the reporter hit). Target: drive ddx-f8a11202's read-side scanner-buffer regression.\n4. `bead-closed-no-evidence.jsonl` — a beads.jsonl row with status:closed and events:[]. Target: drive ddx-e30e60a9's invariant test.\n\nEach fixture should include a short README noting its source incident, the expected pre-fix failure, and the expected post-fix behavior.\n\nNot a product change; test-infrastructure groundwork only.",
+    "acceptance": "(1) Four byte-frozen fixture files land under cli/internal/agent/testdata/reviewer/, captured from real on-disk artifacts (not synthesized):\n  - reviewer-stream-approve-misextracted.jsonl — from .ddx/agent-logs/sessions.jsonl, citing source session id + offset in README.\n  - reviewer-stream-oversized-body.jsonl — the real ~2MB reviewer stream behind the 1.46MB beads.jsonl row, citing source path in README.\n  - bead-jsonl-oversized-line.jsonl — the actual corrupted beads.jsonl row, trimmed, citing source path + line number in README.\n  - bead-closed-no-evidence.jsonl — axon-c5cc071a's closed-state row, citing source tracker path in README.\n(2) Each fixture has a README header: source path, capture date, pre-fix failure mode, expected post-fix behavior.\n(3) Fixtures load cleanly (syntactic/format validity only); behavior-specific failing tests live on the consumer beads (ddx-f7ae036f, ddx-f8a11202, ddx-738edf47, ddx-e30e60a9), not here.\n(4) Fixtures pin to v0.6.0-era ddx-agent output. A v0.7.0 capture is filed as a one-line follow-up after ddx-e7254128 lands.",
+    "labels": [
+      "area:agent",
+      "area:exec",
+      "kind:test",
+      "phase:build",
+      "goal:throughput-per-dollar",
+      "wave:1",
+      "workstream:reviewer"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-20T15:02:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1063103",
+      "execute-loop-heartbeat-at": "2026-04-20T15:02:12.084201915Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260420T150212-6a80d8df",
+    "prompt": ".ddx/executions/20260420T150212-6a80d8df/prompt.md",
+    "manifest": ".ddx/executions/20260420T150212-6a80d8df/manifest.json",
+    "result": ".ddx/executions/20260420T150212-6a80d8df/result.json",
+    "checks": ".ddx/executions/20260420T150212-6a80d8df/checks.json",
+    "usage": ".ddx/executions/20260420T150212-6a80d8df/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-004eccbc-20260420T150212-6a80d8df"
+  }
+}

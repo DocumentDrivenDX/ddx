@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T072233-536841ac",
+  "bead_id": "ddx-42e9d704",
+  "base_rev": "cb30d548b43184d1b6eeada53384273c0d86da80",
+  "created_at": "2026-04-15T07:22:34.128098893Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-42e9d704",
+    "title": "chore(graphql): wire WatcherHub.Close on server shutdown + dedupe subscription test helpers",
+    "description": "Two minor cleanups from opus review of Stage 2.11 and 2.12:\n\n1. bead.WatcherHub goroutines leak on server shutdown. Server.New at cli/internal/server/server.go:63 creates s.beadHub via bead.NewWatcherHub, but Server has no Shutdown/Close method that invokes s.beadHub.Close(). On process exit the goroutines terminate with the process, but on graceful Shutdown (never implemented today, but will be needed for multi-test scenarios and systemd restart with drain) the watchers leak. Add a Server.Shutdown method and invoke s.beadHub.Close() + coordinatorRegistry.StopAll() from it.\n\n2. Subscription test helpers duplicate ~90 lines of graphql-transport-ws WebSocket setup across 3 test files: newGraphQLHandlerWithBeadBus, newGraphQLHandlerWithExecLogs, newGraphQLHandlerWithCoordMetrics. Each does the same httptest.NewServer + gqlgen config + transport registration. Extract to a single test helper newGraphQLSubscriptionTestServer(resolver *Resolver) or equivalent that takes a fully-populated resolver and returns the server + dial function. Cosmetic cleanup, makes adding Stage 3+ subscription tests cheap.\n\nNot blocking anything. File under the migration epic.",
+    "acceptance": "(1) Server.Shutdown method exists, calls s.beadHub.Close() and coordinatorRegistry.StopAll() in sequence, returns any first error. (2) At least one test calls Server.Shutdown and verifies both are invoked (e.g. via goroutine count or channel close). (3) Subscription test setup is extracted to a single helper function used by all 3 existing tests. (4) go test ./internal/server/... -count=1 passes.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:chore",
+      "area:graphql",
+      "area:server"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T07:22:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T07:22:33.900384826Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T072233-536841ac",
+    "prompt": ".ddx/executions/20260415T072233-536841ac/prompt.md",
+    "manifest": ".ddx/executions/20260415T072233-536841ac/manifest.json",
+    "result": ".ddx/executions/20260415T072233-536841ac/result.json",
+    "checks": ".ddx/executions/20260415T072233-536841ac/checks.json",
+    "usage": ".ddx/executions/20260415T072233-536841ac/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-42e9d704-20260415T072233-536841ac"
+  }
+}

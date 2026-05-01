@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260413T204539-660a45c7",
+  "bead_id": "ddx-9a5df084",
+  "base_rev": "5341433135201ba34d614555a8e465814dfa075f",
+  "created_at": "2026-04-13T20:45:40.083618354Z",
+  "requested": {
+    "harness": "claude",
+    "model": "haiku-4.5",
+    "effort": "low",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9a5df084",
+    "title": "Fix pre-push no-debug hook regex compatibility and failure semantics",
+    "description": "\u003ccontext-digest\u003e\nObserved during `git push` in /Users/erik/Projects/ddx after landing tracker commits for execute-loop alpha findings. The DDx pre-push hook `no-debug` invoked `rg` with a look-ahead pattern and emitted a regex parse error, but the hook summary still reported success and the push continued.\n\u003c/context-digest\u003e\n\nThe DDx pre-push `no-debug` hook uses an `rg` pattern that requires PCRE2 look-around support, but it invokes plain `rg` without `--pcre2`. In the current environment that produces a parse error while the hook still exits successfully.\n\n## Reproduction\n1. In `/Users/erik/Projects/ddx`, run `git push`.\n2. Observe pre-push hook output from `no-debug` containing:\n   `rg: regex parse error: ... look-around ... is not supported`\n3. Observe the hook summary still marks `no-debug` as passed and the push continues.\n\n## Why this matters\nThe hook currently gives a false sense of enforcement. A broken regex should either be written in ripgrep-compatible syntax or use `--pcre2`, and failures in the debug scan should not be silently treated as success.",
+    "acceptance": "The DDx pre-push `no-debug` hook runs without regex parse errors in a default ripgrep environment; the debug-scan command fails closed when the scan itself errors; and the hook still blocks actual debug statements it is meant to catch.",
+    "labels": [
+      "helix",
+      "phase:build",
+      "area:tooling",
+      "area:quality"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-13T20:45:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "323",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "cancelled\nresult_rev=4f832f6c749ffc7eb8f07c60f24eb896f409374c\nbase_rev=4f832f6c749ffc7eb8f07c60f24eb896f409374c\nretry_after=2026-04-11T10:07:11Z",
+          "created_at": "2026-04-11T04:07:11.607749478Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "rebase failed\npreserve_ref=refs/ddx/iterations/ddx-9a5df084/20260411T171350Z-9a266e06633c\nresult_rev=02bc637ae4990f888bb3766f434ca74623888061\nbase_rev=9a266e06633cdf848f921f0bea082ac8591436af",
+          "created_at": "2026-04-11T17:13:50.566260866Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "land_conflict"
+        }
+      ],
+      "spec-id": "FEAT-001"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-001",
+      "path": "docs/helix/01-frame/features/FEAT-001-cli.md",
+      "title": "Feature: DDx CLI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T204539-660a45c7",
+    "prompt": ".ddx/executions/20260413T204539-660a45c7/prompt.md",
+    "manifest": ".ddx/executions/20260413T204539-660a45c7/manifest.json",
+    "result": ".ddx/executions/20260413T204539-660a45c7/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-9a5df084-20260413T204539-660a45c7"
+  }
+}

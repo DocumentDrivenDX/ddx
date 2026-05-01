@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260416T125427-16c6bdd6",
+  "bead_id": "ddx-ef1d15a1",
+  "base_rev": "c6e5828044f70b04e72ebafeb67d878b4c93e8af",
+  "created_at": "2026-04-16T12:54:28.176389833Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ef1d15a1",
+    "title": "refactor(svelte): fix ui-primitives demo showing mode as [object Object]",
+    "description": "Opus Stage 3 batch review (2026-04-15): src/routes/demo/ui-primitives/+page.svelte:26 renders {mode} as '[object Object]'. NavShell correctly uses mode.current. The demo page wasn't updated to match the mode-watcher Svelte 5 API.\n\nFix: change {mode} to {mode.current} or {$mode} depending on whether it's a rune or legacy store binding.",
+    "acceptance": "(1) ui-primitives demo page renders the current mode name as a readable string ('light' / 'dark' / 'system'). (2) bun run check green.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:refactor",
+      "area:ui",
+      "stage:3",
+      "source:opus-review"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260416T125427-16c6bdd6",
+    "prompt": ".ddx/executions/20260416T125427-16c6bdd6/prompt.md",
+    "manifest": ".ddx/executions/20260416T125427-16c6bdd6/manifest.json",
+    "result": ".ddx/executions/20260416T125427-16c6bdd6/result.json",
+    "checks": ".ddx/executions/20260416T125427-16c6bdd6/checks.json",
+    "usage": ".ddx/executions/20260416T125427-16c6bdd6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ef1d15a1-20260416T125427-16c6bdd6"
+  }
+}

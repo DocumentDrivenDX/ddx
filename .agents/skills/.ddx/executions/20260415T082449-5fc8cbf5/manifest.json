@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T082449-5fc8cbf5",
+  "bead_id": "ddx-c9baec73",
+  "base_rev": "f45f335d969d10b794c0751c583560289267d023",
+  "created_at": "2026-04-15T08:24:49.835130471Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c9baec73",
+    "title": "test(agent): end-to-end test CLI flag → ExecuteBeadOptions → Runner → routing evidence persisted",
+    "description": "Opus epic review (2026-04-15): no end-to-end integration test exercises the full routing pipeline. Tests are isolated on individual pieces (ValidateOrphanModel, resolveNativeAgentProvider, appendBeadRoutingEvidence).\n\nAdd cli/internal/agent/execute_bead_e2e_routing_test.go that drives runAgentExecuteBead through a cobra command with a fake agentlib.Provider, exercises a full resolve → run → append-evidence path, and asserts (a) the fake provider was called with the resolved model, (b) the kind:routing event is persisted to the bead store with the expected fields.",
+    "acceptance": "(1) New test drives runAgentExecuteBead via a cobra Command.Execute call, not by unit-calling internal functions. (2) Test injects a fake AgentRunner + fake BeadStore. (3) Assertions cover the full resolved_provider/resolved_model/route_reason set. (4) Test passes with the current implementation.",
+    "parent": "ddx-bd0691fe",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:test",
+      "area:agent",
+      "source:opus-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T08:24:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T08:24:49.579438314Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T082449-5fc8cbf5",
+    "prompt": ".ddx/executions/20260415T082449-5fc8cbf5/prompt.md",
+    "manifest": ".ddx/executions/20260415T082449-5fc8cbf5/manifest.json",
+    "result": ".ddx/executions/20260415T082449-5fc8cbf5/result.json",
+    "checks": ".ddx/executions/20260415T082449-5fc8cbf5/checks.json",
+    "usage": ".ddx/executions/20260415T082449-5fc8cbf5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c9baec73-20260415T082449-5fc8cbf5"
+  }
+}

@@ -61,18 +61,6 @@ Issues are stored in `.ddx/beads.jsonl`.
 - Recommended labels: `helix`, plus phase/kind/traceability labels as needed.
 - See `ddx bead --help` for tracker command mapping.
 
-Managed execution belongs to DDx:
-
-- `ddx agent execute-loop` is the primary queue-drain surface for
-  execution-ready work.
-- `ddx agent execute-bead <bead-id> [--from <rev>] [--no-merge]` is the
-  bounded single-bead managed execution primitive.
-- `helix run` is a compatibility controller over DDx-managed execution plus
-  HELIX supervisory routing (`check`, `design`, `polish`, review, alignment).
-- Direct `ddx agent run` remains appropriate only for non-managed prompts such
-  as planning, review, alignment, and other work that should not auto-claim or
-  auto-close execution beads.
-
 Reference docs (read as needed):
 
 - `.ddx/plugins/helix/workflows/README.md`
@@ -96,37 +84,56 @@ When this skill is invoked inline, **execute work immediately** — do not just
 report status, do not just describe what you would do, do not ask for
 confirmation. Start doing real work right now.
 
-### Step 1 — Load the execution contract
+### Step 1 — Find ready issues
 
-- Read `.ddx/plugins/helix/workflows/EXECUTION.md`.
-- Read `.ddx/plugins/helix/workflows/actions/check.md` for queue routing.
-- Read `.ddx/plugins/helix/workflows/actions/implementation.md` for bounded
-  execution rules.
-
-### Step 2 — Inspect queue state
-
-Run:
+Run this command:
 
 ```bash
 ddx bead ready --json
 ```
 
-If execution-ready work exists, prefer the DDx-managed queue-drain path over a
-hand-rolled claim/execute/close loop.
+If no ready issues exist, skip to Step 6 (Queue Drain).
 
-### Step 3 — Use the right execution surface
+### Step 2 — Select and claim one issue
 
-- If the user wants the actual compatibility controller, invoke `helix run`
-  rather than re-implementing it bead-by-bead inside the skill.
-- If the user wants a single explicit bead run, use `helix build` or
-  `ddx agent execute-bead`, not a direct `ddx agent run` prompt.
-- If the work is planning, review, alignment, or another non-managed prompt,
-  use the corresponding HELIX skill or direct `ddx agent run` flow instead of
-  the managed execution lane.
+Pick the best ready issue (smallest unblocked issue with clear governing
+artifacts). Inspect it:
 
-### Step 4 — Queue drain and routing
+```bash
+ddx bead show <id>
+ddx bead dep tree <id>
+```
 
-When no execution-ready work remains, read and execute
+Then claim it:
+
+```bash
+ddx bead update <id> --claim
+```
+
+### Step 3 — Load context and build
+
+1. Read the issue's `spec-id`, parent, labels, and acceptance criteria.
+2. Read the governing artifacts (requirements, design, tests) referenced by
+   the issue.
+3. Read `.ddx/plugins/helix/workflows/actions/implementation.md` for full phase-specific
+   rules (build, deploy, iterate).
+4. Build the work: write code, update docs, create follow-on issues for
+   any out-of-scope work discovered.
+
+### Step 4 — Verify
+
+Run all project verification: tests, lint, type checks, format checks. If
+verification fails, fix within scope or leave the issue open with a status note.
+
+### Step 5 — Commit and close
+
+1. Commit with the issue ID in the message.
+2. Close the issue: `ddx bead close <id>`
+3. Go back to Step 1 for the next ready issue.
+
+### Step 6 — Queue drain
+
+When no ready issues remain, read and execute
 `.ddx/plugins/helix/workflows/actions/check.md` to decide what happens next. That action
 produces a `NEXT_ACTION` code:
 
@@ -136,14 +143,6 @@ produces a `NEXT_ACTION` code:
 - `BACKFILL` → read and execute `.ddx/plugins/helix/workflows/actions/backfill-helix-docs.md`
 - `WAIT` / `GUIDANCE` → report what is blocking and stop
 - `STOP` → report that no actionable work remains
-
-### Step 5 — Enforce execution-ready bead quality
-
-Do not treat a build/deploy/iterate bead as queue-ready unless its acceptance
-criteria are machine-auditable enough for DDx-managed execution to decide
-success from the bead contract itself. If the bead still says "works",
-"complete", or "aligned" without naming commands, checks, files, or observable
-end state, route it to `helix polish` or `helix triage` instead of executing it.
 
 ### Scope narrowing
 

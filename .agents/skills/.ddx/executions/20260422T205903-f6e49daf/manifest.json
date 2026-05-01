@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260422T205903-f6e49daf",
+  "bead_id": "ddx-ad0db8fd",
+  "base_rev": "638bfecab2e29a57794403c7544ccfe87f3a12c6",
+  "created_at": "2026-04-22T20:59:03.470247949Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen/qwen3.6-35b-a3b",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ad0db8fd",
+    "title": "Bead detail GraphQL resolver scans every project and every bead on each request",
+    "description": "## Observed\n\nOpening a bead in the sidepane on `/nodes/.../projects/.../beads?q=test` takes 5+ seconds. The beads list renders quickly; the delay is on single-bead lookup.\n\n## Root cause\n\n`cli/internal/server/graphql/resolver.go:93-100` — the `Bead(id)` resolver calls `r.State.GetBeadSnapshots(\"\", \"\", \"\", \"\")` with no filters, which at `cli/internal/server/state_graphql.go:49-105` walks **every project**, constructs a `bead.Store` per project, calls `ReadAll()` (full directory scan + JSONL parse of every bead file), then iterates the result in Go to find one matching ID.\n\nSo every sidepane open = `O(projects × beads_per_project)` disk reads + parses, for a lookup that should be `O(1)` or `O(log n)`.\n\n`bead.Store` already exposes `Get(id)` (`cli/internal/bead/store.go:450`), but the resolver doesn't use it — nor does it know which project the bead lives in, because the GraphQL schema exposes `bead(id:)` without a project scope.\n\n## Proposed direction (not prescriptive)\n\nAny of these would resolve it; pick based on measurements:\n\n1. **Project scope the query.** Change schema to `bead(projectId:, id:)` (or accept a composite global id) and call `Store.Get` directly.\n2. **Maintain an in-memory index** `beadID → projectID` refreshed on bead mutations and on a debounced filesystem watcher; resolver does one map lookup + one `Store.Get`.\n3. **Short-TTL snapshot cache** behind `GetBeadSnapshots`, invalidated on bead writes.\n\nBefore picking: add a baseline measurement harness (see acceptance) so we know the actual p50/p95 before and after, not just anecdote.",
+    "acceptance": "**User story:** As a developer browsing the web UI beads view, I want clicking a bead to open its detail pane within ~200ms on a repo with hundreds of beads across several projects, so the UI feels interactive.\n\n**Acceptance criteria:**\n\n1. A benchmark/harness exists (Go benchmark or scripted GraphQL client) that measures end-to-end `bead(id:)` latency against a fixture repo with ≥ 5 projects and ≥ 500 beads total. Output is a p50/p95 number, not a pass/fail bool.\n2. Baseline is recorded in the bead notes (actual number measured on the current `main` binary at the time of fix).\n3. After the fix, p95 for `bead(id:)` on the fixture is ≤ 50ms in-process / ≤ 200ms over HTTP on a dev laptop.\n4. The fix does not introduce a stale-read regression: writing a bead via `ddx bead update` and then fetching it via GraphQL returns the new value on the next request (verified by a test that does write-then-read).\n5. Concurrency-safe: an integration test spawns N concurrent `bead(id:)` queries interleaved with `bead update` mutations and asserts no panics, no torn reads, and consistent responses.\n6. Playwright e2e: open `/nodes/.../beads`, click a bead row, assert the sidepane shows the bead title within 1s (generous budget; guards against regressions not the p95).",
+    "labels": [
+      "feat-008",
+      "feat-004",
+      "perf",
+      "graphql"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T20:59:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2792459",
+      "execute-loop-heartbeat-at": "2026-04-22T20:59:01.086596437Z",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T205903-f6e49daf",
+    "prompt": ".ddx/executions/20260422T205903-f6e49daf/prompt.md",
+    "manifest": ".ddx/executions/20260422T205903-f6e49daf/manifest.json",
+    "result": ".ddx/executions/20260422T205903-f6e49daf/result.json",
+    "checks": ".ddx/executions/20260422T205903-f6e49daf/checks.json",
+    "usage": ".ddx/executions/20260422T205903-f6e49daf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ad0db8fd-20260422T205903-f6e49daf"
+  }
+}

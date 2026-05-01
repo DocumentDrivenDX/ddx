@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260414T072328-72334472",
+  "bead_id": "ddx-fbe6409a",
+  "base_rev": "af82743b50d15108f757eebeb1eaaaa3f69aab71",
+  "created_at": "2026-04-14T07:23:28.896242629Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fbe6409a",
+    "title": "Split tracked execution evidence from ignored runtime scratch in ddx init",
+    "description": "\u003ccontext-digest\u003e\nReview area: tracked-vs-ignored execution state. Evidence covers the existing ddx init gitignore gap, the new requirement for tracked execution evidence, and the need to keep only local scratch, locks, transient worktrees, and provider-local runtime state ignored.\n\u003c/context-digest\u003e\nRefine DDx init and ignore management for the tracked execution-evidence model.\n\n## Goals\n- Keep tracked execution artifact paths out of the ignore set\n- Continue ignoring only transient runtime scratch such as managed execute-bead worktrees, lock files, and provider-local ephemeral state\n- Make init write the canonical ignore rules for the new split\n- Add tests proving tracked execution evidence is not accidentally masked by init-managed ignore entries",
+    "acceptance": "ddx init writes ignore rules that preserve tracked execution evidence while ignoring only transient runtime scratch and provider-local ephemeral state; tests verify the tracked path is not masked and the transient paths are",
+    "parent": "ddx-32b3008e",
+    "labels": [
+      "helix",
+      "phase:build",
+      "kind:ux",
+      "area:init",
+      "area:git",
+      "area:agent",
+      "area:cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T07:23:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "execute-loop-heartbeat-at": "2026-04-14T07:23:28.68799405Z",
+      "spec-id": "FEAT-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-015",
+      "path": "docs/helix/01-frame/features/FEAT-015-installation-architecture.md",
+      "title": "Feature: DDx Installation Architecture"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260414T072328-72334472",
+    "prompt": ".ddx/executions/20260414T072328-72334472/prompt.md",
+    "manifest": ".ddx/executions/20260414T072328-72334472/manifest.json",
+    "result": ".ddx/executions/20260414T072328-72334472/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fbe6409a-20260414T072328-72334472"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260413T032603-1fcb52bc",
+  "bead_id": "ddx-274a8f4b",
+  "base_rev": "daa8c015776b60e6f9d7437d9f358e272b589aed",
+  "created_at": "2026-04-13T03:26:03.578007808Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-274a8f4b",
+    "title": "Define execute-loop no-change disposition and retry policy",
+    "description": "\u003ccontext-digest\u003e\nReview area: execute-loop `no_changes` disposition semantics. Evidence covers the fixed `no_changes` status in execute-bead results, repeated queue selection of the same ready bead, merge-gate design work in ddx-40a722c3 / ddx-632792d2, and the need for an explicit rule that determines when a no-change attempt means \"already satisfied\" versus \"still unresolved\".\n\u003c/context-digest\u003e\nDefine the contract for how execute-loop handles `no_changes` attempts.\n\n## Goals\n- Define the satisfaction check that can convert `no_changes` into bead closure without calling the execution itself a success\n- Define the unresolved path for `no_changes`, including retry suppression / cooldown and operator-visible status\n- Clarify how required execution docs, acceptance validation, and future gate enforcement feed the satisfaction decision\n- Define the machine-readable result/evidence fields needed for loop control and UI visibility",
+    "acceptance": "FEAT-006, API-001, and execute-loop docs define how `no_changes` attempts are adjudicated into already-satisfied close vs unresolved cooldown, including the role of required gates/checks and the operator-visible result surface",
+    "parent": "ddx-d2930ee4",
+    "labels": [
+      "ddx",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:bead",
+      "area:docs"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260413T032603-1fcb52bc",
+    "prompt": ".ddx/executions/20260413T032603-1fcb52bc/prompt.md",
+    "manifest": ".ddx/executions/20260413T032603-1fcb52bc/manifest.json",
+    "result": ".ddx/executions/20260413T032603-1fcb52bc/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-274a8f4b-20260413T032603-1fcb52bc"
+  }
+}

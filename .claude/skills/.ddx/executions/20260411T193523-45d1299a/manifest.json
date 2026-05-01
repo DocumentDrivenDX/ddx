@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260411T193523-45d1299a",
+  "bead_id": "ddx-45f6d738",
+  "base_rev": "d58a82a1d850e3a25ea199c0c42fd36ccce254f5",
+  "created_at": "2026-04-11T19:35:23.564163008Z",
+  "requested": {
+    "harness": "agent",
+    "model": "z-ai/glm-5.1",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-45f6d738",
+    "title": "Detect execute-bead worktree edits even when the agent makes no commits",
+    "description": "A Codex execute-loop run on ddx-28c15f0e updated FEAT-002, SD-019, and website server docs inside the managed worktree, but DDx classified the attempt as no_changes because it only looked for agent-created commits. Execute-bead must treat a dirty worktree with tracked edits as real output, preserve or land it appropriately, and record accurate result status instead of discarding useful work.",
+    "acceptance": "execute-bead and execute-loop no longer report no_changes when the worktree contains tracked file modifications without agent-created commits; the attempt preserves or lands the changes and result artifacts reflect the actual diff state",
+    "labels": [
+      "helix",
+      "area:exec",
+      "area:git",
+      "area:agent",
+      "kind:correctness"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "agent made no commits\nresult_rev=89bfda03a82c186ee1d97866eadcbb4b9bd4eedb\nbase_rev=89bfda03a82c186ee1d97866eadcbb4b9bd4eedb\nretry_after=2026-04-11T22:04:02Z",
+          "created_at": "2026-04-11T16:04:02.596184088Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260411T193523-45d1299a",
+    "prompt": ".ddx/executions/20260411T193523-45d1299a/prompt.md",
+    "manifest": ".ddx/executions/20260411T193523-45d1299a/manifest.json",
+    "result": ".ddx/executions/20260411T193523-45d1299a/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-45f6d738-20260411T193523-45d1299a"
+  }
+}

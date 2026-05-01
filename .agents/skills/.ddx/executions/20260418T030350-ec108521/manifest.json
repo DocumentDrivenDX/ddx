@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260418T030350-ec108521",
+  "bead_id": "ddx-e3493010",
+  "base_rev": "b533979a2957688024cd0b036cbb0f7ce4815fd7",
+  "created_at": "2026-04-18T03:03:51.125789235Z",
+  "requested": {
+    "harness": "agent",
+    "model": "Qwen3.6-35B-A3B-4bit",
+    "provider": "vidar-omlx",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e3493010",
+    "title": "docs: add 'Resolution Path' developer guide tracing CLI flag -\u003e final HTTP dispatch",
+    "description": "## Problem\n\nNo single document traces the provider/model/harness resolution path from CLI flags to the final HTTP request. SD-015 and SD-023 are SPECS — they describe what should happen in 5 routing modes. The code lives across routing.go, discovery.go, agent_runner.go, runner.go, and agent_cmd.go. A newcomer debugging a routing bug must infer the flow by reading all of them.\n\nThe audit for epic ddx-2d974641 turned up a RouteRequest struct missing its Provider field, and a parallel RunOptions.Provider path that bypasses routing — neither of which is documented. This is the kind of hidden structural defect a Resolution Path document would have flagged on first read.\n\n## Fix\n\nWrite docs/helix/02-design/solution-designs/SD-015-resolution-path-trace.md (or similar location; coordinate with SD-015's author). The document traces one concrete invocation end-to-end:\n\n    ddx work --once --local --provider vidar-omlx --model-ref qwen/qwen3.6\n\nWalk through every layer, with file:line citations:\n\n1. **CLI parse** — cli/cmd/agent_cmd.go flag extraction (line references).\n\n2. **RouteFlags -\u003e RouteRequest normalization** — routing.go:NormalizeRouteRequest. What each CLI flag maps to; which flags are discarded when they don't match an expected shape; the current gap around --provider.\n\n3. **Discovery probe** — discovery.go:DiscoverProviderModels. When it fires; what it caches; the 30s TTL; how failures are handled.\n\n4. **Candidate planning** — routing.go:BuildCandidatePlans / evaluateCandidate. For each registered harness, the state map lookup and the viability checks.\n\n5. **Fuzzy matching** — discovery.go:FuzzyMatchModel. Pool selection (global vs per-provider), normalization (current gaps), prefix + tiebreak algorithm.\n\n6. **Scoring** — routing.go:scoreCandidate. Per-profile scoring, cost class, historical success rate, provider-affinity bonus (when implemented).\n\n7. **Candidate ranking** — routing.go:RankCandidates / SelectBestCandidate. Non-viable rejection, stable tiebreak.\n\n8. **Dispatch** — runner.go:Run. Harness-specific branches (virtual, agent, script, HTTP-provider-embedded, default exec). For embedded: agent_runner.go:RunAgent -\u003e resolveEmbeddedAgentProvider -\u003e agent library call.\n\n9. **Wire-level request** — ddx-agent builds the HTTP body (system_prompt + messages + tools), sends to the provider. What the server receives.\n\n10. **Response parsing** — streaming or non-streaming decode; where 'unexpected end of JSON input' (ddx-6a5dfe35) surfaces.\n\nInclude a SEQUENCE DIAGRAM (mermaid or ASCII) showing the layers.\n\nInclude a GAP TABLE at the top listing every currently-missing piece (as of whatever the SD-015 implementation state is) with links to the specific beads tracking each gap.\n\nKeep the document MAINTAINED alongside the code: update it when RouteRequest gains a field, when a new routing mode lands, when fuzzy match gains a normalization step.\n\n## Files likely touched\n\n- docs/helix/02-design/solution-designs/SD-015-resolution-path-trace.md (new)\n- docs/helix/01-frame/features/FEAT-006-agent-service.md — add a single-line pointer at the top of the 'Overview' section\n- skills/ddx/reference/agents.md — add a one-line pointer in 'Harness / profile / persona dispatch' section so agents consulting the skill can follow up to the full trace when needed\n\n## Out of scope\n\n- Rewriting SD-015 or SD-023 — this doc complements them; they describe intent, this describes current reality.\n- Documenting future routing modes that haven't landed.",
+    "acceptance": "1. docs/helix/02-design/solution-designs/SD-015-resolution-path-trace.md exists and documents all 10 layers above with file:line citations current as of the document's creation date.\n\n2. The document contains a sequence diagram showing CLI -\u003e NormalizeRouteRequest -\u003e Discovery -\u003e BuildCandidatePlans -\u003e SelectBestCandidate -\u003e Run -\u003e RunAgent -\u003e agent library -\u003e HTTP.\n\n3. The document contains a 'Current Gaps' table with at least the 4 confirmed gaps from epic ddx-2d974641 and links to the tracking beads.\n\n4. FEAT-006 and skills/ddx/reference/agents.md each have a one-line pointer to the new doc.\n\n5. **CI grep verifies citations resolve** (per opus fresh-eyes review). A CI step (or lefthook hook) parses every file:line citation in SD-015-resolution-path-trace.md and verifies the named symbol/line pattern exists in the current source tree. Prevents the doc from rotting silently as routing.go / discovery.go / types.go evolve. Failing citations block the PR.",
+    "parent": "ddx-2d974641",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:documentation",
+      "area:agent",
+      "area:routing"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"Qwen3.6-35B-A3B-4bit\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-18T03:03:27.937852549Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=Qwen3.6-35B-A3B-4bit"
+        }
+      ],
+      "spec-id": "SD-015"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-015",
+      "path": "docs/helix/02-design/solution-designs/SD-015-agent-routing-and-catalog-resolution.md",
+      "title": "Solution Design: Agent Routing and Catalog Resolution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260418T030350-ec108521",
+    "prompt": ".ddx/executions/20260418T030350-ec108521/prompt.md",
+    "manifest": ".ddx/executions/20260418T030350-ec108521/manifest.json",
+    "result": ".ddx/executions/20260418T030350-ec108521/result.json",
+    "checks": ".ddx/executions/20260418T030350-ec108521/checks.json",
+    "usage": ".ddx/executions/20260418T030350-ec108521/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e3493010-20260418T030350-ec108521"
+  }
+}

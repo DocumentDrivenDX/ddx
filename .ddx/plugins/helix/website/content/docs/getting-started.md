@@ -2,7 +2,7 @@
 title: Getting Started
 weight: 1
 prev: /docs
-next: /docs/workflow
+next: /docs/background
 ---
 
 Get HELIX installed and running your first supervised build session.

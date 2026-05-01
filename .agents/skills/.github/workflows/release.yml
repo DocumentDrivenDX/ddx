@@ -1,0 +1,284 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  attestations: write
+  id-token: write
+
+jobs:
+  # Validate and prepare release
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      previous_tag: ${{ steps.previous.outputs.tag }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Validate tag format
+      run: |
+        TAG="${{ github.ref_name }}"
+        if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+          echo "❌ Invalid tag format: $TAG"
+          echo "Expected format: vX.Y.Z or vX.Y.Z-suffix"
+          exit 1
+        fi
+        echo "✅ Valid tag format: $TAG"
+    
+    - name: Extract version
+      id: version
+      run: |
+        VERSION="${{ github.ref_name }}"
+        VERSION="${VERSION#v}"  # Remove 'v' prefix
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "📦 Version: $VERSION"
+    
+    - name: Get previous tag
+      id: previous
+      run: |
+        CURRENT_TAG="${{ github.ref_name }}"
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 "$CURRENT_TAG^" 2>/dev/null || echo "")
+        echo "tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+        if [ -n "$PREVIOUS_TAG" ]; then
+          echo "📊 Previous tag: $PREVIOUS_TAG"
+        else
+          echo "🆕 This is the first release"
+        fi
+
+  # Run full test suite before release
+  test:
+    name: Test Release
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Build test binary
+      working-directory: cli
+      run: |
+        mkdir -p build
+        go build -o build/ddx .
+        chmod +x build/ddx
+        echo "✅ Test binary built at $(pwd)/build/ddx"
+
+    - name: Run tests
+      working-directory: cli
+      run: |
+        go test -v ./...
+        echo "✅ All tests passed - release validated"
+
+  # Build binaries for all platforms
+  build-matrix:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: [prepare, test]
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-latest
+          - goos: darwin
+            goarch: amd64
+            runner: macos-latest
+          - goos: darwin
+            goarch: arm64
+            runner: macos-latest
+          - goos: windows
+            goarch: amd64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+    
+    - name: Build binary
+      working-directory: cli
+      shell: bash
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        VERSION: ${{ needs.prepare.outputs.version }}
+      run: |
+        # Build with version information
+        LDFLAGS="-X main.version=${VERSION} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          go build -ldflags "$LDFLAGS" -o build/ddx.exe .
+        else
+          go build -ldflags "$LDFLAGS" -o build/ddx .
+        fi
+    
+    - name: Create archive
+      working-directory: cli/build
+      shell: bash
+      run: |
+        BINARY="ddx"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          BINARY="ddx.exe"
+        fi
+        
+        # Create archive name
+        ARCHIVE="ddx-${{ matrix.goos }}-${{ matrix.goarch }}"
+        
+        # Add version and README to archive
+        echo "DDx v${{ needs.prepare.outputs.version }}" > VERSION
+        echo "Platform: ${{ matrix.goos }}-${{ matrix.goarch }}" >> VERSION
+        echo "Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> VERSION
+        echo "Commit: ${{ github.sha }}" >> VERSION
+        
+        # Create appropriate archive
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          # Windows: Create ZIP
+          if command -v zip >/dev/null; then
+            zip "${ARCHIVE}.zip" "$BINARY" VERSION
+          else
+            # Fallback for Windows runner
+            7z a "${ARCHIVE}.zip" "$BINARY" VERSION
+          fi
+          echo "📦 Created ${ARCHIVE}.zip"
+        else
+          # Unix: Create tar.gz
+          tar -czf "${ARCHIVE}.tar.gz" "$BINARY" VERSION
+          echo "📦 Created ${ARCHIVE}.tar.gz"
+        fi
+        
+        # Generate checksums
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          sha256sum "${ARCHIVE}.zip" > "${ARCHIVE}.zip.sha256"
+        else
+          sha256sum "${ARCHIVE}.tar.gz" > "${ARCHIVE}.tar.gz.sha256"
+        fi
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: |
+          cli/build/*.tar.gz
+          cli/build/*.zip
+          cli/build/*.sha256
+        retention-days: 1
+
+  # Create GitHub release with all artifacts
+  release:
+    name: Create Release
+    needs: [prepare, build-matrix]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: release-*
+        path: ./artifacts
+        merge-multiple: true
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        PREVIOUS_TAG="${{ needs.prepare.outputs.previous_tag }}"
+        
+        # Generate changelog
+        if [ -z "$PREVIOUS_TAG" ]; then
+          COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges)
+        else
+          COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%an)" --no-merges)
+        fi
+        
+        # Categorize commits
+        echo "# Changelog" > CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        
+        # Features
+        FEATURES=$(echo "$COMMITS" | grep -E "^- (feat|feature):" || true)
+        if [ -n "$FEATURES" ]; then
+          echo "## 🚀 Features" >> CHANGELOG.md
+          echo "$FEATURES" | sed 's/^- feat:/- /g' | sed 's/^- feature:/- /g' >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+        fi
+        
+        # Bug fixes
+        FIXES=$(echo "$COMMITS" | grep -E "^- (fix|bugfix):" || true)
+        if [ -n "$FIXES" ]; then
+          echo "## 🐛 Bug Fixes" >> CHANGELOG.md
+          echo "$FIXES" | sed 's/^- fix:/- /g' | sed 's/^- bugfix:/- /g' >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+        fi
+        
+        # Documentation
+        DOCS=$(echo "$COMMITS" | grep -E "^- (docs|doc):" || true)
+        if [ -n "$DOCS" ]; then
+          echo "## 📚 Documentation" >> CHANGELOG.md
+          echo "$DOCS" | sed 's/^- docs:/- /g' | sed 's/^- doc:/- /g' >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+        fi
+        
+        # Other changes
+        OTHERS=$(echo "$COMMITS" | grep -vE "^- (feat|feature|fix|bugfix|docs|doc):" || true)
+        if [ -n "$OTHERS" ]; then
+          echo "## 🔧 Other Changes" >> CHANGELOG.md
+          echo "$OTHERS" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+        fi
+        
+        # Output for release body
+        cat CHANGELOG.md
+    
+    - name: Create checksums file
+      run: |
+        cd artifacts
+        sha256sum *.tar.gz *.zip > checksums.sha256
+        echo "📝 Generated checksums for all artifacts"
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: DDx ${{ github.ref_name }}
+        body_path: CHANGELOG.md
+        files: |
+          artifacts/*.tar.gz
+          artifacts/*.zip
+          artifacts/*.sha256
+          artifacts/checksums.sha256
+        draft: false
+        prerelease: ${{ contains(github.ref_name, '-') }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Update installation script
+      run: |
+        echo "✅ Release ${{ github.ref_name }} created successfully!"
+        echo "📦 Available at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

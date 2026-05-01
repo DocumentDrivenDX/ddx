@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T071008-a6447823",
+  "bead_id": "ddx-abec1110",
+  "base_rev": "9bffe2fbb27b151343651f714e31e914b0c9ae38",
+  "created_at": "2026-04-15T07:10:09.217068284Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-abec1110",
+    "title": "Stage 3.8: NodeContext + ProjectContext stores + root redirect",
+    "description": "Create src/lib/stores/node.ts and src/lib/stores/project.ts as Svelte 5 runes stores. Create +layout.ts load function that loads { node { id name } } via Houdini. Create src/routes/+page.svelte that checks the store and redirects to /nodes/:nodeId. Create src/routes/nodes/[nodeId]/+page.svelte that renders 'Node: \u003cname\u003e (\u003cid\u003e)' from the store. See docs/plan-svelte-migration.md Stage 3 bead #34.",
+    "acceptance": "(1) MANUAL: load / in browser, URL becomes /nodes/node-xxxxxxxx, page shows the real node name from GraphQL. (2) Check browser devtools Network panel: confirm POST /graphql returned the expected `{ node { id name } }` shape. (3) Record the node ID seen in the completion note.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:3",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T07:10:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T07:10:08.981241413Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T071008-a6447823",
+    "prompt": ".ddx/executions/20260415T071008-a6447823/prompt.md",
+    "manifest": ".ddx/executions/20260415T071008-a6447823/manifest.json",
+    "result": ".ddx/executions/20260415T071008-a6447823/result.json",
+    "checks": ".ddx/executions/20260415T071008-a6447823/checks.json",
+    "usage": ".ddx/executions/20260415T071008-a6447823/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-abec1110-20260415T071008-a6447823"
+  }
+}

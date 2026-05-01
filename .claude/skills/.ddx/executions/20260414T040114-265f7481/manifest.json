@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260414T040114-265f7481",
+  "bead_id": "ddx-640c1ece",
+  "base_rev": "9e07dc4575b1edcda1270e5296794e0bb4b953b7",
+  "created_at": "2026-04-14T04:01:14.316225457Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-640c1ece",
+    "title": "Implement execute-loop no-change adjudication and retry suppression",
+    "description": "\u003ccontext-digest\u003e\nReview area: execute-loop no-progress control flow. Evidence covers the new `no_changes` result status, repeated one-shot queue runs reselecting the same bead, and the need for queue-drain behavior that either closes already-satisfied work or suppresses immediate retry on unresolved no-op attempts.\n\u003c/context-digest\u003e\nImplement no-change adjudication and retry suppression for execute-loop.\n\n## Goals\n- Run the defined satisfaction check after a `no_changes` execute-bead result\n- Auto-close beads only when the satisfaction check says the bead is already satisfied\n- Leave unresolved beads open but record retry suppression / cooldown so the next queue pass can move on\n- Persist enough evidence and state for operator visibility and deterministic tests",
+    "acceptance": "Execute-loop runs a no-change adjudication step, auto-closes already-satisfied beads with evidence, leaves unresolved no-change beads open with retry suppression, and regression tests cover repeated queue passes so one unresolved bead cannot starve the queue",
+    "parent": "ddx-d2930ee4",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:implementation",
+      "area:agent",
+      "area:bead",
+      "area:cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T04:01:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1106936",
+      "execute-loop-heartbeat-at": "2026-04-14T04:01:13.998017865Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260414T040114-265f7481",
+    "prompt": ".ddx/executions/20260414T040114-265f7481/prompt.md",
+    "manifest": ".ddx/executions/20260414T040114-265f7481/manifest.json",
+    "result": ".ddx/executions/20260414T040114-265f7481/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-640c1ece-20260414T040114-265f7481"
+  }
+}

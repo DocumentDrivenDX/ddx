@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T065117-d3770426",
+  "bead_id": "ddx-695d6442",
+  "base_rev": "fa722d9b40db3f2545ae8d317f0132ea0f34b7c4",
+  "created_at": "2026-04-15T06:51:17.226564356Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-695d6442",
+    "title": "Stage 3.6: base layout + theme provider + nav shell",
+    "description": "Create src/routes/+layout.svelte with top nav placeholder (Node name), sidebar with placeholder links for each page (Beads, Documents, Graph, Workers, Sessions, Personas, Commits), dark-mode toggle, stub ProjectPicker. src/lib/theme.ts for theme provider. src/lib/components/NavShell.svelte + ProjectPicker.svelte (stubs). See docs/plan-svelte-migration.md Stage 3 bead #32.",
+    "acceptance": "(1) MANUAL: load / in `bun run dev`, see the shell layout with nav + sidebar + dark-mode toggle. (2) All 7 sidebar links present as placeholders. (3) Dark-mode toggle works.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:3",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T06:51:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T06:51:16.995047397Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T065117-d3770426",
+    "prompt": ".ddx/executions/20260415T065117-d3770426/prompt.md",
+    "manifest": ".ddx/executions/20260415T065117-d3770426/manifest.json",
+    "result": ".ddx/executions/20260415T065117-d3770426/result.json",
+    "checks": ".ddx/executions/20260415T065117-d3770426/checks.json",
+    "usage": ".ddx/executions/20260415T065117-d3770426/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-695d6442-20260415T065117-d3770426"
+  }
+}

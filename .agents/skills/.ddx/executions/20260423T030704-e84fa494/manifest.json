@@ -1,0 +1,155 @@
+{
+  "attempt_id": "20260423T030704-e84fa494",
+  "bead_id": "ddx-69789664",
+  "base_rev": "1811cb188c77a7a20b042f8d08d579228d9368f4",
+  "created_at": "2026-04-23T03:07:04.796746106Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-69789664",
+    "title": "Workers screen: clarify purpose vs Sessions and add lifecycle controls",
+    "description": "## Observed\n\n`/nodes/.../projects/.../workers` renders a table of workers but has no buttons, no controls, and no explanation of how it differs from `/sessions`. The layout (`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte`) shows ID / Kind / State / Current Bead / Attempts — read-only. Clicking a row drills into live-streaming logs and recent events, but offers no actions there either.\n\nThis raised a fair question: **what is this screen for, and how is it different from Sessions?** The answer isn't in the UI.\n\n## Ground truth (from the CLI)\n\n- **Worker** = a persistent execute-loop process draining the bead queue (`ddx work` / `ddx agent execute-loop`). Has a lifecycle: running / idle / stopped / error. Has a *current bead* and cumulative attempts/successes/failures. Can be stopped via `ddx agent workers stop`. Long-lived.\n- **Session** = a historical record of one agent invocation (harness, model, bead, tokens, cost, outcome, start/end). Immutable after completion. One worker produces many sessions over its lifetime.\n\nSo: Workers are *processes you operate*. Sessions are *events you review*. The current UI exposes both as flat tables and lets the reader guess which is which.\n\n## Gaps\n\n1. **No disambiguation.** No page-level copy, no link between the two, no worker→sessions navigation (\"show sessions produced by this worker\"), no session→worker backlink.\n2. **No lifecycle controls on Workers.** The CLI has `ddx agent workers stop` and `ddx work` (start). The UI has neither button. No stop, start, restart, or \"cancel current bead\" affordance. The State column is a spectator sport.\n3. **No worker start UX.** There is no way to start a queue drain from the UI — users must drop to a terminal.\n4. **Unclear empty state.** \"No workers found.\" does not say whether that is normal (nothing running) or broken (server can't see workers). No hint about how to start one.\n5. **No worker details beyond logs.** Worker detail page shows live phase + log tail + tool calls but not: worker config (project path, profile/harness, started-at, last-heartbeat), resource usage, or the list of sessions this worker has produced.\n\n## Proposed direction\n\nSplit into two deliverables — do them together if we're touching this screen anyway, but they are independently landable:\n\n### A. Information architecture (copy + navigation)\n\n- Add a short header description to each page: \"Workers drain the bead queue. Sessions are the history of what they ran.\"\n- Mutual links: Workers page links to \"Recent sessions →\", Sessions page links to \"Workers →\".\n- On worker detail: a \"Sessions\" tab or section listing sessions where `session.workerId == this.id` (requires session records to carry workerID; check whether they do).\n- On session detail (expandable row already exists): if the session has a workerID, surface it as a link back to the worker.\n\n### B. Lifecycle controls\n\n- **Stop** button per running worker row → calls a GraphQL mutation that invokes the equivalent of `ddx agent workers stop \u003cid\u003e`. Confirms before acting.\n- **Start worker** button in the page header → opens a small form (project, profile/harness, effort, optional bead filter) and calls a `startWorker` mutation that shells out to `ddx work` in the background. The form should default to sane values and be submittable in one click for the common case.\n- **Cancel current bead** action on the worker detail page — signals the worker to abandon the in-flight bead without killing the loop. (Only if CLI primitive exists; otherwise descope and note in the bead.)\n- All mutations must be idempotent and log an audit record viewable in the UI (who did it, when). Reuse existing session-event plumbing if possible.\n\n### Out of scope\n\n- Rewriting execute-loop semantics.\n- Cross-project worker orchestration.\n- Auth / permissions model for who can stop workers (assume single-operator for now; file a follow-up if multi-operator becomes real).",
+    "acceptance": "**User story:** As an operator looking at the DDx web UI, I want to understand at a glance what Workers are vs Sessions, and I want to stop a misbehaving worker or start a new queue drain without dropping to a terminal, so the UI is a real operator surface instead of a read-only status page.\n\n**Acceptance criteria:**\n\n1. **Copy + IA.** Workers page header includes a one-sentence description distinguishing it from Sessions. Sessions page likewise. Each links to the other. Playwright asserts both descriptions are present and the cross-links navigate.\n\n2. **Worker → Sessions navigation.** On worker detail, a \"Sessions\" section lists sessions produced by that worker (join on `session.workerId`). Empty state reads \"No sessions recorded yet.\" If session records do not yet carry a worker ID, that gap is filled as part of this bead and backfilled for existing sessions in the current run (no historical backfill required).\n\n3. **Session → Worker backlink.** Expanded session row shows worker ID as a clickable link when present.\n\n4. **Stop worker.** Each row with `state == 'running'` shows a Stop button. Clicking prompts for confirm, then fires a GraphQL mutation that stops the worker. UI updates within 2s via the existing subscription/poll path. Integration test asserts: button visibility is gated on state, confirm dialog is required, and mutation invokes the same code path as `ddx agent workers stop`.\n\n5. **Start worker.** A \"Start worker\" button in the Workers page header opens a form (harness/profile, effort, optional label filter). Submitting fires a `startWorker` mutation. On success the new worker appears in the list within 2s. Form validation prevents empty submissions. The code path reuses `ddx work` / execute-loop internals — not a separate implementation.\n\n6. **Audit trail.** Every lifecycle action (start, stop, cancel) is recorded as a timestamped event visible on the worker detail page, including the actor identifier the server has for the requester.\n\n7. **No regressions.** Existing live log streaming, recent events, and phase overrides continue to work. Playwright smoke of the worker detail page passes.\n\n8. **Playwright e2e.**\n   - Navigates to Workers page, asserts header description.\n   - Clicks \"Start worker\", fills form, submits, asserts new row appears.\n   - Clicks Stop on that row, confirms, asserts row state transitions to `stopped`.\n   - Clicks into the stopped worker, asserts the Sessions section renders (or the empty state).\n   - Asserts the \"Sessions\" link in the worker page header navigates to the Sessions page.\n\n9. **Design review sign-off.** Before implementation begins, a short design note (one page or less) in `docs/helix/02-design/` captures the Workers-vs-Sessions mental model, the chosen controls, and any CLI primitives that need to exist. Implementation PR links to that note.",
+    "labels": [
+      "feat-008",
+      "feat-010",
+      "feat-006",
+      "ui",
+      "design"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-23T03:07:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2988370",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:00:24.797884238Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T21:00:24.997376893Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"codex/gpt-5.4\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:00:27.587139626Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=codex/gpt-5.4"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=claude model=codex/gpt-5.4 probe=ok\nunsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+          "created_at": "2026-04-22T21:00:27.781548Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"gemini\",\"resolved_model\":\"minimax/minimax-m2.7\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:00:30.354251641Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=gemini model=minimax/minimax-m2.7"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness=gemini model=minimax/minimax-m2.7 probe=ok\nunsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+          "created_at": "2026-04-22T21:00:30.563472861Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"harness\":\"agent\",\"model\":\"qwen/qwen3.6-35b-a3b\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2022},{\"tier\":\"standard\",\"harness\":\"claude\",\"model\":\"codex/gpt-5.4\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2011},{\"tier\":\"smart\",\"harness\":\"gemini\",\"model\":\"minimax/minimax-m2.7\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":2011}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-22T21:00:30.623947536Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite\ntier=smart\nprobe_result=ok\nresult_rev=a59a4cae178d79cb62614ec07800c9dcb8152ab7\nbase_rev=a59a4cae178d79cb62614ec07800c9dcb8152ab7\nretry_after=2026-04-23T03:00:30Z",
+          "created_at": "2026-04-22T21:00:30.802362315Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-23T02:49:46.368937057Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260423T021809-c3ed3f02\",\"harness\":\"codex\",\"input_tokens\":19906133,\"output_tokens\":45589,\"total_tokens\":19951722,\"cost_usd\":0,\"duration_ms\":1896612,\"exit_code\":0}",
+          "created_at": "2026-04-23T02:49:46.435150734Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=19951722"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-04-23T02:49:49.402156108Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "`.ddx/executions/20260423T021809-c3ed3f02/result.json:1` and `.ddx/executions/20260423T021809-c3ed3f02/usage.json:1` are the only changed files; they are execution metadata, not implementation.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte` has no diff adding Workers-vs-Sessions copy, cross-link navigation, Start worker UI, or Stop buttons.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/sessions/` has no diff adding Sessions page copy or worker backlinks.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/` has no diff adding a Sessions section, audit trail display, lifecycle controls, or preserving detail-page behavior.\nServer GraphQL schema/resolvers/mutations for `startWorker` and worker stop are absent from the diff, so AC 4, AC 5, and AC 6 are not implemented.\n`docs/helix/02-design/` has no design note for the Workers-vs-Sessions mental model or chosen lifecycle controls.\nNo Playwright or integration tests were added or changed for the required navigation, lifecycle controls, confirmation behavior, or worker detail smoke coverage.",
+          "created_at": "2026-04-23T02:50:33.929889689Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-04-23T02:50:33.997674158Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\n`.ddx/executions/20260423T021809-c3ed3f02/result.json:1` and `.ddx/executions/20260423T021809-c3ed3f02/usage.json:1` are the only changed files; they are execution metadata, not implementation.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte` has no diff adding Workers-vs-Sessions copy, cross-link navigation, Start worker UI, or Stop buttons.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/sessions/` has no diff adding Sessions page copy or worker backlinks.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/` has no diff adding a Sessions section, audit trail display, lifecycle controls, or preserving detail-page behavior.\nServer GraphQL schema/resolvers/mutations for `startWorker` and worker stop are absent from the diff, so AC 4, AC 5, and AC 6 are not implemented.\n`docs/helix/02-design/` has no design note for the Workers-vs-Sessions mental model or chosen lifecycle controls.\nNo Playwright or integration tests were added or changed for the required navigation, lifecycle controls, confirmation behavior, or worker detail smoke coverage.\nresult_rev=01b480acc775fc5256b0489142fb61e0ea635041\nbase_rev=29b8ae2f5c38d4f486c499cdd8efc78bcd386141",
+          "created_at": "2026-04-23T02:50:34.071233836Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-23T03:07:04.253418196Z",
+      "execute-loop-last-detail": "escalation exhausted: unsupported model \"minimax/minimax-m2.7\" for harness \"gemini\"; supported models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite",
+      "execute-loop-last-status": "execution_failed",
+      "feature": "FEAT-008"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260423T030704-e84fa494",
+    "prompt": ".ddx/executions/20260423T030704-e84fa494/prompt.md",
+    "manifest": ".ddx/executions/20260423T030704-e84fa494/manifest.json",
+    "result": ".ddx/executions/20260423T030704-e84fa494/result.json",
+    "checks": ".ddx/executions/20260423T030704-e84fa494/checks.json",
+    "usage": ".ddx/executions/20260423T030704-e84fa494/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-69789664-20260423T030704-e84fa494"
+  }
+}

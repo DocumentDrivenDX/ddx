@@ -1,0 +1,9 @@
+{
+  "attempt_id": "20260419T231835-0d23e8f6",
+  "harness": "agent",
+  "model": "minimax/minimax-m2.7-20260318",
+  "tokens": 1931237,
+  "input_tokens": 1913573,
+  "output_tokens": 17664,
+  "cost_usd": 0.17519574000000007
+}

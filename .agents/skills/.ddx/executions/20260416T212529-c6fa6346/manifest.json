@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260416T212529-c6fa6346",
+  "bead_id": "ddx-4cdb9600",
+  "base_rev": "68d26ac4768e1d8bc353dbf445f20b214cd24b4a",
+  "created_at": "2026-04-16T21:25:30.070107938Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4cdb9600",
+    "title": "Tier success-rate analytics: ddx agent metrics tier-success",
+    "description": "## Scope\nAdd ddx agent metrics tier-success command that aggregates execution outcomes by harness/model tier.\n\n## Context\nExecution evidence result.json records harness, concrete model (via manifest.json or result.json), outcome (task_succeeded/task_failed/etc.), cost_usd, and duration_ms. This command aggregates those into tier-level success rates to inform routing policy.\n\n## Files to touch\n- cli/cmd/agent_metrics.go — new subcommand under ddx agent metrics\n- cli/cmd/agent.go — register metrics subcommand group\n- cli/cmd/agent_metrics_test.go — test with fixture execution dirs\n\n## Implementation notes\n- Scan .ddx/executions/*/result.json for harness and outcome fields\n- Group by harness (or harness+model if useful) \n- Calculate success rate = count(task_succeeded) / count(all)\n- Include avg cost and duration per tier",
+    "acceptance": "(1) ddx agent metrics tier-success queries execution evidence and reports success rate per harness/model tier (local, sonnet, opus, etc.) based on result.json outcome field. Output includes: tier, attempts, successes, success_rate, avg_cost_usd, avg_duration_ms. (2) Supports --last N flag to limit to most recent N attempts (default: all). (3) cd cli \u0026\u0026 go test ./cmd -run TestAgentMetricsTierSuccess -count=1 passes. (4) cd cli \u0026\u0026 go test ./cmd -count=1 passes (no regressions).",
+    "parent": "ddx-4b59b816",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:cli",
+      "kind:measurement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-16T20:28:42.875894505Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"agent\",\"resolved_model\":\"qwen/qwen3-coder-next\",\"route_reason\":\"first-available\",\"fallback_chain\":[],\"base_url\":\"http://vidar:1234/v1\"}",
+          "created_at": "2026-04-16T21:25:12.642075237Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=agent model=qwen/qwen3-coder-next reason=first-available"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260416T212529-c6fa6346",
+    "prompt": ".ddx/executions/20260416T212529-c6fa6346/prompt.md",
+    "manifest": ".ddx/executions/20260416T212529-c6fa6346/manifest.json",
+    "result": ".ddx/executions/20260416T212529-c6fa6346/result.json",
+    "checks": ".ddx/executions/20260416T212529-c6fa6346/checks.json",
+    "usage": ".ddx/executions/20260416T212529-c6fa6346/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4cdb9600-20260416T212529-c6fa6346"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Missing implementation diff for root routes `/beads`, `/documents`, `/graph`, `/agent`, and `/personas`; no `src/routes/...` files are shown.\nMissing evidence that `src/routes/nodes/[nodeId]/+page.svelte` renders an `\u003ch1\u003e`.\nMissing evidence that status, priority, and tier color tokens were centralized in `src/app.css` for `.light` and `.dark`.\nMissing `e2e/a11y.spec.ts` run output or check artifact showing 13/13 green.\nMissing implementation diff needed to evaluate whether new hard-coded hex colors were avoided."
+}

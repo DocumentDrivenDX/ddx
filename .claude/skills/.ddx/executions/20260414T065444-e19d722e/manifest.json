@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260414T065444-e19d722e",
+  "bead_id": "ddx-7004d730",
+  "base_rev": "0a17736214048a4139a43015020eb15f252e0c19",
+  "created_at": "2026-04-14T06:54:45.070584372Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7004d730",
+    "title": "implement: TP-002 multi-project Playwright coverage (TC-010 through TC-013)",
+    "description": "TP-002 TC-010 (project registry and scoped routing), TC-011 (host+user state and node identity), TC-012 (host+user project isolation and concurrency), and TC-013 (execute-loop worker lifecycle) are all PLANNED with no Playwright coverage. TP-002 specifies a projects.spec.ts file at cli/internal/server/frontend/e2e/projects.spec.ts that seeds multi-project fixtures via XDG_DATA_HOME override and POST /api/projects/register. TC-011 state persistence tests may be covered in Go (server_test.go) but TC-010/TC-012 isolation and TC-013 worker lifecycle tests need both Go and Playwright coverage per TP-002.",
+    "acceptance": "cli/internal/server/frontend/e2e/projects.spec.ts exists covering TC-010 (registry, scoped routing, MCP) and TC-012 (isolation); Go tests in cli/internal/server/ cover TC-011 state persistence (restart, single-instance); workers_test.go covers TC-013 worker lifecycle (start, logs, stop, scope); bun run test:e2e passes with projects.spec.ts",
+    "parent": "ddx-2e8ad12b",
+    "labels": [
+      "helix",
+      "phase:build",
+      "area:ui",
+      "area:server",
+      "area:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T06:54:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "execute-loop-heartbeat-at": "2026-04-14T06:54:44.868623304Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T065444-e19d722e",
+    "prompt": ".ddx/executions/20260414T065444-e19d722e/prompt.md",
+    "manifest": ".ddx/executions/20260414T065444-e19d722e/manifest.json",
+    "result": ".ddx/executions/20260414T065444-e19d722e/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7004d730-20260414T065444-e19d722e"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T091721-b85585ac",
+  "bead_id": "ddx-8aa70788",
+  "base_rev": "35996d6213b97fec3d86bcb8b9961007c755fe26",
+  "created_at": "2026-04-15T09:17:22.093632237Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8aa70788",
+    "title": "Stage 4.7: Beads lifecycle subscription (live updates)",
+    "description": "Add beadLifecycle subscription to the Beads page. Subscription active while page open; when bead state changes externally, the row updates live without refresh. See docs/plan-svelte-migration.md Stage 4 bead #41.",
+    "acceptance": "(1) MANUAL: open Beads page in browser. (2) In another terminal, run `ddx bead claim \u003cid\u003e` for a bead visible in the list. (3) See the row's status flip to 'in-progress' within 2 seconds without a refresh. Record the bead ID + observed behavior in the completion note.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T09:17:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T09:17:21.869270184Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T091721-b85585ac",
+    "prompt": ".ddx/executions/20260415T091721-b85585ac/prompt.md",
+    "manifest": ".ddx/executions/20260415T091721-b85585ac/manifest.json",
+    "result": ".ddx/executions/20260415T091721-b85585ac/result.json",
+    "checks": ".ddx/executions/20260415T091721-b85585ac/checks.json",
+    "usage": ".ddx/executions/20260415T091721-b85585ac/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8aa70788-20260415T091721-b85585ac"
+  }
+}

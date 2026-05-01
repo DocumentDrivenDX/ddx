@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260414T084358-38e40267",
+  "bead_id": "ddx-f2e9bdee",
+  "base_rev": "bf4449863580012bc947eb0ac3eda295a7052f52",
+  "created_at": "2026-04-14T08:43:58.445587351Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f2e9bdee",
+    "title": "Dashboard UI: cross-project workers view (all live workers across all projects on one screen)",
+    "description": "When an operator has N projects in flight (e.g. ddx, axon, helix) the FEAT-021 routing puts each project's workers under /nodes/:nodeId/projects/:projectId/agents. To see what's running across ALL projects you currently have to click into each project separately. Add a node-level (combined) view that lists every running worker on the node regardless of project, so the operator has one situational-awareness pane.\\n\\nBacking data: GET /api/agent/workers already returns ALL workers managed by the server (it's a node-wide endpoint, not scoped to a single project). The UI just needs to render this list with a project column.\\n\\nUI requirements:\\n- Route: /nodes/:nodeId/agents (combined; sibling of /nodes/:nodeId/beads and /nodes/:nodeId/sessions)\\n- Columns: project name, worker id, bead id, harness, model, state, started-at, attempts, last-status\\n- Auto-refresh every ~3s\\n- Each row links to /nodes/:nodeId/projects/:projectId/agents/:workerId for the per-worker detail (which is ddx-7be82986)\\n- Project picker dropdown should also expose 'All projects' as a value that navigates to this page\\n- Empty-state message when zero workers are running",
+    "acceptance": "Playwright test seeds the server's worker registry with three workers belonging to three different project IDs (test fixture via direct WorkerManager API or stubbed /api/agent/workers response). Loads /nodes/:nodeId/agents. Asserts: (1) all three workers appear in the table, (2) each row has a non-empty 'Project' column matching the seeded project name, (3) row order is by started-at descending, (4) clicking a row navigates to /nodes/:nodeId/projects/:projectId/agents/:workerId with the URL params matching the clicked worker's project and id, (5) when a worker's state transitions from running to exited the table updates within one refresh cycle. Backend Go test asserts GET /api/agent/workers returns workers from multiple projects in a single response array (already true today; lock it in).",
+    "parent": "ddx-2e8ad12b",
+    "metadata": {
+      "claimed-at": "2026-04-14T08:43:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "execute-loop-heartbeat-at": "2026-04-14T08:43:58.250681023Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T084358-38e40267",
+    "prompt": ".ddx/executions/20260414T084358-38e40267/prompt.md",
+    "manifest": ".ddx/executions/20260414T084358-38e40267/manifest.json",
+    "result": ".ddx/executions/20260414T084358-38e40267/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f2e9bdee-20260414T084358-38e40267"
+  }
+}

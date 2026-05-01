@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T195531-b8a72298",
+  "bead_id": "ddx-307ff904",
+  "base_rev": "86da57e49bdfdc73fcb27ae357aeceee1c8904da",
+  "created_at": "2026-04-14T19:55:31.606408632Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-307ff904",
+    "title": "Stage 1.6: rewrite FEAT-008-web-ui.md (full rewrite)",
+    "description": "Full rewrite of docs/helix/01-frame/features/FEAT-008-web-ui.md. Web UI feature spec now targets GraphQL operation names and Svelte page contracts. Every page lists its GraphQL query/subscription by name. Test plan section references Playwright against the SvelteKit build. Zero React references. See docs/plan-svelte-migration.md Stage 1 bead #6.",
+    "acceptance": "(1) `grep -iE 'react|vite|tanstack|minisearch' docs/helix/01-frame/features/FEAT-008-web-ui.md` returns ZERO matches. (2) Every page description names its GraphQL query. (3) Test plan section names Playwright and Vitest, not MSW.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T19:55:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "execute-loop-heartbeat-at": "2026-04-14T19:55:31.384711291Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T195531-b8a72298",
+    "prompt": ".ddx/executions/20260414T195531-b8a72298/prompt.md",
+    "manifest": ".ddx/executions/20260414T195531-b8a72298/manifest.json",
+    "result": ".ddx/executions/20260414T195531-b8a72298/result.json",
+    "checks": ".ddx/executions/20260414T195531-b8a72298/checks.json",
+    "usage": ".ddx/executions/20260414T195531-b8a72298/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-307ff904-20260414T195531-b8a72298"
+  }
+}

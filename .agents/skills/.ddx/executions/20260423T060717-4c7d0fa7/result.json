@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "**All AC items (1–9):** The diff adds `.ddx/executions/20260423T053812-719b9c5f/result.json`, which is execution metadata from the agent run that attempted this bead. It is not implementation code. No changes to `schema.graphql`, Go resolvers, Svelte components, route files, test files, or fixtures exist in this diff.\n**Scope gap:** This appears to be a bookkeeping commit (`chore: add execution evidence`) rather than a feature implementation commit. The actual feature work from commit `fcb8a93c` (\"feat: add Executions view\") referenced in `result_rev` is not included in the reviewed diff range — the review should target that commit or the full branch diff instead."
+}

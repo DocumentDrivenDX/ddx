@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260415T040703-8adb81a0",
+  "bead_id": "ddx-35f7441a",
+  "base_rev": "fda54978c9cd2f986d51988fc50c30da12f57ca4",
+  "created_at": "2026-04-15T04:07:03.513252476Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-35f7441a",
+    "title": "Stage 3.1: DELETE React frontend entirely",
+    "description": "Destructive bead. Run `git rm -r cli/internal/server/frontend/`. Remove the //go:embed directive in cli/internal/server/embed.go (or replace with a placeholder that embeds an empty fs until the new SvelteKit build lands). Remove or stub the spaHandler in cli/internal/server/server.go. `go build ./...` must still compile. User explicitly approved this destructive delete — pre-release software, UI loaded once, no state lost. See docs/plan-svelte-migration.md Stage 3 bead #27.",
+    "acceptance": "(1) `find cli/internal/server/frontend -type f` returns nothing or fails. (2) `go build ./...` succeeds. (3) `go test ./...` passes (SPA handler tests will be updated in Stage 4). (4) `ddx server` still starts (serves 404 or empty for /). (5) `git log -p cli/internal/server/frontend/` shows the delete commit.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:3",
+      "area:ui",
+      "kind:migration",
+      "tier:local"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T040703-8adb81a0",
+    "prompt": ".ddx/executions/20260415T040703-8adb81a0/prompt.md",
+    "manifest": ".ddx/executions/20260415T040703-8adb81a0/manifest.json",
+    "result": ".ddx/executions/20260415T040703-8adb81a0/result.json",
+    "checks": ".ddx/executions/20260415T040703-8adb81a0/checks.json",
+    "usage": ".ddx/executions/20260415T040703-8adb81a0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-35f7441a-20260415T040703-8adb81a0"
+  }
+}

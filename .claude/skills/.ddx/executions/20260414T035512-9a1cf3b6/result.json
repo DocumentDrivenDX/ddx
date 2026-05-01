@@ -1,0 +1,52 @@
+{
+  "bead_id": "ddx-7be16a5c",
+  "attempt_id": "20260414T035512-9a1cf3b6",
+  "base_rev": "e8a98717de40dc6d47160e8e6e41c181bfcae1a4",
+  "result_rev": "9b94038d47bb30b2095fe17dfff75492486f45f4",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-ca770ad5",
+  "duration_ms": 270894,
+  "tokens": 4557,
+  "cost_usd": 0.42886005000000005,
+  "exit_code": 0,
+  "execution_dir": ".ddx/executions/20260414T035512-9a1cf3b6",
+  "prompt_file": ".ddx/executions/20260414T035512-9a1cf3b6/prompt.md",
+  "manifest_file": ".ddx/executions/20260414T035512-9a1cf3b6/manifest.json",
+  "result_file": ".ddx/executions/20260414T035512-9a1cf3b6/result.json",
+  "started_at": "2026-04-14T03:55:12.730101395Z",
+  "finished_at": "2026-04-14T03:59:43.625073099Z",
+  "gate_results": [
+    {
+      "definition_id": "exec.FEAT-006.execute-bead-cli-regressions",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass",
+      "stdout": "ok  \tgithub.com/DocumentDrivenDX/ddx/cmd\t0.032s"
+    },
+    {
+      "definition_id": "exec.FEAT-006.go-build",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass"
+    },
+    {
+      "definition_id": "EXEC-GO-TEST-AGENT",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass",
+      "stdout": "ok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent\t84.956s"
+    },
+    {
+      "definition_id": "exec.FEAT-011.skills-validation",
+      "required": true,
+      "exit_code": 0,
+      "status": "pass",
+      "stdout": "validated 13 skill files"
+    }
+  ],
+  "required_exec_summary": "pass"
+}

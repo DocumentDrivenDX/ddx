@@ -1,0 +1,8 @@
+{
+  "attempt_id": "20260418T023901-ba3d8d59",
+  "harness": "agent",
+  "model": "Qwen3.6-35B-A3B-4bit",
+  "tokens": 254413,
+  "input_tokens": 219972,
+  "output_tokens": 34441
+}

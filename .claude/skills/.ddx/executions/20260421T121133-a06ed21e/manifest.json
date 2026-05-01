@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260421T121133-a06ed21e",
+  "bead_id": "ddx-3b91ca7a",
+  "base_rev": "8a31c25b8fb716d24266ed33b4559c3c56bd6ecd",
+  "created_at": "2026-04-21T12:11:34.581827496Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3b91ca7a",
+    "title": "design: create SD-019-agent-evaluation.md (comparison, grading, replay architecture)",
+    "description": "FEAT-019 is P1 and complex (dispatch same prompt to multiple harnesses, capture structured outputs, grading, replay), but has no Solution Design. TP-019 cannot be authored until the architecture is defined. Decide: use SD-019 slot (currently multi-project-server-topology — rename that SD to SD-019-multi-project-server-topology is fine but causes confusion) OR allocate a new SD number. Recommended: SD-023-agent-evaluation.md because SD-019 is already taken by multi-project topology.",
+    "acceptance": "SD-023 (or equivalent) written covering: comparison arm isolation; grading rubric and scoring pipeline; replay source-of-truth (session logs vs evidence bundles); relationship to 'ddx agent compare/benchmark/quorum' commands already implemented. Linked from FEAT-019.md and TP-019.",
+    "parent": "ddx-cbd20059",
+    "labels": [
+      "helix",
+      "phase:design",
+      "area:agent",
+      "kind:design"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-019"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-019",
+      "path": "docs/helix/01-frame/features/FEAT-019-agent-evaluation.md",
+      "title": "Feature: DDx Agent Evaluation and Prompt Comparison"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260421T121133-a06ed21e",
+    "prompt": ".ddx/executions/20260421T121133-a06ed21e/prompt.md",
+    "manifest": ".ddx/executions/20260421T121133-a06ed21e/manifest.json",
+    "result": ".ddx/executions/20260421T121133-a06ed21e/result.json",
+    "checks": ".ddx/executions/20260421T121133-a06ed21e/checks.json",
+    "usage": ".ddx/executions/20260421T121133-a06ed21e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3b91ca7a-20260421T121133-a06ed21e"
+  }
+}

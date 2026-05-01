@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T101014-435ffc05",
+  "bead_id": "ddx-3fb90feb",
+  "base_rev": "88e9153a2e7e55b5417b1531ba866acca4b2990d",
+  "created_at": "2026-04-15T10:10:14.348617091Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3fb90feb",
+    "title": "Stage 4.16: Rewrite Go SPA handler tests + CI rewrite + lefthook cleanup",
+    "description": "Rewrite TestSPAServesIndexHTML and TestSPAFallbackForClientRoute in cli/internal/server/server_test.go to verify the new embed path serves SvelteKit build output (index.html + a deep link URL both return the SvelteKit shell). Rewrite .github/workflows/ci.yml frontend job: delete Bun-for-React block, add `bun install` + `bun run build` + `bun run test` + `bun run test:e2e`. Delete the `debug-js` hook in lefthook.yml. See docs/plan-svelte-migration.md Stage 4 bead #50.",
+    "acceptance": "(1) `go test ./cli/internal/server/...` passes. (2) CI workflow yaml validates (use `gh workflow view` or `act` dry-run). (3) `lefthook run pre-commit` is clean (no orphaned debug-js hook). (4) MANUAL: commit a test file, pre-commit runs without errors.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T10:10:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T10:10:14.118837038Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T101014-435ffc05",
+    "prompt": ".ddx/executions/20260415T101014-435ffc05/prompt.md",
+    "manifest": ".ddx/executions/20260415T101014-435ffc05/manifest.json",
+    "result": ".ddx/executions/20260415T101014-435ffc05/result.json",
+    "checks": ".ddx/executions/20260415T101014-435ffc05/checks.json",
+    "usage": ".ddx/executions/20260415T101014-435ffc05/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3fb90feb-20260415T101014-435ffc05"
+  }
+}

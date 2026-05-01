@@ -1,0 +1,74 @@
+{
+  "attempt_id": "20260422T210201-b985b283",
+  "bead_id": "ddx-6ce6d7a7",
+  "base_rev": "de93908806c22639a35799e81d6c322bd7f72ebc",
+  "created_at": "2026-04-22T21:02:01.669720025Z",
+  "requested": {
+    "harness": "gemini",
+    "model": "minimax/minimax-m2.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6ce6d7a7",
+    "title": "Efficacy 'Compare arms' button is unclear and misplaced: decide whether to relocate, redesign, or remove",
+    "description": "## Observed\n\nThe Efficacy page has a \"Compare\" button that opens a flow for adding \"arms\" and writing a prompt. User feedback: they're not sure what to do with it. It does not match their mental model of what efficacy is (a session aggregation grouped by provider / harness / model).\n\n## Ground truth\n\n- The backing feature is `Query.comparisons` and the comparison record set (`cli/internal/server/graphql/resolver_feat008.go:211-226`). It's an A/B-style \"run the same prompt across N arms and compare results\" tool. That is a real capability — just not what a rollup/efficacy dashboard is for.\n- It's colocated with Efficacy today probably because both involve harness/model performance. The colocation is creating confusion: the Efficacy page promises \"how are things doing\" and the Compare button promises \"design an experiment\" — different audiences, different tasks.\n\n## Decision required\n\nBefore implementation, decide one of three:\n\n1. **Relocate.** Move Compare to its own top-level surface (e.g., `/experiments` or `/compare`) and cleanly separate \"how did things go\" (efficacy) from \"design an A/B\" (compare). Efficacy page loses the Compare button entirely.\n2. **Redesign in place.** Keep it on the Efficacy page but recast as \"Compare these rows\" — the user selects 2+ efficacy rows and launches a comparison pre-seeded from them. Removes the cold-start prompt-entry UX; connects directly to the rollup the user is already looking at.\n3. **Remove.** If comparisons are not being used by real workflows, drop the feature and the associated UI/resolver. Least code, least surface area.\n\nThe user did not mandate a specific choice — they flagged the confusion and the mental model. Option 2 aligns best with their stated mental model (efficacy = session aggregation); option 1 is the cleanest separation of concerns; option 3 is viable only if usage data supports it.\n\n## Proposed direction\n\nRun the design decision as a short spike (≤ half a day):\n\n- Check whether `comparisons` is referenced by anything beyond this UI page: CLI, docs, specs, other server endpoints. Deletion cost is a function of that.\n- Usage check: grep agent-logs + bead evidence for any `comparison_id` or `compare` correlation over the last 30 days. Is anyone actually running comparisons?\n- Write a one-page decision note in `docs/helix/02-design/` recording the choice, the evidence that supports it, and the scope of the implementation work.\n\nThis bead's remaining acceptance criteria are written assuming the outcome is (2) \"redesign in place\" — the most-likely-to-be-built option. They should be rewritten when the decision is made if the outcome is (1) or (3).\n\n## Out of scope\n\n- Anything the Efficacy perf/source rework (`ddx-0a33bc5f`) covers.\n- Multi-run orchestration changes to how comparisons execute.",
+    "acceptance": "**User story:** As a developer on the Efficacy page, I understand what Compare is for the moment I see it, and I can either select rows I already care about and compare them, or I can ignore the feature entirely if it's not for me.\n\n**Acceptance criteria (assume outcome (2) — \"redesign in place\"; rewrite these if (1) or (3) is chosen):**\n\n1. **Decision note.** One-pager in `docs/helix/02-design/` records the chosen outcome (relocate / redesign / remove), the evidence behind it (usage grep, dependency scan), and the scope of remaining work. Implementation PR links to it.\n\n2. **Row-selection entry point.** Efficacy table rows gain a leading checkbox column. Selecting ≥2 rows enables a \"Compare selected\" button in the page header. With 0 or 1 rows selected the button is disabled (not hidden) with a tooltip explaining why.\n\n3. **Pre-seeded comparison.** Clicking \"Compare selected\" launches the existing comparison flow with arms pre-populated from the selected rows' `(harness, provider, model)` tuples. The prompt field is still required (comparisons need a prompt) but is the only field the user has to fill in — the arm list is done.\n\n4. **Removed from cold-start.** The standalone \"Compare\" button on the Efficacy page (the one that creates an empty comparison) is removed. New comparisons originate from a row selection. If users legitimately want a from-scratch comparison, that path lives on a separate `/experiments` page (out of scope for this bead unless the design note calls for it).\n\n5. **Empty-state copy.** When the Efficacy table is empty, the Compare affordance is hidden entirely (no point selecting zero rows).\n\n6. **Playwright e2e.**\n   - Seeds the fixture with ≥3 efficacy rows.\n   - Asserts the Compare button is disabled with 0/1 selections and enabled with 2+.\n   - Selects 2 rows, clicks Compare, asserts the comparison form opens with arms pre-populated from those rows and only the prompt field is empty.\n\n7. **No regression to efficacy perf.** All perf targets from `ddx-0a33bc5f` still hold. Adding a checkbox column does not change the payload the resolver returns.",
+    "labels": [
+      "feat-008",
+      "feat-019",
+      "efficacy",
+      "ui",
+      "design"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T21:01:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2792459",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"qwen/qwen3.6-35b-a3b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:01:57.817147436Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=qwen/qwen3.6-35b-a3b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=agent model=qwen/qwen3.6-35b-a3b probe=ok\nagent: provider error: openai: POST \"http://vidar:1235/v1/chat/completions\": 404 Not Found {\"message\":\"Model 'qwen/qwen3.6-35b-a3b' not found. Available models: Qwen3.5-122B-A10B-RAM-100GB-MLX, MiniMax-M2.5-MLX-4bit, Qwen3-Coder-Next-MLX-4bit, gemma-4-31B-it-MLX-4bit, Qwen3.5-27B-4bit, Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit, Qwen3.6-35B-A3B-4bit, Qwen3.6-35B-A3B-nvfp4, gpt-oss-20b-MXFP4-Q8\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}",
+          "created_at": "2026-04-22T21:01:58.014060655Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"codex/gpt-5.4\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T21:02:00.910730191Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=codex/gpt-5.4"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=claude model=codex/gpt-5.4 probe=ok\nunsupported model \"codex/gpt-5.4\" for harness \"claude\"; supported models: sonnet, opus, claude-sonnet-4-6",
+          "created_at": "2026-04-22T21:02:01.117912104Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T21:01:53.255889899Z",
+      "feature": "FEAT-019"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T210201-b985b283",
+    "prompt": ".ddx/executions/20260422T210201-b985b283/prompt.md",
+    "manifest": ".ddx/executions/20260422T210201-b985b283/manifest.json",
+    "result": ".ddx/executions/20260422T210201-b985b283/result.json",
+    "checks": ".ddx/executions/20260422T210201-b985b283/checks.json",
+    "usage": ".ddx/executions/20260422T210201-b985b283/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6ce6d7a7-20260422T210201-b985b283"
+  }
+}

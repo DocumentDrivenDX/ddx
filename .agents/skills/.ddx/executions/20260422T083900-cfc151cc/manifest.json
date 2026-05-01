@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260422T083900-cfc151cc",
+  "bead_id": "ddx-698d48f2",
+  "base_rev": "0294dbdf68526066305daad54c03affa04ecd28e",
+  "created_at": "2026-04-22T08:39:00.777186815Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-698d48f2",
+    "title": "FEAT-008 P5a: US-082g beads sort + filter + URL state",
+    "description": "Extend beads/+page.svelte with sort toggle + filter chips. Sort is a BUTTON named /sort by priority/i that toggles order (not a generic \u003cselect\u003e). Filter chips for status, priority, labels (plural). Chips use aria-pressed bound to URL param. data-testid=bead-row on each row; data-priority is NUMERIC 0-4 (render 'P0'-'P4' as display text but attribute is numeric). Default sort = priority asc. URL params read on mount via $page.url; written on change via goto with replaceState: true. Accept BOTH 'label' and 'labels' on read (test uses /label=ui/ regex that matches either).",
+    "acceptance": "US-082g.a-e green (requires test-fixture fix bead ddx-85dc2ab8 to be closed first).",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "phase-5",
+      "us-082g"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T08:39:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "execute-loop-heartbeat-at": "2026-04-22T08:39:00.312855437Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T083900-cfc151cc",
+    "prompt": ".ddx/executions/20260422T083900-cfc151cc/prompt.md",
+    "manifest": ".ddx/executions/20260422T083900-cfc151cc/manifest.json",
+    "result": ".ddx/executions/20260422T083900-cfc151cc/result.json",
+    "checks": ".ddx/executions/20260422T083900-cfc151cc/checks.json",
+    "usage": ".ddx/executions/20260422T083900-cfc151cc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-698d48f2-20260422T083900-cfc151cc"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "**`cli/internal/agent/agent_runner.go:8`** — `func (r *Runner) RunAgent` remains a `(*Runner)` method. The commit only updated internal call sites (`r.useNewAgentPath()` → `useNewAgentPath()`, `r.runAgentViaService(opts)` → `runAgentViaService(r, opts)`) but did not convert `RunAgent` itself to a free function. This violates AC item 1 and the bead's own post-condition. `RunAgent` should be converted to `runAgentFn(r *Runner, opts RunOptions) (*Result, error)` following the same pattern used for all other files in this commit."
+}

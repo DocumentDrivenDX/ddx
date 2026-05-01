@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260418T173504-895fc5b0",
+  "bead_id": "ddx-3e7f8213",
+  "base_rev": "dbe977f2169597c56e9c482c25ffe7479ff488c4",
+  "created_at": "2026-04-18T17:35:04.469618588Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen/qwen3.6-35b-a3b",
+    "provider": "bragi",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3e7f8213",
+    "title": "Wire required execution gates into managed execute-bead landing",
+    "description": "CONTRACT-001 assigns DDx ownership of required execution semantics sufficient to decide merge vs preserve, but the shipped managed paths do not currently pass governing IDs/worktree context into gate evaluation before land. `evaluateRequiredGates()` and checks.json writing exist, but `ddx agent execute-bead` intentionally clears WtPath/GovernIDs and the server execute-loop path lands through the coordinator without invoking gate evaluation.\n\nPromote required graph-authored execution docs from dormant implementation to the actual managed-landing contract.",
+    "acceptance": "- [ ] `ddx agent execute-bead` and the server/local execute-loop paths evaluate required governing execution docs before a result is merged\n- [ ] A required failing gate preserves the attempt instead of landing it, writes gate results into the execution bundle, and reports `post_run_check_failed`/equivalent preserved detail in the result surface\n- [ ] A required passing gate still allows landing and records the pass summary deterministically\n- [ ] A regression test covers both interactive execute-bead and execute-loop managed paths with required-pass and required-fail fixtures\n- [ ] Existing no-gate behavior remains mergeable and backward compatible",
+    "labels": [
+      "ddx",
+      "area:agent",
+      "area:exec",
+      "area:git"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-18T17:34:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "9637",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"agent\",\"resolved_model\":\"Qwen3-Coder-Next-MLX-4bit\",\"route_reason\":\"direct-override\",\"fallback_chain\":[],\"base_url\":\"http://vidar:1235/v1\"}",
+          "created_at": "2026-04-18T01:18:33.517271146Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=agent model=Qwen3-Coder-Next-MLX-4bit reason=direct-override"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: unexpected end of JSON input\nresult_rev=4cb2f9f56ec7b4da412de3b08d60f4e6abeb257f\nbase_rev=4cb2f9f56ec7b4da412de3b08d60f4e6abeb257f\nretry_after=2026-04-18T07:18:33Z",
+          "created_at": "2026-04-18T01:18:33.663402215Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-18T17:34:51.338719777Z",
+      "execute-loop-last-detail": "agent: provider error: unexpected end of JSON input",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-04-18T07:18:33Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260418T173504-895fc5b0",
+    "prompt": ".ddx/executions/20260418T173504-895fc5b0/prompt.md",
+    "manifest": ".ddx/executions/20260418T173504-895fc5b0/manifest.json",
+    "result": ".ddx/executions/20260418T173504-895fc5b0/result.json",
+    "checks": ".ddx/executions/20260418T173504-895fc5b0/checks.json",
+    "usage": ".ddx/executions/20260418T173504-895fc5b0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3e7f8213-20260418T173504-895fc5b0"
+  }
+}

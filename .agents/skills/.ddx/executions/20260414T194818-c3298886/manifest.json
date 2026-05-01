@@ -1,0 +1,65 @@
+{
+  "attempt_id": "20260414T194818-c3298886",
+  "bead_id": "ddx-fe5c64aa",
+  "base_rev": "0c04e0219823087b8a1df9d273a44db5eb3c22ac",
+  "created_at": "2026-04-14T19:48:18.518719242Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fe5c64aa",
+    "title": "Stage 1.1: draft schema.graphql types + queries",
+    "description": "Draft the initial GraphQL schema covering all types and query entry points needed by the new SvelteKit UI. Create new file cli/internal/server/graphql/schema.graphql. Schema must include: Node, Project, Bead/BeadConnection/BeadEdge (Relay cursor connection), Document, DocGraph, Commit/CommitConnection, Worker, AgentSession, Persona, ExecutionRun, CoordinatorMetrics. Every field doc-commented. Every existing GET /api/* list endpoint in cli/internal/server/server.go:334-417 must have a corresponding Query. See docs/plan-svelte-migration.md Stage 1 bead #1 for full context.",
+    "acceptance": "(1) File cli/internal/server/graphql/schema.graphql exists and parses: `go run github.com/99designs/gqlgen generate --config cli/internal/server/graphql/gqlgen.yml` (or a dry-run equivalent) completes without schema errors. (2) Manual: open the file and point at each GET /api/* in server.go:334-417 — for each, name the GraphQL Query that replaces it. No REST endpoint is orphaned. (3) Every type field has a doc comment. (4) Relay cursor connections used on every list (no offset/limit).",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "agent: identical tool calls repeated, aborting loop\nresult_rev=ad0a9498b6043afe428d4e6b117cd6c2000274eb\nbase_rev=599157e8128981c299fc57b368be96799e36917e",
+          "created_at": "2026-04-14T18:48:42.267254068Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "opus-reviewer",
+          "body": "Opus review of commit f8761ba (was ad0a949 in worktree) against this bead acceptance.\n\nVerdict: APPROVE_WITH_EDITS — schema is a good draft but needs these fixes:\n\n1. ADD missing queries covering REST endpoints:\n   - health: HealthStatus! (covers GET /api/health)\n   - ready: ReadyStatus! (covers GET /api/ready)\n   - workerLog(workerID: ID!): String! (covers GET /api/agent/workers/{id}/log)\n   - workerPrompt(workerID: ID!): String! (covers GET /api/agent/workers/{id}/prompt)\n   - agentCoordinators: [CoordinatorMetrics!]! (list form for GET /api/agent/coordinators)\n   - documentByPath(path: String!): Document (covers GET /api/documents/{path...})\n\n2. ADD per-field doc comments. Only type-level comments exist today. Acceptance criterion (3) says every field needs a doc comment. Add \"\"\"...\"\"\" block above every field in every type. Biggest lift.\n\n3. CONVERT search: [SearchResult!]! to SearchResultConnection with edges/node/cursor/pageInfo per the Relay cursor rule.\n\n4. Leave existing content in cli/internal/server/graphql/schema.graphql alone where possible — this is an edit pass, not a rewrite.\n\nStarting worktree already has the file at cli/internal/server/graphql/schema.graphql (687 lines). Read it first, then apply the fixes above, then commit.",
+          "created_at": "2026-04-14T19:23:15.28315708Z",
+          "kind": "review",
+          "source": "fresh-eyes review of ad0a949 (cherry-picked as f8761ba)",
+          "summary": "APPROVE_WITH_EDITS: 38/44 endpoints covered; per-field doc comments missing; add 6 missing queries"
+        },
+        {
+          "actor": "ddx",
+          "body": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 500 Internal Server Error \nresult_rev=bac38cb665e074ad3cc4a8aa5cb92cf1bcd11978\nbase_rev=bac38cb665e074ad3cc4a8aa5cb92cf1bcd11978\nretry_after=2026-04-15T01:26:10Z",
+          "created_at": "2026-04-14T19:26:10.116792005Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-last-detail": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 500 Internal Server Error ",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-04-15T01:26:10Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T194818-c3298886",
+    "prompt": ".ddx/executions/20260414T194818-c3298886/prompt.md",
+    "manifest": ".ddx/executions/20260414T194818-c3298886/manifest.json",
+    "result": ".ddx/executions/20260414T194818-c3298886/result.json",
+    "checks": ".ddx/executions/20260414T194818-c3298886/checks.json",
+    "usage": ".ddx/executions/20260414T194818-c3298886/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fe5c64aa-20260414T194818-c3298886"
+  }
+}

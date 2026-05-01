@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T094125-eafecd9d",
+  "bead_id": "ddx-238ea71d",
+  "base_rev": "812456727fb3b1b3d6552772284ef93e5a35ef47",
+  "created_at": "2026-04-15T09:41:25.768888936Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-238ea71d",
+    "title": "Stage 4.10: Documents edit-in-place + documentWrite mutation",
+    "description": "Add Edit button to [path]/+page.svelte. Swaps render to textarea, Save calls documentWrite mutation, display updates. See docs/plan-svelte-migration.md Stage 4 bead #44.",
+    "acceptance": "(1) MANUAL: edit a doc via the UI, save, refresh the page, see the change persisted. (2) Verify via `ddx doc show \u003cpath\u003e` that the content matches what was edited.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T09:41:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T09:41:25.539692559Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T094125-eafecd9d",
+    "prompt": ".ddx/executions/20260415T094125-eafecd9d/prompt.md",
+    "manifest": ".ddx/executions/20260415T094125-eafecd9d/manifest.json",
+    "result": ".ddx/executions/20260415T094125-eafecd9d/result.json",
+    "checks": ".ddx/executions/20260415T094125-eafecd9d/checks.json",
+    "usage": ".ddx/executions/20260415T094125-eafecd9d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-238ea71d-20260415T094125-eafecd9d"
+  }
+}

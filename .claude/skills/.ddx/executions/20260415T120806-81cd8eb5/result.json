@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-e14c86ef",
+  "attempt_id": "20260415T120806-81cd8eb5",
+  "base_rev": "de3f9d746d6c5f7019050b68881a5044163bf8af",
+  "result_rev": "de3f9d746d6c5f7019050b68881a5044163bf8af",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: harness lmstudio not available:  not found in PATH",
+  "harness": "lmstudio",
+  "model": "minimax/minimax-m2.7",
+  "session_id": "eb-a4aa3c26",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "agent: harness lmstudio not available:  not found in PATH",
+  "execution_dir": ".ddx/executions/20260415T120806-81cd8eb5",
+  "prompt_file": ".ddx/executions/20260415T120806-81cd8eb5/prompt.md",
+  "manifest_file": ".ddx/executions/20260415T120806-81cd8eb5/manifest.json",
+  "result_file": ".ddx/executions/20260415T120806-81cd8eb5/result.json",
+  "started_at": "2026-04-15T12:08:06.508565661Z",
+  "finished_at": "2026-04-15T12:08:06.508569827Z"
+}

@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260411T164804-a0dfbaa1",
+  "bead_id": "ddx-cba2dc64",
+  "base_rev": "1e1fb11fc2b0ce4e990fe293d28220ae98f4c657",
+  "created_at": "2026-04-11T16:48:05.407818286Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cba2dc64",
+    "title": "Redirect embedded agent logs out of execute-bead worktree root",
+    "description": "\u003ccontext-digest\u003e\nReview area: embedded ddx-agent runtime ownership inside execute-bead worktrees. Evidence covers the tracked execution-evidence lane, the current rule that DDx should own execution artifacts for managed runs, and the need to prevent embedded-agent session/telemetry files from appearing as ad hoc root-level state inside execution worktrees.\n\u003c/context-digest\u003e\nDefine and implement the path contract for embedded ddx-agent logs and telemetry when DDx runs the embedded harness inside execute-bead and execute-loop.\n\n## Goals\n- Prevent embedded ddx-agent session logs, traces, or telemetry from being written as default root-level runtime state in managed execution worktrees\n- Redirect embedded-agent runtime output into DDx-owned execution-evidence or runtime paths\n- Keep the split explicit between tracked execution evidence and ignored local runtime scratch\n- Update the governing specs so embedded-agent log ownership is documented rather than implied by implementation\n\n## Required spec work\n- Update FEAT-006 and the execution-evidence design lane to define where embedded-agent logs/telemetry live during execute-bead runs\n- Clarify how embedded-agent-owned logs differ from external provider-native logs\n\n## Required implementation work\n- Configure the embedded agent harness so managed execute-bead worktrees do not accumulate root-level agent state\n- Add tests proving embedded-agent runtime output is redirected into DDx-owned paths",
+    "acceptance": "FEAT-006 and the execution-evidence design docs define embedded-agent runtime paths for managed execute-bead runs; the embedded harness no longer writes default root-level agent state inside execution worktrees; and tests prove session/telemetry output is redirected into DDx-owned evidence or runtime directories",
+    "parent": "ddx-32b3008e",
+    "labels": [
+      "helix",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:exec",
+      "area:docs"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:19:59.387659141Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "cancelled\nresult_rev=c93da45f6056a8446399e4236d71ebed2345389c\nbase_rev=c93da45f6056a8446399e4236d71ebed2345389c\nretry_after=2026-04-11T10:05:40Z",
+          "created_at": "2026-04-11T04:05:40.513175226Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execution-eligible": true,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260411T164804-a0dfbaa1",
+    "prompt": ".ddx/executions/20260411T164804-a0dfbaa1/prompt.md",
+    "manifest": ".ddx/executions/20260411T164804-a0dfbaa1/manifest.json",
+    "result": ".ddx/executions/20260411T164804-a0dfbaa1/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-cba2dc64-20260411T164804-a0dfbaa1"
+  }
+}

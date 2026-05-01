@@ -1,0 +1,12 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1776827657, "env": {"SHELL": null, "TERM": null}}
+[0.010266, "o", "\r\n$ ddx init\r\n"]
+[0.532398, "o", "🚀 Initializing DDx in current project...\r\n\r\n"]
+[0.995871, "o", "✅ DDx initialized successfully!\r\n\r\nNext steps:\r\n  ddx install helix   - Install HELIX workflow (optional)\r\n  ddx doctor          - Check installation health\r\n\r\n"]
+[1.998122, "o", "\r\n$ ddx bead create Build task tracker --type epic --labels helix,phase:build\r\n"]
+[2.548468, "o", "tmp.JuJSaftZyp-3dc3a24f\r\n"]
+[3.555359, "o", "\r\n$ ddx bead create Add task CRUD --type task --labels helix,phase:build\r\n"]
+[4.088058, "o", "tmp.JuJSaftZyp-33bf72d1\r\n"]
+[5.090257, "o", "\r\n$ ddx bead list\r\n"]
+[5.616858, "o", "tmp.JuJSaftZyp-33bf72d1  open          P0  Add task CRUD [helix,phase:build]\r\ntmp.JuJSaftZyp-3dc3a24f  open          P0  Build task tracker [helix,phase:build]\r\n"]
+[6.620831, "o", "\r\n$ ddx bead ready\r\n"]
+[7.149094, "o", "tmp.JuJSaftZyp-3dc3a24f  P0  Build task tracker\r\ntmp.JuJSaftZyp-33bf72d1  P0  Add task CRUD\r\n"]

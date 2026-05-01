@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260416T044614-0d079bcd",
+  "bead_id": "ddx-e14c86ef",
+  "base_rev": "744b4c8e06f876f177d1eb2771e34c8053ad7a2c",
+  "created_at": "2026-04-16T04:46:15.208343317Z",
+  "requested": {
+    "harness": "agent",
+    "provider": "bragi",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e14c86ef",
+    "title": "feat(agent): add --json flag to ddx agent check",
+    "description": "Opus epic review (2026-04-15): ddx agent providers and route-status have --json flags; ddx agent check does not. Scripting consumers can't reliably parse its output.",
+    "acceptance": "(1) ddx agent check --json emits a JSON array of check results. (2) Each result has provider, harness, status, latency_ms, error fields. (3) Existing non-JSON output unchanged.",
+    "parent": "ddx-bd0691fe",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:feature",
+      "area:agent",
+      "area:cli",
+      "source:opus-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T12:07:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1602306",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"lmstudio\",\"resolved_model\":\"minimax/minimax-m2.7\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-15T12:08:06.579588047Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=lmstudio model=minimax/minimax-m2.7"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness=lmstudio model=minimax/minimax-m2.7 probe=ok\nagent: harness lmstudio not available:  not found in PATH",
+          "created_at": "2026-04-15T12:08:06.630343453Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-15T12:08:28.731112521Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260416T044614-0d079bcd",
+    "prompt": ".ddx/executions/20260416T044614-0d079bcd/prompt.md",
+    "manifest": ".ddx/executions/20260416T044614-0d079bcd/manifest.json",
+    "result": ".ddx/executions/20260416T044614-0d079bcd/result.json",
+    "checks": ".ddx/executions/20260416T044614-0d079bcd/checks.json",
+    "usage": ".ddx/executions/20260416T044614-0d079bcd/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e14c86ef-20260416T044614-0d079bcd"
+  }
+}

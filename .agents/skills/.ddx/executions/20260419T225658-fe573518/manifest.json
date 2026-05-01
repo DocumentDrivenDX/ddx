@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260419T225658-fe573518",
+  "bead_id": "ddx-b9747ee3",
+  "base_rev": "eca4845f4e778434d065bef0a15963428fb9e812",
+  "created_at": "2026-04-19T22:56:58.899901345Z",
+  "requested": {
+    "harness": "agent",
+    "model": "minimax/minimax-m2.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b9747ee3",
+    "title": "registry: package.yaml schema failure suppresses structural audits",
+    "description": "When LoadPackageManifest rejects a package.yaml for missing required fields (e.g. description), it returns nil for the package. AuditInstalledEntry then falls back to \u0026Package{}, which has empty Install.Skills. As a result collectSkillRoots returns nothing and auditSkillRoot is never called, so structural problems like missing SKILL.md files are silently swallowed whenever the manifest also has a schema problem.\n\nThe two audit dimensions should be independent: a malformed manifest should not blind us to install-tree problems.\n\nFix sketch: when LoadPackageManifest fails validation but the YAML at least parsed, still construct a *Package from raw (accepting Install etc.) so structural audits can proceed. Alternatively split manifest validation and structure audit so the latter does not depend on a fully valid *Package.\n\nSurfaced while finishing the WIP for c2203cc3 — TestDoctorPluginsFlagReportsSchemaAndSymlinkIssues had to be split into two tests because no single fixture could trigger both diagnostics.",
+    "acceptance": "Doctor reports both manifest schema and structural issues for a single broken plugin in one diagnostic pass. The split tests in cli/cmd/doctor_plugins_test.go can be re-merged into one combined test.",
+    "labels": [
+      "area:registry",
+      "kind:bug",
+      "phase:build"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-19T22:56:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "721226",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"lmstudio\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-19T22:56:50.283609232Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=lmstudio model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=lmstudio model=qwen3.5-27b probe=ok\nagent: native config provider \"lmstudio\": config: unknown provider \"lmstudio\"",
+          "created_at": "2026-04-19T22:56:50.469185336Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-19T22:56:41.364088838Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260419T225658-fe573518",
+    "prompt": ".ddx/executions/20260419T225658-fe573518/prompt.md",
+    "manifest": ".ddx/executions/20260419T225658-fe573518/manifest.json",
+    "result": ".ddx/executions/20260419T225658-fe573518/result.json",
+    "checks": ".ddx/executions/20260419T225658-fe573518/checks.json",
+    "usage": ".ddx/executions/20260419T225658-fe573518/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b9747ee3-20260419T225658-fe573518"
+  }
+}

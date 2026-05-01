@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T090347-f445ea68",
+  "bead_id": "ddx-927fd970",
+  "base_rev": "e80402266a589c46a1ae65ea43d188994322c0db",
+  "created_at": "2026-04-15T09:03:47.73240586Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-927fd970",
+    "title": "Stage 4.5: Beads detail panel",
+    "description": "Create src/lib/components/BeadDetail.svelte. Row-click opens side panel with full bead metadata + dependencies + history. URL becomes .../beads/:beadId. Closing panel returns to list. See docs/plan-svelte-migration.md Stage 4 bead #39.",
+    "acceptance": "(1) MANUAL: click a bead row, panel opens with full bead data matching `ddx bead show \u003cid\u003e`. (2) URL becomes .../beads/\u003cid\u003e. (3) Close button returns to list. (4) Direct URL load to .../beads/\u003cid\u003e opens the panel.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T09:03:47Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T09:03:47.495286469Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T090347-f445ea68",
+    "prompt": ".ddx/executions/20260415T090347-f445ea68/prompt.md",
+    "manifest": ".ddx/executions/20260415T090347-f445ea68/manifest.json",
+    "result": ".ddx/executions/20260415T090347-f445ea68/result.json",
+    "checks": ".ddx/executions/20260415T090347-f445ea68/checks.json",
+    "usage": ".ddx/executions/20260415T090347-f445ea68/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-927fd970-20260415T090347-f445ea68"
+  }
+}

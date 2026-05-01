@@ -1,0 +1,13 @@
+{
+  "id": "20260419T223852-ac01895b",
+  "parent": "ddx-d118f1bf",
+  "base_rev": "85fb6510e764323175a65cf79d13ed0460c468bf",
+  "result_rev": "85fb6510e764323175a65cf79d13ed0460c468bf",
+  "claimed_at": "2026-04-19T22:38:52Z",
+  "title": "chore: track closure of upstream agent fixes on DDx side (thinking-strip, SSE-filter, preset rename)",
+  "bead_id": "ddx-d118f1bf",
+  "outcome": "no_changes",
+  "error": null,
+  "summary": "Confirmed all three AC items in v0.5.0 context. AC1 (status table) and AC2 (consumer coverage) verified against bead description. AC3 blocked by upstream agent-a365bcf2 (preset rename) which is still in_progress. No file edits appropriate until upstream ships.",
+  "files_touched": []
+}

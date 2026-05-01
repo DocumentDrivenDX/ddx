@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260413T022948-ca285162",
+  "bead_id": "ddx-051b0015",
+  "base_rev": "42fd0feeb54667aa6f89b98c491943357972d42e",
+  "created_at": "2026-04-13T02:29:48.242943561Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-051b0015",
+    "title": "Add dedicated read-only tools (ls, find, grep) to ddx-agent for stall detection and efficiency",
+    "description": "During execute-loop runs with OpenRouter models (GLM-5.1, Qwen 3.6), agents get stuck in read loops — they call read and bash (for ls/find/grep) repeatedly without ever writing. The stall detector cannot distinguish bash ls from bash \"git commit\" because bash is classified as a write-capable tool, resetting the stall counter on every call.\n\nAdding dedicated read-only tools (ls, find, grep) to ddx-agent would:\n1. Let the stall detector accurately distinguish read-only exploration from write activity\n2. Reduce token usage by avoiding bash prompt/response overhead for simple file queries\n3. Give models clearer affordances — read-only tools for exploration, write/edit/bash for modification\n4. Help models transition from reading to writing faster by making the tool boundary explicit\n\nWith these tools, the stall detector classifies read/ls/find/grep as read-only (increment stall counter) and write/edit/bash as write-capable (reset counter). Bash is only used when the agent needs commands that might modify the filesystem.",
+    "acceptance": "dxx-agent has dedicated ls, find, and grep tools; stall detector classifies them as read-only; bash is only classified as write-capable; agents on OpenRouter models transition from reading to writing faster",
+    "labels": [
+      "ddx",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:exec"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-12T02:37:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2937265"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260413T022948-ca285162",
+    "prompt": ".ddx/executions/20260413T022948-ca285162/prompt.md",
+    "manifest": ".ddx/executions/20260413T022948-ca285162/manifest.json",
+    "result": ".ddx/executions/20260413T022948-ca285162/result.json",
+    "worktree": ".ddx/.execute-bead-wt-ddx-051b0015-20260413T022948-ca285162"
+  }
+}

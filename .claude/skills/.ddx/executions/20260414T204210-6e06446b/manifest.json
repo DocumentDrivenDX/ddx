@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T204210-6e06446b",
+  "bead_id": "ddx-83171c44",
+  "base_rev": "1990e6c5c64e45e300143232099d023b5bd42ddd",
+  "created_at": "2026-04-14T20:42:10.589686208Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-83171c44",
+    "title": "Stage 1.11: update external docs (website, personas, resources)",
+    "description": "Update docs/helix-adjacent files referencing the frontend stack: website/content/docs/server/_index.md, library/personas/architect-systems.md, any docs/resources/*.md that reference the stack. Swap to SvelteKit+GraphQL+Houdini+Bun. See docs/plan-svelte-migration.md Stage 1 bead #11.",
+    "acceptance": "(1) website/content/docs/server/_index.md has zero React references. (2) library/personas/architect-systems.md architectural context section names SvelteKit+GraphQL. (3) All files compile/render (no broken markdown).",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T20:42:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "execute-loop-heartbeat-at": "2026-04-14T20:42:10.252170736Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T204210-6e06446b",
+    "prompt": ".ddx/executions/20260414T204210-6e06446b/prompt.md",
+    "manifest": ".ddx/executions/20260414T204210-6e06446b/manifest.json",
+    "result": ".ddx/executions/20260414T204210-6e06446b/result.json",
+    "checks": ".ddx/executions/20260414T204210-6e06446b/checks.json",
+    "usage": ".ddx/executions/20260414T204210-6e06446b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-83171c44-20260414T204210-6e06446b"
+  }
+}

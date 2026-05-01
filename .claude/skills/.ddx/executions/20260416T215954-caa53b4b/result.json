@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-d6e7772c",
+  "attempt_id": "20260416T215954-caa53b4b",
+  "base_rev": "1b3b1750e076d7936f88254854d2277f8b7bb7d8",
+  "result_rev": "1b3b1750e076d7936f88254854d2277f8b7bb7d8",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: compaction stuck: consecutive attempts failed to produce a compacted history",
+  "harness": "agent",
+  "model": "qwen/qwen3-coder-next",
+  "session_id": "eb-217778af",
+  "duration_ms": 654593,
+  "tokens": 192563,
+  "exit_code": 1,
+  "error": "agent: compaction stuck: consecutive attempts failed to produce a compacted history",
+  "execution_dir": ".ddx/executions/20260416T215954-caa53b4b",
+  "prompt_file": ".ddx/executions/20260416T215954-caa53b4b/prompt.md",
+  "manifest_file": ".ddx/executions/20260416T215954-caa53b4b/manifest.json",
+  "result_file": ".ddx/executions/20260416T215954-caa53b4b/result.json",
+  "usage_file": ".ddx/executions/20260416T215954-caa53b4b/usage.json",
+  "started_at": "2026-04-16T21:59:55.219940536Z",
+  "finished_at": "2026-04-16T22:10:49.813916918Z"
+}

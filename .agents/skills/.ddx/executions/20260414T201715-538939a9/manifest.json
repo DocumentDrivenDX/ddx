@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260414T201715-538939a9",
+  "bead_id": "ddx-c325429d",
+  "base_rev": "59afe29d653fb8399879496fd2443731799554ae",
+  "created_at": "2026-04-14T20:17:16.114781675Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c325429d",
+    "title": "Stage 1.5: supersede ADR-005-local-first-beads-ui.md",
+    "description": "Mark docs/helix/02-design/adr/ADR-005-local-first-beads-ui.md as Superseded. Change status to 'Superseded by ADR-002 v2 (2026-04-14)'. Replace the body with a single paragraph explaining that client-side minisearch was a workaround for missing pagination; Relay cursor connections solve this at the schema level. File stays (historical record). See docs/plan-svelte-migration.md Stage 1 bead #5.",
+    "acceptance": "(1) ADR-005 status field is 'Superseded'. (2) Body is one paragraph pointing at ADR-002 v2. (3) File still exists (not deleted).",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "agent: provider error: POST \"http://vidar:1234/v1/chat/completions\": 500 Internal Server Error \nresult_rev=eefe449dabdeb4371c3021336dd5a7c30e6ac8cf\nbase_rev=78d3183d72c4a3b75dc6936345f5eff633f8b5a3",
+          "created_at": "2026-04-14T19:55:31.188509016Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T201715-538939a9",
+    "prompt": ".ddx/executions/20260414T201715-538939a9/prompt.md",
+    "manifest": ".ddx/executions/20260414T201715-538939a9/manifest.json",
+    "result": ".ddx/executions/20260414T201715-538939a9/result.json",
+    "checks": ".ddx/executions/20260414T201715-538939a9/checks.json",
+    "usage": ".ddx/executions/20260414T201715-538939a9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c325429d-20260414T201715-538939a9"
+  }
+}

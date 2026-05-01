@@ -1,0 +1,145 @@
+# Review — Bead Review and Quorum Review
+
+DDx has two distinct review concepts. They are **not interchangeable**.
+
+| Concept | Command | What it does |
+|---|---|---|
+| **Bead review** | `ddx bead review <id>` | Grades a bead's implementation against its declared acceptance criteria. Per-AC verdict with evidence. |
+| **Quorum review** | `ddx agent run --quorum=<policy> --harnesses=<list>` | Dispatches a review prompt across multiple harnesses and aggregates the verdicts. Used for high-stakes or adversarial checks. |
+
+## Bead review
+
+```bash
+ddx bead review <bead-id>
+```
+
+Generates a review-ready prompt that includes:
+
+- Bead title, description, acceptance criteria (verbatim).
+- Governing artifact content (follows `spec-id`).
+- The diff since the bead's base commit (execution evidence commits
+  excluded — see the related bug ddx-39e27896 for exclusion
+  pathspec).
+- Review instructions: output contract, verdict taxonomy.
+
+The reviewer (whoever receives the prompt — a human, a harness via
+`ddx agent run`, or a quorum) produces a structured verdict:
+
+```
+## Bead review: ddx-<id>
+
+### Verdict: APPROVE | REQUEST_CHANGES | BLOCK
+
+### Per-criterion
+
+1. [AC text]
+   Verdict: APPROVE | REQUEST_CHANGES | BLOCK
+   Evidence: <file:line, test output, diff hunk, or explicit "not verifiable">
+
+2. [AC text]
+   ...
+
+### Summary
+<1-3 sentences of overall context>
+
+### Findings
+<detailed issues, if any; omit when verdict is APPROVE with no findings>
+```
+
+The review output can be stored as bead evidence:
+
+```bash
+ddx bead evidence add <id> --type review --body <path-to-review.md>
+```
+
+## Quorum review
+
+```bash
+ddx agent run --quorum=majority --harnesses=claude,codex,gemini \
+  --prompt review-prompt.md
+```
+
+`--quorum=<policy>` values:
+
+- `majority` — at least ⌈N/2⌉ harnesses must agree on the verdict.
+- `unanimous` — all harnesses must agree.
+- `any` — pass if any harness APPROVES (rarely useful; adversarial
+  checks should require stronger consensus).
+
+Use quorum when:
+
+- The change is high-stakes (migrations, security surface, API
+  contracts, auth).
+- The review surface is controversial and one harness's opinion
+  isn't enough.
+- You want adversarial pressure against a single-model blindspot
+  (different model families have different failure modes).
+
+The aggregated output shows each harness's verdict side-by-side plus
+the aggregate decision. Disagreements are surfaced, not hidden.
+
+## Required evidence format
+
+Both review kinds share an evidence contract: **no verdict without
+evidence.**
+
+- "APPROVE" with no `Evidence:` lines → reject as malformed.
+- "REQUEST_CHANGES" without pointing at the change needed → reject.
+- "BLOCK" without a reason → reject (see the related bug
+  ddx-39e27896 about `review-malfunction` retries).
+
+Evidence takes one of these forms:
+
+1. **File:line reference**: `cli/internal/bead/store.go:142`
+2. **Test output**: `FAIL: TestBeadClose_UnclaimsOnNonSuccess (0.01s)`
+3. **Diff hunk**: a short quote from the diff showing the offending
+   or approved change.
+4. **Explicit "not verifiable"**: the AC is written in a way that
+   cannot be mechanically checked; flag this as a bead-authoring
+   issue rather than silently approving.
+
+## Anti-patterns
+
+- **Hallucinated approval.** "Looks good to me!" with no per-AC
+  grading. The review is worthless.
+- **Reviewing the prompt instead of the diff.** The reviewer evaluated
+  "what you intended" not "what you actually changed." Verdict must
+  reference the diff or the resulting code.
+- **Verdict without evidence.** Every verdict must have at least one
+  evidence line; APPROVE is no exception (evidence can be "AC met:
+  `go test ./foo/... passes` output attached").
+- **Silencing disagreement in quorum.** If two harnesses disagree,
+  don't collapse to a single "decision." Surface the disagreement
+  in the output and let the human decide.
+- **Quorum for routine work.** Single-harness bead review is fine
+  for most beads. Reserve quorum for the cases that justify the
+  cost.
+
+## Subagents: not this skill's business
+
+Some harnesses can run a quorum in forked/isolated subagent
+contexts; each harness implements this differently. This skill
+doesn't specify how isolation is achieved —
+`ddx agent run --quorum=<policy> --harnesses=<list>` is the
+portable invocation, and the harness decides whether to fork,
+spawn, or run inline.
+
+## CLI reference
+
+```bash
+# Bead review (single-reviewer AC grading)
+ddx bead review <id>                           # generate review prompt
+ddx bead review <id> --execute --harness claude  # dispatch and grade
+ddx bead evidence add <id> --type review --body r.md  # store review
+
+# Quorum review (multi-harness)
+ddx agent run --quorum=majority \
+  --harnesses=claude,codex \
+  --prompt review.md
+
+ddx agent run --quorum=unanimous \
+  --harnesses=claude,codex,gemini \
+  --prompt review.md
+```
+
+Full flag list: `ddx bead review --help`, `ddx agent run --help`.

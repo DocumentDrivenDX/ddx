@@ -1,0 +1,96 @@
+# MCP Server Registry
+# Central index of available MCP servers for DDx
+
+version: 1.0.0
+updated: 2025-01-15T00:00:00Z
+
+servers:
+  - name: github
+    file: servers/github.yml
+    category: development
+    description: GitHub integration for repository access
+
+  - name: postgres
+    file: servers/postgres.yml
+    category: database
+    description: PostgreSQL database integration
+
+  - name: sqlite
+    file: servers/sqlite.yml
+    category: database
+    description: SQLite database interaction and management
+
+  - name: filesystem
+    file: servers/filesystem.yml
+    category: filesystem
+    description: Local filesystem access
+
+  - name: sequential-thinking
+    file: servers/sequential-thinking.yml
+    category: utility
+    description: Dynamic problem-solving through structured thought sequences
+
+  - name: memory
+    file: servers/memory.yml
+    category: utility
+    description: Persistent memory and context retention using Mem0
+
+  - name: playwright
+    file: servers/playwright.yml
+    category: automation
+    description: Browser automation capabilities using Playwright
+
+  - name: puppeteer
+    file: servers/puppeteer.yml
+    category: automation
+    description: Browser automation and web scraping using Puppeteer
+
+  - name: notion
+    file: servers/notion.yml
+    category: productivity
+    description: Notion workspace integration for pages and databases
+
+  - name: slack
+    file: servers/slack.yml
+    category: productivity
+    description: Slack integration for channels, messages, and workflows
+
+  - name: google-workspace
+    file: servers/google-workspace.yml
+    category: productivity
+    description: Comprehensive Google Workspace integration (Drive, Docs, Sheets, Gmail, Calendar)
+
+  - name: google-drive
+    file: servers/google-drive.yml
+    category: productivity
+    description: Google Drive integration for file management
+
+  - name: office-365
+    file: servers/office-365.yml
+    category: productivity
+    description: Microsoft 365 integration via Graph API
+
+categories:
+  development:
+    description: Development and version control tools
+    icon: 🛠️
+
+  database:
+    description: Database and data storage integrations
+    icon: 🗜️
+
+  filesystem:
+    description: File system and storage access
+    icon: 📁
+
+  utility:
+    description: General utility servers
+    icon: 🔧
+
+  automation:
+    description: Browser and UI automation tools
+    icon: 🤖
+
+  productivity:
+    description: Productivity and collaboration tools
+    icon: 📈

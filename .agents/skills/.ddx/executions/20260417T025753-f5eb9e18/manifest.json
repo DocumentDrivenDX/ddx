@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260417T025753-f5eb9e18",
+  "bead_id": "ddx-499c274e",
+  "base_rev": "3e61b86cf9496cf0e0e74b767a6d6f52cc65fa2f",
+  "created_at": "2026-04-17T02:57:54.201735526Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-499c274e",
+    "title": "Record escalation trace as structured evidence on bead",
+    "description": "When the execute loop escalates through tiers, each tier-attempt is recorded individually but there is no single structured kind:escalation-summary event that captures the complete escalation trace (which tiers tried, why each failed, which won, total wasted cost). Add a summary event after escalation completes for at-a-glance diagnosis.",
+    "acceptance": "1. After the tier escalation loop finishes (success or exhaustion), a kind:escalation-summary bead event is appended with a JSON body containing: tiers_attempted (list of {tier, harness, model, status, cost_usd, duration_ms}), winning_tier (or exhausted), total_cost_usd, wasted_cost_usd.\n2. The event is recorded in the execute-bead loop path.\n3. Unit test: mock 3-tier escalation (cheap fail, standard fail, smart success) -\u003e event body contains all 3 tiers with correct statuses and costs.\n4. cd cli \u0026\u0026 go test -run TestEscalationSummary ./... \u0026\u0026 go build .",
+    "parent": "ddx-4b59b816",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "kind:telemetry",
+      "goal:throughput-per-dollar"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260417T025753-f5eb9e18",
+    "prompt": ".ddx/executions/20260417T025753-f5eb9e18/prompt.md",
+    "manifest": ".ddx/executions/20260417T025753-f5eb9e18/manifest.json",
+    "result": ".ddx/executions/20260417T025753-f5eb9e18/result.json",
+    "checks": ".ddx/executions/20260417T025753-f5eb9e18/checks.json",
+    "usage": ".ddx/executions/20260417T025753-f5eb9e18/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-499c274e-20260417T025753-f5eb9e18"
+  }
+}

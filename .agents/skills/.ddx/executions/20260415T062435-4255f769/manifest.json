@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260415T062435-4255f769",
+  "bead_id": "ddx-78613f54",
+  "base_rev": "d7b4c2c5b5fe5bc11f6404aed25e70322f0c735e",
+  "created_at": "2026-04-15T06:24:35.992775637Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-78613f54",
+    "title": "skill: improve ddx-bead SKILL.md with authoring discipline for execution-ready beads",
+    "description": "The ddx-bead skill guides bead creation but underspecifies what makes a bead *execution-ready* for automated execute-bead runs. Observed during axon ADR-018 execute-loop driving: beads that technically met the current skill's requirements (title, AC, labels, description pointing at spec-id) still produced bad execute-bead outcomes because the description lacked the context the agent needed to ship correct code in one pass.\n\n## Gaps in the current skill\n\n1. **Description quality is underspecified.** The skill gives AC quality rules but the description field just says 'per SD-004 Section 2' is OK. In practice, agents need:\n   - Exact file paths to touch (e.g., 'crates/axon-server/src/auth_pipeline.rs')\n   - Cross-bead context when dependencies are listed (e.g., 'A1 landed the credential_revocations table in crates/axon-storage/src/auth_schema.rs — query it via SELECT 1')\n   - Inline spec excerpts, NOT just doc-id references. If the spec is ADR-018 §4's failure table, paste the table into the description. Don't say 'see ADR-018 §4'.\n   - Files NOT to touch (scope negation)\n\n2. **spec-id and the doc graph are unreliable for execution context.** The current skill implies spec-id linkage is sufficient. It is not — spec-id drives docgraph.BuildGraphWithConfig() which only resolves HELIX-shaped doc references. Generic beads on non-HELIX projects have no equivalent. AND even when resolution works, the agent only gets a file path, not the relevant section. The bead description is the only place that carries content the agent can rely on.\n\n3. **No guidance on cross-bead context.** When bead B depends on bead A, B's description should describe what A landed (file paths, type names, key APIs) — not assume the agent will reopen A's history. Automated execute-bead does not have that context; each bead is read cold.\n\n4. **No guidance on verification commands in AC.** AC items like 'unit tests green' are too vague. Should be 'cargo test -p axon-server green' or 'bun test passes in sdk/typescript'. Named commands.\n\n5. **No guidance on bead size.** A bead should be one unit of testable work, sized so a single agent pass can complete it. Too small is overhead; too large defeats review. Heuristic: if the AC lists more than ~12 checkboxes, consider splitting.\n\n6. **No guidance on incorporating review findings on reopen.** When a bead is reopened after a REQUEST_CHANGES review, the author should either (a) fold the review findings into the description for the next attempt to see, or (b) rely on the tool to thread review events into the prompt (a separate ddx bead — see ddx-a317208c). The skill is silent on this.\n\n7. **No template for description.** A recommended description template (Scope / Files to touch / Cross-bead context / Verification / Quality bar) would make good beads cheaper to author.\n\n## Scope\n\nUpdate skills/ddx-bead/SKILL.md to add:\n\n- A 'What makes a bead execution-ready' section that codifies the points above\n- A 'Description template' with recommended sections: Scope, Files to touch, Files NOT to touch, Cross-bead context, Verification commands, Spec excerpts inline\n- A 'Bead sizing' section with the ~12-AC heuristic\n- A 'Review-driven reopen' section that tells authors to update the description in place when a bead is reopened after a review rejection\n- A 'Common anti-patterns' section enumerating the mistakes observed during the axon execute-loop:\n  - Listing doc IDs without inlining the relevant text\n  - Not naming file paths in the description\n  - AC items that are not verifiable by a named command\n  - Depending on unmerged work without explaining what it landed\n\nKeep the existing required-fields and label-conventions sections — they are correct.\n\n## Context\n\nObserved during axon ADR-018 execute-loop:\n- Bead A1 was well-sized but initially had scope creep in its description (audit_retention_policies, which belonged to F1). Agent added the scope-creep table faithfully.\n- Bead A2's initial description said 'UserIdentity { provider, subject, user_id }' — a typo carried over from an earlier ADR revision. Agent implemented 'subject' faithfully even though ADR-018 §3 said 'external_id'. The description was the contract the agent followed.\n- Bead B1 is being re-authored right now with a richer description (inline ADR-018 §4 failure table, exact file paths, cross-bead context about A1 schema and A2 types) — this is the experiment to validate the authoring changes proposed in this bead.\n\n## Acceptance\n\n- [ ] skills/ddx-bead/SKILL.md gains 'What makes a bead execution-ready' section\n- [ ] Description template added with the 6 recommended sections\n- [ ] Bead sizing heuristic documented\n- [ ] Review-driven reopen guidance added\n- [ ] Common anti-patterns enumerated\n- [ ] Skill still lints against any existing skill-format CI check",
+    "labels": [
+      "helix",
+      "area:bead",
+      "area:skill",
+      "kind:documentation",
+      "gap:bead-authoring"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T06:24:35Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T06:24:35.730163078Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T062435-4255f769",
+    "prompt": ".ddx/executions/20260415T062435-4255f769/prompt.md",
+    "manifest": ".ddx/executions/20260415T062435-4255f769/manifest.json",
+    "result": ".ddx/executions/20260415T062435-4255f769/result.json",
+    "checks": ".ddx/executions/20260415T062435-4255f769/checks.json",
+    "usage": ".ddx/executions/20260415T062435-4255f769/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-78613f54-20260415T062435-4255f769"
+  }
+}

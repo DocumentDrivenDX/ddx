@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260421T173115-c621ffb1",
+  "bead_id": "ddx-888cae40",
+  "base_rev": "744d5c21bc5c92ca0a7b26cea6b062b66142684e",
+  "created_at": "2026-04-21T17:31:16.039914444Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen3.5-27b",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-888cae40",
+    "title": "test: migrate TestExecuteBeadWritesResultArtifactBundle to real git + script harness",
+    "description": "Migrate cli/cmd/agent_execute_bead_test.go TestExecuteBeadWritesResultArtifactBundle() from fakeExecuteBeadGit + fakeAgentRunner to real git + script harness.\n\nPattern:\n- Use cli/internal/agent/integration_helper_test.go newScriptHarnessRepo(t, beadCount) to build an isolated repo with real git.\n- Use runGitInteg (from cli/internal/git/git_basic_test.go) for any supplemental git invocations, so GIT_* env is scrubbed.\n- Replace fakeExecuteBeadGit with the RealLandingGitOps flow used in cli/internal/agent/execute_bead_land_test.go.\n- Replace fakeAgentRunner with the script harness (cli/internal/agent/script.go) driven by a per-attempt directive file. When the test needs to simulate 'agent emits no commits' or 'agent emits a dirty worktree', encode that as script directives rather than a canned Result struct.\n- Preserve every assertion — the point is that the test now exercises real git + real merge/preserve semantics, not that the surface shrinks.\n\nScope limit: ONLY this test. Do not migrate any other test in the same file; touching another test expands blast radius outside the bead.\n\nVerification: cd cli \u0026\u0026 go test ./cmd -run '^TestExecuteBeadWritesResultArtifactBundle$' -count=1 passes. No struct ending in -GitOps or -Runner that fakes the thing under test is referenced from this test after the migration.\n\nGoverning concern: concerns.md §testing 'no mocks, period' + 'never mock the thing you are testing'. Parent: ddx-d9df348d.",
+    "acceptance": "1) TestExecuteBeadWritesResultArtifactBundle no longer references fakeExecuteBeadGit or fakeAgentRunner. 2) Test dispatches through RealLandingGitOps + newScriptHarnessRepo (or equivalent real-git harness). 3) cd cli \u0026\u0026 go test ./cmd -run '^TestExecuteBeadWritesResultArtifactBundle$' -count=1 green. 4) No other test in agent_execute_bead_test.go is modified.",
+    "parent": "ddx-d9df348d",
+    "labels": [
+      "phase:test",
+      "area:cli",
+      "area:agent",
+      "kind:refactor",
+      "workstream:fake-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-21T17:31:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "execute-loop-heartbeat-at": "2026-04-21T17:31:15.684344816Z",
+      "spec-id": "concerns.testing"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260421T173115-c621ffb1",
+    "prompt": ".ddx/executions/20260421T173115-c621ffb1/prompt.md",
+    "manifest": ".ddx/executions/20260421T173115-c621ffb1/manifest.json",
+    "result": ".ddx/executions/20260421T173115-c621ffb1/result.json",
+    "checks": ".ddx/executions/20260421T173115-c621ffb1/checks.json",
+    "usage": ".ddx/executions/20260421T173115-c621ffb1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-888cae40-20260421T173115-c621ffb1"
+  }
+}

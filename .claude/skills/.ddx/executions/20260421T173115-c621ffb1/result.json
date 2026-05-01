@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-888cae40",
+  "attempt_id": "20260421T173115-c621ffb1",
+  "base_rev": "744d5c21bc5c92ca0a7b26cea6b062b66142684e",
+  "result_rev": "744d5c21bc5c92ca0a7b26cea6b062b66142684e",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider error: openai: POST \"http://vidar:1234/v1/chat/completions\": 502 Bad Gateway ",
+  "harness": "agent",
+  "provider": "vidar",
+  "model": "qwen3.5-27b",
+  "session_id": "eb-8241dbef",
+  "duration_ms": 15024,
+  "exit_code": 1,
+  "error": "agent: provider error: openai: POST \"http://vidar:1234/v1/chat/completions\": 502 Bad Gateway ",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260421T173115-c621ffb1",
+  "prompt_file": ".ddx/executions/20260421T173115-c621ffb1/prompt.md",
+  "manifest_file": ".ddx/executions/20260421T173115-c621ffb1/manifest.json",
+  "result_file": ".ddx/executions/20260421T173115-c621ffb1/result.json",
+  "started_at": "2026-04-21T17:31:16.040186485Z",
+  "finished_at": "2026-04-21T17:31:31.06484562Z"
+}

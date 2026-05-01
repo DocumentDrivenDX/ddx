@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260421T155615-07f799e2",
+  "bead_id": "ddx-ea7f041c",
+  "base_rev": "518173ebed90f4cb49a4cd38ae1ae9986202f5e6",
+  "created_at": "2026-04-21T15:56:15.306931948Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ea7f041c",
+    "title": "Phase 5: delete cli/internal/agent/routing.go (moved upstream as agent-1a486c2e ResolveRoute)",
+    "description": "Delete the 915-line routing.go from DDx. All callers should be using service.ResolveRoute or service.RouteStatus by now.\n\nRouting test file (routing_test.go, 915 lines) also deletes — its test cases ported to agent as part of agent-1a486c2e (mechanical newTestRunnerForRouting → newTestRoutingEngine rewrite).\n\nPre-condition: agent-1a486c2e (ResolveRoute) and agent-763ae08b (RouteStatus) landed; cmd/agent_route_status.go migrated (ddx-d224671d).",
+    "acceptance": "- [ ] cli/internal/agent/routing.go and routing_test.go do not exist\n- [ ] No remaining references to BuildCandidatePlans/RankCandidates/SelectBestCandidate/evaluateCandidate/NormalizeRouteRequest in DDx\n- [ ] Tests pass (the routing test cases now run upstream)",
+    "parent": "ddx-ac5c7fdb",
+    "labels": [
+      "phase:build",
+      "kind:cleanup",
+      "area:routing",
+      "wave:deferred",
+      "workstream:agent-upgrade"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260421T155615-07f799e2",
+    "prompt": ".ddx/executions/20260421T155615-07f799e2/prompt.md",
+    "manifest": ".ddx/executions/20260421T155615-07f799e2/manifest.json",
+    "result": ".ddx/executions/20260421T155615-07f799e2/result.json",
+    "checks": ".ddx/executions/20260421T155615-07f799e2/checks.json",
+    "usage": ".ddx/executions/20260421T155615-07f799e2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ea7f041c-20260421T155615-07f799e2"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T010645-96bbad72",
+  "bead_id": "ddx-48cee66e",
+  "base_rev": "b62c7aa080d2ddeaee2bded2f7fd634618cdd216",
+  "created_at": "2026-04-15T01:06:45.69567694Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-48cee66e",
+    "title": "Visibility 1: SD-023 ddx/ddx-agent boundary design doc",
+    "description": "Write new file docs/helix/02-design/solution-designs/SD-023-agent-routing-visibility.md. Documents the boundary: ddx-agent owns providers, /v1/models discovery, health-aware routing, model catalog; DDx owns beads/worktrees/orchestration/UI and surfaces ddx-agent state through its own commands via Go package import (github.com/DocumentDrivenDX/agent v0.3.5+). Explains that DDx adds no duplicate discovery/probing/routing logic — it only wraps ddx-agent's public packages. Names the 8 beads in this epic, cross-references the cost-tiered routing epic as a future follow-up, and describes the upstream bead workflow: when a porcelain function is missing from ddx-agent's public Go API, file a bead on the agent repository.",
+    "acceptance": "(1) File exists at docs/helix/02-design/solution-designs/SD-023-agent-routing-visibility.md. (2) Doc names each of the 8 child beads by title. (3) Doc explicitly states the boundary: ddx-agent owns providers/models/routing; DDx owns workflow/UI. (4) Doc references github.com/DocumentDrivenDX/agent as the Go library being consumed. (5) Manual: reviewer reads the doc and can state the boundary in their own words.",
+    "parent": "ddx-bd0691fe",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:agent-routing",
+      "area:agent",
+      "area:cli"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T01:06:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T01:06:45.470745657Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T010645-96bbad72",
+    "prompt": ".ddx/executions/20260415T010645-96bbad72/prompt.md",
+    "manifest": ".ddx/executions/20260415T010645-96bbad72/manifest.json",
+    "result": ".ddx/executions/20260415T010645-96bbad72/result.json",
+    "checks": ".ddx/executions/20260415T010645-96bbad72/checks.json",
+    "usage": ".ddx/executions/20260415T010645-96bbad72/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-48cee66e-20260415T010645-96bbad72"
+  }
+}

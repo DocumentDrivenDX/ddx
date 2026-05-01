@@ -1,0 +1,10 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "session_id": "c54f384c-aeed-47b0-bcde-623231bab880",
+  "base_rev": "9b4631ce37403850e0c4bde5f2efa0fd176b5b53",
+  "result_rev": "b0a4fce4796e6841c9a9686ebeee197fb22a2fa7",
+  "verdict": "BLOCK",
+  "bead_id": ".execute-bead-wt-ddx-0a651925-20260418T043148-1346e8a3-3e3913a0",
+  "execution_dir": ".ddx/executions/20260418T054806-f87d50b1"
+}

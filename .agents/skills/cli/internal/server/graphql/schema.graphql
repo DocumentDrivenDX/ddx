@@ -1,0 +1,2714 @@
+# DDx GraphQL Schema
+# Single source of truth for the SvelteKit UI.
+# Every type field is doc-commented. Relay cursor connections on all lists.
+
+# ============================================
+# Scalars
+# ============================================
+
+"""ISO-8601 datetime string"""
+scalar DateTime
+
+"""Arbitrary JSON blob (used for opaque map fields)"""
+scalar JSON
+
+# ============================================
+# Interfaces
+# ============================================
+
+"""Node is the Relay global object identification interface"""
+interface Node {
+  """Globally unique identifier"""
+  id: ID!
+}
+
+# ============================================
+# Pagination (Relay Cursor Connections)
+# ============================================
+
+"""PageInfo carries cursor-based pagination state (Relay spec)"""
+type PageInfo {
+  """True when more edges exist after the last returned edge"""
+  hasNextPage: Boolean!
+  """True when more edges exist before the first returned edge"""
+  hasPreviousPage: Boolean!
+  """Cursor of the first edge in the current page (null when empty)"""
+  startCursor: String
+  """Cursor of the last edge in the current page (null when empty)"""
+  endCursor: String
+}
+
+# ============================================
+# Node & Project
+# ============================================
+
+"""NodeInfo represents the running ddx-server instance"""
+type NodeInfo implements Node {
+  """Unique node identifier (stable across restarts)"""
+  id: ID!
+  """Human-readable node name"""
+  name: String!
+  """Timestamp when the server process started"""
+  startedAt: DateTime!
+  """Timestamp of the most recent heartbeat"""
+  lastSeen: DateTime!
+}
+
+"""Project represents a registered ddx project on this node"""
+type Project implements Node {
+  """Unique project identifier"""
+  id: ID!
+  """Short display name"""
+  name: String!
+  """Absolute filesystem path to the project root"""
+  path: String!
+  """Git remote URL, if configured"""
+  gitRemote: String
+  """When the project was first registered with the server"""
+  registeredAt: DateTime!
+  """Timestamp of the last successful probe"""
+  lastSeen: DateTime!
+  """True when the project path is inaccessible"""
+  unreachable: Boolean
+  """Set when the project has been tombstoned (soft-deleted)"""
+  tombstonedAt: DateTime
+}
+
+"""ProjectEdge is one edge in a ProjectConnection"""
+type ProjectEdge {
+  """The project at this position"""
+  node: Project!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""ProjectConnection is a Relay cursor connection of projects"""
+type ProjectConnection {
+  """Ordered list of project edges"""
+  edges: [ProjectEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of projects matching the filter"""
+  totalCount: Int!
+}
+
+# ============================================
+# Beads
+# ============================================
+
+"""Bead is a portable work item with lifecycle metadata"""
+type Bead implements Node {
+  """Unique bead identifier (e.g. "ddx-a1b2c3d4")"""
+  id: ID!
+  """Short summary of the work"""
+  title: String!
+  """Lifecycle status: open, in-progress, closed, blocked"""
+  status: String!
+  """Numeric priority (lower is higher priority)"""
+  priority: Int!
+  """Issue classification (e.g. "task", "bug", "spike")"""
+  issueType: String!
+  """Agent or human currently responsible"""
+  owner: String
+  """When the bead was created"""
+  createdAt: DateTime!
+  """Who or what created the bead"""
+  createdBy: String
+  """Last modification timestamp"""
+  updatedAt: DateTime!
+  """Freeform labels for filtering and grouping"""
+  labels: [String!]
+  """Project identifier this bead belongs to"""
+  projectID: String
+  """Parent bead ID for hierarchy"""
+  parent: String
+  """Full description / body text"""
+  description: String
+  """Acceptance criteria text"""
+  acceptance: String
+  """Freeform notes appended during work"""
+  notes: String
+  """Dependency edges to other beads"""
+  dependencies: [Dependency!]
+}
+
+"""Dependency is a directed edge between two beads"""
+type Dependency {
+  """The bead that has the dependency"""
+  issueId: String!
+  """The bead that must be completed first"""
+  dependsOnId: String!
+  """Dependency kind (e.g. "blocks", "relates-to")"""
+  type: String!
+  """When the dependency was created"""
+  createdAt: String
+  """Who created the dependency"""
+  createdBy: String
+  """Opaque metadata attached to the link"""
+  metadata: String
+}
+
+"""BeadEdge is one edge in a BeadConnection"""
+type BeadEdge {
+  """The bead at this position"""
+  node: Bead!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""BeadConnection is a Relay cursor connection of beads"""
+type BeadConnection {
+  """Ordered list of bead edges"""
+  edges: [BeadEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of beads matching the filter"""
+  totalCount: Int!
+}
+
+"""BeadStatusCounts holds aggregate bead counts by status"""
+type BeadStatusCounts {
+  """Number of beads in open status"""
+  open: Int!
+  """Number of beads in closed status"""
+  closed: Int!
+  """Number of beads with unclosed dependencies"""
+  blocked: Int!
+  """Number of open beads whose dependencies are all closed"""
+  ready: Int!
+  """Total number of beads"""
+  total: Int!
+}
+
+# ============================================
+# Documents (library)
+# ============================================
+
+"""Document represents a docgraph document with dependency tracking"""
+type Document implements Node {
+  """Document identifier (usually the relative path)"""
+  id: ID!
+  """Filesystem path relative to the library root"""
+  path: String!
+  """Human-readable title extracted from frontmatter"""
+  title: String!
+  """IDs of documents this document depends on"""
+  dependsOn: [String!]!
+  """IDs of input artifacts consumed by this document"""
+  inputs: [String!]!
+  """IDs of documents that depend on this document"""
+  dependents: [String!]!
+  """Review state metadata (null if never reviewed)"""
+  review: DocumentReview
+  """True if parked (excluded from staleness checks)"""
+  parkingLot: Boolean!
+  """Prompt text embedded in the document frontmatter"""
+  prompt: String
+  """Execution definition embedded in the document (null if none)"""
+  execDef: DocumentExecDef
+  """Raw file content (populated only by documentByPath, null in list queries)"""
+  content: String
+}
+
+"""DocumentReview holds review-state metadata for a document"""
+type DocumentReview {
+  """Hash of the document content at review time"""
+  selfHash: String!
+  """Map of dependency IDs to their hashes at review time"""
+  deps: JSON!
+  """ISO-8601 timestamp of the last review"""
+  reviewedAt: String!
+}
+
+"""DocumentExecDef holds an execution definition embedded in a document"""
+type DocumentExecDef {
+  """Definition identifier"""
+  id: String
+  """IDs of artifacts this definition produces or consumes"""
+  artifactIds: [String!]
+  """How to invoke the execution"""
+  executor: ExecutorSpec
+  """How to interpret the result"""
+  result: ResultSpec
+  """Evaluation criteria and thresholds"""
+  evaluation: Evaluation
+  """Whether the definition is currently active"""
+  active: Boolean
+  """Whether the definition must pass for merge"""
+  required: Boolean
+  """Whether this definition was discovered from the docgraph"""
+  graphSource: Boolean
+  """When the definition was created"""
+  createdAt: DateTime
+}
+
+"""ExecutorSpec describes how to invoke an execution"""
+type ExecutorSpec {
+  """Execution kind (e.g. "shell", "agent")"""
+  kind: String!
+  """Command and arguments to run"""
+  command: [String!]
+  """Working directory for the command"""
+  cwd: String
+  """Environment variables as key-value pairs"""
+  env: JSON
+  """Maximum execution time in milliseconds"""
+  timeoutMs: Int
+}
+
+"""ResultSpec describes how to interpret an execution result"""
+type ResultSpec {
+  """Metric-shaped projection (null if not metric-typed)"""
+  metric: MetricResultSpec
+}
+
+"""MetricResultSpec defines metric extraction from execution output"""
+type MetricResultSpec {
+  """Unit of measurement (e.g. "ms", "bytes")"""
+  unit: String
+  """JSONPath to the numeric value"""
+  valuePath: String
+  """JSONPath to the samples array"""
+  samplesPath: String
+}
+
+"""Evaluation holds interpretation rules for execution results"""
+type Evaluation {
+  """Comparison operator (e.g. "lt", "gt", "eq")"""
+  comparison: String
+  """Threshold values for warn/ratchet"""
+  thresholds: Thresholds
+}
+
+"""Thresholds captures the ratchet policy for metric evaluations"""
+type Thresholds {
+  """Warn threshold in milliseconds"""
+  warnMs: Float
+  """Ratchet threshold in milliseconds"""
+  ratchetMs: Float
+}
+
+"""DocumentEdge is one edge in a DocumentConnection"""
+type DocumentEdge {
+  """The document at this position"""
+  node: Document!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""DocumentConnection is a Relay cursor connection of documents"""
+type DocumentConnection {
+  """Ordered list of document edges"""
+  edges: [DocumentEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of documents matching the filter"""
+  totalCount: Int!
+}
+
+# ============================================
+# Doc Graph
+# ============================================
+
+"""DocGraph represents the full document dependency graph"""
+type DocGraph {
+  """Absolute path to the docgraph root directory"""
+  rootDir: String!
+  """All documents in the graph"""
+  documents: [Document!]!
+  """Map of relative paths to document IDs"""
+  pathToId: JSON!
+  """Map of document IDs to lists of dependent IDs"""
+  dependents: JSON!
+  """Warnings generated during graph construction. Derived from issues; prefer the structured issues field when rendering UI."""
+  warnings: [String!]!
+  """Structured integrity issues for the graph, grouped by kind on the client."""
+  issues: [GraphIssue!]!
+}
+
+"""GraphIssue describes one integrity problem discovered while building the document graph."""
+type GraphIssue {
+  """Machine-readable category (e.g. duplicate_id, missing_dep)."""
+  kind: String!
+  """Path of the offending document, when known."""
+  path: String
+  """Document identifier associated with the issue, when known."""
+  id: String
+  """Human-readable explanation suitable for the UI or terminal."""
+  message: String!
+  """Related document path (e.g. the pre-existing path a duplicate ID collides with)."""
+  relatedPath: String
+}
+
+"""StaleReason explains why a specific document is stale"""
+type StaleReason {
+  """Document identifier"""
+  id: ID!
+  """Filesystem path of the stale document"""
+  path: String!
+  """Human-readable explanations of why the document is stale"""
+  reasons: [String!]!
+}
+
+# ============================================
+# Search
+# ============================================
+
+"""SearchResult represents a single search hit from the library"""
+type SearchResult {
+  """Filesystem path of the matching resource"""
+  path: String!
+  """Resource type (e.g. "prompt", "template", "persona")"""
+  type: String!
+  """Display name of the resource"""
+  name: String!
+  """Excerpt showing the match context"""
+  snippet: String
+}
+
+"""SearchResultEdge is one edge in a SearchResultConnection"""
+type SearchResultEdge {
+  """The search result at this position"""
+  node: SearchResult!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""SearchResultConnection is a Relay cursor connection of search results"""
+type SearchResultConnection {
+  """Ordered list of search result edges"""
+  edges: [SearchResultEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of results matching the query"""
+  totalCount: Int!
+}
+
+# ============================================
+# Commits
+# ============================================
+
+"""Commit represents a git commit"""
+type Commit {
+  """Full SHA hash"""
+  sha: String!
+  """Abbreviated SHA (7 characters)"""
+  shortSha: String!
+  """Author name and email"""
+  author: String!
+  """Commit timestamp"""
+  date: DateTime!
+  """First line of the commit message"""
+  subject: String!
+  """Remaining commit message body (null if single-line message)"""
+  body: String
+  """Bead IDs referenced in the commit message"""
+  beadRefs: [String!]
+}
+
+"""CommitEdge is one edge in a CommitConnection"""
+type CommitEdge {
+  """The commit at this position"""
+  node: Commit!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""CommitConnection is a Relay cursor connection of commits"""
+type CommitConnection {
+  """Ordered list of commit edges"""
+  edges: [CommitEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of commits matching the filter"""
+  totalCount: Int!
+}
+
+# ============================================
+# Workers
+# ============================================
+
+"""Worker represents an execute-loop worker process"""
+type Worker implements Node {
+  """Unique worker identifier"""
+  id: ID!
+  """Worker kind (e.g. "execute-loop")"""
+  kind: String!
+  """Current lifecycle state (e.g. "running", "idle", "stopped")"""
+  state: String!
+  """Human-readable status summary"""
+  status: String
+  """Absolute path to the project this worker operates on"""
+  projectRoot: String!
+  """Agent harness name (e.g. "claude", "codex")"""
+  harness: String
+  """Provider/backend name"""
+  provider: String
+  """Model identifier used for execution"""
+  model: String
+  """Effort level (e.g. "low", "medium", "high")"""
+  effort: String
+  """True if the worker should stop after one bead"""
+  once: Boolean
+  """Interval between poll cycles (e.g. "30s")"""
+  pollInterval: String
+  """When the worker was started"""
+  startedAt: DateTime
+  """When the worker finished (null if still running)"""
+  finishedAt: DateTime
+  """Fatal error that stopped the worker"""
+  error: String
+  """Path to the worker's stdout log file"""
+  stdoutPath: String
+  """Path to the worker's spec/config file"""
+  specPath: String
+  """Total number of execution attempts"""
+  attempts: Int
+  """Number of successful executions"""
+  successes: Int
+  """Number of failed executions"""
+  failures: Int
+  """Bead ID currently being executed (null if idle)"""
+  currentBead: String
+  """Most recent error message from an execution"""
+  lastError: String
+  """Result of the most recently completed execution"""
+  lastResult: WorkerExecutionResult
+  """In-flight attempt summary (null if idle)"""
+  currentAttempt: CurrentAttemptInfo
+  """Recent phase transitions for observability"""
+  recentPhases: [PhaseTransition!]
+  """Summary of the most recently completed attempt"""
+  lastAttempt: LastAttemptInfo
+  """Land coordinator metrics for this worker's project"""
+  landSummary: CoordinatorMetrics
+  """Recent streamed response events captured for the worker detail view"""
+  recentEvents: [WorkerRecentEvent!]!
+  """Operator lifecycle actions recorded for this worker"""
+  lifecycleEvents: [WorkerLifecycleEvent!]!
+}
+
+"""WorkerLifecycleEvent records an operator lifecycle action."""
+type WorkerLifecycleEvent {
+  """Action name, such as start or stop"""
+  action: String!
+  """Actor identifier known to the server"""
+  actor: String!
+  """When the action was recorded"""
+  timestamp: DateTime!
+  """Optional action detail"""
+  detail: String
+  """Bead involved in the action, if any"""
+  beadId: String
+}
+
+"""WorkerRecentEvent is one captured response frame in worker detail history"""
+type WorkerRecentEvent {
+  """Event kind: text_delta or tool_call"""
+  kind: String!
+  """Text content for text_delta events"""
+  text: String
+  """Tool name for tool_call events"""
+  name: String
+  """Tool call input payload encoded as JSON text"""
+  inputs: String
+  """Tool call output text"""
+  output: String
+}
+
+"""CurrentAttemptInfo summarises the in-flight execution attempt"""
+type CurrentAttemptInfo {
+  """Unique attempt identifier"""
+  attemptId: String!
+  """Bead being executed"""
+  beadId: String!
+  """Title of the bead being executed"""
+  beadTitle: String
+  """Harness running this attempt"""
+  harness: String
+  """Model used for this attempt"""
+  model: String
+  """Profile/configuration name"""
+  profile: String
+  """Current execution phase"""
+  phase: String!
+  """Sequence number of the current phase"""
+  phaseSeq: Int!
+  """When this attempt started"""
+  startedAt: DateTime!
+  """Milliseconds elapsed since attempt start"""
+  elapsedMs: Int!
+}
+
+"""PhaseTransition records a single phase change event"""
+type PhaseTransition {
+  """Phase name entered"""
+  phase: String!
+  """Timestamp of the transition"""
+  ts: DateTime!
+  """Sequence number of this phase"""
+  phaseSeq: Int!
+}
+
+"""LastAttemptInfo summarises the most recently completed attempt"""
+type LastAttemptInfo {
+  """Unique attempt identifier"""
+  attemptId: String!
+  """Bead that was executed"""
+  beadId: String!
+  """Final phase reached"""
+  phase: String!
+  """When the attempt started"""
+  startedAt: DateTime!
+  """When the attempt ended"""
+  endedAt: DateTime!
+  """Total duration in milliseconds"""
+  elapsedMs: Int!
+}
+
+"""WorkerExecutionResult captures the outcome of one execution"""
+type WorkerExecutionResult {
+  """Bead that was executed"""
+  beadId: String
+  """Unique attempt identifier"""
+  attemptId: String
+  """Worker that ran the execution"""
+  workerId: String
+  """Harness used"""
+  harness: String
+  """Provider used"""
+  provider: String
+  """Model used"""
+  model: String
+  """Outcome status (e.g. "success", "failure", "timeout")"""
+  status: String
+  """Human-readable outcome detail"""
+  detail: String
+  """Correlated agent session ID"""
+  sessionId: String
+  """Git revision the execution started from"""
+  baseRev: String
+  """Git revision produced by the execution"""
+  resultRev: String
+  """Suggested retry delay (e.g. "30s")"""
+  retryAfter: String
+}
+
+"""WorkerEdge is one edge in a WorkerConnection"""
+type WorkerEdge {
+  """The worker at this position"""
+  node: Worker!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""WorkerConnection is a Relay cursor connection of workers"""
+type WorkerConnection {
+  """Ordered list of worker edges"""
+  edges: [WorkerEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of workers matching the filter"""
+  totalCount: Int!
+}
+
+"""WorkerLog holds captured output from a worker process"""
+type WorkerLog {
+  """Captured standard output"""
+  stdout: String!
+  """Captured standard error"""
+  stderr: String!
+}
+
+# ============================================
+# Agent Sessions
+# ============================================
+
+"""AgentSession represents one agent execution session"""
+type AgentSession implements Node {
+  """Unique session identifier"""
+  id: ID!
+  """Project this session belongs to"""
+  projectId: String!
+  """Bead being worked on (null for ad-hoc runs)"""
+  beadId: String
+  """Worker that produced this session, when known"""
+  workerId: String
+  """Agent harness used (e.g. "claude", "codex")"""
+  harness: String!
+  """Model identifier"""
+  model: String!
+  """Effort level applied"""
+  effort: String!
+  """Session status (e.g. "running", "completed", "failed")"""
+  status: String!
+  """When the session started"""
+  startedAt: DateTime!
+  """When the session ended (null if still running)"""
+  endedAt: DateTime
+  """Path to stdout log file"""
+  stdoutPath: String
+  """Path to stderr log file"""
+  stderrPath: String
+  """Total duration in milliseconds"""
+  durationMs: Int!
+  """Estimated cost in USD (null if unknown)"""
+  cost: Float
+  """Cost-basis bucket for this session: paid, subscription, or local"""
+  billingMode: String!
+  """Token consumption breakdown"""
+  tokens: TokenUsage
+  """Outcome classification (e.g. "success", "failure")"""
+  outcome: String
+  """Human-readable outcome detail"""
+  detail: String
+  """Git revision produced by this session"""
+  resultRev: String
+  """Git revision the session started from"""
+  baseRev: String
+  """Prompt body, loaded only for agentSession(id:)"""
+  prompt: String
+  """Response body, loaded only for agentSession(id:)"""
+  response: String
+  """Standard error body, loaded only for agentSession(id:)"""
+  stderr: String
+}
+
+"""TokenUsage breaks down token consumption for a session"""
+type TokenUsage {
+  """Number of prompt/input tokens consumed"""
+  prompt: Int
+  """Number of completion/output tokens generated"""
+  completion: Int
+  """Total tokens (prompt + completion)"""
+  total: Int
+  """Number of tokens served from cache"""
+  cached: Int
+}
+
+"""AgentSessionEdge is one edge in an AgentSessionConnection"""
+type AgentSessionEdge {
+  """The session at this position"""
+  node: AgentSession!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""AgentSessionConnection is a Relay cursor connection of agent sessions"""
+type AgentSessionConnection {
+  """Ordered list of session edges"""
+  edges: [AgentSessionEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of sessions matching the filter"""
+  totalCount: Int!
+}
+
+"""SessionsCostSummary separates cash, subscription-equivalent, and local session costs"""
+type SessionsCostSummary {
+  """Actual billed pay-per-token API spend"""
+  cashUsd: Float!
+  """Dollar-equivalent token value consumed under subscription harnesses"""
+  subscriptionEquivUsd: Float!
+  """Count of sessions served locally"""
+  localSessionCount: Int!
+  """Optional local compute estimate, present only when configured"""
+  localEstimatedUsd: Float
+}
+
+# ============================================
+# Personas
+# ============================================
+
+"""Persona represents an AI persona definition from the library"""
+type Persona implements Node {
+  """Unique persona identifier"""
+  id: ID!
+  """Persona name (e.g. "strict-code-reviewer")"""
+  name: String!
+  """Roles this persona fulfills (e.g. ["code-reviewer"])"""
+  roles: [String!]!
+  """Short description of the persona's behaviour"""
+  description: String!
+  """Freeform tags for discovery and filtering"""
+  tags: [String!]!
+  """Full persona prompt/instruction text"""
+  content: String!
+  """Markdown body for frontend detail views"""
+  body: String!
+  """Persona source package or plugin"""
+  source: String!
+  """Known project bindings for this persona"""
+  bindings: [PersonaBinding!]!
+  """Filesystem path to the persona definition file"""
+  filePath: String
+  """Last modification time of the persona file"""
+  modTime: DateTime
+}
+
+"""PersonaBinding records one role binding for a persona"""
+type PersonaBinding {
+  """Project identifier containing the binding"""
+  projectId: String!
+  """Role name bound to the persona"""
+  role: String!
+  """Persona name assigned to the role"""
+  persona: String!
+}
+
+"""PersonaEdge is one edge in a PersonaConnection"""
+type PersonaEdge {
+  """The persona at this position"""
+  node: Persona!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""PersonaConnection is a Relay cursor connection of personas"""
+type PersonaConnection {
+  """Ordered list of persona edges"""
+  edges: [PersonaEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of personas matching the filter"""
+  totalCount: Int!
+}
+
+# ============================================
+# Executions
+# ============================================
+
+"""ExecutionDefinition describes a repeatable execution (check, benchmark, etc.)"""
+type ExecutionDefinition implements Node {
+  """Unique definition identifier"""
+  id: ID!
+  """IDs of artifacts this definition produces or consumes"""
+  artifactIds: [String!]!
+  """How to invoke the execution"""
+  executor: ExecutorSpec!
+  """How to interpret the result"""
+  result: ResultSpec
+  """Evaluation criteria and thresholds"""
+  evaluation: Evaluation
+  """Whether the definition is currently active"""
+  active: Boolean!
+  """Whether the definition must pass for merge"""
+  required: Boolean
+  """Whether this definition was discovered from the docgraph"""
+  graphSource: Boolean
+  """When the definition was created"""
+  createdAt: DateTime!
+}
+
+"""ExecutionDefinitionEdge is one edge in an ExecutionDefinitionConnection"""
+type ExecutionDefinitionEdge {
+  """The definition at this position"""
+  node: ExecutionDefinition!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""ExecutionDefinitionConnection is a Relay cursor connection of execution definitions"""
+type ExecutionDefinitionConnection {
+  """Ordered list of definition edges"""
+  edges: [ExecutionDefinitionEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of definitions matching the filter"""
+  totalCount: Int!
+}
+
+"""ExecutionRun represents one invocation of an execution definition"""
+type ExecutionRun implements Node {
+  """Unique run identifier"""
+  id: ID!
+  """ID of the definition that was executed"""
+  definitionId: String!
+  """IDs of artifacts involved in this run"""
+  artifactIds: [String!]!
+  """When the run started"""
+  startedAt: DateTime!
+  """When the run finished"""
+  finishedAt: DateTime!
+  """Run outcome status (e.g. "pass", "fail", "error")"""
+  status: String!
+  """Process exit code"""
+  exitCode: Int!
+  """Whether a failure blocks merge"""
+  mergeBlocking: Boolean
+  """Correlated agent session ID (null if not agent-driven)"""
+  agentSessionId: String
+  """Opaque attachments (files, screenshots, etc.)"""
+  attachments: JSON
+  """Host and version metadata for reproducibility"""
+  provenance: Provenance
+  """Metric observation extracted from output (null if not metric-typed)"""
+  metric: MetricObservation
+  """Captured stdout from the execution"""
+  stdout: String
+  """Captured stderr from the execution"""
+  stderr: String
+  """Extracted numeric value (null if not parsed)"""
+  value: Float
+  """Unit of the extracted value"""
+  unit: String
+  """Whether the output was successfully parsed"""
+  parsed: Boolean
+}
+
+"""ExecutionRunEdge is one edge in an ExecutionRunConnection"""
+type ExecutionRunEdge {
+  """The run at this position"""
+  node: ExecutionRun!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""ExecutionRunConnection is a Relay cursor connection of execution runs"""
+type ExecutionRunConnection {
+  """Ordered list of run edges"""
+  edges: [ExecutionRunEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of runs matching the filter"""
+  totalCount: Int!
+}
+
+"""ExecutionRunLog holds the captured output from an execution run"""
+type ExecutionRunLog {
+  """Captured standard output"""
+  stdout: String!
+  """Captured standard error"""
+  stderr: String!
+}
+
+"""Provenance captures host and version metadata for reproducibility"""
+type Provenance {
+  """Actor that triggered the execution (agent name or "human")"""
+  actor: String
+  """Hostname where the execution ran"""
+  host: String
+  """Git revision at execution time"""
+  gitRev: String
+  """DDx binary version"""
+  ddxVersion: String
+}
+
+"""MetricObservation records a metric-shaped measurement from an execution"""
+type MetricObservation {
+  """Artifact ID the metric belongs to"""
+  artifactId: String!
+  """Definition ID that produced this metric"""
+  definitionId: String!
+  """When the observation was recorded"""
+  observedAt: DateTime!
+  """Observation status (e.g. "pass", "warn", "fail")"""
+  status: String!
+  """Observed numeric value"""
+  value: Float!
+  """Unit of measurement"""
+  unit: String
+  """Raw sample values (for distribution metrics)"""
+  samples: [Float!]
+  """Comparison against baseline (null if no baseline)"""
+  comparison: ComparisonResult
+}
+
+"""ComparisonResult records a metric comparison against a baseline"""
+type ComparisonResult {
+  """Baseline value being compared against"""
+  baseline: Float!
+  """Absolute difference (observed - baseline)"""
+  delta: Float!
+  """Direction of change ("better", "worse", "neutral")"""
+  direction: String!
+}
+
+# ============================================
+# Execute-bead bundles
+# ============================================
+
+"""
+Execution represents one execute-bead attempt bundle stored under
+`.ddx/executions/<ts>-<hash>/`. It joins bead, session, prompt, verdict,
+and tool-call stream together as the canonical record of a single
+ddx agent execute-bead attempt.
+"""
+type Execution implements Node {
+  """Stable ID, equal to the bundle directory name (e.g. 20260423T002311-2ebaa669)."""
+  id: ID!
+  """Project this execution belongs to."""
+  projectId: String!
+  """Linked bead ID (manifest.bead_id)."""
+  beadId: String
+  """Bead title at the time the execution ran (when manifest carried it)."""
+  beadTitle: String
+  """Linked session ID (result.session_id) if a session was recorded."""
+  sessionId: String
+  """Worker ID if recorded in the manifest."""
+  workerId: String
+  """Harness used (e.g. claude, codex, agent)."""
+  harness: String
+  """Model identifier used."""
+  model: String
+  """Verdict / outcome reported in result.json (e.g. PASS, BLOCK, no_changes, success)."""
+  verdict: String
+  """Status from result.json (success, failure, no_changes, etc.)."""
+  status: String
+  """Human-readable rationale or detail from result.json."""
+  rationale: String
+  """When the bundle was created (manifest.created_at), ISO-8601."""
+  createdAt: DateTime!
+  """When the run started (result.started_at), ISO-8601."""
+  startedAt: DateTime
+  """When the run finished (result.finished_at), ISO-8601."""
+  finishedAt: DateTime
+  """Total duration in milliseconds."""
+  durationMs: Int
+  """Estimated cost in USD."""
+  costUsd: Float
+  """Total token count (when reported)."""
+  tokens: Int
+  """Process exit code from the harness."""
+  exitCode: Int
+  """Git revision the attempt started from."""
+  baseRev: String
+  """Git revision the attempt produced (commit SHA when one was made)."""
+  resultRev: String
+  """Bundle directory (relative to project root)."""
+  bundlePath: String!
+  """Path to the prompt file in the bundle."""
+  promptPath: String
+  """Path to the result file in the bundle."""
+  resultPath: String
+  """Path to the manifest file in the bundle."""
+  manifestPath: String
+  """Path to the agent-log file (when known) carrying tool-call frames."""
+  agentLogPath: String
+  """Prompt body (markdown). Loaded only for execution(id:)."""
+  prompt: String
+  """Manifest JSON as a single string (raw). Loaded only for execution(id:)."""
+  manifest: String
+  """Result JSON as a single string (raw). Loaded only for execution(id:)."""
+  result: String
+}
+
+"""ExecutionEdge is one edge in an ExecutionConnection."""
+type ExecutionEdge {
+  """The execution at this position."""
+  node: Execution!
+  """Opaque cursor for pagination."""
+  cursor: String!
+}
+
+"""ExecutionConnection is a Relay cursor connection of executions."""
+type ExecutionConnection {
+  """Ordered list of execution edges."""
+  edges: [ExecutionEdge!]!
+  """Pagination metadata."""
+  pageInfo: PageInfo!
+  """Total number of executions matching the filter."""
+  totalCount: Int!
+}
+
+"""ExecutionToolCall is one tool_use/tool_result pair in an execution's agent-log stream."""
+type ExecutionToolCall {
+  """Stable index within the stream (used as cursor)."""
+  id: ID!
+  """Tool name (e.g. Bash, Read, Write, Edit)."""
+  name: String!
+  """Sequence number within the stream, starting at 0."""
+  seq: Int!
+  """Frame timestamp (ISO-8601), when present."""
+  ts: DateTime
+  """Tool input as a JSON-encoded string."""
+  inputs: String
+  """Tool output as a string. May be truncated for very large outputs."""
+  output: String
+  """Whether the output payload was truncated for transport."""
+  truncated: Boolean
+}
+
+"""ExecutionToolCallEdge is one edge in an ExecutionToolCallConnection."""
+type ExecutionToolCallEdge {
+  """The tool call at this position."""
+  node: ExecutionToolCall!
+  """Opaque cursor for pagination."""
+  cursor: String!
+}
+
+"""ExecutionToolCallConnection is a Relay cursor connection of tool calls."""
+type ExecutionToolCallConnection {
+  """Ordered list of tool call edges."""
+  edges: [ExecutionToolCallEdge!]!
+  """Pagination metadata."""
+  pageInfo: PageInfo!
+  """Total number of tool calls available in the stream."""
+  totalCount: Int!
+}
+
+# ============================================
+# Coordinators
+# ============================================
+
+"""LandOutcomeSummary is one entry in the coordinator's submission log"""
+type LandOutcomeSummary {
+  """When the submission completed"""
+  ts: DateTime!
+  """Bead ID that was submitted (null for non-bead work)"""
+  beadId: String
+  """Attempt ID of the submission"""
+  attemptId: String
+  """Outcome: landed, preserved, failed, or push_failed"""
+  outcome: String!
+  """Duration of the land operation in milliseconds"""
+  durationMs: Int!
+  """Number of commits in the submission"""
+  commitCount: Int!
+}
+
+"""CoordinatorMetrics holds outcome metrics for one land coordinator"""
+type CoordinatorMetrics {
+  """Number of submissions successfully merged"""
+  landed: Int!
+  """Number of submissions kept in a separate worktree"""
+  preserved: Int!
+  """Number of submissions that failed"""
+  failed: Int!
+  """Number of submissions that failed to push"""
+  pushFailed: Int!
+  """Sum of all submission durations in milliseconds"""
+  totalDurationMs: Int!
+  """Total commits across all submissions"""
+  totalCommits: Int!
+  """Ratio of preserved+failed to total submissions"""
+  preservedRatio: Float!
+  """Up to the last 10 submission outcomes"""
+  lastSubmissions: [LandOutcomeSummary!]
+}
+
+"""CoordinatorMetricsEntry pairs a project root with its coordinator metrics"""
+type CoordinatorMetricsEntry {
+  """Absolute path to the project root"""
+  projectRoot: String!
+  """Coordinator outcome metrics for this project"""
+  metrics: CoordinatorMetrics!
+}
+
+# ============================================
+# Health
+# ============================================
+
+"""HealthStatus represents the server health response"""
+type HealthStatus {
+  """Status string ("ok" when healthy)"""
+  status: String!
+  """When the server process started"""
+  startedAt: DateTime!
+}
+
+"""ReadyCheck represents one subsystem readiness check"""
+type ReadyCheck {
+  """Subsystem name being checked"""
+  name: String!
+  """Check result ("ok" or a short problem description)"""
+  status: String!
+}
+
+"""ReadyStatus represents the server readiness response"""
+type ReadyStatus {
+  """True when all subsystem checks pass"""
+  ready: Boolean!
+  """Per-subsystem readiness state"""
+  checks: [ReadyCheck!]!
+}
+
+# ============================================
+# Process Metrics
+# ============================================
+
+"""Window captures the time window used to scope a metrics query"""
+type Window {
+  """Cutoff time for the window (null means all-time)"""
+  since: DateTime
+}
+
+"""SourceRef explains where a derived metric fact originated"""
+type SourceRef {
+  """Bead ID associated with this fact"""
+  beadId: String
+  """Agent session ID associated with this fact"""
+  sessionId: String
+  """Native (harness-specific) session identifier"""
+  nativeSessionId: String
+  """Native log reference for traceability"""
+  nativeLogRef: String
+  """SHA of the commit that closed the bead"""
+  closingCommitSha: String
+  """Timestamp of the source event"""
+  timestamp: DateTime
+  """Source system identifier"""
+  source: String
+}
+
+"""AggregateSummaryBeads holds bead-level aggregate counts"""
+type AggregateSummaryBeads {
+  """Total number of beads"""
+  total: Int!
+  """Number of beads in open status"""
+  open: Int!
+  """Number of beads currently in progress"""
+  inProgress: Int!
+  """Number of closed beads"""
+  closed: Int!
+  """Number of beads that have been reopened"""
+  reopened: Int!
+  """Beads with known cycle time data"""
+  knownCycleTime: Int!
+  """Beads with unknown cycle time data"""
+  unknownCycleTime: Int!
+  """Beads with known cost data"""
+  knownCost: Int!
+  """Beads with estimated cost data"""
+  estimatedCost: Int!
+  """Beads with unknown cost data"""
+  unknownCost: Int!
+}
+
+"""AggregateSummarySessions holds session-level aggregate counts"""
+type AggregateSummarySessions {
+  """Total number of sessions"""
+  total: Int!
+  """Sessions correlated to a bead"""
+  correlated: Int!
+  """Sessions not correlated to any bead"""
+  uncorrelated: Int!
+  """Total prompt/input tokens consumed"""
+  inputTokens: Int!
+  """Total completion/output tokens generated"""
+  outputTokens: Int!
+  """Total tokens (input + output)"""
+  totalTokens: Int!
+  """Sessions with known cost data"""
+  knownCost: Int!
+  """Sessions with estimated cost data"""
+  estimatedCost: Int!
+  """Sessions with unknown cost data"""
+  unknownCost: Int!
+  """Total cost in USD"""
+  costUsd: Float!
+}
+
+"""AggregateSummaryCost holds cost aggregates across beads and features"""
+type AggregateSummaryCost {
+  """Number of beads with cost data"""
+  beads: Int!
+  """Number of features with cost data"""
+  features: Int!
+  """Total known cost in USD"""
+  knownCostUsd: Float!
+  """Total estimated cost in USD"""
+  estimatedCostUsd: Float!
+  """Number of beads with no cost data"""
+  unknownBeads: Int!
+}
+
+"""AggregateSummaryCycleTime holds cycle time aggregates"""
+type AggregateSummaryCycleTime {
+  """Number of beads with known cycle time"""
+  knownCount: Int!
+  """Number of beads with unknown cycle time"""
+  unknownCount: Int!
+  """Average cycle time in milliseconds"""
+  averageMs: Int
+  """Minimum cycle time in milliseconds"""
+  minMs: Int
+  """Maximum cycle time in milliseconds"""
+  maxMs: Int
+}
+
+"""AggregateSummaryRework holds rework/churn aggregates"""
+type AggregateSummaryRework {
+  """Number of beads with known closure data"""
+  knownClosed: Int!
+  """Number of beads known to have been reopened"""
+  knownReopened: Int!
+  """Number of beads with unknown rework data"""
+  unknownCount: Int!
+  """Ratio of reopened to total closed beads"""
+  reopenRate: Float!
+  """Total number of post-close revisions"""
+  revisionCount: Int!
+}
+
+"""AggregateSummary is the full process-metrics summary"""
+type AggregateSummary {
+  """Bead-level aggregate counts"""
+  beads: AggregateSummaryBeads!
+  """Session-level aggregate counts"""
+  sessions: AggregateSummarySessions!
+  """Cost aggregates"""
+  cost: AggregateSummaryCost!
+  """Cycle time aggregates"""
+  cycleTime: AggregateSummaryCycleTime!
+  """Rework aggregates"""
+  rework: AggregateSummaryRework!
+}
+
+"""CostSummary aggregates cost across all beads/features in a cost report"""
+type CostSummary {
+  """Number of beads with cost data"""
+  beads: Int!
+  """Number of features with cost data"""
+  features: Int!
+  """Total known cost in USD"""
+  knownCostUsd: Float!
+  """Total estimated cost in USD"""
+  estimatedCostUsd: Float!
+  """Number of beads with no cost data"""
+  unknownBeads: Int!
+}
+
+"""BeadCostRow is one bead's cost attribution within a CostReport"""
+type BeadCostRow {
+  """Bead identifier"""
+  beadId: String!
+  """Bead title"""
+  title: String!
+  """Spec/feature ID the bead belongs to"""
+  specId: String
+  """Current bead status"""
+  status: String!
+  """Agent sessions contributing to this bead's cost"""
+  sessionIds: [String!]
+  """Total prompt/input tokens consumed"""
+  inputTokens: Int!
+  """Total completion/output tokens generated"""
+  outputTokens: Int!
+  """Total tokens (input + output)"""
+  totalTokens: Int!
+  """Cost data quality: known, estimated, or unknown"""
+  costState: String!
+  """Cost in USD (null if unknown)"""
+  costUsd: Float
+  """Number of sessions with unknown cost"""
+  unknownSessions: Int
+  """Source references for cost attribution"""
+  provenance: [SourceRef!]
+}
+
+"""FeatureCostRow aggregates bead cost rows by spec/feature ID"""
+type FeatureCostRow {
+  """Spec/feature identifier"""
+  specId: String!
+  """Bead IDs contributing to this feature's cost"""
+  beadIds: [String!]
+  """Total prompt/input tokens consumed"""
+  inputTokens: Int!
+  """Total completion/output tokens generated"""
+  outputTokens: Int!
+  """Total tokens (input + output)"""
+  totalTokens: Int!
+  """Cost data quality: known, estimated, or unknown"""
+  costState: String!
+  """Cost in USD (null if unknown)"""
+  costUsd: Float
+  """Number of beads with unknown cost"""
+  unknownBeads: Int
+}
+
+"""CostReport describes bead and feature cost attribution over a time window"""
+type CostReport {
+  """Report scope (e.g. "all", "bead", "feature")"""
+  scope: String!
+  """Time window for the report (null means all-time)"""
+  window: Window
+  """Filter: specific bead ID (null for all beads)"""
+  beadId: String
+  """Filter: specific feature ID (null for all features)"""
+  featureId: String
+  """Per-bead cost rows"""
+  beads: [BeadCostRow!]
+  """Per-feature cost rows"""
+  features: [FeatureCostRow!]
+  """Aggregate cost summary"""
+  summary: CostSummary!
+}
+
+"""CycleTimeSummary aggregates lifecycle timing across all beads in a report"""
+type CycleTimeSummary {
+  """Number of beads with known cycle time"""
+  knownCount: Int!
+  """Number of beads with unknown cycle time"""
+  unknownCount: Int!
+  """Average cycle time in milliseconds"""
+  averageMs: Int
+  """Minimum cycle time in milliseconds"""
+  minMs: Int
+  """Maximum cycle time in milliseconds"""
+  maxMs: Int
+}
+
+"""CycleTimeRow describes one bead's lifecycle timing"""
+type CycleTimeRow {
+  """Bead identifier"""
+  beadId: String!
+  """Bead title"""
+  title: String!
+  """Spec/feature ID the bead belongs to"""
+  specId: String
+  """Current bead status"""
+  status: String!
+  """When the bead was created"""
+  createdAt: DateTime!
+  """When the bead was first closed"""
+  firstClosedAt: DateTime
+  """When the bead was last closed"""
+  lastClosedAt: DateTime
+  """Total cycle time in milliseconds (null if still open)"""
+  cycleTimeMs: Int
+  """Number of times the bead was reopened"""
+  reopenCount: Int
+  """Number of post-close revisions"""
+  revisionCount: Int
+  """Time spent in open status in milliseconds"""
+  timeInOpenMs: Int
+  """Time spent in in-progress status in milliseconds"""
+  timeInProgressMs: Int
+  """Time spent in closed status in milliseconds"""
+  timeInClosedMs: Int
+  """Cycle time data quality: known, estimated, or unknown"""
+  cycleState: String!
+  """Source references for timing attribution"""
+  provenance: [SourceRef!]
+}
+
+"""CycleTimeReport describes lifecycle timing over a time window"""
+type CycleTimeReport {
+  """Report scope"""
+  scope: String!
+  """Time window for the report"""
+  window: Window
+  """Per-bead cycle time rows"""
+  beads: [CycleTimeRow!]
+  """Aggregate cycle time summary"""
+  summary: CycleTimeSummary!
+}
+
+"""ReworkSummary aggregates reopen and post-close churn"""
+type ReworkSummary {
+  """Number of beads with known closure data"""
+  knownClosed: Int!
+  """Number of beads known to have been reopened"""
+  knownReopened: Int!
+  """Number of beads with unknown rework data"""
+  unknownCount: Int!
+  """Ratio of reopened to total closed beads"""
+  reopenRate: Float!
+  """Total number of post-close revisions"""
+  revisionCount: Int!
+}
+
+"""ReworkRow describes reopen and revision facts for one bead"""
+type ReworkRow {
+  """Bead identifier"""
+  beadId: String!
+  """Bead title"""
+  title: String!
+  """Spec/feature ID the bead belongs to"""
+  specId: String
+  """Current bead status"""
+  status: String!
+  """When the bead was first closed"""
+  firstClosedAt: DateTime
+  """Whether the bead has been reopened at least once"""
+  reopened: Boolean!
+  """Number of times the bead was reopened"""
+  reopenCount: Int
+  """Number of post-close revisions"""
+  revisionCount: Int
+  """Rework data quality: known, estimated, or unknown"""
+  reworkState: String!
+  """Source references for rework attribution"""
+  provenance: [SourceRef!]
+}
+
+"""ReworkReport describes reopen and post-close churn over a time window"""
+type ReworkReport {
+  """Report scope"""
+  scope: String!
+  """Time window for the report"""
+  window: Window
+  """Per-bead rework rows"""
+  beads: [ReworkRow!]
+  """Aggregate rework summary"""
+  summary: ReworkSummary!
+}
+
+# ============================================
+# Providers
+# ============================================
+
+"""Provider represents an agent provider/harness configuration"""
+type Provider implements Node {
+  """Unique provider identifier"""
+  id: ID!
+  """Display name"""
+  name: String!
+  """Provider kind (e.g. "cli", "api")"""
+  kind: String!
+  """Default model for this provider"""
+  defaultModel: String
+  """Available model identifiers"""
+  models: [String!]
+  """Default effort level"""
+  defaultEffort: String
+  """Available effort levels"""
+  effortLevels: [String!]
+  """Default execution timeout in milliseconds"""
+  timeoutMs: Int
+  """Granted permission scopes"""
+  permissions: [String!]
+}
+
+"""ProviderKind distinguishes endpoint providers from subprocess harnesses."""
+enum ProviderKind {
+  """API-endpoint provider configured via base URL + key (e.g. anthropic, openai-compat)."""
+  ENDPOINT
+  """Subprocess harness invoked via a local binary (e.g. claude, codex, gemini)."""
+  HARNESS
+}
+
+"""ProviderUsage is a rolling-window token/request summary computed from the sessions index."""
+type ProviderUsage {
+  """Tokens recorded in sessions whose StartedAt falls in the last 60 minutes. Null when unavailable."""
+  tokensUsedLastHour: Int
+  """Tokens recorded in sessions whose StartedAt falls in the last 24 hours. Null when unavailable."""
+  tokensUsedLast24h: Int
+  """Session count in the last 60 minutes. Null when unavailable."""
+  requestsLastHour: Int
+  """Session count in the last 24 hours. Null when unavailable."""
+  requestsLast24h: Int
+}
+
+"""ProviderQuota captures the ceiling reported by the harness/provider, when known.
+All fields are nullable; null means "not reported" (no fabrication)."""
+type ProviderQuota {
+  """Ceiling tokens for the current window. Null when the harness/provider does not report one."""
+  ceilingTokens: Int
+  """Length of the quota window in seconds (e.g. 60 for per-minute ceilings)."""
+  ceilingWindowSeconds: Int
+  """Remaining tokens in the current window, as reported by the provider."""
+  remaining: Int
+  """RFC3339 timestamp when the quota window resets."""
+  resetAt: String
+}
+
+"""ProviderStatus is the live connectivity status of a configured endpoint provider
+or subprocess harness, mirroring the output of `ddx agent providers` and
+`ddx agent list` / `ddx agent doctor`."""
+type ProviderStatus {
+  """Provider/harness name from agent config"""
+  name: String!
+  """Kind: endpoint provider or subprocess harness."""
+  kind: ProviderKind!
+  """Provider type (e.g. "anthropic", "openai-compat") for endpoints; binary name or surface for harnesses."""
+  providerType: String!
+  """API base URL for endpoints; "(subprocess)" for harnesses."""
+  baseURL: String!
+  """Configured model identifier"""
+  model: String!
+  """Live connectivity status message"""
+  status: String!
+  """True when the last-known status says this endpoint/harness can accept work."""
+  reachable: Boolean!
+  """Human-readable detail explaining the current status."""
+  detail: String!
+  """Number of models discovered via /v1/models (endpoints) or harness model count (harnesses)."""
+  modelCount: Int!
+  """True when this is the default provider/harness."""
+  isDefault: Boolean!
+  """RFC3339 timestamp when health cooldown expires, if on cooldown"""
+  cooldownUntil: String
+  """RFC3339 timestamp of the last probe result (cached or live)."""
+  lastCheckedAt: String
+  """Rolling usage aggregated from the sessions index. Null when sessions index is unavailable."""
+  usage: ProviderUsage
+  """Quota ceiling + reset from the harness/provider. Null when unreported."""
+  quota: ProviderQuota
+  """Profile names where this row is the default candidate (may be empty)."""
+  defaultForProfile: [String!]!
+}
+
+"""ProviderTrendPoint is one time-bucketed data point of usage vs. ceiling."""
+type ProviderTrendPoint {
+  """RFC3339 bucket start (hour-aligned for ≤7d windows, 4-hour-aligned beyond)."""
+  bucketStart: String!
+  """Sum of tokens recorded in sessions whose StartedAt falls in this bucket."""
+  tokens: Int!
+  """Count of sessions in this bucket."""
+  requests: Int!
+}
+
+"""ProviderTrend is the trend-detail payload for `/providers/[name]`."""
+type ProviderTrend {
+  """Provider/harness name."""
+  name: String!
+  """Endpoint vs harness."""
+  kind: ProviderKind!
+  """Window in days covered by series points."""
+  windowDays: Int!
+  """Time-bucketed usage points, oldest first."""
+  series: [ProviderTrendPoint!]!
+  """Quota ceiling tokens; null when unreported."""
+  ceilingTokens: Int
+  """Projected hours until the ceiling is hit, computed from the last-24h slope. Null when ceiling is unreported or slope is non-positive."""
+  projectedRunOutHours: Float
+}
+
+"""DefaultRouteStatus shows which provider/model the default model-ref resolves to."""
+type DefaultRouteStatus {
+  """The model-ref key (e.g. "code-medium") or empty if no default configured"""
+  modelRef: String!
+  """Selected provider name, or null if no healthy candidate found"""
+  resolvedProvider: String
+  """Selected model identifier, or null if no healthy candidate found"""
+  resolvedModel: String
+  """Routing strategy (e.g. "first-available")"""
+  strategy: String
+}
+
+"""QueueSummary is a compact project queue status for action dispatch."""
+type QueueSummary {
+  """Open beads with no unmet dependencies"""
+  ready: Int!
+  """Open beads blocked by unmet dependencies"""
+  blocked: Int!
+  """Beads currently claimed or executing"""
+  inProgress: Int!
+}
+
+"""QueueAndWorkersSummary backs the global drain indicator. Combines the
+ready-bead count with running/total worker counts so the NavShell badge
+can render without issuing two queries per poll."""
+type QueueAndWorkersSummary {
+  """Open beads with no unmet dependencies (the drain queue depth)"""
+  readyBeads: Int!
+  """Count of workers in state `running` for this project"""
+  runningWorkers: Int!
+  """Total workers on record for this project (any state)"""
+  totalWorkers: Int!
+}
+
+"""WorkerDispatchResult describes the worker started by an action."""
+type WorkerDispatchResult {
+  """Worker identifier"""
+  id: ID!
+  """Queued/running state"""
+  state: String!
+  """Worker kind"""
+  kind: String!
+}
+
+"""WorkerLifecycleResult describes a lifecycle mutation result."""
+type WorkerLifecycleResult {
+  """Worker identifier"""
+  id: ID!
+  """Worker state after the mutation was accepted"""
+  state: String!
+  """Worker kind"""
+  kind: String!
+}
+
+"""StartWorkerInput configures a project execute-loop worker."""
+input StartWorkerInput {
+  """Project identifier"""
+  projectId: String!
+  """Optional harness override"""
+  harness: String
+  """Routing profile, defaulting to smart when omitted"""
+  profile: String
+  """Reasoning effort, defaulting to medium when omitted"""
+  effort: String
+  """Optional label filter for ready beads"""
+  labelFilter: String
+}
+
+"""PluginDispatchResult describes the worker started by a plugin action."""
+type PluginDispatchResult {
+  """Worker identifier"""
+  id: ID!
+  """Queued/running state"""
+  state: String!
+  """Plugin action requested"""
+  action: String!
+}
+
+"""PersonaBindResult reports a persona binding write."""
+type PersonaBindResult {
+  """True when the binding was accepted"""
+  ok: Boolean!
+  """Role name bound"""
+  role: String!
+  """Persona assigned to the role"""
+  persona: String!
+}
+
+"""PersonaDeleteResult reports a project-local persona delete."""
+type PersonaDeleteResult {
+  """True when the persona was deleted"""
+  ok: Boolean!
+  """Persona name that was deleted"""
+  name: String!
+}
+
+"""EfficacyWarning flags a model row that needs operator attention."""
+type EfficacyWarning {
+  """Warning kind"""
+  kind: String!
+  """Numeric threshold involved in the warning"""
+  threshold: Float
+}
+
+"""EfficacyRow summarizes agent performance for one harness/provider/model tuple."""
+type EfficacyRow {
+  """Stable row key"""
+  rowKey: String!
+  """Agent harness"""
+  harness: String!
+  """Provider name"""
+  provider: String!
+  """Model identifier"""
+  model: String!
+  """Attempt count"""
+  attempts: Int!
+  """Successful attempt count"""
+  successes: Int!
+  """Successes divided by attempts"""
+  successRate: Float!
+  """Median input tokens"""
+  medianInputTokens: Int!
+  """Median output tokens"""
+  medianOutputTokens: Int!
+  """Median duration in milliseconds"""
+  medianDurationMs: Int!
+  """Median cost in USD when known"""
+  medianCostUsd: Float
+  """Optional warning metadata"""
+  warning: EfficacyWarning
+}
+
+"""EfficacyAttempt is one historical attempt for an efficacy row."""
+type EfficacyAttempt {
+  """Bead identifier"""
+  beadId: String!
+  """Attempt outcome"""
+  outcome: String!
+  """Duration in milliseconds"""
+  durationMs: Int!
+  """Cost in USD when known"""
+  costUsd: Float
+  """Execution evidence URL or path"""
+  evidenceBundleUrl: String!
+}
+
+"""EfficacyAttempts groups attempt details for a row."""
+type EfficacyAttempts {
+  """Stable row key"""
+  rowKey: String!
+  """Attempts in newest-first order"""
+  attempts: [EfficacyAttempt!]!
+}
+
+"""ComparisonRecord is a queued or completed model comparison."""
+type ComparisonRecord {
+  """Comparison identifier"""
+  id: ID!
+  """Comparison state"""
+  state: String!
+  """Number of configured arms"""
+  armCount: Int!
+}
+
+"""ComparisonDispatchResult describes a queued model comparison."""
+type ComparisonDispatchResult {
+  """Comparison identifier"""
+  id: ID!
+  """Queued/running state"""
+  state: String!
+  """Number of configured arms"""
+  armCount: Int!
+}
+
+"""PluginInfo describes one plugin registry entry."""
+type PluginInfo {
+  """Plugin name"""
+  name: String!
+  """Registry version"""
+  version: String!
+  """Installed version, if present"""
+  installedVersion: String
+  """Plugin classification"""
+  type: String!
+  """Short description"""
+  description: String!
+  """Search keywords"""
+  keywords: [String!]!
+  """available, installed, or update-available"""
+  status: String!
+  """Registry source"""
+  registrySource: String!
+  """Approximate disk footprint"""
+  diskBytes: Int!
+  """Manifest encoded as JSON text"""
+  manifest: String
+  """Skill names exposed by the plugin"""
+  skills: [String!]!
+  """Prompt names exposed by the plugin"""
+  prompts: [String!]!
+  """Template names exposed by the plugin"""
+  templates: [String!]!
+}
+
+"""PaletteDocumentResult is a document match for the command palette."""
+type PaletteDocumentResult {
+  kind: String!
+  path: String!
+  title: String!
+}
+
+"""PaletteBeadResult is a bead match for the command palette."""
+type PaletteBeadResult {
+  kind: String!
+  id: ID!
+  title: String!
+}
+
+"""PaletteActionResult is an executable action in the command palette."""
+type PaletteActionResult {
+  kind: String!
+  id: ID!
+  label: String!
+}
+
+"""PaletteNavigationResult is a navigation target in the command palette."""
+type PaletteNavigationResult {
+  kind: String!
+  route: String!
+  title: String!
+}
+
+"""PaletteSearchResults groups command palette result buckets."""
+type PaletteSearchResults {
+  documents: [PaletteDocumentResult!]!
+  beads: [PaletteBeadResult!]!
+  actions: [PaletteActionResult!]!
+  navigation: [PaletteNavigationResult!]!
+}
+
+# ============================================
+# Query Root
+# ============================================
+
+"""Query is the root entry point for all read operations"""
+type Query {
+  """Fetch any entity by its globally unique ID (Relay node interface)"""
+  node(id: ID!): Node
+
+  # ==========================================
+  # Node & Project Queries
+  # ==========================================
+
+  """Return the server node information (maps to GET /api/node)"""
+  nodeInfo: NodeInfo!
+
+  """List all registered projects with cursor pagination (maps to GET /api/projects)"""
+  projects(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Include projects whose path is unreachable"""
+    includeUnreachable: Boolean
+  ): ProjectConnection!
+
+  # ==========================================
+  # Bead Queries
+  # ==========================================
+
+  """List all beads with cursor pagination and optional filters (maps to GET /api/beads)"""
+  beads(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Filter by lifecycle status"""
+    status: String,
+    """Filter by label"""
+    label: String,
+    """Filter by project ID"""
+    projectID: String
+  ): BeadConnection!
+
+  """List beads for a specific project (maps to GET /api/beads with project filter)"""
+  beadsByProject(
+    """Project identifier to filter by"""
+    projectID: String!,
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Filter by lifecycle status"""
+    status: String,
+    """Filter by label"""
+    label: String,
+    """Search by title or ID (case-insensitive substring)"""
+    search: String
+  ): BeadConnection!
+
+  """List open beads whose dependencies are all closed (maps to GET /api/beads/ready)"""
+  beadsReady(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+  ): BeadConnection!
+
+  """List open beads with unclosed dependencies (maps to GET /api/beads/blocked)"""
+  beadsBlocked(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+  ): BeadConnection!
+
+  """Return aggregate bead counts by status (maps to GET /api/beads/status)"""
+  beadsStatus: BeadStatusCounts!
+
+  """Return the dependency tree for a bead as a formatted string (maps to GET /api/beads/dep/tree/{id})"""
+  beadDepTree(
+    """Bead ID to compute the dependency tree for"""
+    beadID: ID!
+  ): String!
+
+  """Fetch a single bead by ID (maps to GET /api/beads/{id})"""
+  bead(
+    """Bead identifier"""
+    id: ID!
+  ): Bead
+
+  # ==========================================
+  # Document Queries
+  # ==========================================
+
+  """List all library documents with cursor pagination (maps to GET /api/documents)"""
+  documents(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Filter by document type (e.g. "prompt", "template")"""
+    type: String
+  ): DocumentConnection!
+
+  """Read a single document by path (maps to GET /api/documents/{path...})"""
+  documentByPath(
+    """Document path relative to the library root"""
+    path: String!
+  ): Document
+
+  """Return the full document dependency graph (maps to GET /api/docs/graph)"""
+  docGraph: DocGraph!
+
+  """Return only the structured integrity issues for the document graph."""
+  docGraphIssues: [GraphIssue!]!
+
+  """Return documents that are stale (maps to GET /api/docs/stale)"""
+  docStale: [StaleReason!]!
+
+  """Return the dependency IDs of a document (maps to GET /api/docs/{id}/deps)"""
+  docDeps(
+    """Document identifier"""
+    documentID: ID!
+  ): [String!]!
+
+  """Return the dependent IDs of a document (maps to GET /api/docs/{id}/dependents)"""
+  docDependents(
+    """Document identifier"""
+    documentID: ID!
+  ): [String!]!
+
+  """Return the git history for a document with cursor pagination (maps to GET /api/docs/{id}/history)"""
+  docHistory(
+    """Document identifier"""
+    documentID: ID!,
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+  ): CommitConnection!
+
+  """Return the diff for a document (maps to GET /api/docs/{id}/diff)"""
+  docDiff(
+    """Document identifier"""
+    documentID: ID!,
+    """Git ref to diff against (default: HEAD)"""
+    ref: String
+  ): String!
+
+  """Fetch a single document by ID (maps to GET /api/docs/{id})"""
+  doc(
+    """Document identifier"""
+    id: ID!
+  ): Document
+
+  """Search library documents (maps to GET /api/search)"""
+  search(
+    """Search query string"""
+    query: String!,
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+  ): SearchResultConnection!
+
+  # ==========================================
+  # Commit Queries
+  # ==========================================
+
+  """List git commits for a project with cursor pagination (maps to GET /api/projects/{project}/commits)"""
+  commits(
+    """Project identifier"""
+    projectID: ID!,
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Filter commits since this date (ISO-8601)"""
+    since: String,
+    """Filter by author name or email"""
+    author: String
+  ): CommitConnection!
+
+  # ==========================================
+  # Worker Queries
+  # ==========================================
+
+  """List all workers with cursor pagination (maps to GET /api/agent/workers)"""
+  workers(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+  ): WorkerConnection!
+
+  """List workers for a specific project (maps to GET /api/projects/{project}/workers)"""
+  workersByProject(
+    """Project identifier"""
+    projectID: String!,
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+  ): WorkerConnection!
+
+  """
+  Fetch a single worker by ID (maps to GET /api/agent/workers/{id} and GET /api/projects/{project}/workers/{id})
+  """
+  worker(
+    """Worker identifier"""
+    id: ID!
+  ): Worker
+
+  """
+  Return recent phase transitions for a worker (maps to GET /api/projects/{project}/workers/{id}/progress)
+  """
+  workerProgress(
+    """Worker identifier"""
+    workerID: ID!
+  ): [PhaseTransition!]!
+
+  """Return captured stdout/stderr from a worker (maps to GET /api/agent/workers/{id}/log)"""
+  workerLog(
+    """Worker identifier"""
+    workerID: ID!
+  ): WorkerLog!
+
+  """
+  Return the prompt text for a worker's current or last attempt (maps to GET /api/agent/workers/{id}/prompt)
+  """
+  workerPrompt(
+    """Worker identifier"""
+    workerID: ID!
+  ): String!
+
+  # ==========================================
+  # Agent Session Queries
+  # ==========================================
+
+  """List all agent sessions with cursor pagination (maps to GET /api/agent/sessions)"""
+  agentSessions(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+    """Only include sessions starting at or after this timestamp"""
+    startedAfter: DateTime
+    """Only include sessions starting before this timestamp"""
+    startedBefore: DateTime
+  ): AgentSessionConnection!
+
+  """Fetch a single agent session by ID (maps to GET /api/agent/sessions/{id})"""
+  agentSession(
+    """Session identifier"""
+    id: ID!
+  ): AgentSession
+
+  """Summarize session cost buckets for one project"""
+  sessionsCostSummary(
+    """Project identifier"""
+    projectId: ID!
+    """Only include sessions starting at or after this timestamp"""
+    since: DateTime
+    """Only include sessions starting before this timestamp"""
+    until: DateTime
+  ): SessionsCostSummary!
+
+  # ==========================================
+  # Persona Queries
+  # ==========================================
+
+  """List all personas as a flat array (maps to GET /api/personas).
+
+  When projectId is provided, project-local personas under the given
+  project's `.ddx/personas` are included and override library personas
+  of the same name."""
+  personas(
+    """Optional project identifier to scope project-local personas"""
+    projectId: String
+  ): [Persona!]!
+
+  """Fetch a single persona by name (maps to GET /api/personas)"""
+  persona(
+    """Persona name"""
+    name: String!,
+    """Optional project identifier to prefer project-local lookup"""
+    projectId: String
+  ): Persona
+
+  """Resolve the persona bound to a role (maps to GET /api/personas/{role})"""
+  personaByRole(
+    """Role name to resolve"""
+    role: String!
+  ): Persona
+
+  # ==========================================
+  # Execution Queries
+  # ==========================================
+
+  """List execution definitions with cursor pagination (maps to GET /api/exec/definitions)"""
+  execDefinitions(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Filter by artifact ID"""
+    artifactID: String
+  ): ExecutionDefinitionConnection!
+
+  """Fetch a single execution definition by ID (maps to GET /api/exec/definitions/{id})"""
+  execDefinition(
+    """Definition identifier"""
+    id: ID!
+  ): ExecutionDefinition
+
+  """List execution runs with cursor pagination (maps to GET /api/exec/runs)"""
+  execRuns(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String,
+    """Filter by artifact ID"""
+    artifactID: String,
+    """Filter by definition ID"""
+    definitionID: String
+  ): ExecutionRunConnection!
+
+  """Fetch a single execution run by ID (maps to GET /api/exec/runs/{id})"""
+  execRun(
+    """Run identifier"""
+    id: ID!
+  ): ExecutionRun
+
+  """Return the log for an execution run (maps to GET /api/exec/runs/{id}/log)"""
+  execRunLog(
+    """Run identifier"""
+    runID: ID!
+  ): ExecutionRunLog!
+
+  # ==========================================
+  # Execute-bead bundle Queries
+  # ==========================================
+
+  """List execute-bead execution bundles with cursor pagination and filters."""
+  executions(
+    """Project identifier whose .ddx/executions/ directory should be scanned."""
+    projectId: ID!,
+    """Return the first N edges after the cursor."""
+    first: Int,
+    """Cursor to start after."""
+    after: String,
+    """Return the last N edges before the cursor."""
+    last: Int,
+    """Cursor to end before."""
+    before: String,
+    """Filter to executions for a specific bead."""
+    beadId: String,
+    """Filter to a specific verdict (e.g. PASS, BLOCK, no_changes)."""
+    verdict: String,
+    """Filter to a specific harness."""
+    harness: String,
+    """Only include executions starting at or after this timestamp (ISO-8601)."""
+    since: DateTime,
+    """Only include executions starting before this timestamp (ISO-8601)."""
+    until: DateTime,
+    """Free-text search applied to the prompt and bead title."""
+    search: String
+  ): ExecutionConnection!
+
+  """Fetch a single execution bundle by ID, fully materialized (prompt + manifest + result)."""
+  execution(
+    """Execution identifier (bundle directory name)."""
+    id: ID!
+  ): Execution
+
+  """Look up the execution that produced a given session id."""
+  executionBySessionId(
+    """Project to scope the lookup to."""
+    projectId: ID!,
+    """Session id (e.g. eb-…)."""
+    sessionId: String!
+  ): Execution
+
+  """Look up an execution by the commit sha it produced (manifest.result_rev)."""
+  executionByResultRev(
+    """Project to scope the lookup to."""
+    projectId: ID!,
+    """Git commit SHA produced by the execution."""
+    sha: String!
+  ): Execution
+
+  """List tool-call frames for an execution bundle, paginated by sequence."""
+  executionToolCalls(
+    """Execution identifier (bundle directory name)."""
+    id: ID!,
+    """Return the first N edges after the cursor."""
+    first: Int,
+    """Cursor to start after."""
+    after: String
+  ): ExecutionToolCallConnection!
+
+  # ==========================================
+  # Health Queries
+  # ==========================================
+
+  """Return server health status (maps to GET /api/health)"""
+  health: HealthStatus!
+
+  """Return per-subsystem readiness checks (maps to GET /api/ready)"""
+  ready: ReadyStatus!
+
+  # ==========================================
+  # Coordinator Queries
+  # ==========================================
+
+  """Return metrics for every active land coordinator (maps to GET /api/agent/coordinators)"""
+  coordinators: [CoordinatorMetricsEntry!]!
+
+  """
+  Return the coordinator metrics for a specific project root.
+  Restores the single-project variant requested by the prior review.
+  Returns null when no coordinator has been observed for the given project root.
+  """
+  coordinatorMetricsByProject(
+    """Absolute project root path (matches CoordinatorMetricsEntry.projectRoot)"""
+    projectRoot: String!
+  ): CoordinatorMetrics
+
+  # ==========================================
+  # Metrics Queries
+  # ==========================================
+
+  """Return aggregate process metrics summary (maps to GET /api/metrics/summary)"""
+  metricsSummary(
+    """ISO-8601 cutoff; only include data after this time"""
+    since: String
+  ): AggregateSummary!
+
+  """Return bead and feature cost attribution (maps to GET /api/metrics/cost)"""
+  metricsCost(
+    """ISO-8601 cutoff"""
+    since: String,
+    """Filter to a specific bead"""
+    bead: String,
+    """Filter to a specific feature"""
+    feature: String
+  ): CostReport!
+
+  """Return lifecycle timing data (maps to GET /api/metrics/cycle-time)"""
+  metricsCycleTime(
+    """ISO-8601 cutoff"""
+    since: String
+  ): CycleTimeReport!
+
+  """Return reopen and post-close churn data (maps to GET /api/metrics/rework)"""
+  metricsRework(
+    """ISO-8601 cutoff"""
+    since: String
+  ): ReworkReport!
+
+  # ==========================================
+  # Provider Queries
+  # ==========================================
+
+  """List all agent providers (maps to GET /api/providers)"""
+  providers: [Provider!]!
+
+  """Fetch a single provider by harness name (maps to GET /api/providers/{harness})"""
+  provider(
+    """Harness/provider name"""
+    name: String!
+  ): Provider
+
+  """List configured API providers with live connectivity status (mirrors `ddx agent providers`)"""
+  providerStatuses: [ProviderStatus!]!
+
+  """List subprocess harnesses with live reachability, kind=HARNESS. Equivalent surface to `ddx agent list` + `ddx agent doctor`."""
+  harnessStatuses: [ProviderStatus!]!
+
+  """Show which provider/model the default model-ref resolves to (mirrors `ddx agent route-status`)"""
+  defaultRouteStatus: DefaultRouteStatus
+
+  """Return a time-bucketed trend of tokens and requests for a provider or harness."""
+  providerTrend(
+    """Provider or harness name."""
+    name: String!
+    """Window in days (7 or 30)."""
+    windowDays: Int! = 7
+  ): ProviderTrend
+
+  """Return compact queue counts for a project."""
+  queueSummary(
+    """Project identifier"""
+    projectId: String!
+  ): QueueSummary!
+
+  """Return a lightweight ready-beads + worker-count snapshot for a project.
+  Returns zeros for unknown or empty projects. Used by the global drain
+  indicator in the nav shell."""
+  queueAndWorkersSummary(
+    """Project identifier"""
+    projectId: String!
+  ): QueueAndWorkersSummary!
+
+  """Return model efficacy rows."""
+  efficacyRows(
+    """Filter sessions started at or after this ISO-8601 timestamp."""
+    since: String
+    """Filter sessions started before this ISO-8601 timestamp."""
+    until: String
+    """Project identifier whose session index should be read."""
+    projectId: String
+  ): [EfficacyRow!]!
+
+  """Return attempt details for one efficacy row."""
+  efficacyAttempts(
+    """Stable efficacy row key"""
+    rowKey: String!
+    """Filter sessions started at or after this ISO-8601 timestamp."""
+    since: String
+    """Filter sessions started before this ISO-8601 timestamp."""
+    until: String
+    """Project identifier whose session index should be read."""
+    projectId: String
+  ): EfficacyAttempts!
+
+  """Return model comparison records."""
+  comparisons: [ComparisonRecord!]!
+
+  """Return plugin registry entries."""
+  pluginsList: [PluginInfo!]!
+
+  """Return one plugin registry entry."""
+  pluginDetail(
+    """Plugin name"""
+    name: String!
+  ): PluginInfo
+
+  """Return persona bindings for a project as JSON text."""
+  projectBindings(
+    """Project identifier"""
+    projectId: String!
+  ): String!
+
+  """Search command palette documents, beads, actions, and navigation."""
+  paletteSearch(
+    """Search query"""
+    query: String!
+  ): PaletteSearchResults!
+}
+
+# ============================================
+# Mutations
+# ============================================
+
+"""Mutation is the root entry point for all write operations"""
+type Mutation {
+  """Create a new bead (maps to POST /api/beads)"""
+  beadCreate(input: BeadInput!): Bead!
+
+  """Update an existing bead (maps to POST /api/beads/{id})"""
+  beadUpdate(
+    """Bead ID to update"""
+    id: ID!,
+    """Fields to update"""
+    input: BeadUpdateInput!
+  ): Bead!
+
+  """Claim a bead for execution (maps to POST /api/beads/{id}/claim)"""
+  beadClaim(
+    """Bead ID to claim"""
+    id: ID!,
+    """Agent or human identifier claiming the bead"""
+    assignee: String!
+  ): Bead!
+
+  """Unclaim a bead (maps to POST /api/beads/{id}/unclaim)"""
+  beadUnclaim(
+    """Bead ID to unclaim"""
+    id: ID!
+  ): Bead!
+
+  """Reopen a closed bead (maps to POST /api/beads/{id}/reopen)"""
+  beadReopen(
+    """Bead ID to reopen"""
+    id: ID!
+  ): Bead!
+
+  """Close a bead."""
+  beadClose(
+    """Bead ID to close"""
+    id: ID!,
+    """Operator-provided reason"""
+    reason: String
+  ): Bead!
+
+  """Write or update a document in the library (maps to PUT /api/docs/{id})"""
+  documentWrite(
+    """Document path relative to the library root"""
+    path: String!,
+    """Document content"""
+    content: String!
+  ): Document!
+
+  """Dispatch a project worker action."""
+  workerDispatch(
+    """Worker kind: execute-loop, realign-specs, or run-checks"""
+    kind: String!,
+    """Project identifier"""
+    projectId: String!,
+    """Optional JSON-encoded arguments"""
+    args: String
+  ): WorkerDispatchResult!
+
+  """Start a project execute-loop worker."""
+  startWorker(input: StartWorkerInput!): WorkerDispatchResult!
+
+  """Stop a running worker through the same path as ddx agent workers stop."""
+  stopWorker(id: ID!): WorkerLifecycleResult!
+
+  """Dispatch a plugin install/update/uninstall action."""
+  pluginDispatch(
+    """Plugin name"""
+    name: String!,
+    """Plugin action"""
+    action: String!,
+    """Install scope"""
+    scope: String!
+  ): PluginDispatchResult!
+
+  """Dispatch a model comparison."""
+  comparisonDispatch(
+    """Comparison arms"""
+    arms: [ComparisonArmInput!]!
+  ): ComparisonDispatchResult!
+
+  """Bind a role to a persona for a project."""
+  personaBind(
+    """Role name"""
+    role: String!,
+    """Persona name"""
+    persona: String!,
+    """Project identifier"""
+    projectId: String!
+  ): PersonaBindResult!
+
+  """Create a new project-local persona. Library personas cannot be created via this API."""
+  personaCreate(
+    """Unique persona name (also used as the file name)"""
+    name: String!,
+    """Markdown body including YAML frontmatter"""
+    body: String!,
+    """Project identifier to create the persona under"""
+    projectId: String!
+  ): Persona!
+
+  """Update an existing project-local persona. Errors on library personas."""
+  personaUpdate(
+    """Persona name to update"""
+    name: String!,
+    """Markdown body including YAML frontmatter"""
+    body: String!,
+    """Project identifier whose persona to update"""
+    projectId: String!
+  ): Persona!
+
+  """Delete a project-local persona. Errors on library personas."""
+  personaDelete(
+    """Persona name to delete"""
+    name: String!,
+    """Project identifier whose persona to delete"""
+    projectId: String!
+  ): PersonaDeleteResult!
+
+  """Fork a library persona into the project-local directory. Returns the new project persona."""
+  personaFork(
+    """Library persona name to copy"""
+    libraryName: String!,
+    """Optional new persona name; defaults to the library name"""
+    newName: String,
+    """Project identifier to fork into"""
+    projectId: String!
+  ): Persona!
+}
+
+# ============================================
+# Input Types for Mutations
+# ============================================
+
+"""Input type for creating a new bead"""
+input BeadInput {
+  """Short summary of the work"""
+  title: String!
+  """Lifecycle status (default: "open")"""
+  status: String
+  """Numeric priority (default: 2)"""
+  priority: Int
+  """Issue classification (e.g. "task", "bug")"""
+  issueType: String
+  """Freeform labels for filtering and grouping"""
+  labels: [String!]
+  """Parent bead ID for hierarchy"""
+  parent: String
+  """Full description / body text"""
+  description: String
+  """Acceptance criteria text"""
+  acceptance: String
+  """Freeform notes appended during work"""
+  notes: String
+}
+
+"""Input type for updating an existing bead"""
+input BeadUpdateInput {
+  """Short summary of the work"""
+  title: String
+  """Lifecycle status"""
+  status: String
+  """Numeric priority"""
+  priority: Int
+  """Issue classification"""
+  issueType: String
+  """Freeform labels for filtering and grouping"""
+  labels: [String!]
+  """Parent bead ID for hierarchy"""
+  parent: String
+  """Full description / body text"""
+  description: String
+  """Acceptance criteria text"""
+  acceptance: String
+  """Freeform notes appended during work"""
+  notes: String
+}
+
+"""ComparisonArmInput is one requested comparison arm."""
+input ComparisonArmInput {
+  """Agent harness"""
+  harness: String
+  """Provider name"""
+  provider: String
+  """Model identifier"""
+  model: String!
+  """Prompt or task text"""
+  prompt: String!
+}
+
+# ============================================
+# Subscriptions
+# ============================================
+
+"""Subscription is the root entry point for all real-time events"""
+type Subscription {
+  """Stream progress events for a worker (maps to GET /api/projects/{project}/workers/{id}/progress SSE)"""
+  workerProgress(
+    """Worker identifier"""
+    workerID: ID!
+  ): WorkerEvent!
+
+  """Stream bead lifecycle events for a project (maps to bead store AppendEvent)"""
+  beadLifecycle(
+    """Project root path to monitor for bead events"""
+    projectID: ID!
+  ): BeadEvent!
+
+  """Stream execution evidence (stdout/stderr) for a run (maps to GET /api/exec/runs/{id}/log)"""
+  executionEvidence(
+    """Run identifier"""
+    runID: ID!
+  ): ExecutionEvent!
+
+  """Stream coordinator metrics updates (maps to land coordinator event hook)"""
+  coordinatorMetrics(
+    """Project root path"""
+    projectRoot: String!
+  ): CoordinatorMetricsUpdate!
+}
+
+# ============================================
+# Event Types for Subscriptions
+# ============================================
+
+"""WorkerEvent is a progress or lifecycle event from a worker"""
+type WorkerEvent {
+  """Unique event identifier"""
+  eventID: ID!
+  """Worker that emitted this event"""
+  workerID: String!
+  """Current execution phase (e.g. "pending", "running", "done")"""
+  phase: String!
+  """Timestamp of the event"""
+  timestamp: DateTime!
+  """Log line output from the worker (if any)"""
+  logLine: String
+  """Bead ID being executed (null if not executing a bead)"""
+  beadID: String
+}
+
+"""BeadEvent is an immutable execution evidence entry from the bead store"""
+type BeadEvent {
+  """Unique event identifier (bead ID + sequence)"""
+  eventID: ID!
+  """Bead ID that emitted this event"""
+  beadID: String!
+  """Event kind (e.g. "claim", "unclaim", "reopen", "summary")"""
+  kind: String!
+  """Human-readable summary of the event"""
+  summary: String
+  """Full body text (e.g. agent output, metadata changes)"""
+  body: String
+  """Actor that triggered this event (agent name or human name)"""
+  actor: String
+  """Timestamp of the event"""
+  timestamp: DateTime!
+}
+
+"""ExecutionEvent is a log output from an execution run"""
+type ExecutionEvent {
+  """Unique event identifier (run ID + sequence)"""
+  eventID: ID!
+  """Run that emitted this event"""
+  runID: String!
+  """Output stream (stdout or stderr)"""
+  stream: String!
+  """Log line content"""
+  line: String!
+  """Timestamp of the event"""
+  timestamp: DateTime!
+}
+
+"""CoordinatorMetricsUpdate is a metrics snapshot from a land coordinator"""
+type CoordinatorMetricsUpdate {
+  """Unique update identifier"""
+  updateID: ID!
+  """Project root these metrics belong to"""
+  projectRoot: String!
+  """Timestamp of the update"""
+  timestamp: DateTime!
+  """Number of submissions successfully merged"""
+  landed: Int!
+  """Number of submissions kept in a separate worktree"""
+  preserved: Int!
+  """Number of submissions that failed"""
+  failed: Int!
+  """Number of submissions that failed to push"""
+  pushFailed: Int!
+  """Sum of all submission durations in milliseconds"""
+  totalDurationMs: Int!
+  """Total commits across all submissions"""
+  totalCommits: Int!
+}

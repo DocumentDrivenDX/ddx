@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "`cli/internal/docgraph/docgraph.go` / `findMarkdownFiles` is not changed, so `.claude` and arbitrary `worktrees/` directories are still not proven excluded.\n`cli/internal/docgraph/docgraph.go` document path construction is not changed, so `doc.Path` is still not proven relative to `workingDir`.\nThe GraphQL documents and `document(id:)` resolver code is not changed, so `.claude/worktrees/` filtering and absolute-ID compatibility are not implemented in this diff.\n`cli/internal/server/frontend/` is not changed, and no Playwright test is added for the documents route.\n`cli/internal/docgraph/docgraph_test.go` is not changed, so the required fixture and assertions for `.claude/worktrees/agent-x/docs/foo.md` versus `docs/foo.md` are missing."
+}

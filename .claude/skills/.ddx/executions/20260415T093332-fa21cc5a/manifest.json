@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T093332-fa21cc5a",
+  "bead_id": "ddx-01c0ed6c",
+  "base_rev": "97a974c745175f3a0babe7959001ad61aa5d06e0",
+  "created_at": "2026-04-15T09:33:32.802602668Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-01c0ed6c",
+    "title": "Stage 4.9: Documents list + markdown render",
+    "description": "New files: src/routes/nodes/[nodeId]/projects/[projectId]/documents/+page.svelte + [...path]/+page.svelte. Table of docs, click to open rendered markdown view. Use svelte-markdown or @portabletext/svelte for GFM rendering. See docs/plan-svelte-migration.md Stage 4 bead #43.",
+    "acceptance": "(1) MANUAL: click any document, see rendered markdown matching the file content. (2) GFM features (tables, links) render correctly.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:4",
+      "area:ui",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T09:33:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T09:33:32.570237113Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T093332-fa21cc5a",
+    "prompt": ".ddx/executions/20260415T093332-fa21cc5a/prompt.md",
+    "manifest": ".ddx/executions/20260415T093332-fa21cc5a/manifest.json",
+    "result": ".ddx/executions/20260415T093332-fa21cc5a/result.json",
+    "checks": ".ddx/executions/20260415T093332-fa21cc5a/checks.json",
+    "usage": ".ddx/executions/20260415T093332-fa21cc5a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-01c0ed6c-20260415T093332-fa21cc5a"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260415T081657-9e3822f2",
+  "bead_id": "ddx-13ff9cd2",
+  "base_rev": "d3ae7bd3a086cac76b31e8acde11e2c0338980a2",
+  "created_at": "2026-04-15T08:16:57.20983464Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-13ff9cd2",
+    "title": "refactor(agent): surface kind:routing bead evidence to a consumer (cost-tier epic prereq)",
+    "description": "Opus epic review (2026-04-15): kind:routing evidence written by V8 is write-only — no consumer reads events[].Kind == 'routing' except its own test file. The cost-tier epic (ddx-4b59b816) is the intended consumer, but the read path does not exist yet.\n\nScope: add a query helper in internal/bead that filters events by kind, and a CLI/GraphQL surface that rolls up routing decisions by bead (last N, per-harness success rate, escalation paths). This is a measurement primitive the cost-tier epic depends on.",
+    "acceptance": "(1) bead.Store.EventsByKind(beadID, kind) helper exists. (2) A new CLI (ddx bead routing \u003cid\u003e or similar) or GraphQL query returns routing events. (3) The cost-tier epic has a concrete consumer to plug into.",
+    "parent": "ddx-4b59b816",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:refactor",
+      "area:agent",
+      "measurement",
+      "source:opus-review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T08:16:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T08:16:56.986241695Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T081657-9e3822f2",
+    "prompt": ".ddx/executions/20260415T081657-9e3822f2/prompt.md",
+    "manifest": ".ddx/executions/20260415T081657-9e3822f2/manifest.json",
+    "result": ".ddx/executions/20260415T081657-9e3822f2/result.json",
+    "checks": ".ddx/executions/20260415T081657-9e3822f2/checks.json",
+    "usage": ".ddx/executions/20260415T081657-9e3822f2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-13ff9cd2-20260415T081657-9e3822f2"
+  }
+}

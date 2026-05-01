@@ -1,0 +1,72 @@
+{
+  "attempt_id": "20260422T075818-7dd31e90",
+  "bead_id": "ddx-d7778715",
+  "base_rev": "52cbb6cd03ede518aacb39743f97d6733f3ec6ec",
+  "created_at": "2026-04-22T07:58:18.956785118Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d7778715",
+    "title": "FEAT-008 P2: GraphQL schema + stubbed resolvers",
+    "description": "Add stubbed resolvers + client queries for every operation the new specs mock. Verified exact names from body.query.includes in each spec. Required ops: workerDispatch(kind, projectId, args) with kinds execute-loop/realign-specs/run-checks; pluginDispatch(name, action, scope); comparisonDispatch(arms); beadClose(id, reason) — ADD TO SCHEMA; personaBind(role, persona, projectId); queueSummary(projectId); efficacyRows; efficacyAttempts(rowKey); comparisons; pluginsList; pluginDetail; projectBindings; paletteSearch(query) — NO context arg; bead(id); worker(id) with recentEvents. Worker event is a single object with nullable fields per kind: {kind, text} for text_delta, {kind, name, inputs, output} for tool_call. Persona MUST return flat array 'data.personas' (NOT PersonaConnection.edges). Detail must be satisfiable from the list query (tests don't mock persona(name)).",
+    "acceptance": "Every new spec file can reach its first expect() without a GraphQL error; stubs return reasonable fixture data.",
+    "parent": "ddx-4a9d30db",
+    "labels": [
+      "ui",
+      "feat-008",
+      "phase-2",
+      "backend"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-22T07:58:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1682344",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"vidar-coder\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-22T07:55:29.750786825Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=vidar-coder model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness=agent model=qwen3.5-27b probe=ok\nagent: provider error: openai: POST \"http://vidar:1234/v1/chat/completions\": 502 Bad Gateway ",
+          "created_at": "2026-04-22T07:55:29.940215451Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"harness\":\"agent\",\"model\":\"qwen3.5-27b\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":15018}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-22T07:55:29.995735022Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=1 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "infrastructure failure (deferred): agent: provider error: openai: POST \"http://vidar:1234/v1/chat/completions\": 502 Bad Gateway \ntier=standard\nprobe_result=ok\nresult_rev=61dc34a21b4434bb9a14884b7c60966fb84f5f5b\nbase_rev=61dc34a21b4434bb9a14884b7c60966fb84f5f5b\nretry_after=2026-04-22T13:55:30Z",
+          "created_at": "2026-04-22T07:55:30.163193736Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-22T07:58:18.480176804Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260422T075818-7dd31e90",
+    "prompt": ".ddx/executions/20260422T075818-7dd31e90/prompt.md",
+    "manifest": ".ddx/executions/20260422T075818-7dd31e90/manifest.json",
+    "result": ".ddx/executions/20260422T075818-7dd31e90/result.json",
+    "checks": ".ddx/executions/20260422T075818-7dd31e90/checks.json",
+    "usage": ".ddx/executions/20260422T075818-7dd31e90/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d7778715-20260422T075818-7dd31e90"
+  }
+}

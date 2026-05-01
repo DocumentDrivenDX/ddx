@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260415T005249-1a2f354f",
+  "bead_id": "ddx-c946d856",
+  "base_rev": "f43c20c039413e574cba2656cec833d9de78f996",
+  "created_at": "2026-04-15T00:52:49.559130431Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c946d856",
+    "title": "Stage 2.13: GraphQL integration test suite (queries + mutations + subscriptions)",
+    "description": "New file cli/internal/server/graphql/integration_test.go. Uses t.TempDir() + real bead store + real git. ZERO MOCKS per DDx testing doctrine. Must cover: every Query resolver, every Mutation resolver, at least one Subscription test that drives a real WebSocket client. See docs/plan-svelte-migration.md Stage 2 bead #26.",
+    "acceptance": "(1) `go test ./cli/internal/server/graphql/... -count=1 -v` passes with all three test categories present (query, mutation, subscription). (2) Zero mocks in the test file (grep for 'mock' or 'Mock' returns nothing). (3) Test file uses t.TempDir() + bead.NewStore + real git init. (4) All Stage 2 resolvers have at least one test each.",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:2",
+      "area:graphql",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-15T00:52:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3766264",
+      "execute-loop-heartbeat-at": "2026-04-15T00:52:49.334440197Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260415T005249-1a2f354f",
+    "prompt": ".ddx/executions/20260415T005249-1a2f354f/prompt.md",
+    "manifest": ".ddx/executions/20260415T005249-1a2f354f/manifest.json",
+    "result": ".ddx/executions/20260415T005249-1a2f354f/result.json",
+    "checks": ".ddx/executions/20260415T005249-1a2f354f/checks.json",
+    "usage": ".ddx/executions/20260415T005249-1a2f354f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c946d856-20260415T005249-1a2f354f"
+  }
+}

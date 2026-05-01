@@ -1,0 +1,544 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ddx-tools.github.io/schemas/config.schema.json",
+  "title": "DDx Configuration Schema",
+  "description": "Schema for DDx project configuration files (.ddx/config.yaml)",
+  "type": "object",
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Configuration schema version (e.g., '1.0')",
+      "examples": [
+        "1.0"
+      ]
+    },
+    "library": {
+      "type": "object",
+      "description": "Library configuration for DDx resources",
+      "properties": {
+        "path": {
+          "type": "string",
+          "default": "./library",
+          "description": "Path to DDx library relative to config.yaml",
+          "examples": [
+            "./library",
+            "../shared/ddx-library",
+            "/opt/ddx/library"
+          ]
+        },
+        "repository": {
+          "type": "object",
+          "description": "Repository configuration for git subtree synchronization",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "DDx repository URL",
+              "examples": [
+                "https://github.com/easel/ddx",
+                "https://github.com/company/ddx-enterprise"
+              ]
+            },
+            "branch": {
+              "type": "string",
+              "description": "Branch to sync from repository",
+              "default": "main",
+              "examples": [
+                "main",
+                "master",
+                "stable",
+                "v2"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "bead": {
+      "type": "object",
+      "description": "Bead tracker configuration",
+      "properties": {
+        "id_prefix": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Override the bead ID prefix used by the tracker",
+          "examples": [
+            "nif",
+            "bx"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "persona_bindings": {
+      "type": "object",
+      "description": "Bindings between roles and persona names",
+      "additionalProperties": {
+        "type": "string",
+        "description": "Persona name for the role"
+      },
+      "examples": [
+        {
+          "code-reviewer": "strict-reviewer",
+          "test-engineer": "tdd-engineer"
+        }
+      ]
+    },
+    "system": {
+      "type": "object",
+      "description": "System-level configuration settings",
+      "properties": {
+        "meta_prompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Path to meta-prompt file (null to disable)",
+          "examples": [
+            "claude/system-prompts/focused.md",
+            null
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "update_check": {
+      "type": "object",
+      "description": "Automatic update check configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic update checks"
+        },
+        "frequency": {
+          "type": "string",
+          "default": "24h",
+          "pattern": "^\\d+[hdwmy]$",
+          "description": "Check frequency (Go duration format: h=hours, d=days, w=weeks, m=months, y=years)",
+          "examples": [
+            "24h",
+            "12h",
+            "7d",
+            "1w"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "git": {
+      "type": "object",
+      "description": "Git integration configuration",
+      "properties": {
+        "auto_commit": {
+          "type": "string",
+          "enum": [
+            "always",
+            "prompt",
+            "never"
+          ],
+          "default": "never",
+          "description": "Auto-commit mode for document writes (always | prompt | never)"
+        },
+        "commit_prefix": {
+          "type": "string",
+          "default": "docs",
+          "description": "Prefix for auto-commit messages",
+          "examples": [
+            "docs",
+            "chore"
+          ]
+        },
+        "checkpoint_prefix": {
+          "type": "string",
+          "description": "Prefix for checkpoint commit messages",
+          "examples": [
+            "checkpoint",
+            "wip"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "agent": {
+      "type": "object",
+      "description": "Agent service configuration",
+      "properties": {
+        "harness": {
+          "type": "string",
+          "description": "Default harness name (e.g., codex, claude, gemini)",
+          "examples": [
+            "codex",
+            "claude",
+            "gemini"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "description": "Global model override for agent invocation",
+          "examples": [
+            "o3-mini",
+            "claude-sonnet-4-20250514"
+          ]
+        },
+        "models": {
+          "type": "object",
+          "description": "Per-harness model overrides",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "examples": [
+            {
+              "codex": "o3-mini",
+              "claude": "claude-sonnet-4-20250514"
+            }
+          ]
+        },
+        "reasoning_levels": {
+          "type": "object",
+          "description": "Per-harness reasoning-level options",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "examples": [
+            {
+              "codex": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          ]
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "description": "Default timeout in milliseconds",
+          "default": 300000,
+          "examples": [
+            300000,
+            600000
+          ]
+        },
+        "session_log_dir": {
+          "type": "string",
+          "description": "Directory for agent session logs",
+          "default": ".ddx/agent-logs",
+          "examples": [
+            ".ddx/agent-logs",
+            "/tmp/agent-logs"
+          ]
+        },
+        "permissions": {
+          "type": "string",
+          "description": "Default permission level for agent invocations",
+          "enum": [
+            "safe",
+            "supervised",
+            "unrestricted"
+          ]
+        },
+        "endpoints": {
+          "type": "array",
+          "description": "Endpoint-first native agent provider targets. These blocks intentionally omit provider profile names and model pins; routing discovers live models from /v1/models.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "Provider endpoint type, such as lmstudio, omlx, ollama, openrouter, or openai"
+              },
+              "host": {
+                "type": "string",
+                "description": "Endpoint host used with port when base_url is omitted"
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "description": "Endpoint port used with host when base_url is omitted"
+              },
+              "base_url": {
+                "type": "string",
+                "description": "OpenAI-compatible base URL, for example http://vidar:1235/v1"
+              },
+              "api_key": {
+                "type": "string",
+                "description": "Optional endpoint API key"
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "base_url"
+                ]
+              },
+              {
+                "required": [
+                  "host",
+                  "port"
+                ]
+              }
+            ]
+          }
+        },
+        "routing": {
+          "type": "object",
+          "description": "Model routing configuration",
+          "properties": {
+            "profile_priority": {
+              "type": "array",
+              "description": "DEPRECATED: flat ordered list of profiles to prefer. Replaced by `profile_ladders`; retained for backward compatibility. When both are set, `profile_ladders` wins.",
+              "deprecated": true,
+              "items": {
+                "type": "string"
+              }
+            },
+            "profile_ladders": {
+              "type": "object",
+              "description": "Per-profile escalation ladders. Each key is a profile name (cheap|default|fast|smart|custom); each value is the ordered tier list to try. Example: { \"default\": [\"cheap\", \"standard\", \"smart\"], \"cheap\": [\"cheap\"], \"fast\": [\"fast\", \"smart\"], \"smart\": [\"smart\"] }. See FEAT-006 Profile Routing and ddx-bbb65768.",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "default_harness": {
+              "type": "string",
+              "description": "Fallback harness when no profile matches"
+            },
+            "model_overrides": {
+              "type": "object",
+              "description": "Per-tier model override map (e.g. { \"cheap\": \"qwen/qwen3.6\", \"standard\": \"codex/gpt-5.4\", \"smart\": \"claude-opus-4-6\" })",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "virtual": {
+          "type": "object",
+          "description": "Configuration for the virtual agent harness",
+          "properties": {
+            "normalize": {
+              "type": "array",
+              "description": "Regex/replacement pairs applied to prompts before hashing",
+              "items": {
+                "type": "object",
+                "required": [
+                  "pattern",
+                  "replace"
+                ],
+                "properties": {
+                  "pattern": {
+                    "type": "string",
+                    "description": "Regular expression to match"
+                  },
+                  "replace": {
+                    "type": "string",
+                    "description": "Replacement string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "server": {
+      "type": "object",
+      "description": "Server configuration for ddx-server",
+      "properties": {
+        "addr": {
+          "type": "string",
+          "description": "Listen address for the server",
+          "examples": [
+            ":8080",
+            "127.0.0.1:8080"
+          ]
+        },
+        "tsnet": {
+          "type": "object",
+          "description": "Tailscale ts-net listener configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable Tailscale ts-net listener"
+            },
+            "hostname": {
+              "type": "string",
+              "description": "Tailscale hostname for the server"
+            },
+            "auth_key": {
+              "type": "string",
+              "description": "Tailscale auth key"
+            },
+            "state_dir": {
+              "type": "string",
+              "description": "Directory for Tailscale state storage"
+            }
+          },
+          "additionalProperties": false
+        },
+        "watchdog_deadline": {
+          "type": "string",
+          "description": "Total worker runtime budget before the autonomous watchdog considers reaping (time.ParseDuration, e.g. '6h'). Empty uses the built-in default."
+        },
+        "stall_deadline": {
+          "type": "string",
+          "description": "Max time the current attempt may sit without a phase transition before the watchdog treats it as stalled (time.ParseDuration, e.g. '1h'). Empty uses the built-in default."
+        }
+      },
+      "additionalProperties": false
+    },
+    "executions": {
+      "type": "object",
+      "description": "Configuration for the execute-bead execution bundle archive (mirror).",
+      "properties": {
+        "mirror": {
+          "type": "object",
+          "description": "Out-of-band mirror target for .ddx/executions/<attempt>/ bundles.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Mirror backend kind. Currently 'local' (more backends planned).",
+              "enum": ["local"]
+            },
+            "path": {
+              "type": "string",
+              "description": "Mirror destination. Templates support {project}, {attempt_id}, {date}, {bead_id}.",
+              "examples": [
+                "/var/lib/ddx-mirror/{project}/{attempt_id}",
+                "/mnt/archive/{date}/{bead_id}/{attempt_id}"
+              ]
+            },
+            "include": {
+              "type": "array",
+              "description": "Bundle parts to upload. Defaults to manifest, prompt, result, usage, checks, embedded.",
+              "items": {
+                "type": "string",
+                "enum": ["manifest", "prompt", "result", "usage", "checks", "embedded"]
+              }
+            },
+            "async": {
+              "type": "boolean",
+              "description": "Upload in a background goroutine (default true) so execute-bead never blocks on the mirror."
+            }
+          },
+          "additionalProperties": false
+        },
+        "retain_days": {
+          "type": "integer",
+          "description": "Optional local retention policy. Bundles older than this are subject to local pruning while the mirror keeps full history.",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "cost": {
+      "type": "object",
+      "description": "Optional cost-estimation settings. DDx does not invent local compute rates when this block is absent.",
+      "properties": {
+        "local_per_1k_tokens": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Optional local compute estimate in USD per 1,000 tokens for locally served sessions."
+        }
+      },
+      "additionalProperties": false
+    },
+    "workers": {
+      "type": "object",
+      "description": "Defaults and safety rails for the workers overview (+ Add worker / − Remove worker count control).",
+      "properties": {
+        "default_spec": {
+          "type": "object",
+          "description": "Default worker spec used by + Add worker on the workers overview. Any field left unset falls back to `ddx work` defaults.",
+          "properties": {
+            "harness": {
+              "type": "string",
+              "description": "Default harness name. Empty leaves routing to the agent profile."
+            },
+            "profile": {
+              "type": "string",
+              "description": "Default routing profile (e.g. default, cheap, fast, smart)."
+            },
+            "effort": {
+              "type": "string",
+              "description": "Default reasoning-effort tier (low, medium, high)."
+            },
+            "min_tier": {
+              "type": "string",
+              "description": "Optional minimum routing tier."
+            },
+            "max_tier": {
+              "type": "string",
+              "description": "Optional maximum routing tier."
+            }
+          },
+          "additionalProperties": false
+        },
+        "max_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional cap on running drain workers. + Add worker refuses to exceed this limit. Unset = no cap."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "version": "1.0",
+      "library": {
+        "path": "./library",
+        "repository": {
+          "url": "https://github.com/easel/ddx",
+          "branch": "main"
+        }
+      }
+    },
+    {
+      "version": "1.0",
+      "library": {
+        "path": "./library",
+        "repository": {
+          "url": "https://github.com/company/ddx-enterprise",
+          "branch": "stable"
+        }
+      },
+      "persona_bindings": {
+        "code-reviewer": "strict-reviewer",
+        "test-engineer": "tdd-engineer"
+      }
+    },
+    {
+      "version": "1.0",
+      "library": {
+        "path": ".ddx/plugins/ddx",
+        "repository": {
+          "url": "https://github.com/easel/ddx-library",
+          "branch": "main"
+        }
+      },
+      "persona_bindings": {
+        "code-reviewer": "strict-code-reviewer"
+      }
+    }
+  ]
+}

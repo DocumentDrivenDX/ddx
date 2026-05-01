@@ -1,0 +1,65 @@
+{
+  "attempt_id": "20260419T233428-0f3fa08d",
+  "bead_id": "ddx-bb7dca79",
+  "base_rev": "15a4e53d2535531221b835dab99dfb58f0ba4d75",
+  "created_at": "2026-04-19T23:34:28.485948212Z",
+  "requested": {
+    "harness": "agent",
+    "model": "minimax/minimax-m2.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bb7dca79",
+    "title": "Delete dropped persona files after deprecation window",
+    "description": "After one release with deprecation warnings (previous bead), physically remove the 5 dropped persona files plus the renamed originals (now superseded by the rewrites).\n\nTo delete:\n- library/personas/reliability-guardian.md\n- library/personas/simplicity-architect.md\n- library/personas/data-driven-optimizer.md\n- library/personas/product-discovery-analyst.md\n- library/personas/product-manager-minimalist.md\n- library/personas/strict-code-reviewer.md (superseded by code-reviewer.md)\n- library/personas/test-engineer-tdd.md (superseded by test-engineer.md)\n- library/personas/architect-systems.md (superseded by architect.md)\n- library/personas/pragmatic-implementer.md (superseded by implementer.md)\n\nAfter this bead, library/personas/*.md contains exactly: code-reviewer.md, test-engineer.md, implementer.md, architect.md, specification-enforcer.md, README.md.\n\nBefore deletion:\n1. Confirm the deprecation warning has been in at least one released ddx version (binary release or equivalent, however the project defines a release).\n2. Re-run the persona-binding audit — any still-unresolved binding is a migration gap; do NOT force-delete if active bindings still point to a dropped persona in the repo's own config or any shipped workflow.\n3. Remove the deprecation list entries from the persona loader (from the previous bead).\n\nIn-scope:\n- Deletion of the 9 files above\n- Cleanup of the deprecation-list entries added in the deprecation-warning bead\n\nOut-of-scope:\n- Any re-binding in downstream projects (out of DDx's control)\n- Keeping the deprecated files as stubs that 'redirect' to the new name — we are not providing compatibility shims; the stderr warnings during the deprecation window are the migration path\n\nBlocked on:\n- The deprecation-warning bead (one release cycle of visibility before deletion)\n- The 5 persona rewrite beads (so the replacements exist)",
+    "acceptance": "ls library/personas/*.md returns exactly 6 files: code-reviewer.md, test-engineer.md, implementer.md, architect.md, specification-enforcer.md, README.md. git status confirms the 9 deletions. The deprecation list in the persona loader is empty (all entries removed). cd cli \u0026\u0026 go test ./... passes. ddx persona list returns only the 5 active personas with no (deprecated) markers.",
+    "parent": "ddx-94c28517",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "kind:cleanup",
+      "area:personas"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-19T23:34:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "721226",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"lmstudio\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-19T23:34:19.895029963Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=lmstudio model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness=lmstudio model=qwen3.5-27b probe=ok\nagent: native config provider \"lmstudio\": config: unknown provider \"lmstudio\"",
+          "created_at": "2026-04-19T23:34:20.10397457Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-19T23:34:10.903748695Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service (consumer of ddx-agent contract)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260419T233428-0f3fa08d",
+    "prompt": ".ddx/executions/20260419T233428-0f3fa08d/prompt.md",
+    "manifest": ".ddx/executions/20260419T233428-0f3fa08d/manifest.json",
+    "result": ".ddx/executions/20260419T233428-0f3fa08d/result.json",
+    "checks": ".ddx/executions/20260419T233428-0f3fa08d/checks.json",
+    "usage": ".ddx/executions/20260419T233428-0f3fa08d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bb7dca79-20260419T233428-0f3fa08d"
+  }
+}

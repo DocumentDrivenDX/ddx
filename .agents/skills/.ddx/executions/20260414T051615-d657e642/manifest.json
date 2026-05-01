@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260414T051615-d657e642",
+  "bead_id": "ddx-359706d2",
+  "base_rev": "b334cd7fa10cb2f297e9429d4d7197d4441a600d",
+  "created_at": "2026-04-14T05:16:15.692202782Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-359706d2",
+    "title": "Design server agent dashboard for provider availability and utilization",
+    "description": "\u003ccontext-digest\u003e\nReview area: server agent observability and operator controls. Evidence covers FEAT-002 server surfaces, FEAT-008 web UI, FEAT-014 token-awareness/routing metrics, the embedded-agent progress lane, and the requirement that a host+user ddx-server expose actionable provider availability and utilization state across configured harnesses/providers.\n\u003c/context-digest\u003e\nDefine the server-side agent dashboard that lets operators inspect configured providers and make informed execution decisions.\n\n## Goals\n- Show configured providers/harnesses, effective routing availability, auth/health state, and current quota or headroom when known\n- Show utilization and performance signals already normalized by DDx: token usage, cost when available, recent latency/success, burn estimates, and freshness timestamps\n- Support search/sort/filter/reporting across provider, model, profile, status, and time window\n- Distinguish provider-native facts from DDx-derived estimates and from unknown values\n\n## Required spec work\n- Update FEAT-002, FEAT-008, and FEAT-014 so the dashboard and its backing read model are explicitly governed\n- Define the API/read-model fields exposed to UI consumers and reporting surfaces\n- Clarify how live provider availability, cached quota snapshots, and historical usage are presented without inventing certainty\n\n## Required implementation planning\n- Define sample/fixture data needed to Playwright-test the dashboard states\n- Define how the dashboard relates to worker progress, execution history, and routing diagnostics without collapsing them into one page",
+    "acceptance": "FEAT-002, FEAT-008, and FEAT-014 define an agent dashboard showing configured providers, availability/health, utilization metrics, freshness, and unknown-state semantics; the design includes a queryable read model and deterministic fixture scenarios for Playwright coverage",
+    "parent": "ddx-8b6cd40e",
+    "labels": [
+      "helix",
+      "phase:planning",
+      "kind:architecture",
+      "area:agent",
+      "area:api",
+      "area:ui",
+      "area:docs"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T05:16:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1412283",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "checkpointing dirty worktree: git stash: error: could not write index\n.ddx/beads.jsonl: needs merge: exit status 1",
+          "created_at": "2026-04-10T22:19:58.276240086Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-14T05:16:15.483755685Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260414T051615-d657e642",
+    "prompt": ".ddx/executions/20260414T051615-d657e642/prompt.md",
+    "manifest": ".ddx/executions/20260414T051615-d657e642/manifest.json",
+    "result": ".ddx/executions/20260414T051615-d657e642/result.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-359706d2-20260414T051615-d657e642"
+  }
+}

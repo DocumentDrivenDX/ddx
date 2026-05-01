@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260418T212728-2d5a55c6",
+  "bead_id": "ddx-e437ebc1",
+  "base_rev": "051ccc65e80c7bba112b117b2f7914ef69811600",
+  "created_at": "2026-04-18T21:27:28.714182389Z",
+  "requested": {
+    "harness": "agent",
+    "model": "qwen/qwen3.6-35b-a3b",
+    "provider": "bragi",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e437ebc1",
+    "title": "Wire required execution gates into server execute-loop coordinator landing path",
+    "description": "Server execute-loop path in cli/internal/server/workers.go (around line 388-395) builds a LandRequest via BuildLandRequestFromResult and submits it directly through coordinator.Submit, bypassing LandBeadResult and gate evaluation entirely. Land() is intentionally a pure ref-advance contract and should not learn about gates. Choose one of two designs: (a) extend the coordinator pattern so Submit orchestrates gate-eval -\u003e land-or-preserve, or (b) run gate evaluation upstream in workers.go before submission and convert the request to preserve-only when a required gate fails. Manifest path is available from the ExecuteBead result; reuse ExtractGoverningIDsFromManifest.",
+    "acceptance": "- [ ] Server-managed execute-loop runs evaluateRequiredGates against the result worktree before the coordinator advances the target ref\n- [ ] A required failing gate preserves the attempt under refs/ddx/iterations/, writes gate results into the execution bundle, and surfaces post_run_check_failed via the loop event\n- [ ] A required passing gate still merges through the coordinator and records the pass summary\n- [ ] Regression test in cli/internal/server/ covers required-pass and required-fail fixtures driven through the server worker path\n- [ ] No-gate case still merges (backward compatible)",
+    "parent": "ddx-3e7f8213",
+    "labels": [
+      "ddx",
+      "area:agent",
+      "area:exec",
+      "area:server"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-18T21:27:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "17370",
+      "execute-loop-heartbeat-at": "2026-04-18T21:27:15.315582867Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260418T212728-2d5a55c6",
+    "prompt": ".ddx/executions/20260418T212728-2d5a55c6/prompt.md",
+    "manifest": ".ddx/executions/20260418T212728-2d5a55c6/manifest.json",
+    "result": ".ddx/executions/20260418T212728-2d5a55c6/result.json",
+    "checks": ".ddx/executions/20260418T212728-2d5a55c6/checks.json",
+    "usage": ".ddx/executions/20260418T212728-2d5a55c6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e437ebc1-20260418T212728-2d5a55c6"
+  }
+}

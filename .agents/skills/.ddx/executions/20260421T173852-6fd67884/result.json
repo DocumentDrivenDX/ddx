@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-455807e6",
+  "attempt_id": "20260421T173852-6fd67884",
+  "base_rev": "31ff65644dc0cbf0ca8297248bff5df7d6e02295",
+  "result_rev": "31ff65644dc0cbf0ca8297248bff5df7d6e02295",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "cancelled",
+  "harness": "agent",
+  "provider": "grendel",
+  "model": "qwen3.5-27b",
+  "session_id": "eb-c2a309b7",
+  "duration_ms": 110849,
+  "exit_code": 1,
+  "error": "cancelled",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260421T173852-6fd67884",
+  "prompt_file": ".ddx/executions/20260421T173852-6fd67884/prompt.md",
+  "manifest_file": ".ddx/executions/20260421T173852-6fd67884/manifest.json",
+  "result_file": ".ddx/executions/20260421T173852-6fd67884/result.json",
+  "started_at": "2026-04-21T17:38:52.576606248Z",
+  "finished_at": "2026-04-21T17:40:43.425917546Z"
+}

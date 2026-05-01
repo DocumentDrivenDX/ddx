@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-e3493010",
+  "attempt_id": "20260418T030326-2b94449b",
+  "base_rev": "43d42c5a89c2b1f3d4d9158a06ac119258342e1b",
+  "result_rev": "43d42c5a89c2b1f3d4d9158a06ac119258342e1b",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "execution_failed",
+  "harness": "claude",
+  "model": "Qwen3.6-35B-A3B-4bit",
+  "session_id": "eb-759a442e",
+  "duration_ms": 1260,
+  "exit_code": 1,
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260418T030326-2b94449b",
+  "prompt_file": ".ddx/executions/20260418T030326-2b94449b/prompt.md",
+  "manifest_file": ".ddx/executions/20260418T030326-2b94449b/manifest.json",
+  "result_file": ".ddx/executions/20260418T030326-2b94449b/result.json",
+  "started_at": "2026-04-18T03:03:26.555007101Z",
+  "finished_at": "2026-04-18T03:03:27.815616427Z"
+}

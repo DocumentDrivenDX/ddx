@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260414T204617-6a351e39",
+  "bead_id": "ddx-75929391",
+  "base_rev": "42c2f94903a502301e368509eb0ef1070963fa23",
+  "created_at": "2026-04-14T20:46:17.273189838Z",
+  "requested": {
+    "harness": "agent",
+    "model": "vidar-coder",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-75929391",
+    "title": "Stage 1.12: mark historical docs superseded (no body rewrite)",
+    "description": "Add a front-matter or top-of-file note to docs/helix/02-design/plan-2026-04-04.md, docs/helix/06-iterate/alignment-reviews/AR-*.md files, any TP-002 related docs: 'Historical — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.' Do NOT rewrite the bodies. See docs/plan-svelte-migration.md Stage 1 bead #12.",
+    "acceptance": "(1) Each flagged historical doc has a clear 'Historical' note at top. (2) Bodies unchanged (git diff shows only the note added).",
+    "parent": "ddx-02d6142d",
+    "labels": [
+      "ddx",
+      "phase:build",
+      "stage:1",
+      "area:docs",
+      "kind:migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-14T20:46:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3055612",
+      "execute-loop-heartbeat-at": "2026-04-14T20:46:17.044921385Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260414T204617-6a351e39",
+    "prompt": ".ddx/executions/20260414T204617-6a351e39/prompt.md",
+    "manifest": ".ddx/executions/20260414T204617-6a351e39/manifest.json",
+    "result": ".ddx/executions/20260414T204617-6a351e39/result.json",
+    "checks": ".ddx/executions/20260414T204617-6a351e39/checks.json",
+    "usage": ".ddx/executions/20260414T204617-6a351e39/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-75929391-20260414T204617-6a351e39"
+  }
+}
