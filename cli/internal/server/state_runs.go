@@ -299,6 +299,15 @@ func (s *ServerState) GetRunsGraphQL(projectID string, filter ddxgraphql.RunFilt
 	return ddxgraphql.ApplyRunFilter(all, filter)
 }
 
+// tagProjectID sets ProjectID on each run in-place.
+func tagProjectID(runs []*ddxgraphql.Run, projectID string) []*ddxgraphql.Run {
+	for _, r := range runs {
+		pid := projectID
+		r.ProjectID = &pid
+	}
+	return runs
+}
+
 // loadRunsForProject loads runs for a single project, merging the file store
 // with synthesized execution bundle records.
 func (s *ServerState) loadRunsForProject(projectID, projectRoot string) []*ddxgraphql.Run {
@@ -330,7 +339,7 @@ func (s *ServerState) loadRunsForProject(projectID, projectRoot string) []*ddxgr
 		}
 		return si > sj
 	})
-	return stored
+	return tagProjectID(stored, projectID)
 }
 
 // GetRunGraphQL implements RunsStateProvider.

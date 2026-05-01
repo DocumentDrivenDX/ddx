@@ -1697,6 +1697,8 @@ type Run struct {
 	Layer RunLayer `json:"layer"`
 	// Current status (pending, running, success, failure, preserved)
 	Status string `json:"status"`
+	// Project ID this run belongs to (set for all runs; enables combined cross-project views)
+	ProjectID *string `json:"projectID,omitempty"`
 	// When the run started
 	StartedAt *string `json:"startedAt,omitempty"`
 	// When the run completed (null if still running)

@@ -1073,6 +1073,8 @@ type Run implements Node {
   layer: RunLayer!
   """Current status (pending, running, success, failure, preserved)"""
   status: String!
+  """Project ID this run belongs to (set for all runs; enables combined cross-project views)"""
+  projectID: String
   """When the run started"""
   startedAt: DateTime
   """When the run completed (null if still running)"""

@@ -14,7 +14,8 @@
 		Layers,
 		BarChart3,
 		PlayCircle,
-		Home
+		Home,
+		Activity
 	} from 'lucide-svelte';
 	import { page } from '$app/stores';
 	import { toggleMode, mode } from '$lib/theme';
@@ -31,6 +32,7 @@
 		{ page: 'beads', label: 'Beads', Icon: LayoutDashboard },
 		{ page: 'artifacts', label: 'Artifacts', Icon: Archive },
 		{ page: 'graph', label: 'Graph', Icon: GitBranch },
+		{ page: 'runs', label: 'Runs', Icon: Activity },
 		{ page: 'workers', label: 'Workers', Icon: Cpu },
 		{ page: 'sessions', label: 'Sessions', Icon: Terminal },
 		{ page: 'executions', label: 'Executions', Icon: PlayCircle },
@@ -57,6 +59,8 @@
 	);
 
 	const allBeadsHref = $derived(nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/beads` : null);
+
+	const allRunsHref = $derived(nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/runs` : null);
 
 	const providersHref = $derived(
 		nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/providers` : null
@@ -154,6 +158,26 @@
 				>
 					<Layers class="h-4 w-4 shrink-0" />
 					All Beads
+				</span>
+			{/if}
+			{#if allRunsHref}
+				{@const active = $page.url.pathname.startsWith(allRunsHref)}
+				<a
+					href={allRunsHref}
+					aria-current={active ? 'page' : undefined}
+					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+						? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
+						: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
+				>
+					<Activity class="h-4 w-4 shrink-0" />
+					All Runs
+				</a>
+			{:else}
+				<span
+					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
+				>
+					<Activity class="h-4 w-4 shrink-0" />
+					All Runs
 				</span>
 			{/if}
 			{#if providersHref}

@@ -1030,6 +1030,7 @@ type ComplexityRoot struct {
 		ParentRunID     func(childComplexity int) int
 		PowerMax        func(childComplexity int) int
 		PowerMin        func(childComplexity int) int
+		ProjectID       func(childComplexity int) int
 		PromptSummary   func(childComplexity int) int
 		Provider        func(childComplexity int) int
 		QueueInputs     func(childComplexity int) int
@@ -5875,6 +5876,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.PowerMin(childComplexity), true
+	case "Run.projectID":
+		if e.ComplexityRoot.Run.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.ProjectID(childComplexity), true
 	case "Run.promptSummary":
 		if e.ComplexityRoot.Run.PromptSummary == nil {
 			break
@@ -28658,6 +28665,8 @@ func (ec *executionContext) fieldContext_Query_run(ctx context.Context, field gr
 				return ec.fieldContext_Run_layer(ctx, field)
 			case "status":
 				return ec.fieldContext_Run_status(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Run_projectID(ctx, field)
 			case "startedAt":
 				return ec.fieldContext_Run_startedAt(ctx, field)
 			case "completedAt":
@@ -31065,6 +31074,35 @@ func (ec *executionContext) fieldContext_Run_status(_ context.Context, field gra
 	return fc, nil
 }
 
+func (ec *executionContext) _Run_projectID(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_projectID,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_projectID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Run_startedAt(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -31952,6 +31990,8 @@ func (ec *executionContext) fieldContext_RunEdge_node(_ context.Context, field g
 				return ec.fieldContext_Run_layer(ctx, field)
 			case "status":
 				return ec.fieldContext_Run_status(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Run_projectID(ctx, field)
 			case "startedAt":
 				return ec.fieldContext_Run_startedAt(ctx, field)
 			case "completedAt":
@@ -44710,6 +44750,8 @@ func (ec *executionContext) _Run(ctx context.Context, sel ast.SelectionSet, obj 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "projectID":
+			out.Values[i] = ec._Run_projectID(ctx, field, obj)
 		case "startedAt":
 			out.Values[i] = ec._Run_startedAt(ctx, field, obj)
 		case "completedAt":
