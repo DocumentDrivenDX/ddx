@@ -13,25 +13,45 @@
       <div class="ddx-home-nav__inner">
         <a class="ddx-home-logo" href="{{ relLangURL "" }}">DDX</a>
         <div class="ddx-home-nav__links">
-          <a href="{{ relLangURL "docs/" }}">Docs</a>
-          <a href="{{ relLangURL "docs/concepts/" }}">Concepts</a>
+          <a href="{{ relLangURL "why/" }}">Why DDx</a>
+          <a href="{{ relLangURL "features/" }}">Features</a>
+          <a href="{{ relLangURL "docs/cli/" }}">Reference</a>
+          <a href="{{ relLangURL "docs/ecosystem/" }}">Ecosystem</a>
+          <a href="https://github.com/DocumentDrivenDX/ddx">GitHub</a>
         </div>
       </div>
     </nav>
 
     <main class="ddx-home-main">
+      <!-- 1. HERO -->
       <section class="ddx-home-hero" aria-labelledby="ddx-home-title">
-        <div>
+        <div class="ddx-home-hero__lede">
           <p class="ddx-home-kicker">Document-driven development</p>
           <h1 id="ddx-home-title" class="ddx-home-title">Documents drive the agents. DDx drives the documents.</h1>
           <p class="ddx-home-prose">
-            DDx is the local-first platform for AI-assisted development: beads track
-            work, specs carry intent, plugins package workflows, and every agent run
-            leaves evidence behind.
+            DDx is the local-first platform for the documents AI agents consume to
+            build software — beads carry work, specs carry intent, plugins package
+            workflows, and every agent run leaves evidence behind.
           </p>
-          <div class="ddx-home-actions" aria-label="Start">
+
+          <aside class="ddx-home-helix" aria-label="HELIX">
+            <span class="ddx-home-helix__tag">Pairs with HELIX</span>
+            <p>
+              DDx is the platform. <strong>HELIX</strong> is the opinionated
+              workflow that runs on top of it — phases, gates, and bounded actions
+              for teams that want a methodology out of the box.
+            </p>
+          </aside>
+
+          <div class="ddx-home-actions" aria-label="Install">
             <a class="ddx-home-action-primary" href="{{ relLangURL "docs/getting-started/" }}">Get Started</a>
-            <a href="{{ relLangURL "docs/concepts/" }}">Read Concepts</a>
+            <a href="{{ relLangURL "why/" }}">Why DDx</a>
+          </div>
+
+          <div class="ddx-home-install" aria-label="Install command">
+            <code>brew install documentdrivendx/tap/ddx</code>
+            <span class="ddx-home-install__or">or</span>
+            <code>curl -fsSL https://ddx.sh/install | sh</code>
           </div>
         </div>
 
@@ -41,51 +61,162 @@
         </blockquote>
       </section>
 
-      <section class="ddx-home-principles" aria-labelledby="ddx-principles-title">
-        <p id="ddx-principles-title" class="ddx-home-section-label">Principles</p>
-        <div class="ddx-home-grid">
+      <!-- 2. NEW REALITY -->
+      <section class="ddx-home-reality" aria-labelledby="ddx-reality-title">
+        <p class="ddx-home-section-label">The new reality</p>
+        <h2 id="ddx-reality-title" class="ddx-home-section-title">
+          Agents now write the code. The bottleneck moved upstream — to the
+          documents that tell them what to build.
+        </h2>
+        <p class="ddx-home-section-prose">
+          Specs, beads, prompts, personas, and review notes are the new source
+          code. They need a workspace, a tracker, an audit trail, and a way to
+          travel between projects. DDx is that workspace.
+        </p>
+      </section>
+
+      <!-- 3. PAIN POINTS -->
+      <section class="ddx-home-pains" aria-labelledby="ddx-pains-title">
+        <p id="ddx-pains-title" class="ddx-home-section-label">What breaks without it</p>
+        <div class="ddx-home-grid ddx-home-grid--pains">
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">01 / lever</span>
+            <span class="ddx-home-card__number">01</span>
             <div>
-              <h2>Platform, Not Methodology</h2>
-              <p>DDx provides primitives. Workflow opinions belong in plugins.</p>
+              <h3>Prompts scatter across machines</h3>
+              <p>Every developer keeps their own folder of half-edited instructions. None of them ship with the project.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">02 / load</span>
+            <span class="ddx-home-card__number">02</span>
             <div>
-              <h2>Project-Local by Default</h2>
-              <p>Init and install write under the project, keeping machine state out of the product.</p>
+              <h3>Specs drift from reality</h3>
+              <p>The spec said one thing, the code did another, and nobody updated the doc the agent reads tomorrow.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">03 / fulcrum</span>
+            <span class="ddx-home-card__number">03</span>
             <div>
-              <h2>Beads Are Work</h2>
-              <p>Every task is a bead with acceptance criteria, dependencies, and audit history.</p>
+              <h3>Work has no shared queue</h3>
+              <p>Tickets live in one tool, AI tasks in another, and neither knows which agent is allowed to pick them up.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">04 / lever</span>
+            <span class="ddx-home-card__number">04</span>
             <div>
-              <h2>Cost-Tiered Throughput</h2>
-              <p>Optimize closed work per dollar, with stronger models reserved for harder calls.</p>
+              <h3>Agent runs leave no evidence</h3>
+              <p>You cannot tell which prompt, which model, or which inputs produced the diff that just landed.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">05 / load</span>
+            <span class="ddx-home-card__number">05</span>
             <div>
-              <h2>Design for Simplicity</h2>
-              <p>Start small, name the moving parts, and remove complexity that earns no keep.</p>
+              <h3>Strong models do cheap work</h3>
+              <p>Routine edits burn frontier tokens because there is no ladder for which model handles which class of task.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">06 / fulcrum</span>
+            <span class="ddx-home-card__number">06</span>
             <div>
-              <h2>Validate Your Work</h2>
-              <p>Good decisions expose the evidence needed to tell whether they are working.</p>
+              <h3>Improvements stay trapped</h3>
+              <p>A pattern that works in one repo never reaches the next, because nothing shares it back to a library.</p>
             </div>
           </article>
+        </div>
+      </section>
+
+      <!-- 4. PHYSICS CALLOUT -->
+      <section class="ddx-home-physics" aria-labelledby="ddx-physics-title">
+        <p id="ddx-physics-title" class="ddx-home-section-label">The physics</p>
+        <ul class="ddx-home-physics__lines">
+          <li><span class="ddx-home-physics__tag" data-tag="load">Load</span> the work — beads with acceptance and dependencies.</li>
+          <li><span class="ddx-home-physics__tag" data-tag="lever">Lever</span> the agents — prompts, personas, and harnesses you reuse.</li>
+          <li><span class="ddx-home-physics__tag" data-tag="fulcrum">Fulcrum</span> the evidence — every run, in the repo, reviewable.</li>
+        </ul>
+      </section>
+
+      <!-- 5. CAPABILITY TABLE -->
+      <section class="ddx-home-caps" aria-labelledby="ddx-caps-title">
+        <p id="ddx-caps-title" class="ddx-home-section-label">What DDx ships</p>
+        <table class="ddx-home-table">
+          <thead>
+            <tr>
+              <th scope="col">Capability</th>
+              <th scope="col">What it does</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Bead tracker</th>
+              <td>Local-first work items with acceptance, dependencies, and a ready queue.</td>
+              <td><span class="ddx-badge ddx-badge--shipped">Shipped</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Agent service</th>
+              <td>Run prompts through harnesses, with isolated worktrees and merge-back.</td>
+              <td><span class="ddx-badge ddx-badge--shipped">Shipped</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Personas</th>
+              <td>Reusable AI roles bound to projects — reviewer, architect, test engineer.</td>
+              <td><span class="ddx-badge ddx-badge--shipped">Shipped</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Document library</th>
+              <td>Prompts, templates, and patterns synced via git, scoped to the project.</td>
+              <td><span class="ddx-badge ddx-badge--shipped">Shipped</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Execute-bead loop</th>
+              <td>Drain the queue: cheap models do, strong models review, evidence merges.</td>
+              <td><span class="ddx-badge ddx-badge--shipped">Shipped</span></td>
+            </tr>
+            <tr>
+              <th scope="row">MCP &amp; web server</th>
+              <td>Document and bead access for editors, dashboards, and other agents.</td>
+              <td><span class="ddx-badge ddx-badge--preview">Preview</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 6. DEMO PLACEHOLDER -->
+      <section class="ddx-home-demo" aria-labelledby="ddx-demo-title">
+        <p class="ddx-home-section-label">See it run</p>
+        <h2 id="ddx-demo-title" class="ddx-home-section-title">A bead, a run, an evidence trail.</h2>
+        <figure class="ddx-home-demo__frame" role="img" aria-label="DDx execute-bead demo placeholder">
+          <div class="ddx-home-demo__placeholder">
+            <span class="ddx-home-demo__badge">Demo</span>
+            <p>Walkthrough video coming soon — a bead drained from the queue, the agent running in an isolated worktree, and the merge committing back with evidence.</p>
+          </div>
+        </figure>
+      </section>
+
+      <!-- 7. CTA / ROLE ENTRY POINTS -->
+      <section class="ddx-home-cta" aria-labelledby="ddx-cta-title">
+        <p class="ddx-home-section-label">Where to start</p>
+        <h2 id="ddx-cta-title" class="ddx-home-section-title">Pick the door that fits the day.</h2>
+        <div class="ddx-home-roles">
+          <a class="ddx-home-role" href="{{ relLangURL "docs/getting-started/" }}">
+            <span class="ddx-home-role__tag">Builders</span>
+            <span class="ddx-home-role__title">Install &amp; init a project</span>
+            <span class="ddx-home-role__hint">Get the CLI, run <code>ddx init</code>, and open your first bead.</span>
+          </a>
+          <a class="ddx-home-role" href="{{ relLangURL "why/" }}">
+            <span class="ddx-home-role__tag">Leads</span>
+            <span class="ddx-home-role__title">Why DDx</span>
+            <span class="ddx-home-role__hint">The case for putting the documents AI consumes under version control.</span>
+          </a>
+          <a class="ddx-home-role" href="{{ relLangURL "docs/ecosystem/" }}">
+            <span class="ddx-home-role__tag">Workflow authors</span>
+            <span class="ddx-home-role__title">Build a plugin</span>
+            <span class="ddx-home-role__hint">Package your methodology — phases, prompts, personas — as a DDx plugin.</span>
+          </a>
+          <a class="ddx-home-role" href="{{ relLangURL "docs/cli/" }}">
+            <span class="ddx-home-role__tag">Operators</span>
+            <span class="ddx-home-role__title">CLI reference</span>
+            <span class="ddx-home-role__hint">Every command, flag, and config knob in one place.</span>
+          </a>
         </div>
       </section>
 
