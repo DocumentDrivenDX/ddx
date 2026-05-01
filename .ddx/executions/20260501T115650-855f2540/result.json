@@ -1,0 +1,59 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution metadata (manifest.json, result.json). No cast file at website/static/demos/08-helix-quickstart.cast, no homepage player update in website/layouts/index.html, and 07-quickstart.cast not archived/replaced. None of the AC are verifiable.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Missing required cast file website/static/demos/08-helix-quickstart.cast covering ddx init → install helix → bead create → ddx work",
+      "location": "website/static/demos/"
+    },
+    {
+      "severity": "block",
+      "summary": "Homepage demo player data-src not updated to reference the new cast",
+      "location": "website/layouts/index.html"
+    },
+    {
+      "severity": "block",
+      "summary": "Old 07-quickstart.cast not replaced or archived",
+      "location": "website/static/demos/07-quickstart.cast"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1751,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T115546-504eaf99/manifest.json",
+          ".ddx/executions/20260501T115546-504eaf99/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 9044,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 12601,
+    "output_bytes": 877,
+    "elapsed_ms": 8677,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

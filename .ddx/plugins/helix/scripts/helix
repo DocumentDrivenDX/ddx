@@ -20,7 +20,7 @@ else
   script_dir="$(resolve_script_dir)"
   library_root="$(cd "$script_dir/.." && pwd)"
 fi
-HELIX_VERSION="0.3.3"
+HELIX_VERSION="0.3.2"
 helix_docs_root="${HELIX_LIBRARY_ROOT:-$library_root/workflows}"
 target_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 

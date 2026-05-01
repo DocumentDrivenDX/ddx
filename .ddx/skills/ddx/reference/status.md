@@ -66,7 +66,8 @@ changed.
 - `ddx doctor` — **environment health** (is DDx working on this
   machine?). Call after `ddx upgrade` or when things seem broken.
 - `ddx agent doctor` — **harness health** (are the agents
-  reachable?). Call when `ddx agent run` fails unexpectedly.
+  reachable?). Call when `ddx run` reports an agent setup or availability
+  failure.
 - `ddx status` — **upstream drift** (is this project in sync with
   the library registry?). Call periodically to catch stale
   plugins.

@@ -5,7 +5,7 @@ DDx has two distinct review concepts. They are **not interchangeable**.
 | Concept | Command | What it does |
 |---|---|---|
 | **Bead review** | `ddx bead review <id>` | Grades a bead's implementation against its declared acceptance criteria. Per-AC verdict with evidence. |
-| **Quorum review** | `ddx agent run --quorum=<policy> --harnesses=<list>` | Dispatches a review prompt across multiple harnesses and aggregates the verdicts. Used for high-stakes or adversarial checks. |
+| **Comparison/adversarial review** | workflow skill composition over `ddx run` | Dispatches review prompts across multiple roles or configured agent routes and aggregates the verdicts. Used for high-stakes or adversarial checks. |
 
 ## Bead review
 
@@ -22,8 +22,8 @@ Generates a review-ready prompt that includes:
   pathspec).
 - Review instructions: output contract, verdict taxonomy.
 
-The reviewer (whoever receives the prompt — a human, a harness via
-`ddx agent run`, or a quorum) produces a structured verdict:
+The reviewer (whoever receives the prompt — a human, `ddx run`, or a workflow
+skill composition) produces a structured verdict:
 
 ```
 ## Bead review: ddx-<id>
@@ -52,21 +52,21 @@ The review output can be stored as bead evidence:
 ddx bead evidence add <id> --type review --body <path-to-review.md>
 ```
 
-## Quorum review
+## Comparison/adversarial review
 
 ```bash
-ddx agent run --quorum=majority --harnesses=claude,codex,gemini \
-  --prompt review-prompt.md
+ddx run --persona code-reviewer --prompt review-prompt.md > review-code.md
+ddx run --persona architect --prompt review-prompt.md > review-arch.md
 ```
 
-`--quorum=<policy>` values:
+Aggregation policies used by workflow skills:
 
 - `majority` — at least ⌈N/2⌉ harnesses must agree on the verdict.
 - `unanimous` — all harnesses must agree.
 - `any` — pass if any harness APPROVES (rarely useful; adversarial
   checks should require stronger consensus).
 
-Use quorum when:
+Use comparison/adversarial review when:
 
 - The change is high-stakes (migrations, security surface, API
   contracts, auth).
@@ -108,20 +108,19 @@ Evidence takes one of these forms:
 - **Verdict without evidence.** Every verdict must have at least one
   evidence line; APPROVE is no exception (evidence can be "AC met:
   `go test ./foo/... passes` output attached").
-- **Silencing disagreement in quorum.** If two harnesses disagree,
+- **Silencing disagreement in comparison review.** If two reviewers disagree,
   don't collapse to a single "decision." Surface the disagreement
   in the output and let the human decide.
-- **Quorum for routine work.** Single-harness bead review is fine
-  for most beads. Reserve quorum for the cases that justify the
+- **Comparison review for routine work.** Single-reviewer bead review is fine
+  for most beads. Reserve multi-reviewer comparison for the cases that justify the
   cost.
 
 ## Subagents: not this skill's business
 
-Some harnesses can run a quorum in forked/isolated subagent
+Some harnesses can run a comparison in forked/isolated subagent
 contexts; each harness implements this differently. This skill
 doesn't specify how isolation is achieved —
-`ddx agent run --quorum=<policy> --harnesses=<list>` is the
-portable invocation, and the harness decides whether to fork,
+`ddx run` is the portable invocation, and the harness decides whether to fork,
 spawn, or run inline.
 
 ## CLI reference
@@ -132,14 +131,9 @@ ddx bead review <id>                           # generate review prompt
 ddx bead review <id> --execute --harness claude  # dispatch and grade
 ddx bead evidence add <id> --type review --body r.md  # store review
 
-# Quorum review (multi-harness)
-ddx agent run --quorum=majority \
-  --harnesses=claude,codex \
-  --prompt review.md
-
-ddx agent run --quorum=unanimous \
-  --harnesses=claude,codex,gemini \
-  --prompt review.md
+# Comparison review (workflow composition)
+ddx run --persona code-reviewer --prompt review.md > review-code.md
+ddx run --persona architect --prompt review.md > review-arch.md
 ```
 
-Full flag list: `ddx bead review --help`, `ddx agent run --help`.
+Full flag list: `ddx bead review --help`, `ddx run --help`.

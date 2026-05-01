@@ -21,24 +21,21 @@ menu:
     - name: Docs
       pageRef: /docs
       weight: 1
-    - name: Background
-      pageRef: /docs/background
-      weight: 2
     - name: Workflow
       pageRef: /docs/workflow
-      weight: 3
+      weight: 2
     - name: CLI Reference
       pageRef: /docs/cli
-      weight: 4
+      weight: 3
     - name: Skills
       pageRef: /docs/skills
-      weight: 5
+      weight: 4
     - name: Glossary
       pageRef: /docs/glossary
-      weight: 6
+      weight: 5
     - name: Demos
       pageRef: /docs/demos
-      weight: 7
+      weight: 6
     - name: GitHub
       url: https://github.com/easel/helix
       weight: 10

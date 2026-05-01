@@ -1,8 +1,8 @@
 # Work — Drain the Queue, Execute, Verify, Close
 
-"Doing work" in DDx means draining the ready queue: pick the top
-ready bead, dispatch an agent, verify the result, and close the bead
-on success (or unclaim it on failure).
+"Doing work" in DDx means draining the ready queue: pick the top ready bead,
+run one or more `ddx try` attempts, verify the result, and close the bead on
+success or leave it available for a future eligible retry.
 
 ## Default surface: `ddx work`
 
@@ -10,39 +10,40 @@ on success (or unclaim it on failure).
 ddx work
 ```
 
-`ddx work` is an alias for `ddx agent execute-loop`. It drains the
-queue by picking the top ready bead, running it through
-`ddx agent execute-bead`, and advancing to the next one. Prefer this
-over running individual commands.
+`ddx work` drains the queue by picking ready beads and invoking `ddx try`.
+`ddx try` wraps `ddx run`, which is the single agent invocation primitive. DDx
+owns queue iteration, attempt evidence, and retry policy; the upstream agent
+owns provider/model routing.
 
 Flags worth knowing:
 
 - `--once` — pick one bead and stop (don't loop).
 - `--poll-interval <dur>` — continuous worker mode; wait between
   iterations.
-- `--harness <name>` — force a specific harness (overrides profile).
-- `--profile cheap|fast|smart` — routing intent (default `smart`).
-- `--model <ref>` — exact model pin (overrides profile).
+- `--min-power <n>` / `--max-power <n>` — requested agent power bounds.
+- `--top-power` — choose a `MinPower` threshold from the agent catalog.
+- `--harness <name>` / `--provider <name>` / `--model <ref>` — passthrough
+  constraints only. DDx sends them unchanged and does not route on them.
 - `--local` — run inline in the current process (no subprocess).
 
-## Primitive: `ddx agent execute-bead`
+## Primitive: `ddx try`
 
 For targeted re-runs, debugging, or running a specific bead:
 
 ```bash
-ddx agent execute-bead <bead-id>
-ddx agent execute-bead <bead-id> --from <rev>      # base commit override
-ddx agent execute-bead <bead-id> --no-merge        # preserve result, don't land
+ddx try <bead-id>
+ddx try <bead-id> --from <rev>      # base commit override
+ddx try <bead-id> --no-merge        # preserve result, don't land
 ```
 
-`execute-bead` runs an agent against one bead in an isolated git
-worktree. It's what `ddx work` calls under the hood.
+`ddx try` runs one bead attempt in an isolated git worktree. It calls `ddx run`
+for the actual agent invocation.
 
 ## Pick by default, not by ID
 
 Under normal operation, **don't specify a bead ID**. `ddx work` picks
 the top ready bead based on priority + dependency satisfaction. Only
-pin a specific ID when debugging (`ddx agent execute-bead <id>`) or
+pin a specific ID when debugging (`ddx try <id>`) or
 when the queue ordering would pick the wrong bead and you need to
 override.
 
@@ -63,21 +64,22 @@ If all three pass: close the bead.
 
 ## Close on success, unclaim on failure
 
-DDx execute-bead outcomes form a specific taxonomy. Each outcome
+DDx try/work outcomes form a specific taxonomy. Each outcome
 maps to a concrete follow-up action:
 
 | Outcome | Meaning | Action |
 |---|---|---|
 | `success` | Tests pass, AC met, commit landed | `ddx bead close <id>` |
 | `already_satisfied` | No changes needed (AC was already green) | `ddx bead close <id>` |
-| `no_changes` | Agent returned without producing commits | Leave open, **unclaim** |
+| `no_changes` | Agent returned without producing commits and wrote `no_changes_rationale.txt` | Leave open, **unclaim** |
+| `no_evidence_produced` | Agent exited without a commit or rationale | Leave open, **unclaim**, investigate harness/commit failure |
 | `land_conflict` | Merge conflict on landing the result | Leave open, **unclaim** |
 | `post_run_check_failed` | Tests or gate failed after landing | Leave open, **unclaim**, investigate |
 | `execution_failed` | Agent subprocess errored (timeout, crash, provider error) | Leave open, **unclaim** |
 | `structural_validation_failed` | Result failed structural sanity check | Leave open, **unclaim**, investigate |
 
 `ddx work` applies these actions automatically. If you're running
-`execute-bead` directly, apply them manually: `ddx bead update <id>
+`ddx try` directly, apply them manually: `ddx bead update <id>
 --unclaim` to release a bead after a non-closing outcome, so another
 worker can pick it up.
 
@@ -110,15 +112,16 @@ that exercise the new code:
 
 - **Trusting the agent's "done"**: always re-run the AC command
   yourself before closing.
-- **Closing on no_changes**: only `success` and `already_satisfied`
-  close a bead. `no_changes` means the agent returned without doing
-  anything — unclaim and investigate.
-- **Squashing execute-bead commits**: the per-attempt history is
+- **Closing on no_changes/no_evidence**: only `success` and `already_satisfied`
+  close a bead. `no_changes` requires an explicit rationale. `no_evidence_produced`
+  means the agent returned without a commit or rationale — unclaim and investigate.
+- **Squashing bead-attempt commits**: the per-attempt history is
   an audit trail (evidence commits, heartbeats). Use only
   `git merge --ff-only` or `--no-ff`; never squash/rebase/filter.
-- **Running `--harness` without a reason**: profile-first routing
-  (`--profile smart`) picks a reasonable default. Override only
-  when pinning for a bug repro or controlled test.
+- **Running passthrough pins without a reason**: power-bound dispatch lets the
+  agent choose an appropriate route. Use `--harness`, `--provider`, or
+  `--model` only for explicit operator constraints, bug repros, or controlled
+  tests.
 - **Parallel workers on the same claimed bead**: the tracker
   guards against this via claim semantics, but don't try to defeat
   it — each claim represents an in-flight attempt.
@@ -129,13 +132,12 @@ that exercise the new code:
 ddx work                                    # default queue drain
 ddx work --once                             # one bead, then stop
 ddx work --poll-interval 30s                # continuous worker
-ddx work --harness claude --profile smart   # pin harness, profile
+ddx work --min-power 10                     # request stronger attempts
+ddx work --harness claude                   # passthrough constraint
 
-ddx agent execute-bead <id>                 # primitive
-ddx agent execute-bead <id> --from <rev>    # override base commit
-ddx agent execute-bead <id> --no-merge      # preserve iteration
-
-ddx agent execute-loop                      # same as ddx work
+ddx try <id>                                # one bead attempt
+ddx try <id> --from <rev>                   # override base commit
+ddx try <id> --no-merge                     # preserve iteration
 ```
 
-Full flag list: `ddx work --help`, `ddx agent execute-bead --help`.
+Full flag list: `ddx work --help`, `ddx try --help`, `ddx run --help`.

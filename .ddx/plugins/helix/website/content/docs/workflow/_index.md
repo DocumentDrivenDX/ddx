@@ -1,7 +1,7 @@
 ---
 title: Workflow
-weight: 3
-prev: /docs/background
+weight: 2
+prev: /docs/getting-started
 next: /docs/cli
 ---
 

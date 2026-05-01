@@ -1,0 +1,234 @@
+<bead-review>
+  <bead id="ddx-38d773c1" iter=1>
+    <title>website: record bootstrap→beads→work demo for website/static/demos/</title>
+    <description>
+Author a synthetic asciinema v2 cast file at website/static/demos/08-helix-quickstart.cast showing the bootstrap → beads → work flow. Cast files are plain JSON (one header line + timestamped event lines) — see existing files in website/static/demos/ for format. The cast must cover: (1) ddx init in a fresh project dir, (2) ddx install helix, (3) create 2-3 beads with ddx bead create, (4) ddx work draining the queue with realistic agent dispatch output. Target 60-90s playback at normal speed (timestamp the events accordingly). Width=100 cols, height=28 rows. Update the homepage demo player data-src to reference this file instead of 07-quickstart.cast. See website/layouts/index.html for the player mount element.
+    </description>
+    <acceptance>
+60-90s terminal screencast committed to website/static/demos/ covering: ddx init, ddx install helix, create beads, ddx work draining queue with agent dispatch visible; homepage demo player references this file; old 07-quickstart.cast replaced or archived
+    </acceptance>
+    <notes>
+REVIEW:BLOCK
+
+Diff contains only execution metadata (manifest.json, result.json) — no screencast file under website/static/demos/, no homepage player reference change, and no archival of 07-quickstart.cast. None of the acceptance criteria can be verified from the changed files.
+
+REVIEW:BLOCK
+
+Diff contains only execution metadata; no cast file under website/static/demos/, no homepage player update, and 07-quickstart.cast not replaced/archived. None of the acceptance criteria are verifiable.
+    </notes>
+    <labels>area:website, demo</labels>
+  </bead>
+
+  <changed-files>
+    <file>.ddx/executions/20260501T115546-504eaf99/manifest.json</file>
+    <file>.ddx/executions/20260501T115546-504eaf99/result.json</file>
+  </changed-files>
+
+  <governing>
+    <note>No governing documents found. Evaluate the diff against the acceptance criteria alone.</note>
+  </governing>
+
+  <diff rev="74465cabba21e7580df4eddbbcfdb7b515988d08">
+diff --git a/.ddx/executions/20260501T115546-504eaf99/manifest.json b/.ddx/executions/20260501T115546-504eaf99/manifest.json
+new file mode 100644
+index 00000000..c53d047f
+--- /dev/null
++++ b/.ddx/executions/20260501T115546-504eaf99/manifest.json
+@@ -0,0 +1,134 @@
++{
++  "attempt_id": "20260501T115546-504eaf99",
++  "bead_id": "ddx-38d773c1",
++  "base_rev": "533917661ef4e60b7f1fc911b4f7af385a83c867",
++  "created_at": "2026-05-01T11:55:47.298728097Z",
++  "requested": {
++    "harness": "claude",
++    "prompt": "synthesized"
++  },
++  "bead": {
++    "id": "ddx-38d773c1",
++    "title": "website: record bootstrap→beads→work demo for website/static/demos/",
++    "description": "Author a synthetic asciinema v2 cast file at website/static/demos/08-helix-quickstart.cast showing the bootstrap → beads → work flow. Cast files are plain JSON (one header line + timestamped event lines) — see existing files in website/static/demos/ for format. The cast must cover: (1) ddx init in a fresh project dir, (2) ddx install helix, (3) create 2-3 beads with ddx bead create, (4) ddx work draining the queue with realistic agent dispatch output. Target 60-90s playback at normal speed (timestamp the events accordingly). Width=100 cols, height=28 rows. Update the homepage demo player data-src to reference this file instead of 07-quickstart.cast. See website/layouts/index.html for the player mount element.",
++    "acceptance": "60-90s terminal screencast committed to website/static/demos/ covering: ddx init, ddx install helix, create beads, ddx work draining queue with agent dispatch visible; homepage demo player references this file; old 07-quickstart.cast replaced or archived",
++    "parent": "ddx-4b202bbb",
++    "labels": [
++      "area:website",
++      "demo"
++    ],
++    "metadata": {
++      "claimed-at": "2026-05-01T11:55:46Z",
++      "claimed-machine": "eitri",
++      "claimed-pid": "3396374",
++      "events": [
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
++          "created_at": "2026-05-01T07:48:20.600379518Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260501T074403-a6c3369f\",\"harness\":\"claude\",\"input_tokens\":43,\"output_tokens\":14995,\"total_tokens\":15038,\"cost_usd\":1.65685275,\"duration_ms\":255772,\"exit_code\":0}",
++          "created_at": "2026-05-01T07:48:20.707622081Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=15038 cost_usd=1.6569"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
++          "created_at": "2026-05-01T07:48:24.41132769Z",
++          "kind": "routing",
++          "source": "ddx agent execute-loop",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "Diff contains only execution metadata (manifest.json, result.json) — no screencast file under website/static/demos/, no homepage player reference change, and no archival of 07-quickstart.cast. None of the acceptance criteria can be verified from the changed files.\nharness=claude\nmodel=opus\ninput_bytes=5259\noutput_bytes=791\nelapsed_ms=8575",
++          "created_at": "2026-05-01T07:48:33.175593946Z",
++          "kind": "review",
++          "source": "ddx agent execute-loop",
++          "summary": "BLOCK"
++        },
++        {
++          "actor": "",
++          "body": "",
++          "created_at": "2026-05-01T07:48:33.282638384Z",
++          "kind": "reopen",
++          "source": "",
++          "summary": "review: BLOCK"
++        },
++        {
++          "actor": "ddx",
++          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution metadata (manifest.json, result.json) — no screencast file under website/static/demos/, no homepage player reference change, and no archival of 07-quickstart.cast. None of the acceptance criteria can be verified from the changed files.\nresult_rev=3c00e49a83e60b4997461a5602feb6dda006fbf3\nbase_rev=43c7146ebe06f4295fa60697a9317e33e81ff349",
++          "created_at": "2026-05-01T07:48:33.391012946Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "review_block"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
++          "created_at": "2026-05-01T11:52:52.287082615Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260501T115115-02d42b2a\",\"harness\":\"claude\",\"input_tokens\":18,\"output_tokens\":6604,\"total_tokens\":6622,\"cost_usd\":0.602709,\"duration_ms\":95448,\"exit_code\":0}",
++          "created_at": "2026-05-01T11:52:52.399447894Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=6622 cost_usd=0.6027"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
++          "created_at": "2026-05-01T11:52:57.414829253Z",
++          "kind": "routing",
++          "source": "ddx agent execute-loop",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "ddx",
++          "body": "Diff contains only execution metadata; no cast file under website/static/demos/, no homepage player update, and 07-quickstart.cast not replaced/archived. None of the acceptance criteria are verifiable.\nharness=claude\nmodel=opus\ninput_bytes=4440\noutput_bytes=756\nelapsed_ms=7608",
++          "created_at": "2026-05-01T11:53:05.213776827Z",
++          "kind": "review",
++          "source": "ddx agent execute-loop",
++          "summary": "BLOCK"
++        },
++        {
++          "actor": "",
++          "body": "",
++          "created_at": "2026-05-01T11:53:05.322231068Z",
++          "kind": "reopen",
++          "source": "",
++          "summary": "review: BLOCK"
++        },
++        {
++          "actor": "ddx",
++          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution metadata; no cast file under website/static/demos/, no homepage player update, and 07-quickstart.cast not replaced/archived. None of the acceptance criteria are verifiable.\nresult_rev=0b6e9943391e077561f1ef73e443113c982b4770\nbase_rev=a378cc284db7edf1c1d3beee5ce509133b4ad919",
++          "created_at": "2026-05-01T11:53:05.429874768Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "review_block"
++        }
++      ],
++      "execute-loop-heartbeat-at": "2026-05-01T11:55:46.32550551Z"
++    }
++  },
++  "paths": {
++    "dir": ".ddx/executions/20260501T115546-504eaf99",
++    "prompt": ".ddx/executions/20260501T115546-504eaf99/prompt.md",
++    "manifest": ".ddx/executions/20260501T115546-504eaf99/manifest.json",
++    "result": ".ddx/executions/20260501T115546-504eaf99/result.json",
++    "checks": ".ddx/executions/20260501T115546-504eaf99/checks.json",
++    "usage": ".ddx/executions/20260501T115546-504eaf99/usage.json",
++    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-38d773c1-20260501T115546-504eaf99"
++  }
++}
+\ No newline at end of file
+diff --git a/.ddx/executions/20260501T115546-504eaf99/result.json b/.ddx/executions/20260501T115546-504eaf99/result.json
+new file mode 100644
+index 00000000..9d60ec19
+--- /dev/null
++++ b/.ddx/executions/20260501T115546-504eaf99/result.json
+@@ -0,0 +1,22 @@
++{
++  "bead_id": "ddx-38d773c1",
++  "attempt_id": "20260501T115546-504eaf99",
++  "base_rev": "533917661ef4e60b7f1fc911b4f7af385a83c867",
++  "result_rev": "b1b62c98c4832bc7309a2233d5a1b9f40e9ebe64",
++  "outcome": "task_succeeded",
++  "status": "success",
++  "detail": "success",
++  "harness": "claude",
++  "session_id": "eb-8d093b53",
++  "duration_ms": 59655,
++  "tokens": 3012,
++  "cost_usd": 0.46326624999999994,
++  "exit_code": 0,
++  "execution_dir": ".ddx/executions/20260501T115546-504eaf99",
++  "prompt_file": ".ddx/executions/20260501T115546-504eaf99/prompt.md",
++  "manifest_file": ".ddx/executions/20260501T115546-504eaf99/manifest.json",
++  "result_file": ".ddx/executions/20260501T115546-504eaf99/result.json",
++  "usage_file": ".ddx/executions/20260501T115546-504eaf99/usage.json",
++  "started_at": "2026-05-01T11:55:47.299120055Z",
++  "finished_at": "2026-05-01T11:56:46.954887821Z"
++}
+\ No newline at end of file
+  </diff>
+
+  <instructions>
+You are reviewing a bead implementation against its acceptance criteria.
+
+For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
+
+- APPROVE — every AC item is fully and correctly implemented.
+- REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
+
+## Required output format (schema_version: 1)
+
+Respond with EXACTLY one JSON object as your final response, fenced as a single ```json … ``` code block. Do not include any prose outside the fenced block. The JSON must match this schema:
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "≤300 char human-readable verdict justification",
+  "findings": [
+    { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
+  ]
+}
+```
+
+Rules:
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "severity" must be exactly one of "info", "warn", "block".
+- Output the JSON object inside ONE fenced ```json … ``` block. No additional prose, no extra fences, no markdown headings.
+- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.
+  </instructions>
+</bead-review>

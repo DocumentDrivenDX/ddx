@@ -1,0 +1,136 @@
+---
+name: helix-frame
+description: Create or refine product vision, PRD, feature specs, and user stories. Use when starting a new project, adding a major feature, or when upstream requirements need definition.
+argument-hint: '[scope]'
+---
+
+# Frame: Define What to Build (v2 - Strict HELIX Compliance)
+
+Frame creates the highest-authority artifacts in the HELIX stack — the
+documents that govern everything downstream. Use it when you need to define
+or refine what the product should do before designing how.
+
+## When to Use
+
+- Starting a new project from scratch
+- Adding a major new capability or feature area
+- Requirements are unclear or contradictory
+- `helix run` stopped with GUIDANCE because upstream authority is missing
+- You want to write a PRD, vision document, or feature spec
+
+## What It Produces (STRICT NAMING REQUIRED)
+
+Frame-phase artifacts must follow HELIX naming conventions EXACTLY:
+
+### 1. Product Vision (`docs/helix/00-discover/product-vision.md`)
+- Mission statement, market context, value propositions
+- Principles that guide all downstream decisions
+- Success metrics and target users
+
+### 2. PRD (`docs/helix/01-frame/prd.md`)
+- Problem statement with clear scope boundaries
+- Goals (numbered list) and Non-goals (explicit exclusions)
+- Requirements categorized as P0/P1/P2
+- Constraints table (language, timeline, team size, etc.)
+- Success criteria that are MEASURABLE
+
+### 3. Feature Specifications (`docs/helix/01-frame/features/FEAT-XXX-{name}.md`)
+**CRITICAL:** Each feature gets its OWN file with proper ID:
+- `FEAT-001-{short-descriptive-name}.md`
+- Must include `[[ID]]` cross-references to PRD and downstream artifacts
+- Structure: Problem, Requirements, User Stories (or reference to US files), Acceptance Criteria
+
+### 4. User Stories (`docs/helix/01-frame/user-stories/US-XXX-{name}.md`)
+**CRITICAL:** Each user story gets its OWN file with proper ID:
+- `US-001-{short-descriptive-name}.md`
+- Must include `[[ID]]` cross-references to parent FEAT and downstream TD
+- Structure: As a/I want/So that, Acceptance Criteria (Gherkin or checklist)
+
+## Mandatory Cross-Reference Pattern
+
+**EVERY artifact must declare its relationships using `[[ID]]` syntax:**
+
+```markdown
+# US-001-cli-interface.md
+**Parent Feature**: [[FEAT-001-core-conversion]]
+**Technical Design**: [[TD-001-cli-api]]  # Forward reference, filled later
+```
+
+This enables automated graph traversal for impact detection.
+
+## Steps (STRICT ORDER)
+
+1. **Read existing Frame-phase artifacts** if they exist — never overwrite without understanding context
+2. **Create PRD first** (`docs/helix/01-frame/prd.md`) — this is the source of truth
+3. **Decompose into features** — create `FEAT-XXX-{name}.md` files for each major capability
+4. **Break down into user stories** — create `US-XXX-{name}.md` files with acceptance criteria
+5. **Add cross-references** — every artifact must reference its parent and children using `[[ID]]`
+6. **Validate completeness**:
+   - PRD exists with goals, constraints, success criteria
+   - At least 2 FEAT files for non-trivial projects
+   - At least 3 US files total
+   - All artifacts have `[[ID]]` cross-references
+7. **Create tracker issues** for Design-phase work implied by the framing
+
+## Naming Convention Rules (NON-NEGOTIABLE)
+
+1. **IDs are sequential within type**: FEAT-001, FEAT-002... US-001, US-002...
+2. **Names are kebab-case and descriptive**: `FEAT-001-core-conversion`, not `FEAT-001-main`
+3. **Numbers stay constant across phases**: US-001-cli-interface → TD-001-cli-interface → TP-001-cli-interface
+4. **File names match IDs exactly**: `US-001-cli-interface.md` contains story with ID `US-001`
+
+## Autonomy Level Behavior
+
+### Low Autonomy (Ask Before Creating)
+- Present PRD outline and ask for confirmation before writing
+- List proposed features and ask which to prioritize
+- Ask about user personas before creating stories
+- Do NOT create any artifacts without explicit approval
+
+### Medium Autonomy (Make Obvious Decisions, Ask on Ambiguity)
+- Create PRD with clear assumptions documented
+- Propose feature breakdown based on vision statement
+- Ask questions ONLY when:
+  - Multiple valid approaches exist (e.g., TypeScript vs Rust)
+  - Requirements are genuinely unclear
+  - Constraints conflict
+- Document all assumptions in artifacts
+
+### High Autonomy (Complete Stack with Reasonable Defaults)
+- Create full artifact hierarchy: PRD → FEATs → USs
+- Make reasonable technology choices based on constraints
+- Add `Assumption:` comments for any decisions without explicit guidance
+- All cross-references must be complete
+- Ready for Design phase immediately
+
+## Quality Gates (Must Pass Before Completing)
+
+1. **PRD has measurable success criteria** — not "good UX" but "< 100ms response time"
+2. **Features are independent** — each FEAT can be implemented without others
+3. **User stories have acceptance criteria** — testable conditions, not descriptions
+4. **Cross-references exist** — every artifact links to parent and children
+5. **No circular dependencies** — authority flows one direction (PRD → FEAT → US)
+
+## Examples
+
+```bash
+helix frame                    # Frame the whole project from vision
+helix frame auth               # Frame the authentication capability  
+helix frame "mobile payments"  # Frame a new feature area
+```
+
+## Anti-Patterns to Avoid
+
+❌ **Generic document names**: `features.md`, `user-stories.md` (should be FEAT-XXX, US-XXX)
+❌ **Missing cross-references**: Artifacts that don't declare relationships
+❌ **Vague acceptance criteria**: "User can convert temperatures" vs "tempconv 100 --from c --to f outputs '378.00 F'"
+❌ **Monolithic features**: One FEAT file for entire project (should be decomposed)
+❌ **No constraints documented**: Language, timeline, team size must be explicit
+
+## References
+
+- Vision template: `.ddx/plugins/helix/workflows/phases/00-discover/artifacts/product-vision/`
+- PRD template: `.ddx/plugins/helix/workflows/phases/01-frame/artifacts/prd/`
+- Feature spec template: `.ddx/plugins/helix/workflows/phases/01-frame/artifacts/feature-specification/`
+- Authority order: `workflows/artifact-hierarchy.md`
+- Cross-reference pattern: `[[ID]]` syntax for graph traversal

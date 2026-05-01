@@ -7,36 +7,55 @@ disable-model-invocation: true
 
 # Build
 
-Pick the next issue from the queue, build it fully, and close it.
+Run one bounded managed implementation attempt for an execution-ready bead.
 
 If a specific issue or scope is given, use: $ARGUMENTS
 
-## Steps
+`helix build` is a compatibility wrapper over the DDx managed execution
+surface. Its contract is:
 
-1. **Identify the next issue** — run `ddx bead ready`. Pick the
-   highest-priority actionable issue with clear governing artifacts.
+- resolve one execution-ready bead from the current queue or selector
+- delegate the bounded attempt to `ddx agent execute-bead`
+- keep HELIX authority-order and bead-shaping rules in force
+- avoid substituting a direct `ddx agent run` prompt or a private
+  claim/execute/close loop for managed execution work
 
-2. **Claim it** — `ddx bead update <id> --claim`.
+## Execution Surface
 
-3. **Load context** — read the governing artifacts referenced by the issue's
-   spec-id and description. Understand what "done" means from the acceptance
-   criteria.
+Use this surface for one explicit bead or selector:
 
-4. **Build** — write the code, docs, or config changes needed to satisfy
-   the issue. Stay within scope. Do not add unspecified functionality.
+```bash
+helix build [issue-id|scope]
+ddx agent execute-bead <bead-id> [--from <rev>] [--no-merge]
+```
 
-5. **Verify** — run the project's test suite and quality checks. Ensure:
-   - All relevant tests pass
-   - No previously passing checks now fail
-   - Test coverage improves or stays stable
-   - Lint, format, and static analysis gates pass
+`ddx agent execute-bead` is the bounded managed execution primitive. Direct
+`ddx agent run` is not the build surface for execution-ready beads.
 
-6. **Commit** — create a commit with:
-   - Issue ID in the message
-   - Concise summary of what was done
-   - Reference to governing artifacts
+## Read Before Executing
 
-7. **Close** — `ddx bead close <id>`.
+Load:
 
-8. **Capture follow-on work** — if build execution revealed additional work,
-   create new issues for it. Do not silently absorb extra scope.
+- `.ddx/plugins/helix/workflows/actions/implementation.md`
+- `.ddx/plugins/helix/workflows/EXECUTION.md`
+- the bead's governing artifacts via `spec-id`, parent, and context digest
+
+## Readiness Rules
+
+Before dispatching a managed build attempt:
+
+1. Ensure the selector resolves to an execution-ready bead.
+2. Ensure the bead has deterministic acceptance and success-measurement
+   criteria: exact commands, named checks, files, fields, or observable end
+   state that can prove success.
+3. If the bead lacks that contract, do not force execution. Route it to
+   `helix polish`, `helix triage`, or another planning surface first.
+
+## Operator Guidance
+
+- Use `helix build` when the operator wants one explicit bounded attempt.
+- Use `ddx agent execute-loop` for queue drain.
+- Use `helix run` only when the compatibility wrapper's supervisory routing is
+  needed on top of DDx-managed execution.
+- File follow-on beads for newly discovered work instead of silently expanding
+  the current bead's scope.

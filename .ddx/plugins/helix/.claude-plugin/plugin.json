@@ -1,6 +1,6 @@
 {
   "name": "helix",
-  "version": "0.3.3",
+  "version": "0.3.2",
   "description": "HELIX development control system — supervisory autopilot for AI-assisted software delivery",
   "author": {
     "name": "Erik LaBianca",
@@ -9,5 +9,6 @@
   "homepage": "https://github.com/DocumentDrivenDX/helix",
   "repository": "https://github.com/DocumentDrivenDX/helix",
   "license": "MIT",
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
 }

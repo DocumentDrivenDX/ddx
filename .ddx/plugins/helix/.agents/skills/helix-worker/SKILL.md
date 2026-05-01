@@ -12,6 +12,11 @@ Use this skill when the user wants HELIX work to proceed in the background
 while they continue working interactively. The worker starts the CLI process,
 watches summary output, and reads log ranges on failure.
 
+`helix run` remains a compatibility controller over
+`ddx agent execute-loop --once` plus HELIX supervisory routing. This skill is
+for background wrapper control, not for replacing DDx's managed execution
+surfaces with a custom agent loop.
+
 ## When to Use
 
 - The user wants `helix run` in the background
@@ -45,7 +50,6 @@ Key flags:
 
 Environment overrides:
 - `HELIX_AGENT_TIMEOUT=1800` — per-agent-call timeout in seconds (default 2700)
-- `HELIX_BACKOFF_SLEEP=1` — override backoff delay (useful for testing)
 
 ## Monitor
 
@@ -72,10 +76,13 @@ Check results:
 ```bash
 helix status
 ddx bead ready --execution
+ddx bead blocked --json
 ```
 
-If the worker stopped with blockers, the blocker report is in
-`.helix-logs/blockers-*.md`.
+If the worker stopped with blocked work, treat `ddx bead blocked --json` as the
+durable tracker surface. Legacy wrapper blocker reports under
+`.helix-logs/blockers-*.md` may still exist during the migration, but they are
+not the enduring DDx/HELIX contract.
 
 ## Examples
 

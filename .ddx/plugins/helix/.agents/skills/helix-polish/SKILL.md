@@ -1,6 +1,6 @@
 ---
 name: helix-polish
-description: Iteratively refine issues before implementation. Deduplication, plan coverage verification, acceptance criteria sharpening, and dependency correction.
+description: Iteratively refine issues before implementation. Deduplication, execute-loop-ready acceptance sharpening, and dependency correction.
 argument-hint: "[scope]"
 disable-model-invocation: true
 ---
@@ -33,7 +33,8 @@ shared library is missing, stop and report an incomplete HELIX package.
    - **Deduplication**: find and merge overlapping issues
    - **Coverage verification**: ensure every plan section has an issue
    - **Acceptance criteria sharpening**: replace vague criteria with testable
-     statements
+     statements, and require execution-ready beads to name exact commands,
+     checks, or observable repository states rather than "works correctly"
    - **Dependency verification**: correct missing, circular, or incorrect deps
    - **Sizing**: split oversized issues into independently verifiable slices
    - **Label hygiene**: ensure helix, phase, kind, and area labels are correct
@@ -45,7 +46,10 @@ shared library is missing, stop and report an incomplete HELIX package.
 
 5. **Preserve executability** — ensure issues are small enough to verify,
    explicit about governing specs, and ordered so tests and safety work land
-   before behavior changes where required.
+   before behavior changes where required. If a bead's acceptance text cannot
+   be sharpened into explicit measurement criteria from the governing artifacts,
+   flag it as not execution-ready and keep it in planning/polish rather than
+   leaving hidden wrapper knowledge to decide what "done" means.
 
 ## References
 
