@@ -84,8 +84,14 @@ function fallbackDataForQuery(query: string): object | null {
 		data.docGraph = {
 			rootDir: '',
 			documents: [],
-			warnings: []
+			pathToId: '{}',
+			warnings: [],
+			issues: []
 		};
+	}
+
+	if (query.includes('docStale')) {
+		data.docStale = [];
 	}
 
 	if (query.includes('personas')) {
