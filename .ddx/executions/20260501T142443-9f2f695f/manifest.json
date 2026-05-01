@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T142443-9f2f695f",
+  "bead_id": "ddx-2940b60d",
+  "base_rev": "7d0b0d8e0342c05810f50cd19a8a5137f8431d72",
+  "created_at": "2026-05-01T14:24:44.773644428Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2940b60d",
+    "title": "beads layout: h1, filter chips, table body use raw text-xs/text-sm/text-xl instead of semantic tokens",
+    "description": "src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.svelte uses raw Tailwind size classes instead of semantic tokens:\n\nLine 307: h1 uses text-xl instead of text-headline-lg (20px/800)\nLines 309, 477: text-sm instead of text-body-sm (13px)\nLines 327: text-sm for search input instead of text-body-sm\nLines 333, 357, 382: text-xs for filter labels instead of text-body-sm or text-label-caps\nLines 292-293: chip classes use text-xs instead of text-label-caps (chips are label/badge contexts)\nLine 438: font-mono text-xs for ID column — should be font-mono-code text-mono-code (13px)\nLine 471: font-mono text-xs for priority column — should be font-mono-code text-mono-code\nLine 540: create panel h2 uses text-base — should be text-headline-md\n\nThe beads layout also has inconsistent chip sizing: chipClass() uses text-xs (raw) for both active and inactive states; the runs page uses the same pattern. These chips are filter toggles, not label-caps badges, but they should use a consistent token regardless.",
+    "acceptance": "All raw text-xs, text-sm, text-xl, text-base in beads/+layout.svelte replaced with appropriate semantic tokens. font-mono replaced with font-mono-code. Chip classes use text-label-caps (11px/700) since chips in this context function as label/filter badges.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:24:43Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:24:43.738675557Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T142443-9f2f695f",
+    "prompt": ".ddx/executions/20260501T142443-9f2f695f/prompt.md",
+    "manifest": ".ddx/executions/20260501T142443-9f2f695f/manifest.json",
+    "result": ".ddx/executions/20260501T142443-9f2f695f/result.json",
+    "checks": ".ddx/executions/20260501T142443-9f2f695f/checks.json",
+    "usage": ".ddx/executions/20260501T142443-9f2f695f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2940b60d-20260501T142443-9f2f695f"
+  }
+}

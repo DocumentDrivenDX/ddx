@@ -1,0 +1,48 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Both runs pages now use semantic badge-layer-work/try/run utilities defined in app.css with light/dark CSS variables; raw text-xl/text-sm replaced with text-headline-lg/text-body-sm. All AC items satisfied.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Layer badge pill-shape vs status badge sharp-corner inconsistency mentioned in description was not addressed, but it was not part of the acceptance criteria.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/runs/+page.svelte"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1641,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T142332-57f145f7/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1183,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4558,
+    "output_bytes": 781,
+    "elapsed_ms": 17257,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
