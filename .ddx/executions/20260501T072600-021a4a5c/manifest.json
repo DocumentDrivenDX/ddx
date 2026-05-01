@@ -1,0 +1,144 @@
+{
+  "attempt_id": "20260501T072600-021a4a5c",
+  "bead_id": "ddx-61d3a25f",
+  "base_rev": "562540d09f5c5e65e7b034fbb53602c3cf27cfcf",
+  "created_at": "2026-05-01T07:26:01.347199387Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-61d3a25f",
+    "title": "artifact regeneration: artifactRegenerate mutation + UI action + artifacts.spec.ts e2e",
+    "description": "Add the artifactRegenerate mutation and wire up the Regenerate button in the provenance panel.\n\nBackend:\n- GraphQL mutation artifactRegenerate(artifactId: ID!): ArtifactRegenerateResult\n- ArtifactRegenerateResult: { runId: ID!, status: String! }\n- Resolver dispatches a server-side worker using the artifact's generator/prompt, returns the new run id.\n- If no generator metadata, mutation returns a typed error (not a crash).\n\nUI:\n- Regenerate button in provenance panel (only shown when generated_by is present).\n- On click: button shows spinner; calls mutation; on success shows returned run id and two links: 'View run' (/runs/:runId) and 'Refresh artifact' (reload artifact detail).\n- On error: show error message inline in provenance panel; no silent failure.\n\nE2E:\n- artifacts.spec.ts: full US-081b workflow end-to-end using seeded fixture (artifact with known generated_by). Flow: list → filter → open → verify renderer → provenance panel → click Regenerate → verify run id shown → follow run link → navigate back to artifact.\n\nDepends on ddx-43684ac1 (provenance panel), ddx-ccbf6172 (backend).",
+    "acceptance": "1. artifactRegenerate mutation present in schema; resolver dispatches worker and returns run id.\n2. Regenerate button only visible when generated_by is present.\n3. Button spinner shows during mutation; success state shows run id with links.\n4. Error case: mutation fails → inline error in panel, no page crash.\n5. No generator metadata: mutation returns typed error, button remains disabled with tooltip.\n6. artifacts.spec.ts passes: complete US-081b workflow from list to regeneration and back.",
+    "labels": [
+      "area:graphql",
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:26:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:22.350036627Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=5c97c26aa45d50f20c5639d895c799f5249c9566\nbase_rev=5c97c26aa45d50f20c5639d895c799f5249c9566\nretry_after=2026-05-01T01:09:22Z",
+          "created_at": "2026-04-30T19:09:22.673789488Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:21.090635605Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:21.230188732Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-30T19:31:21.332583684Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-30T19:31:21.53458313Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T04:24:22.0935839Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T040734-0dbbcb11\",\"harness\":\"claude\",\"input_tokens\":147,\"output_tokens\":43311,\"total_tokens\":43458,\"cost_usd\":9.674437749999996,\"duration_ms\":1007038,\"exit_code\":0}",
+          "created_at": "2026-05-01T04:24:22.36550128Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=43458 cost_usd=9.6744"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T04:24:31.700313094Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json metadata file. No schema, resolver, UI, or e2e test changes are present to evaluate against any of the 6 acceptance criteria.\nharness=claude\nmodel=opus\ninput_bytes=74456\noutput_bytes=910\nelapsed_ms=41327",
+          "created_at": "2026-05-01T04:25:14.487733286Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T04:25:14.627343235Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json metadata file. No schema, resolver, UI, or e2e test changes are present to evaluate against any of the 6 acceptance criteria.\nresult_rev=1be6492a09dbf6ab7c03d4f6359f523189f45ea1\nbase_rev=6d858b7567a050c4bc96843f979ac40f59310435",
+          "created_at": "2026-05-01T04:25:14.752211358Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T07:26:00.264894034Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260501T072600-021a4a5c",
+    "prompt": ".ddx/executions/20260501T072600-021a4a5c/prompt.md",
+    "manifest": ".ddx/executions/20260501T072600-021a4a5c/manifest.json",
+    "result": ".ddx/executions/20260501T072600-021a4a5c/result.json",
+    "checks": ".ddx/executions/20260501T072600-021a4a5c/checks.json",
+    "usage": ".ddx/executions/20260501T072600-021a4a5c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-61d3a25f-20260501T072600-021a4a5c"
+  }
+}
