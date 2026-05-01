@@ -43,22 +43,37 @@
 		costUsd: number | null;
 	}
 
+	interface BeadRunRow {
+		id: string;
+		layer: string;
+		status: string;
+		harness: string | null;
+		startedAt: string | null;
+		durationMs: number | null;
+	}
+
 	let {
 		bead: initialBead,
 		onClose,
 		executions = [],
+		runs = [],
 		nodeId = '',
 		projectId = ''
 	}: {
 		bead: Bead;
 		onClose: () => void;
 		executions?: BeadExecutionRow[];
+		runs?: BeadRunRow[];
 		nodeId?: string;
 		projectId?: string;
 	} = $props();
 
 	function executionHref(executionId: string): string {
 		return `/nodes/${nodeId}/projects/${projectId}/executions/${executionId}`;
+	}
+
+	function runHref(runId: string): string {
+		return `/nodes/${nodeId}/projects/${projectId}/runs/${runId}`;
 	}
 
 	function fmtExecDate(iso: string): string {
@@ -443,6 +458,39 @@
 							Notes
 						</dt>
 						<dd class="mt-1 whitespace-pre-wrap text-fg-muted dark:text-dark-fg-ink">{bead.notes}</dd>
+					</div>
+				{/if}
+
+				{#if runs.length > 0}
+					<div data-testid="bead-linked-runs">
+						<dt class="text-xs font-medium tracking-wide text-fg-muted uppercase dark:text-dark-fg-muted">
+							Linked Runs ({runs.length})
+						</dt>
+						<dd class="mt-1 space-y-1">
+							{#each runs as run (run.id)}
+								<a
+									href={runHref(run.id)}
+									data-testid="bead-linked-run"
+									class="flex items-center justify-between rounded-none border border-border-line px-2 py-1 text-xs hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-elevated"
+								>
+									<span class="flex items-center gap-2">
+										<span class="font-mono-code text-accent-lever dark:text-dark-accent-lever">{run.id}</span>
+										<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
+											{run.layer}
+										</span>
+										<span class="rounded-none border border-border-line bg-bg-canvas px-1 py-0.5 text-[10px] uppercase text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted">
+											{run.status}
+										</span>
+										{#if run.harness}
+											<span class="font-mono-code text-fg-muted dark:text-dark-fg-muted">{run.harness}</span>
+										{/if}
+									</span>
+									<span class="text-fg-muted dark:text-dark-fg-muted">
+										{run.startedAt ? new Date(run.startedAt).toLocaleString() : '—'}
+									</span>
+								</a>
+							{/each}
+						</dd>
 					</div>
 				{/if}
 
