@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260501T074835-f2ce1ec5",
+  "bead_id": "ddx-dcee9b0c",
+  "base_rev": "97ad8cce851d70da9ccffeab946642b635d8fa9a",
+  "created_at": "2026-05-01T07:48:36.725645055Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dcee9b0c",
+    "title": "docs: add bounded context execution concept — context rot, ralph loop, product-vision + concept doc",
+    "acceptance": "context rot and bounded context execution are named and explained across: product-vision.md physics section, new concept doc, /why/ root cause section, execute-loop feature page",
+    "labels": [
+      "area:docs",
+      "bounded-context",
+      "concepts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:48:35Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T07:48:35.749426835Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T074835-f2ce1ec5",
+    "prompt": ".ddx/executions/20260501T074835-f2ce1ec5/prompt.md",
+    "manifest": ".ddx/executions/20260501T074835-f2ce1ec5/manifest.json",
+    "result": ".ddx/executions/20260501T074835-f2ce1ec5/result.json",
+    "checks": ".ddx/executions/20260501T074835-f2ce1ec5/checks.json",
+    "usage": ".ddx/executions/20260501T074835-f2ce1ec5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dcee9b0c-20260501T074835-f2ce1ec5"
+  }
+}
