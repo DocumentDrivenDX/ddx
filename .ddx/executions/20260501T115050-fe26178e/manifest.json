@@ -1,0 +1,87 @@
+{
+  "attempt_id": "20260501T115050-fe26178e",
+  "bead_id": "ddx-2e0beb6c",
+  "base_rev": "19e674d482b6db2a6ee464966432c8eaf551dcd7",
+  "created_at": "2026-05-01T11:50:51.758297085Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2e0beb6c",
+    "title": "e2e: new multi-model-review.spec.ts for quorum review end-to-end",
+    "acceptance": "New spec file multi-model-review.spec.ts exists; tests quorum review UI flow end-to-end; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "quorum"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T11:50:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T07:43:48.855568288Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T074023-2221fd9f\",\"harness\":\"claude\",\"input_tokens\":37,\"output_tokens\":12921,\"total_tokens\":12958,\"cost_usd\":1.4907725,\"duration_ms\":204135,\"exit_code\":0}",
+          "created_at": "2026-05-01T07:43:48.962796666Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=12958 cost_usd=1.4908"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T07:43:52.404594713Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only execution manifest/result metadata; the required spec file multi-model-review.spec.ts is not present in the changed files, so AC cannot be verified.\nharness=claude\nmodel=opus\ninput_bytes=4979\noutput_bytes=554\nelapsed_ms=8755",
+          "created_at": "2026-05-01T07:44:01.354634447Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T07:44:01.458824579Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution manifest/result metadata; the required spec file multi-model-review.spec.ts is not present in the changed files, so AC cannot be verified.\nresult_rev=b0a9d323b5279e37c19583529d13b0bbae92cc84\nbase_rev=e3118ae05fc875cee4594a08e1489d7da03edeee",
+          "created_at": "2026-05-01T07:44:01.565387291Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T11:50:50.848051027Z",
+      "execute-loop-retry-after": ""
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T115050-fe26178e",
+    "prompt": ".ddx/executions/20260501T115050-fe26178e/prompt.md",
+    "manifest": ".ddx/executions/20260501T115050-fe26178e/manifest.json",
+    "result": ".ddx/executions/20260501T115050-fe26178e/result.json",
+    "checks": ".ddx/executions/20260501T115050-fe26178e/checks.json",
+    "usage": ".ddx/executions/20260501T115050-fe26178e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2e0beb6c-20260501T115050-fe26178e"
+  }
+}
