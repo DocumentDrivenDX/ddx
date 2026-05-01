@@ -24,15 +24,25 @@
 
       <!-- Section 1: Hero -->
       <section class="ddx-home-hero" aria-labelledby="ddx-home-title">
-        <div>
+        <div class="ddx-home-hero__lede">
           <p class="ddx-home-kicker">Document-driven development</p>
           <h1 id="ddx-home-title" class="ddx-home-title">Documents drive the agents. DDx drives the documents.</h1>
           <p class="ddx-home-prose">
-            DDx is the local-first platform for AI-assisted development: beads track
-            work, specs carry intent, plugins package workflows, and every agent run
-            leaves evidence behind.
+            DDx is the local-first platform for the documents AI agents consume to
+            build software — beads carry work, specs carry intent, plugins package
+            workflows, and every agent run leaves evidence behind.
           </p>
-          <div class="ddx-home-actions" aria-label="Start">
+
+          <aside class="ddx-home-helix" aria-label="HELIX">
+            <span class="ddx-home-helix__tag">Pairs with HELIX</span>
+            <p>
+              DDx is the platform. <strong>HELIX</strong> is the opinionated
+              workflow that runs on top of it — phases, gates, and bounded actions
+              for teams that want a methodology out of the box.
+            </p>
+          </aside>
+
+          <div class="ddx-home-actions" aria-label="Install">
             <a class="ddx-home-action-primary" href="{{ relLangURL "docs/getting-started/" }}">Get Started</a>
             <a href="{{ relLangURL "features/" }}">See Features</a>
           </div>
@@ -118,45 +128,45 @@
         <p id="ddx-principles-title" class="ddx-home-section-label">Principles</p>
         <div class="ddx-home-grid">
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">01 / lever</span>
+            <span class="ddx-home-card__number">01</span>
             <div>
-              <h2>Platform, Not Methodology</h2>
-              <p>DDx provides primitives. Workflow opinions belong in plugins.</p>
+              <h3>Prompts scatter across machines</h3>
+              <p>Every developer keeps their own folder of half-edited instructions. None of them ship with the project.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">02 / load</span>
+            <span class="ddx-home-card__number">02</span>
             <div>
-              <h2>Project-Local by Default</h2>
-              <p>Init and install write under the project, keeping machine state out of the product.</p>
+              <h3>Specs drift from reality</h3>
+              <p>The spec said one thing, the code did another, and nobody updated the doc the agent reads tomorrow.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">03 / fulcrum</span>
+            <span class="ddx-home-card__number">03</span>
             <div>
-              <h2>Beads Are Work</h2>
-              <p>Every task is a bead with acceptance criteria, dependencies, and audit history.</p>
+              <h3>Work has no shared queue</h3>
+              <p>Tickets live in one tool, AI tasks in another, and neither knows which agent is allowed to pick them up.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">04 / lever</span>
+            <span class="ddx-home-card__number">04</span>
             <div>
-              <h2>Cost-Tiered Throughput</h2>
-              <p>Optimize closed work per dollar, with stronger models reserved for harder calls.</p>
+              <h3>Agent runs leave no evidence</h3>
+              <p>You cannot tell which prompt, which model, or which inputs produced the diff that just landed.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">05 / load</span>
+            <span class="ddx-home-card__number">05</span>
             <div>
-              <h2>Design for Simplicity</h2>
-              <p>Start small, name the moving parts, and remove complexity that earns no keep.</p>
+              <h3>Strong models do cheap work</h3>
+              <p>Routine edits burn frontier tokens because there is no ladder for which model handles which class of task.</p>
             </div>
           </article>
           <article class="ddx-home-card">
-            <span class="ddx-home-card__number">06 / fulcrum</span>
+            <span class="ddx-home-card__number">06</span>
             <div>
-              <h2>Validate Your Work</h2>
-              <p>Good decisions expose the evidence needed to tell whether they are working.</p>
+              <h3>Improvements stay trapped</h3>
+              <p>A pattern that works in one repo never reaches the next, because nothing shares it back to a library.</p>
             </div>
           </article>
         </div>
