@@ -603,6 +603,9 @@ func (s *Server) routes() {
 	scoped("GET /api/projects/{project}/documents/{path...}", s.handleReadDocument)
 	scoped("GET /api/projects/{project}/search", s.handleSearch)
 
+	// Artifacts — project-scoped (FEAT-008)
+	scoped("GET /api/projects/{project}/artifact-content", s.handleArtifactContent)
+
 	// Beads — legacy
 	legacy("GET /api/beads", s.handleListBeads)
 	legacy("GET /api/beads/ready", s.handleBeadsReady)
@@ -4800,4 +4803,54 @@ func (s *Server) mcpBeadRouting(workingDir, id string) mcpToolResult {
 	}
 	data, _ := json.Marshal(parsed)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+// handleArtifactContent serves the raw file content for a DDx-tracked artifact.
+// The artifact is identified by its project-relative path in the "path" query
+// parameter. The response Content-Type is inferred from the file extension.
+// This endpoint is used by the web UI to render binary artifact types (images,
+// PDFs) that cannot be embedded in a GraphQL text response.
+func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
+	entry, ok := projectFromContext(r.Context())
+	if !ok {
+		http.Error(w, "project not found", http.StatusNotFound)
+		return
+	}
+
+	rawPath := r.URL.Query().Get("path")
+	if rawPath == "" {
+		http.Error(w, "path query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	// Normalize and validate path stays within project root.
+	cleanedPath := filepath.Clean(filepath.FromSlash(rawPath))
+	if filepath.IsAbs(cleanedPath) || cleanedPath == ".." || strings.HasPrefix(cleanedPath, ".."+string(filepath.Separator)) {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	absPath := filepath.Join(entry.Path, cleanedPath)
+	// Double-check the resolved path is under the project root.
+	rootClean := filepath.Clean(entry.Path) + string(filepath.Separator)
+	if !strings.HasPrefix(filepath.Clean(absPath)+string(filepath.Separator), rootClean) {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	f, err := os.Open(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+		} else {
+			http.Error(w, "failed to read file", http.StatusInternalServerError)
+		}
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		return
+	}
+	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 }

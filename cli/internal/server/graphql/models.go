@@ -213,6 +213,8 @@ type Artifact struct {
 	Description *string `json:"description,omitempty"`
 	// Last modified timestamp
 	UpdatedAt *string `json:"updatedAt,omitempty"`
+	// Raw file content (text-based artifacts only; null for binary types)
+	Content *string `json:"content,omitempty"`
 }
 
 func (Artifact) IsNode() {}

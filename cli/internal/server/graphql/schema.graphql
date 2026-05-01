@@ -1952,6 +1952,8 @@ type Artifact implements Node {
   description: String
   """Last modified timestamp"""
   updatedAt: DateTime
+  """Raw file content (text-based artifacts only; null for binary types)"""
+  content: String
 }
 
 """ArtifactEdge wraps an Artifact for Relay cursor connections."""
@@ -2187,6 +2189,14 @@ type Query {
     """Search across title and path"""
     search: String
   ): ArtifactConnection!
+
+  """Fetch a single artifact by ID within a project (includes content for text-based types)."""
+  artifact(
+    """Project identifier"""
+    projectID: ID!,
+    """Artifact identifier"""
+    id: ID!
+  ): Artifact
 
   # ==========================================
   # Commit Queries

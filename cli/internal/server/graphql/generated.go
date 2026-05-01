@@ -132,6 +132,7 @@ type ComplexityRoot struct {
 	}
 
 	Artifact struct {
+		Content        func(childComplexity int) int
 		DdxFrontmatter func(childComplexity int) int
 		Description    func(childComplexity int) int
 		GeneratedBy    func(childComplexity int) int
@@ -884,6 +885,7 @@ type ComplexityRoot struct {
 	Query struct {
 		AgentSession                func(childComplexity int, id string) int
 		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) int
+		Artifact                    func(childComplexity int, projectID string, id string) int
 		Artifacts                   func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string) int
 		Bead                        func(childComplexity int, id string) int
 		BeadDepTree                 func(childComplexity int, beadID string) int
@@ -1258,6 +1260,7 @@ type QueryResolver interface {
 	Doc(ctx context.Context, id string) (*Document, error)
 	Search(ctx context.Context, query string, first *int, after *string, last *int, before *string) (*SearchResultConnection, error)
 	Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string) (*ArtifactConnection, error)
+	Artifact(ctx context.Context, projectID string, id string) (*Artifact, error)
 	Commits(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) (*CommitConnection, error)
 	Workers(ctx context.Context, first *int, after *string, last *int, before *string) (*WorkerConnection, error)
 	WorkersByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string) (*WorkerConnection, error)
@@ -1745,6 +1748,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.AggregateSummarySessions.UnknownCost(childComplexity), true
 
+	case "Artifact.content":
+		if e.ComplexityRoot.Artifact.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.Content(childComplexity), true
 	case "Artifact.ddxFrontmatter":
 		if e.ComplexityRoot.Artifact.DdxFrontmatter == nil {
 			break
@@ -4873,6 +4882,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.AgentSessions(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["startedAfter"].(*string), args["startedBefore"].(*string)), true
+	case "Query.artifact":
+		if e.ComplexityRoot.Query.Artifact == nil {
+			break
+		}
+
+		args, err := ec.field_Query_artifact_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Artifact(childComplexity, args["projectID"].(string), args["id"].(string)), true
 	case "Query.artifacts":
 		if e.ComplexityRoot.Query.Artifacts == nil {
 			break
@@ -7062,6 +7082,22 @@ func (ec *executionContext) field_Query_agentSessions_args(ctx context.Context, 
 		return nil, err
 	}
 	args["startedBefore"] = arg5
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_artifact_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectID", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectID"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg1
 	return args, nil
 }
 
@@ -10625,6 +10661,35 @@ func (ec *executionContext) fieldContext_Artifact_updatedAt(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Artifact_content(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ArtifactConnection_edges(ctx context.Context, field graphql.CollectedField, obj *ArtifactConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10770,6 +10835,8 @@ func (ec *executionContext) fieldContext_ArtifactEdge_node(_ context.Context, fi
 				return ec.fieldContext_Artifact_description(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Artifact_updatedAt(ctx, field)
+			case "content":
+				return ec.fieldContext_Artifact_content(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Artifact", field.Name)
 		},
@@ -27003,6 +27070,69 @@ func (ec *executionContext) fieldContext_Query_artifacts(ctx context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_artifact(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_artifact,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Artifact(ctx, fc.Args["projectID"].(string), fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalOArtifact2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifact,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_artifact(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Artifact_id(ctx, field)
+			case "path":
+				return ec.fieldContext_Artifact_path(ctx, field)
+			case "title":
+				return ec.fieldContext_Artifact_title(ctx, field)
+			case "mediaType":
+				return ec.fieldContext_Artifact_mediaType(ctx, field)
+			case "generatedBy":
+				return ec.fieldContext_Artifact_generatedBy(ctx, field)
+			case "staleness":
+				return ec.fieldContext_Artifact_staleness(ctx, field)
+			case "ddxFrontmatter":
+				return ec.fieldContext_Artifact_ddxFrontmatter(ctx, field)
+			case "description":
+				return ec.fieldContext_Artifact_description(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Artifact_updatedAt(ctx, field)
+			case "content":
+				return ec.fieldContext_Artifact_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Artifact", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_artifact_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_commits(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -37697,6 +37827,8 @@ func (ec *executionContext) _Artifact(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = ec._Artifact_description(ctx, field, obj)
 		case "updatedAt":
 			out.Values[i] = ec._Artifact_updatedAt(ctx, field, obj)
+		case "content":
+			out.Values[i] = ec._Artifact_content(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -43091,6 +43223,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "artifact":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_artifact(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "commits":
 			field := field
 
@@ -48199,6 +48350,13 @@ func (ec *executionContext) marshalOAgentSession2ᚖgithubᚗcomᚋDocumentDrive
 		return graphql.Null
 	}
 	return ec._AgentSession(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOArtifact2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifact(ctx context.Context, sel ast.SelectionSet, v *Artifact) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Artifact(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOArtifactGeneratedBy2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactGeneratedBy(ctx context.Context, sel ast.SelectionSet, v *ArtifactGeneratedBy) graphql.Marshaler {

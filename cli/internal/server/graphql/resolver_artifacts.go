@@ -367,3 +367,40 @@ func titleFromDoc(d docgraph.Document) string {
 	}
 	return base
 }
+
+// Artifact is the resolver for the artifact(projectID, id) query.
+// It returns a single artifact by ID, loading file content for text-based media types.
+func (r *queryResolver) Artifact(ctx context.Context, projectID string, id string) (*Artifact, error) {
+	root := r.projectRoot(projectID)
+	artifacts, err := collectArtifacts(root)
+	if err != nil {
+		return nil, fmt.Errorf("collecting artifacts: %w", err)
+	}
+	for _, a := range artifacts {
+		if a.ID == id {
+			if isTextMediaType(a.MediaType) {
+				a.Content = loadArtifactContent(root, a.Path)
+			}
+			return a, nil
+		}
+	}
+	return nil, nil
+}
+
+// isTextMediaType reports whether the media type has text content suitable
+// for inline rendering (markdown, SVG, Excalidraw JSON).
+func isTextMediaType(mt string) bool {
+	return mt == "text/markdown" || mt == "image/svg+xml" || mt == "application/vnd.excalidraw+json"
+}
+
+// loadArtifactContent reads the raw file content for an artifact at the given
+// project-relative path. Returns nil if the file cannot be read.
+func loadArtifactContent(root, relPath string) *string {
+	absPath := filepath.Join(root, filepath.FromSlash(relPath))
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil
+	}
+	s := string(data)
+	return &s
+}

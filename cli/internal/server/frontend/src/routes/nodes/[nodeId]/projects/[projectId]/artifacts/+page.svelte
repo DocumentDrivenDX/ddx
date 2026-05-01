@@ -56,9 +56,16 @@
 	}
 
 	function openArtifact(id: string) {
-		goto(
-			`/nodes/${data.nodeId}/projects/${data.projectId}/artifacts/${encodeURIComponent(id)}`
-		)
+		// Pass current filter/search state as a "back" param so the detail page
+		// can return to the same filtered list state.
+		const listUrl = new URL(window.location.href)
+		const detailBase = `/nodes/${data.nodeId}/projects/${data.projectId}/artifacts/${encodeURIComponent(id)}`
+		const detailUrl = new URL(detailBase, window.location.origin)
+		const backHref = listUrl.pathname + listUrl.search
+		if (backHref !== `/nodes/${data.nodeId}/projects/${data.projectId}/artifacts`) {
+			detailUrl.searchParams.set('back', backHref)
+		}
+		goto(detailUrl.pathname + detailUrl.search)
 	}
 
 	async function loadMore() {

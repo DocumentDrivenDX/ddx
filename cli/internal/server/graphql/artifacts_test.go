@@ -272,3 +272,144 @@ func containsCI(s, sub string) bool {
 		bytes.ToLower([]byte(sub)),
 	)
 }
+
+func TestArtifact_DetailWithContent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupArtifactFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+
+	// Query the markdown artifact by fetching the list first to get its ID.
+	listBody := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", mediaType: \"text/markdown\") { edges { node { id } } } }"}`)
+	listResp, err := http.Post(srv.URL+"/graphql", "application/json", listBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp.Body.Close()
+
+	var listResult map[string]interface{}
+	if err := json.NewDecoder(listResp.Body).Decode(&listResult); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := listResult["errors"]; ok {
+		t.Fatalf("list GraphQL errors: %v", errs)
+	}
+	listData := listResult["data"].(map[string]interface{})
+	edges := listData["artifacts"].(map[string]interface{})["edges"].([]interface{})
+	if len(edges) == 0 {
+		t.Fatal("expected at least one markdown artifact")
+	}
+	artifactID := edges[0].(map[string]interface{})["node"].(map[string]interface{})["id"].(string)
+
+	// Now fetch detail via artifact(projectID, id).
+	detailBody := bytes.NewBufferString(`{"query":"{ artifact(projectID: \"` + projID + `\", id: \"` + artifactID + `\") { id path mediaType content ddxFrontmatter } }"}`)
+	detailResp, err := http.Post(srv.URL+"/graphql", "application/json", detailBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer detailResp.Body.Close()
+
+	var detailResult map[string]interface{}
+	if err := json.NewDecoder(detailResp.Body).Decode(&detailResult); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := detailResult["errors"]; ok {
+		t.Fatalf("detail GraphQL errors: %v", errs)
+	}
+
+	detail := detailResult["data"].(map[string]interface{})["artifact"].(map[string]interface{})
+	if detail["mediaType"].(string) != "text/markdown" {
+		t.Errorf("expected text/markdown, got %s", detail["mediaType"])
+	}
+	content, hasContent := detail["content"]
+	if !hasContent || content == nil {
+		t.Error("expected content field to be populated for text/markdown artifact")
+	}
+	if ddxFM, ok := detail["ddxFrontmatter"]; !ok || ddxFM == nil {
+		t.Error("expected ddxFrontmatter field to be populated")
+	}
+}
+
+func TestArtifact_DetailBinaryNoContent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupArtifactFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+
+	// Get the image/png artifact ID.
+	listBody := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", mediaType: \"image/png\") { edges { node { id } } } }"}`)
+	listResp, err := http.Post(srv.URL+"/graphql", "application/json", listBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp.Body.Close()
+
+	var listResult map[string]interface{}
+	if err := json.NewDecoder(listResp.Body).Decode(&listResult); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := listResult["errors"]; ok {
+		t.Fatalf("list GraphQL errors: %v", errs)
+	}
+	edges := listResult["data"].(map[string]interface{})["artifacts"].(map[string]interface{})["edges"].([]interface{})
+	if len(edges) == 0 {
+		t.Fatal("expected at least one image/png artifact")
+	}
+	artifactID := edges[0].(map[string]interface{})["node"].(map[string]interface{})["id"].(string)
+
+	detailBody := bytes.NewBufferString(`{"query":"{ artifact(projectID: \"` + projID + `\", id: \"` + artifactID + `\") { id mediaType content } }"}`)
+	detailResp, err := http.Post(srv.URL+"/graphql", "application/json", detailBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer detailResp.Body.Close()
+
+	var detailResult map[string]interface{}
+	if err := json.NewDecoder(detailResp.Body).Decode(&detailResult); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := detailResult["errors"]; ok {
+		t.Fatalf("detail GraphQL errors: %v", errs)
+	}
+
+	detail := detailResult["data"].(map[string]interface{})["artifact"].(map[string]interface{})
+	if content := detail["content"]; content != nil {
+		t.Errorf("expected content to be null for binary artifact, got %v", content)
+	}
+}
+
+func TestArtifact_DetailNotFound(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+	body := bytes.NewBufferString(`{"query":"{ artifact(projectID: \"` + projID + `\", id: \"nonexistent-id\") { id } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := result["errors"]; ok {
+		t.Fatalf("GraphQL errors: %v", errs)
+	}
+
+	if artifact := result["data"].(map[string]interface{})["artifact"]; artifact != nil {
+		t.Errorf("expected null for unknown artifact, got %v", artifact)
+	}
+}
