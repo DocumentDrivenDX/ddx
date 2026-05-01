@@ -1,7 +1,7 @@
 <script lang="ts">
 	import {
 		LayoutDashboard,
-		FileText,
+		Archive,
 		GitBranch,
 		Cpu,
 		Terminal,
@@ -29,7 +29,7 @@
 	const pages = [
 		{ page: '', label: 'Overview', Icon: Home, exact: true },
 		{ page: 'beads', label: 'Beads', Icon: LayoutDashboard },
-		{ page: 'documents', label: 'Documents', Icon: FileText },
+		{ page: 'artifacts', label: 'Artifacts', Icon: Archive },
 		{ page: 'graph', label: 'Graph', Icon: GitBranch },
 		{ page: 'workers', label: 'Workers', Icon: Cpu },
 		{ page: 'sessions', label: 'Sessions', Icon: Terminal },

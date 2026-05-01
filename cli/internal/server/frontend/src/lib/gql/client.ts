@@ -72,6 +72,14 @@ function fallbackDataForQuery(query: string): object | null {
 		};
 	}
 
+	if (query.includes('artifacts')) {
+		data.artifacts = {
+			edges: [],
+			pageInfo: EMPTY_PAGE_INFO,
+			totalCount: 0
+		};
+	}
+
 	if (query.includes('docGraph')) {
 		data.docGraph = {
 			rootDir: '',

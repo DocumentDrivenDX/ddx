@@ -1,0 +1,1 @@
+import{t as e}from"../chunks/D-_T_ixn.js";import"../chunks/C9gjXInc.js";import"../chunks/BpAyAfhb.js";import{n as t,t as n}from"../chunks/C0ODJxjn.js";var r=e({load:()=>i}),i=async({params:e,fetch:n})=>t(n,e.projectId,decodeURIComponent(e.name));function a(e,t){n(e,{get data(){return t.data}})}export{a as component,r as universal};

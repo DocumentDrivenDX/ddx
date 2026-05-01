@@ -1,1 +1,0 @@
-import{t as e}from"../chunks/Dkx8MRxF.js";import{n as t}from"../chunks/BJ_KTwLw.js";import{t as n}from"../chunks/Do5J-jP8.js";var r=e({load:()=>i}),i=async({fetch:e})=>{throw t(307,await n(`personas`,e))};export{r as universal};
