@@ -1,0 +1,95 @@
+{
+  "attempt_id": "20260501T020347-efb6497d",
+  "bead_id": "ddx-d7d1119d",
+  "base_rev": "e06b784a4dd5dd7b88cba389be286d39c05efc86",
+  "created_at": "2026-05-01T02:03:48.975520614Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d7d1119d",
+    "title": "artifact renderers: media-type detail view at /artifacts/:artifactId",
+    "description": "Build the artifact detail route at /nodes/:nodeId/projects/:projectId/artifacts/:artifactId.\n\nRenderers by mediaType:\n- text/markdown: rendered markdown with syntax-highlighted code blocks; intra-repo relative links navigate within UI (same tab, no reload); external links open in new tab.\n- image/svg+xml with Mermaid provenance: sanitized inline SVG (DOMPurify); raw download affordance alongside.\n- application/vnd.excalidraw+json: read-only Excalidraw embed via hosted iframe (https://excalidraw.com/embed); raw JSON download affordance. Offline fallback: show 'Excalidraw preview requires network' with download only.\n- image/*: inline \u003cimg\u003e preview; metadata panel; open/download affordance.\n- application/pdf: \u003cembed type=application/pdf\u003e with open-file fallback link; file size shown.\n- unknown/binary: metadata-only panel with open/download affordance; no attempt to render.\n\nAll renderers show: path, mediaType badge, updatedAt, sidecar metadata panel (DDx frontmatter key/value).\n\nDepends on ddx-fbf57b89 (artifacts list, for navigation context).",
+    "acceptance": "1. Each mediaType renders with the correct renderer (verified with one fixture artifact per type).\n2. Markdown renderer: relative intra-repo links navigate within UI; external links open new tab.\n3. SVG renderer: DOMPurify sanitizes content before inserting into DOM.\n4. Excalidraw renderer: hosted iframe loads; offline fallback shows download-only message.\n5. Unknown/binary: no render attempt; open/download affordance present.\n6. All renderers show sidecar metadata panel with DDx frontmatter fields.\n7. Back button from detail returns to artifacts list with filter/search state preserved.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T02:03:47Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3376840",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:08.507246533Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=7aeb58c237ce03c063f5d109ca09a2623aa76803\nbase_rev=7aeb58c237ce03c063f5d109ca09a2623aa76803\nretry_after=2026-05-01T01:09:08Z",
+          "created_at": "2026-04-30T19:09:08.862802151Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:01.039440754Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:01.153544403Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-30T19:31:01.256366062Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-30T19:31:01.454534471Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T02:03:47.135045559Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260501T020347-efb6497d",
+    "prompt": ".ddx/executions/20260501T020347-efb6497d/prompt.md",
+    "manifest": ".ddx/executions/20260501T020347-efb6497d/manifest.json",
+    "result": ".ddx/executions/20260501T020347-efb6497d/result.json",
+    "checks": ".ddx/executions/20260501T020347-efb6497d/checks.json",
+    "usage": ".ddx/executions/20260501T020347-efb6497d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d7d1119d-20260501T020347-efb6497d"
+  }
+}
