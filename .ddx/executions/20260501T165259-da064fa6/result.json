@@ -1,0 +1,54 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution manifest/result metadata. No actual artifacts (prompt.md, png, png.ddx.yaml) for the user-workflow capstone are present in the changed files, so acceptance cannot be evaluated as met.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Expected artifacts at docs/helix/01-frame/visuals/user-workflow.{prompt.md,png,png.ddx.yaml} are not in the diff",
+      "location": "docs/helix/01-frame/visuals/"
+    },
+    {
+      "severity": "info",
+      "summary": "Only execution tracking files were added; result.json reports success but no deliverable files are visible in the changed-files list",
+      "location": ".ddx/executions/20260501T165030-979aff9f/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 814,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T165030-979aff9f/manifest.json",
+          ".ddx/executions/20260501T165030-979aff9f/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3339,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5959,
+    "output_bytes": 740,
+    "elapsed_ms": 10913,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
