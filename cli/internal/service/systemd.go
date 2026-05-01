@@ -56,8 +56,12 @@ func (systemdBackend) Install(cfg Config) error {
 		return err
 	}
 
-	envFile := filepath.Join(cfg.WorkDir, ".ddx", "server.env")
-	if err := os.MkdirAll(filepath.Dir(envFile), 0o755); err != nil {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	envFile := filepath.Join(home, ".config", "ddx", "server.env")
+	if err := os.MkdirAll(filepath.Dir(envFile), 0o700); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(cfg.LogPath), 0o755); err != nil {
