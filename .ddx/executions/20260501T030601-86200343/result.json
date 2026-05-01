@@ -1,0 +1,59 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Run detail page renders layer-appropriate fields (work: queueInputs/stopCondition/child tries; try: bead link, revisions, worktree, merge outcome, checks, child runs; run: power, harness/provider/model, tokens, cost, duration, output, evidence). Breadcrumbs include grandparent for run-layer via additional parent fetch. SvelteKit \u003ca href\u003e links yield client-side routing and preserve back-button to filtered list URL.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Run-layer breadcrumb does an extra GraphQL roundtrip to fetch grandparent; could be combined into a single nested query to reduce latency.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/runs/[runId]/+page.ts:79"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1680,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T030210-d5637f4c/manifest.json",
+          ".ddx/executions/20260501T030210-d5637f4c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-021",
+        "bytes_included": 24248,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-021-dashboard-ui.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6780,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 34580,
+    "output_bytes": 813,
+    "elapsed_ms": 24511,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
