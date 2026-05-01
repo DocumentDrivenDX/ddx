@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260501T034639-98c404a1",
+  "bead_id": "ddx-db06411c",
+  "base_rev": "5efdb414f2c6bc84e0dddecb54e5104be14dfc4c",
+  "created_at": "2026-05-01T03:46:40.218593753Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-db06411c",
+    "title": "website: wire DESIGN.md lever/load/fulcrum tokens to Hugo via assets/css/custom.css",
+    "acceptance": "Hugo site uses CSS variables from DESIGN.md (#F4EFE6 canvas, #3B5B7A accent-lever, Inter/Newsreader/Space Grotesk fonts, 0px border-radius); homepage visual matches design language spec",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:website",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:46:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T03:46:39.431801553Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T034639-98c404a1",
+    "prompt": ".ddx/executions/20260501T034639-98c404a1/prompt.md",
+    "manifest": ".ddx/executions/20260501T034639-98c404a1/manifest.json",
+    "result": ".ddx/executions/20260501T034639-98c404a1/result.json",
+    "checks": ".ddx/executions/20260501T034639-98c404a1/checks.json",
+    "usage": ".ddx/executions/20260501T034639-98c404a1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-db06411c-20260501T034639-98c404a1"
+  }
+}
