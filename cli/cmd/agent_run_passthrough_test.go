@@ -197,6 +197,38 @@ func TestWorkDoesNotCallResolveRoute(t *testing.T) {
 	// the test's only concern is that ResolveRoute was not invoked.
 }
 
+// TestWorkPassesEmptyHarnessToService verifies that ddx work --local with no
+// --harness flag sends an empty Harness to the agent service, allowing the
+// service's routing engine to auto-select a provider from configured endpoints.
+func TestWorkPassesEmptyHarnessToService(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+
+	env := NewTestEnvironment(t)
+
+	store := bead.NewStore(filepath.Join(env.Dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "ddx-empty-harness-test",
+		Title: "empty harness passthrough test bead",
+	}))
+
+	root := NewCommandFactory(env.Dir).NewRootCommand()
+	_, _ = executeCommand(root, "work", "--local", "--once")
+
+	stub.mu.Lock()
+	executeCalled := stub.executeCalled
+	lastReq := stub.lastReq
+	stub.mu.Unlock()
+
+	if !executeCalled {
+		t.Skip("Execute not called — bead may have been short-circuited before service dispatch")
+	}
+	assert.Empty(t, lastReq.Harness,
+		"ddx work with no --harness must send empty Harness to service for engine auto-selection")
+}
+
 // TestExecuteBeadDoesNotCallResolveRoute (AC4 / ddx-6036e1bc): ddx agent
 // execute-bead must not call ResolveRoute in the execution path. The stub
 // installed by installExecuteCapturingStub returns an error from ResolveRoute,

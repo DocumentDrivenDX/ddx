@@ -1,0 +1,64 @@
+{
+  "attempt_id": "20260430T191003-3532090d",
+  "bead_id": "ddx-ccbf6172",
+  "base_rev": "e3c575d688c88a3ddde8c6df6f7c223c2751dbcb",
+  "created_at": "2026-04-30T19:10:04.415898725Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ccbf6172",
+    "title": "artifacts backend: GraphQL Artifact type + artifacts query + resolver",
+    "description": "Add the GraphQL Artifact type and artifacts query to schema.graphql and implement the resolver.\n\nArtifact type fields: id, path, title, mediaType, generatedBy (runId, promptSummary, sourceHashMatch bool), staleness (fresh/stale/missing), ddxFrontmatter, description, updatedAt.\n\nartifacts(projectID, mediaType, search, first, after): query scanning .ddx sidecar files (.ddx.yaml alongside artifacts) and the document library. Resolver reads FEAT-007 doc graph for documents; reads .ddx/plugins/**/*.* sidecars for other artifact types. Returns Relay cursor connection.\n\nNote: existing ExecutionRun type in schema is unrelated (exec-definition results). New Artifact type is independent.",
+    "acceptance": "1. Artifact type present in schema with all fields.\n2. artifacts query returns paginated results scoped to a projectID.\n3. mediaType filter narrows results correctly.\n4. search parameter matches title and path.\n5. Resolver handles missing sidecars gracefully (no crash, artifact omitted or mediaType=unknown).\n6. Go tests cover resolver with fixture project containing markdown, image, and unknown-type artifacts.",
+    "labels": [
+      "area:graphql",
+      "area:server",
+      "feat-008",
+      "feat-021",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:10:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3278104",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:04.616861491Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=f9ea4558d644a88f93754c67df3d522d6880f4fa\nbase_rev=f9ea4558d644a88f93754c67df3d522d6880f4fa\nretry_after=2026-05-01T01:09:04Z",
+          "created_at": "2026-04-30T19:09:04.958756981Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-04-30T19:10:03.365620709Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T191003-3532090d",
+    "prompt": ".ddx/executions/20260430T191003-3532090d/prompt.md",
+    "manifest": ".ddx/executions/20260430T191003-3532090d/manifest.json",
+    "result": ".ddx/executions/20260430T191003-3532090d/result.json",
+    "checks": ".ddx/executions/20260430T191003-3532090d/checks.json",
+    "usage": ".ddx/executions/20260430T191003-3532090d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ccbf6172-20260430T191003-3532090d"
+  }
+}
