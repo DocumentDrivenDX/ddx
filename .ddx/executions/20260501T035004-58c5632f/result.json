@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "hugo.yaml nav now contains Why DDx, Features, Reference, Ecosystem, GitHub; old Docs/Concepts/CLI Reference/Skills/Plugins entries removed; website/data/redirects.yaml redirect map added covering old paths.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Self-mapping redirects (/docs/cli/ → /docs/cli/, /docs/ecosystem/ → /docs/ecosystem/) are no-ops; could be omitted but harmless.",
+      "location": "website/data/redirects.yaml:23"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 429,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T034849-d8165806/manifest.json",
+          ".ddx/executions/20260501T034849-d8165806/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 2920,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5155,
+    "output_bytes": 619,
+    "elapsed_ms": 15817,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
