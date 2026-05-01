@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T073638-f5135838",
+  "bead_id": "ddx-dbeb3ddc",
+  "base_rev": "ecf48f3b39bb02e7f3c75c0d00591881a3f5fdce",
+  "created_at": "2026-05-01T07:36:39.338977995Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dbeb3ddc",
+    "title": "website: update /ecosystem/ for DDx platform + HELIX workflow two-layer framing",
+    "acceptance": "/ecosystem/ page reflects DDx=platform primitives / HELIX=workflow methodology split; plugin registry section; agent landscape section; no Dun references; no persona system references",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:website",
+      "content",
+      "ecosystem"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:36:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T07:36:38.2878779Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T073638-f5135838",
+    "prompt": ".ddx/executions/20260501T073638-f5135838/prompt.md",
+    "manifest": ".ddx/executions/20260501T073638-f5135838/manifest.json",
+    "result": ".ddx/executions/20260501T073638-f5135838/result.json",
+    "checks": ".ddx/executions/20260501T073638-f5135838/checks.json",
+    "usage": ".ddx/executions/20260501T073638-f5135838/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dbeb3ddc-20260501T073638-f5135838"
+  }
+}
