@@ -1,0 +1,38 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "custom.css now defines --ddx-bg-canvas: #F4EFE6, --ddx-accent-lever: #3B5B7A, imports Inter/Newsreader/Space Grotesk, and enforces border-radius: 0 across the editorial home, satisfying the DESIGN.md token wiring acceptance criteria.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Sharp-corner rule is scoped to body.ddx-editorial-home; non-home pages retain default radii. Acceptable since AC targets the homepage visual.",
+      "location": "website/assets/css/custom.css:60"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 437,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 215,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 2277,
+    "output_bytes": 563,
+    "elapsed_ms": 24888,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
