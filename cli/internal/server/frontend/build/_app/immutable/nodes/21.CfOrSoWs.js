@@ -1,1 +1,0 @@
-import{t as e}from"../chunks/CuWRZlNB.js";import"../chunks/D5KUolLB.js";import"../chunks/Q94VlVm2.js";import{n as t}from"../chunks/DGFmmtCw.js";var n=e({load:()=>r}),r=async({params:e})=>{throw t(302,`/nodes/${e.nodeId}/projects/${e.projectId}/artifacts?mediaType=text%2Fmarkdown`)};function i(e){}export{i as component,n as universal};

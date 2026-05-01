@@ -250,6 +250,14 @@ type ArtifactGeneratedBy struct {
 	SourceHashMatch bool `json:"sourceHashMatch"`
 }
 
+// ArtifactRegenerateResult is the response from the artifactRegenerate mutation.
+type ArtifactRegenerateResult struct {
+	// Run ID of the dispatched regeneration worker
+	RunID string `json:"runId"`
+	// Worker dispatch state (e.g. queued, running)
+	Status string `json:"status"`
+}
+
 // Bead is a portable work item with lifecycle metadata
 type Bead struct {
 	// Unique bead identifier (e.g. "ddx-a1b2c3d4")

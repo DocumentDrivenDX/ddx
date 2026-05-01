@@ -161,6 +161,11 @@ type ComplexityRoot struct {
 		SourceHashMatch func(childComplexity int) int
 	}
 
+	ArtifactRegenerateResult struct {
+		RunID  func(childComplexity int) int
+		Status func(childComplexity int) int
+	}
+
 	Bead struct {
 		Acceptance   func(childComplexity int) int
 		CreatedAt    func(childComplexity int) int
@@ -659,6 +664,7 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
+		ArtifactRegenerate func(childComplexity int, artifactID string) int
 		BeadClaim          func(childComplexity int, id string, assignee string) int
 		BeadClose          func(childComplexity int, id string, reason *string) int
 		BeadCreate         func(childComplexity int, input BeadInput) int
@@ -1237,6 +1243,7 @@ type MutationResolver interface {
 	PersonaUpdate(ctx context.Context, name string, body string, projectID string) (*Persona, error)
 	PersonaDelete(ctx context.Context, name string, projectID string) (*PersonaDeleteResult, error)
 	PersonaFork(ctx context.Context, libraryName string, newName *string, projectID string) (*Persona, error)
+	ArtifactRegenerate(ctx context.Context, artifactID string) (*ArtifactRegenerateResult, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id string) (Node, error)
@@ -1860,6 +1867,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ArtifactGeneratedBy.SourceHashMatch(childComplexity), true
+
+	case "ArtifactRegenerateResult.runId":
+		if e.ComplexityRoot.ArtifactRegenerateResult.RunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactRegenerateResult.RunID(childComplexity), true
+	case "ArtifactRegenerateResult.status":
+		if e.ComplexityRoot.ArtifactRegenerateResult.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactRegenerateResult.Status(childComplexity), true
 
 	case "Bead.acceptance":
 		if e.ComplexityRoot.Bead.Acceptance == nil {
@@ -3891,6 +3911,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.MetricResultSpec.ValuePath(childComplexity), true
 
+	case "Mutation.artifactRegenerate":
+		if e.ComplexityRoot.Mutation.ArtifactRegenerate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_artifactRegenerate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ArtifactRegenerate(childComplexity, args["artifactId"].(string)), true
 	case "Mutation.beadClaim":
 		if e.ComplexityRoot.Mutation.BeadClaim == nil {
 			break
@@ -6761,6 +6792,17 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // endregion ************************** generated!.gotpl **************************
 
 // region    ***************************** args.gotpl *****************************
+
+func (ec *executionContext) field_Mutation_artifactRegenerate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "artifactId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["artifactId"] = arg0
+	return args, nil
+}
 
 func (ec *executionContext) field_Mutation_beadClaim_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
@@ -10962,6 +11004,64 @@ func (ec *executionContext) fieldContext_ArtifactGeneratedBy_sourceHashMatch(_ c
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactRegenerateResult_runId(ctx context.Context, field graphql.CollectedField, obj *ArtifactRegenerateResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactRegenerateResult_runId,
+		func(ctx context.Context) (any, error) {
+			return obj.RunID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactRegenerateResult_runId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactRegenerateResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactRegenerateResult_status(ctx context.Context, field graphql.CollectedField, obj *ArtifactRegenerateResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactRegenerateResult_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactRegenerateResult_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactRegenerateResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -22223,6 +22323,53 @@ func (ec *executionContext) fieldContext_Mutation_personaFork(ctx context.Contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_personaFork_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_artifactRegenerate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_artifactRegenerate,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ArtifactRegenerate(ctx, fc.Args["artifactId"].(string))
+		},
+		nil,
+		ec.marshalNArtifactRegenerateResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactRegenerateResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_artifactRegenerate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "runId":
+				return ec.fieldContext_ArtifactRegenerateResult_runId(ctx, field)
+			case "status":
+				return ec.fieldContext_ArtifactRegenerateResult_status(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactRegenerateResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_artifactRegenerate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -38034,6 +38181,50 @@ func (ec *executionContext) _ArtifactGeneratedBy(ctx context.Context, sel ast.Se
 	return out
 }
 
+var artifactRegenerateResultImplementors = []string{"ArtifactRegenerateResult"}
+
+func (ec *executionContext) _ArtifactRegenerateResult(ctx context.Context, sel ast.SelectionSet, obj *ArtifactRegenerateResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactRegenerateResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtifactRegenerateResult")
+		case "runId":
+			out.Values[i] = ec._ArtifactRegenerateResult_runId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._ArtifactRegenerateResult_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var beadImplementors = []string{"Bead", "Node"}
 
 func (ec *executionContext) _Bead(ctx context.Context, sel ast.SelectionSet, obj *Bead) graphql.Marshaler {
@@ -41330,6 +41521,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "personaFork":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_personaFork(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "artifactRegenerate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_artifactRegenerate(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -46413,6 +46611,20 @@ func (ec *executionContext) marshalNArtifactEdge2ᚖgithubᚗcomᚋDocumentDrive
 		return graphql.Null
 	}
 	return ec._ArtifactEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNArtifactRegenerateResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactRegenerateResult(ctx context.Context, sel ast.SelectionSet, v ArtifactRegenerateResult) graphql.Marshaler {
+	return ec._ArtifactRegenerateResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNArtifactRegenerateResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactRegenerateResult(ctx context.Context, sel ast.SelectionSet, v *ArtifactRegenerateResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ArtifactRegenerateResult(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNBead2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead(ctx context.Context, sel ast.SelectionSet, v Bead) graphql.Marshaler {

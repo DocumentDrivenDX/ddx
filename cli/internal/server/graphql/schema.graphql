@@ -1976,6 +1976,14 @@ type ArtifactConnection {
   totalCount: Int!
 }
 
+"""ArtifactRegenerateResult is the response from the artifactRegenerate mutation."""
+type ArtifactRegenerateResult {
+  """Run ID of the dispatched regeneration worker"""
+  runId: ID!
+  """Worker dispatch state (e.g. queued, running)"""
+  status: String!
+}
+
 # ============================================
 # Query Root
 # ============================================
@@ -2770,6 +2778,12 @@ type Mutation {
     """Project identifier to fork into"""
     projectId: String!
   ): Persona!
+
+  """Regenerate an artifact by dispatching a server-side worker using the artifact's recorded generator metadata. Returns a typed error if the artifact has no generator metadata."""
+  artifactRegenerate(
+    """Artifact ID to regenerate"""
+    artifactId: ID!
+  ): ArtifactRegenerateResult!
 }
 
 # ============================================
