@@ -289,8 +289,8 @@
 
 	function chipClass(active: boolean): string {
 		return active
-			? 'rounded-sm border px-3 py-1 text-xs font-medium border-accent-lever bg-accent-lever/10 text-accent-lever dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever'
-			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line bg-bg-elevated text-fg-ink hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface';
+			? 'rounded-sm border px-3 py-1 text-label-caps border-accent-lever bg-accent-lever/10 text-accent-lever dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever'
+			: 'rounded-sm border px-3 py-1 text-label-caps border-border-line bg-bg-elevated text-fg-ink hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface';
 	}
 
 	function priorityLabel(priority: number): string {
@@ -304,14 +304,14 @@
 
 <div class="min-h-full space-y-4 bg-bg-canvas dark:bg-dark-bg-canvas">
 	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">Beads</h1>
+		<h1 class="text-headline-lg text-fg-ink dark:text-dark-fg-ink">Beads</h1>
 		<div class="flex items-center gap-3">
-			<span class="text-sm text-fg-muted dark:text-dark-fg-muted">
+			<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{sortedEdges.length} of {totalCount}
 			</span>
 			<button
 				onclick={() => (showCreateForm = true)}
-				class="rounded-sm bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-lever/90"
+				class="rounded-sm bg-accent-lever px-3 py-1.5 text-body-sm text-white hover:bg-accent-lever/90"
 			>
 				New bead
 			</button>
@@ -324,13 +324,13 @@
 			type="search"
 			bind:value={searchInput}
 			placeholder="Search beads…"
-			class="w-full rounded-none border border-border-line bg-bg-elevated px-3 py-2 text-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:placeholder-dark-fg-muted dark:focus:border-dark-accent-lever"
+			class="w-full rounded-none border border-border-line bg-bg-elevated px-3 py-2 text-body-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:placeholder-dark-fg-muted dark:focus:border-dark-accent-lever"
 		/>
 	</div>
 
 	<!-- Status filter chips -->
 	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Status:</span>
+		<span class="self-center text-body-sm text-fg-muted dark:text-dark-fg-muted">Status:</span>
 		{#each STATUS_OPTIONS as status}
 			<button
 				type="button"
@@ -344,7 +344,7 @@
 		{#if data.activeStatus}
 			<button
 				type="button"
-				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-body-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 				onclick={() => setFilter('status', null)}
 			>
 				clear
@@ -354,7 +354,7 @@
 
 	<!-- Priority filter chips -->
 	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Priority:</span>
+		<span class="self-center text-body-sm text-fg-muted dark:text-dark-fg-muted">Priority:</span>
 		{#each PRIORITY_OPTIONS as priority}
 			<button
 				type="button"
@@ -368,7 +368,7 @@
 		{#if data.activePriority}
 			<button
 				type="button"
-				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-body-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 				onclick={() => setFilter('priority', null)}
 			>
 				clear
@@ -379,7 +379,7 @@
 	<!-- Label filter chips (only shown when labels exist in current result) -->
 	{#if allLabels.length > 0}
 		<div class="flex flex-wrap gap-2">
-			<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Labels:</span>
+			<span class="self-center text-body-sm text-fg-muted dark:text-dark-fg-muted">Labels:</span>
 			{#each allLabels as label}
 				<button
 					type="button"
@@ -393,7 +393,7 @@
 			{#if data.activeLabel}
 				<button
 					type="button"
-					class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+					class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-body-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 					onclick={() => setFilter('labels', null)}
 				>
 					clear
@@ -403,7 +403,7 @@
 	{/if}
 
 	<div class="overflow-hidden border border-border-line bg-bg-elevated dark:border-dark-border-line dark:bg-dark-bg-elevated">
-		<table class="w-full border-collapse text-sm">
+		<table class="w-full border-collapse text-body-sm">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
 					<th class="px-4 py-3 text-left font-medium text-fg-muted dark:text-dark-fg-muted">ID</th>
@@ -435,7 +435,7 @@
 							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 					>
-						<td class="px-4 py-3 font-mono text-xs text-lever">
+						<td class="px-4 py-3 font-mono-code text-mono-code text-lever">
 							{edge.node.id}
 						</td>
 						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
@@ -468,13 +468,13 @@
 								{liveStatusOverrides.get(edge.node.id) ?? edge.node.status}
 							</span>
 						</td>
-						<td class="px-4 py-3 text-right font-mono text-xs font-medium {priorityClass(edge.node.priority)}">
+						<td class="px-4 py-3 text-right font-mono-code text-mono-code {priorityClass(edge.node.priority)}">
 							{priorityLabel(edge.node.priority)}
 						</td>
 						<td class="px-4 py-3 text-fg-muted dark:text-dark-fg-muted">
 							{edge.node.owner ?? '—'}
 						</td>
-						<td class="px-4 py-3 text-xs text-fg-muted dark:text-dark-fg-muted">
+						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							{new Date(edge.node.updatedAt).toLocaleDateString()}
 						</td>
 					</tr>
@@ -487,7 +487,7 @@
 									<p>No beads match the current filters.</p>
 									<button
 										type="button"
-										class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1.5 text-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+										class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1.5 text-body-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 										onclick={clearFilters}
 									>
 										Clear filters
@@ -508,7 +508,7 @@
 			<button
 				onclick={loadMore}
 				disabled={loadingMore}
-				class="rounded-sm border border-border-line bg-bg-elevated px-4 py-2 text-sm text-fg-ink hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+				class="rounded-sm border border-border-line bg-bg-elevated px-4 py-2 text-body-sm text-fg-ink hover:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
 			>
 				{loadingMore ? 'Loading…' : 'Load more'}
 			</button>
@@ -537,7 +537,7 @@
 		<div
 			class="flex shrink-0 items-center justify-between border-b border-border-line px-6 py-4 dark:border-dark-border-line"
 		>
-			<h2 class="text-base font-semibold text-fg-ink dark:text-dark-fg-ink">New bead</h2>
+			<h2 class="text-headline-md text-fg-ink dark:text-dark-fg-ink">New bead</h2>
 		</div>
 		<div class="flex-1 overflow-auto p-6">
 			<BeadForm
