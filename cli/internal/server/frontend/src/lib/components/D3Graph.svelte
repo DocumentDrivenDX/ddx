@@ -28,13 +28,15 @@
 		links,
 		onNodeClick,
 		initialTransform = null,
-		onTransformChange
+		onTransformChange,
+		highlightNodeId = undefined
 	}: {
 		nodes: GraphNode[]
 		links: GraphLink[]
 		onNodeClick?: (node: GraphNode) => void
 		initialTransform?: ZoomTransform | null
 		onTransformChange?: (t: ZoomTransform) => void
+		highlightNodeId?: string
 	} = $props()
 
 	let svgEl = $state<SVGSVGElement | undefined>(undefined)
@@ -76,6 +78,7 @@
 		const currentNodes = nodes
 		const currentLinks = links
 		const capturedInitialTransform = initialTransform
+		const capturedHighlightId = highlightNodeId
 
 		type SimNode = GraphNode & d3.SimulationNodeDatum
 
@@ -177,7 +180,7 @@
 				.append('circle')
 				.attr('r', 18)
 				.attr('class', (d: SimNode) => nodeColorClass(d.staleness))
-				.attr('stroke-width', 2)
+				.attr('stroke-width', (d: SimNode) => (d.id === capturedHighlightId ? 4 : 2))
 
 			nodeGroup
 				.append('text')
@@ -254,22 +257,48 @@
 				nodeGroup.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
 			})
 
-			// Fit to bounds after simulation settles, only when no initialTransform
-			if (!capturedInitialTransform) {
+			// After simulation settles: pan to highlighted node or fit to bounds
+			if (!capturedInitialTransform || capturedHighlightId) {
 				const zoomRef = zoom
 				simulation.on('end', () => {
 					if (!zoomRef) return
-					const bounds = (g.node() as SVGGElement | null)?.getBBox()
-					if (!bounds || bounds.width === 0) return
-					const w = svgNode.clientWidth || width
-					const h = svgNode.clientHeight || height
-					const scale = Math.min(0.9, 0.9 / Math.max(bounds.width / w, bounds.height / h))
-					const tx = w / 2 - scale * (bounds.x + bounds.width / 2)
-					const ty = h / 2 - scale * (bounds.y + bounds.height / 2)
-					d3.select(svgNode)
-						.transition()
-						.duration(400)
-						.call(zoomRef.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
+					if (capturedHighlightId) {
+						const hn = freshSimNodes.find((n) => n.id === capturedHighlightId)
+						if (hn && hn.x != null && hn.y != null) {
+							const w = svgNode.clientWidth || width
+							const h = svgNode.clientHeight || height
+							const tx = w / 2 - hn.x
+							const ty = h / 2 - hn.y
+							d3.select(svgNode)
+								.transition()
+								.duration(600)
+								.call(zoomRef.transform, d3.zoomIdentity.translate(tx, ty).scale(1))
+						}
+						// Pulse animation on highlighted node
+						nodeGroup
+							.filter((d: SimNode) => d.id === capturedHighlightId)
+							.select('circle')
+							.each(function () {
+								d3.select(this)
+									.append('animate')
+									.attr('attributeName', 'r')
+									.attr('values', '18;28;18')
+									.attr('dur', '0.8s')
+									.attr('repeatCount', '6')
+							})
+					} else if (!capturedInitialTransform) {
+						const bounds = (g.node() as SVGGElement | null)?.getBBox()
+						if (!bounds || bounds.width === 0) return
+						const w = svgNode.clientWidth || width
+						const h = svgNode.clientHeight || height
+						const scale = Math.min(0.9, 0.9 / Math.max(bounds.width / w, bounds.height / h))
+						const tx = w / 2 - scale * (bounds.x + bounds.width / 2)
+						const ty = h / 2 - scale * (bounds.y + bounds.height / 2)
+						d3.select(svgNode)
+							.transition()
+							.duration(400)
+							.call(zoomRef.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
+					}
 				})
 			}
 		}

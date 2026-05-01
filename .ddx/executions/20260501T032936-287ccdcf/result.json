@@ -1,0 +1,58 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All six AC items are implemented: ResizeObserver-driven sizing, node click navigation (markdown vs artifact), URL-persisted viewport restored on Back, filter chips with edge filtering, staleness-based node colors, View document list link, and updated graph.spec.ts coverage.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Staleness is only ever 'fresh' or 'stale' — the data loader never assigns 'missing', so the red color path in nodeColorClass is unreachable in practice. D3Graph supports it, but +page.ts derives staleness solely from docStale presence.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/+page.ts"
+    },
+    {
+      "severity": "info",
+      "summary": "Non-markdown node click navigates to /artifacts/doc:\u003cid\u003e, which assumes the artifact ID convention 'doc:\u003cdocId\u003e'. If the artifacts route uses a different ID scheme this will 404; worth a quick verification.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/+page.svelte"
+    },
+    {
+      "severity": "info",
+      "summary": "Viewport persistence uses history.replaceState (not goto) on every zoom/pan-end, which keeps Back semantics correct but bypasses SvelteKit's navigation; acceptable here since no reactive data depends on zoom/pan params after initial load.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/+page.svelte"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2476,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-008",
+        "bytes_included": 69565,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 215,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 73935,
+    "output_bytes": 1574,
+    "elapsed_ms": 31382,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
