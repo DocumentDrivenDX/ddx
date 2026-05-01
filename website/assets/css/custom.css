@@ -21,7 +21,7 @@
   --ddx-accent-brass:   #9A6A2F;
 
   /* Background tokens. */
-  --ddx-bg-canvas:  #F7F1E7;
+  --ddx-bg-canvas:  #F4EFE6;
   --ddx-bg-surface: #FFFDF8;
 
   /* Foreground tokens. */
@@ -50,11 +50,18 @@ body.ddx-editorial-home {
   margin: 0;
   min-height: 100vh;
   background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.92), rgba(247, 241, 231, 0.98)),
+    linear-gradient(180deg, rgba(255, 253, 248, 0.92), rgba(244, 239, 230, 0.98)),
     var(--ddx-bg-canvas);
   color: var(--ddx-fg-ink);
   font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0;
+}
+
+body.ddx-editorial-home,
+body.ddx-editorial-home *,
+body.ddx-editorial-home *::before,
+body.ddx-editorial-home *::after {
+  border-radius: 0;
 }
 
 .ddx-home-nav {
