@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T164654-a9ef5c55",
+  "bead_id": "ddx-ea3a7e23",
+  "base_rev": "6105d705b62de8696c35427b87780bfe24322e8a",
+  "created_at": "2026-05-01T16:46:58.978001036Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ea3a7e23",
+    "title": "[visual-suite] V6 generate principle composite (pressure-test gate)",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. Author principle-composite prompt + generate via nano-banana-pro-openrouter. FIRST RENDER — pressure-test the lever/fulcrum/load metaphor. If it doesn't read, pause and revise. Budget tracking starts here: $10 total cap, $1.50/image halt trigger. HARD BLOCKED on artifact infrastructure: ddx-d5e71fb3 (FEAT-010 three-layer substrate), ddx-5d92b873 (FEAT-007 sidecar + generated_by edge), and ddx artifact regenerate CLI implementation. NO MANUAL FALLBACK — if those slip, V6 slips.",
+    "labels": [
+      "generate",
+      "plan-2026-04-29-vis",
+      "principles"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T16:46:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "566701",
+      "execute-loop-heartbeat-at": "2026-05-01T16:46:54.825273831Z",
+      "execution-eligible": true
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T164654-a9ef5c55",
+    "prompt": ".ddx/executions/20260501T164654-a9ef5c55/prompt.md",
+    "manifest": ".ddx/executions/20260501T164654-a9ef5c55/manifest.json",
+    "result": ".ddx/executions/20260501T164654-a9ef5c55/result.json",
+    "checks": ".ddx/executions/20260501T164654-a9ef5c55/checks.json",
+    "usage": ".ddx/executions/20260501T164654-a9ef5c55/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ea3a7e23-20260501T164654-a9ef5c55"
+  }
+}
