@@ -8,6 +8,8 @@
 		title: string
 		dependsOn: string[]
 		dependents: string[]
+		staleness?: string
+		mediaType?: string
 	}
 
 	interface GraphLink {
@@ -15,14 +17,24 @@
 		target: string
 	}
 
+	interface ZoomTransform {
+		x: number
+		y: number
+		k: number
+	}
+
 	let {
 		nodes,
 		links,
-		onNodeClick
+		onNodeClick,
+		initialTransform = null,
+		onTransformChange
 	}: {
 		nodes: GraphNode[]
 		links: GraphLink[]
 		onNodeClick?: (node: GraphNode) => void
+		initialTransform?: ZoomTransform | null
+		onTransformChange?: (t: ZoomTransform) => void
 	} = $props()
 
 	let svgEl = $state<SVGSVGElement | undefined>(undefined)
@@ -48,192 +60,238 @@
 		d3.select(svgEl).transition().duration(350).call(zoom.transform, d3.zoomIdentity)
 	}
 
+	function nodeColorClass(staleness?: string): string {
+		if (staleness === 'stale')
+			return 'fill-amber-400 stroke-amber-600 dark:fill-amber-500 dark:stroke-amber-400'
+		if (staleness === 'missing')
+			return 'fill-red-400 stroke-red-600 dark:fill-red-500 dark:stroke-red-400'
+		// fresh (default)
+		return 'fill-green-400 stroke-green-600 dark:fill-green-500 dark:stroke-green-400'
+	}
+
 	$effect(() => {
-		const el = svgEl
+		const el: SVGSVGElement | undefined = svgEl
 		if (!el) return
 
 		const currentNodes = nodes
 		const currentLinks = links
-
-		d3.select(el).selectAll('*').remove()
-
-		const width = el.clientWidth || 960
-		const height = el.clientHeight || 700
-
-		const svg = d3.select(el)
-
-		svg
-			.append('defs')
-			.append('marker')
-			.attr('id', 'ddx-arrow')
-			.attr('viewBox', '0 -5 10 10')
-			.attr('refX', 28)
-			.attr('refY', 0)
-			.attr('markerWidth', 6)
-			.attr('markerHeight', 6)
-			.attr('orient', 'auto')
-			.append('path')
-			.attr('d', 'M0,-5L10,0L0,5')
-			.attr('class', 'fill-border-line dark:fill-dark-border-line')
-
-		const g = svg.append('g')
-
-		zoom = d3
-			.zoom<SVGSVGElement, unknown>()
-			.scaleExtent([0.05, 10])
-			.on('zoom', (event) => {
-				g.attr('transform', event.transform.toString())
-			})
-
-		svg.call(zoom)
-
-		// Double-click to reset zoom
-		svg.on('dblclick.zoom', null)
+		const capturedInitialTransform = initialTransform
 
 		type SimNode = GraphNode & d3.SimulationNodeDatum
-		const simNodes: SimNode[] = currentNodes.map((n) => ({ ...n }))
-		const nodeById = new Map(simNodes.map((n) => [n.id, n]))
 
-		const simLinks = currentLinks
-			.filter((l) => nodeById.has(l.source) && nodeById.has(l.target))
-			.map((l) => ({ source: l.source, target: l.target }))
+		let simulation: d3.Simulation<SimNode, { source: string; target: string }> | null = null
+		let currentWidth = 0
+		let currentHeight = 0
 
-		const simulation = d3
-			.forceSimulation(simNodes)
-			.force(
-				'link',
-				d3
-					.forceLink<SimNode, (typeof simLinks)[0]>(simLinks)
-					.id((d) => d.id)
-					.distance(160)
-					.strength(0.4)
-			)
-			.force('charge', d3.forceManyBody().strength(-600))
-			.force('center', d3.forceCenter(width / 2, height / 2))
-			.force('collide', d3.forceCollide(48))
+		function rebuild(svgNode: SVGSVGElement, width: number, height: number) {
+			currentWidth = width
+			currentHeight = height
+			simulation?.stop()
 
-		const linkSel = g
-			.append('g')
-			.selectAll<SVGLineElement, (typeof simLinks)[0]>('line')
-			.data(simLinks)
-			.join('line')
-			.attr('class', 'stroke-border-line dark:stroke-dark-border-line')
-			.attr('stroke-width', 1.5)
-			.attr('stroke-opacity', 0.6)
-			.attr('marker-end', 'url(#ddx-arrow)')
+			const svgSel = d3.select(svgNode)
+			svgSel.selectAll('*').remove()
 
-		const nodeGroup = g
-			.append('g')
-			.selectAll<SVGGElement, SimNode>('g')
-			.data(simNodes)
-			.join('g')
-			.style('cursor', onNodeClick ? 'pointer' : 'grab')
+			svgSel
+				.append('defs')
+				.append('marker')
+				.attr('id', 'ddx-arrow')
+				.attr('viewBox', '0 -5 10 10')
+				.attr('refX', 28)
+				.attr('refY', 0)
+				.attr('markerWidth', 6)
+				.attr('markerHeight', 6)
+				.attr('orient', 'auto')
+				.append('path')
+				.attr('d', 'M0,-5L10,0L0,5')
+				.attr('class', 'fill-border-line dark:fill-dark-border-line')
 
-		nodeGroup
-			.append('circle')
-			.attr('r', 18)
-			.attr('class', (d: SimNode) => {
-				if (d.dependsOn.length === 0)
-					return 'fill-accent-load stroke-accent-fulcrum dark:fill-dark-accent-load dark:stroke-dark-accent-fulcrum'
-				return 'fill-accent-lever stroke-accent-fulcrum dark:fill-dark-accent-lever dark:stroke-dark-accent-fulcrum'
-			})
-			.attr('stroke-width', 2)
+			const g = svgSel.append('g')
 
-		nodeGroup
-			.append('text')
-			.attr('x', 24)
-			.attr('dy', '0.35em')
-			.attr('font-size', '12px')
-			.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted select-none')
-			.attr('pointer-events', 'none')
-			.text((d) => (d.title.length > 32 ? d.title.slice(0, 32) + '…' : d.title))
+			zoom = d3
+				.zoom<SVGSVGElement, unknown>()
+				.scaleExtent([0.05, 10])
+				.on('zoom', (event) => {
+					g.attr('transform', event.transform.toString())
+				})
+				.on('end', (event) => {
+					if (onTransformChange) {
+						onTransformChange({
+							x: event.transform.x,
+							y: event.transform.y,
+							k: event.transform.k
+						})
+					}
+				})
 
-		// Drag with distance tracking to distinguish click from drag
-		let dragDistance = 0
+			svgSel.call(zoom)
+			svgSel.on('dblclick.zoom', null)
 
-		const drag = d3
-			.drag<SVGGElement, SimNode>()
-			.on('start', (event, d) => {
-				dragDistance = 0
-				if (!event.active) simulation.alphaTarget(0.3).restart()
-				d.fx = d.x
-				d.fy = d.y
-			})
-			.on('drag', (event, d) => {
-				dragDistance += Math.abs(event.dx) + Math.abs(event.dy)
-				d.fx = event.x
-				d.fy = event.y
-			})
-			.on('end', (event, d) => {
-				if (!event.active) simulation.alphaTarget(0)
-				d.fx = null
-				d.fy = null
-			})
+			// Apply initialTransform immediately if provided
+			if (capturedInitialTransform) {
+				svgSel.call(
+					zoom.transform,
+					d3.zoomIdentity
+						.translate(capturedInitialTransform.x, capturedInitialTransform.y)
+						.scale(capturedInitialTransform.k)
+				)
+			}
 
-		nodeGroup.call(drag)
+			const freshSimNodes: SimNode[] = currentNodes.map((n) => ({ ...n }))
+			const freshNodeById = new Map(freshSimNodes.map((n) => [n.id, n]))
+			const freshSimLinks = currentLinks
+				.filter((l) => freshNodeById.has(l.source) && freshNodeById.has(l.target))
+				.map((l) => ({ source: l.source, target: l.target }))
 
-		// Click to navigate — only fire if the node wasn't dragged
-		if (onNodeClick) {
-			nodeGroup.on('click', (_event: MouseEvent, d: SimNode) => {
-				if (dragDistance > 4) return
-				onNodeClick(d)
-			})
+			simulation = d3
+				.forceSimulation(freshSimNodes)
+				.force(
+					'link',
+					d3
+						.forceLink<SimNode, (typeof freshSimLinks)[0]>(freshSimLinks)
+						.id((d) => d.id)
+						.distance(160)
+						.strength(0.4)
+				)
+				.force('charge', d3.forceManyBody().strength(-600))
+				.force('center', d3.forceCenter(width / 2, height / 2))
+				.force('collide', d3.forceCollide(48))
+
+			const linkSel = g
+				.append('g')
+				.selectAll<SVGLineElement, (typeof freshSimLinks)[0]>('line')
+				.data(freshSimLinks)
+				.join('line')
+				.attr('class', 'stroke-border-line dark:stroke-dark-border-line')
+				.attr('stroke-width', 1.5)
+				.attr('stroke-opacity', 0.6)
+				.attr('marker-end', 'url(#ddx-arrow)')
+
+			const nodeGroup = g
+				.append('g')
+				.selectAll<SVGGElement, SimNode>('g')
+				.data(freshSimNodes)
+				.join('g')
+				.style('cursor', onNodeClick ? 'pointer' : 'grab')
 
 			nodeGroup
-				.on('mouseenter', function () {
-					d3.select(this).select('circle').attr('stroke-width', 3).attr('r', 20)
+				.append('circle')
+				.attr('r', 18)
+				.attr('class', (d: SimNode) => nodeColorClass(d.staleness))
+				.attr('stroke-width', 2)
+
+			nodeGroup
+				.append('text')
+				.attr('x', 24)
+				.attr('dy', '0.35em')
+				.attr('font-size', '12px')
+				.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted select-none')
+				.attr('pointer-events', 'none')
+				.text((d) => (d.title.length > 32 ? d.title.slice(0, 32) + '…' : d.title))
+
+			// Drag with distance tracking to distinguish click from drag
+			let dragDistance = 0
+
+			const drag = d3
+				.drag<SVGGElement, SimNode>()
+				.on('start', (event, d) => {
+					dragDistance = 0
+					if (!event.active) simulation!.alphaTarget(0.3).restart()
+					d.fx = d.x
+					d.fy = d.y
 				})
-				.on('mouseleave', function () {
-					d3.select(this).select('circle').attr('stroke-width', 2).attr('r', 18)
+				.on('drag', (event, d) => {
+					dragDistance += Math.abs(event.dx) + Math.abs(event.dy)
+					d.fx = event.x
+					d.fy = event.y
+				})
+				.on('end', (event, d) => {
+					if (!event.active) simulation!.alphaTarget(0)
+					d.fx = null
+					d.fy = null
+				})
+
+			nodeGroup.call(drag)
+
+			if (onNodeClick) {
+				nodeGroup.on('click', (_event: MouseEvent, d: SimNode) => {
+					if (dragDistance > 4) return
+					onNodeClick(d)
+				})
+
+				nodeGroup
+					.on('mouseenter', function () {
+						d3.select(this).select('circle').attr('stroke-width', 3).attr('r', 20)
+					})
+					.on('mouseleave', function () {
+						d3.select(this).select('circle').attr('stroke-width', 2).attr('r', 18)
+						tooltipNode = null
+					})
+			}
+
+			nodeGroup
+				.on('mouseenter.tooltip', (event: MouseEvent, d) => {
+					const rect = svgNode.getBoundingClientRect()
+					tooltipNode = d
+					tooltipX = event.clientX - rect.left + 16
+					tooltipY = event.clientY - rect.top - 12
+				})
+				.on('mousemove.tooltip', (event: MouseEvent) => {
+					const rect = svgNode.getBoundingClientRect()
+					tooltipX = event.clientX - rect.left + 16
+					tooltipY = event.clientY - rect.top - 12
+				})
+				.on('mouseleave.tooltip', () => {
 					tooltipNode = null
 				})
+
+			simulation.on('tick', () => {
+				linkSel
+					.attr('x1', (d: any) => d.source.x ?? 0)
+					.attr('y1', (d: any) => d.source.y ?? 0)
+					.attr('x2', (d: any) => d.target.x ?? 0)
+					.attr('y2', (d: any) => d.target.y ?? 0)
+
+				nodeGroup.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
+			})
+
+			// Fit to bounds after simulation settles, only when no initialTransform
+			if (!capturedInitialTransform) {
+				const zoomRef = zoom
+				simulation.on('end', () => {
+					if (!zoomRef) return
+					const bounds = (g.node() as SVGGElement | null)?.getBBox()
+					if (!bounds || bounds.width === 0) return
+					const w = svgNode.clientWidth || width
+					const h = svgNode.clientHeight || height
+					const scale = Math.min(0.9, 0.9 / Math.max(bounds.width / w, bounds.height / h))
+					const tx = w / 2 - scale * (bounds.x + bounds.width / 2)
+					const ty = h / 2 - scale * (bounds.y + bounds.height / 2)
+					d3.select(svgNode)
+						.transition()
+						.duration(400)
+						.call(zoomRef.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
+				})
+			}
 		}
 
-		// Tooltip on hover
-		nodeGroup
-			.on('mouseenter.tooltip', (event: MouseEvent, d) => {
-				const rect = el.getBoundingClientRect()
-				tooltipNode = d
-				tooltipX = event.clientX - rect.left + 16
-				tooltipY = event.clientY - rect.top - 12
-			})
-			.on('mousemove.tooltip', (event: MouseEvent) => {
-				const rect = el.getBoundingClientRect()
-				tooltipX = event.clientX - rect.left + 16
-				tooltipY = event.clientY - rect.top - 12
-			})
-			.on('mouseleave.tooltip', () => {
-				tooltipNode = null
-			})
-
-		simulation.on('tick', () => {
-			linkSel
-				.attr('x1', (d: any) => d.source.x ?? 0)
-				.attr('y1', (d: any) => d.source.y ?? 0)
-				.attr('x2', (d: any) => d.target.x ?? 0)
-				.attr('y2', (d: any) => d.target.y ?? 0)
-
-			nodeGroup.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
+		const obs = new ResizeObserver((entries) => {
+			const { width, height } = entries[0].contentRect
+			if (width === 0 || height === 0) return
+			if (Math.abs(width - currentWidth) > 1 || Math.abs(height - currentHeight) > 1) {
+				rebuild(el, width, height)
+			}
 		})
 
-		// Fit to bounds after simulation settles
-		simulation.on('end', () => {
-			if (!el || !zoom) return
-			const bounds = (g.node() as SVGGElement | null)?.getBBox()
-			if (!bounds || bounds.width === 0) return
-			const w = el.clientWidth || width
-			const h = el.clientHeight || height
-			const scale = Math.min(0.9, 0.9 / Math.max(bounds.width / w, bounds.height / h))
-			const tx = w / 2 - scale * (bounds.x + bounds.width / 2)
-			const ty = h / 2 - scale * (bounds.y + bounds.height / 2)
-			d3.select(el)
-				.transition()
-				.duration(400)
-				.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
-		})
+		obs.observe(el)
+
+		// Trigger immediately if element is already sized
+		if (el.clientWidth > 0 && el.clientHeight > 0) {
+			rebuild(el, el.clientWidth, el.clientHeight)
+		}
 
 		return () => {
-			simulation.stop()
+			obs.disconnect()
+			simulation?.stop()
 			tooltipNode = null
 			zoom = null
 		}

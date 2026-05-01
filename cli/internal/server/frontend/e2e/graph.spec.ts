@@ -56,10 +56,15 @@ function makeGraphResponse(
 	warnings: string[] = [],
 	issues: GraphIssueFixture[] = []
 ) {
+	const pathToId: Record<string, string> = {};
+	for (const doc of docs) {
+		pathToId[doc.path] = doc.id;
+	}
 	return {
 		docGraph: {
 			rootDir: '/repos/alpha',
 			documents: docs,
+			pathToId: JSON.stringify(pathToId),
 			warnings,
 			issues
 		}
@@ -73,7 +78,8 @@ async function mockGraphQL(
 	page: import('@playwright/test').Page,
 	docs = GRAPH_DOCS,
 	warnings: string[] = [],
-	issues: GraphIssueFixture[] = []
+	issues: GraphIssueFixture[] = [],
+	staleDocIds: string[] = []
 ) {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
@@ -97,6 +103,12 @@ async function mockGraphQL(
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({ data: makeGraphResponse(docs, warnings, issues) })
+			});
+		} else if (body.query.includes('DocStale')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { docStale: staleDocIds.map((id) => ({ id })) } })
 			});
 		} else {
 			await route.continue();
@@ -406,6 +418,69 @@ test('TC-038: clean graph hides the integrity badge and panel', async ({ page })
 		await page.unroute('/graphql');
 		await stopRealDdxServer(server);
 	}
+});
+
+// TC-039: Clicking a graph node navigates to the document page
+test('TC-039: clicking a graph node navigates to document detail page', async ({ page }) => {
+	await mockGraphQL(page);
+	await page.goto(BASE_URL);
+
+	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
+
+	// Wait for force simulation and auto-fit to settle
+	await page.waitForTimeout(800);
+
+	// Click the first circle node in the SVG
+	await page.locator('[data-testid="doc-graph-svg"] circle').first().click();
+
+	// Navigation should go to the document page (SPA navigation, no full reload)
+	await expect(page).toHaveURL(/\/documents\//);
+});
+
+// TC-040: Back navigation restores graph viewport
+test('TC-040: Back navigation restores graph viewport from URL params', async ({ page }) => {
+	await mockGraphQL(page);
+
+	// Navigate to graph with preset viewport params
+	await page.goto(`${BASE_URL}?zoom=2.000&pan=100.0,50.0`);
+
+	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
+	await page.waitForTimeout(500);
+
+	// Click a node to navigate to the document page
+	await page.locator('[data-testid="doc-graph-svg"] circle').first().click();
+	await expect(page).toHaveURL(/\/documents\//);
+
+	// Navigate back
+	await page.goBack();
+
+	// Verify viewport params are preserved in the URL
+	await expect(page).toHaveURL(/zoom=2\.000/);
+	await expect(page).toHaveURL(/pan=100\.0%2C50\.0|pan=100\.0,50\.0/);
+});
+
+// TC-041: Staleness filter chips update visible node count
+test('TC-041: staleness filter chips update visible node count', async ({ page }) => {
+	// Mark doc-001 as stale; doc-002 and doc-003 are fresh
+	await mockGraphQL(page, GRAPH_DOCS, [], [], ['doc-001']);
+	await page.goto(BASE_URL);
+
+	await expect(page.getByRole('heading', { name: 'Document Graph' })).toBeVisible();
+
+	// All 3 nodes visible initially
+	await expect(page.getByText(/3 nodes/)).toBeVisible();
+
+	// Click "Stale" filter chip — only stale nodes (1) should be visible
+	await page.getByTestId('filter-staleness-stale').click();
+	await expect(page.getByText(/1 nodes/)).toBeVisible();
+
+	// Click "Fresh" filter chip as well — adds fresh nodes back (1 stale + 2 fresh = 3 would show
+	// if both active, but only stale is active here... click to toggle fresh instead)
+	// Remove stale filter
+	await page.getByTestId('filter-staleness-stale').click();
+
+	// Back to all 3 nodes
+	await expect(page.getByText(/3 nodes/)).toBeVisible();
 });
 
 // TC-036: Graph page re-fetches DocGraph query on navigation (interaction with query)

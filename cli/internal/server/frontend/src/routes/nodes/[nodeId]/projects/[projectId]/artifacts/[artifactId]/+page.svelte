@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types'
-	import { ArrowLeft, Download, ExternalLink } from 'lucide-svelte'
+	import { ArrowLeft, Download, ExternalLink, Network } from 'lucide-svelte'
 	import { marked } from 'marked'
 	import DOMPurify from 'isomorphic-dompurify'
 	import { onMount } from 'svelte'
@@ -105,13 +105,24 @@
 </script>
 
 <div class="space-y-4">
-	<a
-		href={listHref}
-		class="inline-flex items-center gap-1 text-body-sm text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
-	>
-		<ArrowLeft class="h-4 w-4" />
-		Back to Artifacts
-	</a>
+	<div class="flex items-center justify-between">
+		<a
+			href={listHref}
+			class="inline-flex items-center gap-1 text-body-sm text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+		>
+			<ArrowLeft class="h-4 w-4" />
+			Back to Artifacts
+		</a>
+		{#if data.artifact?.mediaType === 'text/markdown'}
+			<a
+				href={`/nodes/${data.nodeId}/projects/${data.projectId}/graph`}
+				class="inline-flex items-center gap-1 text-body-sm text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+			>
+				<Network class="h-4 w-4" />
+				View in Graph
+			</a>
+		{/if}
+	</div>
 
 	{#if data.artifact}
 		{@const badge = stalenessBadge(data.artifact.staleness)}
