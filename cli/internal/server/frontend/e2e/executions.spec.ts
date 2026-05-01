@@ -358,3 +358,49 @@ test('executions list and detail flow', async ({ page }) => {
 	await expect(page.getByTestId('bead-executions')).toContainText(passExec.id);
 	await expect(page.getByTestId('bead-executions')).toContainText(blockExec.id);
 });
+
+test('execution detail renders cost tier information', async ({ page }) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('ExecutionDetail')) {
+			const id = body.variables?.['id'] as string;
+			const exec = [passExec2, blockExec, passExec].find((e) => e.id === id) ?? null;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { execution: exec } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/executions/${blockExec.id}`);
+
+	// Heading confirms we landed on detail view.
+	await expect(page.getByRole('heading', { name: blockExec.id })).toBeVisible();
+
+	// Cost-tier signal: the Cost quick-fact cell renders the formatted USD
+	// amount derived from the execution's costUsd field. blockExec.costUsd is
+	// 0.04, which fmtCost formats as "$0.0400".
+	const costLabel = page.getByText('Cost', { exact: true });
+	await expect(costLabel).toBeVisible();
+	const costCell = costLabel.locator('..');
+	await expect(costCell).toContainText('$0.0400');
+});
