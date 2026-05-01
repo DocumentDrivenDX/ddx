@@ -1,0 +1,1 @@
+import{t as e}from"../chunks/D-_T_ixn.js";import{n as t}from"../chunks/M2wJvVQH.js";import{t as n}from"../chunks/BNVqKcdA.js";var r=e({load:()=>i}),i=async({fetch:e})=>{throw t(307,await n(`documents`,e))};export{r as universal};
