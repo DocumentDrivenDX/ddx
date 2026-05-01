@@ -69,7 +69,10 @@
 		const crumbs: Array<{ label: string; href: string }> = [
 			{ label: 'Runs', href: runsListHref() }
 		]
-		if (run.parentRunId) {
+		if (run.layer === 'run' && data.grandparentRunId && run.parentRunId) {
+			crumbs.push({ label: data.grandparentRunId, href: parentRunHref(data.grandparentRunId) })
+			crumbs.push({ label: run.parentRunId, href: parentRunHref(run.parentRunId) })
+		} else if (run.parentRunId) {
 			crumbs.push({ label: run.parentRunId, href: parentRunHref(run.parentRunId) })
 		}
 		crumbs.push({ label: run.id, href: '#' })

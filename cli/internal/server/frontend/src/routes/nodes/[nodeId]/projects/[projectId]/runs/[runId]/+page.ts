@@ -76,16 +76,34 @@ export interface RunDetail {
 	evidenceLinks: string[] | null
 }
 
+const PARENT_RUN_QUERY = gql`
+	query ParentRunParent($id: ID!) {
+		run(id: $id) {
+			parentRunId
+		}
+	}
+`
+
 export const load: PageLoad = async ({ params, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 	const data = await client.request<{ run: RunDetail | null }>(RUN_DETAIL_QUERY, {
 		id: params.runId
 	})
 
+	let grandparentRunId: string | null = null
+	if (data.run?.layer === 'run' && data.run.parentRunId) {
+		const parentData = await client.request<{ run: { parentRunId: string | null } | null }>(
+			PARENT_RUN_QUERY,
+			{ id: data.run.parentRunId }
+		)
+		grandparentRunId = parentData.run?.parentRunId ?? null
+	}
+
 	return {
 		nodeId: params.nodeId,
 		projectId: params.projectId,
 		runId: params.runId,
-		run: data.run
+		run: data.run,
+		grandparentRunId
 	}
 }
