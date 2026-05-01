@@ -3,99 +3,97 @@ title: Features
 description: "DDx platform capabilities — stable, beta, and planned."
 ---
 
-DDx provides a focused set of platform primitives for AI-assisted development. Each capability is listed with its current maturity level.
+DDx is a focused set of platform primitives for AI-assisted development. Each capability below carries a maturity badge so you can tell what is solid today from what is still in motion.
 
-## Core Platform
+## Artifact Graph {#artifact-graph} {{< maturity "beta" >}}
 
-### Bead Tracker {{< maturity "stable" >}}
+![Artifact graph view](/ui/feature-artifact-graph.png "Artifact graph — placeholder")
 
-Beads are the atomic unit of work in DDx. Each bead carries a title, description, acceptance criteria, dependency graph, and full state history. The `ddx bead` subcommands cover the complete CRUD lifecycle.
+Documents are not the only thing a project ships. Diagrams, screenshots, schema files, fixtures, generated assets — all of them carry meaning, and all of them drift. DDx treats every artifact as a first-class node in a single graph: markdown documents directly, and non-markdown files (graphics, diagrams, binaries) through a `.ddx.yaml` sidecar that records kind, provenance, and links.
+
+The graph exists to answer two questions:
+
+- **Drift visibility** — which artifacts have moved out from under the documents that reference them, and which references now point at stale or missing targets?
+- **Impact analysis** — if you change this spec, which features, beads, diagrams, and downstream artifacts are implicated?
+
+```
+ddx doc graph         # show the artifact graph
+ddx doc audit         # surface drift and broken references
+```
+
+This is the spine the rest of the platform hangs from. Beads reference artifacts; executions produce artifacts; reviews assess artifacts. Keeping the graph honest keeps everything else honest.
+
+## Beads & DAG {#beads-dag} {{< maturity "stable" >}}
+
+![Bead list with dependency tree](/ui/feature-beads-dag.png "Beads and dependency DAG — placeholder")
+
+Beads are the atomic unit of work. Each one carries a title, description, acceptance criteria, labels, state history, and a typed dependency edge to other beads. The dependency graph is a DAG, not a list: `ddx bead ready` returns only beads whose prerequisites are closed, so the queue is always a correct-by-construction work front.
 
 ```
 ddx bead create "Add login endpoint" --ac "returns 200 on valid credentials"
-ddx bead list --status ready
-ddx bead close <id>
+ddx bead dep add <child> --on <parent>
+ddx bead ready
+ddx bead tree <id>
 ```
 
-### Agent Dispatch {{< maturity "stable" >}}
+## Execute-Loop (`ddx work`) {#execute-loop} {{< maturity "stable" >}}
 
-Invoke AI agents through a single interface. DDx selects the configured harness, passes the prompt and context, and records token usage and cost per run.
+![Execute-loop draining the queue](/ui/feature-execute-loop.png "ddx work draining the queue — placeholder")
 
-```
-ddx agent run --harness claude --prompt prompts/implement.md
-ddx agent execute-bead <id>
-```
-
-### Execution Engine {{< maturity "stable" >}}
-
-Each bead executes in an isolated git worktree. Evidence is captured after every run. Passing beads are merged back; timed-out or failing runs are preserved for inspection.
+`ddx work` drains the bead queue. It picks the next ready bead, runs the configured agent harness inside an isolated git worktree, captures evidence, and merges the result back when acceptance criteria pass. Failing or timed-out runs are preserved as refs for inspection rather than discarded.
 
 ```
-ddx agent execute-loop          # drain the queue
+ddx work                              # drain the queue
 ddx agent execute-bead <id> --from HEAD
 ```
 
-### Plugin System {{< maturity "stable" >}}
+Because each iteration runs in its own worktree, parallel runs are safe and a failed run never poisons the main branch.
 
-Plugins package additional resources — templates, prompts, patterns, personas, workflows. One command installs a plugin under the project root — no global state, no machine-wide side effects.
+## Evidence Capture {#evidence-capture} {{< maturity "stable" >}}
 
-```
-ddx install <plugin-name>       # install a plugin
-ddx install ddx                 # update DDx default resources
-```
+![Execution evidence bundle](/ui/feature-evidence-capture.png "Evidence capture bundle — placeholder")
 
-### Document Library {{< maturity "stable" >}}
-
-Prompts, patterns, templates, and personas live in versioned library directories. The library ships with DDx and is extended by plugins.
+Every execution writes a bundle under `.ddx/executions/<timestamp>-<hash>/` with the prompt, the agent transcript, token and cost telemetry, the diff produced, and the merge outcome. Evidence stays in the repository, attached to the commit, so future reviewers (human or model) can reconstruct what happened without rerunning the agent.
 
 ```
-ddx prompts list
-ddx templates apply scaffold
-ddx persona list
+ddx agent log
+ls .ddx/executions/
 ```
 
-### Artifact Graph {{< maturity "stable" >}}
+## Multi-Model Review {#multi-model-review} {{< maturity "beta" >}}
 
-DDx tracks the relationships between project artifacts — both markdown documents and non-markdown files. Each non-markdown artifact carries a `.ddx.yaml` sidecar that records its kind, provenance, and links to other artifacts, so the graph stays consistent across formats.
+![Multi-model review consensus](/ui/feature-multi-model-review.png "Multi-model review — placeholder")
 
-```
-ddx doc graph
-ddx doc audit
-```
-
-### Git Sync {{< maturity "stable" >}}
-
-DDx resources are versioned via git subtree. `ddx update` pulls the latest library from the master repository; `ddx contribute` pushes improvements back.
+A single model is a single point of view. DDx can dispatch the same prompt — a plan, a diff, a spec — to multiple harnesses (Claude, Codex, Gemini, local models) and aggregate their findings. Quorum modes let you require majority or unanimous agreement before a result is treated as approved.
 
 ```
-ddx update
-ddx contribute
+ddx agent run --quorum=majority --harnesses=claude,codex,gemini --prompt review.md
 ```
 
-## Extended Capabilities
+The pattern works for plan review before implementation, diff review before merge, and spec sanity-checks before breakdown into beads.
 
-### MCP Server {{< maturity "beta" >}}
+## Skills {#skills} {{< maturity "beta" >}}
 
-DDx can expose beads, documents, and execution history over the Model Context Protocol (MCP) and HTTP. Remote supervisors — including Claude Desktop and compatible clients — can query work state and steer execution.
+![Skill listing](/ui/feature-skills.png "Skills — placeholder")
+
+Skills are reusable, agent-invocable capabilities packaged alongside the project. They install under `.agents/skills/` and `.claude/skills/` and become available to any harness that supports skill discovery. Plugins ship skills the way they ship templates and prompts — versioned, project-local, no global state.
 
 ```
-ddx server start
+ddx install <plugin-name>     # plugins can carry skills
+ls .claude/skills/
 ```
 
-### Web UI {{< maturity "beta" >}}
+## Agent-Agnostic Dispatch {#agent-agnostic-dispatch} {{< maturity "stable" >}}
 
-A browser interface for the bead tracker and document library. Built with SvelteKit and embedded in the `ddx-server` binary. Useful for reviewing bead state, execution history, and document relationships without leaving the browser.
+![Agent harness selection](/ui/feature-agent-dispatch.png "Agent-agnostic dispatch — placeholder")
 
-### Cost-Tiered Routing {{< maturity "beta" >}}
+DDx talks to agents through a uniform harness interface. Swap Claude for Codex for a local model by changing configuration, not commands. The same `ddx agent run` invocation works across providers; cost, tokens, and latency are recorded the same way regardless of which harness answered.
 
-Configure multiple model endpoints with tier labels. DDx routes beads to the cheapest model that meets the complexity threshold, escalating on failure. Optimize closed-work-per-dollar across Claude, Codex, Gemini, and local models.
+```
+ddx agent list                # show available harnesses
+ddx agent run --harness claude --prompt prompts/implement.md
+ddx agent run --harness codex --prompt prompts/implement.md
+ddx agent doctor              # harness health check
+```
 
-## Planned
-
-### Remote Execution {{< maturity "planned" >}}
-
-Run beads on remote compute — a cloud VM, a CI runner, or a dedicated agent host — without changing the local workflow. The bead queue and merge result flow stay identical.
-
-### Team Sync {{< maturity "planned" >}}
-
-Shared bead queues across a team. Agents on multiple machines claim, execute, and close beads from the same queue without coordination overhead.
+This is what makes cost-tiered routing and multi-model review possible: the rest of the platform never has to care which model is on the other end of the wire.
