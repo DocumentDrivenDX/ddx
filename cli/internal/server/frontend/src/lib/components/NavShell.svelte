@@ -122,19 +122,19 @@
 					<a
 						{href}
 						aria-current={active ? 'page' : undefined}
-						class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+						class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-body-md text-body-sm {active
 							? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
 							: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 					>
-						<Icon class="h-4 w-4 shrink-0" />
+						<Icon class="h-[18px] w-[18px] shrink-0" />
 						{label}
 					</a>
 				{:else}
 					<span
-						class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
+						class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-body-md text-body-sm text-fg-muted/50 dark:text-dark-fg-muted/50"
 						title="/(no project)"
 					>
-						<Icon class="h-4 w-4 shrink-0" />
+						<Icon class="h-[18px] w-[18px] shrink-0" />
 						{label}
 					</span>
 				{/if}
@@ -145,7 +145,7 @@
 				<a
 					href={allBeadsHref}
 					aria-current={active ? 'page' : undefined}
-					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-body-md text-body-sm {active
 						? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
 						: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 				>
@@ -154,7 +154,7 @@
 				</a>
 			{:else}
 				<span
-					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
+					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-body-md text-body-sm text-fg-muted/50 dark:text-dark-fg-muted/50"
 				>
 					<Layers class="h-4 w-4 shrink-0" />
 					All Beads
@@ -165,7 +165,7 @@
 				<a
 					href={allRunsHref}
 					aria-current={active ? 'page' : undefined}
-					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-body-md text-body-sm {active
 						? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
 						: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 				>
@@ -174,7 +174,7 @@
 				</a>
 			{:else}
 				<span
-					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
+					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-body-md text-body-sm text-fg-muted/50 dark:text-dark-fg-muted/50"
 				>
 					<Activity class="h-4 w-4 shrink-0" />
 					All Runs
@@ -185,7 +185,7 @@
 				<a
 					href={providersHref}
 					aria-current={active ? 'page' : undefined}
-					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-label-caps text-label-caps uppercase {active
+					class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-body-md text-body-sm {active
 						? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
 						: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 				>
@@ -194,7 +194,7 @@
 				</a>
 			{:else}
 				<span
-					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-label-caps text-label-caps uppercase text-fg-muted/50 dark:text-dark-fg-muted/50"
+					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-body-md text-body-sm text-fg-muted/50 dark:text-dark-fg-muted/50"
 				>
 					<Radio class="h-4 w-4 shrink-0" />
 					Providers
