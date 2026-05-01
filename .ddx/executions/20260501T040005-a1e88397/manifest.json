@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260501T040005-a1e88397",
+  "bead_id": "ddx-d1c4e27a",
+  "base_rev": "8c8e7521b0a061082ffa9ef6b9d6ef62fce44251",
+  "created_at": "2026-05-01T04:00:06.614469613Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d1c4e27a",
+    "title": "e2e: sessions.spec.ts — add per-run evidence artifact detail test",
+    "acceptance": "sessions.spec.ts has test that: navigates to a run/session, verifies evidence artifact detail view is accessible; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "sessions"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T04:00:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T03:59:34.592581096Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T035638-4d58aec7\",\"harness\":\"claude\",\"input_tokens\":34,\"output_tokens\":9241,\"total_tokens\":9275,\"cost_usd\":1.72178325,\"duration_ms\":175020,\"exit_code\":0}",
+          "created_at": "2026-05-01T03:59:34.696752334Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=9275 cost_usd=1.7218"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T03:59:39.440043189Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json artifact; no sessions.spec.ts test was added or modified. Acceptance criteria require a Playwright e2e test for evidence artifact detail view, which is absent from the changed files.\nharness=claude\nmodel=opus\ninput_bytes=3279\noutput_bytes=774\nelapsed_ms=10845",
+          "created_at": "2026-05-01T03:59:51.800427456Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T03:59:51.911841728Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no sessions.spec.ts test was added or modified. Acceptance criteria require a Playwright e2e test for evidence artifact detail view, which is absent from the changed files.\nresult_rev=d1b1144b20b96cadefc4b43673e5b1dca6b8c724\nbase_rev=3894a324c4243f202f4aeeffd35fca0763dfe3e1",
+          "created_at": "2026-05-01T03:59:52.014336342Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T04:00:05.606776957Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T040005-a1e88397",
+    "prompt": ".ddx/executions/20260501T040005-a1e88397/prompt.md",
+    "manifest": ".ddx/executions/20260501T040005-a1e88397/manifest.json",
+    "result": ".ddx/executions/20260501T040005-a1e88397/result.json",
+    "checks": ".ddx/executions/20260501T040005-a1e88397/checks.json",
+    "usage": ".ddx/executions/20260501T040005-a1e88397/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d1c4e27a-20260501T040005-a1e88397"
+  }
+}
