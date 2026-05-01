@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260501T075114-00d7aee2",
+  "bead_id": "ddx-91a4e480",
+  "base_rev": "64dd11e0213076000ec3901b1119f8f4405a05e7",
+  "created_at": "2026-05-01T07:51:15.275719487Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-91a4e480",
+    "title": "docs: extend product-vision.md Physics #4 with context rot and the ralph loop",
+    "acceptance": "Principle 4 in product-vision.md includes the sentence: 'Quality degrades as the context window fills.' Nothing else added.",
+    "parent": "ddx-dcee9b0c",
+    "labels": [
+      "area:docs",
+      "bounded-context"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T07:51:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T07:51:14.121668619Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T075114-00d7aee2",
+    "prompt": ".ddx/executions/20260501T075114-00d7aee2/prompt.md",
+    "manifest": ".ddx/executions/20260501T075114-00d7aee2/manifest.json",
+    "result": ".ddx/executions/20260501T075114-00d7aee2/result.json",
+    "checks": ".ddx/executions/20260501T075114-00d7aee2/checks.json",
+    "usage": ".ddx/executions/20260501T075114-00d7aee2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-91a4e480-20260501T075114-00d7aee2"
+  }
+}
