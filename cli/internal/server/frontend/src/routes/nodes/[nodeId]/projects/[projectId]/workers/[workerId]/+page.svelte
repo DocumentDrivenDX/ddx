@@ -311,28 +311,28 @@
 
 		<!-- Metadata grid -->
 		<div
-			class="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 border-b border-border-line px-6 py-4 text-body-sm dark:border-dark-border-line"
+			class="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 border-b border-border-line px-6 py-4 dark:border-dark-border-line"
 		>
 			<div>
 				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">State</div>
-				<div class="mt-0.5 font-medium text-fg-ink dark:text-dark-fg-ink">{data.worker.state}</div>
+				<div class="mt-0.5 text-body-md font-medium text-fg-ink dark:text-dark-fg-ink">{data.worker.state}</div>
 			</div>
 			{#if data.worker.harness}
 				<div>
 					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</div>
-					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">{data.worker.harness}</div>
+					<div class="mt-0.5 text-body-md text-fg-ink dark:text-dark-fg-ink">{data.worker.harness}</div>
 				</div>
 			{/if}
 			{#if data.worker.model}
 				<div>
 					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Model</div>
-					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">{data.worker.model}</div>
+					<div class="mt-0.5 text-body-md text-fg-ink dark:text-dark-fg-ink">{data.worker.model}</div>
 				</div>
 			{/if}
 			{#if data.worker.effort}
 				<div>
 					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Effort</div>
-					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">{data.worker.effort}</div>
+					<div class="mt-0.5 text-body-md text-fg-ink dark:text-dark-fg-ink">{data.worker.effort}</div>
 				</div>
 			{/if}
 			{#if data.worker.currentBead}
@@ -346,9 +346,9 @@
 			{#if data.worker.attempts != null}
 				<div>
 					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Attempts</div>
-					<div class="mt-0.5 text-fg-ink dark:text-dark-fg-ink">
+					<div class="mt-0.5 text-body-md text-fg-ink dark:text-dark-fg-ink">
 						{data.worker.attempts}
-						<span class="text-mono-code text-fg-muted dark:text-dark-fg-muted">
+						<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							({data.worker.successes ?? 0}✓ / {data.worker.failures ?? 0}✗)
 						</span>
 					</div>
@@ -358,10 +358,10 @@
 				<div>
 					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Phase</div>
 					<div class="mt-0.5">
-						<span class="font-medium text-status-in-progress">
+						<span class="text-body-md font-medium text-status-in-progress">
 							{data.worker.currentAttempt.phase}
 						</span>
-						<span class="ml-1 text-mono-code text-fg-muted dark:text-dark-fg-muted">
+						<span class="ml-1 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
 							({formatElapsed(data.worker.currentAttempt.elapsedMs)})
 						</span>
 					</div>
@@ -370,12 +370,12 @@
 			{#if data.worker.lastError}
 				<div class="col-span-2">
 					<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Last error</div>
-					<div class="mt-0.5 text-status-failed">{data.worker.lastError}</div>
+					<div class="mt-0.5 text-body-md text-status-failed">{data.worker.lastError}</div>
 				</div>
 			{/if}
 		</div>
 
-		<section class="shrink-0 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line">
+		<section class="shrink-0 border-b border-border-line px-6 py-4 dark:border-dark-border-line">
 			<div class="mb-3 flex items-center justify-between gap-3">
 				<h3 class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Sessions</h3>
 				<a class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever" href={sessionsHref()}>
@@ -421,14 +421,14 @@
 			{/if}
 		</section>
 
-		<section class="shrink-0 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line">
+		<section class="shrink-0 border-b border-border-line px-6 py-4 dark:border-dark-border-line">
 			<div class="mb-3 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Lifecycle audit</div>
 			{#if lifecycleEvents.length === 0}
 				<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">No lifecycle actions recorded.</p>
 			{:else}
 				<ul class="space-y-2">
 					{#each lifecycleEvents as event (`${event.action}-${event.timestamp}`)}
-						<li class="flex items-start justify-between gap-3 text-xs">
+						<li class="flex items-start justify-between gap-3 text-body-sm">
 							<div>
 								<span class="font-medium text-fg-ink dark:text-dark-fg-ink">{event.action}</span>
 								<span class="text-fg-muted dark:text-dark-fg-muted"> by {event.actor}</span>
@@ -452,12 +452,12 @@
 			role="region"
 			aria-label="Live response"
 			aria-live="polite"
-			class="shrink-0 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line"
+			class="shrink-0 border-b border-border-line px-6 py-4 dark:border-dark-border-line"
 		>
 			<div class="mb-2 flex items-center justify-between gap-3">
 				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Live response</div>
 				{#if reconnecting && !isTerminal}
-					<div class="alert-caution border px-2 py-1 text-xs">
+					<div class="alert-caution border px-2 py-1 text-body-sm">
 						Reconnecting…
 					</div>
 				{/if}
@@ -468,7 +468,7 @@
 				{:else}
 					{#each liveItems as item (item.type === 'tool_call' ? item.key : item.text)}
 						{#if item.type === 'text'}
-							<p class="whitespace-pre-wrap">{item.text}</p>
+							<p class="text-body-md whitespace-pre-wrap">{item.text}</p>
 						{:else}
 							<details class="border border-border-line dark:border-dark-border-line">
 								<summary
