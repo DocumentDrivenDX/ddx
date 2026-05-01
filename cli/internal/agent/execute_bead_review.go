@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // Verdict is the outcome of a post-merge bead review.
@@ -416,10 +416,10 @@ func reviewXMLEscape(s string) string {
 type DefaultBeadReviewer struct {
 	ProjectRoot string
 	BeadStore   BeadReader
-	// Service, when non-nil, is the agentlib.DdxAgent used to dispatch the
+	// Service, when non-nil, is the agentlib.FizeauService used to dispatch the
 	// review invocation. Production callers leave this nil — ReviewBead
 	// constructs a fresh service from ProjectRoot via NewServiceFromWorkDir.
-	Service agentlib.DdxAgent
+	Service agentlib.FizeauService
 	// Runner, when non-nil, replaces the service-based dispatch path. Used by
 	// tests to return canned *Result values without spinning up a real
 	// service. Takes precedence over Service.

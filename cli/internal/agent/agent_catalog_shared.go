@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // profileSurfaceToDDx maps agentlib ProfileSurface names to DDx catalog surface
@@ -19,7 +19,7 @@ var profileSurfaceToDDx = map[string]string{
 // It enumerates profiles via svc.ListProfiles and resolves surface-specific
 // models via svc.ResolveProfile. Individual profile errors are silently skipped;
 // the builtin catalog remains the fallback for any unresolvable entry.
-func ApplyCatalogFromService(ctx context.Context, cat *Catalog, svc agentlib.DdxAgent) {
+func ApplyCatalogFromService(ctx context.Context, cat *Catalog, svc agentlib.FizeauService) {
 	if cat == nil || svc == nil {
 		return
 	}

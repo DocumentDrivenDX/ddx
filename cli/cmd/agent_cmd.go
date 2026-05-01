@@ -15,7 +15,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -23,6 +22,7 @@ import (
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/spf13/cobra"
 )
 
@@ -846,7 +846,7 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 // RecordRouteAttempt benefits every other consumer. When RouteStatus is
 // unavailable (e.g. fresh service with no routes yet) the harness is
 // considered healthy.
-func harnessHealthyViaService(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
+func harnessHealthyViaService(ctx context.Context, svc agentlib.FizeauService, harness string) bool {
 	if svc == nil || harness == "" {
 		return true
 	}

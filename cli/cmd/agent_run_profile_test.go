@@ -13,7 +13,7 @@ import (
 
 // agentTestDir creates a temp dir with a minimal DDx config (no harness set, so
 // routing picks from all registered candidates).
-// HOME is redirected to a clean temp dir to prevent the global ~/.config/agent/config.yaml
+// HOME is redirected to a clean temp dir to prevent the global ~/.config/fizeau/config.yaml
 // from being loaded (which would cause tests to attempt real network connections).
 func agentTestDir(t *testing.T) string {
 	t.Helper()
@@ -160,7 +160,7 @@ func TestAgentCapabilitiesEmbeddedAgent(t *testing.T) {
 	output, err := executeCommand(rootCmd, "agent", "capabilities", "agent")
 	require.NoError(t, err)
 	assert.Contains(t, output, "Harness: agent")
-	assert.Contains(t, output, "Binary: ddx-agent")
+	assert.Contains(t, output, "Binary: fiz")
 	assert.Contains(t, output, "harness: agent", "config example should show harness: agent")
 }
 
@@ -184,7 +184,7 @@ func TestAgentCapabilitiesEmbeddedAgentJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(output), &caps))
 	assert.Equal(t, "agent", caps.Harness)
 	assert.True(t, caps.Available)
-	assert.Equal(t, "ddx-agent", caps.Binary)
+	assert.Equal(t, "fiz", caps.Binary)
 	assert.True(t, caps.IsLocal, "agent harness must be local (embedded)")
 	assert.Equal(t, "local", caps.CostClass)
 }

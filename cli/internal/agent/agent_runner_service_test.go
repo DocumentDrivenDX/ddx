@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +77,7 @@ func TestExecuteBeadResultDetailReportsNoopCompactionWallClockBreaker(t *testing
 	})
 	rcfg := cfg.Resolve(config.CLIOverrides{})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
-		Service: &noopCompactionDdxAgent{
+		Service: &noopCompactionFizeauService{
 			interval: 3 * time.Second,
 			total:    serviceNoopCompactionWallClockLimit + time.Minute,
 		},
@@ -154,12 +154,12 @@ func noopCompactionServiceEvent(ts time.Time) agentlib.ServiceEvent {
 	}
 }
 
-type noopCompactionDdxAgent struct {
+type noopCompactionFizeauService struct {
 	interval time.Duration
 	total    time.Duration
 }
 
-func (s *noopCompactionDdxAgent) Execute(ctx context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+func (s *noopCompactionFizeauService) Execute(ctx context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 	events := make(chan agentlib.ServiceEvent, 400)
 	go func() {
 		defer close(events)
@@ -194,61 +194,61 @@ func sendServiceEvent(ctx context.Context, events chan<- agentlib.ServiceEvent, 
 	}
 }
 
-func (s *noopCompactionDdxAgent) TailSessionLog(ctx context.Context, sessionID string) (<-chan agentlib.ServiceEvent, error) {
+func (s *noopCompactionFizeauService) TailSessionLog(ctx context.Context, sessionID string) (<-chan agentlib.ServiceEvent, error) {
 	events := make(chan agentlib.ServiceEvent)
 	close(events)
 	return events, nil
 }
 
-func (s *noopCompactionDdxAgent) ListHarnesses(ctx context.Context) ([]agentlib.HarnessInfo, error) {
+func (s *noopCompactionFizeauService) ListHarnesses(ctx context.Context) ([]agentlib.HarnessInfo, error) {
 	return []agentlib.HarnessInfo{{Name: "agent", Available: true}}, nil
 }
 
-func (s *noopCompactionDdxAgent) ListProviders(ctx context.Context) ([]agentlib.ProviderInfo, error) {
+func (s *noopCompactionFizeauService) ListProviders(ctx context.Context) ([]agentlib.ProviderInfo, error) {
 	return nil, nil
 }
 
-func (s *noopCompactionDdxAgent) ListModels(ctx context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+func (s *noopCompactionFizeauService) ListModels(ctx context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	return nil, nil
 }
 
-func (s *noopCompactionDdxAgent) HealthCheck(ctx context.Context, target agentlib.HealthTarget) error {
+func (s *noopCompactionFizeauService) HealthCheck(ctx context.Context, target agentlib.HealthTarget) error {
 	return nil
 }
 
-func (s *noopCompactionDdxAgent) ResolveRoute(ctx context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+func (s *noopCompactionFizeauService) ResolveRoute(ctx context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (s *noopCompactionDdxAgent) RouteStatus(ctx context.Context) (*agentlib.RouteStatusReport, error) {
+func (s *noopCompactionFizeauService) RouteStatus(ctx context.Context) (*agentlib.RouteStatusReport, error) {
 	return nil, nil
 }
 
-func (s *noopCompactionDdxAgent) ListProfiles(ctx context.Context) ([]agentlib.ProfileInfo, error) {
+func (s *noopCompactionFizeauService) ListProfiles(ctx context.Context) ([]agentlib.ProfileInfo, error) {
 	return nil, nil
 }
 
-func (s *noopCompactionDdxAgent) ResolveProfile(ctx context.Context, name string) (*agentlib.ResolvedProfile, error) {
+func (s *noopCompactionFizeauService) ResolveProfile(ctx context.Context, name string) (*agentlib.ResolvedProfile, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (s *noopCompactionDdxAgent) ProfileAliases(ctx context.Context) (map[string]string, error) {
+func (s *noopCompactionFizeauService) ProfileAliases(ctx context.Context) (map[string]string, error) {
 	return nil, nil
 }
 
-func (s *noopCompactionDdxAgent) RecordRouteAttempt(ctx context.Context, attempt agentlib.RouteAttempt) error {
+func (s *noopCompactionFizeauService) RecordRouteAttempt(ctx context.Context, attempt agentlib.RouteAttempt) error {
 	return nil
 }
 
-func (s *noopCompactionDdxAgent) ListSessionLogs(ctx context.Context) ([]agentlib.SessionLogEntry, error) {
+func (s *noopCompactionFizeauService) ListSessionLogs(ctx context.Context) ([]agentlib.SessionLogEntry, error) {
 	return nil, nil
 }
-func (s *noopCompactionDdxAgent) WriteSessionLog(ctx context.Context, sessionID string, w io.Writer) error {
+func (s *noopCompactionFizeauService) WriteSessionLog(ctx context.Context, sessionID string, w io.Writer) error {
 	return nil
 }
-func (s *noopCompactionDdxAgent) ReplaySession(ctx context.Context, sessionID string, w io.Writer) error {
+func (s *noopCompactionFizeauService) ReplaySession(ctx context.Context, sessionID string, w io.Writer) error {
 	return nil
 }
-func (s *noopCompactionDdxAgent) UsageReport(ctx context.Context, opts agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
+func (s *noopCompactionFizeauService) UsageReport(ctx context.Context, opts agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
 	return nil, nil
 }

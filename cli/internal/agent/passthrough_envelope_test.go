@@ -13,12 +13,12 @@ import (
 	"io"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
-// passthroughTestService is a minimal DdxAgent stub that records the most
+// passthroughTestService is a minimal FizeauService stub that records the most
 // recent Execute call's request and returns a synthetic success event.
 type passthroughTestService struct {
 	executeCalled       bool

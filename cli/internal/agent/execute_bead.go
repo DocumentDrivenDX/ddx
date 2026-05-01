@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // ExecuteBeadResult captures the outcome of an execute-bead worker run.
@@ -110,7 +110,7 @@ type ExecuteBeadRuntime struct {
 	PromptFile  string // override prompt file (auto-generated if empty)
 	WorkerID    string // from DDX_WORKER_ID env or caller
 	BeadEvents  BeadEventAppender
-	Service     agentlib.DdxAgent
+	Service     agentlib.FizeauService
 	AgentRunner AgentRunner
 }
 
@@ -591,7 +591,7 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 // recovery are the parent's responsibility (see LandBeadResult, RecoverOrphans).
 //
 // Agent dispatch: production callers leave runtime.Service and runtime.AgentRunner
-// nil. ExecuteBeadWithConfig constructs a fresh agentlib.DdxAgent from
+// nil. ExecuteBeadWithConfig constructs a fresh agentlib.FizeauService from
 // projectRoot via NewServiceFromWorkDir and dispatches via RunViaServiceWith.
 // Tests may set runtime.AgentRunner to inject a fake that returns canned
 // Result values; when set, it takes precedence over the service path.
@@ -985,7 +985,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 // The script and virtual harnesses are DDx-side helpers that the agent service
 // does not implement; the underlying RunViaServiceWith path delegates those to
 // a private Runner internally, so they continue to work through this path.
-func dispatchAgentRun(ctx context.Context, projectRoot string, svc agentlib.DdxAgent, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+func dispatchAgentRun(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
 	return dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 }
 
@@ -1242,7 +1242,7 @@ If this prompt already contains a ` + "`<review-findings>`" + ` section, address
 After the commit succeeds and you have verified every AC item, stop. Return control to the orchestrator. Do not continue to explore the repository, run extra tests, or generate follow-up notes — the bead is complete, and returning promptly is how execute-bead signals success.`
 
 // executeBeadInstructionsAgentText is the per-bead task instructions emitted
-// inside <instructions> when running against the embedded ddx-agent harness,
+// inside <instructions> when running against the embedded Fizeau harness,
 // which has a minimal system prompt and needs more scaffolding to produce
 // reliable output. This version is more explicit about tools, process, and
 // stopping cleanly after the commit (to avoid the known post-commit runaway
@@ -1289,12 +1289,12 @@ The bead description and AC override any CLAUDE.md, AGENTS.md, or project-level 
 
 // executeBeadInstructionsText selects the right instructions variant for the
 // given harness. Harnesses with rich system prompts (claude, codex, opencode)
-// get the terser claude variant; the embedded ddx-agent harness gets the
+// get the terser claude variant; the embedded Fizeau harness gets the
 // fuller agent variant with explicit tool names and stop-after-commit
 // scaffolding.
 func executeBeadInstructionsText(harness string) string {
 	switch strings.ToLower(strings.TrimSpace(harness)) {
-	case "agent", "ddx-agent", "embedded":
+	case "agent", "fiz", "embedded":
 		return executeBeadInstructionsAgentText
 	default:
 		return executeBeadInstructionsClaudeText

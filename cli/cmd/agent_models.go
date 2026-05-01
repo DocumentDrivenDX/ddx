@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/spf13/cobra"
 )
 

@@ -3,7 +3,7 @@ package agent
 import (
 	"sort"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // TopNPowerThreshold returns the minimum power value that, when used as

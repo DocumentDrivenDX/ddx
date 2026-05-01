@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # capture-omlx-fixture.sh — regenerate a testdata/omlx-wire fixture from a
-# live omlx endpoint. Wraps `ddx agent run` with AGENT_DEBUG_WIRE_STREAM_FULL=1
-# (shipped in ddx-agent v0.3.14 — bead agent-f237e07b) and reshapes the wire
+# live omlx endpoint. Wraps `ddx agent run` with FIZEAU_DEBUG_WIRE_STREAM_FULL=1
+# (shipped in Fizeau v0.3.14 — bead agent-f237e07b) and reshapes the wire
 # dump into the fixture JSONL format the consumer-side smoke test expects.
 #
 # Usage:
@@ -15,7 +15,7 @@
 #
 # What the script does:
 #   1. Runs an isolated ddx agent invocation against the given omlx endpoint
-#      with AGENT_DEBUG_WIRE=1 AGENT_DEBUG_WIRE_STREAM_FULL=1 so the whole
+#      with FIZEAU_DEBUG_WIRE=1 FIZEAU_DEBUG_WIRE_STREAM_FULL=1 so the whole
 #      SSE stream is captured to a sidecar wire file.
 #   2. Extracts every `dir=="response"` body chunk in arrival order and emits
 #      one {"kind":"frame","body":...} record per chunk.
@@ -67,9 +67,9 @@ trap 'rm -f "$wire_file"' EXIT
 
 echo "capturing wire dump from $endpoint → $wire_file" >&2
 
-AGENT_DEBUG_WIRE=1 \
-AGENT_DEBUG_WIRE_STREAM_FULL=1 \
-AGENT_DEBUG_WIRE_FILE="$wire_file" \
+FIZEAU_DEBUG_WIRE=1 \
+FIZEAU_DEBUG_WIRE_STREAM_FULL=1 \
+FIZEAU_DEBUG_WIRE_FILE="$wire_file" \
 ddx agent run \
   --harness agent \
   --provider vidar-omlx \
@@ -98,7 +98,7 @@ jq -cn \
     expected:{status:$status, error_must_not_contain:"unexpected end of JSON input"}}' \
   >> "$tmp_out"
 
-# Frame records — every response chunk in capture order. AGENT_DEBUG_WIRE
+# Frame records — every response chunk in capture order. FIZEAU_DEBUG_WIRE
 # with STREAM_FULL=1 emits one {"dir":"response","body":"…"} record per read.
 jq -c 'select(.dir=="response" and (.body|type=="string") and (.body|length>0))
        | {kind:"frame", body:.body}' \

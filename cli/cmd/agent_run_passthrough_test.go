@@ -13,14 +13,14 @@ import (
 	"sync"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// executeCapturingStub is a DdxAgent that records Execute calls and fails
+// executeCapturingStub is a FizeauService that records Execute calls and fails
 // loudly if ResolveRoute is invoked — enforcing the CONTRACT-003 boundary
 // that execution paths must not pre-resolve routes.
 type executeCapturingStub struct {
@@ -95,7 +95,7 @@ func (s *executeCapturingStub) UsageReport(_ context.Context, _ agentlib.UsageRe
 func installExecuteCapturingStub(t *testing.T) *executeCapturingStub {
 	t.Helper()
 	stub := &executeCapturingStub{}
-	agent.SetServiceRunFactory(func(_ string) (agentlib.DdxAgent, error) {
+	agent.SetServiceRunFactory(func(_ string) (agentlib.FizeauService, error) {
 		return stub, nil
 	})
 	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })

@@ -2,7 +2,7 @@
 
 These fixtures drive `cli/internal/agent/omlx_e2e_test.go` — the consumer-side
 end-to-end smoke test that guards `ddx work` against regressions on the
-`ddx-agent → vidar-omlx` dispatch path. Context: bead **ddx-bbb2d177**, which
+`Fizeau → vidar-omlx` dispatch path. Context: bead **ddx-bbb2d177**, which
 was filed after v0.3.14 shipped the `sseCommentFilter` fix for bead
 **agent-f237e07b** (upstream).
 
@@ -31,7 +31,7 @@ just to refresh timestamps.
 ## How to regenerate
 
 Use `scripts/capture-omlx-fixture.sh`, which wraps `ddx agent run` with
-`AGENT_DEBUG_WIRE_STREAM_FULL=1` (shipped in ddx-agent v0.3.14) so the full
+`FIZEAU_DEBUG_WIRE_STREAM_FULL=1` (shipped in Fizeau v0.3.14) so the full
 stream is captured to a sidecar JSONL, then reshapes it into the fixture
 format:
 
@@ -56,6 +56,6 @@ The agent repo (`DocumentDrivenDX/agent`) has its own provider-level SSE
 tests in `provider/openai/openai_test.go`. Those guard the SDK's handling of
 SSE framing in isolation. The fixtures in *this* directory guard the DDx
 consumer — `ddx work` → `Runner.RunAgent` → `agentlib.Run` — against both
-SDK regressions (a bad ddx-agent bump) and DDx-side regressions (a header or
+SDK regressions (a bad Fizeau bump) and DDx-side regressions (a header or
 request-shape change that trips omlx's parser). The two layers cover
 different failure modes and both matter.

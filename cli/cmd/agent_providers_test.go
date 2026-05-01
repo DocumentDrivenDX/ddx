@@ -37,26 +37,26 @@ func newOAIModelsStub(t *testing.T, modelIDs []string) *httptest.Server {
 }
 
 // makeProviderTestDir creates a temp directory wired up for provider command
-// tests. It writes an .agent/config.yaml with agentCfgYAML and a minimal
+// tests. It writes an .fizeau/config.yaml with agentCfgYAML and a minimal
 // .ddx/config.yaml, then isolates the test from the global agent config and
-// any AGENT_* environment variables.
+// any FIZEAU_* environment variables.
 func makeProviderTestDir(t *testing.T, agentCfgYAML string) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Isolate from ~/.config/agent/config.yaml.
+	// Isolate from ~/.config/fizeau/config.yaml.
 	t.Setenv("HOME", dir)
 
-	// Clear AGENT_* env overrides so the real environment cannot override
+	// Clear FIZEAU_* env overrides so the real environment cannot override
 	// the test provider config.
-	t.Setenv("AGENT_PROVIDER", "")
-	t.Setenv("AGENT_BASE_URL", "")
-	t.Setenv("AGENT_API_KEY", "")
-	t.Setenv("AGENT_MODEL", "")
+	t.Setenv("FIZEAU_PROVIDER", "")
+	t.Setenv("FIZEAU_BASE_URL", "")
+	t.Setenv("FIZEAU_API_KEY", "")
+	t.Setenv("FIZEAU_MODEL", "")
 
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
-	agentDir := filepath.Join(dir, ".agent")
+	agentDir := filepath.Join(dir, ".fizeau")
 	require.NoError(t, os.MkdirAll(agentDir, 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(agentDir, "config.yaml"),
@@ -81,7 +81,7 @@ library:
 	return dir
 }
 
-// oaiAgentConfig returns .agent/config.yaml YAML for a single openai-compat
+// oaiAgentConfig returns .fizeau/config.yaml YAML for a single openai-compat
 // provider pointing at baseURL (e.g. "http://127.0.0.1:PORT/v1").
 func oaiAgentConfig(baseURL, model string) string {
 	return "providers:\n  testprovider:\n    type: lmstudio\n    base_url: " +
@@ -158,7 +158,7 @@ func TestAgentProvidersUnreachableJSON(t *testing.T) {
 }
 
 func TestAgentProvidersConfigError(t *testing.T) {
-	// Write deliberately invalid YAML to .agent/config.yaml.
+	// Write deliberately invalid YAML to .fizeau/config.yaml.
 	dir := makeProviderTestDir(t, "providers: [\ninvalid yaml{{{{")
 
 	_, err := executeCommand(

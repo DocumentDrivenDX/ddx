@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
-// Public event-type strings emitted by agentlib.DdxAgent.Execute, mirrored
+// Public event-type strings emitted by agentlib.FizeauService.Execute, mirrored
 // from CONTRACT-003 §"Event JSON shapes". Kept as constants here so the
 // drain loop does not have to import the agent's internal/harnesses
 // package (which is module-private).
@@ -48,7 +48,7 @@ type (
 )
 
 // useNewAgentPath reports whether RunAgent should dispatch to the new
-// agentlib.DdxAgent.Execute path. Default is on. Set the env var
+// agentlib.FizeauService.Execute path. Default is on. Set the env var
 // DDX_USE_NEW_AGENT_PATH=0 (or "false") to disable as an emergency escape
 // hatch.
 func useNewAgentPath() bool {
@@ -61,7 +61,7 @@ func useNewAgentPath() bool {
 }
 
 // runAgentViaService is the new RunAgent dispatch path that drives the
-// agent through agentlib.DdxAgent.Execute and drains the resulting event
+// agent through agentlib.FizeauService.Execute and drains the resulting event
 // channel into a DDx Result. Old in-package code paths (RunAgent legacy
 // loop, embeddedCompactionConfig, buildAgentProvider, findTool,
 // wrapProviderWithDeadlines, stall + compaction-stuck circuit breakers)

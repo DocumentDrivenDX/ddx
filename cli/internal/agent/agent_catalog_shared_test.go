@@ -6,11 +6,11 @@ import (
 	"io"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 )
 
-// catalogStubAgent is a minimal DdxAgent stub for catalog tests.
+// catalogStubAgent is a minimal FizeauService stub for catalog tests.
 type catalogStubAgent struct {
 	profiles []agentlib.ProfileInfo
 	resolved map[string]*agentlib.ResolvedProfile

@@ -1,7 +1,7 @@
 # Model Catalog
 
 Reference table for routing tier assignment, benchmark scores, and pricing.
-Used to drive model selection in agent routing (defined by ddx-agent CONTRACT-003-ddx-agent-service).
+Used to drive model selection in agent routing (defined by Fizeau CONTRACT-003-fizeau-service).
 
 **Primary benchmarks:**
 - **SWE-bench Verified** — real-world Python bug fixes from GitHub issues; most discriminative for software engineering capability at the frontier

@@ -10,8 +10,8 @@ import (
 	"context"
 	"fmt"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // dispatchViaResolvedConfig is the internal SD-024 dispatch seam shared by
@@ -32,7 +32,7 @@ import (
 // PermissionsOverride, SessionLogDirOverride) take precedence over the
 // matching rcfg accessors when non-empty, so callers can pin one knob for
 // a single invocation without re-resolving the full ResolvedConfig.
-func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agentlib.DdxAgent, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
 	if runner != nil {
 		return runner.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}

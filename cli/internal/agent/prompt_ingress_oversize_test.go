@@ -17,9 +17,9 @@ import (
 	"strings"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // promptIngressTestCap is the cap installed during oversize-fixture tests
@@ -130,7 +130,7 @@ func TestPromptIngressOversize(t *testing.T) {
 	})
 }
 
-// promptIngressStubAgent is a minimal DdxAgent that records Execute
+// promptIngressStubAgent is a minimal FizeauService that records Execute
 // invocations. Used to assert oversize prompt-file reads short-circuit
 // before any provider dispatch.
 type promptIngressStubAgent struct {

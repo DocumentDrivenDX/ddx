@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/spf13/cobra"
 )
 
@@ -282,7 +282,7 @@ Examples:
 					}
 				}
 				if !found {
-					return fmt.Errorf("no route configured for model key %q — check .agent/config.yaml", model)
+					return fmt.Errorf("no route configured for model key %q — check .fizeau/config.yaml", model)
 				}
 				filtered := report.Routes[:0]
 				for _, r := range report.Routes {
@@ -295,8 +295,8 @@ Examples:
 
 			if len(report.Routes) == 0 {
 				if !asJSON {
-					fmt.Fprintln(cmd.OutOrStdout(), "No model routes configured in .agent/config.yaml.")
-					fmt.Fprintln(cmd.OutOrStdout(), "Use --model <route-key> or configure model_routes in .agent/config.yaml.")
+					fmt.Fprintln(cmd.OutOrStdout(), "No model routes configured in .fizeau/config.yaml.")
+					fmt.Fprintln(cmd.OutOrStdout(), "Use --model <route-key> or configure model_routes in .fizeau/config.yaml.")
 				} else {
 					enc := json.NewEncoder(cmd.OutOrStdout())
 					enc.SetIndent("", "  ")

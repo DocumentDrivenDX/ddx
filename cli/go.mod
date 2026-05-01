@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/99designs/gqlgen v0.17.89
+	github.com/DocumentDrivenDX/fizeau v0.9.26-fizeau.1
 	github.com/fatih/color v1.18.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/itchyny/gojq v0.12.19
@@ -94,7 +95,6 @@ require (
 )
 
 require (
-	github.com/DocumentDrivenDX/agent v0.9.25
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

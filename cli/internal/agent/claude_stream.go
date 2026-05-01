@@ -110,7 +110,7 @@ type claudeStreamResult struct {
 // call and a session.start event on init), and returns an aggregated
 // claudeStreamResult covering token usage, final text, and counts.
 //
-// The progress entries use the same event type names the ddx-agent harness
+// The progress entries use the same event type names the Fizeau harness
 // emits (session.start, tool.call, llm.response) so the existing
 // TailSessionLogs / FormatSessionLogLines pipeline can render them as
 // real-time progress without any changes.
@@ -124,7 +124,7 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 	if startTime.IsZero() {
 		startTime = time.Now()
 	}
-	verbose := os.Getenv("DDX_AGENT_LOG_VERBOSE") == "1"
+	verbose := os.Getenv("DDX_LOG_VERBOSE") == "1"
 	pendingTools := map[string]*pendingToolCall{}
 	res := &claudeStreamResult{SessionID: sessionID}
 	scanner := bufio.NewScanner(r)
@@ -441,7 +441,7 @@ func resolveClaudeProgressLogDir(opts RunArgs, cfg Config) string {
 // runClaudeStreaming is the streaming execution path for the claude harness.
 // It launches the claude binary directly (bypassing the standard Executor
 // abstraction so it can pipe stdout line-by-line), parses stream-json events
-// as they arrive, and writes per-tool progress entries to a ddx-agent-style
+// as they arrive, and writes per-tool progress entries to a Fizeau-style
 // JSONL file in opts.SessionLogDir (when set) or r.Config.SessionLogDir so
 // `ddx server workers log` sees real-time activity.
 //

@@ -1,6 +1,6 @@
 package agent
 
-// RunAgent executes a prompt using the agentlib.DdxAgent service path.
+// RunAgent executes a prompt using the agentlib.FizeauService service path.
 // This runs in-process — no subprocess, no binary lookup.
 //
 // Phase 5h migration (ddx-4e3e149f): converted from a (*Runner) method

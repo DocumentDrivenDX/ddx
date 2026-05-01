@@ -2307,7 +2307,7 @@ func (c *modelPassthroughCapture) Run(opts agent.RunArgs) (*agent.Result, error)
 // by any hardcoded or catalog-derived default. This regression test guards
 // against routing layers injecting a model (e.g. a stale vendor/model like
 // "z-ai/glm-5.1") when the caller did not request one — the case the agent
-// harness resolves from ~/.config/agent/config.yaml must be preserved by
+// harness resolves from ~/.config/fizeau/config.yaml must be preserved by
 // ExecuteBead handing the runner an empty Model so the harness's own
 // resolution chain runs.
 //

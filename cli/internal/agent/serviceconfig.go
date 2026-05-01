@@ -9,15 +9,15 @@ import (
 	"time"
 	"unicode"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	// Import the configinit package for its init() side-effect: it triggers
 	// agent's internal/config init which registers the config loader into
 	// agentlib so that agentlib.New(ServiceOptions{ConfigPath:…}) can resolve
 	// provider configuration without a separate adapter. configinit is the
 	// public marker package exposed for this purpose after agent v0.5.0
 	// moved internal/config out of the public surface.
-	_ "github.com/DocumentDrivenDX/agent/configinit"
 	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
+	_ "github.com/DocumentDrivenDX/fizeau/configinit"
 )
 
 // DefaultProviderRequestTimeout is the per-request wall-clock cap for
@@ -81,12 +81,12 @@ func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Dur
 	return 0
 }
 
-// NewServiceFromWorkDir constructs a DdxAgent for the given DDx project.
+// NewServiceFromWorkDir constructs a FizeauService for the given DDx project.
 // When .ddx/config.yaml contains agent.endpoints, those endpoint blocks are
 // injected as the service config so routing is independent from global named
 // provider profiles. Otherwise, ConfigPath preserves the upstream agent loader
 // fallback for legacy .agent/global configuration.
-func NewServiceFromWorkDir(workDir string) (agentlib.DdxAgent, error) {
+func NewServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 	opts := agentlib.ServiceOptions{
 		ConfigPath: filepath.Join(workDir, "config.yaml"),
 	}
@@ -104,7 +104,7 @@ func NewServiceFromWorkDir(workDir string) (agentlib.DdxAgent, error) {
 // without pre-filtering .ddx agent endpoints by /models reachability. The
 // returned service still probes when ListProviders is called, but unreachable
 // configured endpoints remain present in the result as unreachable rows.
-func NewStatusProbeServiceFromWorkDir(workDir string) (agentlib.DdxAgent, error) {
+func NewStatusProbeServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 	opts := agentlib.ServiceOptions{
 		ConfigPath: filepath.Join(workDir, "config.yaml"),
 	}
@@ -321,4 +321,18 @@ func (c *endpointServiceConfig) HealthCooldown() time.Duration {
 
 func (c *endpointServiceConfig) WorkDir() string {
 	return c.workDir
+}
+
+func (c *endpointServiceConfig) SessionLogDir() string {
+	if c.workDir == "" {
+		return ""
+	}
+	return filepath.Join(c.workDir, ".fizeau", "sessions")
+}
+
+func (c *endpointServiceConfig) RouteHealthPath(routeKey string) string {
+	if c.workDir == "" {
+		return ""
+	}
+	return filepath.Join(c.workDir, ".fizeau", "route-health-"+routeKey+".json")
 }

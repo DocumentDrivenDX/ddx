@@ -143,13 +143,13 @@ func TestParseClaudeStream(t *testing.T) {
 	}
 }
 
-// TestParseClaudeStreamVerboseMode asserts that with DDX_AGENT_LOG_VERBOSE=1
+// TestParseClaudeStreamVerboseMode asserts that with DDX_LOG_VERBOSE=1
 // the parser produces enriched llm.response events (content, finish_reason,
 // full usage object including cache fields) and emits tool.call events
 // only after the matching tool_result, with input, output, duration_ms,
 // and error all populated.
 func TestParseClaudeStreamVerboseMode(t *testing.T) {
-	t.Setenv("DDX_AGENT_LOG_VERBOSE", "1")
+	t.Setenv("DDX_LOG_VERBOSE", "1")
 	input := strings.Join([]string{
 		`{"type":"system","subtype":"init","session_id":"sess-v","model":"claude-sonnet-4-6"}`,
 		`{"type":"assistant","message":{"id":"m-1","model":"claude-sonnet-4-6","stop_reason":"tool_use","content":[{"type":"text","text":"running ls"},{"type":"tool_use","id":"tu-1","name":"Bash","input":{"command":"ls"}}],"usage":{"input_tokens":120,"output_tokens":42,"cache_creation_input_tokens":10,"cache_read_input_tokens":80}}}`,
@@ -217,11 +217,11 @@ func TestParseClaudeStreamVerboseMode(t *testing.T) {
 }
 
 // TestParseClaudeStreamVerboseLeanDefault asserts that the lean schema is
-// the default — when DDX_AGENT_LOG_VERBOSE is unset, llm.response events
+// the default — when DDX_LOG_VERBOSE is unset, llm.response events
 // must NOT carry the verbose-only fields and tool.call events are emitted
 // immediately (without output/duration_ms/error).
 func TestParseClaudeStreamVerboseLeanDefault(t *testing.T) {
-	t.Setenv("DDX_AGENT_LOG_VERBOSE", "")
+	t.Setenv("DDX_LOG_VERBOSE", "")
 	input := strings.Join([]string{
 		`{"type":"system","subtype":"init","session_id":"sess-l","model":"claude-sonnet-4-6"}`,
 		`{"type":"assistant","message":{"id":"m-1","stop_reason":"tool_use","content":[{"type":"tool_use","id":"tu-1","name":"Bash","input":{"command":"ls"}}],"usage":{"input_tokens":1,"output_tokens":1}}}`,

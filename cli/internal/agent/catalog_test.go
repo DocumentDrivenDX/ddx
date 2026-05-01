@@ -9,7 +9,7 @@ import (
 
 // TestAgentRoutingDoesNotDuplicateEmbeddedBackendPoolStrategy verifies that
 // DDx catalog entries for embedded-only refs do not contain backend pool
-// strategy fields — that logic belongs entirely in ddx-agent.
+// strategy fields — that logic belongs entirely in Fizeau.
 func TestAgentRoutingDoesNotDuplicateEmbeddedBackendPoolStrategy(t *testing.T) {
 	// The catalog entry for qwen3 maps only to a concrete model string per
 	// surface. It does not contain provider, endpoint, or strategy fields.
@@ -26,7 +26,7 @@ func TestAgentRoutingDoesNotDuplicateEmbeddedBackendPoolStrategy(t *testing.T) {
 	assert.NotEmpty(t, model)
 
 	// The catalog resolution returns a concrete model string only — no provider
-	// endpoint, no backend pool strategy. DDx stops here; ddx-agent continues.
+	// endpoint, no backend pool strategy. DDx stops here; Fizeau continues.
 	resolved, ok := BuiltinCatalog.Resolve("qwen3", "embedded-openai")
 	assert.True(t, ok)
 	assert.NotEmpty(t, resolved)

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 func containsString(slice []string, s string) bool {
@@ -54,7 +54,7 @@ func NewRunner(cfg Config) *Runner {
 	}
 	// Build the effective catalog in precedence order (lowest to highest priority):
 	//   1. Built-in seed (DefaultModelCatalogYAML — deterministic fallback for smart/standard/cheap)
-	//   2. Shared ddx-agent catalog (~/.config/agent/models.yaml — authoritative when installed)
+	//   2. Shared Fizeau catalog (~/.config/fizeau/models.yaml — authoritative when installed)
 	//   3. User overrides (~/.ddx/model-catalog.yaml — user wins over shared and built-in)
 	catalog := BuiltinCatalog.Clone()
 	if svc, err := agentlib.New(agentlib.ServiceOptions{}); err == nil {
@@ -92,7 +92,7 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 	// If the provider flag was consumed as a harness name (e.g. "agent",
 	// "local"), clear it so downstream code (RunAgent →
 	// resolveEmbeddedAgentProvider) doesn't try to look it up as a
-	// ddx-agent config provider name.
+	// Fizeau config provider name.
 	if opts.Provider != "" {
 		resolved := resolveHarnessAlias(opts.Provider)
 		if resolved == harnessName {
@@ -126,7 +126,7 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 	if harness.IsHTTPProvider && harness.Binary == "" {
 		agentOpts := opts
 		// Surface the harness name as the provider so the embedded runtime
-		// knows which .agent/config.yaml provider block to use. If the caller
+		// knows which .fizeau/config.yaml provider block to use. If the caller
 		// already specified --provider, preserve their choice.
 		if agentOpts.Provider == "" {
 			agentOpts.Provider = harnessName

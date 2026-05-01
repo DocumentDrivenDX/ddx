@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 )
 

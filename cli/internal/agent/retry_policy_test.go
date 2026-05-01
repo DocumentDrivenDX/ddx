@@ -16,7 +16,7 @@ package agent
 import (
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // catalogWithPowers builds a slice of ModelInfo with the given power values,

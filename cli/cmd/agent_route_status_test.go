@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/require"
 )
 
-// routeAgentConfig returns .agent/config.yaml YAML for a provider + a single
+// routeAgentConfig returns .fizeau/config.yaml YAML for a provider + a single
 // model route referencing that provider. routeKey is the model route name.
 func routeAgentConfig(baseURL, model, routeKey string) string {
 	return `providers:
@@ -146,7 +146,7 @@ func TestAgentRouteStatusActiveCooldown(t *testing.T) {
 	dir := makeProviderTestDir(t, routeAgentConfig(srv.URL+"/v1", "cool-model", "standard"))
 
 	// Write a route-health file recording a recent failure for testprovider.
-	agentDir := filepath.Join(dir, ".agent")
+	agentDir := filepath.Join(dir, ".fizeau")
 	require.NoError(t, os.MkdirAll(agentDir, 0o755))
 	failedAt := time.Now().Add(-1 * time.Minute) // 1 minute ago, within 30m cooldown
 	healthJSON := `{"failures":{"testprovider":"` + failedAt.UTC().Format(time.RFC3339) + `"}}`

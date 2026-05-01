@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // TestListProviders verifies GET /api/providers returns a JSON array containing

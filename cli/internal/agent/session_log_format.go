@@ -15,7 +15,7 @@ import (
 //
 // Two schema modes coexist. Lean mode is always on by default and is what
 // existing tooling consumes. Verbose mode is opt-in via the env var
-// DDX_AGENT_LOG_VERBOSE=1; when set, the writer adds extra fields to a
+// DDX_LOG_VERBOSE=1; when set, the writer adds extra fields to a
 // few event types so a session can be replayed and root-caused without
 // loss of inputs and outputs. Lean fields are never removed in verbose
 // mode — verbose is strictly additive (with the single exception that
@@ -29,7 +29,7 @@ import (
 //	  data.session_id  string  — session id from the harness CLI
 //	  data.bead_id     string  — bead under which the session ran (may be "")
 //	  data.elapsed_ms  int     — ms since session start (always 0 here)
-//	  data.harness     string  — "claude" | "ddx-agent" | etc.
+//	  data.harness     string  — "claude" | "fiz" | etc.
 //
 //	llm.request (lean and verbose):
 //	  data.attempt_index int        — request attempt counter (0-based)
@@ -77,7 +77,7 @@ import (
 // (TailSessionLogs, FormatSessionLogLines, the server worker log endpoint)
 // keep working unchanged because they tolerate extra fields.
 
-// FormatSessionLogLines formats ddx-agent JSONL log entries into readable progress.
+// FormatSessionLogLines formats Fizeau-style JSONL log entries into readable progress.
 // It is used by both the CLI (local execute-loop) and the server worker log endpoint.
 func FormatSessionLogLines(lines []string) string {
 	var sb strings.Builder

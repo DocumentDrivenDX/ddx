@@ -15,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 type ExecuteLoopWorkerSpec struct {
@@ -748,7 +748,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	// OpaquePassthrough=true (ddx work path — routing belongs to the agent service).
 	var routePreflight func(ctx context.Context, harness, model string) error
 	if m.BeadWorkerFactory == nil && !spec.OpaquePassthrough {
-		var preflightSvc agentlib.DdxAgent
+		var preflightSvc agentlib.FizeauService
 		preflightSvc, preflightSvcErr := agent.NewServiceFromWorkDir(projectRoot)
 		preflightErr := preflightSvcErr
 		routePreflight = func(ctx context.Context, harness, model string) error {
@@ -1448,7 +1448,7 @@ func (m *WorkerManager) SubscribeProgress(workerID string) (<-chan agent.Progres
 }
 
 // readActiveSessionLog reads the latest session log entries for an active worker.
-// The ddx-agent library writes per-iteration entries to .ddx/agent-logs/agent-*.jsonl
+// The Fizeau library writes per-iteration entries to .ddx/agent-logs/agent-*.jsonl
 // in real-time, so this gives live visibility into what the model provider is doing.
 func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 	logDir := filepath.Join(m.projectRoot, ".ddx", "agent-logs")
@@ -1658,7 +1658,7 @@ func relToProject(projectRoot, path string) string {
 // failure cooldown recorded against the given harness. RouteStatus is the
 // service-owned health source. When RouteStatus is unavailable, the harness is
 // considered healthy.
-func workerHarnessHealthy(ctx context.Context, svc agentlib.DdxAgent, harness string) bool {
+func workerHarnessHealthy(ctx context.Context, svc agentlib.FizeauService, harness string) bool {
 	if svc == nil || harness == "" {
 		return true
 	}

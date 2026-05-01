@@ -1,7 +1,7 @@
 package agent
 
 // service_run.go provides Runner-free helpers that drive every operation via
-// the agentlib.DdxAgent service surface (CONTRACT-003). RunWithConfigViaService
+// the agentlib.FizeauService service surface (CONTRACT-003). RunWithConfigViaService
 // is the only run entry point; legacy RunViaService/RunViaServiceWith and the
 // runFixtureHarnessViaRunner shim were retired in B22d-h.
 
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // appendProviderTimeoutHint appends a configuration override hint to errMsg
@@ -34,11 +34,11 @@ func appendProviderTimeoutHint(errMsg string, providerTimeout time.Duration) str
 // serviceRunFactory, when non-nil, overrides NewServiceFromWorkDir inside
 // RunWithConfigViaService. CLI-level integration tests inject a stub to
 // observe ServiceExecuteRequest fields without a real agent server.
-var serviceRunFactory func(workDir string) (agentlib.DdxAgent, error)
+var serviceRunFactory func(workDir string) (agentlib.FizeauService, error)
 
 // SetServiceRunFactory installs a service factory for RunWithConfigViaService.
 // Pass nil to restore production behavior. Exported for cmd/ integration tests.
-func SetServiceRunFactory(f func(workDir string) (agentlib.DdxAgent, error)) {
+func SetServiceRunFactory(f func(workDir string) (agentlib.FizeauService, error)) {
 	serviceRunFactory = f
 }
 
@@ -103,7 +103,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 // knobs from rcfg and per-invocation plumbing from runtime, then records
 // one session-index row. It is the inlined replacement for the retired
 // RunViaServiceWith helper and is shared with dispatchViaResolvedConfig.
-func executeOnService(ctx context.Context, svc agentlib.DdxAgent, workDir string, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir string, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
 	if svc == nil {
 		return nil, fmt.Errorf("agent: nil service")
 	}

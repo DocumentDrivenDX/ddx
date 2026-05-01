@@ -3,7 +3,7 @@ package agent
 import (
 	"fmt"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // Retry policy logical outcome names. These are the policy's semantic

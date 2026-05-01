@@ -12,8 +12,8 @@ Show routing table, recent decisions, and active health cooldowns
 Shows the current provider routing state, recent routing decisions, and
 any health cooldowns currently in effect.
 
-Uses the ddx-agent Service.RouteStatus API. Requires model routes to be
-configured in .agent/config.yaml.
+Uses the Fizeau Service.RouteStatus API. Requires model routes to be
+configured in .fizeau/config.yaml.
 
 Examples:
   ddx agent route-status

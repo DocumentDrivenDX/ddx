@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )

@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// stubAgentService is a controllable agentlib.DdxAgent used by routing e2e
+// stubAgentService is a controllable agentlib.FizeauService used by routing e2e
 // tests. It records Execute calls and can be configured to return typed errors
 // from Execute to test upstream error surfacing.
 type stubAgentService struct {
@@ -84,7 +84,7 @@ func (s *stubAgentService) UsageReport(_ context.Context, _ agentlib.UsageReport
 // installStubService injects a service factory and registers cleanup.
 func installStubService(t *testing.T, stub *stubAgentService) {
 	t.Helper()
-	agent.SetServiceRunFactory(func(_ string) (agentlib.DdxAgent, error) {
+	agent.SetServiceRunFactory(func(_ string) (agentlib.FizeauService, error) {
 		return stub, nil
 	})
 	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })

@@ -1217,7 +1217,7 @@ func oneLineGateSummary(detail string) string {
 
 // writeLoopEvent emits one structured JSONL line to sink describing a
 // milestone in an execute-bead loop run. Entries use the same envelope as
-// the ddx-agent harness (session_id/seq/type/ts/data) so existing log
+// the Fizeau harness (session_id/seq/type/ts/data) so existing log
 // aggregators (FormatSessionLogLines, ddx server workers log) can parse
 // the stream uniformly. Errors are swallowed: structured logging must
 // never break the core execute-loop.

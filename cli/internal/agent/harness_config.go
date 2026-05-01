@@ -2,7 +2,7 @@ package agent
 
 // harnessConfig is the private compatibility shape used by DDx's legacy
 // Runner path for fixture harnesses and subprocess argument tests. Production
-// harness inventory comes from github.com/DocumentDrivenDX/agent ListHarnesses.
+// harness inventory comes from github.com/DocumentDrivenDX/fizeau ListHarnesses.
 type harnessConfig struct {
 	Name            string
 	Binary          string
@@ -129,7 +129,7 @@ var builtinHarnessConfigs = map[string]harnessConfig{
 	},
 	"agent": {
 		Name:            "agent",
-		Binary:          "ddx-agent", // embedded — runs in-process via the agent library, not as a subprocess
+		Binary:          "fiz", // embedded — runs in-process via the Fizeau library, not as a subprocess
 		PromptMode:      "arg",
 		DefaultModel:    "", // uses agent config or provider default
 		Surface:         "embedded-openai",
@@ -186,7 +186,7 @@ var builtinHarnessConfigs = map[string]harnessConfig{
 }
 
 // harnessAliases maps convenience names to canonical harness names.
-// "local" always routes to the embedded ddx-agent; it must never
+// "local" always routes to the embedded Fizeau harness; it must never
 // fall through to a cloud harness like claude or codex.
 var harnessAliases = map[string]string{
 	"local": "agent",
