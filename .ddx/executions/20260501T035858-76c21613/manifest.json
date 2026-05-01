@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260501T035858-76c21613",
+  "bead_id": "ddx-c5f9c009",
+  "base_rev": "e4ac7dad86810d1fb0ee1fb84ed0e91b800990b1",
+  "created_at": "2026-05-01T03:58:59.588224975Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c5f9c009",
+    "title": "e2e: beads.spec.ts — add dependency tree/DAG view test",
+    "acceptance": "beads.spec.ts has test that renders bead dependency DAG view; verifies parent/child bead relationships visible; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "beads"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:58:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T03:56:23.326522162Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T035434-a2102c7b\",\"harness\":\"claude\",\"input_tokens\":20,\"output_tokens\":5751,\"total_tokens\":5771,\"cost_usd\":0.8377842499999999,\"duration_ms\":107993,\"exit_code\":0}",
+          "created_at": "2026-05-01T03:56:23.432753564Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=5771 cost_usd=0.8378"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T03:56:28.007848141Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json artifact; no beads.spec.ts test file added or modified. Acceptance criteria require a Playwright test rendering the bead dependency DAG view, which is absent from the changed files.\nharness=claude\nmodel=opus\ninput_bytes=3271\noutput_bytes=684\nelapsed_ms=7850",
+          "created_at": "2026-05-01T03:56:36.034501579Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T03:56:36.143573561Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no beads.spec.ts test file added or modified. Acceptance criteria require a Playwright test rendering the bead dependency DAG view, which is absent from the changed files.\nresult_rev=8fee1989768673c794f73996ff55a48956744222\nbase_rev=27229aef8a367e451e575b037bf7048468918d4e",
+          "created_at": "2026-05-01T03:56:36.24809534Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T03:58:58.594592262Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T035858-76c21613",
+    "prompt": ".ddx/executions/20260501T035858-76c21613/prompt.md",
+    "manifest": ".ddx/executions/20260501T035858-76c21613/manifest.json",
+    "result": ".ddx/executions/20260501T035858-76c21613/result.json",
+    "checks": ".ddx/executions/20260501T035858-76c21613/checks.json",
+    "usage": ".ddx/executions/20260501T035858-76c21613/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c5f9c009-20260501T035858-76c21613"
+  }
+}

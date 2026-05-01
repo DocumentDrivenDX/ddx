@@ -1,0 +1,53 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no sessions.spec.ts test was added or modified. Acceptance criteria require a Playwright e2e test for evidence artifact detail view, which is absent from the changed files.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes to sessions.spec.ts (or any e2e test file); only an execution result artifact is present",
+      "location": ".ddx/executions/20260501T035638-4d58aec7/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "Acceptance criteria (navigate to run/session, verify evidence artifact detail accessible) cannot be evaluated — no test code added",
+      "location": "cli/internal/server/frontend/e2e/sessions.spec.ts"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 370,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T035638-4d58aec7/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1175,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 3279,
+    "output_bytes": 774,
+    "elapsed_ms": 10845,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
