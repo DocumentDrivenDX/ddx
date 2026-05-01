@@ -233,7 +233,7 @@
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-8">
 		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
 			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Sessions</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">{data.sessions.totalCount}</div>
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">{data.sessions.totalCount}</div>
 		</div>
 		<div
 			aria-label="Cash paid. Billed by pay-per-token APIs (OpenRouter, direct API keys)"
@@ -244,7 +244,7 @@
 			>
 				<span>Cash paid</span>
 				<span
-					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-[10px] dark:border-dark-border-line"
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-label-caps font-label-caps dark:border-dark-border-line"
 					>?</span
 				>
 				<span
@@ -254,7 +254,7 @@
 					Billed by pay-per-token APIs (OpenRouter, direct API keys)
 				</span>
 			</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
 				{fmtCardCost(
 					data.costSummary.cashUsd,
 					summary.paidSessions > 0 || data.costSummary.cashUsd > 0
@@ -270,7 +270,7 @@
 			>
 				<span>Subscription value</span>
 				<span
-					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-[10px] dark:border-dark-border-line"
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-label-caps font-label-caps dark:border-dark-border-line"
 					>?</span
 				>
 				<span
@@ -281,7 +281,7 @@
 					out of pocket.
 				</span>
 			</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
 				{fmtCardCost(
 					data.costSummary.subscriptionEquivUsd,
 					summary.subscriptionSessions > 0 || data.costSummary.subscriptionEquivUsd > 0
@@ -297,7 +297,7 @@
 			>
 				<span>Local sessions</span>
 				<span
-					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-[10px] dark:border-dark-border-line"
+					class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border-line text-label-caps font-label-caps dark:border-dark-border-line"
 					>?</span
 				>
 				<span
@@ -307,35 +307,35 @@
 					Sessions served locally. Compute cost not modeled.
 				</span>
 			</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">{fmtLocalValue()}</div>
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">{fmtLocalValue()}</div>
 		</div>
 		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
 			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Total Tokens</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
 				{summary.totalTokens.toLocaleString()}
 			</div>
 		</div>
 		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
 			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Prompt</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
 				{summary.totalPrompt.toLocaleString()}
 			</div>
 		</div>
 		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
 			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Completion</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
 				{summary.totalCompletion.toLocaleString()}
 			</div>
 		</div>
 		<div class="border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
 			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cache Hit</div>
-			<div class="mt-1 text-lg font-semibold text-fg-ink dark:text-dark-fg-ink">{summary.cacheRate}%</div>
+			<div class="mt-1 text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">{summary.cacheRate}%</div>
 		</div>
 	</div>
 
 	<!-- Sessions list -->
 	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
-		<table class="w-full border-collapse text-sm">
+		<table class="w-full border-collapse">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
 					<th class="w-6 px-4 py-3"></th>
@@ -361,18 +361,18 @@
 							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 					>
-						<td class="px-4 py-3 text-fg-muted dark:text-dark-fg-muted">
+						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							{isExpanded ? '▾' : '▸'}
 						</td>
 						<td class="px-4 py-3 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
 							{s.id.slice(0, 8)}
 						</td>
-						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
+						<td class="px-4 py-3 text-body-sm text-fg-ink dark:text-dark-fg-ink">
 							<span>{s.harness}</span>
 							<span class="ml-1 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{s.model}</span>
 						</td>
-						<td class="px-4 py-3">
-							<span class="inline-block border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {statusBadgeClass(s.status)}">{s.status}</span>
+						<td class="px-4 py-3 text-body-sm">
+							<span class="inline-block border px-1.5 py-0.5 text-label-caps font-label-caps uppercase tracking-wide {statusBadgeClass(s.status)}">{s.status}</span>
 						</td>
 						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							{fmtDate(s.startedAt)}
@@ -384,7 +384,7 @@
 							<div class="flex items-center justify-end gap-2">
 								<span>{fmtCost(s.cost)}</span>
 								<span
-									class="group relative inline-flex min-w-10 justify-center border px-1.5 py-0.5 text-[10px] leading-none font-semibold uppercase {billingBadgeClass(
+									class="group relative inline-flex min-w-10 justify-center border px-1.5 py-0.5 text-label-caps font-label-caps leading-none uppercase {billingBadgeClass(
 										s.billingMode
 									)}"
 									aria-label="{billingBadge(s.billingMode)}: {billingDescription(s.billingMode)}"
@@ -409,7 +409,7 @@
 							class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface"
 						>
 							<td colspan="8" class="px-6 py-4">
-								<div class="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+								<div class="grid grid-cols-2 gap-4 text-body-sm sm:grid-cols-4">
 									<div>
 										<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Bead</div>
 										<div class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
