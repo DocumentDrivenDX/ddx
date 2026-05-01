@@ -10,7 +10,8 @@
 		relatedPath: string | null;
 	}
 
-	let { issues }: { issues: GraphIssue[] } = $props();
+	let { issues, pathToDocId = {} }: { issues: GraphIssue[]; pathToDocId?: Record<string, string> } =
+		$props();
 
 	const KIND_LABELS: Record<string, string> = {
 		duplicate_id: 'Duplicate ID',
@@ -51,6 +52,12 @@
 		const nodeId = p['nodeId'];
 		const projectId = p['projectId'];
 		if (!nodeId || !projectId) return null;
+		// Use /artifacts/:artifactId when we can resolve the document ID from the path
+		const docId = pathToDocId[path];
+		if (docId) {
+			return `/nodes/${nodeId}/projects/${projectId}/artifacts/${encodeURIComponent('doc:' + docId)}`;
+		}
+		// Fall back to /documents/:path
 		const segments = path
 			.split('/')
 			.filter((s) => s.length > 0)
