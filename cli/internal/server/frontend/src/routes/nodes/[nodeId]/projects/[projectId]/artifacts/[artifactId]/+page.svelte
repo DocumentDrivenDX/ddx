@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
-	import { ArrowLeft, Download, ExternalLink, Network } from 'lucide-svelte';
+	import { ArrowLeft, Download, ExternalLink, Network, FileClock } from 'lucide-svelte';
 	import { marked } from 'marked';
 	import DOMPurify from 'isomorphic-dompurify';
 	import { onMount } from 'svelte';
@@ -391,6 +391,81 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- Provenance panel: shown when artifact has generated_by metadata -->
+		{#if data.artifact.generatedBy}
+			{@const gb = data.artifact.generatedBy}
+			{@const hashLabel = gb.sourceHashMatch ? 'fresh' : 'stale'}
+			{@const hashCls = gb.sourceHashMatch
+				? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+				: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'}
+			{@const runHref = `/nodes/${data.nodeId}/projects/${data.projectId}/runs/${encodeURIComponent(gb.runId)}`}
+			<div
+				class="border-border-line dark:border-dark-border-line border"
+				data-testid="provenance-panel"
+			>
+				<div
+					class="border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface flex items-center justify-between border-b px-4 py-2"
+				>
+					<h2
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted tracking-wide uppercase inline-flex items-center gap-2"
+					>
+						<FileClock class="h-4 w-4" />
+						Provenance
+					</h2>
+					<span
+						class="font-label-caps text-label-caps inline-block rounded-full px-2 py-0.5 uppercase {hashCls}"
+						data-testid="source-hash-badge"
+					>
+						{hashLabel}
+					</span>
+				</div>
+				<dl class="text-body-sm divide-border-line dark:divide-dark-border-line divide-y">
+					<div class="flex gap-4 px-4 py-2">
+						<dt class="text-fg-muted dark:text-dark-fg-muted w-32 shrink-0">Producing run</dt>
+						<dd class="font-mono-code text-mono-code break-all">
+							{#if data.runExists}
+								<a
+									href={runHref}
+									data-testid="run-link"
+									class="text-accent-lever dark:text-dark-accent-lever inline-flex items-center gap-1 hover:underline"
+								>
+									{gb.runId}
+									<ExternalLink class="h-3 w-3" />
+								</a>
+							{:else}
+								<span
+									data-testid="run-link-disabled"
+									title="Producing run not found"
+									aria-disabled="true"
+									class="text-fg-muted dark:text-dark-fg-muted cursor-not-allowed opacity-60"
+								>
+									{gb.runId}
+								</span>
+							{/if}
+						</dd>
+					</div>
+					{#if gb.promptSummary}
+						<div class="flex gap-4 px-4 py-2">
+							<dt class="text-fg-muted dark:text-dark-fg-muted w-32 shrink-0">Prompt</dt>
+							<dd class="text-fg-ink dark:text-dark-fg-ink">
+								{gb.promptSummary.length > 240
+									? gb.promptSummary.slice(0, 240) + '…'
+									: gb.promptSummary}
+							</dd>
+						</div>
+					{/if}
+					<div class="flex gap-4 px-4 py-2">
+						<dt class="text-fg-muted dark:text-dark-fg-muted w-32 shrink-0">Source hash</dt>
+						<dd class="text-fg-ink dark:text-dark-fg-ink">
+							{gb.sourceHashMatch
+								? 'source inputs unchanged since this artifact was produced'
+								: 'source inputs differ from when this artifact was produced'}
+						</dd>
+					</div>
+				</dl>
+			</div>
+		{/if}
 
 		<!-- DDx sidecar metadata panel -->
 		{#if frontmatterEntries.length > 0}

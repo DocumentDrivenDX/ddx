@@ -14,9 +14,28 @@ const ARTIFACT_DETAIL_QUERY = gql`
 			updatedAt
 			ddxFrontmatter
 			content
+			generatedBy {
+				runId
+				promptSummary
+				sourceHashMatch
+			}
 		}
 	}
 `
+
+const RUN_EXISTS_QUERY = gql`
+	query RunExists($id: ID!) {
+		run(id: $id) {
+			id
+		}
+	}
+`
+
+export interface ArtifactGeneratedBy {
+	runId: string
+	promptSummary: string
+	sourceHashMatch: boolean
+}
 
 export interface ArtifactDetail {
 	id: string
@@ -28,6 +47,7 @@ export interface ArtifactDetail {
 	updatedAt: string | null
 	ddxFrontmatter: string | null
 	content: string | null
+	generatedBy: ArtifactGeneratedBy | null
 }
 
 interface ArtifactDetailResult {
@@ -50,12 +70,28 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	// Preserve back-link state so the detail page can return to the filtered list.
 	const back = url.searchParams.get('back') ?? null
 
+	// Probe whether the producing run exists, so the UI can disable the link
+	// (with tooltip) when the run id is unknown.
+	let runExists = false
+	const gb = data.artifact?.generatedBy
+	if (gb?.runId) {
+		try {
+			const probe = await client.request<{ run: { id: string } | null }>(RUN_EXISTS_QUERY, {
+				id: gb.runId
+			})
+			runExists = probe.run != null
+		} catch {
+			runExists = false
+		}
+	}
+
 	return {
 		nodeId: params.nodeId,
 		projectId: params.projectId,
 		artifactId: params.artifactId,
 		artifact: data.artifact,
 		contentUrl,
-		back
+		back,
+		runExists
 	}
 }

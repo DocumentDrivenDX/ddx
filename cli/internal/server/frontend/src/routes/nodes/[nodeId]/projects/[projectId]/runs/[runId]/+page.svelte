@@ -22,6 +22,10 @@
 		return `/nodes/${data.nodeId}/projects/${data.projectId}/beads/${beadId}`
 	}
 
+	function artifactHref(artifactId: string): string {
+		return `/nodes/${data.nodeId}/projects/${data.projectId}/artifacts/${encodeURIComponent(artifactId)}`
+	}
+
 	function fmtDate(iso: string | null): string {
 		if (!iso) return '—'
 		return new Date(iso).toLocaleString()
@@ -133,6 +137,17 @@
 					<div class="mb-1 font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Bead</div>
 					<a href={beadHref(run.beadId)} class="font-mono-code text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever">
 						{run.beadId}
+					</a>
+				</div>
+			{/if}
+			{#if data.producedArtifact}
+				<div data-testid="produced-artifact">
+					<div class="mb-1 font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Produced artifact</div>
+					<a
+						href={artifactHref(data.producedArtifact.id)}
+						class="text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever"
+					>
+						{data.producedArtifact.title}
 					</a>
 				</div>
 			{/if}

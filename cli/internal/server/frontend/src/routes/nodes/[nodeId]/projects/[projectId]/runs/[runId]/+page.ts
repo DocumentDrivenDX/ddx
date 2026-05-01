@@ -10,6 +10,7 @@ const RUN_DETAIL_QUERY = gql`
 			status
 			projectID
 			beadId
+			artifactId
 			parentRunId
 			childRunIds
 			startedAt
@@ -47,6 +48,7 @@ export interface RunDetail {
 	status: string
 	projectID: string | null
 	beadId: string | null
+	artifactId: string | null
 	parentRunId: string | null
 	childRunIds: string[]
 	startedAt: string | null
@@ -84,6 +86,20 @@ const PARENT_RUN_QUERY = gql`
 	}
 `
 
+const PRODUCED_ARTIFACT_QUERY = gql`
+	query ProducedArtifact($projectID: ID!, $id: ID!) {
+		artifact(projectID: $projectID, id: $id) {
+			id
+			title
+		}
+	}
+`
+
+export interface ProducedArtifact {
+	id: string
+	title: string
+}
+
 export const load: PageLoad = async ({ params, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 	const data = await client.request<{ run: RunDetail | null }>(RUN_DETAIL_QUERY, {
@@ -99,11 +115,25 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		grandparentRunId = parentData.run?.parentRunId ?? null
 	}
 
+	let producedArtifact: ProducedArtifact | null = null
+	if (data.run?.artifactId) {
+		try {
+			const artData = await client.request<{ artifact: ProducedArtifact | null }>(
+				PRODUCED_ARTIFACT_QUERY,
+				{ projectID: params.projectId, id: data.run.artifactId }
+			)
+			producedArtifact = artData.artifact
+		} catch {
+			producedArtifact = null
+		}
+	}
+
 	return {
 		nodeId: params.nodeId,
 		projectId: params.projectId,
 		runId: params.runId,
 		run: data.run,
-		grandparentRunId
+		grandparentRunId,
+		producedArtifact
 	}
 }
