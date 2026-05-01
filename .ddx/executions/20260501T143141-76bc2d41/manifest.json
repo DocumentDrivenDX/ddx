@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260501T143141-76bc2d41",
+  "bead_id": "ddx-83bcd4a4",
+  "base_rev": "bfa66988ef7e2549bf7cb2c1f9fb0f1bd0df28a2",
+  "created_at": "2026-05-01T14:31:42.721289953Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-83bcd4a4",
+    "title": "BeadDetail: h2 title and dt labels use raw text-xl/text-xs instead of semantic tokens",
+    "description": "src/lib/components/BeadDetail.svelte uses raw Tailwind size classes:\n\nLine 377: h2 uses text-xl — should be text-headline-lg (20px/800) since this is the primary heading of the detail panel\nLines 383, 392, 399, 413, 429, 443, 452, 465, 499: dt elements use text-xs — these are uppercase label/field labels and should use text-label-caps (11px/700/uppercase) since they also carry uppercase and tracking-wide already\nLines 382-383: outer dl uses text-sm — should be text-body-sm (13px)\nLines 479, 481: run/execution row sub-badges use text-[10px] — this is below label-caps (11px) and below the token floor; should be text-label-caps if used as status chips\nLine 301: owner span uses text-xs — should be text-body-sm\n\nClaim/Unclaim/Edit/Delete buttons use text-sm — should be text-body-sm.",
+    "acceptance": "h2 uses text-headline-lg. dt uppercase labels use text-label-caps. Body text uses text-body-sm. Sub-badges in runs/executions rows use text-label-caps. No raw text-xs, text-sm, or text-xl remains in BeadDetail.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:31:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T14:31:21.924352807Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T142826-d7c8439d\",\"harness\":\"claude\",\"input_tokens\":36,\"output_tokens\":10302,\"total_tokens\":10338,\"cost_usd\":1.3344052500000003,\"duration_ms\":174152,\"exit_code\":0}",
+          "created_at": "2026-05-01T14:31:22.029782068Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=10338 cost_usd=1.3344"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T14:31:26.072424773Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json artifact; no changes to BeadDetail.svelte are present, so none of the acceptance criteria can be evaluated as implemented.\nharness=claude\nmodel=opus\ninput_bytes=4209\noutput_bytes=574\nelapsed_ms=10007",
+          "created_at": "2026-05-01T14:31:36.25857276Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T14:31:36.372814075Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no changes to BeadDetail.svelte are present, so none of the acceptance criteria can be evaluated as implemented.\nresult_rev=ebc9229f59b733b14c8c889775ea700d066f63b6\nbase_rev=456f43af2207bdc811461c6ab3418c4d71afd85a",
+          "created_at": "2026-05-01T14:31:36.476684316Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T14:31:41.768197172Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143141-76bc2d41",
+    "prompt": ".ddx/executions/20260501T143141-76bc2d41/prompt.md",
+    "manifest": ".ddx/executions/20260501T143141-76bc2d41/manifest.json",
+    "result": ".ddx/executions/20260501T143141-76bc2d41/result.json",
+    "checks": ".ddx/executions/20260501T143141-76bc2d41/checks.json",
+    "usage": ".ddx/executions/20260501T143141-76bc2d41/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-83bcd4a4-20260501T143141-76bc2d41"
+  }
+}
