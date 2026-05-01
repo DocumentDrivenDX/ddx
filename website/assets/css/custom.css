@@ -265,6 +265,212 @@ body.ddx-editorial-home *::after {
   font-size: 12px;
 }
 
+/* ─── Section 2: Problem ─── */
+
+.ddx-home-problem {
+  padding: 72px 0 48px;
+  border-top: 1px solid var(--ddx-border-line);
+}
+
+.ddx-home-problem__body {
+  max-width: 860px;
+}
+
+.ddx-home-problem__headline {
+  margin: 0 0 20px;
+  color: var(--ddx-fg-ink);
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(24px, 3.5vw, 36px);
+  font-weight: 800;
+  line-height: 1.12;
+}
+
+.ddx-home-problem__prose {
+  margin: 0;
+  color: var(--ddx-fg-muted);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 18px;
+  line-height: 1.62;
+}
+
+/* ─── Section 3: How it works ─── */
+
+.ddx-home-how {
+  padding: 64px 0 28px;
+  border-top: 1px solid var(--ddx-border-line);
+}
+
+.ddx-home-how__steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 36px;
+}
+
+.ddx-home-how__step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ddx-home-how__step-num {
+  color: var(--ddx-accent-brass);
+  font-family: "Space Grotesk", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.ddx-home-how__step h3 {
+  margin: 0;
+  color: var(--ddx-fg-ink);
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.14;
+}
+
+.ddx-home-how__step p {
+  margin: 0;
+  color: var(--ddx-fg-muted);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 17px;
+  line-height: 1.52;
+}
+
+/* ─── Section 4: Features preview ─── */
+
+.ddx-home-features {
+  padding: 64px 0 28px;
+  border-top: 1px solid var(--ddx-border-line);
+}
+
+.ddx-home-features__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.ddx-home-features__header .ddx-home-section-label {
+  margin: 0;
+}
+
+.ddx-home-features__all {
+  color: var(--ddx-accent-lever);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ddx-home-features__all:hover {
+  color: var(--ddx-accent-fulcrum);
+}
+
+.ddx-home-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ddx-home-card--feature {
+  aspect-ratio: auto;
+  min-height: 180px;
+}
+
+/* ─── Section 6: Demo ─── */
+
+.ddx-home-demo {
+  padding: 64px 0 28px;
+  border-top: 1px solid var(--ddx-border-line);
+}
+
+.ddx-home-demo__player {
+  margin-top: 20px;
+  border: 1px solid var(--ddx-border-line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #272822;
+  min-height: 260px;
+}
+
+.ddx-home-demo__fallback {
+  width: 100%;
+  display: block;
+}
+
+/* ─── Section 7: CTA ─── */
+
+.ddx-home-cta {
+  padding: 80px 0 64px;
+  border-top: 1px solid var(--ddx-border-line);
+  text-align: center;
+}
+
+.ddx-home-cta__headline {
+  margin: 0 auto 20px;
+  max-width: 680px;
+  color: var(--ddx-fg-ink);
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(26px, 3.5vw, 38px);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.ddx-home-cta__prose {
+  margin: 0 auto 34px;
+  max-width: 480px;
+  color: var(--ddx-fg-muted);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 18px;
+  line-height: 1.56;
+}
+
+.ddx-home-cta .ddx-home-actions {
+  justify-content: center;
+}
+
+/* ─── Maturity badges ─── */
+
+.ddx-maturity {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-family: "Space Grotesk", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.ddx-maturity--stable {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.ddx-maturity--beta {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.ddx-maturity--planned {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.dark .ddx-maturity--stable {
+  background: #064e3b;
+  color: #6ee7b7;
+}
+
+.dark .ddx-maturity--beta {
+  background: #451a03;
+  color: #fcd34d;
+}
+
+.dark .ddx-maturity--planned {
+  background: #1f2937;
+  color: #9ca3af;
+}
+
 @media (max-width: 820px) {
   .ddx-home-main {
     padding-top: 104px;
@@ -284,9 +490,18 @@ body.ddx-editorial-home *::after {
     grid-template-columns: 1fr;
   }
 
+  .ddx-home-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .ddx-home-card {
     aspect-ratio: auto;
     min-height: 220px;
+  }
+
+  .ddx-home-how__steps {
+    grid-template-columns: 1fr;
+    gap: 28px;
   }
 }
 
@@ -306,5 +521,9 @@ body.ddx-editorial-home *::after {
 
   .ddx-home-footer {
     flex-direction: column;
+  }
+
+  .ddx-home-grid--4 {
+    grid-template-columns: 1fr;
   }
 }

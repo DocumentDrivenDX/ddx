@@ -13,6 +13,7 @@
       <div class="ddx-home-nav__inner">
         <a class="ddx-home-logo" href="{{ relLangURL "" }}">DDX</a>
         <div class="ddx-home-nav__links">
+          <a href="{{ relLangURL "features/" }}">Features</a>
           <a href="{{ relLangURL "docs/" }}">Docs</a>
           <a href="{{ relLangURL "docs/concepts/" }}">Concepts</a>
         </div>
@@ -20,6 +21,8 @@
     </nav>
 
     <main class="ddx-home-main">
+
+      <!-- Section 1: Hero -->
       <section class="ddx-home-hero" aria-labelledby="ddx-home-title">
         <div>
           <p class="ddx-home-kicker">Document-driven development</p>
@@ -31,7 +34,7 @@
           </p>
           <div class="ddx-home-actions" aria-label="Start">
             <a class="ddx-home-action-primary" href="{{ relLangURL "docs/getting-started/" }}">Get Started</a>
-            <a href="{{ relLangURL "docs/concepts/" }}">Read Concepts</a>
+            <a href="{{ relLangURL "features/" }}">See Features</a>
           </div>
         </div>
 
@@ -41,6 +44,76 @@
         </blockquote>
       </section>
 
+      <!-- Section 2: The gap AI agents cannot close alone -->
+      <section class="ddx-home-problem" aria-labelledby="ddx-problem-title">
+        <p id="ddx-problem-title" class="ddx-home-section-label">The gap</p>
+        <div class="ddx-home-problem__body">
+          <h2 class="ddx-home-problem__headline">AI agents can write code. They cannot hold context across a codebase, a sprint, or a team.</h2>
+          <p class="ddx-home-problem__prose">DDx closes that gap. Specs encode intent. Beads carry acceptance criteria forward. Agents execute against a defined contract — and leave evidence when they are done.</p>
+        </div>
+      </section>
+
+      <!-- Section 3: How it works — three moving parts -->
+      <section class="ddx-home-how" aria-labelledby="ddx-how-title">
+        <p id="ddx-how-title" class="ddx-home-section-label">How it works</p>
+        <div class="ddx-home-how__steps">
+          <div class="ddx-home-how__step">
+            <span class="ddx-home-how__step-num">01</span>
+            <h3>Track work as beads</h3>
+            <p>Create beads with acceptance criteria and dependency graphs. The queue tells agents what to do next.</p>
+          </div>
+          <div class="ddx-home-how__step">
+            <span class="ddx-home-how__step-num">02</span>
+            <h3>Execute in isolation</h3>
+            <p>Each bead runs in its own worktree. Results are merged — or preserved — with a full audit trail.</p>
+          </div>
+          <div class="ddx-home-how__step">
+            <span class="ddx-home-how__step-num">03</span>
+            <h3>Review and close</h3>
+            <p>A review pass checks every acceptance criterion. Passing beads close. Failing beads re-queue with findings.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: Features preview -->
+      <section class="ddx-home-features" aria-labelledby="ddx-features-title">
+        <div class="ddx-home-features__header">
+          <p id="ddx-features-title" class="ddx-home-section-label">Capabilities</p>
+          <a class="ddx-home-features__all" href="{{ relLangURL "features/" }}">All features →</a>
+        </div>
+        <div class="ddx-home-grid ddx-home-grid--4">
+          <article class="ddx-home-card ddx-home-card--feature">
+            <span class="ddx-home-card__number">bead tracker</span>
+            <div>
+              <h2>Work Queue</h2>
+              <p>Beads encode work with acceptance criteria, dependency graphs, and agent claims.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card ddx-home-card--feature">
+            <span class="ddx-home-card__number">agent dispatch</span>
+            <div>
+              <h2>Execution Engine</h2>
+              <p>Agents run in isolated worktrees. Evidence is captured with every invocation.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card ddx-home-card--feature">
+            <span class="ddx-home-card__number">plugin registry</span>
+            <div>
+              <h2>Plugin System</h2>
+              <p>Install workflow methodologies with one command. Everything stays project-local.</p>
+            </div>
+          </article>
+          <article class="ddx-home-card ddx-home-card--feature">
+            <span class="ddx-home-card__number">mcp server</span>
+            <div>
+              <h2>MCP Server</h2>
+              <p>Serve beads and documents over MCP. Remote supervisors can observe and steer work.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Section 5: Principles -->
       <section class="ddx-home-principles" aria-labelledby="ddx-principles-title">
         <p id="ddx-principles-title" class="ddx-home-section-label">Principles</p>
         <div class="ddx-home-grid">
@@ -89,10 +162,55 @@
         </div>
       </section>
 
+      <!-- Section 6: See it in action -->
+      <section class="ddx-home-demo" aria-labelledby="ddx-demo-title">
+        <p id="ddx-demo-title" class="ddx-home-section-label">See it in action</p>
+        <div id="ddx-demo-player-mount" class="ddx-home-demo__player"
+             data-src="{{ relURL "demos/07-quickstart.cast" }}"
+             data-cols="100" data-rows="28">
+        </div>
+        <noscript>
+          <img src="{{ relURL "demos/07-quickstart.gif" }}" alt="DDx quickstart demo" class="ddx-home-demo__fallback" />
+        </noscript>
+        <script>
+          (function() {
+            var el = document.getElementById('ddx-demo-player-mount');
+            if (!el) return;
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://cdn.jsdelivr.net/npm/asciinema-player@3.9.0/dist/bundle/asciinema-player.min.css';
+            document.head.appendChild(link);
+            var script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/asciinema-player@3.9.0/dist/bundle/asciinema-player.min.js';
+            script.onload = function() {
+              AsciinemaPlayer.create(el.dataset.src, el, {
+                cols: Number(el.dataset.cols),
+                rows: Number(el.dataset.rows),
+                autoPlay: true,
+                speed: 1.5,
+                theme: 'monokai',
+              });
+            };
+            document.head.appendChild(script);
+          })();
+        </script>
+      </section>
+
+      <!-- Section 7: Get started CTA -->
+      <section class="ddx-home-cta" aria-labelledby="ddx-cta-title">
+        <h2 id="ddx-cta-title" class="ddx-home-cta__headline">Ready to bring structure to your AI workflow?</h2>
+        <p class="ddx-home-cta__prose">Install DDx and have your first bead running in under five minutes.</p>
+        <div class="ddx-home-actions">
+          <a class="ddx-home-action-primary" href="{{ relLangURL "docs/getting-started/" }}">Get Started</a>
+          <a href="https://github.com/DocumentDrivenDX/ddx">View on GitHub</a>
+        </div>
+      </section>
+
       <footer class="ddx-home-footer">
         <span class="ddx-home-footer__mark">DDX</span>
         <span>local-first document orchestration for agentic software work</span>
       </footer>
+
     </main>
   </body>
 </html>
