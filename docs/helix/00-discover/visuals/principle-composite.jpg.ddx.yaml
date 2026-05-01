@@ -1,0 +1,24 @@
+---
+artifact: principle-composite.jpg
+generator: nano-banana-pro-openrouter
+model: google/gemini-3-pro-image-preview
+resolution: "2K"
+generated_at: 2026-05-01T18:43:00Z
+generated_by:
+  prompt: docs/helix/00-discover/visuals/principle-composite.prompt.md
+depends_on:
+  - .stitch/DESIGN.md
+  - docs/helix/00-discover/product-vision.md
+  - docs/helix/00-discover/visuals/principle-1-lever.prompt.md
+  - docs/helix/00-discover/visuals/principle-2-cyclic-motion.prompt.md
+  - docs/helix/00-discover/visuals/principle-3-interchangeable-handles.prompt.md
+  - docs/helix/00-discover/visuals/principle-4-load.prompt.md
+  - docs/helix/00-discover/visuals/principle-5-trail.prompt.md
+  - docs/helix/00-discover/visuals/principle-6-fulcrum.prompt.md
+notes: |
+  Pressure-test gate passed. All six lever-metaphor elements read without
+  caption: stacked lever beam (1), cyclic arcs labeled "iterate" (2),
+  interchangeable handles cluster (3), load cluster (4), receipts trail (5),
+  fulcrum with human/agent two-face seam (6). Patent-figure register; no
+  AI-gloss. Model returned JPEG; filename extension changed from .png to .jpg.
+---

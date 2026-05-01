@@ -133,6 +133,10 @@ ddx work</code></pre>
       <!-- Section 5: Principles -->
       <section class="ddx-home-principles" aria-labelledby="ddx-principles-title">
         <p id="ddx-principles-title" class="ddx-home-section-label">Principles</p>
+        <figure class="ddx-home-visual">
+          <img src="{{ relURL "visuals/principle-composite.jpg" }}" alt="Lever metaphor composite: stacked abstraction beam pivoting on the human-AI fulcrum, lifting a probabilistic load, driven by interchangeable methodology handles, leaving an audit trail of receipts through cyclic iteration." />
+          <figcaption>The DDx physics, in one figure: a lever with stacked levels of abstraction, pivoting on the human-AI fulcrum, lifting a probabilistic load, driven by interchangeable methodology handles, leaving an audit trail through cyclic iteration.</figcaption>
+        </figure>
         <div class="ddx-home-grid">
           <article class="ddx-home-card">
             <span class="ddx-home-card__number">01</span>
@@ -177,6 +181,38 @@ ddx work</code></pre>
             </div>
           </article>
         </div>
+      </section>
+
+      <!-- Section 5b: Tools -->
+      <section class="ddx-home-tools" aria-labelledby="ddx-tools-title">
+        <p id="ddx-tools-title" class="ddx-home-section-label">The four tools</p>
+        <div class="ddx-home-tools__grid">
+          <figure class="ddx-home-tool">
+            <img src="{{ relURL "visuals/tool-tracker.png" }}" alt="Bead tracker: priority queue with ready and blocked states, dependency DAG with closed predecessors marked with a check." />
+            <figcaption><strong>Bead tracker</strong> — work items with acceptance criteria, ordered by a dependency DAG and a ready/blocked queue.</figcaption>
+          </figure>
+          <figure class="ddx-home-tool">
+            <img src="{{ relURL "visuals/tool-doc-graph.jpg" }}" alt="Document graph: nodes for vision, PRD, design plans, beads, and generated artifacts, connected by depends_on (solid blue) and generated_by (dashed) edges." />
+            <figcaption><strong>Document graph</strong> — every artifact's <code>depends_on</code> and <code>generated_by</code> edges, queryable and verifiable.</figcaption>
+          </figure>
+          <figure class="ddx-home-tool">
+            <img src="{{ relURL "visuals/tool-execution.jpg" }}" alt="Agentic execution: three-layer wrapping showing ddx run inside ddx try inside ddx work, with a worktree isolation boundary." />
+            <figcaption><strong>Agentic execution</strong> — <code>ddx run</code> / <code>try</code> / <code>work</code> in three concentric layers; each agent runs in its own worktree.</figcaption>
+          </figure>
+          <figure class="ddx-home-tool">
+            <img src="{{ relURL "visuals/tool-plugins.png" }}" alt="Plugins: modular components like HELIX and Dun snapping into a shared DDx core." />
+            <figcaption><strong>Plugins</strong> — modular composition. HELIX, Dun, and your own packs snap into the shared DDx core.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Section 5c: Workflow capstone -->
+      <section class="ddx-home-workflow" aria-labelledby="ddx-workflow-title">
+        <p id="ddx-workflow-title" class="ddx-home-section-label">Working with DDx</p>
+        <figure class="ddx-home-visual">
+          <img src="{{ relURL "visuals/user-workflow.png" }}" alt="Six-step DDx loop: author or refine an artifact, the graph synthesizes context, a bead is created, the agent runs in an isolated worktree, evidence is captured, the human re-aligns and the loop continues." />
+          <figcaption>The loop closes; the artifact improves. Author → graph synthesizes context → bead → agent run → evidence → human re-aligns → repeat.</figcaption>
+        </figure>
       </section>
 
       <!-- Section 6: See it in action -->
