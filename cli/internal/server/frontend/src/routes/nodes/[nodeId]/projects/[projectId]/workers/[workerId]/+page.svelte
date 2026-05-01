@@ -311,7 +311,7 @@
 
 		<!-- Metadata grid -->
 		<div
-			class="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 border-b border-border-line px-6 py-4 text-sm dark:border-dark-border-line"
+			class="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 border-b border-border-line px-6 py-4 text-body-sm dark:border-dark-border-line"
 		>
 			<div>
 				<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">State</div>
@@ -386,7 +386,7 @@
 				<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">No sessions recorded yet.</p>
 			{:else}
 				<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
-					<table class="w-full text-xs">
+					<table class="w-full text-body-sm">
 						<thead class="bg-bg-surface text-fg-muted dark:bg-dark-bg-surface dark:text-dark-fg-muted">
 							<tr>
 								<th class="px-3 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide">Session</th>
@@ -539,8 +539,8 @@
 			<pre
 				bind:this={logContainer}
 				onscroll={handleScroll}
-				class="flex-1 overflow-auto bg-gray-950 px-4 py-3 font-mono text-xs leading-relaxed text-green-400 dark:text-green-300">{#if logLines.length === 0}<span
-						class="text-gray-600 dark:text-gray-500">No log output yet…</span
+				class="flex-1 overflow-auto bg-terminal-bg px-4 py-3 font-mono text-xs leading-relaxed text-terminal-fg">{#if logLines.length === 0}<span
+						class="text-fg-muted dark:text-dark-fg-muted">No log output yet…</span
 					>{:else}{logLines.join('\n')}{/if}</pre>
 		</div>
 	</div>
