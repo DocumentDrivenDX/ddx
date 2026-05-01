@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T035638-4d58aec7",
+  "bead_id": "ddx-d1c4e27a",
+  "base_rev": "3894a324c4243f202f4aeeffd35fca0763dfe3e1",
+  "created_at": "2026-05-01T03:56:39.569594572Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d1c4e27a",
+    "title": "e2e: sessions.spec.ts — add per-run evidence artifact detail test",
+    "acceptance": "sessions.spec.ts has test that: navigates to a run/session, verifies evidence artifact detail view is accessible; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "sessions"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:56:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T03:56:38.611984704Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T035638-4d58aec7",
+    "prompt": ".ddx/executions/20260501T035638-4d58aec7/prompt.md",
+    "manifest": ".ddx/executions/20260501T035638-4d58aec7/manifest.json",
+    "result": ".ddx/executions/20260501T035638-4d58aec7/result.json",
+    "checks": ".ddx/executions/20260501T035638-4d58aec7/checks.json",
+    "usage": ".ddx/executions/20260501T035638-4d58aec7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d1c4e27a-20260501T035638-4d58aec7"
+  }
+}
