@@ -37,10 +37,10 @@ ddx agent execute-bead <id> --from HEAD
 
 ### Plugin System {{< maturity "stable" >}}
 
-Workflow methodologies are packaged as plugins. One command installs a plugin under the project root — no global state, no machine-wide side effects.
+Plugins package additional resources — templates, prompts, patterns, personas, workflows. One command installs a plugin under the project root — no global state, no machine-wide side effects.
 
 ```
-ddx install helix               # install HELIX workflow
+ddx install <plugin-name>       # install a plugin
 ddx install ddx                 # update DDx default resources
 ```
 
@@ -54,13 +54,13 @@ ddx templates apply scaffold
 ddx persona list
 ```
 
-### Persona System {{< maturity "stable" >}}
+### Artifact Graph {{< maturity "stable" >}}
 
-Personas are reusable AI personality templates — code-reviewer, test-engineer, architect. Projects bind personas to roles in `.ddx.yml`. Every agent run picks up the bound persona automatically.
+DDx tracks the relationships between project artifacts — both markdown documents and non-markdown files. Each non-markdown artifact carries a `.ddx.yaml` sidecar that records its kind, provenance, and links to other artifacts, so the graph stays consistent across formats.
 
 ```
-ddx persona show code-reviewer
-ddx persona bind code-reviewer --role reviewer
+ddx doc graph
+ddx doc audit
 ```
 
 ### Git Sync {{< maturity "stable" >}}
