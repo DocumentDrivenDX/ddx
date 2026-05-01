@@ -210,7 +210,7 @@
 	     worker; server enforces workers.default_spec + workers.max_count. -->
 	<div
 		data-testid="drain-count-panel"
-		class="flex flex-col gap-3 border border-border-line bg-bg-surface p-4 text-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:flex-row sm:items-center sm:justify-between"
+		class="flex flex-col gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:flex-row sm:items-center sm:justify-between"
 	>
 		<div>
 			<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
@@ -218,7 +218,7 @@
 			</div>
 			<div
 				data-testid="drain-worker-count"
-				class="mt-1 text-3xl font-semibold text-fg-ink dark:text-dark-fg-ink"
+				class="mt-1 text-headline-lg font-headline-lg text-fg-ink dark:text-dark-fg-ink"
 			>
 				{runningDrainCount}
 			</div>
@@ -233,7 +233,7 @@
 				onclick={() => void addDrainWorker()}
 				disabled={addDisabled}
 				title={addTooltip}
-				class="border border-accent-lever bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-accent-lever dark:bg-dark-accent-lever"
+				class="border border-accent-lever bg-accent-lever px-3 py-1.5 text-body-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-accent-lever dark:bg-dark-accent-lever"
 				aria-label="Add worker"
 			>
 				{adding ? '…' : '+ Add worker'}
@@ -243,7 +243,7 @@
 				data-testid="remove-drain-worker"
 				onclick={() => void removeDrainWorker()}
 				disabled={removing || runningDrainCount === 0}
-				class="border border-border-line px-3 py-1.5 text-sm font-medium text-status-failed hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
+				class="border border-border-line px-3 py-1.5 text-body-sm font-medium text-error hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:text-dark-error dark:hover:bg-dark-bg-surface"
 				aria-label="Remove worker"
 			>
 				{removing ? '…' : '− Remove worker'}
@@ -272,7 +272,7 @@
 					actionError = null;
 					showStartForm = !showStartForm;
 				}}
-				class="border border-accent-lever bg-accent-lever px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-accent-lever dark:bg-dark-accent-lever"
+				class="border border-accent-lever bg-accent-lever px-3 py-1.5 text-body-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-accent-lever dark:bg-dark-accent-lever"
 			>
 				Start worker
 			</button>
@@ -281,7 +281,7 @@
 
 	{#if showStartForm}
 		<form
-			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-4"
+			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-4"
 			onsubmit={(event) => {
 				event.preventDefault();
 				void startWorker();
@@ -331,14 +331,14 @@
 				<button
 					type="submit"
 					disabled={starting || !profile.trim() || !effort.trim()}
-					class="border border-fg-ink bg-fg-ink px-3 py-1.5 text-sm font-medium text-bg-canvas hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-fg-ink dark:bg-dark-fg-ink dark:text-dark-bg-canvas"
+					class="border border-fg-ink bg-fg-ink px-3 py-1.5 text-body-sm font-medium text-bg-canvas hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-fg-ink dark:bg-dark-fg-ink dark:text-dark-bg-canvas"
 				>
 					{starting ? 'Starting…' : 'Start'}
 				</button>
 				<button
 					type="button"
 					onclick={() => (showStartForm = false)}
-					class="px-3 py-1.5 text-sm text-fg-muted hover:bg-bg-canvas dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+					class="px-3 py-1.5 text-body-sm text-fg-muted hover:bg-bg-canvas dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 				>
 					Cancel
 				</button>
@@ -353,7 +353,7 @@
 	{/if}
 
 	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
-		<table class="w-full text-sm">
+		<table class="w-full text-body-sm">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
 					<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">ID</th>
