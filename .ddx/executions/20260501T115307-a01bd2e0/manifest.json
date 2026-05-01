@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260501T115307-a01bd2e0",
+  "bead_id": "ddx-dcee9b0c",
+  "base_rev": "d842a3d9e003c3b14c50c695615507112e0eee3e",
+  "created_at": "2026-05-01T11:53:08.763638891Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dcee9b0c",
+    "title": "docs: add bounded context execution concept — context rot, ralph loop, product-vision + concept doc",
+    "acceptance": "context rot and bounded context execution are named and explained across: product-vision.md physics section, new concept doc, /why/ root cause section, execute-loop feature page",
+    "labels": [
+      "area:docs",
+      "bounded-context",
+      "concepts",
+      "epic"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T11:53:07Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T07:50:57.601709427Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T074835-f2ce1ec5\",\"harness\":\"claude\",\"input_tokens\":25,\"output_tokens\":7743,\"total_tokens\":7768,\"cost_usd\":0.875531,\"duration_ms\":140873,\"exit_code\":0}",
+          "created_at": "2026-05-01T07:50:57.70938854Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=7768 cost_usd=0.8755"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T07:51:01.115758882Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only execution metadata (manifest.json, result.json) under .ddx/executions/. No changes to product-vision.md, concept doc, /why/ page, or execute-loop feature page — none of the AC items are evaluable from this diff.\nharness=claude\nmodel=opus\ninput_bytes=5178\noutput_bytes=826\nelapsed_ms=8205",
+          "created_at": "2026-05-01T07:51:11.521796545Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T07:51:11.63086449Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution metadata (manifest.json, result.json) under .ddx/executions/. No changes to product-vision.md, concept doc, /why/ page, or execute-loop feature page — none of the AC items are evaluable from this diff.\nresult_rev=e2ac20acd1ce1dbdc8c4a86a8d87c463775b8a80\nbase_rev=97ad8cce851d70da9ccffeab946642b635d8fa9a",
+          "created_at": "2026-05-01T07:51:11.739509185Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T11:53:07.809160953Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T115307-a01bd2e0",
+    "prompt": ".ddx/executions/20260501T115307-a01bd2e0/prompt.md",
+    "manifest": ".ddx/executions/20260501T115307-a01bd2e0/manifest.json",
+    "result": ".ddx/executions/20260501T115307-a01bd2e0/result.json",
+    "checks": ".ddx/executions/20260501T115307-a01bd2e0/checks.json",
+    "usage": ".ddx/executions/20260501T115307-a01bd2e0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dcee9b0c-20260501T115307-a01bd2e0"
+  }
+}
