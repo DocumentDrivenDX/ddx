@@ -1,0 +1,53 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no changes to IntegrityPanel.svelte. None of the AC items (badge-status-blocked removal, neutral ID chip, semantic button styles, diff text dark variants, text-error usage, headline typography) can be evaluated as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No modifications to src/lib/components/IntegrityPanel.svelte in the diff",
+      "location": "src/lib/components/IntegrityPanel.svelte"
+    },
+    {
+      "severity": "block",
+      "summary": "Only a new execution result.json was added; acceptance criteria untouched",
+      "location": ".ddx/executions/20260501T143140-719e465c/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1672,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T143140-719e465c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1183,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4589,
+    "output_bytes": 733,
+    "elapsed_ms": 10531,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
