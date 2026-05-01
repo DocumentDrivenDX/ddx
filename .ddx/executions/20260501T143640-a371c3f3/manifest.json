@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T143640-a371c3f3",
+  "bead_id": "ddx-4006df47",
+  "base_rev": "a9d0f126728bdb0956ca1c5dd98b0eeaa5aedf1e",
+  "created_at": "2026-05-01T14:36:41.809628361Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4006df47",
+    "title": "workers layout: text-lever on ID column should be text-accent-lever; raw text-sm/text-xs present",
+    "description": "src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte has these token issues:\n\n1. Line 382: ID column uses text-lever (a CSS utility defined in app.css pointing to --status-open-text). This is semantically wrong: it should use text-accent-lever / dark:text-dark-accent-lever, which is how bead IDs are styled in other pages (e.g. executions, runs). text-lever exists as a legacy utility; it should not be used in new code.\n\n2. Line 220: drain worker count uses text-3xl — raw size; should be text-headline-lg (20px/800) or an explicit heading scale token. The '3xl' weight is too large for the defined headline scale but is not in the token set at all.\n\n3. Lines 216-219 drain panel uses text-label-caps correctly but also text-3xl without a paired font-headline token.\n\n4. The file also uses text-sm (lines in start-worker form) where text-body-sm should be used.\n\n5. Line 246 Remove worker button uses text-status-failed inline — should use text-error / dark:text-dark-error to match the semantic error pattern used elsewhere.",
+    "acceptance": "ID column uses text-accent-lever dark:text-dark-accent-lever. text-lever removed. Drain count uses an appropriate headline token. text-sm replaced with text-body-sm. Remove button uses text-error / dark:text-dark-error.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:36:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:36:40.832141166Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143640-a371c3f3",
+    "prompt": ".ddx/executions/20260501T143640-a371c3f3/prompt.md",
+    "manifest": ".ddx/executions/20260501T143640-a371c3f3/manifest.json",
+    "result": ".ddx/executions/20260501T143640-a371c3f3/result.json",
+    "checks": ".ddx/executions/20260501T143640-a371c3f3/checks.json",
+    "usage": ".ddx/executions/20260501T143640-a371c3f3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4006df47-20260501T143640-a371c3f3"
+  }
+}
