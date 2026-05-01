@@ -59,6 +59,17 @@
 	--tier-smart-surface: oklch(97% 0.02 315);
 	--tier-smart-border: oklch(79% 0.09 315);
 
+	/* run-hierarchy layers — work=violet (~300), try=blue (~220), run=teal (~190) */
+	--layer-work-text: oklch(41% 0.13 300);
+	--layer-work-surface: oklch(97% 0.02 300);
+	--layer-work-border: oklch(79% 0.09 300);
+	--layer-try-text: #3B5B7A;
+	--layer-try-surface: oklch(97% 0.01 220);
+	--layer-try-border: oklch(78% 0.06 220);
+	--layer-run-text: oklch(40% 0.09 190);
+	--layer-run-surface: oklch(97% 0.03 190);
+	--layer-run-border: oklch(79% 0.08 190);
+
 	/* doc prose — warm surface tones */
 	--doc-link-text: #3B5B7A;
 	--doc-link-text-hover: #224361;
@@ -126,6 +137,16 @@
 	--tier-smart-text: oklch(78% 0.1 315);
 	--tier-smart-surface: oklch(28% 0.06 315);
 	--tier-smart-border: oklch(51% 0.09 315);
+
+	--layer-work-text: oklch(78% 0.1 300);
+	--layer-work-surface: oklch(27% 0.06 300);
+	--layer-work-border: oklch(51% 0.09 300);
+	--layer-try-text: #7BA3CC;
+	--layer-try-surface: oklch(22% 0.04 220);
+	--layer-try-border: oklch(45% 0.07 220);
+	--layer-run-text: oklch(78% 0.09 190);
+	--layer-run-surface: oklch(27% 0.05 190);
+	--layer-run-border: oklch(51% 0.08 190);
 
 	--doc-link-text: #7BA3CC;
 	--doc-link-text-hover: #A9CAEE;
@@ -253,6 +274,23 @@
 	}
 	.text-priority-p4 {
 		color: var(--priority-p4-text);
+	}
+
+	/* run-hierarchy layer badges — work/try/run */
+	.badge-layer-work {
+		color: var(--layer-work-text);
+		background-color: var(--layer-work-surface);
+		border-color: var(--layer-work-border);
+	}
+	.badge-layer-try {
+		color: var(--layer-try-text);
+		background-color: var(--layer-try-surface);
+		border-color: var(--layer-try-border);
+	}
+	.badge-layer-run {
+		color: var(--layer-run-text);
+		background-color: var(--layer-run-surface);
+		border-color: var(--layer-run-border);
 	}
 
 	/* billing mode badges — tier-fast=amber (real cost), tier-standard=blue (subscription), p4=neutral (local) */
