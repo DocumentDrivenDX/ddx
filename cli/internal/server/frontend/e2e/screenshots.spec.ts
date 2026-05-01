@@ -1,4 +1,12 @@
 import { test, expect } from '@playwright/test';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Marketing assets — feature-area screenshots referenced by
+// website/content/features/_index.md. Written directly into
+// website/static/ui/ with the exact filenames the Hugo site renders.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const WEBSITE_UI_DIR = path.resolve(__dirname, '../../../../../website/static/ui');
 
 // DDx Server UI — visual regression screenshots
 // These capture each page for visual review and regression detection.
@@ -140,5 +148,96 @@ test.describe('DDx Server UI Screenshots', () => {
 				});
 			});
 		}
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Feature-area marketing screenshots — one PNG per feature in
+// website/content/features/_index.md, written to website/static/ui/.
+// These are not visual-regression baselines; they ship as the feature-page
+// imagery on the public site. Filenames match the markdown image refs.
+// ---------------------------------------------------------------------------
+
+type FeatureArea = {
+	id: string;
+	file: string;
+	ready: string;
+	path: (ids: { nodeId: string; projectId: string }) => string;
+	prepare?: (page: import('@playwright/test').Page) => Promise<void>;
+};
+
+const FEATURE_AREAS: readonly FeatureArea[] = [
+	{
+		id: 'artifact-graph',
+		file: 'feature-artifact-graph.png',
+		ready: 'h1',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/graph`
+	},
+	{
+		id: 'beads-dag',
+		file: 'feature-beads-dag.png',
+		ready: 'text=OPEN',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/beads`,
+		prepare: async (page) => {
+			const card = page.locator('[draggable="true"]').first();
+			if (await card.isVisible({ timeout: 3000 }).catch(() => false)) {
+				await card.click();
+				await page.waitForTimeout(800);
+			}
+		}
+	},
+	{
+		id: 'execute-loop',
+		file: 'feature-execute-loop.png',
+		ready: 'h1',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/workers`
+	},
+	{
+		id: 'evidence-capture',
+		file: 'feature-evidence-capture.png',
+		ready: 'h1',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/executions`
+	},
+	{
+		id: 'multi-model-review',
+		file: 'feature-multi-model-review.png',
+		ready: 'h1',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/runs`
+	},
+	{
+		id: 'skills',
+		file: 'feature-skills.png',
+		ready: 'text=Plugins',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/plugins`
+	},
+	{
+		id: 'agent-dispatch',
+		file: 'feature-agent-dispatch.png',
+		ready: 'h1',
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/sessions`
+	}
+] as const;
+
+test.describe('DDx feature-area marketing screenshots', () => {
+	for (const area of FEATURE_AREAS) {
+		test(`feature: ${area.id}`, async ({ page, request }) => {
+			const ids = await getFixtureIds(request);
+
+			// Light mode is the canonical look on the marketing site.
+			await page.addInitScript(() => {
+				window.localStorage.setItem('mode-watcher-mode', 'light');
+			});
+
+			await page.goto(area.path(ids));
+			await page.waitForSelector(area.ready);
+			await page.waitForLoadState('networkidle').catch(() => {});
+			if (area.prepare) await area.prepare(page);
+			await page.waitForTimeout(500);
+
+			await page.screenshot({
+				path: path.join(WEBSITE_UI_DIR, area.file),
+				fullPage: true
+			});
+		});
 	}
 });
