@@ -52,7 +52,11 @@ Step back from the symptoms and the underlying issue is one sentence:
 
 Every pain above is downstream of this. Context re-explanation is the absence of shared memory across sessions. Spec/code drift is the absence of shared memory across artifacts. Work-tracking reinvention is the absence of shared memory across tools. Evidence loss is the absence of shared memory across runs. Cost overspend is the absence of shared memory about what worked at what tier. Project re-learning is the absence of shared memory about the project's own surface.
 
-Patching symptom-by-symptom doesn't fix it. What's needed is a substrate that gives agent work a place to stand — durable, file-based, agent-discoverable, and shared across every invocation.
+This isolation is not optional, and trying to fight it with longer sessions makes things worse. LLM output quality decays as a single context window fills — a phenomenon we call **context rot**. Transcript, tool output, failed attempts, and partial reasoning accumulate and compete with the original instructions. The agent at hour one is sharper than the agent at hour three, even at the same model and the same prompt. Long-running agent sessions trade reliability for the illusion of continuity.
+
+The structural fix is **bounded context execution** — also known as the **Ralph loop**: every unit of agent work runs in a fresh, narrowly-scoped context against an explicit contract, and durable state lives on disk as evidence rather than as transcript carried forward. The next attempt re-enters cold, reads what it needs from the substrate, and executes against the same kind of contract. Iteration becomes reliable because no single iteration has to remember anything.
+
+Patching symptom-by-symptom doesn't fix it. What's needed is a substrate that gives agent work a place to stand — durable, file-based, agent-discoverable, and shared across every invocation — plus a loop shape that respects context rot instead of fighting it.
 
 DDx answers with four primitives:
 

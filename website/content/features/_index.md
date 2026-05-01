@@ -49,6 +49,16 @@ ddx agent execute-bead <id> --from HEAD
 
 Because each iteration runs in its own worktree, parallel runs are safe and a failed run never poisons the main branch.
 
+### Why a loop, not a long session — bounded context execution
+
+The execute-loop is the operational shape of **bounded context execution** — sometimes called the **Ralph loop**. LLM output quality decays as a single context window fills: transcript, tool output, and failed attempts accumulate and compete with the original instructions. We call this decay **context rot**, and it is why long-running agent sessions are unreliable even on frontier models.
+
+`ddx work` answers context rot structurally. Each bead runs in a fresh agent invocation with a clean context, scoped tightly to the bead's description, acceptance criteria, and the files it touches. When the attempt ends — merged, preserved, or abandoned — the context is discarded. Persistent state lands on disk as evidence, code, an updated bead, or a `<review-findings>` block threaded into the next attempt's prompt. The next iteration starts cold and reads what it needs from the substrate.
+
+The result: drain throughput stays steady across hundreds of beads. The agent never has to remember what attempt 47 was thinking. The loop does the remembering, on disk, in plain files.
+
+See [Bounded Context Execution](/docs/concepts/bounded-context-execution/) for the full treatment.
+
 ## Evidence Capture {#evidence-capture} {{< maturity "stable" >}}
 
 ![Execution evidence bundle](/ui/feature-evidence-capture.png "Evidence capture bundle — placeholder")
